@@ -1,0 +1,38 @@
+# Dependencies and package-manager state
+node_modules/
+.pnp
+.pnp.*
+.yarn/
+
+# Build outputs
+.next/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+
+# Cloudflare / Sites local state
+.wrangler/
+.sites-runtime/
+outputs/
+work/
+
+# Local environment and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Logs and editor/OS files
+*.log
+.DS_Store
+.idea/
+.vscode/
+
+# Generated archives
+*.zip
+*.tar
+*.tar.gz
