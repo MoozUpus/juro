@@ -1,0 +1,13 @@
+import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
+import { requireD1 } from "../../../../../../../lib/document-builder/storage/runtime";
+import { isoNow } from "../../../../../../../lib/document-builder/storage/db";
+function response(body:unknown,status=200){return Response.json(body,{status,headers:{"cache-control":"private, no-store"}});}
+export const PATCH = withApiErrors(async function PATCH(request:Request,{params}:{params:Promise<{caseId:string;stepId:string}>}){
+  assertSafeWrite(request);const user=await requireApiUser();const {caseId,stepId}=await params;const body=await request.json().catch(()=>null) as {status?:string;revision?:number;dueAt?:string|null}|null;
+  const allowed=new Set(["not_started","in_progress","waiting_user","waiting_response","overdue","completed","cancelled"]);if(!body||!allowed.has(body.status||"")||!Number.isInteger(body.revision))return response({error:"Некорректное изменение шага."},400);
+  const db=requireD1();const owned=await db.prepare("SELECT s.plan_id AS planId FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id JOIN cases c ON c.id=p.case_id WHERE s.id=? AND c.id=? AND c.owner_user_id=? LIMIT 1").bind(stepId,caseId,user.id).first<{planId:string}>();if(!owned)return response({error:"Доступ запрещён."},403);
+  const now=isoNow();const result=await db.prepare("UPDATE action_plan_steps SET status=?,due_at=?,completed_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?").bind(body.status,body.dueAt||null,body.status==="completed"?now:null,now,stepId,body.revision).run();if(!result.meta.changes)return response({error:"Шаг уже изменён в другой сессии.",code:"VERSION_CONFLICT"},409);
+  const counts=await db.prepare("SELECT count(*) AS total,sum(CASE WHEN status='completed' THEN 1 ELSE 0 END) AS done FROM action_plan_steps WHERE plan_id=?").bind(owned.planId).first<{total:number;done:number}>();const progress=counts?.total?Math.round(((counts.done||0)/counts.total)*100):0;
+  await db.batch([db.prepare("UPDATE action_plans SET progress_percent=?,status=?,current_revision=current_revision+1,updated_at=? WHERE id=?").bind(progress,progress===100?"completed":"in_progress",now,owned.planId),db.prepare("UPDATE cases SET current_revision=current_revision+1,updated_at=? WHERE id=?").bind(now,caseId),db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'step_updated',?,?)").bind(crypto.randomUUID(),caseId,user.id,JSON.stringify({stepId,status:body.status}),now)]);
+  return response({ok:true,progress,revision:body.revision!+1});
+});

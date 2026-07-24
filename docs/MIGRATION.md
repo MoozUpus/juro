@@ -11,7 +11,7 @@ The repository was assembled from the current source snapshots of two existing J
 | JURO public website | `juro.uz` | `apps/website` |
 | JURO user platform | `app.juro.uz` | `apps/platform` |
 
-The isolated document builder is part of the user-platform source at `/document-builder-test`.
+The document builder is part of the user-platform source at canonical route `/document-builder`; the historical test route is redirect-only.
 
 The source was imported as a clean snapshot rather than by copying the original internal Git history. This prevents hosting credentials, temporary build state and unrelated platform metadata from entering the new repository history.
 
@@ -30,7 +30,7 @@ The public website snapshot contained 58 tracked files, including:
 The platform snapshot contained 134 tracked files, including:
 
 - the main JURO interactive application;
-- the complete `/document-builder-test` UI;
+- the complete document-builder UI;
 - 20 document-builder API route files;
 - D1 schema and two SQL migrations;
 - D1/R2 storage code;
@@ -98,7 +98,8 @@ If a secret was ever supplied to an earlier build outside the tracked source, th
 | `/landing-test` | `apps/website` | Present |
 | `/lending-test` alias | `apps/website` | Present |
 | `/` platform | `apps/platform` | Present |
-| `/document-builder-test` | `apps/platform` | Present |
+| `/document-builder` | `apps/platform` | Present as the canonical entry |
+| `/document-builder-test/*` | `apps/platform` | Present as backward-compatible redirects |
 | document list/workspace | `apps/platform` | Present as direct routes |
 | contacts and notifications | `apps/platform` | Present as direct routes |
 | document and signed-PDF share pages | `apps/platform` | Present as direct routes |

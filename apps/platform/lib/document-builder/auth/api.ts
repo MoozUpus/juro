@@ -3,7 +3,7 @@ import type { UserProfile } from "../types";
 import { getOrCreateUserProfile } from "../storage/db";
 
 export class ApiAuthError extends Error {
-  constructor(message = "Для этого действия необходимо войти в JURO.") {
+  constructor(message = "Для этого действия необходимо войти в JURO.", public readonly status = 401) {
     super(message);
     this.name = "ApiAuthError";
   }
@@ -24,9 +24,25 @@ export function assertSafeWrite(request: Request): void {
   const url = new URL(request.url);
   const origin = request.headers.get("origin");
   if (origin && origin !== url.origin) {
-    throw new ApiAuthError("Запрос отклонён проверкой происхождения.");
+    throw new ApiAuthError("Запрос отклонён проверкой происхождения.", 403);
   }
   if (request.headers.get("x-juro-csrf") !== "1") {
-    throw new ApiAuthError("Запрос отклонён: отсутствует защитный заголовок.");
+    throw new ApiAuthError("Запрос отклонён: отсутствует защитный заголовок.", 403);
   }
+}
+
+export function withApiErrors<TArgs extends unknown[]>(handler: (...args: TArgs) => Promise<Response>) {
+  return async (...args: TArgs): Promise<Response> => {
+    try {
+      return await handler(...args);
+    } catch (error) {
+      if (error instanceof ApiAuthError) {
+        return Response.json(
+          { error: error.message },
+          { status: error.status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } },
+        );
+      }
+      throw error;
+    }
+  };
 }

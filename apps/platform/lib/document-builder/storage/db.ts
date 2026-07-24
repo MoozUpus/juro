@@ -1,5 +1,6 @@
 import type { ChatGPTUser } from "../../../app/chatgpt-auth";
 import type { UserProfile } from "../types";
+import type { DocumentDefinition } from "../registry";
 import { requireD1 } from "./runtime";
 
 let seeded = false;
@@ -29,6 +30,22 @@ export async function ensureTemplateSeed(): Promise<void> {
     seeded = false;
     throw error;
   }
+}
+
+export async function ensureConfiguredTemplateSeed(definition: DocumentDefinition): Promise<void> {
+  const db = requireD1();
+  const now = isoNow();
+  await db.batch([
+    db.prepare(
+      "INSERT OR IGNORE INTO document_templates (id, key, category, active, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?)",
+    ).bind(definition.id, definition.code, definition.categorySlug, now, now),
+    db.prepare(
+      "INSERT OR IGNORE INTO document_template_locales (id, template_id, language, name, source_object_key, created_at, updated_at) VALUES (?, ?, 'ru', ?, NULL, ?, ?)",
+    ).bind(`${definition.id}-ru`, definition.id, definition.titleRu, now, now),
+    db.prepare(
+      "INSERT OR IGNORE INTO document_template_locales (id, template_id, language, name, source_object_key, created_at, updated_at) VALUES (?, ?, 'uz', ?, NULL, ?, ?)",
+    ).bind(`${definition.id}-uz`, definition.id, definition.titleUz, now, now),
+  ]);
 }
 
 export async function getOrCreateUserProfile(user: ChatGPTUser): Promise<UserProfile> {

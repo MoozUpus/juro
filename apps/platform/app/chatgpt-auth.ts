@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { getSessionUser } from "../lib/auth/session";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -19,7 +20,7 @@ const CALLBACK_PATH = "/callback";
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!email) return null;
+  if (!email) return getSessionUser();
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
@@ -40,8 +41,8 @@ export async function requireChatGPTUser(
 ): Promise<ChatGPTUser> {
   const user = await getChatGPTUser();
   if (user) return user;
-
-  redirect(chatGPTSignInPath(returnTo));
+  const safeReturnTo = safeRelativeReturnPath(returnTo);
+  redirect(`/login?returnTo=${encodeURIComponent(safeReturnTo)}`);
 }
 
 export function chatGPTSignInPath(returnTo: string): string {

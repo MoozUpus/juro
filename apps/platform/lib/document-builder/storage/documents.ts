@@ -25,9 +25,9 @@ export async function createStoredDocument(user: UserProfile, input: CreateDocum
   await db.batch([
     db.prepare(
       `INSERT INTO documents
-      (id, owner_user_id, template_id, language, participant_mode, acting_side, title, category, status,
+      (id, owner_user_id, template_id, template_code, template_version, language, participant_mode, acting_side, title, category, status,
        lender_name, borrower_name, is_favorite, archived_at, generated_at, signed_file_id, revision, created_at, updated_at)
-      VALUES (?, ?, 'receipt-money-v1', ?, ?, ?, ?, 'Займы и расписки', ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
+      VALUES (?, ?, 'receipt-money-v1', 'receipt-money', '1.0.0', ?, ?, ?, ?, 'Займы и расписки', ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
     ).bind(id, user.id, input.answers.language, input.answers.participantMode, input.answers.actingSide, title, status, input.answers.lender.fullName || null, input.answers.borrower.fullName || null, now, now),
     db.prepare("INSERT INTO document_answers (document_id, answers_json, updated_at) VALUES (?, ?, ?)")
       .bind(id, JSON.stringify(input.answers), now),

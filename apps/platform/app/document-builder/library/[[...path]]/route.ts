@@ -1,0 +1,2 @@
+import { canonicalBuilderUrl } from "../../route-helpers";
+export async function GET(request:Request,{params}:{params:Promise<{path?:string[]}>}){const {path=[]}=await params;const target=await canonicalBuilderUrl(request,`document-builder${path.length?`/${path.map(encodeURIComponent).join("/")}`:""}`);const source=new URL(request.url);for(const key of ["q","status","category"]){for(const value of source.searchParams.getAll(key))target.searchParams.append(key,value);}return Response.redirect(target,308);}

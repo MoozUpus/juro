@@ -6,7 +6,7 @@ This repository is a monorepo containing the current source snapshots behind:
 
 - `https://juro.uz` — public website;
 - `https://app.juro.uz` — user platform;
-- `https://app.juro.uz/document-builder-test` — isolated document-builder module.
+- `https://app.juro.uz/document-builder` — canonical document-builder module.
 
 The source code is complete enough to build both deployed applications. Runtime data, hosted database contents, private object-storage files, DNS configuration, TLS certificates and secret values are intentionally not stored in Git.
 
@@ -16,7 +16,7 @@ The source code is complete enough to build both deployed applications. Runtime 
 juro-platform/
 ├── apps/
 │   ├── website/        # juro.uz
-│   └── platform/       # app.juro.uz and document-builder-test
+│   └── platform/       # app.juro.uz and the canonical document builder
 ├── docs/
 │   └── MIGRATION.md
 ├── .github/
@@ -41,7 +41,7 @@ The two applications retain their original package manifests, lockfiles, build s
 | Backend | Next.js route handlers compiled for Cloudflare Worker runtime |
 | Database | Cloudflare D1 (SQLite) with Drizzle ORM and SQL migrations |
 | File storage | Private Cloudflare R2 bucket |
-| Authentication | Sites/ChatGPT identity headers for protected builder routes; the main prototype login remains browser-local demo logic |
+| Authentication | Sites/ChatGPT identity headers plus server-side hashed OTP sessions for protected routes |
 | AI | Server-side OpenAI Responses API integration for the document builder |
 | Document generation | DOCX, PDF and ZIP generation in the platform application |
 | Package manager | npm with committed `package-lock.json` files |
@@ -93,6 +93,8 @@ Local D1 and R2 resources are simulated by the existing Vite/Cloudflare configur
 |---|---:|---|---|
 | `OPENAI_API_KEY` | For live AI only | Server | OpenAI Responses API authentication |
 | `OPENAI_MODEL` | No | Server | Model override; defaults to `gpt-5.6-sol` |
+| `RESEND_API_KEY` | For email OTP | Server | Resend API authentication; never exposed to the client |
+| `EMAIL_FROM` | For email OTP | Server | Verified JURO sender address |
 | `JURO_SMOKE_BASE_URL` | No | Test process | Base URL for the document-builder smoke test |
 | `DB` | Yes for persisted builder features | Worker binding | Cloudflare D1 database |
 | `BUCKET` | Yes for generated/uploaded files | Worker binding | Private Cloudflare R2 bucket |
@@ -121,23 +123,25 @@ The application-level test scripts also validate the deployable Worker artifact.
 | Route | Status |
 |---|---|
 | `/` | Public JURO landing page |
-| `/landing-test` | Isolated premium landing experiment |
-| `/lending-test` | Backward-compatible misspelled alias retained from the source |
+| `/landing-test` | Permanent redirect to `/` |
+| `/lending-test` | Permanent redirect to `/` for the historical misspelling |
+| `/{ru|uz}/{terms|privacy-policy|personal-data-processing|cookies|ai-rules}` | Public legal pages |
 
 ### User platform (`apps/platform`)
 
 | Route | Status |
 |---|---|
-| `/` | Main interactive platform prototype |
-| `/document-builder-test` | Document-builder entry |
-| `/document-builder-test/documents` | User documents |
-| `/document-builder-test/documents/[id]` | Document workspace |
-| `/document-builder-test/contacts` | Contacts |
-| `/document-builder-test/notifications` | Notifications |
-| `/document-builder-test/share/[token]` | Main document share link |
-| `/document-builder-test/signed-share/[token]` | Signed-PDF code access |
+| `/` | Session-aware entry route |
+| `/login`, `/register` | Public authentication routes |
+| `/main` | Session-aware canonical dashboard router |
+| `/{locale}/{accountType}/main` | Canonical dashboard |
+| `/{locale}/{accountType}/document-builder` | Canonical document library and builder |
+| `/{locale}/{accountType}/documents` | User documents |
+| `/{locale}/{accountType}/action-plan` | Cases and action plans |
+| `/{locale}/{accountType}/consultations` | Internal consultation calendar |
+| `/document-builder-test/*` | Backward-compatible permanent redirects only |
 
-The main login, registration, dashboard, AI chat, voice, analysis, operator and profile screens currently exist as internal React states under `/`; they are not separate directly addressable URL routes. The document-builder routes and APIs are server-backed.
+The primary modules are directly addressable routes. Locale and account type are preserved in canonical URLs, and protected data is checked server-side.
 
 ## Database and file storage
 
