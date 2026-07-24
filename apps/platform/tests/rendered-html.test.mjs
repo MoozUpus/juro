@@ -41,6 +41,9 @@ test("routes /document-builder to the canonical account space", async () => {
   const response = await worker.fetch(new Request("http://localhost/document-builder", { headers: { accept: "text/html" } }), runtime, context);
   assert.equal(response.status, 307);
   assert.match(response.headers.get("location") ?? "", /\/ru\/individual\/document-builder/);
+  const canonical = await worker.fetch(new Request("http://localhost/ru/individual/document-builder", { headers: { accept: "text/html" }, redirect: "manual" }), runtime, context);
+  assert.equal(canonical.status, 307);
+  assert.match(canonical.headers.get("location") ?? "", /returnTo=%2Fru%2Findividual%2Fdocument-builder/);
 });
 
 test("keeps direct category and document URLs through canonical redirects", async () => {
@@ -90,6 +93,14 @@ test("serves public login and registration routes", async () => {
     assert.equal(response.status, 200, route);
     assert.match(await response.text(), /Защищённый вход|Himoyalangan kirish|одноразовому коду|Email orqali/);
   }
+});
+
+test("login preserves the protected return path for the active sign-in provider", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(new Request("http://localhost/login?returnTo=%2Fru%2Findividual%2Fdocument-builder", { headers: { accept: "text/html" } }), runtime, context);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /signin-with-chatgpt\?return_to=%2Fru%2Findividual%2Fdocument-builder/);
 });
 
 test("permanently redirects legacy test routes and preserves safe context", async () => {
