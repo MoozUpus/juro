@@ -44,9 +44,9 @@ const worker = {
     }
 
     const response = await handler.fetch(request, env, ctx);
-    const isPrivateApi = url.pathname.startsWith("/api/document-builder-test/");
-    const isPrivateShare = url.pathname.startsWith("/document-builder-test/share/")
-      || url.pathname.startsWith("/document-builder-test/signed-share/");
+    const isPrivateApi = url.pathname.startsWith("/api/document-builder/") || url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/api/platform/");
+    const isPrivateShare = url.pathname.startsWith("/document-builder/share/")
+      || url.pathname.startsWith("/document-builder/signed-share/");
     if (!isPrivateApi && !isPrivateShare) return response;
 
     const headers = new Headers(response.headers);

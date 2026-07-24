@@ -4,6 +4,6 @@ import { NotificationsClient } from "./NotificationsClient";
 export const dynamic = "force-dynamic";
 
 export default async function NotificationsPage() {
-  const user = await requireChatGPTUser("/document-builder-test/notifications");
-  return <NotificationsClient user={user} signInPath={chatGPTSignInPath("/document-builder-test/notifications")}/>;
+  const user = await requireChatGPTUser("/document-builder/notifications");
+  return <NotificationsClient user={user} signInPath={chatGPTSignInPath("/document-builder/notifications")}/>;
 }

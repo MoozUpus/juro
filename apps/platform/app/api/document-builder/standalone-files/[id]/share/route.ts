@@ -32,7 +32,7 @@ export async function GET(request: Request, context: Context): Promise<Response>
     const origin = new URL(request.url).origin;
     return jsonResponse({ share: {
       id: share.id,
-      url: `${origin}/document-builder-test/signed-share/${share.publicToken}`,
+      url: `${origin}/document-builder/signed-share/${share.publicToken}`,
       code: active ? share.accessCode : null,
       status: active ? "active" : expired ? "expired" : "inactive",
     } });
@@ -84,7 +84,7 @@ export async function POST(request: Request, context: Context): Promise<Response
         .bind(shareId, id, user.id, tokenHash, token, code, codeHash, expiresAt, now),
     ]);
     const origin = new URL(request.url).origin;
-    return jsonResponse({ share: { id: shareId, url: `${origin}/document-builder-test/signed-share/${token}`, code, status: "active" } }, { status: 201 });
+    return jsonResponse({ share: { id: shareId, url: `${origin}/document-builder/signed-share/${token}`, code, status: "active" } }, { status: 201 });
   } catch (error) {
     return apiError(error);
   }

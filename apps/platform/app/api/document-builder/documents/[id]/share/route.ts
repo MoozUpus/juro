@@ -36,7 +36,7 @@ export async function POST(request: Request, context: Context): Promise<Response
         .bind(crypto.randomUUID(), id, user.id, hash, token, expiresAt, now),
     ]);
     const origin = new URL(request.url).origin;
-    return jsonResponse({ url: `${origin}/document-builder-test/share/${token}`, expiresAt });
+    return jsonResponse({ url: `${origin}/document-builder/share/${token}`, expiresAt });
   } catch (error) {
     return apiError(error);
   }

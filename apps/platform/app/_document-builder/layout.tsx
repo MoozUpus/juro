@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./document-builder.css";
 
 export const metadata: Metadata = {
-  title: "Создать документ — JURO",
-  description: "Рабочий конструктор расписки в получении денежных средств.",
+  title: "Юридические документы — JURO",
+  description: "Единая библиотека и интерактивный конструктор юридических документов JURO.",
   robots: { index: false, follow: false },
 };
 

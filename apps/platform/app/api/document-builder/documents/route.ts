@@ -1,13 +1,19 @@
 import { assertSafeWrite, requireApiUser } from "../../../../lib/document-builder/auth/api";
 import { apiError, badRequest, jsonResponse } from "../../../../lib/document-builder/auth/responses";
 import { createStoredDocument } from "../../../../lib/document-builder/storage/documents";
+import { createConfiguredDocument } from "../../../../lib/document-builder/storage/configured-documents";
+import { getDocumentByCode } from "../../../../lib/document-builder/registry";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import type { DocumentRecord, FileRecord, ReceiptAnswers } from "../../../../lib/document-builder/types";
+import type { QuestionnaireAnswers } from "../../../../lib/document-builder/registry";
 
 export const dynamic = "force-dynamic";
 
 interface DocumentListRow {
   id: string;
+  templateId: string;
+  templateCode: string | null;
+  templateVersion: string | null;
   title: string;
   category: string;
   status: DocumentRecord["status"];
@@ -50,7 +56,8 @@ export async function GET(request: Request): Promise<Response> {
       binds.push(pattern, pattern, pattern);
     }
     const order = sort === "oldest" ? "d.created_at ASC" : sort === "title" ? "d.title COLLATE NOCASE ASC" : "d.updated_at DESC";
-    const query = `SELECT DISTINCT d.id, d.title, d.category, d.status, d.language,
+    const query = `SELECT DISTINCT d.id, d.template_id AS templateId, d.template_code AS templateCode,
+      d.template_version AS templateVersion, d.title, d.category, d.status, d.language,
       d.lender_name AS lenderName, d.borrower_name AS borrowerName, d.is_favorite AS isFavorite,
       d.archived_at AS archivedAt, d.generated_at AS generatedAt, d.signed_file_id AS signedFileId,
       d.revision, d.created_at AS createdAt, d.updated_at AS updatedAt,
@@ -80,13 +87,25 @@ export async function POST(request: Request): Promise<Response> {
     if (!body.sourceDocumentId) return badRequest("Не указан исходный документ.");
     const db = requireD1();
     const source = await db.prepare(
-      `SELECT d.title, a.answers_json AS answersJson, c.auto_content AS autoContent,
+      `SELECT d.title, d.template_code AS templateCode, d.language, a.answers_json AS answersJson, c.auto_content AS autoContent,
        c.final_content AS finalContent, c.manually_edited AS manuallyEdited
        FROM documents d JOIN document_answers a ON a.document_id = d.id
        JOIN document_current_content c ON c.document_id = d.id
        WHERE d.id = ? AND d.owner_user_id = ? LIMIT 1`,
-    ).bind(body.sourceDocumentId, user.id).first<{ title: string; answersJson: string; autoContent: string; finalContent: string; manuallyEdited: number }>();
+    ).bind(body.sourceDocumentId, user.id).first<{ title: string; templateCode: string | null; language: string; answersJson: string; autoContent: string; finalContent: string; manuallyEdited: number }>();
     if (!source) return jsonResponse({ error: "Документ не найден." }, { status: 404 });
+    const definition = source.templateCode ? getDocumentByCode(source.templateCode) : undefined;
+    if (definition) {
+      const document = await createConfiguredDocument(user, {
+        definition,
+        language: source.language === "uz" ? "uz" : "ru",
+        answers: JSON.parse(source.answersJson) as QuestionnaireAnswers,
+        title: `${source.title} — копия`,
+        finalContent: source.finalContent,
+        manuallyEdited: Boolean(source.manuallyEdited),
+      });
+      return jsonResponse({ document }, { status: 201 });
+    }
     const answers = JSON.parse(source.answersJson) as ReceiptAnswers;
     const document = await createStoredDocument(user, {
       answers,

@@ -13,7 +13,7 @@ export function SignedShareAccessClient({ token }: { token: string }) {
     const target = window.open("about:blank", "_blank");
     setLoading(true);
     try {
-      const response = await fetch(`/api/document-builder-test/standalone-signed-shares/${token}/verify`, {
+      const response = await fetch(`/api/document-builder/standalone-signed-shares/${token}/verify`, {
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
         body: JSON.stringify({ code }),

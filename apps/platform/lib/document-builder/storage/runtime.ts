@@ -6,6 +6,8 @@ export interface BuilderRuntimeEnv {
   BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
 }
 
 export class ServiceUnavailableError extends Error {

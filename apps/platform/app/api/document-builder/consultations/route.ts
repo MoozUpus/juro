@@ -31,7 +31,7 @@ export async function POST(request: Request): Promise<Response> {
     await requireD1().prepare(
       "INSERT INTO consultation_requests (id, document_id, requester_user_id, consultation_type, context_json, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'created', ?, ?)",
     ).bind(id, document.id, user.id, body.type, JSON.stringify(context), now, now).run();
-    return jsonResponse({ request: { id, type: body.type, status: "created", contextAttached: true, createdAt: now }, handoffUrl: `/document-builder-test/documents/${document.id}?consultation=${body.type}&request=${id}` }, { status: 201 });
+    return jsonResponse({ request: { id, type: body.type, status: "created", contextAttached: true, createdAt: now }, handoffUrl: `/document-builder/documents/${document.id}?consultation=${body.type}&request=${id}` }, { status: 201 });
   } catch (error) {
     return apiError(error);
   }

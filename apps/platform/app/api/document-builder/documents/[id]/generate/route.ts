@@ -75,7 +75,7 @@ export async function POST(request: Request, context: Context): Promise<Response
     ]);
     if (old.results.length) await bucket.delete(old.results.map((file) => file.r2Key));
     await addActivity(id, user.id, "document_generated");
-    const filePath = (fileId: string) => `/api/document-builder-test/documents/${id}/files/${fileId}`;
+    const filePath = (fileId: string) => `/api/document-builder/documents/${id}/files/${fileId}`;
     return jsonResponse({
       status: "Готов",
       files: {

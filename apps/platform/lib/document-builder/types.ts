@@ -1,4 +1,4 @@
-export type DocumentLanguage = "ru" | "uz-cyrl";
+export type DocumentLanguage = "ru" | "uz" | "uz-cyrl";
 export type ParticipantMode = "self" | "for_other" | "organization";
 export type ActingSide = "lender" | "borrower" | "both" | "organization";
 export type IdentityDocumentType = "passport" | "id_card" | "";
@@ -165,6 +165,9 @@ export interface AiReviewResult {
 
 export interface DocumentRecord {
   id: string;
+  templateId?: string;
+  templateCode?: string | null;
+  templateVersion?: string | null;
   title: string;
   category: string;
   status: DocumentStatus;
@@ -184,6 +187,17 @@ export interface DocumentRecord {
 export interface StoredDocument extends DocumentRecord {
   ownerUserId: string;
   answers: ReceiptAnswers;
+  autoContent: string;
+  finalContent: string;
+  manuallyEdited: boolean;
+}
+
+export interface GenericStoredDocument extends DocumentRecord {
+  ownerUserId: string;
+  templateId: string;
+  templateCode: string;
+  templateVersion: string;
+  answers: import("./registry/types").QuestionnaireAnswers;
   autoContent: string;
   finalContent: string;
   manuallyEdited: boolean;
@@ -247,6 +261,9 @@ export interface CollaborationSnapshot {
     email: string;
     displayName: string;
     status: string;
+    role?: string;
+    partyNumber?: number | null;
+    approvalStatus?: string;
     confirmedAt: string | null;
     signedViewAllowed?: boolean;
     signedDownloadAllowed?: boolean;
@@ -259,6 +276,11 @@ export interface CollaborationSnapshot {
     authorName: string;
     body: string;
     anchor: string | null;
+    threadId?: string | null;
+    parentCommentId?: string | null;
+    threadStatus?: string | null;
+    anchorType?: string | null;
+    anchorKey?: string | null;
     createdAt: string;
   }>;
   proposals: Array<{

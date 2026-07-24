@@ -33,8 +33,8 @@ export async function POST(request: Request, context: Context): Promise<Response
     const sessionExpiresAt = addHours(now, 1);
     await db.prepare("INSERT INTO signed_share_sessions (id, share_id, session_hash, expires_at, created_at) VALUES (?, ?, ?, ?, ?)")
       .bind(crypto.randomUUID(), share.id, sessionHash, sessionExpiresAt, now).run();
-    const response = jsonResponse({ viewerUrl: `/api/document-builder-test/standalone-signed-shares/${token}/file` });
-    response.headers.append("set-cookie", `juro_signed_share_session=${session}; Path=/api/document-builder-test/standalone-signed-shares/${token}/file; Max-Age=3600; HttpOnly; Secure; SameSite=Strict`);
+    const response = jsonResponse({ viewerUrl: `/api/document-builder/standalone-signed-shares/${token}/file` });
+    response.headers.append("set-cookie", `juro_signed_share_session=${session}; Path=/api/document-builder/standalone-signed-shares/${token}/file; Max-Age=3600; HttpOnly; Secure; SameSite=Strict`);
     return response;
   } catch (error) {
     return apiError(error);

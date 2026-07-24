@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- persisted guest drafts and authenticated documents hydrate after mount */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, Eye, FileCheck2, LoaderCircle, LockKeyhole, PenLine, Save, Sparkles } from "lucide-react";
 import { createDefaultAnswers, EXAMPLE_RU, EXAMPLE_UZ } from "../../lib/document-builder/defaults";
 import { amountToWords } from "../../lib/document-builder/money-to-words";
@@ -159,7 +160,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
 
   useEffect(() => {
     if (initialDocumentId && user) {
-      apiFetch<{ document: StoredDocument }>(`/api/document-builder-test/documents/${initialDocumentId}`)
+      apiFetch<{ document: StoredDocument }>(`/api/document-builder/documents/${initialDocumentId}`)
         .then(({ document }) => hydrateDocument(document))
         .catch((caught: Error) => setError(caught.message))
         .finally(() => setHydrated(true));
@@ -211,15 +212,15 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
 
   useEffect(() => {
     if (!user) return;
-    apiFetch<{ user: UserProfile | null }>("/api/document-builder-test/bootstrap").then((result) => setProfile(result.user)).catch(() => undefined);
-    apiFetch<{ contacts: ContactRecord[] }>("/api/document-builder-test/contacts").then((result) => setContacts(result.contacts)).catch(() => undefined);
+    apiFetch<{ user: UserProfile | null }>("/api/document-builder/bootstrap").then((result) => setProfile(result.user)).catch(() => undefined);
+    apiFetch<{ contacts: ContactRecord[] }>("/api/document-builder/contacts").then((result) => setContacts(result.contacts)).catch(() => undefined);
   }, [user]);
 
   const createDraft = useCallback(async (): Promise<string> => {
     if (documentId) return documentId;
     if (!user) throw new Error("AUTH_REQUIRED");
     if (createPromise.current) return createPromise.current;
-    createPromise.current = apiFetch<{ document: StoredDocument }>("/api/document-builder-test/drafts", {
+    createPromise.current = apiFetch<{ document: StoredDocument }>("/api/document-builder/drafts", {
       method: "POST",
       body: JSON.stringify({ answers, title: title || suggestedDocumentTitle(answers), autoContent: autoText, finalContent: finalText || autoText, manuallyEdited }),
     }).then(({ document }) => {
@@ -250,7 +251,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     const run = async () => {
       setSaveState("saving");
       try {
-        const result = await apiFetch<{ revision: number; status: string }>(`/api/document-builder-test/documents/${id}`, {
+        const result = await apiFetch<{ revision: number; status: string }>(`/api/document-builder/documents/${id}`, {
           method: "PUT",
           body: JSON.stringify({ ...snapshot, revision: revisionRef.current }),
         });
@@ -369,7 +370,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     if (!user) { setError("Оценка качества и AI-проверка доступны после входа."); return; }
     setReviewState("loading"); setError("");
     try {
-      const result = await apiFetch<AiReviewResult>("/api/document-builder-test/ai-review", { method: "POST", body: JSON.stringify({ answers, finalText: finalText || autoText }) });
+      const result = await apiFetch<AiReviewResult>("/api/document-builder/ai-review", { method: "POST", body: JSON.stringify({ answers, finalText: finalText || autoText }) });
       setReview(result); setReviewState(result.status === "completed" ? "completed" : "unavailable");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Проверка не выполнена."); setReviewState("unavailable"); }
   };
@@ -399,7 +400,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     try {
       const id = await createDraft();
       await persist(id);
-      const result = await apiFetch<GenerationResult>(`/api/document-builder-test/documents/${id}/generate`, { method: "POST", body: "{}" });
+      const result = await apiFetch<GenerationResult>(`/api/document-builder/documents/${id}/generate`, { method: "POST", body: "{}" });
       setFiles(result.files); setStatus(result.status); setPhase("success"); window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось сформировать файлы."); }
     finally { setGenerating(false); }
@@ -408,21 +409,21 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   const download = async (file: GeneratedFile) => {
     try {
       await downloadAuthenticatedFile(file.url, file.name);
-      window.location.assign("/document-builder-test/documents");
+      window.location.assign("/document-builder/documents");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Скачивание не выполнено."); }
   };
 
   const requestConsultation = async (type: "ai" | "lawyer") => {
     if (!documentId) return;
     try {
-      const result = await apiFetch<{ handoffUrl: string }>("/api/document-builder-test/consultations", { method: "POST", body: JSON.stringify({ documentId, type }) });
+      const result = await apiFetch<{ handoffUrl: string }>("/api/document-builder/consultations", { method: "POST", body: JSON.stringify({ documentId, type }) });
       window.location.assign(result.handoffUrl);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось создать обращение."); }
   };
 
   const saveProfile = async (party: PartyDetails) => {
     try {
-      const result = await apiFetch<{ user: UserProfile }>("/api/document-builder-test/bootstrap", {
+      const result = await apiFetch<{ user: UserProfile }>("/api/document-builder/bootstrap", {
         method: "PATCH",
         body: JSON.stringify(party),
       });
@@ -438,7 +439,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     const contact = contacts.find((item) => item.id === contactId);
     if (!contact) throw new Error("Контакт не найден.");
     try {
-      await apiFetch(`/api/document-builder-test/contacts/${contactId}`, {
+      await apiFetch(`/api/document-builder/contacts/${contactId}`, {
         method: "PUT",
         body: JSON.stringify({
           label: contact.label,
@@ -480,12 +481,12 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
 
   if (phase === "intro") return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><main className="dbt-intro"><section className="dbt-intro-copy"><span className="dbt-eyebrow"><FileCheck2 size={16}/>Первый бесплатный документ JURO</span><h1>Расписка в получении денежных средств</h1><p>Документ подтверждает передачу денежных средств в качестве займа и обязанность их возврата.</p><div className="dbt-intro-meta"><span><strong>≈ 5 минут</strong><small>примерное время заполнения</small></span><span><strong>DOCX + PDF</strong><small>настоящие готовые файлы</small></span></div><fieldset className="dbt-language"><legend>Язык документа</legend><label className={answers.language === "ru" ? "selected" : ""}><input type="radio" checked={answers.language === "ru"} onChange={() => changeLanguage("ru")}/><span><strong>Русский</strong><small>Полная русская версия</small></span></label><label className={answers.language === "uz-cyrl" ? "selected" : ""}><input type="radio" checked={answers.language === "uz-cyrl"} onChange={() => changeLanguage("uz-cyrl")}/><span><strong>Ўзбекча</strong><small>Ўзбек кирилл алифбосида</small></span></label></fieldset><button type="button" className="dbt-start" onClick={start}>Создать документ<ArrowRight size={19}/></button><p className="dbt-intro-note">Начать можно без регистрации. До входа ответы сохраняются только в текущей вкладке.</p></section><DocumentPreview document={example} example/></main></div>;
 
-  if (phase === "success" && files) return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><main className="dbt-success-wrap">{error && <div className="dbt-global-error" role="alert">{error}</div>}<FinalSuccess files={files} onDownload={(file) => void download(file)} onPrint={() => window.open(`/document-builder-test/documents/${documentId}?print=1`, "_blank", "noopener,noreferrer")} onConsultation={() => setConsultationOpen(true)}/>{consultationOpen && <div className="dbt-modal-backdrop" role="presentation" onMouseDown={() => setConsultationOpen(false)}><section className="dbt-consultation-modal" role="dialog" aria-modal="true" aria-labelledby="consultation-title" onMouseDown={(event) => event.stopPropagation()}><h2 id="consultation-title">Получить консультацию</h2><p>Контекст документа и ответы анкеты будут прикреплены автоматически.</p><button type="button" onClick={() => void requestConsultation("ai")}><Sparkles size={20}/><span><strong>AI-юрист</strong><small>Создать обращение с полным контекстом</small></span></button><button type="button" onClick={() => void requestConsultation("lawyer")}><PenLine size={20}/><span><strong>Живой юрист</strong><small>Зарегистрировать заявку без повторной загрузки</small></span></button><button type="button" className="dbt-modal-close" onClick={() => setConsultationOpen(false)}>Закрыть</button></section></div>}</main></div>;
+  if (phase === "success" && files) return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><main className="dbt-success-wrap">{error && <div className="dbt-global-error" role="alert">{error}</div>}<FinalSuccess files={files} onDownload={(file) => void download(file)} onPrint={() => window.open(`/document-builder/documents/${documentId}?print=1`, "_blank", "noopener,noreferrer")} onConsultation={() => setConsultationOpen(true)}/>{consultationOpen && <div className="dbt-modal-backdrop" role="presentation" onMouseDown={() => setConsultationOpen(false)}><section className="dbt-consultation-modal" role="dialog" aria-modal="true" aria-labelledby="consultation-title" onMouseDown={(event) => event.stopPropagation()}><h2 id="consultation-title">Получить консультацию</h2><p>Контекст документа и ответы анкеты будут прикреплены автоматически.</p><button type="button" onClick={() => void requestConsultation("ai")}><Sparkles size={20}/><span><strong>AI-юрист</strong><small>Создать обращение с полным контекстом</small></span></button><button type="button" onClick={() => void requestConsultation("lawyer")}><PenLine size={20}/><span><strong>Живой юрист</strong><small>Зарегистрировать заявку без повторной загрузки</small></span></button><button type="button" className="dbt-modal-close" onClick={() => setConsultationOpen(false)}>Закрыть</button></section></div>}</main></div>;
 
   if (accessRole === "collaborator") return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><main className="dbt-collaborator-page">{error && <div className="dbt-global-error" role="alert">{error}</div>}<div className="dbt-collaborator-document"><DocumentPreview document={printableReceipt(finalText)} mobileOpen/></div>{documentId && <CollaborationPanel documentId={documentId} accessRole="collaborator" finalText={finalText} currentUserEmail={user?.email} signedFileId={signedFileId} onApplied={() => window.location.reload()}/>}</main></div>;
 
   return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><main className="dbt-builder">
-    <div className="dbt-builder-top"><div><a href="/document-builder-test" className="dbt-back"><ArrowLeft size={16}/>Новый документ</a><h1>Расписка в получении денежных средств</h1><div className="dbt-status-line"><span className={`dbt-save-state ${saveState}`}>{!user ? <><LockKeyhole size={14}/>Гостевой режим</> : saveState === "saving" ? <><LoaderCircle size={14}/>Сохраняем…</> : saveState === "error" ? "Ошибка сохранения" : <><Save size={14}/>Черновик сохранён</>}</span>{documentId && <span>ID: {documentId.slice(0, 8)}</span>}<span>Ревизия: {revision}</span><span>Статус: {status}</span></div></div><div className="dbt-title-edit"><label><span>Название документа</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={suggestedDocumentTitle(answers)}/></label><small>Категория: Займы и расписки</small></div></div>
+    <div className="dbt-builder-top"><div><Link href="/document-builder" className="dbt-back"><ArrowLeft size={16}/>Новый документ</Link><h1>Расписка в получении денежных средств</h1><div className="dbt-status-line"><span className={`dbt-save-state ${saveState}`}>{!user ? <><LockKeyhole size={14}/>Гостевой режим</> : saveState === "saving" ? <><LoaderCircle size={14}/>Сохраняем…</> : saveState === "error" ? "Ошибка сохранения" : <><Save size={14}/>Черновик сохранён</>}</span>{documentId && <span>ID: {documentId.slice(0, 8)}</span>}<span>Ревизия: {revision}</span><span>Статус: {status}</span></div></div><div className="dbt-title-edit"><label><span>Название документа</span><input value={title} onChange={(event) => setTitle(event.target.value)} placeholder={suggestedDocumentTitle(answers)}/></label><small>Категория: Займы и расписки</small></div></div>
     {initialConsultation && <div className="dbt-handoff-banner" role="status"><Sparkles size={18}/><span><strong>{initialConsultation.type === "ai" ? "Запрос AI-юристу создан" : "Заявка живому юристу создана"}</strong><small>Контекст документа и анкеты прикреплён. Номер обращения: {initialConsultation.requestId.slice(0, 8)}</small></span></div>}
     {error && <div className="dbt-global-error" role="alert"><span>{error}</span>{!user && <button type="button" onClick={signIn}>Войти</button>}<button type="button" aria-label="Закрыть сообщение" onClick={() => setError("")}>×</button></div>}
     <div className="dbt-progress"><div><span style={{ width: `${progress}%` }}/></div><strong>{progress}%</strong></div>

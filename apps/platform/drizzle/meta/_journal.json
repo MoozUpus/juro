@@ -15,6 +15,27 @@
       "when": 1784755213537,
       "tag": "0001_past_naoko",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1784876465827,
+      "tag": "0002_next_sugar_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1784910669081,
+      "tag": "0003_soft_deathbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1784915000000,
+      "tag": "0004_secure_sandstone",
+      "breakpoints": true
     }
   ]
 }

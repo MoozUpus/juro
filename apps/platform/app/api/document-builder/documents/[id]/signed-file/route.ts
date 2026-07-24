@@ -34,7 +34,7 @@ export async function POST(request: Request, context: Context): Promise<Response
       db.prepare("UPDATE documents SET signed_file_id = ?, status = 'Подписан', revision = revision + 1, updated_at = ? WHERE id = ?").bind(fileId, now, id),
     ]);
     await addActivity(id, user.id, "signed_pdf_uploaded");
-    return jsonResponse({ file: { id: fileId, fileName: safeName, mimeType: "application/pdf", sizeBytes: file.size, url: `/api/document-builder-test/documents/${id}/files/${fileId}?inline=1` }, status: "Подписан" }, { status: 201 });
+    return jsonResponse({ file: { id: fileId, fileName: safeName, mimeType: "application/pdf", sizeBytes: file.size, url: `/api/document-builder/documents/${id}/files/${fileId}?inline=1` }, status: "Подписан" }, { status: 201 });
   } catch (error) {
     return apiError(error);
   }
