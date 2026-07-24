@@ -130,6 +130,15 @@ test("rejects unauthenticated document writes and disables caching", async () =>
   assert.match(response.headers.get("cache-control") ?? "", /no-store/);
 });
 
+test("platform workflow APIs return private 401 responses without a session", async () => {
+  const worker = await createWorker();
+  for (const route of ["/api/platform/cases", "/api/platform/consultations"]) {
+    const response = await worker.fetch(new Request(`http://localhost${route}`), runtime, context);
+    assert.equal(response.status, 401, route);
+    assert.match(response.headers.get("cache-control") ?? "", /no-store/, route);
+  }
+});
+
 test("applies noindex and no-cache to private share pages", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(new Request("http://localhost/document-builder/share/nonexistent", { headers: { accept: "text/html" } }), runtime, context);

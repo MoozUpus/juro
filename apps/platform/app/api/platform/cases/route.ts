@@ -1,4 +1,4 @@
-import { assertSafeWrite, requireApiUser } from "../../../../lib/document-builder/auth/api";
+import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 
@@ -12,16 +12,16 @@ const scenarios: Record<string, { ru: string[]; uz: string[] }> = {
 
 function response(body: unknown, status=200){return Response.json(body,{status,headers:{"cache-control":"private, no-store"}});}
 
-export async function GET(){
+export const GET = withApiErrors(async function GET(){
   const user=await requireApiUser(); const db=requireD1();
   const rows=await db.prepare(`SELECT c.id,c.title,c.description,c.legal_area AS legalArea,c.status,c.next_deadline_at AS nextDeadlineAt,c.created_at AS createdAt,c.updated_at AS updatedAt,
     p.id AS planId,p.title AS planTitle,p.status AS planStatus,p.progress_percent AS progressPercent,
     (SELECT json_group_array(json_object('id',s.id,'ordinal',s.ordinal,'title',s.title,'description',s.description,'status',s.status,'dueAt',s.due_at,'actionType',s.action_type,'templateCode',s.template_code,'revision',s.revision)) FROM action_plan_steps s WHERE s.plan_id=p.id ORDER BY s.ordinal) AS stepsJson
     FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id WHERE c.owner_user_id=? AND c.archived_at IS NULL ORDER BY c.updated_at DESC`).bind(user.id).all();
   return response({cases:(rows.results as Array<Record<string,unknown>>).map(row=>({...row,steps:parseJson(String(row.stepsJson||"[]"),[])}))});
-}
+});
 
-export async function POST(request:Request){
+export const POST = withApiErrors(async function POST(request:Request){
   assertSafeWrite(request); const user=await requireApiUser(); const body=await request.json().catch(()=>null) as {title?:string;description?:string;legalArea?:string;locale?:string;accountType?:string}|null;
   const title=body?.title?.trim().slice(0,180); const legalArea=body?.legalArea&&scenarios[body.legalArea]?body.legalArea:"debt"; const locale=body?.locale==="uz"?"uz":"ru"; const accountType=body?.accountType==="business"?"business":"individual";
   if(!title)return response({error:locale==="ru"?"Укажите название ситуации.":"Vaziyat nomini kiriting."},400);
@@ -33,4 +33,4 @@ export async function POST(request:Request){
     db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'case_created',?,?)").bind(crypto.randomUUID(),caseId,user.id,JSON.stringify({legalArea}),now),
   ]);
   return response({ok:true,caseId,planId},201);
-}
+});
