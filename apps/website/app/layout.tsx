@@ -13,11 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "JURO — Юрист в кармане",
+  metadataBase: new URL("https://juro.uz"),
+  title: { default: "JURO — Юрист в кармане", template: "%s — JURO" },
   description: "Цифровая юридическая платформа: AI-помощь, документы и живые юристы в одном сервисе.",
-  other: {
-    "codex-preview": "development",
-  },
+  robots: { index: true, follow: true },
   icons: {
     icon: "/favicon.png",
     shortcut: "/favicon.png",
