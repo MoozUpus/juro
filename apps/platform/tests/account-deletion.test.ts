@@ -4,7 +4,10 @@ import {
   confirmAccountDeletion,
   reserveAccountDeletionChallenge,
 } from "../lib/auth/account-deletion";
-import { sha256 } from "../lib/auth/crypto";
+import {
+  createIdentityProtectionContext,
+  IdentityProtectionError,
+} from "../lib/auth/identity-protection";
 import { createEmailOtpSession } from "../lib/auth/session-management";
 import {
   batchBarrier,
@@ -15,6 +18,30 @@ const USER_ID = "deletion-user";
 const WORKSPACE_ID = "deletion-workspace";
 const CODE = "123456";
 const SALT = "deletion-test-salt";
+
+function encodedKey(seed: number): string {
+  const bytes = Uint8Array.from(
+    { length: 32 },
+    (_, index) => (seed + index) % 256,
+  );
+  let raw = "";
+  for (const byte of bytes) raw += String.fromCharCode(byte);
+  return btoa(raw)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+const dualContext = createIdentityProtectionContext(
+  "dual_write",
+  JSON.stringify({
+    active: "v2",
+    versions: {
+      v1: { aead: encodedKey(1), hmac: encodedKey(33) },
+      v2: { aead: encodedKey(65), hmac: encodedKey(97) },
+    },
+  }),
+);
 
 async function fixture() {
   const value = sqliteD1Fixture();
@@ -70,13 +97,14 @@ async function reserve(
   const now = options.now ?? "2026-07-26T12:01:00.000Z";
   const nowMs = Date.parse(now);
   return reserveAccountDeletionChallenge(d1, {
+    identityContext: dualContext,
     id: options.id ?? crypto.randomUUID(),
     userId: USER_ID,
     sessionId,
-    emailHash: await sha256("deletion@example.test"),
+    email: "deletion@example.test",
     locale: "ru",
     codeSalt: SALT,
-    codeHash: await sha256(`${SALT}:${options.code ?? CODE}`),
+    code: options.code ?? CODE,
     expiresAt: new Date(nowMs + 10 * 60 * 1_000).toISOString(),
     now,
     recentSince: new Date(nowMs - 10 * 60 * 1_000).toISOString(),
@@ -102,14 +130,17 @@ function confirm(
   challengeId: string,
   options: {
     code?: string;
+    email?: string;
     now?: string;
   } = {},
 ) {
   const now = options.now ?? "2026-07-26T12:02:00.000Z";
   return confirmAccountDeletion(d1, {
+    identityContext: dualContext,
     challengeId,
     userId: USER_ID,
     sessionId,
+    email: options.email ?? "deletion@example.test",
     workspaceId: WORKSPACE_ID,
     code: options.code ?? CODE,
     reason: null,
@@ -238,14 +269,26 @@ test("verified deletion request stores exact evidence and revokes sessions", asy
     const challenge = sqlite.prepare(
       `SELECT
          consumed_at AS consumedAt,
-         consumed_by_operation_id AS operationId
+         consumed_by_operation_id AS operationId,
+         email_lookup_hash AS emailLookupHash,
+         email_lookup_key_version AS emailLookupKeyVersion,
+         code_hmac AS codeHmac,
+         code_key_version AS codeKeyVersion
        FROM account_deletion_challenges WHERE id=?`,
     ).get(challengeId) as {
       consumedAt: string;
       operationId: string;
+      emailLookupHash: string;
+      emailLookupKeyVersion: string;
+      codeHmac: string;
+      codeKeyVersion: string;
     };
     assert.equal(challenge.consumedAt, "2026-07-26T12:02:00.000Z");
     assert.ok(challenge.operationId);
+    assert.match(challenge.emailLookupHash, /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(challenge.emailLookupKeyVersion, "v2");
+    assert.match(challenge.codeHmac, /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(challenge.codeKeyVersion, "v2");
     assert.equal(
       (
         sqlite.prepare(
@@ -337,6 +380,14 @@ test("wrong, expired, and foreign-session codes fail closed", async () => {
       (await confirm(d1, second.sessionId, challengeId)).status,
       "invalid",
     );
+    assert.equal(
+      (
+        await confirm(d1, session.sessionId, challengeId, {
+          email: "different@example.test",
+        })
+      ).status,
+      "invalid",
+    );
 
     sqlite.prepare(
       `UPDATE account_deletion_challenges
@@ -361,6 +412,35 @@ test("wrong, expired, and foreign-session codes fail closed", async () => {
     );
   } finally {
     sqlite.close();
+  }
+});
+
+test("keyed deletion confirmation rejects divergent retained SHA evidence", async () => {
+  for (const column of ["email_hash", "code_hash"] as const) {
+    const { sqlite, d1, session } = await fixture();
+    try {
+      await reserve(d1, session.sessionId);
+      const challengeId = activeChallengeId(sqlite);
+      sqlite.prepare(
+        `UPDATE account_deletion_challenges
+         SET ${column}='divergent' WHERE id=?`,
+      ).run(challengeId);
+      await assert.rejects(
+        confirm(d1, session.sessionId, challengeId),
+        (error: unknown) => error instanceof IdentityProtectionError
+          && error.code === "IDENTITY_VALUE_DIVERGED",
+      );
+      assert.equal(
+        (
+          sqlite.prepare(
+            "SELECT count(*) AS total FROM account_deletion_requests",
+          ).get() as { total: number }
+        ).total,
+        0,
+      );
+    } finally {
+      sqlite.close();
+    }
   }
 });
 

@@ -1,4 +1,9 @@
-import { sha256 } from "./crypto";
+import {
+  accountDeletionCodeMatches,
+  accountDeletionEmailMatches,
+  prepareAccountDeletionEvidence,
+} from "./challenge-evidence";
+import type { IdentityProtectionContext } from "./identity-protection";
 import { batchWithSecurityEvent } from "./security-events";
 
 const MAX_HOURLY_CHALLENGES = 5;
@@ -23,8 +28,13 @@ export type DeletionChallengeReservation =
 
 type DeletionChallengeRow = {
   id: string;
+  emailHash: string;
+  emailLookupHash: string | null;
+  emailLookupKeyVersion: string | null;
   codeSalt: string;
   codeHash: string;
+  codeHmac: string | null;
+  codeKeyVersion: string | null;
   attemptCount: number;
   maxAttempts: number;
   expiresAt: string;
@@ -52,13 +62,14 @@ export type DeletionConfirmationResult =
 export async function reserveAccountDeletionChallenge(
   db: D1Database,
   input: {
+    identityContext: IdentityProtectionContext;
     id: string;
     userId: string;
     sessionId: string;
-    emailHash: string;
+    email: string;
     locale: "ru" | "uz";
     codeSalt: string;
-    codeHash: string;
+    code: string;
     expiresAt: string;
     now: string;
     recentSince: string;
@@ -66,6 +77,17 @@ export async function reserveAccountDeletionChallenge(
     hourlySince: string;
   },
 ): Promise<DeletionChallengeReservation> {
+  const evidence = await prepareAccountDeletionEvidence(
+    input.identityContext,
+    {
+      challengeId: input.id,
+      userId: input.userId,
+      sessionId: input.sessionId,
+      email: input.email,
+      codeSalt: input.codeSalt,
+      code: input.code,
+    },
+  );
   const eligible = `
     NOT EXISTS (
       SELECT 1 FROM account_deletion_requests
@@ -118,11 +140,13 @@ export async function reserveAccountDeletionChallenge(
     ),
     db.prepare(
       `INSERT INTO account_deletion_challenges (
-         id,user_id,session_id,email_hash,locale,code_salt,code_hash,
+         id,user_id,session_id,email_hash,
+         email_lookup_hash,email_lookup_key_version,
+         locale,code_salt,code_hash,code_hmac,code_key_version,
          attempt_count,max_attempts,expires_at,consumed_at,
          consumed_by_operation_id,invalidated_at,created_at
        )
-       SELECT ?,?,?,?,?,?,?,0,5,?,NULL,NULL,NULL,?
+       SELECT ?,?,?,?,?,?,?,?,?,?,?,0,5,?,NULL,NULL,NULL,?
        WHERE ${eligible}
          AND NOT EXISTS (
            SELECT 1 FROM account_deletion_challenges
@@ -134,10 +158,14 @@ export async function reserveAccountDeletionChallenge(
       input.id,
       input.userId,
       input.sessionId,
-      input.emailHash,
+      evidence.emailEvidence.legacyHash,
+      evidence.emailEvidence.lookupHash,
+      evidence.emailEvidence.lookupKeyVersion,
       input.locale,
       input.codeSalt,
-      input.codeHash,
+      evidence.codeEvidence.legacyHash,
+      evidence.codeEvidence.lookupHash,
+      evidence.codeEvidence.lookupKeyVersion,
       input.expiresAt,
       input.now,
       ...eligibilityBindings,
@@ -253,7 +281,11 @@ async function loadChallenge(
 ): Promise<DeletionChallengeRow | null> {
   return db.prepare(
     `SELECT
-       id,code_salt AS codeSalt,code_hash AS codeHash,
+       id,email_hash AS emailHash,
+       email_lookup_hash AS emailLookupHash,
+       email_lookup_key_version AS emailLookupKeyVersion,
+       code_salt AS codeSalt,code_hash AS codeHash,
+       code_hmac AS codeHmac,code_key_version AS codeKeyVersion,
        attempt_count AS attemptCount,max_attempts AS maxAttempts,
        expires_at AS expiresAt,consumed_at AS consumedAt,
        invalidated_at AS invalidatedAt
@@ -265,6 +297,32 @@ async function loadChallenge(
     input.userId,
     input.sessionId,
   ).first<DeletionChallengeRow>();
+}
+
+async function validatedChallenge(
+  db: D1Database,
+  input: {
+    identityContext: IdentityProtectionContext;
+    challengeId: string;
+    userId: string;
+    sessionId: string;
+    email: string;
+  },
+): Promise<DeletionChallengeRow | null> {
+  const challenge = await loadChallenge(db, input);
+  if (!challenge) return null;
+  const matches = await accountDeletionEmailMatches(
+    input.identityContext,
+    {
+      email: input.email,
+      evidence: {
+        legacyHash: challenge.emailHash,
+        lookupHash: challenge.emailLookupHash,
+        lookupKeyVersion: challenge.emailLookupKeyVersion,
+      },
+    },
+  );
+  return matches ? challenge : null;
 }
 
 function unavailableState(
@@ -305,9 +363,11 @@ function isActiveRequestConflict(error: unknown): boolean {
 export async function confirmAccountDeletion(
   db: D1Database,
   input: {
+    identityContext: IdentityProtectionContext;
     challengeId: string;
     userId: string;
     sessionId: string;
+    email: string;
     workspaceId: string;
     code: string;
     reason: string | null;
@@ -318,18 +378,36 @@ export async function confirmAccountDeletion(
 ): Promise<DeletionConfirmationResult> {
   const existing = await activeDeletionRequest(db, input.userId);
   if (existing) return { status: "existing_request", request: existing };
-  const challenge = await loadChallenge(db, input);
+  const challenge = await validatedChallenge(db, input);
   const unavailable = unavailableState(challenge, input.now);
   if (unavailable) return unavailable;
 
-  const candidateHash = await sha256(
-    `${challenge!.codeSalt}:${input.code}`,
+  const codeMatches = await accountDeletionCodeMatches(
+    input.identityContext,
+    {
+      challengeId: input.challengeId,
+      userId: input.userId,
+      sessionId: input.sessionId,
+      codeSalt: challenge!.codeSalt,
+      code: input.code,
+      evidence: {
+        legacyHash: challenge!.codeHash,
+        lookupHash: challenge!.codeHmac,
+        lookupKeyVersion: challenge!.codeKeyVersion,
+      },
+    },
   );
-  if (candidateHash !== challenge!.codeHash) {
+  if (!codeMatches) {
     const result = await db.prepare(
       `UPDATE account_deletion_challenges
        SET attempt_count=attempt_count+1
        WHERE id=? AND user_id=? AND session_id=?
+         AND email_hash=?
+         AND email_lookup_hash IS ?
+         AND email_lookup_key_version IS ?
+         AND code_hash=?
+         AND code_hmac IS ?
+         AND code_key_version IS ?
          AND consumed_at IS NULL
          AND invalidated_at IS NULL
          AND expires_at>?
@@ -341,6 +419,12 @@ export async function confirmAccountDeletion(
       input.challengeId,
       input.userId,
       input.sessionId,
+      challenge!.emailHash,
+      challenge!.emailLookupHash,
+      challenge!.emailLookupKeyVersion,
+      challenge!.codeHash,
+      challenge!.codeHmac,
+      challenge!.codeKeyVersion,
       input.now,
     ).run<{ attemptCount: number; maxAttempts: number }>();
     const updated = result.results[0];
@@ -354,7 +438,7 @@ export async function confirmAccountDeletion(
         };
     }
     return (
-      unavailableState(await loadChallenge(db, input), input.now)
+      unavailableState(await validatedChallenge(db, input), input.now)
       ?? { status: "invalid" }
     );
   }
@@ -399,6 +483,11 @@ export async function confirmAccountDeletion(
                consumed_by_operation_id=?
            WHERE id=? AND user_id=? AND session_id=?
              AND code_hash=?
+             AND code_hmac IS ?
+             AND code_key_version IS ?
+             AND email_hash=?
+             AND email_lookup_hash IS ?
+             AND email_lookup_key_version IS ?
              AND consumed_at IS NULL
              AND invalidated_at IS NULL
              AND expires_at>?
@@ -410,7 +499,12 @@ export async function confirmAccountDeletion(
           input.challengeId,
           input.userId,
           input.sessionId,
-          candidateHash,
+          challenge!.codeHash,
+          challenge!.codeHmac,
+          challenge!.codeKeyVersion,
+          challenge!.emailHash,
+          challenge!.emailLookupHash,
+          challenge!.emailLookupKeyVersion,
           input.now,
           ...sessionGuardBindings,
         ),
@@ -508,7 +602,7 @@ export async function confirmAccountDeletion(
     };
   }
   return (
-    unavailableState(await loadChallenge(db, input), input.now)
+    unavailableState(await validatedChallenge(db, input), input.now)
     ?? { status: "invalid" }
   );
 }

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { prepareAuthOtpChallengeEvidence } from "../lib/auth/challenge-evidence";
 import { sha256 } from "../lib/auth/crypto";
+import {
+  createIdentityProtectionContext,
+  IdentityProtectionError,
+} from "../lib/auth/identity-protection";
 import {
   parseJsonRequest,
   requestOtpInputSchema,
@@ -10,6 +15,40 @@ import {
 import { consumeOtpChallenge } from "../lib/auth/otp-challenge";
 import { reserveOtpChallenge } from "../lib/auth/otp-request";
 import { sessionTokenFromCookie } from "../lib/auth/session-token";
+
+function encodedKey(seed: number): string {
+  const bytes = Uint8Array.from(
+    { length: 32 },
+    (_, index) => (seed + index) % 256,
+  );
+  let raw = "";
+  for (const byte of bytes) raw += String.fromCharCode(byte);
+  return btoa(raw)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+const dualContext = createIdentityProtectionContext(
+  "dual_write",
+  JSON.stringify({
+    active: "v2",
+    versions: {
+      v1: { aead: encodedKey(1), hmac: encodedKey(33) },
+      v2: { aead: encodedKey(65), hmac: encodedKey(97) },
+    },
+  }),
+);
+const previousKeyContext = createIdentityProtectionContext(
+  "dual_write",
+  JSON.stringify({
+    active: "v1",
+    versions: {
+      v1: { aead: encodedKey(1), hmac: encodedKey(33) },
+      v2: { aead: encodedKey(65), hmac: encodedKey(97) },
+    },
+  }),
+);
 
 class SqliteStatement {
   constructor(
@@ -86,10 +125,14 @@ function databaseFixture(): {
       id TEXT PRIMARY KEY,
       email TEXT NOT NULL DEFAULT 'user@example.test',
       email_hash TEXT NOT NULL,
+      email_lookup_hash TEXT,
+      email_lookup_key_version TEXT,
       purpose TEXT NOT NULL,
       locale TEXT NOT NULL DEFAULT 'ru',
       code_salt TEXT NOT NULL,
       code_hash TEXT NOT NULL,
+      code_hmac TEXT,
+      code_key_version TEXT,
       attempt_count INTEGER NOT NULL DEFAULT 0,
       max_attempts INTEGER NOT NULL DEFAULT 5,
       expires_at TEXT NOT NULL,
@@ -97,6 +140,8 @@ function databaseFixture(): {
       invalidated_at TEXT,
       account_type TEXT NOT NULL,
       request_ip_hash TEXT,
+      request_ip_lookup_hash TEXT,
+      request_ip_lookup_key_version TEXT,
       created_at TEXT NOT NULL DEFAULT '2026-07-26T00:00:00.000Z'
     );
   `);
@@ -125,7 +170,7 @@ async function insertChallenge(
   sqlite: DatabaseSync,
   overrides: Partial<{
     id: string;
-    emailHash: string;
+    email: string;
     purpose: "login" | "register";
     code: string;
     attempts: number;
@@ -137,7 +182,7 @@ async function insertChallenge(
 ) {
   const input = {
     id: "challenge-1",
-    emailHash: "email-hash",
+    email: "user@example.test",
     purpose: "login" as const,
     code: "123456",
     attempts: 0,
@@ -148,17 +193,31 @@ async function insertChallenge(
     ...overrides,
   };
   const salt = "salt";
+  const evidence = await prepareAuthOtpChallengeEvidence(dualContext, {
+    challengeId: input.id,
+    email: input.email,
+    requestIp: null,
+    purpose: input.purpose,
+    codeSalt: salt,
+    code: input.code,
+  });
   sqlite.prepare(`
     INSERT INTO auth_otp_challenges (
-      id, email_hash, purpose, code_salt, code_hash, attempt_count,
+      id,email,email_hash,email_lookup_hash,email_lookup_key_version,
+      purpose,code_salt,code_hash,code_hmac,code_key_version,attempt_count,
       max_attempts, expires_at, consumed_at, invalidated_at, account_type
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'individual')
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'individual')
   `).run(
     input.id,
-    input.emailHash,
+    evidence.email,
+    evidence.emailEvidence.legacyHash,
+    evidence.emailEvidence.lookupHash,
+    evidence.emailEvidence.lookupKeyVersion,
     input.purpose,
     salt,
-    await sha256(`${salt}:${input.code}`),
+    evidence.codeEvidence.legacyHash,
+    evidence.codeEvidence.lookupHash,
+    evidence.codeEvidence.lookupKeyVersion,
     input.attempts,
     input.maxAttempts,
     input.expiresAt,
@@ -173,8 +232,9 @@ test("concurrent correct OTP requests create exactly one atomic claim", async ()
   try {
     const challenge = await insertChallenge(sqlite);
     const input = {
+      identityContext: dualContext,
       challengeId: challenge.id,
-      emailHash: challenge.emailHash,
+      email: challenge.email,
       purpose: challenge.purpose,
       code: challenge.code,
       now: "2026-07-26T12:00:00.000Z",
@@ -203,26 +263,26 @@ test("concurrent correct OTP requests create exactly one atomic claim", async ()
 });
 
 function reservationInput(overrides: Partial<{
+  identityContext: typeof dualContext;
   id: string;
   email: string;
-  emailHash: string;
-  ipHash: string | null;
+  requestIp: string | null;
   purpose: "login" | "register";
   now: string;
   cooldownSince: string;
   hourlySince: string;
 }> = {}) {
   return {
+    identityContext: dualContext,
     id: crypto.randomUUID(),
     email: "user@example.test",
-    emailHash: "email-hash",
     purpose: "login" as const,
     locale: "ru" as const,
     accountType: "individual" as const,
     codeSalt: "salt",
-    codeHash: "code-hash",
+    code: "123456",
     expiresAt: "2026-07-26T12:10:00.000Z",
-    ipHash: "ip-hash",
+    requestIp: "203.0.113.8",
     now: "2026-07-26T12:00:00.000Z",
     cooldownSince: "2026-07-26T11:59:00.000Z",
     hourlySince: "2026-07-26T11:00:00.000Z",
@@ -257,22 +317,64 @@ test("parallel OTP reservations create one active challenge", async () => {
   }
 });
 
+test("OTP rate limits match retained lookup-key versions", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    assert.equal(
+      (
+        await reserveOtpChallenge(d1, reservationInput({
+          identityContext: previousKeyContext,
+          id: "previous-key",
+        }))
+      ).status,
+      "reserved",
+    );
+    assert.equal(
+      (
+        sqlite.prepare(
+          `SELECT email_lookup_key_version AS version
+           FROM auth_otp_challenges WHERE id='previous-key'`,
+        ).get() as { version: string }
+      ).version,
+      "v1",
+    );
+    const blocked = await reserveOtpChallenge(d1, reservationInput({
+      id: "active-key",
+    }));
+    assert.equal(blocked.status, "blocked");
+    assert.equal(
+      (
+        sqlite.prepare(
+          "SELECT count(*) AS total FROM auth_otp_challenges",
+        ).get() as { total: number }
+      ).total,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("OTP hourly limit counts invalidated provider failures", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {
+    const legacyEmailHash = await sha256("user@example.test");
+    const legacyIpHash = await sha256("203.0.113.8");
     const insert = sqlite.prepare(`
       INSERT INTO auth_otp_challenges (
         id, email, email_hash, purpose, locale, account_type, code_salt,
         code_hash, attempt_count, max_attempts, expires_at, consumed_at,
         invalidated_at, request_ip_hash, created_at
-      ) VALUES (?, 'user@example.test', 'email-hash', 'login', 'ru',
+      ) VALUES (?, 'user@example.test', ?, 'login', 'ru',
         'individual', 'salt', 'hash', 0, 5,
         '2026-07-26T12:10:00.000Z', NULL,
-        '2026-07-26T11:30:00.000Z', 'ip-hash', ?)
+        '2026-07-26T11:30:00.000Z', ?, ?)
     `);
     for (let index = 0; index < 8; index += 1) {
       insert.run(
         `failed-${index}`,
+        legacyEmailHash,
+        legacyIpHash,
         `2026-07-26T11:${String(30 + index).padStart(2, "0")}:00.000Z`,
       );
     }
@@ -297,14 +399,12 @@ test("missing IP does not merge unrelated OTP email buckets", async () => {
     const first = await reserveOtpChallenge(d1, reservationInput({
       id: "first",
       email: "first@example.test",
-      emailHash: "first-hash",
-      ipHash: null,
+      requestIp: null,
     }));
     const second = await reserveOtpChallenge(d1, reservationInput({
       id: "second",
       email: "second@example.test",
-      emailHash: "second-hash",
-      ipHash: null,
+      requestIp: null,
     }));
     assert.equal(first.status, "reserved");
     assert.equal(second.status, "reserved");
@@ -371,8 +471,9 @@ test("concurrent wrong OTP requests cannot overshoot the attempt budget", async 
     const challenge = await insertChallenge(sqlite);
     const results = await Promise.all(
       Array.from({ length: 8 }, () => consumeOtpChallenge(d1, {
+        identityContext: dualContext,
         challengeId: challenge.id,
-        emailHash: challenge.emailHash,
+        email: challenge.email,
         purpose: challenge.purpose,
         code: "000000",
         now: "2026-07-26T12:00:00.000Z",
@@ -423,8 +524,9 @@ test("expired, replaced, used, and mismatched OTP states remain distinct", async
     try {
       const challenge = await insertChallenge(sqlite, fixture);
       const result = await consumeOtpChallenge(d1, {
+        identityContext: dualContext,
         challengeId: challenge.id,
-        emailHash: challenge.emailHash,
+        email: challenge.email,
         purpose: challenge.purpose,
         code: challenge.code,
         now: "2026-07-26T12:00:00.000Z",
@@ -439,8 +541,9 @@ test("expired, replaced, used, and mismatched OTP states remain distinct", async
   try {
     const challenge = await insertChallenge(sqlite);
     const result = await consumeOtpChallenge(d1, {
+      identityContext: dualContext,
       challengeId: challenge.id,
-      emailHash: "another-email-hash",
+      email: "another@example.test",
       purpose: challenge.purpose,
       code: challenge.code,
       now: "2026-07-26T12:00:00.000Z",
@@ -448,5 +551,31 @@ test("expired, replaced, used, and mismatched OTP states remain distinct", async
     assert.equal(result.status, "invalid");
   } finally {
     sqlite.close();
+  }
+});
+
+test("keyed OTP verification rejects divergent retained SHA evidence", async () => {
+  for (const column of ["email_hash", "code_hash"] as const) {
+    const { sqlite, d1 } = databaseFixture();
+    try {
+      const challenge = await insertChallenge(sqlite);
+      sqlite.prepare(
+        `UPDATE auth_otp_challenges SET ${column}='divergent' WHERE id=?`,
+      ).run(challenge.id);
+      await assert.rejects(
+        consumeOtpChallenge(d1, {
+          identityContext: dualContext,
+          challengeId: challenge.id,
+          email: challenge.email,
+          purpose: challenge.purpose,
+          code: challenge.code,
+          now: "2026-07-26T12:00:00.000Z",
+        }),
+        (error: unknown) => error instanceof IdentityProtectionError
+          && error.code === "IDENTITY_VALUE_DIVERGED",
+      );
+    } finally {
+      sqlite.close();
+    }
   }
 });

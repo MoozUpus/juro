@@ -115,10 +115,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const db = requireD1();
   const identityContext = runtimeIdentityProtection();
   const now = new Date().toISOString();
-  const emailHash = await sha256(email);
   const verification = await consumeOtpChallenge(db, {
+    identityContext,
     challengeId: body.challengeId,
-    emailHash,
+    email,
     purpose,
     code,
     now,
@@ -126,6 +126,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (verification.status !== "verified") {
     return otpError(verification, locale);
   }
+  const emailHash = await sha256(email);
 
   const existingUserId = await userIdByEmail(db, identityContext, email);
   let user = existingUserId

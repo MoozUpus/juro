@@ -50,7 +50,7 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 
 | ID | Threat | Current exposure | Required controls |
 |---|---|---|---|
-| T-01 | OTP enumeration/brute force | independent limits, pepper, Turnstile, and atomic lock absent | generic response, Turnstile, per-email/IP limits, peppered hash, atomic attempts/lock |
+| T-01 | OTP enumeration/brute force | local atomic claims and disabled keyed evidence exist; independent limits, Turnstile, remote activation, and legacy-digest drain are absent | generic response, Turnstile, per-email/IP limits, staged HMAC activation, atomic attempts/lock |
 | T-02 | session fixation/replay | rotation/device binding absent | rotation, device record, security-event revoke, one/all logout |
 | T-03 | IDOR/cross-tenant access | confirmed builder listing and invitation gaps | central object authorization, active-workspace scope, negative matrix, neutral response |
 | T-04 | invitation/token replay | acceptance is not consistently atomic | one-time conditional consume, expiry, email binding, resend invalidation |
@@ -102,4 +102,3 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 - Vectorize pre/post-authorization leak tests;
 - secret scans across source, history, bundles, artifacts, logs, and docs;
 - backup and rollback rehearsal against isolated staging resources.
-

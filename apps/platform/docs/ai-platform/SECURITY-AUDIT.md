@@ -78,6 +78,14 @@ Required fix:
 - hash is `SHA-256(salt:code)` without `OTP_HASH_SECRET`;
 - generic anti-enumeration responses are incomplete.
 
+Local remediation status: migration 0018 and the application contain a
+disabled expand layer for domain-separated, versioned HMAC evidence covering
+OTP email/IP lookup and challenge-bound codes. It preserves cross-key-version
+rate-limit buckets and fails closed on keyed/SHA divergence. Checked-in mode
+is still `legacy`, the combined eight/hour policy is unchanged, Turnstile and
+independent limits remain absent, legacy salted code SHA remains stored, and
+no remote D1/Resend test has run. SEC-005 is therefore not closed.
+
 ### SEC-006 — session and device security incomplete
 
 - all sessions use a 30-day expiry;
@@ -97,16 +105,17 @@ Document deletion cascades through collaboration/history. The database delete oc
 
 Email, phone, identity fields, user content, document text, and AI results lack the required protected lookup/envelope-encryption model.
 
-Local remediation status: migrations 0016–0017 and the application now contain
+Local remediation status: migrations 0016–0018 and the application now contain
 disabled expand layers for canonical `user_profiles` email/phone and
 workspace/document invitation evidence. Workspace invitation email has
 record-bound ciphertext plus keyed lookup; document targets have
-purpose-separated keyed lookup. All checked-in environments remain in
-`legacy`, no remote row was backfilled, and workspace/profile plaintext plus
-legacy SHA fields are intentionally retained. OTP/deletion challenge identity
-digests, contact identity fields, document/AI content, staging key
-configuration, TTL drain, and contract migrations remain open; SEC-009 is
-therefore not closed.
+purpose-separated keyed lookup; OTP/deletion challenges have non-recoverable,
+purpose-separated keyed evidence. All checked-in environments remain in
+`legacy`, no remote row was backfilled, and workspace/profile/challenge
+plaintext plus legacy SHA fields are intentionally retained. Contact identity
+fields, document/AI content, staging key configuration, dependency-safe
+retention drain, and contract migrations remain open; SEC-009 is therefore
+not closed.
 
 ### SEC-010 — append-only audit is erasable
 
@@ -139,6 +148,8 @@ When `ALLOW_PLATFORM_AUTH_HEADERS=true`, `oai-authenticated-user-*` headers are 
 - session tokens are stored as hashes;
 - cookies use Secure, HttpOnly, and SameSite=Lax;
 - OTP is six digits, expires after ten minutes, has a 60-second resend cooldown, invalidates the previous challenge, and stores a salted hash rather than the code;
+- the disabled local 0018 expand path additionally binds keyed OTP/deletion
+  code evidence to its purpose and record/session context;
 - no OTP logging was found;
 - R2 object keys do not include the original filename or direct PII;
 - unauthenticated protected API smoke returns `401`;

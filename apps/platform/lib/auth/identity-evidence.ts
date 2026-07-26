@@ -14,11 +14,21 @@ import {
 export type IdentityEvidencePurpose =
   | "workspace-invitation-email"
   | "document-invitation-email"
-  | "document-invitation-phone";
+  | "document-invitation-phone"
+  | "auth-otp-email"
+  | "auth-otp-request-ip"
+  | "auth-otp-code"
+  | "account-deletion-email"
+  | "account-deletion-code";
 
 export type KeyedIdentityEvidence = {
   lookupHash: string | null;
   lookupKeyVersion: string | null;
+};
+
+export type KeyedIdentityEvidencePair = {
+  lookupHash: string;
+  lookupKeyVersion: string;
 };
 
 export type EncryptedIdentityEvidence = KeyedIdentityEvidence & {
@@ -93,6 +103,41 @@ export async function prepareKeyedIdentityEvidence(
       lookupHash: lookup.digest,
       lookupKeyVersion: lookup.keyVersion,
     };
+  } catch (error) {
+    return asProtectionError(error);
+  }
+}
+
+export async function identityEvidenceLookupPairs(
+  context: IdentityProtectionContext,
+  input: {
+    normalizedValue: string;
+    purpose: IdentityEvidencePurpose;
+  },
+): Promise<KeyedIdentityEvidencePair[]> {
+  if (context.mode === "legacy") return [];
+  try {
+    const keyring = requireKeyring(context);
+    const versions = [
+      keyring.activeVersion,
+      ...[...keyring.versions.keys()]
+        .filter(version => version !== keyring.activeVersion)
+        .sort(),
+    ];
+    return Promise.all(
+      versions.map(async (version) => {
+        const lookup = await identityLookupHmac(
+          keyring,
+          input.normalizedValue,
+          lookupPurpose(input.purpose),
+          version,
+        );
+        return {
+          lookupHash: lookup.digest,
+          lookupKeyVersion: lookup.keyVersion,
+        };
+      }),
+    );
   } catch (error) {
     return asProtectionError(error);
   }
@@ -241,15 +286,18 @@ export async function identityEvidenceMatches(
   context: IdentityProtectionContext,
   input: {
     normalizedValue: string;
+    legacyNormalizedValue?: string;
     purpose: IdentityEvidencePurpose;
     legacyHash: string | null;
     lookupHash: string | null;
     lookupKeyVersion: string | null;
   },
 ): Promise<boolean> {
+  const legacyNormalizedValue = input.legacyNormalizedValue
+    ?? input.normalizedValue;
   if (context.mode === "legacy") {
     return input.legacyHash !== null
-      && secureEqual(await sha256(input.normalizedValue), input.legacyHash);
+      && secureEqual(await sha256(legacyNormalizedValue), input.legacyHash);
   }
   const keyedComplete = completeGroup([
     input.lookupHash,
@@ -257,7 +305,7 @@ export async function identityEvidenceMatches(
   ]);
   if (!keyedComplete) {
     return input.legacyHash !== null
-      && secureEqual(await sha256(input.normalizedValue), input.legacyHash);
+      && secureEqual(await sha256(legacyNormalizedValue), input.legacyHash);
   }
   try {
     const expected = await identityLookupHmac(
@@ -266,8 +314,20 @@ export async function identityEvidenceMatches(
       lookupPurpose(input.purpose),
       input.lookupKeyVersion!,
     );
-    return secureEqual(expected.digest, input.lookupHash!);
+    if (!secureEqual(expected.digest, input.lookupHash!)) return false;
+    if (
+      input.legacyHash !== null
+      && input.legacyNormalizedValue !== undefined
+      && !secureEqual(
+        await sha256(legacyNormalizedValue),
+        input.legacyHash,
+      )
+    ) {
+      throw new IdentityProtectionError("IDENTITY_VALUE_DIVERGED");
+    }
+    return true;
   } catch (error) {
+    if (error instanceof IdentityProtectionError) throw error;
     return asProtectionError(error);
   }
 }

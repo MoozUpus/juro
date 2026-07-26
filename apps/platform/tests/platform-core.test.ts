@@ -156,6 +156,68 @@ test("canonical identity expand stays disabled and public projections omit prote
   assert.match(identityEvidence, /secureEqual/);
 });
 
+test("short-lived challenge evidence is keyed without enabling rollout", async () => {
+  const [
+    requestOtp,
+    verifyOtp,
+    otpReservation,
+    otpConsumption,
+    deletionRoute,
+    deletionService,
+    challengeEvidence,
+    migration,
+  ] = await Promise.all([
+    readFile(
+      new URL("../app/api/auth/request-otp/route.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/api/auth/verify-otp/route.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(new URL("../lib/auth/otp-request.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../lib/auth/otp-challenge.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../app/api/platform/privacy/deletion-request/route.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL("../lib/auth/account-deletion.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../lib/auth/challenge-evidence.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../drizzle/0018_loud_puck.sql", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(requestOtp, /runtimeIdentityProtection/);
+  assert.match(verifyOtp, /identityContext/);
+  assert.match(otpReservation, /prepareAuthOtpChallengeEvidence/);
+  assert.match(otpReservation, /email_lookup_key_version/);
+  assert.match(otpConsumption, /authOtpEmailMatches/);
+  assert.match(otpConsumption, /authOtpCodeMatches/);
+  assert.match(deletionRoute, /runtimeIdentityProtection/);
+  assert.match(deletionService, /accountDeletionEmailMatches/);
+  assert.match(deletionService, /accountDeletionCodeMatches/);
+  assert.match(challengeEvidence, /identityEvidenceLookupPairs/);
+  assert.match(challengeEvidence, /legacyNormalizedValue/);
+  assert.match(migration, /auth_otp_challenge_evidence_insert_guard/);
+  assert.match(
+    migration,
+    /account_deletion_challenge_evidence_insert_guard/,
+  );
+});
+
 test("session management distinguishes the current local device and audits revocation", async () => {
   const [sessionStore, sessionRoute, singleRoute, settings] =
     await Promise.all([

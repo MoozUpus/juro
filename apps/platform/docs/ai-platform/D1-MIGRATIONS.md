@@ -1,7 +1,7 @@
 # JURO D1 migrations
 
 Updated: 2026-07-26  
-Latest source migration: `0017_ancient_thunderbird.sql`
+Latest source migration: `0018_loud_puck.sql`
 Remote application status: not applied.
 
 ## Migration policy
@@ -144,6 +144,30 @@ keyed evidence while pre-0017 invitations retain legacy compatibility for
 their bounded seven-day lifetime. A later contract migration requires a
 verified TTL drain or revocation/reissue process.
 
+## Migration 0018
+
+`0018_loud_puck.sql` is the additive short-lived challenge-evidence expand
+step. It:
+
+- adds nullable, versioned HMAC fields for OTP email, request IP, and code;
+- adds nullable, versioned HMAC fields for account-deletion email and code;
+- adds OTP email/time and IP/time lookup indexes used across retained key
+  versions;
+- rejects partial, malformed, or cross-group keyed evidence with insert/update
+  triggers;
+- preserves every raw email, legacy SHA-256 digest, salt, attempt counter,
+  expiry/lifecycle timestamp, foreign-key reference, and pre-existing row;
+- stores no key, secret, plaintext code, generated backfill, or fabricated
+  digest.
+
+The migration alone protects no challenge. In checked-in `legacy` mode the
+application continues writing the old fields and null keyed groups. A reviewed
+staging `dual_write` switch writes both forms, treats keyed evidence as
+authoritative, checks retained SHA consistency, and tries all retained lookup
+key versions for rate limiting. Contract cleanup is separate: a ten-minute TTL
+does not prove that an historical row is unreferenced by MFA, policy, or
+deletion-request evidence.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -151,7 +175,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0017` with foreign keys enabled;
+- apply migrations `0000`–`0018` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -189,6 +213,12 @@ partial or invalid evidence, record-bound encryption, purpose separation,
 keyed-authoritative matching, unknown-key failure, and explicit legacy
 rollback behavior.
 
+Migration 0018 tests additionally prove additive-only SQL, snapshot/index
+agreement, preservation of legacy challenge rows, DB rejection of partial
+email/code/IP keyed groups, old-key rate-limit lookup, record/purpose/session
+code binding, keyed-authoritative verification, retained-SHA divergence
+failure, exact legacy rollback, attempt fencing, and one-winner concurrency.
+
 The full local migration sequence changes the SQLite table count from 79 to
 94 and reports zero foreign-key integrity errors. This is compatibility
 evidence for the checked-in migration sequence, not
@@ -203,7 +233,7 @@ After remote inventory and backup/restore gates:
 3. record its bookmark/checksum/manifest without storing secret values;
 4. verify that no user has multiple `requested`/`reviewing` deletion rows,
    because 0015 intentionally installs a partial unique index;
-5. apply only pending migrations, including 0011–0017 if absent;
+5. apply only pending migrations, including 0011–0018 if absent;
 6. verify table/index/trigger presence and foreign keys;
 7. run existing route/security tests and isolated document-builder/comparison smoke flows;
 8. verify outbox/job lease behavior and Queue/DLQ delivery;
@@ -218,6 +248,8 @@ After remote inventory and backup/restore gates:
     old-key read/current-key rewrite before proposing `dual_write`;
 13. verify rendered RU/UZ policy digests and run real deletion-code delivery,
     concurrent confirmation, audit, and session-revocation checks;
-14. retain the backup until the release window and restore test are complete.
+14. verify OTP/deletion keyed fields and both lookup-key versions without
+    logging digests; keep cleanup disabled and record legacy/keyed counts;
+15. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

@@ -320,3 +320,38 @@ be revoked and reissued before a later contract migration. Short-lived login
 and deletion challenges have separate user/session/challenge binding,
 rate-limit, consumption, and cleanup semantics; their digest migration is a
 separate slice and is not implied by 0017.
+
+## D-024 — short-lived challenges use keyed, non-recoverable evidence
+
+Status: accepted
+Date: 2026-07-26
+
+Login/registration OTP and account-deletion challenges need equality,
+rate-limit, and one-time-code verification; the server never needs to recover
+their stored email or code after delivery. Their expand layer therefore uses
+domain-separated HMAC-SHA-256 rather than adding new recoverable ciphertext.
+Email, request IP, login code, deletion email, and deletion code use distinct
+purposes. Login codes are bound to challenge ID and purpose; deletion codes
+are bound to challenge ID, user ID, and local session ID.
+
+Migration 0018 is additive. It adds nullable digest/key-version pairs, lookup
+indexes for OTP email/IP rate limiting, and insert/update completeness
+triggers. It retains raw OTP email, legacy SHA-256 email/IP/code fields, salt,
+TTL, attempts, and lifecycle timestamps so the prior application remains a
+valid rollback after the schema expands. It computes no digest in SQL and
+contains no key material.
+
+In `dual_write`, new challenges write both forms. Keyed evidence is
+authoritative whenever present, retained SHA evidence must agree, and
+rate-limit lookup tries the active and every retained HMAC key version.
+Pre-0018 rows with no keyed group continue through the exact legacy SHA path.
+Explicit `legacy` mode writes null keyed fields and preserves the historical
+verification contract.
+
+Ten-minute expiry is not deletion evidence. Historical OTP rows may be
+referenced by MFA or policy evidence, and deletion challenges are referenced
+by deletion requests. Cleanup remains disabled until a reviewed,
+dry-run-first retention/pseudonymization plan classifies those references.
+Clearing raw email and legacy digests, deleting expired rows, and retiring a
+key version are later contract actions requiring staging counts, backup and
+restore proof, dependency-safe predicates, and explicit authorization.

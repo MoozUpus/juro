@@ -95,6 +95,12 @@ Current sensitive fields and content are generally plaintext in D1:
 
 No workspace data-key model, AES-GCM envelope encryption, protected lookup hashes, or key-rotation metadata exists. OTP has a per-record salt but no server-side pepper. A standalone signed-share code is stored both as plaintext and as a hash.
 
+Local expand status (not remote evidence): migrations 0016–0018 now define
+disabled, versioned AES/HMAC boundaries for canonical profile and invitation
+identity plus equality-only HMAC evidence for OTP/deletion challenges. All
+checked-in environments remain `legacy`; plaintext and legacy SHA fields are
+retained, and document/AI/contact/workspace-key encryption is still absent.
+
 ## Duplicate or overlapping concepts
 
 The following require consolidation decisions before additive schema work:
@@ -155,4 +161,3 @@ Before any remote migration:
 8. apply to staging;
 9. validate data invariants and the document-builder regression;
 10. keep production unchanged until explicit approval.
-

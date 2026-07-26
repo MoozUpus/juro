@@ -1,4 +1,5 @@
-import { normalizeEmail, randomOtp, randomToken, sha256 } from "../../../../lib/auth/crypto";
+import { normalizeEmail, randomOtp, randomToken } from "../../../../lib/auth/crypto";
+import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
 import {
   parseJsonRequest,
   requestOtpInputSchema,
@@ -41,9 +42,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (!EMAIL_RE.test(email) || email.length > 254) return json({ error: locale === "ru" ? "Проверьте адрес электронной почты." : "Elektron pochta manzilini tekshiring." }, 400);
 
   const db = requireD1();
-  const emailHash = await sha256(email);
   const connectingIp = request.headers.get("cf-connecting-ip")?.trim() || null;
-  const ipHash = connectingIp ? await sha256(connectingIp) : null;
   const id = crypto.randomUUID();
   const code = randomOtp();
   const salt = randomToken(16);
@@ -51,16 +50,16 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const now = new Date(nowMs).toISOString();
   const expiresAt = new Date(nowMs + 10 * 60 * 1000).toISOString();
   const reservation = await reserveOtpChallenge(db, {
+    identityContext: runtimeIdentityProtection(),
     id,
     email,
-    emailHash,
+    requestIp: connectingIp,
     purpose,
     locale,
     accountType,
     codeSalt: salt,
-    codeHash: await sha256(`${salt}:${code}`),
+    code,
     expiresAt,
-    ipHash,
     now,
     cooldownSince: new Date(nowMs - 60 * 1000).toISOString(),
     hourlySince: new Date(nowMs - 60 * 60 * 1000).toISOString(),

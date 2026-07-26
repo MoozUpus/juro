@@ -5,11 +5,10 @@ import {
   type DeletionConfirmationResult,
 } from "../../../../../lib/auth/account-deletion";
 import {
-  normalizeEmail,
   randomOtp,
   randomToken,
-  sha256,
 } from "../../../../../lib/auth/crypto";
+import { runtimeIdentityProtection } from "../../../../../lib/auth/identity-runtime";
 import {
   accountDeletionInputSchema,
   parseJsonRequest,
@@ -154,6 +153,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
 
   const db = requireD1();
+  const identityContext = runtimeIdentityProtection();
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
   if (body.action === "request_code") {
@@ -170,13 +170,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
     const code = randomOtp();
     const salt = randomToken(16);
     const reservation = await reserveAccountDeletionChallenge(db, {
+      identityContext,
       id,
       userId: session.userId,
       sessionId: session.sessionId,
-      emailHash: await sha256(normalizeEmail(session.email)),
+      email: session.email,
       locale,
       codeSalt: salt,
-      codeHash: await sha256(`${salt}:${code}`),
+      code,
       expiresAt: new Date(nowMs + CHALLENGE_TTL_MS).toISOString(),
       now,
       recentSince: new Date(nowMs - RECENT_SESSION_MS).toISOString(),
@@ -260,9 +261,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
 
   const result = await confirmAccountDeletion(db, {
+    identityContext,
     challengeId: body.challengeId,
     userId: session.userId,
     sessionId: session.sessionId,
+    email: session.email,
     workspaceId: await ensureDefaultWorkspace(session.userId),
     code: body.code,
     reason: body.reason || null,

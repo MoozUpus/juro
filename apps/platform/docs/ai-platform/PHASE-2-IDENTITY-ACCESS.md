@@ -90,8 +90,7 @@ The key ring is not committed or configured in source.
 Every checked-in environment remains
 `IDENTITY_PROTECTION_MODE=legacy`. Migration 0016 has not been applied, the
 backfill has no live invocation, and plaintext has not been cleared.
-OTP/deletion challenges, saved contacts, and document/AI content remain
-separate protection slices.
+Saved contacts and document/AI content remain separate protection slices.
 
 ### Invitation identity evidence expand layer
 
@@ -115,8 +114,32 @@ Migration 0017 is not applied remotely and checked-in mode remains `legacy`,
 so no live invitation is encrypted or keyed by this source change. Workspace
 plaintext email and both legacy SHA columns remain during expansion. Active
 legacy invitations must expire within their seven-day TTL or be revoked and
-reissued before a later contract step; login/deletion challenge digests are a
-separate short-lived evidence slice.
+reissued before a later contract step.
+
+### Short-lived challenge evidence expand layer
+
+- migration 0018 adds nullable HMAC/key-version pairs for OTP email, request
+  IP, and code plus account-deletion email and code;
+- equality-only values are not newly encrypted: the server does not need to
+  recover a stored code, IP, or challenge email after delivery;
+- email, IP, login code, deletion email, and deletion code have separate HMAC
+  purposes; login codes bind challenge ID and login/register purpose, while
+  deletion codes also bind user and local session;
+- new `dual_write` rows use the active key, and OTP rate-limit queries try
+  every retained key version so rotation does not reset a bucket;
+- keyed evidence is authoritative; a keyed mismatch never falls back, and a
+  matching keyed value with divergent retained SHA evidence fails closed
+  before attempts, sessions, deletion requests, audit, or revocation effects;
+- pre-0018 rows with no keyed group and explicit `legacy` mode retain the exact
+  historical SHA verification path;
+- insert/update triggers reject partial or malformed keyed groups, while all
+  raw/SHA/salt/TTL/lifecycle fields remain for rollback.
+
+Migration 0018 is not applied remotely and checked-in mode remains `legacy`,
+so no live challenge uses these HMAC fields. Expiry remains ten minutes, but
+historical rows are not assumed deletable: MFA, policy, and deletion-request
+references require a reviewed dry-run retention/pseudonymization plan before
+raw email or legacy SHA fields can be cleared.
 
 ### Two-factor authentication
 
@@ -211,6 +234,7 @@ node --import tsx --test \
   tests/auth-keyring.test.ts \
   tests/identity-protection.test.ts \
   tests/identity-evidence.test.ts \
+  tests/challenge-evidence.test.ts \
   tests/auth-sessions.test.ts \
   tests/auth-mfa-crypto.test.ts \
   tests/auth-mfa.test.ts \
@@ -230,11 +254,13 @@ backup codes, pre-auth session gating, attempt exhaustion, concurrent login,
 concurrent disable, failed-enrollment side effects, out-of-order audit
 timestamps, protected profile read/write/backfill/rotation, response
 projection, invitation AAD/domain separation/keyed-authoritative matching,
-legacy-row preservation, DB completeness guards, and the full existing
+challenge purpose/record/session binding, retained-key rate-limit lookup,
+legacy-row preservation, SHA-divergence failure, DB completeness guards, and
+the full existing
 builder/comparison/rendered Worker regression suite.
 
-The final local full suite passes 217/217 checks: 22 rendered
-Worker/security checks, 155 core/document/auth checks, and 40 Cloudflare
+The final local full suite passes 227/227 checks: 22 rendered
+Worker/security checks, 163 core/document/auth checks, and 42 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
 94 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
@@ -256,12 +282,13 @@ staging:
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests, then apply
-   pending migrations through 0017 while keeping identity mode `legacy`;
+   pending migrations through 0018 while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
    sender;
-8. exercise same-email and same-IP concurrency against D1, not only SQLite;
+8. exercise same-email and same-IP concurrency, retained-key lookup, keyed/SHA
+   divergence failure, and one-winner consume against D1, not only SQLite;
 9. confirm CSRF failures, current/single/other/all session revocation, idle
    expiry, tenant isolation, and the append-only audit chain;
 10. configure the versioned identity key ring in protected staging secret
@@ -320,7 +347,7 @@ GROUP BY email_key_version,email_lookup_key_version;
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0017 are not applied to staging or production;
+- migrations 0011–0018 are not applied to staging or production;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, D1 migration, real-device authenticator flow, or remote D1
 concurrency test has been completed;
@@ -341,8 +368,12 @@ concurrency test has been completed;
   plaintext email and legacy SHA digests remain; no remote TTL drain,
   revocation/reissue rehearsal, contract migration, or key activation has
   occurred;
-- OTP/deletion identity digests, saved-contact identity fields, and
-  document/AI content remain outside the protected expand layers;
+- OTP/deletion evidence now has a disabled local HMAC expand layer, but raw
+  OTP email and all legacy SHA digests remain; no remote activation,
+  dependency-safe retention drain, pseudonymization, contract migration, or
+  key retirement has occurred;
+- saved-contact identity fields and document/AI content remain outside the
+  protected expand layers;
 - NAT-wide OTP limits preserve existing behavior and need staging product
   review;
 - cleanup scheduling for expired pending credentials and consumed/invalidated

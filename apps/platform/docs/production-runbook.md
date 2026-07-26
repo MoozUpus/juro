@@ -49,7 +49,7 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 ## Database migration
 
 Migrations are ordered in `drizzle/0000_*.sql` through
-`drizzle/0017_*.sql`. Before any remote deployment:
+`drizzle/0018_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -63,7 +63,9 @@ Migrations are ordered in `drizzle/0000_*.sql` through
    `auth_backup_codes`, `auth_mfa_challenges`, and
    `auth_mfa_factor_claims`, plus the nullable profile identity-protection
    columns and completeness triggers from 0016, plus the nullable invitation
-   evidence columns, lookup indexes, and completeness triggers from 0017.
+   evidence columns, lookup indexes, and completeness triggers from 0017,
+   plus the nullable OTP/deletion challenge HMAC fields, OTP lookup indexes,
+   and completeness triggers from 0018.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 9. Require both tenant-link audits to return zero:
 
@@ -75,17 +77,20 @@ Migrations are ordered in `drizzle/0000_*.sql` through
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migrations `0011`–`0017` have passed local sequence, foreign-key,
+Migrations `0011`–`0018` have passed local sequence, foreign-key,
 sentinel-preservation, tenant-backfill, append-only trigger, chain-fork, and
 snapshot tests. They have not been applied to staging or production.
 
-Keep `IDENTITY_PROTECTION_MODE=legacy` while applying 0016 and 0017. Before any
+Keep `IDENTITY_PROTECTION_MODE=legacy` while applying 0016–0018. Before any
 staging-only `dual_write` proposal, configure the protected key ring, invoke
 the bounded backfill through a reviewed isolated harness, prove zero
 legacy/divergent/rotation-required profile rows, and rehearse rollback. The
 current source does not authorize clearing plaintext, removing legacy
-invitation hashes, or changing production. Active legacy invitations must
-expire or be revoked/reissued before a later contract migration.
+invitation/challenge hashes, or changing production. Active legacy invitations
+must expire or be revoked/reissued before a later contract migration. A
+challenge's ten-minute expiry alone does not authorize row deletion or
+pseudonymization: first classify MFA, policy, and deletion-request references
+through a dry-run retention plan.
 
 ## Smoke checklist
 
@@ -94,6 +99,9 @@ expire or be revoked/reissued before a later contract migration.
 - Invalid, expired, replaced, and exhausted OTP states are distinct.
 - Parallel OTP requests create one active challenge, and one valid OTP creates
   at most one session claim.
+- With a protected staging key ring and `dual_write`, OTP email/IP rate limits
+  match the active and retained HMAC key versions; keyed/SHA divergence fails
+  before attempt or session side effects.
 - A new email-code login creates one device-aware primary-assurance session,
   with a 30-day absolute and seven-day idle limit.
 - For an account with active MFA, email OTP creates only a five-minute
@@ -105,6 +113,9 @@ expire or be revoked/reissued before a later contract migration.
   winner's session.
 - Missing, malformed, and unknown-version `IDENTITY_KEYRING` values fail
   closed without issuing a session or exposing configuration detail.
+- Deletion-code evidence is bound to challenge, user, and current local
+  session; keyed/SHA divergence cannot create a deletion request, audit event,
+  or session revocation.
 - Session listing marks the current local session, never claims to include
   external-provider sessions, and allows only owner-scoped single/other/all
   revocation.

@@ -43,13 +43,16 @@ Requirements:
 The current source provides the cryptographic primitive, encrypted TOTP
 enrollment, backup-code hashing, canonical profile dual-read/write primitives,
 bounded profile backfill/verification, invitation evidence primitives, and
-tests. It does not contain a real key ring, and no live environment was
-changed.
+short-lived OTP/deletion challenge HMAC evidence. It does not contain a real
+key ring, and no live environment was changed. Migration 0018 deliberately
+retains legacy SHA digests during expansion, so keyed code evidence is not a
+claim that a D1-only compromise is already resistant to offline OTP guessing;
+that requires the later verified contract/drain step.
 
 `IDENTITY_PROTECTION_MODE` is not a secret, but it is a security-sensitive
 deployment control. All checked-in development/staging/production
 configurations are fixed to `legacy`. Do not change staging to `dual_write`
-until migrations 0016 and 0017 are applied, the protected key ring is
+until migrations 0016–0018 are applied, the protected key ring is
 configured, and a backup/restore rehearsal succeeds. Do not change production
 in this phase.
 

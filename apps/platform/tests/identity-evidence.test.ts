@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sha256 } from "../lib/auth/crypto";
 import {
+  identityEvidenceLookupPairs,
   identityEvidenceMatches,
   prepareEncryptedIdentityEvidence,
   prepareKeyedIdentityEvidence,
@@ -156,6 +157,37 @@ test("keyed invitation evidence is domain-separated and authoritative", async ()
     }),
     false,
     "a keyed mismatch must not fall back to a matching legacy hash",
+  );
+  await assert.rejects(
+    identityEvidenceMatches(dualContext, {
+      normalizedValue,
+      legacyNormalizedValue: normalizedValue,
+      purpose: "document-invitation-email",
+      legacyHash: await sha256("different@example.test"),
+      ...document,
+    }),
+    (error: unknown) => error instanceof IdentityProtectionError
+      && error.code === "IDENTITY_VALUE_DIVERGED",
+    "matching keyed evidence must not hide divergent retained SHA evidence",
+  );
+});
+
+test("lookup candidates cover the active and retained key versions", async () => {
+  const pairs = await identityEvidenceLookupPairs(dualContext, {
+    normalizedValue: "user@example.test",
+    purpose: "auth-otp-email",
+  });
+  assert.deepEqual(
+    pairs.map(({ lookupKeyVersion }) => lookupKeyVersion),
+    ["v2", "v1"],
+  );
+  assert.equal(new Set(pairs.map(({ lookupHash }) => lookupHash)).size, 2);
+  assert.deepEqual(
+    await identityEvidenceLookupPairs(legacyContext, {
+      normalizedValue: "user@example.test",
+      purpose: "auth-otp-email",
+    }),
+    [],
   );
 });
 

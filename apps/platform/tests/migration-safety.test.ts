@@ -19,6 +19,7 @@ const mfaEntry = journal.entries.find(({ idx }) => idx === 14);
 const policyDeletionEntry = journal.entries.find(({ idx }) => idx === 15);
 const identityProtectionEntry = journal.entries.find(({ idx }) => idx === 16);
 const invitationEvidenceEntry = journal.entries.find(({ idx }) => idx === 17);
+const challengeEvidenceEntry = journal.entries.find(({ idx }) => idx === 18);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -35,6 +36,10 @@ assert.ok(
 assert.ok(
   invitationEvidenceEntry,
   "Drizzle journal must contain migration 0017",
+);
+assert.ok(
+  challengeEvidenceEntry,
+  "Drizzle journal must contain migration 0018",
 );
 
 function migrationSql(entry: JournalEntry): string {
@@ -1046,6 +1051,141 @@ test("0017 preserves legacy invitations and rejects partial evidence", () => {
     ).run("d".repeat(43));
     assert.equal(tableDefinitions(db).size, 94);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0018 adds only keyed challenge evidence columns, indexes, and guards", () => {
+  const sql = migrationSql(challengeEvidenceEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^(?:ALTER TABLE|CREATE INDEX|CREATE TRIGGER)\b/i,
+      `unexpected non-additive statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const column of [
+    "email_lookup_hash",
+    "email_lookup_key_version",
+    "code_hmac",
+    "code_key_version",
+    "request_ip_lookup_hash",
+    "request_ip_lookup_key_version",
+  ]) {
+    assert.match(sql, new RegExp(`ADD \\\`${column}\\\``));
+  }
+  for (const name of [
+    "auth_otp_email_lookup_idx",
+    "auth_otp_ip_lookup_created_idx",
+    "auth_otp_challenge_evidence_insert_guard",
+    "auth_otp_challenge_evidence_update_guard",
+    "account_deletion_challenge_evidence_insert_guard",
+    "account_deletion_challenge_evidence_update_guard",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.doesNotMatch(
+    sql,
+    /IDENTITY_KEYRING|RESEND_API_KEY|BEGIN (?:RSA |EC )?PRIVATE KEY/i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0018_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, {
+      columns: Record<string, unknown>;
+      indexes: Record<string, unknown>;
+    }>;
+  };
+  assert.ok(
+    snapshot.tables.auth_otp_challenges.columns.email_lookup_hash,
+  );
+  assert.ok(snapshot.tables.auth_otp_challenges.columns.code_hmac);
+  assert.ok(
+    snapshot.tables.auth_otp_challenges
+      .columns.request_ip_lookup_hash,
+  );
+  assert.ok(
+    snapshot.tables.auth_otp_challenges
+      .indexes.auth_otp_email_lookup_idx,
+  );
+  assert.ok(
+    snapshot.tables.auth_otp_challenges
+      .indexes.auth_otp_ip_lookup_created_idx,
+  );
+  assert.ok(
+    snapshot.tables.account_deletion_challenges
+      .columns.email_lookup_hash,
+  );
+  assert.ok(
+    snapshot.tables.account_deletion_challenges.columns.code_hmac,
+  );
+});
+
+test("0018 preserves legacy challenges and rejects partial keyed groups", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(`
+      CREATE TABLE auth_otp_challenges (
+        id TEXT PRIMARY KEY,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE account_deletion_challenges (
+        id TEXT PRIMARY KEY
+      );
+    `);
+    applyMigration(db, challengeEvidenceEntry);
+    db.prepare(
+      "INSERT INTO auth_otp_challenges (id,created_at) VALUES (?,?)",
+    ).run("legacy-otp", "2026-07-26T12:00:00.000Z");
+    db.prepare(
+      "INSERT INTO account_deletion_challenges (id) VALUES (?)",
+    ).run("legacy-deletion");
+
+    assert.throws(
+      () => db.prepare(
+        `UPDATE auth_otp_challenges
+         SET email_lookup_hash=? WHERE id='legacy-otp'`,
+      ).run("a".repeat(43)),
+      /auth OTP challenge evidence incomplete/,
+    );
+    db.prepare(
+      `UPDATE auth_otp_challenges SET
+         email_lookup_hash=?,email_lookup_key_version='v1',
+         code_hmac=?,code_key_version='v1'
+       WHERE id='legacy-otp'`,
+    ).run("a".repeat(43), "b".repeat(43));
+    assert.throws(
+      () => db.prepare(
+        `UPDATE auth_otp_challenges
+         SET request_ip_lookup_hash=? WHERE id='legacy-otp'`,
+      ).run("c".repeat(43)),
+      /auth OTP challenge evidence incomplete/,
+    );
+    db.prepare(
+      `UPDATE auth_otp_challenges SET
+         request_ip_lookup_hash=?,
+         request_ip_lookup_key_version='v1'
+       WHERE id='legacy-otp'`,
+    ).run("c".repeat(43));
+
+    assert.throws(
+      () => db.prepare(
+        `UPDATE account_deletion_challenges
+         SET code_hmac=? WHERE id='legacy-deletion'`,
+      ).run("d".repeat(43)),
+      /account deletion challenge evidence incomplete/,
+    );
+    db.prepare(
+      `UPDATE account_deletion_challenges SET
+         email_lookup_hash=?,email_lookup_key_version='v1',
+         code_hmac=?,code_key_version='v1'
+       WHERE id='legacy-deletion'`,
+    ).run("e".repeat(43), "f".repeat(43));
   } finally {
     db.close();
   }
