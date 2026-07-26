@@ -214,3 +214,6 @@ Security reports should follow [SECURITY.md](SECURITY.md).
 ## Current product boundaries
 
 The repository contains production-capable document-builder backend code, but several screens in the broader platform remain interactive prototypes. In particular, the main registration/login flow, general AI chat, voice/avatar, operator queue, payments and much of the dashboard use browser-local state or demonstration data. They require separate backend integrations before being represented as live services.
+
+
+<!-- Trigger Cloudflare production deployment -->
