@@ -44,6 +44,11 @@ export type ResolvedUserIdentity = {
   needsRotation: boolean;
 };
 
+export type UserIdentityLookupPair = {
+  hash: string;
+  keyVersion: string;
+};
+
 export class IdentityProtectionError extends Error {
   constructor(
     public readonly code:
@@ -384,7 +389,7 @@ async function lookupPairs(
   keyring: IdentityKeyring,
   normalizedValue: string,
   purpose: string,
-): Promise<Array<{ hash: string; keyVersion: string }>> {
+): Promise<UserIdentityLookupPair[]> {
   return Promise.all(
     [...keyring.versions.keys()].sort().map(async keyVersion => {
       const value = await identityLookupHmac(
@@ -400,7 +405,7 @@ async function lookupPairs(
 
 function lookupPredicate(
   columnPrefix: "email" | "phone",
-  pairs: Array<{ hash: string; keyVersion: string }>,
+  pairs: UserIdentityLookupPair[],
 ): { sql: string; bindings: string[] } {
   return {
     sql: pairs.map(
@@ -409,6 +414,18 @@ function lookupPredicate(
     ).join(" OR "),
     bindings: pairs.flatMap(pair => [pair.keyVersion, pair.hash]),
   };
+}
+
+export async function userEmailLookupPairs(
+  context: IdentityProtectionContext,
+  emailInput: string,
+): Promise<UserIdentityLookupPair[]> {
+  if (context.mode === "legacy") return [];
+  return lookupPairs(
+    requireKeyring(context),
+    normalizeEmail(emailInput),
+    EMAIL_LOOKUP_PURPOSE,
+  );
 }
 
 export async function userIdByEmail(
@@ -422,11 +439,7 @@ export async function userIdByEmail(
       "SELECT id FROM user_profiles WHERE lower(email)=? LIMIT 1",
     ).bind(email).first<{ id: string }>())?.id ?? null;
   }
-  const pairs = await lookupPairs(
-    requireKeyring(context),
-    email,
-    EMAIL_LOOKUP_PURPOSE,
-  );
+  const pairs = await userEmailLookupPairs(context, email);
   const predicate = lookupPredicate("email", pairs);
   const rows = await db.prepare(
     `SELECT id FROM user_profiles

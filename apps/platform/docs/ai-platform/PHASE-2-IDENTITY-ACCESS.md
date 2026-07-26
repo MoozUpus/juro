@@ -292,8 +292,8 @@ fencing, identity rotation, session/challenge invalidation, DB completeness
 guards, and the full existing builder/comparison/rendered Worker regression
 suite.
 
-The final local full suite passes 239/239 checks: 23 rendered
-Worker/security checks, 172 core/document/auth checks, and 44 Cloudflare
+The final local full suite passes 242/242 checks: 23 rendered
+Worker/security checks, 175 core/document/auth checks, and 44 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
 95 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
