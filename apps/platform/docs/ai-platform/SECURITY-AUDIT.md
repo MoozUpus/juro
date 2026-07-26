@@ -162,11 +162,12 @@ release gate rather than a remotely closed finding.
 - attachment R2 metadata contains the original filename;
 - public-share downloads have incomplete access auditing;
 - the CSP still permits unsafe inline script/style behavior;
-- support/admin routes and privileged access-event evidence do not exist. The
-  local-only 0020 foundation now separates expiring platform roles from
-  workspace roles and requires a live local MFA/TOTP session plus an explicit
-  non-inheriting capability, but it creates no assignment or usable staff
-  access;
+- support/admin routes and customer-resource access evidence do not exist.
+  The local-only 0020–0021 foundation now separates expiring platform roles
+  from workspace roles and provides an unexposed administrator grant/revoke
+  service requiring fresh local MFA/TOTP. Each role change is atomic with an
+  immutable per-actor hash-chain event, but no assignment, trusted operator
+  bootstrap, usable staff surface, or view/download/edit grant exists;
 - baseline account deletion did not require email OTP. The local Phase 2
   migration 0015 adds a dedicated verified request flow, but it is not
   deployed and purge/retention orchestration still does not exist.

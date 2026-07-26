@@ -22,6 +22,9 @@ const invitationEvidenceEntry = journal.entries.find(({ idx }) => idx === 17);
 const challengeEvidenceEntry = journal.entries.find(({ idx }) => idx === 18);
 const emailChangeEntry = journal.entries.find(({ idx }) => idx === 19);
 const platformStaffEntry = journal.entries.find(({ idx }) => idx === 20);
+const platformStaffRoleEventEntry = journal.entries.find(
+  ({ idx }) => idx === 21,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -50,6 +53,10 @@ assert.ok(
 assert.ok(
   platformStaffEntry,
   "Drizzle journal must contain migration 0020",
+);
+assert.ok(
+  platformStaffRoleEventEntry,
+  "Drizzle journal must contain migration 0021",
 );
 
 function migrationSql(entry: JournalEntry): string {
@@ -1437,7 +1444,9 @@ test("0020 rejects role confusion, self-grant, mutation, reactivation, and delet
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for (const entry of journal.entries) applyMigration(db, entry);
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 20)) {
+      applyMigration(db, entry);
+    }
     const createdAt = "2026-07-26T12:00:00.000Z";
     const expiresAt = "2026-08-26T12:00:00.000Z";
     db.prepare(
@@ -1567,6 +1576,235 @@ test("0020 rejects role confusion, self-grant, mutation, reactivation, and delet
       /FOREIGN KEY constraint failed/,
     );
     assert.equal(tableDefinitions(db).size, 96);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0021 adds only an append-only, MFA-bound staff role event ledger", () => {
+  const sql = migrationSql(platformStaffRoleEventEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i,
+      `unexpected staff-role-event statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const name of [
+    "platform_staff_role_events",
+    "platform_staff_role_events_hash_uidx",
+    "platform_staff_role_events_chain_uidx",
+    "platform_staff_role_events_assignment_type_uidx",
+    "platform_staff_role_events_actor_idx",
+    "platform_staff_role_events_subject_idx",
+    "platform_staff_role_events_chain_guard",
+    "platform_staff_role_events_consistency",
+    "platform_staff_role_events_no_update",
+    "platform_staff_role_events_no_delete",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.match(sql, /'staff\.role\.granted','staff\.role\.revoked'/);
+  assert.match(sql, /'staff\.roles\.manage'/);
+  assert.match(sql, /unixepoch\(NEW\.created_at\).*BETWEEN 0 AND 300/s);
+  assert.match(sql, /actor\.role = 'administrator'/);
+  assert.match(sql, /t\.status = 'active'/);
+  assert.match(sql, /chain predecessor mismatch/);
+  assert.doesNotMatch(
+    sql,
+    /workspace_members|account_type|IDENTITY_KEYRING|RESEND_API_KEY/i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0021_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, {
+      indexes: Record<string, { isUnique: boolean }>;
+      foreignKeys: Record<string, { onDelete: string }>;
+      checkConstraints: Record<string, unknown>;
+    }>;
+  };
+  const table = snapshot.tables.platform_staff_role_events;
+  assert.ok(table);
+  assert.equal(Object.keys(table.indexes).length, 5);
+  assert.equal(Object.keys(table.foreignKeys).length, 4);
+  assert.equal(Object.keys(table.checkConstraints).length, 6);
+  assert.equal(
+    table.indexes.platform_staff_role_events_chain_uidx.isUnique,
+    true,
+  );
+  assert.equal(
+    table.indexes.platform_staff_role_events_assignment_type_uidx.isUnique,
+    true,
+  );
+  for (const foreignKey of Object.values(table.foreignKeys)) {
+    assert.equal(foreignKey.onDelete, "no action");
+  }
+});
+
+test("0021 rejects mismatched role-event evidence and makes accepted events immutable", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const actorMfaAt = "2026-07-26T12:28:00.000Z";
+    const createdAt = "2026-07-26T12:30:00.000Z";
+    const expiresAt = "2026-07-27T12:30:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES (?,?,?,?),(?,?,?,?)`,
+    ).run(
+      "role-actor",
+      "role-actor@example.test",
+      actorMfaAt,
+      actorMfaAt,
+      "role-subject",
+      "role-subject@example.test",
+      actorMfaAt,
+      actorMfaAt,
+    );
+    db.prepare(
+      `INSERT INTO auth_totp_credentials (
+         id,user_id,status,secret_ciphertext,secret_iv,key_version,
+         enrollment_expires_at,created_at,updated_at,verified_at
+       ) VALUES (
+         'role-actor-totp','role-actor','active','ciphertext',
+         'abcdefghijklmnop','v1',?,?,?,?
+       )`,
+    ).run(expiresAt, actorMfaAt, actorMfaAt, actorMfaAt);
+    db.prepare(
+      `INSERT INTO auth_devices (
+         id,user_id,display_name,first_seen_at,last_seen_at
+       ) VALUES (
+         'role-actor-device','role-actor','Role actor device',?,?
+       )`,
+    ).run(actorMfaAt, actorMfaAt);
+    db.prepare(
+      `INSERT INTO auth_sessions (
+         id,user_id,device_id,token_hash,auth_method,assurance_level,
+         authenticated_at,mfa_verified_at,expires_at,idle_expires_at,
+         created_at,last_seen_at
+       ) VALUES (
+         'role-actor-session','role-actor','role-actor-device',
+         'role-actor-token','email_otp+totp','mfa',?,?,?,?,?,?
+       )`,
+    ).run(
+      actorMfaAt,
+      actorMfaAt,
+      expiresAt,
+      expiresAt,
+      actorMfaAt,
+      actorMfaAt,
+    );
+    const assignmentInsert = db.prepare(
+      `INSERT INTO platform_staff_assignments (
+         id,user_id,role,grant_source,granted_by_user_id,grant_reason,
+         granted_at,expires_at,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    );
+    assignmentInsert.run(
+      "role-actor-assignment",
+      "role-actor",
+      "administrator",
+      "operator_bootstrap",
+      null,
+      "Approved operator bootstrap",
+      actorMfaAt,
+      expiresAt,
+      actorMfaAt,
+      actorMfaAt,
+    );
+    assignmentInsert.run(
+      "role-subject-assignment",
+      "role-subject",
+      "support",
+      "administrator",
+      "role-actor",
+      "Approved support duty",
+      createdAt,
+      expiresAt,
+      createdAt,
+      createdAt,
+    );
+    const eventInsert = db.prepare(
+      `INSERT INTO platform_staff_role_events (
+         id,actor_user_id,actor_session_id,actor_assignment_id,
+         subject_user_id,subject_assignment_id,event_type,capability,role,
+         reason,actor_mfa_verified_at,previous_hash,event_hash,created_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    assert.throws(
+      () => eventInsert.run(
+        "role-event-mismatch",
+        "role-actor",
+        "role-actor-session",
+        "role-actor-assignment",
+        "role-subject",
+        "role-subject-assignment",
+        "staff.role.granted",
+        "staff.roles.manage",
+        "support",
+        "Mismatched reason",
+        actorMfaAt,
+        "0".repeat(64),
+        "1".repeat(64),
+        createdAt,
+      ),
+      /platform staff role event evidence mismatch/,
+    );
+    assert.throws(
+      () => eventInsert.run(
+        "role-event-orphan",
+        "role-actor",
+        "role-actor-session",
+        "role-actor-assignment",
+        "role-subject",
+        "role-subject-assignment",
+        "staff.role.granted",
+        "staff.roles.manage",
+        "support",
+        "Approved support duty",
+        actorMfaAt,
+        "9".repeat(64),
+        "1".repeat(64),
+        createdAt,
+      ),
+      /platform staff role event chain predecessor mismatch/,
+    );
+    eventInsert.run(
+      "role-event-grant",
+      "role-actor",
+      "role-actor-session",
+      "role-actor-assignment",
+      "role-subject",
+      "role-subject-assignment",
+      "staff.role.granted",
+      "staff.roles.manage",
+      "support",
+      "Approved support duty",
+      actorMfaAt,
+      "0".repeat(64),
+      "2".repeat(64),
+      createdAt,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE platform_staff_role_events
+         SET reason='Rewritten evidence' WHERE id='role-event-grant'`,
+      ).run(),
+      /append-only/,
+    );
+    assert.throws(
+      () => db.prepare(
+        "DELETE FROM platform_staff_role_events WHERE id='role-event-grant'",
+      ).run(),
+      /append-only/,
+    );
+    assert.equal(tableDefinitions(db).size, 97);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

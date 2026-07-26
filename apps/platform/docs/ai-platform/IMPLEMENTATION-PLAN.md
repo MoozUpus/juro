@@ -69,7 +69,9 @@ Vertical slices:
 6. individual/entrepreneur/lawyer profiles and business workspace URLs;
 7. invitation atomicity and tenant isolation;
 8. immutable policy documents and acceptance evidence;
-9. deletion/recovery/purge orchestration.
+9. deletion/recovery/purge orchestration;
+10. disabled platform-staff authorization plus atomic, immutable role
+    lifecycle evidence, without operator bootstrap or staff routes.
 
 The two existing document-builder isolation defects are fixed in this phase before staging collaboration use.
 
@@ -78,6 +80,8 @@ Gate:
 - auth E2E and race tests pass;
 - cross-account/workspace leaks: zero;
 - privileged access requires 2FA;
+- staff assignment/event tables remain empty and the internal role-management
+  service remains unreachable until a separately reviewed operator release;
 - builder regression remains green.
 
 ## Phase 3 — legal knowledge
@@ -218,4 +222,3 @@ Then stop and request explicit production approval. No production deploy or migr
 7. Live Queue consumers require quarantine/DLQ consumption, alerts, redrive, durable ledger reconciliation, and per-kind producer/handler flags.
 8. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing; the current read-only probe is the only enabled handler.
 9. The Sites deployment pipeline must prove it selects the explicit production build; ordinary `npm run build` intentionally produces development.
-

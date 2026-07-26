@@ -928,6 +928,80 @@ export const platformStaffAssignments = sqliteTable(
   ],
 );
 
+export const platformStaffRoleEvents = sqliteTable(
+  "platform_staff_role_events",
+  {
+    id: text("id").primaryKey(),
+    actorUserId: text("actor_user_id").notNull().references(
+      () => userProfiles.id,
+    ),
+    actorSessionId: text("actor_session_id").notNull(),
+    actorAssignmentId: text("actor_assignment_id").notNull().references(
+      () => platformStaffAssignments.id,
+    ),
+    subjectUserId: text("subject_user_id").notNull().references(
+      () => userProfiles.id,
+    ),
+    subjectAssignmentId: text("subject_assignment_id").notNull().references(
+      () => platformStaffAssignments.id,
+    ),
+    eventType: text("event_type").notNull(),
+    capability: text("capability").notNull(),
+    role: text("role").notNull(),
+    reason: text("reason").notNull(),
+    actorMfaVerifiedAt: text("actor_mfa_verified_at").notNull(),
+    previousHash: text("previous_hash").notNull(),
+    eventHash: text("event_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "platform_staff_role_events_type_check",
+      sql`${table.eventType} IN ('staff.role.granted','staff.role.revoked')`,
+    ),
+    check(
+      "platform_staff_role_events_capability_check",
+      sql`${table.capability} = 'staff.roles.manage'`,
+    ),
+    check(
+      "platform_staff_role_events_role_check",
+      sql`${table.role} IN ('administrator','support','legal_reviewer')`,
+    ),
+    check(
+      "platform_staff_role_events_reason_check",
+      sql`length(trim(${table.reason})) BETWEEN 1 AND 500`,
+    ),
+    check(
+      "platform_staff_role_events_hash_check",
+      sql`length(${table.previousHash}) = 64
+        AND length(${table.eventHash}) = 64`,
+    ),
+    check(
+      "platform_staff_role_events_mfa_time_check",
+      sql`${table.actorMfaVerifiedAt} <= ${table.createdAt}`,
+    ),
+    uniqueIndex("platform_staff_role_events_hash_uidx").on(
+      table.eventHash,
+    ),
+    uniqueIndex("platform_staff_role_events_chain_uidx").on(
+      table.actorUserId,
+      table.previousHash,
+    ),
+    uniqueIndex("platform_staff_role_events_assignment_type_uidx").on(
+      table.subjectAssignmentId,
+      table.eventType,
+    ),
+    index("platform_staff_role_events_actor_idx").on(
+      table.actorUserId,
+      table.createdAt,
+    ),
+    index("platform_staff_role_events_subject_idx").on(
+      table.subjectUserId,
+      table.createdAt,
+    ),
+  ],
+);
+
 export const policyDocuments = sqliteTable("policy_documents", {
   id: text("id").primaryKey(),
   documentKey: text("document_key").notNull(),

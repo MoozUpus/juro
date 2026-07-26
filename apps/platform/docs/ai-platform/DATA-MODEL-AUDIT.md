@@ -142,9 +142,11 @@ The exact SQL will be generated only after staging D1 inventory and backup verif
    - lawyer profiles, conflict checks, grants, offers, messages, reviews.
 8. **Operations**
    - notifications/email jobs, support, incidents, feature flags, backups and cleanup runs;
-   - migration 0020 now supplies only an expiring platform staff assignment
-     boundary; support tickets, per-resource grants, privileged access events,
-     bootstrap/revocation workflow, and staff UI remain absent.
+   - migrations 0020–0021 now supply an expiring platform staff assignment
+     boundary plus an immutable, per-actor role-change ledger and an internal
+     fresh-MFA administrator grant/revoke service; operator bootstrap,
+     externally reachable staff routes, support tickets, per-resource grants,
+     customer-resource access events, and staff UI remain absent.
 
 Each sequence follows:
 

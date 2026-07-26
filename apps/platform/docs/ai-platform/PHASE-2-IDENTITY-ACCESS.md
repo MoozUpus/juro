@@ -220,13 +220,29 @@ invalid, the feature fails closed and setup is not offered.
 - no platform capability names or authorizes customer, workspace, case,
   document, or file access; lawyer client access remains a separate future
   user-confirmed grant boundary;
-- no assignment, admin/support route, role-management mutation, or staff UI is
+- no assignment, admin/support route, operator bootstrap, or staff UI is
   created by this slice.
 
 Migration 0020 creates the additive assignment table, restrictive foreign
 keys, partial uniqueness fence, lifecycle checks, and one-way revocation
 triggers. It remains unapplied remotely and must be empty after any future
 staging migration until a separately reviewed bootstrap procedure exists.
+
+Migration 0021 adds an append-only, per-actor role-change chain and an internal
+administrator grant/revoke service. The actor must have exactly one active
+administrator authority for `staff.roles.manage`, a live local session and
+device, active TOTP, and MFA no more than five minutes old. A subject must
+already have active TOTP; grants cannot target the actor, expire within 30
+days, and execute in the same D1 batch as the exact grant event. Revocation is
+limited to a currently active assignment, remains atomic with its event, and
+allows explicit administrator self-deprovisioning.
+
+The database rejects orphan/forked chain predecessors, mismatched
+session/MFA/assignment evidence, duplicate assignment event types, and any
+event update or deletion. Concurrent grants have one assignment winner, and
+an event failure rolls back the role mutation. This service has no route,
+Worker/job import, UI, seeded administrator, or operator-bootstrap path, so it
+is deliberately unreachable.
 
 ### Versioned policy evidence
 
@@ -298,6 +314,7 @@ node --import tsx --test \
   tests/account-deletion.test.ts \
   tests/email-change.test.ts \
   tests/staff-access.test.ts \
+  tests/staff-role-management.test.ts \
   tests/policy-acceptance.test.ts \
   tests/document-access.test.ts \
   tests/migration-safety.test.ts \
@@ -318,13 +335,15 @@ legacy-row preservation, SHA-divergence failure, email-change dual-address
 proof, provider acceptance gating, target races, revoked-session attempt
 fencing, identity rotation, session/challenge invalidation, DB completeness
 guards, platform/workspace role separation, staff capability non-inheritance,
-live MFA/TOTP/session/device checks, role expiry/revocation/immutability, and
-the full existing builder/comparison/rendered Worker regression suite.
+live MFA/TOTP/session/device checks, role expiry/revocation/immutability,
+fresh-MFA administrator grant/revoke, subject-MFA and TTL bounds, chained
+append-only role events, concurrency/rollback behavior, and the full existing
+builder/comparison/rendered Worker regression suite.
 
-The final local full suite passes 248/248 checks: 23 rendered
-Worker/security checks, 179 core/document/auth checks, and 46 Cloudflare
+The final local full suite passes 255/255 checks: 23 rendered
+Worker/security checks, 184 core/document/auth checks, and 48 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
-96 tables with zero foreign-key integrity errors. Local evidence is not
+97 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
@@ -344,7 +363,7 @@ staging:
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests, then apply
-   pending migrations through 0020 while keeping identity mode `legacy`;
+   pending migrations through 0021 while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -378,9 +397,11 @@ staging:
     denial, target-ownership races, one-winner D1 confirmation, canonical
     identity rotation, current-session preservation, other-session/device
     revocation, and invalidation of old/new login/deletion/MFA challenges.
-18. prove `platform_staff_assignments` is empty; do not bootstrap a role or
-    expose a staff route until grant/revoke administration and immutable
-    privileged access-event evidence have their own reviewed vertical.
+18. prove `platform_staff_assignments` and `platform_staff_role_events` are
+    empty; keep the internal grant/revoke service unreachable and do not
+    bootstrap a role or expose a staff route until operator identity,
+    emergency revocation, and immutable customer-resource access evidence
+    have their own reviewed vertical.
 
 Required read-only queries:
 
@@ -415,12 +436,15 @@ GROUP BY email_key_version,email_lookup_key_version;
 
 SELECT count(*) AS platform_staff_assignments
 FROM platform_staff_assignments;
+
+SELECT count(*) AS platform_staff_role_events
+FROM platform_staff_role_events;
 ```
 
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0020 are not applied to staging or production;
+- migrations 0011–0021 are not applied to staging or production;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, D1 migration, real-device authenticator flow, or remote D1
 concurrency test has been completed;
@@ -448,9 +472,11 @@ concurrency test has been completed;
 - protected email change is implemented and verified locally, but migration
   0019, real Resend batch delivery, remote D1 race tests, alert mail, and
   staging session/device revocation evidence are still absent;
-- the platform staff policy and migration 0020 are local-only; no bootstrap,
-  grant/revoke API, `/admin` or support UI, privileged content grant, access
-  event, or staging MFA evidence exists;
+- the platform staff policy and migrations 0020–0021 are local-only; an
+  internal fresh-MFA grant/revoke service and immutable role-change events now
+  exist, but there is no bootstrap, route/API, `/admin` or support UI,
+  privileged content grant, customer-resource access event, or staging MFA
+  evidence;
 - saved-contact identity fields and document/AI content remain outside the
   protected expand layers;
 - NAT-wide OTP limits preserve existing behavior and need staging product

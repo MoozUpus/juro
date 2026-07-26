@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { glob, readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -416,6 +417,46 @@ test("platform staff access is separate, local-MFA-only, and grants no customer-
   assert.match(httpBoundary, /localSessionForRequest/);
   assert.match(httpBoundary, /requirePlatformStaffAccess/);
   assert.doesNotMatch(httpBoundary, /getChatGPTUser|getAuthPrincipal/);
+});
+
+test("staff role lifecycle is internal, fresh-MFA-gated, and atomically audited", async () => {
+  const [management, events] = await Promise.all([
+    readFile(
+      new URL("../lib/auth/staff-role-management.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../lib/auth/staff-role-events.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(management, /STAFF_ROLE_FRESH_MFA_MS = 5 \* 60/);
+  assert.match(management, /MAX_STAFF_ROLE_TTL_MS = 30 \* 24/);
+  assert.match(management, /requirePlatformStaffAccess/);
+  assert.match(management, /"staff\.roles\.manage"/);
+  assert.match(management, /auth_totp_credentials/);
+  assert.match(management, /PLATFORM_STAFF_ROLE_SELF_GRANT_FORBIDDEN/);
+  assert.match(management, /batchWithPlatformStaffRoleEvent/);
+  assert.match(events, /juro-platform-staff-role-event-v1/);
+  assert.match(events, /platform_staff_role_events/);
+  assert.match(events, /"staff\.roles\.manage"/);
+  assert.match(events, /MAX_CHAIN_RETRIES = 3/);
+  assert.doesNotMatch(
+    `${management}\n${events}`,
+    /operator_bootstrap|getChatGPTUser|getAuthPrincipal|NextRequest|cookies\(/,
+  );
+  const projectRoot = fileURLToPath(new URL("../", import.meta.url));
+  for await (const path of glob(
+    ["app/**/*.{ts,tsx}", "worker/**/*.ts"],
+    { cwd: projectRoot },
+  )) {
+    const source = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
+    assert.doesNotMatch(
+      source,
+      /staff-role-management/,
+      `${path} must not expose the internal staff role mutation service`,
+    );
+  }
 });
 
 test("canonical platform route classifier is stable", () => {

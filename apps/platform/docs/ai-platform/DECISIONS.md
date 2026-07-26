@@ -429,6 +429,37 @@ Sensitive future routes can require a narrower fresh-MFA window. The helper
 does not grant case, document, workspace, or customer-content access.
 
 This is a disabled authorization foundation, not a staff feature. No role is
-inserted by migration, no management mutation or admin/support UI exists, and
-lawyer client access still requires the separate user-confirmed case-grant and
-immutable access-event design from Phase 7.
+inserted by migration, and no externally reachable management mutation or
+admin/support UI exists. The internal service added by D-028 remains
+unreferenced by every route and runtime entrypoint. Lawyer client access still
+requires the separate user-confirmed case-grant and immutable access-event
+design from Phase 7.
+
+## D-028 — administrator role changes are atomic, chained, and unreachable by default
+
+Status: accepted
+Date: 2026-07-27
+
+Migration 0021 and the internal role-management service add the next
+deny-by-default layer without creating an operator or exposing an HTTP route.
+Only one active `administrator` assignment, backed by a live local session,
+active TOTP, and MFA verified within five minutes, can grant or revoke a
+platform role. A grant also requires active TOTP on the subject, expires
+within 30 days, and cannot target the actor. Revocation applies only to a
+currently active assignment; administrator self-deprovisioning is allowed.
+
+Each administrator mutation and its `staff.role.granted` or
+`staff.role.revoked` event execute in one D1 batch. Events form a per-actor
+SHA-256 chain with a database-enforced single current predecessor, preserve
+the exact session, assignment, subject, role, reason, MFA time, and operation
+time, and reject update or deletion. The actor-session identifier deliberately
+has no foreign key so normal session retention cannot erase or block
+privileged evidence; actor, subject, and assignment references remain
+restrictive.
+
+This does not solve trusted operator bootstrap. Until a verified operator
+identity, out-of-band approval, emergency revoke procedure, and staging
+evidence exist, `platform_staff_assignments` must remain empty and the
+management service must remain unreferenced by routes, UI, jobs, and Workers.
+Role-change evidence is also not a substitute for future immutable
+view/download/edit audit on explicitly granted customer resources.

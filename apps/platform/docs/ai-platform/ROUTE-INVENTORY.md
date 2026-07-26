@@ -177,11 +177,12 @@ Missing:
 
 ### Admin
 
-All required `/admin` modules remain absent. The local 0020 foundation now
-defines a separate expiring platform-staff/capability boundary that accepts
-only a live JURO MFA session and does not recognize workspace roles,
-`account_type`, or platform headers. No role is bootstrapped and no staff route,
-mutation, content grant, or UI invokes that boundary yet.
+All required `/admin` modules remain absent. The local 0020–0021 foundation
+defines a separate expiring platform-staff/capability boundary and an internal
+administrator grant/revoke service with fresh MFA and chained role-change
+evidence. It does not recognize workspace roles, `account_type`, or platform
+headers. No role is bootstrapped, and no route, Worker, job, UI, or
+customer-content grant invokes the internal mutation service.
 
 ### Help and status
 
