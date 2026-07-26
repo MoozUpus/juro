@@ -777,3 +777,147 @@ export const comparisonChanges = sqliteTable("comparison_changes", {
   index("comparison_changes_type_idx").on(table.comparisonId, table.changeType),
   index("comparison_changes_risk_idx").on(table.comparisonId, table.riskLevel, table.riskEffect),
 ]);
+
+export const idempotencyKeys = sqliteTable("idempotency_keys", {
+  key: text("key").primaryKey(),
+  scope: text("scope").notNull(),
+  requestHash: text("request_hash").notNull(),
+  status: text("status").notNull().default("started"),
+  resultRef: text("result_ref"),
+  expiresAt: text("expires_at").notNull(),
+  completedAt: text("completed_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("idempotency_keys_expiry_idx").on(table.expiresAt),
+  index("idempotency_keys_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const jobOutbox = sqliteTable("job_outbox", {
+  id: text("id").primaryKey(),
+  queueBinding: text("queue_binding").notNull(),
+  jobType: text("job_type").notNull(),
+  schemaVersion: integer("schema_version").notNull().default(1),
+  idempotencyKey: text("idempotency_key").notNull(),
+  subjectId: text("subject_id").notNull(),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+  correlationId: text("correlation_id").notNull(),
+  enqueuedAt: text("enqueued_at").notNull(),
+  availableAt: text("available_at").notNull(),
+  status: text("status").notNull().default("pending"),
+  dispatchAttempts: integer("dispatch_attempts").notNull().default(0),
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: text("lease_expires_at"),
+  nextAttemptAt: text("next_attempt_at"),
+  dispatchedAt: text("dispatched_at"),
+  errorCode: text("error_code"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("job_outbox_idempotency_uidx").on(table.idempotencyKey),
+  index("job_outbox_status_idx").on(table.status, table.availableAt),
+  index("job_outbox_lease_idx").on(table.status, table.leaseExpiresAt),
+  index("job_outbox_workspace_idx").on(table.workspaceId, table.createdAt),
+]);
+
+export const jobRuns = sqliteTable("job_runs", {
+  id: text("id").primaryKey(),
+  queueName: text("queue_name").notNull(),
+  messageId: text("message_id").notNull(),
+  jobType: text("job_type").notNull(),
+  schemaVersion: integer("schema_version").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  subjectId: text("subject_id").notNull(),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
+  correlationId: text("correlation_id").notNull(),
+  envelopeHash: text("envelope_hash").notNull(),
+  status: text("status").notNull().default("received"),
+  attempt: integer("attempt").notNull().default(1),
+  leaseOwner: text("lease_owner"),
+  leaseExpiresAt: text("lease_expires_at"),
+  nextAttemptAt: text("next_attempt_at"),
+  errorCode: text("error_code"),
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("job_runs_idempotency_uidx").on(table.idempotencyKey),
+  uniqueIndex("job_runs_message_uidx").on(table.queueName, table.messageId),
+  index("job_runs_status_idx").on(table.status, table.nextAttemptAt),
+  index("job_runs_lease_idx").on(table.status, table.leaseExpiresAt),
+  index("job_runs_workspace_idx").on(table.workspaceId, table.createdAt),
+]);
+
+export const scheduledLocks = sqliteTable("scheduled_locks", {
+  name: text("name").primaryKey(),
+  holderId: text("holder_id").notNull(),
+  acquiredAt: text("acquired_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("scheduled_locks_expiry_idx").on(table.expiresAt),
+]);
+
+export const scheduledRuns = sqliteTable("scheduled_runs", {
+  id: text("id").primaryKey(),
+  scheduleName: text("schedule_name").notNull(),
+  cron: text("cron").notNull(),
+  scheduledFor: text("scheduled_for").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  holderId: text("holder_id").notNull(),
+  status: text("status").notNull().default("running"),
+  errorCode: text("error_code"),
+  startedAt: text("started_at").notNull(),
+  finishedAt: text("finished_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("scheduled_runs_idempotency_uidx").on(table.idempotencyKey),
+  index("scheduled_runs_schedule_idx").on(table.scheduleName, table.scheduledFor),
+  index("scheduled_runs_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const backupRuns = sqliteTable("backup_runs", {
+  id: text("id").primaryKey(),
+  environment: text("environment").notNull(),
+  backupType: text("backup_type").notNull(),
+  status: text("status").notNull().default("requested"),
+  schemaVersion: text("schema_version"),
+  appVersion: text("app_version"),
+  sourceBookmark: text("source_bookmark"),
+  objectKey: text("object_key"),
+  checksumSha256: text("checksum_sha256"),
+  byteSize: integer("byte_size"),
+  manifestVersion: text("manifest_version"),
+  verifiedAt: text("verified_at"),
+  restoreTestedAt: text("restore_tested_at"),
+  errorCode: text("error_code"),
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("backup_runs_environment_idx").on(table.environment, table.createdAt),
+  index("backup_runs_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const cleanupRuns = sqliteTable("cleanup_runs", {
+  id: text("id").primaryKey(),
+  environment: text("environment").notNull(),
+  policyVersion: text("policy_version").notNull(),
+  status: text("status").notNull().default("requested"),
+  dryRun: integer("dry_run", { mode: "boolean" }).notNull().default(true),
+  cursor: text("cursor"),
+  scannedCount: integer("scanned_count").notNull().default(0),
+  deletedCount: integer("deleted_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  errorCode: text("error_code"),
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("cleanup_runs_environment_idx").on(table.environment, table.createdAt),
+  index("cleanup_runs_status_idx").on(table.status, table.updatedAt),
+]);

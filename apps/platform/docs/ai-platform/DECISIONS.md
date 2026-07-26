@@ -50,7 +50,7 @@ Implement and test queue consumers, idempotency, DLQ behavior, scheduled locks, 
 Status: accepted  
 Date: 2026-07-26
 
-Store all required user-document metadata but create at most ten indexed metadata properties per index. Because each environment has a physically separate index, `environment` is stored but does not consume a filter index. Authorization remains a D1/server check before and after vector search.
+Store all required user-document metadata but create at most ten indexed metadata properties per index. Each environment declares a distinct index name intended for a physically separate index; control-plane inventory must prove that separation before `environment` is omitted as a filter. Authorization remains a D1/server check before and after vector search.
 
 ## D-007 — legal source authority
 
@@ -82,3 +82,41 @@ Date: 2026-07-26
 
 Realtime audio/video calls and payments use adapter interfaces and disabled feature flags until providers are selected and tested. UI must say “Скоро” and must not simulate calls, charges, or completion.
 
+## D-011 — Sites binding normalization
+
+Status: accepted  
+Date: 2026-07-26
+
+Use `wrangler.jsonc` as the environment-aware source configuration. During Vite build, mutate the resolved Cloudflare config in place. Replace the canonical Sites `DB` and `BUCKET` only for an explicit production build; development and staging retain isolated source bindings. Returning an additional configuration object is prohibited because `defu` concatenates arrays and can produce duplicate binding names.
+
+Deployable validation targets the flattened `dist/server/wrangler.json`, selected at build time with `CLOUDFLARE_ENV`. Do not add `--env` to deployment of that artifact.
+
+## D-012 — queue content and execution fencing
+
+Status: accepted  
+Date: 2026-07-26
+
+Queue envelopes contain opaque identifiers only and reject unknown fields. Tenant-scoped jobs require `workspaceId`; consumers reload and reauthorize state server-side. Job execution and outbox dispatch use separate short leases, owner-token fencing, canonical envelope hashes, and bounded retries.
+
+Raw user/provider content and raw errors are prohibited in queue bodies, job records, metrics, and logs.
+
+Until a tenant-scoped composite idempotency model is introduced, all job and
+request idempotency keys must be generated server-side in a globally
+namespaced format. No client-supplied key may reach these tables.
+
+## D-013 — Cron and consumer activation
+
+Status: accepted  
+Date: 2026-07-26
+
+Omit `triggers` entirely until the Cloudflare control-plane inventory and reviewed scheduled job exist. `CRON_ENABLED=false` is defense in depth, not a replacement for trigger inventory.
+
+Queue consumer declarations are also not proof that resources exist or are safe to activate. A disabled runtime still receives and retries messages when live consumers are attached. Staging activation therefore requires exact resource inventory, handler readiness, DLQ behavior, and alert verification.
+
+Malformed envelopes and disabled handlers are intentionally terminal in the
+current inert implementation. A live producer must not be wired until
+quarantine/DLQ consumers, alerts, redrive policy, ledger reconciliation, and
+per-kind producer/handler flags are implemented. Side-effecting handlers also
+require provider idempotency or immutable subject-version identifiers plus
+lease renewal/fencing; the current short lease is sufficient only for the
+read-only D1 probe.

@@ -1,0 +1,696 @@
+import { z } from "zod";
+
+export const JOB_KINDS = [
+  "platform.probe",
+  "ai.request",
+  "file.process",
+  "document.analyze",
+  "legal.sync",
+  "email.send",
+  "notification.dispatch",
+  "cleanup.run",
+  "backup.run",
+] as const;
+
+export type JobKind = (typeof JOB_KINDS)[number];
+
+const jobKindSchema = z.enum(JOB_KINDS);
+const identifierSchema = z
+  .string()
+  .min(1)
+  .max(180)
+  .regex(/^[A-Za-z0-9:_-]+$/);
+
+/**
+ * Queue bodies intentionally contain opaque identifiers only. Consumers must
+ * reload tenant-scoped state from D1/R2; user content and object keys never
+ * cross the queue boundary.
+ */
+const tenantJobKinds = new Set<JobKind>([
+  "ai.request",
+  "file.process",
+  "document.analyze",
+  "email.send",
+  "notification.dispatch",
+]);
+
+export const jobEnvelopeSchema = z.object({
+  schemaVersion: z.literal(1),
+  jobId: identifierSchema,
+  kind: jobKindSchema,
+  idempotencyKey: identifierSchema,
+  subjectId: identifierSchema,
+  workspaceId: identifierSchema.nullable().optional(),
+  correlationId: identifierSchema,
+  enqueuedAt: z.iso.datetime({ offset: true }),
+}).strict().superRefine((value, context) => {
+  if (tenantJobKinds.has(value.kind) && !value.workspaceId) {
+    context.addIssue({
+      code: "custom",
+      message: "Tenant-scoped jobs require workspaceId.",
+      path: ["workspaceId"],
+    });
+  }
+});
+
+export type JobEnvelope = z.infer<typeof jobEnvelopeSchema>;
+
+export type PlatformJobEnv = Omit<
+  Env,
+  "ASYNC_RUNTIME_ENABLED" | "CRON_ENABLED"
+> & {
+  ASYNC_RUNTIME_ENABLED: string;
+  CRON_ENABLED: string;
+};
+
+type JobErrorCode =
+  | "ASYNC_RUNTIME_DISABLED"
+  | "JOB_HANDLER_NOT_ENABLED"
+  | "JOB_IDEMPOTENCY_CONFLICT"
+  | "JOB_LEASE_LOST"
+  | "JOB_QUEUE_MISMATCH"
+  | "JOB_SCHEMA_VERSION_MISMATCH"
+  | "JOB_TRANSIENT_FAILURE"
+  | "JOB_VALIDATION_FAILED";
+
+type OperationalError = {
+  code: JobErrorCode;
+  retryable: boolean;
+};
+
+class SafeJobError extends Error {
+  constructor(
+    readonly code: JobErrorCode,
+    readonly retryable: boolean,
+  ) {
+    super(code);
+    this.name = "SafeJobError";
+  }
+}
+
+const queueStemByKind: Record<JobKind, string> = {
+  "platform.probe": "cleanup-jobs",
+  "ai.request": "ai-jobs",
+  "file.process": "file-jobs",
+  "document.analyze": "document-jobs",
+  "legal.sync": "legal-sync",
+  "email.send": "email-jobs",
+  "notification.dispatch": "notification-jobs",
+  "cleanup.run": "cleanup-jobs",
+  "backup.run": "backup-jobs",
+};
+
+export const QUEUE_BINDING_BY_KIND = {
+  "platform.probe": "CLEANUP_JOBS_QUEUE",
+  "ai.request": "AI_JOBS_QUEUE",
+  "file.process": "FILE_JOBS_QUEUE",
+  "document.analyze": "DOCUMENT_JOBS_QUEUE",
+  "legal.sync": "LEGAL_SYNC_QUEUE",
+  "email.send": "EMAIL_JOBS_QUEUE",
+  "notification.dispatch": "NOTIFICATION_JOBS_QUEUE",
+  "cleanup.run": "CLEANUP_JOBS_QUEUE",
+  "backup.run": "BACKUP_JOBS_QUEUE",
+} as const satisfies Record<JobKind, string>;
+
+export const PLATFORM_QUEUE_BINDINGS = [
+  "AI_JOBS_QUEUE",
+  "FILE_JOBS_QUEUE",
+  "DOCUMENT_JOBS_QUEUE",
+  "LEGAL_SYNC_QUEUE",
+  "EMAIL_JOBS_QUEUE",
+  "NOTIFICATION_JOBS_QUEUE",
+  "CLEANUP_JOBS_QUEUE",
+  "BACKUP_JOBS_QUEUE",
+] as const;
+
+export type PlatformQueueBinding =
+  (typeof QUEUE_BINDING_BY_KIND)[JobKind];
+
+export function expectedQueueName(
+  kind: JobKind,
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return `juro-${queueStemByKind[kind]}-${environment}`;
+}
+
+function operationalError(error: unknown): OperationalError {
+  if (error instanceof SafeJobError) {
+    return { code: error.code, retryable: error.retryable };
+  }
+  return { code: "JOB_TRANSIENT_FAILURE", retryable: true };
+}
+
+function logEvent(
+  level: "info" | "error",
+  fields: Record<string, string | number | boolean | null>,
+): void {
+  const entry = JSON.stringify(fields);
+  if (level === "error") {
+    console.error(entry);
+  } else {
+    console.log(entry);
+  }
+}
+
+function writeMetric(
+  env: PlatformJobEnv,
+  input: {
+    queueName: string;
+    kind: string;
+    status: string;
+    durationMs: number;
+    correlationId: string;
+  },
+): void {
+  try {
+    env.PLATFORM_ANALYTICS.writeDataPoint({
+      blobs: [input.queueName, input.kind, input.status],
+      doubles: [input.durationMs],
+      indexes: [input.correlationId],
+    });
+  } catch {
+    logEvent("error", {
+      event: "queue.metric_failed",
+      environment: env.APP_ENV,
+      queue: input.queueName,
+      correlationId: input.correlationId,
+    });
+  }
+}
+
+async function sha256(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+}
+
+function isoAfter(iso: string, milliseconds: number): string {
+  return new Date(new Date(iso).getTime() + milliseconds).toISOString();
+}
+
+export function retryDelay(attempts: number): number {
+  return Math.min(3_600, 15 * (2 ** Math.max(0, attempts - 1)));
+}
+
+async function envelopeHash(envelope: JobEnvelope): Promise<string> {
+  return sha256(JSON.stringify({
+    schemaVersion: envelope.schemaVersion,
+    jobId: envelope.jobId,
+    kind: envelope.kind,
+    idempotencyKey: envelope.idempotencyKey,
+    subjectId: envelope.subjectId,
+    workspaceId: envelope.workspaceId ?? null,
+    correlationId: envelope.correlationId,
+  }));
+}
+
+type ClaimResult =
+  | { state: "acquired"; leaseOwner: string }
+  | { state: "busy" }
+  | { state: "conflict" }
+  | { state: "terminal" };
+
+async function classifyExistingJob(
+  env: PlatformJobEnv,
+  envelope: JobEnvelope,
+  expectedEnvelopeHash: string,
+): Promise<ClaimResult | null> {
+  const existing = await env.DB.prepare(`
+    SELECT id, idempotency_key, status, envelope_hash
+    FROM job_runs
+    WHERE idempotency_key = ? OR id = ?
+    LIMIT 1
+  `).bind(envelope.idempotencyKey, envelope.jobId).first<{
+    id: string;
+    idempotency_key: string;
+    status: string;
+    envelope_hash: string;
+  }>();
+
+  if (!existing) {
+    return null;
+  }
+  if (
+    existing.id !== envelope.jobId ||
+    existing.idempotency_key !== envelope.idempotencyKey ||
+    existing.envelope_hash !== expectedEnvelopeHash
+  ) {
+    return { state: "conflict" };
+  }
+  if (["completed", "rejected", "dead_lettered"].includes(existing.status)) {
+    return { state: "terminal" };
+  }
+  return { state: "busy" };
+}
+
+async function claimJob(
+  env: PlatformJobEnv,
+  input: {
+    envelope: JobEnvelope;
+    envelopeHash: string;
+    messageId: string;
+    queueName: string;
+    attempts: number;
+    now: string;
+  },
+): Promise<ClaimResult> {
+  const leaseOwner = crypto.randomUUID();
+  const leaseExpiresAt = isoAfter(input.now, 5 * 60 * 1_000);
+  let result: D1Result<unknown>;
+  try {
+    result = await env.DB.prepare(`
+      INSERT INTO job_runs (
+        id, queue_name, message_id, job_type, schema_version,
+        idempotency_key, subject_id, workspace_id, correlation_id,
+        envelope_hash, status, attempt, lease_owner, lease_expires_at,
+        next_attempt_at, error_code, started_at, finished_at,
+        created_at, updated_at
+      ) VALUES (
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+        'running', ?, ?, ?, NULL, NULL, ?, NULL, ?, ?
+      )
+      ON CONFLICT(idempotency_key) DO UPDATE SET
+        queue_name = excluded.queue_name,
+        message_id = excluded.message_id,
+        attempt = excluded.attempt,
+        status = 'running',
+        lease_owner = excluded.lease_owner,
+        lease_expires_at = excluded.lease_expires_at,
+        next_attempt_at = NULL,
+        error_code = NULL,
+        started_at = excluded.started_at,
+        finished_at = NULL,
+        updated_at = excluded.updated_at
+      WHERE job_runs.envelope_hash = excluded.envelope_hash
+        AND job_runs.status NOT IN ('completed', 'rejected', 'dead_lettered')
+        AND (
+          job_runs.lease_expires_at IS NULL
+          OR job_runs.lease_expires_at <= excluded.started_at
+        )
+        AND (
+          job_runs.next_attempt_at IS NULL
+          OR job_runs.next_attempt_at <= excluded.started_at
+        )
+    `).bind(
+      input.envelope.jobId,
+      input.queueName,
+      input.messageId,
+      input.envelope.kind,
+      input.envelope.schemaVersion,
+      input.envelope.idempotencyKey,
+      input.envelope.subjectId,
+      input.envelope.workspaceId ?? null,
+      input.envelope.correlationId,
+      input.envelopeHash,
+      input.attempts,
+      leaseOwner,
+      leaseExpiresAt,
+      input.now,
+      input.now,
+      input.now,
+    ).run();
+  } catch (error) {
+    const existing = await classifyExistingJob(
+      env,
+      input.envelope,
+      input.envelopeHash,
+    );
+    if (existing) {
+      return existing;
+    }
+    throw error;
+  }
+
+  if (Number(result.meta.changes ?? 0) > 0) {
+    return { state: "acquired", leaseOwner };
+  }
+
+  return (
+    await classifyExistingJob(env, input.envelope, input.envelopeHash)
+  ) ?? { state: "conflict" };
+}
+
+async function completeJob(
+  env: PlatformJobEnv,
+  idempotencyKey: string,
+  leaseOwner: string,
+  now: string,
+): Promise<void> {
+  const result = await env.DB.prepare(`
+    UPDATE job_runs
+    SET status = 'completed',
+        lease_owner = NULL,
+        lease_expires_at = NULL,
+        next_attempt_at = NULL,
+        error_code = NULL,
+        finished_at = ?,
+        updated_at = ?
+    WHERE idempotency_key = ?
+      AND lease_owner = ?
+      AND status = 'running'
+  `).bind(now, now, idempotencyKey, leaseOwner).run();
+
+  if (Number(result.meta.changes ?? 0) !== 1) {
+    throw new SafeJobError("JOB_LEASE_LOST", true);
+  }
+}
+
+async function rejectJob(
+  env: PlatformJobEnv,
+  input: {
+    idempotencyKey: string;
+    leaseOwner: string;
+    errorCode: JobErrorCode;
+    now: string;
+  },
+): Promise<boolean> {
+  const result = await env.DB.prepare(`
+    UPDATE job_runs
+    SET status = 'rejected',
+        lease_owner = NULL,
+        lease_expires_at = NULL,
+        next_attempt_at = NULL,
+        error_code = ?,
+        finished_at = ?,
+        updated_at = ?
+    WHERE idempotency_key = ?
+      AND lease_owner = ?
+      AND status = 'running'
+  `).bind(
+    input.errorCode,
+    input.now,
+    input.now,
+    input.idempotencyKey,
+    input.leaseOwner,
+  ).run();
+  return Number(result.meta.changes ?? 0) === 1;
+}
+
+async function retryJob(
+  env: PlatformJobEnv,
+  input: {
+    idempotencyKey: string;
+    leaseOwner: string;
+    errorCode: JobErrorCode;
+    nextAttemptAt: string;
+    now: string;
+  },
+): Promise<boolean> {
+  const result = await env.DB.prepare(`
+    UPDATE job_runs
+    SET status = 'retrying',
+        lease_owner = NULL,
+        lease_expires_at = NULL,
+        next_attempt_at = ?,
+        error_code = ?,
+        finished_at = ?,
+        updated_at = ?
+    WHERE idempotency_key = ?
+      AND lease_owner = ?
+      AND status = 'running'
+  `).bind(
+    input.nextAttemptAt,
+    input.errorCode,
+    input.now,
+    input.now,
+    input.idempotencyKey,
+    input.leaseOwner,
+  ).run();
+  return Number(result.meta.changes ?? 0) === 1;
+}
+
+async function executeJob(
+  queueName: string,
+  env: PlatformJobEnv,
+  envelope: JobEnvelope,
+): Promise<void> {
+  if (queueName !== expectedQueueName(envelope.kind, env.APP_ENV)) {
+    throw new SafeJobError("JOB_QUEUE_MISMATCH", false);
+  }
+  if (envelope.kind !== "platform.probe") {
+    throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
+  }
+
+  const probe = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
+  if (probe?.ok !== 1) {
+    throw new SafeJobError("JOB_TRANSIENT_FAILURE", true);
+  }
+}
+
+async function processMessage(
+  queueName: string,
+  message: Message<unknown>,
+  env: PlatformJobEnv,
+): Promise<void> {
+  const parsed = jobEnvelopeSchema.safeParse(message.body);
+  if (!parsed.success) {
+    logEvent("error", {
+      event: "queue.invalid_message",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      errorCode: "JOB_VALIDATION_FAILED",
+    });
+    message.ack();
+    return;
+  }
+
+  const envelope = parsed.data;
+  const started = Date.now();
+  const now = new Date().toISOString();
+  let claim: ClaimResult;
+
+  try {
+    claim = await claimJob(env, {
+      envelope,
+      envelopeHash: await envelopeHash(envelope),
+      messageId: message.id,
+      queueName,
+      attempts: message.attempts,
+      now,
+    });
+  } catch {
+    logEvent("error", {
+      event: "queue.claim_failed",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      errorCode: "JOB_TRANSIENT_FAILURE",
+    });
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+
+  if (claim.state === "terminal") {
+    message.ack();
+    return;
+  }
+  if (claim.state === "conflict") {
+    logEvent("error", {
+      event: "queue.idempotency_conflict",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      errorCode: "JOB_IDEMPOTENCY_CONFLICT",
+    });
+    message.ack();
+    return;
+  }
+  if (claim.state === "busy") {
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+
+  try {
+    await executeJob(queueName, env, envelope);
+    await completeJob(
+      env,
+      envelope.idempotencyKey,
+      claim.leaseOwner,
+      new Date().toISOString(),
+    );
+    writeMetric(env, {
+      queueName,
+      kind: envelope.kind,
+      status: "completed",
+      durationMs: Date.now() - started,
+      correlationId: envelope.correlationId,
+    });
+    logEvent("info", {
+      event: "queue.completed",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      durationMs: Date.now() - started,
+    });
+    message.ack();
+  } catch (error) {
+    const failure = operationalError(error);
+    const failedAt = new Date().toISOString();
+
+    if (!failure.retryable) {
+      try {
+        const recorded = await rejectJob(env, {
+          idempotencyKey: envelope.idempotencyKey,
+          leaseOwner: claim.leaseOwner,
+          errorCode: failure.code,
+          now: failedAt,
+        });
+        if (!recorded) {
+          message.retry({ delaySeconds: retryDelay(message.attempts) });
+          return;
+        }
+      } catch {
+        message.retry({ delaySeconds: retryDelay(message.attempts) });
+        return;
+      }
+
+      writeMetric(env, {
+        queueName,
+        kind: envelope.kind,
+        status: "rejected",
+        durationMs: Date.now() - started,
+        correlationId: envelope.correlationId,
+      });
+      logEvent("error", {
+        event: "queue.rejected",
+        environment: env.APP_ENV,
+        queue: queueName,
+        messageId: message.id,
+        correlationId: envelope.correlationId,
+        jobId: envelope.jobId,
+        jobKind: envelope.kind,
+        errorCode: failure.code,
+      });
+      message.ack();
+      return;
+    }
+
+    const delaySeconds = retryDelay(message.attempts);
+    try {
+      const recorded = await retryJob(env, {
+        idempotencyKey: envelope.idempotencyKey,
+        leaseOwner: claim.leaseOwner,
+        errorCode: failure.code,
+        nextAttemptAt: isoAfter(failedAt, delaySeconds * 1_000),
+        now: failedAt,
+      });
+      if (!recorded) {
+        logEvent("error", {
+          event: "queue.lease_lost_before_retry",
+          environment: env.APP_ENV,
+          queue: queueName,
+          messageId: message.id,
+          correlationId: envelope.correlationId,
+          jobId: envelope.jobId,
+          errorCode: "JOB_LEASE_LOST",
+        });
+        message.retry({ delaySeconds });
+        return;
+      }
+    } catch {
+      // The queue retry remains the source of truth when bookkeeping is down.
+    }
+    writeMetric(env, {
+      queueName,
+      kind: envelope.kind,
+      status: "retrying",
+      durationMs: Date.now() - started,
+      correlationId: envelope.correlationId,
+    });
+    logEvent("error", {
+      event: "queue.retrying",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: failure.code,
+      attempt: message.attempts,
+    });
+    message.retry({ delaySeconds });
+  }
+}
+
+export async function handleQueue(
+  batch: MessageBatch<unknown>,
+  env: PlatformJobEnv,
+): Promise<void> {
+  if (String(env.ASYNC_RUNTIME_ENABLED) !== "true") {
+    logEvent("error", {
+      event: "queue.runtime_disabled",
+      environment: env.APP_ENV,
+      queue: batch.queue,
+      errorCode: "ASYNC_RUNTIME_DISABLED",
+    });
+    batch.retryAll({ delaySeconds: 300 });
+    return;
+  }
+  if (String(env.JOB_SCHEMA_VERSION) !== "1") {
+    logEvent("error", {
+      event: "queue.schema_version_mismatch",
+      environment: env.APP_ENV,
+      queue: batch.queue,
+      errorCode: "JOB_SCHEMA_VERSION_MISMATCH",
+    });
+    batch.retryAll({ delaySeconds: 300 });
+    return;
+  }
+
+  for (const message of batch.messages) {
+    try {
+      await processMessage(batch.queue, message, env);
+    } catch {
+      logEvent("error", {
+        event: "queue.message_failed",
+        environment: env.APP_ENV,
+        queue: batch.queue,
+        messageId: message.id,
+        errorCode: "JOB_TRANSIENT_FAILURE",
+      });
+      message.retry({ delaySeconds: retryDelay(message.attempts) });
+    }
+  }
+}
+
+/**
+ * No cron schedule is attached in Phase 1. Even if this handler is invoked
+ * manually, it cannot start maintenance work until an explicit schedule is
+ * implemented and reviewed.
+ */
+export async function handleScheduled(
+  controller: ScheduledController,
+  env: PlatformJobEnv,
+): Promise<void> {
+  if (
+    String(env.ASYNC_RUNTIME_ENABLED) !== "true" ||
+    String(env.CRON_ENABLED) !== "true"
+  ) {
+    logEvent("info", {
+      event: "scheduled.runtime_disabled",
+      environment: env.APP_ENV,
+      cron: controller.cron,
+    });
+    controller.noRetry();
+    return;
+  }
+
+  logEvent("error", {
+    event: "scheduled.unknown_cron",
+    environment: env.APP_ENV,
+    cron: controller.cron,
+  });
+  controller.noRetry();
+}

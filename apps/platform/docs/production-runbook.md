@@ -15,6 +15,8 @@ The following values are configured in the deployment environment and never comm
 - `ALLOW_PLATFORM_AUTH_HEADERS` — leave empty unless a trusted edge strips client-supplied `oai-authenticated-*` headers and injects authenticated values.
 - `DB` — Cloudflare D1 binding.
 - `BUCKET` — private Cloudflare R2 binding.
+- `BACKUP_BUCKET`, `QUARANTINE_BUCKET` — environment-specific protected R2 bindings.
+- Queue, Vectorize, and Analytics Engine bindings declared in `wrangler.jsonc`.
 
 Do not use `NEXT_PUBLIC_*` for credentials.
 
@@ -22,10 +24,12 @@ Do not use `NEXT_PUBLIC_*` for credentials.
 
 ```bash
 npm ci
+npm run cf:types:check
 npm run lint
 npm run type-check
 npm test
 npm run validate:artifact
+npm audit --omit=dev --audit-level=high
 ```
 
 Run the local integration flow only against an isolated D1/R2 environment:
@@ -39,16 +43,21 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 
 ## Database migration
 
-Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0010_*.sql`. Before production deployment:
+Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0011_*.sql`. Before any remote deployment:
 
-1. Take a D1 backup.
-2. Apply the pending migrations in order.
-3. Verify the migration ledger.
-4. Confirm that pre-existing user profiles received a default workspace and that tenant-owned records received `workspace_id`.
-5. Verify `document_comparisons`, `comparison_changes`, `legislation_updates`, and `monitoring_preferences`.
-6. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
+1. Record the exact environment, D1 ID, schema ledger, and application version.
+2. Take an independent D1 backup and verify its checksum/manifest.
+3. Restore it into an isolated database and run integrity checks.
+4. Apply the pending migrations in order.
+5. Verify the migration ledger and foreign keys.
+6. Confirm that pre-existing user profiles received a default workspace and that tenant-owned records received `workspace_id`.
+7. Verify `document_comparisons`, `comparison_changes`, `legislation_updates`, `monitoring_preferences`, `job_outbox`, and `job_runs`.
+8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 
 Do not delete the backup tables created by migration `0004` during the release window.
+Those same-database tables are not a substitute for the independent backup and restore rehearsal.
+
+Migration `0011` has passed local additive and sentinel-preservation tests. It has not been applied to staging or production.
 
 ## Smoke checklist
 

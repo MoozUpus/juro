@@ -1,11 +1,13 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import {
+  handleQueue,
+  handleScheduled,
+  type PlatformJobEnv,
+} from "./platform-jobs";
 
-interface Env {
-  ASSETS: Fetcher;
-  DB: D1Database;
-  BUCKET: R2Bucket;
+type FrameworkEnv = PlatformJobEnv & {
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   AI_PROVIDER?: string;
@@ -18,18 +20,21 @@ interface Env {
   PAYMENT_API_KEY?: string;
   PAYMENT_WEBHOOK_SECRET?: string;
   ALLOW_PLATFORM_AUTH_HEADERS?: string;
-  IMAGES: {
-    input(stream: ReadableStream): {
-      transform(options: Record<string, unknown>): {
-        output(options: { format: string; quality: number }): Promise<{ response(): Response }>;
-      };
-    };
-  };
-}
+};
 
-interface ExecutionContext {
-  waitUntil(promise: Promise<unknown>): void;
-  passThroughOnException(): void;
+type SupportedImageOutputFormat =
+  | "image/jpeg"
+  | "image/webp"
+  | "image/avif";
+
+function isSupportedImageOutputFormat(
+  format: string,
+): format is SupportedImageOutputFormat {
+  return (
+    format === "image/jpeg" ||
+    format === "image/webp" ||
+    format === "image/avif"
+  );
 }
 
 function withSecurityHeaders(response: Response, url: URL): Response {
@@ -54,7 +59,7 @@ function withSecurityHeaders(response: Response, url: URL): Response {
 // const imageConfig: ImageConfig = { dangerouslyAllowSVG: true };
 
 const worker = {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: FrameworkEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/_vinext/image") {
@@ -62,6 +67,9 @@ const worker = {
       const optimized = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
         transformImage: async (body, { width, format, quality }) => {
+          if (!isSupportedImageOutputFormat(format)) {
+            throw new Error("Unsupported optimized image output format.");
+          }
           const result = await env.IMAGES.input(body).transform(width > 0 ? { width } : {}).output({ format, quality });
           return result.response();
         },
@@ -81,6 +89,18 @@ const worker = {
     if (isPrivateShare) headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
     return withSecurityHeaders(new Response(response.body, { status: response.status, statusText: response.statusText, headers }), url);
   },
-};
+  async queue(
+    batch: MessageBatch<unknown>,
+    env: FrameworkEnv,
+  ): Promise<void> {
+    await handleQueue(batch, env);
+  },
+  async scheduled(
+    controller: ScheduledController,
+    env: FrameworkEnv,
+  ): Promise<void> {
+    await handleScheduled(controller, env);
+  },
+} satisfies ExportedHandler<FrameworkEnv, unknown>;
 
 export default worker;

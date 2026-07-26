@@ -27,9 +27,9 @@ There are two materially different source states:
 | Sites checkout for `app.juro.uz` | `86843ca9ff0be33a97c8a6b22005d0d47e25ff53` | Most complete known production source; migrations `0000`–`0010`; used for this audit |
 | GitHub `MoozUpus/juro` `main` | `eb5a5ca82d0059e7be04e34e9adcce2f7e3fb8ca` | Older platform snapshot; migrations only through `0004`; must not be deployed over the Sites source |
 
-The comparison found 116 files present only in the Sites source, 50 materially changed files, one GitHub-only file, and 179 identical files. The GitHub feature branch `feature/juro-ai-platform` and draft PR #3 exist, but the complete Sites source has not yet been synchronized into them.
+The comparison found 116 files present only in the Sites source, 50 materially changed files, one GitHub-only file, and 179 identical files. The verified Sites source and Phase 0 audit were synchronized into `feature/juro-ai-platform` in commit `c454d779e1ec91c6a1a1ad270c9d1b7b02afabb7`; draft PR #3 is now the reviewed integration branch.
 
-Until synchronization is complete and reviewed, the Sites checkout is the implementation baseline and GitHub `main` is not safe as a deployment source.
+GitHub `main` remains behind until that PR is reviewed and merged, so it is still not a safe deployment source. Production remains pinned to the verified Sites revision and has not been changed.
 
 ## Runtime and dependency baseline
 
@@ -81,17 +81,18 @@ Not independently verified:
 
 Wrangler is not authenticated in this environment. Generated build configuration contains local placeholder resource names and IDs and is not evidence of production resource identity. No claim is made that the requested staging resources exist.
 
-The Worker currently implements only `fetch`. It has no `scheduled` or `queue` handlers and no Queue, Vectorize, Cron, or Analytics Engine bindings.
+The Phase 1 source now exports `fetch`, `queue`, and `scheduled` and declares environment-specific Queue, Vectorize, Images, Assets, Analytics Engine, D1, and R2 bindings. These declarations and flattened development/staging/production artifacts pass local validation only. `ASYNC_RUNTIME_ENABLED=false`, `CRON_ENABLED=false`, and no Cron trigger is attached. No remote resource existence, identity, permission, or delivery behavior has been verified, and live Queue consumers remain blocked.
 
 ## Data and migrations
 
-- Drizzle schema currently describes 53 application tables.
-- Local application of migrations `0000`–`0010` to an empty SQLite database succeeded.
-- The resulting local database had 79 tables and zero foreign-key violations.
+- Drizzle schema currently describes 60 application tables.
+- Local application of migrations `0000`–`0011` to an empty SQLite database succeeded.
+- Migration `0011` is additive and introduces seven durable job/operation tables.
+- The resulting local database had 86 tables and zero foreign-key violations.
 - No destructive `DROP` was found in the existing migrations.
 - This local result does not prove compatibility with the actual production schema.
 - Migration `0004` copies sensitive operational tables into `__backup_*` tables in the same D1. These are not independent backups and have no tested restore procedure.
-- `migrations_dir` is not committed in Wrangler configuration.
+- `migrations_dir` is committed in the environment-aware `wrangler.jsonc`; remote application remains prohibited until backup/restore and inventory gates pass.
 
 No production snapshot or migration was performed because the control plane is not authenticated and an independent backup could not be verified.
 
@@ -149,11 +150,7 @@ A targeted source/client scan found no provider key values or private keys. The 
 
 ## Phase 0 gate
 
-The baseline is reproducible, but Phase 0 remains open until:
+The Phase 0 audit, threat model, design audit, reproducible baseline, and source reconciliation are complete in draft PR #3. External control-plane prerequisites remain open: authenticated Cloudflare inventory and a verified independent backup/restore rehearsal are mandatory before any remote migration or staging resource claim.
 
-1. the production Sites source is synchronized into the GitHub feature branch;
-2. a Cloudflare control-plane inventory is completed after safe local authentication;
-3. a real production D1 export/snapshot and restore plan are verified before any production migration;
-4. the design audit and threat model are committed;
-5. the two critical builder isolation defects and OTP race are covered by failing regression tests before implementation.
+The disabled, source-only Phase 1 foundation now passes 135 local tests (17 rendered/security, 91 existing unit/integration, and 27 Cloudflare/migration/runtime), type-check, lint, generated-type freshness, three-environment build/dry-run validation, production dependency audit, artifact validation, and secret-pattern scanning. This does not close the Phase 1 staging gate. Live consumers are blocked until quarantine/DLQ consumer, alert, redrive, ledger-reconciliation, per-kind flag, and side-effect fencing policies are implemented. The critical builder isolation defects and OTP race remain Phase 2 implementation blockers.
 

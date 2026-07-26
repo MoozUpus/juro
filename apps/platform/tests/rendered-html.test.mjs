@@ -31,6 +31,13 @@ async function createWorker() {
   return (await import(workerUrl.href)).default;
 }
 
+test("built Worker exposes fetch, queue, and scheduled module handlers", async () => {
+  const worker = await createWorker();
+  assert.equal(typeof worker.fetch, "function");
+  assert.equal(typeof worker.queue, "function");
+  assert.equal(typeof worker.scheduled, "function");
+});
+
 const runtime = {
   ALLOW_PLATFORM_AUTH_HEADERS: "true",
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },

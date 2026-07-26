@@ -1,12 +1,12 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-26  
-Status: Phase 0 in progress; production changes prohibited without later explicit approval.
+Status: Phase 0 audit/reconciliation complete; Phase 1 local foundation verified, remote staging gate open; production changes prohibited without later explicit approval.
 
 ## Execution principles
 
 - Extend the current working system; do not rewrite the document builder.
-- Treat `app.juro.uz` production source revision `86843ca` as the implementation baseline until GitHub synchronization is complete.
+- Treat `app.juro.uz` production source revision `86843ca` as the preserved runtime baseline and draft PR #3 as the reconciled integration branch; `main` remains behind until review/merge.
 - Use additive, expand-contract migrations.
 - Prove each vertical slice through type-check, lint, unit/integration/security tests, build, artifact validation, secret scan, and staging smoke.
 - Never expose a feature as working when its provider, storage, queue, or authorization path is absent.
@@ -33,18 +33,18 @@ Gate:
 
 ## Phase 1 — Cloudflare foundation
 
-Order:
+Order and current state:
 
-1. commit environment-aware `wrangler.jsonc`, including `migrations_dir`;
-2. generate Worker environment types;
-3. implement environment-safe bindings and validation;
-4. add D1 job/idempotency/operation tables;
-5. implement queue consumers and dead-letter behavior;
-6. implement scheduled handler, locks, run records, manual retry, and alerts;
-7. select embedding model and dimension from current provider documentation;
-8. create only missing development/staging resources after authenticated inventory;
-9. add safe observability, redaction, cost metadata, and backups;
-10. deploy staging and verify every binding.
+1. **Locally verified:** environment-aware `wrangler.jsonc`, including `migrations_dir`;
+2. **Locally verified:** generated Worker environment types and freshness check;
+3. **Locally verified:** environment-safe binding normalization, artifact validation, and three-environment dry-run matrix;
+4. **Locally verified:** additive D1 job/idempotency/operation tables in migration `0011`;
+5. **Source-only/disabled:** identifiers-only queue consumer boundary, outbox, idempotency, short leases, and fencing tests; live delivery is blocked until quarantine/DLQ consumer, alert, redrive, reconciliation, and per-kind flags exist;
+6. **Partial/source-only:** scheduled handler is inert with no trigger; locks/run ledgers exist, but reviewed schedules, manual retry, and alerts are pending;
+7. **Pending:** select embedding model and dimension from current provider documentation;
+8. **Blocked on authenticated inventory:** create only missing development/staging resources;
+9. **Partial/source-only:** redacted structured logs and Analytics binding exist; remote observability, cost metadata, backup execution, and restore evidence are pending;
+10. **Blocked:** deploy staging and verify every binding only after the preceding safety gates.
 
 Cron for 00:00 Asia/Tashkent is `0 19 * * *` UTC. It will not be configured until the scheduled handler and locking are tested.
 
@@ -215,4 +215,7 @@ Then stop and request explicit production approval. No production deploy or migr
 4. Operator legal identity placeholders require owner-supplied approved legal details.
 5. Final RU/UZ policies and the legal-language priority rule require legal approval.
 6. Malware scanner and audio/video providers require selection only after adapter and privacy/cost evaluation.
+7. Live Queue consumers require quarantine/DLQ consumption, alerts, redrive, durable ledger reconciliation, and per-kind producer/handler flags.
+8. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing; the current read-only probe is the only enabled handler.
+9. The Sites deployment pipeline must prove it selects the explicit production build; ordinary `npm run build` intentionally produces development.
 
