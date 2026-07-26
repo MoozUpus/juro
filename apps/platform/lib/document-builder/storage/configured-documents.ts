@@ -5,6 +5,7 @@ import type { GenericStoredDocument, UserProfile } from "../types";
 import { getDocumentAccess } from "../permissions";
 import { ensureConfiguredTemplateSeed, isoNow, parseJson } from "./db";
 import { requireD1 } from "./runtime";
+import { workspaceForUser } from "../../platform/workspace";
 
 export interface CreateConfiguredDocumentInput {
   definition: DocumentDefinition;
@@ -57,6 +58,7 @@ export function suggestedConfiguredTitle(definition: DocumentDefinition, languag
 
 export async function createConfiguredDocument(user: UserProfile, input: CreateConfiguredDocumentInput): Promise<GenericStoredDocument> {
   const db = requireD1();
+  const workspace = await workspaceForUser(user);
   await ensureConfiguredTemplateSeed(input.definition);
   const id = crypto.randomUUID();
   const now = isoNow();
@@ -69,11 +71,11 @@ export async function createConfiguredDocument(user: UserProfile, input: CreateC
   const statements = [
     db.prepare(
       `INSERT INTO documents
-      (id, owner_user_id, template_id, template_code, template_version, language, participant_mode, acting_side,
+      (id, workspace_id, owner_user_id, template_id, template_code, template_version, language, participant_mode, acting_side,
        title, category, status, case_id, plan_step_id, lender_name, borrower_name, is_favorite, archived_at, generated_at,
        signed_file_id, revision, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'configurable', NULL, ?, ?, 'Черновик', ?, ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
-    ).bind(id, user.id, input.definition.id, input.definition.code, input.definition.version, input.language, title, category?.title.ru ?? input.definition.categorySlug, input.caseId ?? null, input.planStepId ?? null, primary, secondary, now, now),
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'configurable', NULL, ?, ?, 'Черновик', ?, ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
+    ).bind(id, workspace.id, user.id, input.definition.id, input.definition.code, input.definition.version, input.language, title, category?.title.ru ?? input.definition.categorySlug, input.caseId ?? null, input.planStepId ?? null, primary, secondary, now, now),
     db.prepare("INSERT INTO document_answers (document_id, answers_json, updated_at) VALUES (?, ?, ?)").bind(id, JSON.stringify(input.answers), now),
     db.prepare("INSERT INTO document_current_content (document_id, auto_content, final_content, manually_edited, updated_at) VALUES (?, ?, ?, ?, ?)")
       .bind(id, rendered.plainText, finalContent, input.manuallyEdited ? 1 : 0, now),

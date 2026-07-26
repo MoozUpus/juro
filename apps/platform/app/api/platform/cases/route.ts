@@ -1,6 +1,7 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
+import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const scenarios: Record<string, { ru: string[]; uz: string[] }> = {
   "unpaid-salary": { ru: ["Собрать трудовые документы и расчёты", "Подготовить письменное требование работодателю", "Зафиксировать вручение требования", "Проверить ответ и определить следующий способ защиты"], uz: ["Mehnat hujjatlari va hisob-kitoblarni yig‘ish", "Ish beruvchiga yozma talab tayyorlash", "Talab topshirilganini qayd etish", "Javobni tekshirib, keyingi himoya usulini belgilash"] },
@@ -14,10 +15,11 @@ function response(body: unknown, status=200){return Response.json(body,{status,h
 
 export const GET = withApiErrors(async function GET(){
   const user=await requireApiUser(); const db=requireD1();
+  const workspace=await workspaceForUser(user);
   const rows=await db.prepare(`SELECT c.id,c.title,c.description,c.legal_area AS legalArea,c.status,c.next_deadline_at AS nextDeadlineAt,c.created_at AS createdAt,c.updated_at AS updatedAt,
     p.id AS planId,p.title AS planTitle,p.status AS planStatus,p.progress_percent AS progressPercent,
     (SELECT json_group_array(json_object('id',s.id,'ordinal',s.ordinal,'title',s.title,'description',s.description,'status',s.status,'dueAt',s.due_at,'actionType',s.action_type,'templateCode',s.template_code,'revision',s.revision)) FROM action_plan_steps s WHERE s.plan_id=p.id ORDER BY s.ordinal) AS stepsJson
-    FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id WHERE c.owner_user_id=? AND c.archived_at IS NULL ORDER BY c.updated_at DESC`).bind(user.id).all();
+    FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id WHERE c.workspace_id=? AND c.archived_at IS NULL ORDER BY c.updated_at DESC`).bind(workspace.id).all();
   return response({cases:(rows.results as Array<Record<string,unknown>>).map(row=>({...row,steps:parseJson(String(row.stepsJson||"[]"),[])}))});
 });
 
@@ -26,8 +28,9 @@ export const POST = withApiErrors(async function POST(request:Request){
   const title=body?.title?.trim().slice(0,180); const legalArea=body?.legalArea&&scenarios[body.legalArea]?body.legalArea:"debt"; const locale=body?.locale==="uz"?"uz":"ru"; const accountType=body?.accountType==="business"?"business":"individual";
   if(!title)return response({error:locale==="ru"?"Укажите название ситуации.":"Vaziyat nomini kiriting."},400);
   const now=isoNow(); const caseId=crypto.randomUUID(); const planId=crypto.randomUUID(); const steps=scenarios[legalArea][locale]; const db=requireD1();
+  const workspace=await workspaceForUser(user);
   await db.batch([
-    db.prepare("INSERT INTO cases (id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'open',1,?,?)").bind(caseId,user.id,accountType,locale,title,body?.description?.trim().slice(0,2000)||null,legalArea,now,now),
+    db.prepare("INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'open',1,?,?)").bind(caseId,workspace.id,user.id,accountType,locale,title,body?.description?.trim().slice(0,2000)||null,legalArea,now,now),
     db.prepare("INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,?,'in_progress',0,1,?,?)").bind(planId,caseId,user.id,locale==="ru"?`План: ${title}`:`Reja: ${title}`,now,now),
     ...steps.map((step,index)=>db.prepare("INSERT INTO action_plan_steps (id,plan_id,ordinal,title,status,deadline_type,revision,created_at,updated_at) VALUES (?,?,?,?,'not_started','calendar_days',1,?,?)").bind(crypto.randomUUID(),planId,index+1,step,now,now)),
     db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'case_created',?,?)").bind(crypto.randomUUID(),caseId,user.id,JSON.stringify({legalArea}),now),

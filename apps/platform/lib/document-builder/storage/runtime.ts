@@ -6,8 +6,18 @@ export interface BuilderRuntimeEnv {
   BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
+  AI_PROVIDER?: string;
+  AI_PROVIDER_API_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  APP_URL?: string;
+  PUBLIC_SITE_URL?: string;
+  PAYMENT_PROVIDER?: string;
+  PAYMENT_API_KEY?: string;
+  PAYMENT_WEBHOOK_SECRET?: string;
+  ALLOW_PLATFORM_AUTH_HEADERS?: string;
+  LEGISLATION_FEED_PROVIDER?: string;
+  LEGISLATION_FEED_API_KEY?: string;
 }
 
 export class ServiceUnavailableError extends Error {

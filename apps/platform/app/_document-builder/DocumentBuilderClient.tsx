@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- persisted guest drafts and authenticated documents hydrate after mount */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, Eye, FileCheck2, LoaderCircle, LockKeyhole, PenLine, Save, Sparkles } from "lucide-react";
 import { createDefaultAnswers, EXAMPLE_RU, EXAMPLE_UZ } from "../../lib/document-builder/defaults";
@@ -30,7 +31,8 @@ import { ReviewPanel } from "./_components/ReviewPanel";
 import { apiFetch, downloadAuthenticatedFile } from "./_components/api-client";
 import { useDebouncedEffect } from "./_hooks/useDebouncedEffect";
 
-const GUEST_KEY = "juro-document-builder-test-draft";
+const GUEST_KEY = "juro-document-builder-draft-v1";
+const LEGACY_GUEST_KEY = ["juro", "document", "builder", "test", "draft"].join("-");
 
 type Phase = "intro" | "builder" | "success";
 type SaveState = "idle" | "saving" | "saved" | "error";
@@ -170,8 +172,10 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     const base = createDefaultAnswers(language);
     if (!user) {
       try {
-        const raw = sessionStorage.getItem(GUEST_KEY);
+        const raw = sessionStorage.getItem(GUEST_KEY) ?? sessionStorage.getItem(LEGACY_GUEST_KEY);
         if (raw) {
+          sessionStorage.setItem(GUEST_KEY, raw);
+          sessionStorage.removeItem(LEGACY_GUEST_KEY);
           const guest = JSON.parse(raw) as GuestDraft;
           setPhase(guest.phase === "success" ? "builder" : guest.phase);
           setStep(guest.step);
@@ -187,8 +191,10 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
       }
     } else {
       try {
-        const raw = sessionStorage.getItem(GUEST_KEY);
+        const raw = sessionStorage.getItem(GUEST_KEY) ?? sessionStorage.getItem(LEGACY_GUEST_KEY);
         if (raw) {
+          sessionStorage.setItem(GUEST_KEY, raw);
+          sessionStorage.removeItem(LEGACY_GUEST_KEY);
           const guest = JSON.parse(raw) as GuestDraft;
           setPhase(guest.phase === "intro" ? "intro" : "builder");
           setStep(guest.step);
@@ -477,7 +483,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     return <main className="dbt-print-only">{hydrated ? <DocumentPreview document={printableReceipt(finalText)} mobileOpen/> : <p>Подготовка документа к печати…</p>}</main>;
   }
 
-  if (!hydrated) return <main className="dbt-loading"><img src="/juro-logo-primary.png" alt="JURO"/><LoaderCircle size={28}/><p>Открываем конструктор…</p></main>;
+  if (!hydrated) return <main className="dbt-loading"><Image src="/juro-logo-primary.png" alt="JURO" width={140} height={137} priority unoptimized/><LoaderCircle size={28}/><p>Открываем конструктор…</p></main>;
 
   if (phase === "intro") return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><main className="dbt-intro"><section className="dbt-intro-copy"><span className="dbt-eyebrow"><FileCheck2 size={16}/>Первый бесплатный документ JURO</span><h1>Расписка в получении денежных средств</h1><p>Документ подтверждает передачу денежных средств в качестве займа и обязанность их возврата.</p><div className="dbt-intro-meta"><span><strong>≈ 5 минут</strong><small>примерное время заполнения</small></span><span><strong>DOCX + PDF</strong><small>настоящие готовые файлы</small></span></div><fieldset className="dbt-language"><legend>Язык документа</legend><label className={answers.language === "ru" ? "selected" : ""}><input type="radio" checked={answers.language === "ru"} onChange={() => changeLanguage("ru")}/><span><strong>Русский</strong><small>Полная русская версия</small></span></label><label className={answers.language === "uz-cyrl" ? "selected" : ""}><input type="radio" checked={answers.language === "uz-cyrl"} onChange={() => changeLanguage("uz-cyrl")}/><span><strong>Ўзбекча</strong><small>Ўзбек кирилл алифбосида</small></span></label></fieldset><button type="button" className="dbt-start" onClick={start}>Создать документ<ArrowRight size={19}/></button><p className="dbt-intro-note">Начать можно без регистрации. До входа ответы сохраняются только в текущей вкладке.</p></section><DocumentPreview document={example} example/></main></div>;
 

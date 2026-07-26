@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./document-builder.css";
 
 export const metadata: Metadata = {
-  title: "Юридические документы — JURO",
+  title: "Юридические документы",
   description: "Единая библиотека и интерактивный конструктор юридических документов JURO.",
   robots: { index: false, follow: false },
 };

@@ -51,12 +51,20 @@ function drawJustifiedLine(page: PDFPage, line: string, x: number, y: number, wi
   }
 }
 
-function drawFooter(page: PDFPage, index: number, total: number, font: PDFFont, mark: PDFImage): void {
+function drawFooter(
+  page: PDFPage,
+  index: number,
+  total: number,
+  font: PDFFont,
+  mark: PDFImage,
+  footerLabel: string,
+  pageLabel: string,
+): void {
   const y = 22;
   page.drawLine({ start: { x: MARGIN_X, y: y + 17 }, end: { x: A4_WIDTH - MARGIN_X, y: y + 17 }, thickness: 0.4, color: rgb(0.78, 0.72, 0.62) });
   page.drawImage(mark, { x: MARGIN_X, y: y - 1, width: 13, height: 13 });
-  page.drawText("Создано в JURO", { x: MARGIN_X + 18, y: y + 1, size: 7.4, font, color: rgb(0.32, 0.36, 0.4) });
-  const numberText = `Страница ${index + 1} из ${total}`;
+  page.drawText(footerLabel, { x: MARGIN_X + 18, y: y + 1, size: 7.4, font, color: rgb(0.32, 0.36, 0.4) });
+  const numberText = `${pageLabel} ${index + 1} / ${total}`;
   page.drawText(numberText, { x: A4_WIDTH - MARGIN_X - font.widthOfTextAtSize(numberText, 7.4), y: y + 1, size: 7.4, font, color: rgb(0.32, 0.36, 0.4) });
 }
 
@@ -65,15 +73,21 @@ export async function generatePdf(
   regularBytes: ArrayBuffer,
   boldBytes: ArrayBuffer,
   markBytes: ArrayBuffer,
+  options: {
+    title?: string;
+    producer?: string;
+    footerLabel?: string;
+    pageLabel?: string;
+  } = {},
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const regular = await pdf.embedFont(regularBytes, { subset: true });
   const bold = await pdf.embedFont(boldBytes, { subset: true });
   const mark = await pdf.embedPng(markBytes);
-  pdf.setTitle("JURO — Расписка в получении денежных средств");
+  pdf.setTitle(options.title || "JURO — Расписка в получении денежных средств");
   pdf.setCreator("JURO");
-  pdf.setProducer("JURO Document Builder");
+  pdf.setProducer(options.producer || "JURO Document Builder");
 
   let page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
   let y = A4_HEIGHT - TOP;
@@ -101,7 +115,15 @@ export async function generatePdf(
   }
 
   const pages = pdf.getPages();
-  pages.forEach((pdfPage, index) => drawFooter(pdfPage, index, pages.length, regular, mark));
+  pages.forEach((pdfPage, index) => drawFooter(
+    pdfPage,
+    index,
+    pages.length,
+    regular,
+    mark,
+    options.footerLabel || "Создано в JURO",
+    options.pageLabel || "Страница",
+  ));
   const bytes = await pdf.save({ useObjectStreams: false });
   if (bytes.byteLength < 1_000 || String.fromCharCode(...bytes.slice(0, 4)) !== "%PDF") {
     throw new Error("Generated PDF is invalid");

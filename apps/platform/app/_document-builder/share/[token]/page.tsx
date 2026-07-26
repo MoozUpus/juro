@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { sha256 } from "../../../../lib/document-builder/share-links/crypto";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { paragraphsFromFinalText } from "../../../../lib/document-builder/generation/paragraphs";
@@ -6,7 +7,7 @@ import { PublicDocumentView } from "../../_components/PublicDocumentView";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Документ JURO",
+  title: "Документ",
   robots: { index: false, follow: false, nocache: true },
 };
 
@@ -32,7 +33,7 @@ export default async function SharePage({ params }: { params: Promise<{ token: s
     record = null;
   }
   if (!record || record.revokedAt || record.expiresAt <= new Date().toISOString()) {
-    return <main className="dbt-public-message"><img src="/juro-logo-primary.png" alt="JURO"/><h1>Ссылка недействительна</h1><p>Срок действия ссылки истёк либо владелец отозвал доступ.</p></main>;
+    return <main className="dbt-public-message"><Image src="/juro-logo-primary.png" alt="JURO" width={140} height={137} unoptimized/><h1>Ссылка недействительна</h1><p>Срок действия ссылки истёк либо владелец отозвал доступ.</p></main>;
   }
   return <PublicDocumentView title={record.title} paragraphs={paragraphsFromFinalText(record.finalContent)} />;
 }

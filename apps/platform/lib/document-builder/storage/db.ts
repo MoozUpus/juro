@@ -1,4 +1,5 @@
 import type { ChatGPTUser } from "../../../app/chatgpt-auth";
+import { ensureDefaultWorkspace } from "../../platform/workspace";
 import type { UserProfile } from "../types";
 import type { DocumentDefinition } from "../registry";
 import { requireD1 } from "./runtime";
@@ -57,16 +58,19 @@ export async function getOrCreateUserProfile(user: ChatGPTUser): Promise<UserPro
     if (user.fullName && user.fullName !== existing.fullName) {
       await db.prepare("UPDATE user_profiles SET full_name = ?, updated_at = ? WHERE id = ?")
         .bind(user.fullName, isoNow(), existing.id).run();
+      await ensureDefaultWorkspace(existing.id);
       return { ...existing, fullName: user.fullName };
     }
+    await ensureDefaultWorkspace(existing.id);
     return existing;
   }
 
   const id = crypto.randomUUID();
   const now = isoNow();
   await db.prepare(
-    "INSERT INTO user_profiles (id, email, full_name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+    "INSERT INTO user_profiles (id, email, full_name, locale, account_type, created_at, updated_at) VALUES (?, ?, ?, 'ru', 'individual', ?, ?)",
   ).bind(id, user.email.toLocaleLowerCase(), user.fullName, now, now).run();
+  await ensureDefaultWorkspace(id);
   return {
     id,
     email: user.email.toLocaleLowerCase(),
@@ -103,8 +107,8 @@ export async function addNotification(
 ): Promise<void> {
   const db = requireD1();
   await db.prepare(
-    "INSERT INTO notifications (id, user_id, document_id, type, title, body, read_at, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
-  ).bind(crypto.randomUUID(), userId, documentId, type, title, body, isoNow()).run();
+    "INSERT INTO notifications (id, workspace_id, user_id, document_id, type, title, body, read_at, created_at) VALUES (?, (SELECT default_workspace_id FROM user_profiles WHERE id = ?), ?, ?, ?, ?, ?, NULL, ?)",
+  ).bind(crypto.randomUUID(), userId, userId, documentId, type, title, body, isoNow()).run();
 }
 
 export function parseJson<T>(value: string | null | undefined, fallback: T): T {

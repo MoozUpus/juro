@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "../lib/auth/session";
+import { runtimeEnv } from "../lib/document-builder/storage/runtime";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -18,9 +19,16 @@ const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  const sessionUser = await getSessionUser();
+  if (sessionUser) return sessionUser;
+
+  const allowPlatformHeaders = process.env.NODE_ENV !== "production"
+    || runtimeEnv().ALLOW_PLATFORM_AUTH_HEADERS === "true";
+  if (!allowPlatformHeaders) return null;
+
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!email) return getSessionUser();
+  if (!email) return null;
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =

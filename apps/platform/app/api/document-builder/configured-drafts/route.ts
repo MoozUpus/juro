@@ -3,6 +3,7 @@ import { apiError, badRequest, jsonResponse } from "../../../../lib/document-bui
 import { getDocumentByCode } from "../../../../lib/document-builder/registry";
 import { createConfiguredDocument } from "../../../../lib/document-builder/storage/configured-documents";
 import { configuredDraftSchema } from "../../../../lib/document-builder/validation/schema";
+import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,9 @@ export async function POST(request: Request): Promise<Response> {
     if (!definition || definition.status !== "published") return badRequest("Шаблон недоступен или ещё находится на проверке.", "TEMPLATE_UNAVAILABLE");
     if (parsed.data.caseId) {
       const { requireD1 } = await import("../../../../lib/document-builder/storage/runtime");
-      const owned = await requireD1().prepare("SELECT c.id FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id LEFT JOIN action_plan_steps s ON s.plan_id=p.id AND s.id=? WHERE c.id=? AND c.owner_user_id=? AND (? IS NULL OR s.id IS NOT NULL) LIMIT 1")
-        .bind(parsed.data.planStepId ?? null, parsed.data.caseId, user.id, parsed.data.planStepId ?? null).first();
+      const workspace = await workspaceForUser(user);
+      const owned = await requireD1().prepare("SELECT c.id FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id LEFT JOIN action_plan_steps s ON s.plan_id=p.id AND s.id=? WHERE c.id=? AND c.workspace_id=? AND (? IS NULL OR s.id IS NOT NULL) LIMIT 1")
+        .bind(parsed.data.planStepId ?? null, parsed.data.caseId, workspace.id, parsed.data.planStepId ?? null).first();
       if (!owned) return badRequest("Дело или шаг недоступны.", "CASE_ACCESS_DENIED");
     }
     const document = await createConfiguredDocument(user, { definition, language: parsed.data.language, answers: parsed.data.answers, title: parsed.data.title, finalContent: parsed.data.finalContent, manuallyEdited: parsed.data.manuallyEdited, caseId: parsed.data.caseId, planStepId: parsed.data.planStepId });

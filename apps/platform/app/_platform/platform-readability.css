@@ -1,0 +1,52 @@
+/*
+ * Shared legibility floor for the new command, evidence, search, comparison,
+ * and monitoring surfaces. Compact metadata remains visually secondary, while
+ * every action and legal conclusion stays readable at 100% and 200% zoom.
+ */
+.platform-shell .global-search-trigger span,
+.platform-shell .global-search-results strong,
+.platform-shell .ai-confidence,
+.platform-shell .ai-evidence a span,
+.platform-shell .ai-evidence a em,
+.platform-shell .monitoring-status-copy p,
+.platform-shell .monitoring-section-heading p,
+.platform-shell .monitoring-segmented label,
+.platform-shell .monitoring-topics label,
+.platform-shell .monitoring-channels strong,
+.platform-shell .monitoring-consent strong,
+.platform-shell .monitoring-loading,
+.platform-shell .monitoring-empty p,
+.platform-shell .monitoring-update>p,
+.platform-shell .monitoring-update section p,
+.platform-shell .monitoring-update-actions a {
+  font-size:14px;
+}
+
+.platform-shell .global-search-results small,
+.platform-shell .global-search-dialog>footer,
+.platform-shell .monitoring-channels small,
+.platform-shell .monitoring-consent small,
+.platform-shell .monitoring-update-meta time,
+.platform-shell .monitoring-update dt,
+.platform-shell .monitoring-update dd,
+.platform-shell .monitoring-source strong,
+.platform-shell .monitoring-source small {
+  font-size:12px;
+}
+
+.platform-shell .monitoring-update section h4,
+.platform-shell .monitoring-status dt {
+  font-size:13px;
+}
+
+.platform-shell .monitoring-update-actions a,
+.platform-shell .monitoring-source {
+  min-height:44px;
+}
+
+@media (max-width:800px) {
+  .platform-shell .platform-mobile-nav a,
+  .platform-shell .platform-mobile-nav button {
+    font-size:12px;
+  }
+}

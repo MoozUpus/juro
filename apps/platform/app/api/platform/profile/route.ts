@@ -1,0 +1,55 @@
+import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
+import { isoNow } from "../../../../lib/document-builder/storage/db";
+import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { workspaceForUser } from "../../../../lib/platform/workspace";
+
+function response(body: unknown, status = 200) {
+  return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
+}
+
+export const GET = withApiErrors(async function GET() {
+  const user = await requireApiUser();
+  const workspace = await workspaceForUser(user);
+  const db = requireD1();
+  const [profile, workspaceRow, consents] = await db.batch([
+    db.prepare(
+      `SELECT id,email,full_name AS fullName,phone,locale,account_type AS accountType,
+        company_name AS companyName,organization_role AS organizationRole,primary_goal AS primaryGoal,
+        timezone,onboarding_completed_at AS onboardingCompletedAt,created_at AS createdAt
+       FROM user_profiles WHERE id=? LIMIT 1`,
+    ).bind(user.id),
+    db.prepare("SELECT id,name,type,locale FROM workspaces WHERE id=? LIMIT 1").bind(workspace.id),
+    db.prepare(
+      "SELECT type,version,granted_at AS grantedAt,revoked_at AS revokedAt FROM consents WHERE user_id=? ORDER BY granted_at DESC",
+    ).bind(user.id),
+  ]);
+  return response({ profile: profile.results[0] ?? null, workspace: workspaceRow.results[0] ?? null, role: workspace.role, consents: consents.results });
+});
+
+export const PATCH = withApiErrors(async function PATCH(request: Request) {
+  assertSafeWrite(request);
+  const user = await requireApiUser();
+  const workspace = await workspaceForUser(user);
+  const body = await request.json().catch(() => null) as { fullName?: string; phone?: string; locale?: string; timezone?: string; companyName?: string; organizationRole?: string } | null;
+  if (!body) return response({ error: "Некорректные данные." }, 400);
+  const fullName = body.fullName?.trim().slice(0, 160);
+  if (!fullName) return response({ error: "Укажите имя." }, 400);
+  const locale = body.locale === "uz" ? "uz" : "ru";
+  const timezone = body.timezone === "UTC" ? "UTC" : "Asia/Tashkent";
+  const phone = body.phone?.trim().slice(0, 40) || null;
+  const companyName = body.companyName?.trim().slice(0, 180) || null;
+  const organizationRole = body.organizationRole?.trim().slice(0, 120) || null;
+  const now = isoNow();
+  const db = requireD1();
+  await db.batch([
+    db.prepare(
+      "UPDATE user_profiles SET full_name=?,phone=?,locale=?,timezone=?,company_name=?,organization_role=?,updated_at=? WHERE id=?",
+    ).bind(fullName, phone, locale, timezone, companyName, organizationRole, now, user.id),
+    db.prepare("UPDATE workspaces SET locale=?,name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE name END,updated_at=? WHERE id=?")
+      .bind(locale, companyName, companyName, now, workspace.id),
+    db.prepare(
+      "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'user',?,'profile_updated',?,?)",
+    ).bind(crypto.randomUUID(), workspace.id, user.id, user.id, JSON.stringify({ locale, timezone }), now),
+  ]);
+  return response({ ok: true, locale });
+});

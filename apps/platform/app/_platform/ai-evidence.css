@@ -1,0 +1,19 @@
+.ai-confidence{
+  display:grid;
+  grid-template-columns:auto minmax(80px,1fr) auto;
+  align-items:center;
+  gap:9px;
+  margin:14px 0;
+  padding:10px 12px;
+  border-radius:10px;
+  background:#f2f5f5;
+  color:#526873;
+  font-size:12px;
+}
+.ai-confidence>div{height:6px;border-radius:99px;background:#dfe5e4;overflow:hidden}
+.ai-confidence i{display:block;height:100%;background:#3e7558}
+.ai-confidence strong{color:#284858}
+.ai-cautions>p{margin:0}
+.ai-evidence a{align-items:flex-start;flex-direction:column}
+.ai-evidence a span,.ai-evidence a em{margin-top:4px;color:#657782;font-size:11px;line-height:1.45}
+.ai-evidence a em{color:#865f19;font-style:normal}

@@ -56,9 +56,9 @@ async function download(path: string, user: string): Promise<{ response: Respons
 }
 
 async function main(): Promise<void> {
-  const page = await fetch(`${baseUrl}/document-builder`);
-  assert.equal(page.status, 200);
-  assert.match(await page.text(), /<title>Создать документ — JURO<\/title>/);
+  const anonymousEntry = await fetch(`${baseUrl}/document-builder`, { redirect: "manual" });
+  assert.equal(anonymousEntry.status, 307);
+  assert.match(anonymousEntry.headers.get("location") ?? "", /\/ru\/individual\/document-builder/);
 
   const anonymous = await api("/api/document-builder/documents", { expected: 401 });
   assert.equal((anonymous.data as { code?: string }).code, "UNAUTHORIZED");
@@ -69,6 +69,36 @@ async function main(): Promise<void> {
 
   const collaboratorBootstrap = await api<{ user: { id: string } }>("/api/document-builder/bootstrap", { user: collaboratorEmail });
   const collaboratorId = collaboratorBootstrap.data.user.id;
+
+  await api("/api/onboarding", {
+    method: "POST",
+    user: ownerEmail,
+    json: {
+      accountType: "individual",
+      displayName: "Owner Test",
+      locale: "ru",
+      primaryGoal: "create_document",
+      acceptPolicies: true,
+    },
+  });
+  await api("/api/onboarding", {
+    method: "POST",
+    user: collaboratorEmail,
+    json: {
+      accountType: "individual",
+      displayName: "Counterparty Test",
+      locale: "ru",
+      primaryGoal: "personal_issue",
+      acceptPolicies: true,
+    },
+  });
+
+  const page = await fetch(`${baseUrl}/ru/individual/document-builder`, { headers: authHeaders(ownerEmail, false) });
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /<title>Создать документ — JURO<\/title>/);
+  const helpPage = await fetch(`${baseUrl}/ru/individual/help`, { headers: authHeaders(ownerEmail, false) });
+  assert.equal(helpPage.status, 200);
+  assert.match(await helpPage.text(), /Короткие маршруты к рабочим функциям/);
 
   await api("/api/document-builder/drafts", {
     method: "POST",

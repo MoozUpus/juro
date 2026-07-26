@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Bell, BookOpenText, BookUser, Files, LogIn, Plus, UserRound } from "lucide-react";
 
 export interface BuilderUser {
@@ -12,7 +13,7 @@ export interface BuilderUser {
 export function BuilderHeader({ user, signInPath, compact = false }: { user: BuilderUser | null; signInPath?: string; compact?: boolean }) {
   return <header className="dbt-header">
     <Link className="dbt-brand" href="/document-builder" aria-label="JURO — Создать документ">
-      <img src="/juro-mark.png" alt="" aria-hidden="true"/>
+      <Image src="/juro-mark.png" alt="" width={38} height={38} aria-hidden="true" unoptimized/>
       <b>JURO</b>
       {!compact && <span>Конструктор документов</span>}
     </Link>

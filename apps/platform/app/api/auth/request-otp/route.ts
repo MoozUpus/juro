@@ -24,10 +24,25 @@ export async function POST(request: Request) {
   const db = requireD1();
   const emailHash = await sha256(email);
   const ipHash = await sha256(request.headers.get("cf-connecting-ip") ?? "unknown");
+  const latest = await db.prepare("SELECT created_at AS createdAt FROM auth_otp_challenges WHERE invalidated_at IS NULL AND (email_hash = ? OR request_ip_hash = ?) ORDER BY created_at DESC LIMIT 1")
+    .bind(emailHash, ipHash).first<{ createdAt: string }>();
+  if (latest?.createdAt) {
+    const elapsedSeconds = Math.floor((Date.now() - Date.parse(latest.createdAt)) / 1000);
+    const retryAfterSeconds = Math.max(0, 60 - elapsedSeconds);
+    if (retryAfterSeconds > 0) {
+      return json({
+        code: "OTP_COOLDOWN",
+        retryAfterSeconds,
+        error: locale === "ru"
+          ? `Новый код можно запросить через ${retryAfterSeconds} сек.`
+          : `Yangi kodni ${retryAfterSeconds} soniyadan keyin so‘rash mumkin.`,
+      }, 429);
+    }
+  }
   const since = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const count = await db.prepare("SELECT count(*) AS total FROM auth_otp_challenges WHERE (email_hash = ? OR request_ip_hash = ?) AND created_at > ?")
     .bind(emailHash, ipHash, since).first<{ total: number }>();
-  if ((count?.total ?? 0) >= 8) return json({ error: locale === "ru" ? "Слишком много запросов. Попробуйте позже." : "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring." }, 429);
+  if ((count?.total ?? 0) >= 8) return json({ code: "OTP_RATE_LIMIT", error: locale === "ru" ? "Слишком много запросов. Попробуйте позже." : "Juda ko‘p so‘rov. Keyinroq urinib ko‘ring." }, 429);
 
   const id = crypto.randomUUID();
   const code = randomOtp();
@@ -45,10 +60,20 @@ export async function POST(request: Request) {
   const html = locale === "ru"
     ? `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Ваш код JURO</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${safeCode}</p><p>Код действует 10 минут и предназначен только для вас. Никому его не передавайте.</p></div>`
     : `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>JURO kodingiz</h2><p style="font-size:28px;letter-spacing:8px;font-weight:700">${safeCode}</p><p>Kod 10 daqiqa amal qiladi va faqat siz uchun. Uni hech kimga bermang.</p></div>`;
-  const sent = await fetch("https://api.resend.com/emails", { method: "POST", headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" }, body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject, html }) });
-  if (!sent.ok) {
+  let sent: Response | null = null;
+  try {
+    sent = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ from: env.EMAIL_FROM, to: [email], subject, html }),
+      signal: AbortSignal.timeout(8_000),
+    });
+  } catch {
+    sent = null;
+  }
+  if (!sent?.ok) {
     await db.prepare("UPDATE auth_otp_challenges SET invalidated_at = ? WHERE id = ?").bind(new Date().toISOString(), id).run();
-    return json({ error: locale === "ru" ? "Не удалось отправить письмо. Попробуйте позже." : "Xat yuborilmadi. Keyinroq urinib ko‘ring." }, 502);
+    return json({ code: "EMAIL_PROVIDER_ERROR", error: locale === "ru" ? "Не удалось отправить письмо. Попробуйте позже." : "Xat yuborilmadi. Keyinroq urinib ko‘ring." }, 502);
   }
   return json({ ok: true, challengeId: id, expiresInSeconds: 600, resendAfterSeconds: 60 });
 }

@@ -16,7 +16,8 @@ interface ResponsesApiPayload {
 }
 
 export function hasAiConfiguration(): boolean {
-  return Boolean(runtimeEnv().OPENAI_API_KEY);
+  const configuration = runtimeEnv();
+  return Boolean(configuration.OPENAI_API_KEY || (configuration.AI_PROVIDER === "openai" && configuration.AI_PROVIDER_API_KEY));
 }
 
 export async function callOpenAiJson<T>(options: {
@@ -28,8 +29,9 @@ export async function callOpenAiJson<T>(options: {
   rawInput?: boolean;
 }): Promise<T> {
   const configuration = runtimeEnv();
-  if (!configuration.OPENAI_API_KEY) {
-    throw new AiUnavailableError("AI-модель не подключена: отсутствует серверный OPENAI_API_KEY.");
+  const apiKey = configuration.OPENAI_API_KEY || (configuration.AI_PROVIDER === "openai" ? configuration.AI_PROVIDER_API_KEY : undefined);
+  if (!apiKey) {
+    throw new AiUnavailableError("AI-модель не подключена: отсутствует серверный ключ провайдера.");
   }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
@@ -37,7 +39,7 @@ export async function callOpenAiJson<T>(options: {
     const response = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
       headers: {
-        authorization: `Bearer ${configuration.OPENAI_API_KEY}`,
+        authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({

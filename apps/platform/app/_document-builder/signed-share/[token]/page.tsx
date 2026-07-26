@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { sha256 } from "../../../../lib/document-builder/share-links/crypto";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { SignedShareAccessClient } from "./SignedShareAccessClient";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Доступ к подписанному документу — JURO",
+  title: "Доступ к подписанному документу",
   robots: { index: false, follow: false, nocache: true },
 };
 
@@ -30,7 +31,7 @@ export default async function SignedSharePage({ params }: { params: Promise<{ to
   } catch {
     record = null;
   }
-  if (!record || Boolean(record.deletedAt) || record.expiresAt <= new Date().toISOString()) return <main className="dbt-public-message"><img src="/juro-logo-primary.png" alt="JURO"/><h1>Срок действия ссылки истёк</h1><p>Доступ к этому файлу больше не предоставляется.</p></main>;
-  if (record.deactivatedAt || record.archivedAt) return <main className="dbt-public-message"><img src="/juro-logo-primary.png" alt="JURO"/><h1>Доступ запрещён</h1><p>Владелец файла закрыл доступ.</p></main>;
+  if (!record || Boolean(record.deletedAt) || record.expiresAt <= new Date().toISOString()) return <main className="dbt-public-message"><Image src="/juro-logo-primary.png" alt="JURO" width={140} height={137} unoptimized/><h1>Срок действия ссылки истёк</h1><p>Доступ к этому файлу больше не предоставляется.</p></main>;
+  if (record.deactivatedAt || record.archivedAt) return <main className="dbt-public-message"><Image src="/juro-logo-primary.png" alt="JURO" width={140} height={137} unoptimized/><h1>Доступ запрещён</h1><p>Владелец файла закрыл доступ.</p></main>;
   return <SignedShareAccessClient token={token}/>;
 }

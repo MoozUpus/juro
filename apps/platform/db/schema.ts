@@ -5,6 +5,20 @@ const timestamps = {
   updatedAt: text("updated_at").notNull(),
 };
 
+export const workspaces = sqliteTable(
+  "workspaces",
+  {
+    id: text("id").primaryKey(),
+    type: text("type").notNull(),
+    name: text("name").notNull(),
+    locale: text("locale").notNull().default("ru"),
+    ...timestamps,
+  },
+  (table) => [
+    index("workspaces_type_idx").on(table.type, table.createdAt),
+  ],
+);
+
 export const userProfiles = sqliteTable(
   "user_profiles",
   {
@@ -22,10 +36,89 @@ export const userProfiles = sqliteTable(
     locale: text("locale").notNull().default("ru"),
     accountType: text("account_type").notNull().default("individual"),
     companyName: text("company_name"),
+    organizationRole: text("organization_role"),
+    primaryGoal: text("primary_goal"),
+    timezone: text("timezone").notNull().default("Asia/Tashkent"),
+    defaultWorkspaceId: text("default_workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
     onboardingCompletedAt: text("onboarding_completed_at"),
     ...timestamps,
   },
   (table) => [uniqueIndex("user_profiles_email_uidx").on(table.email)],
+);
+
+export const workspaceMembers = sqliteTable(
+  "workspace_members",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    status: text("status").notNull().default("active"),
+    joinedAt: text("joined_at").notNull(),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workspace_members_uidx").on(table.workspaceId, table.userId),
+    index("workspace_members_user_idx").on(table.userId, table.status),
+  ],
+);
+
+export const workspaceInvitations = sqliteTable(
+  "workspace_invitations",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    invitedByUserId: text("invited_by_user_id").notNull().references(() => userProfiles.id),
+    email: text("email"),
+    emailHash: text("email_hash").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    role: text("role").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    acceptedAt: text("accepted_at"),
+    revokedAt: text("revoked_at"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("workspace_invitations_token_uidx").on(table.tokenHash),
+    index("workspace_invitations_workspace_idx").on(table.workspaceId, table.expiresAt),
+  ],
+);
+
+export const workspaceAuditEvents = sqliteTable(
+  "workspace_audit_events",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    action: text("action").notNull(),
+    metadataJson: text("metadata_json"),
+    ipHash: text("ip_hash"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("workspace_audit_events_workspace_idx").on(table.workspaceId, table.createdAt),
+    index("workspace_audit_events_entity_idx").on(table.entityType, table.entityId),
+  ],
+);
+
+export const consents = sqliteTable(
+  "consents",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    version: text("version").notNull(),
+    scopeJson: text("scope_json"),
+    grantedAt: text("granted_at").notNull(),
+    revokedAt: text("revoked_at"),
+  },
+  (table) => [
+    index("consents_user_idx").on(table.userId, table.type, table.grantedAt),
+    index("consents_workspace_idx").on(table.workspaceId, table.type),
+  ],
 );
 
 export const contacts = sqliteTable(
@@ -75,6 +168,7 @@ export const documents = sqliteTable(
   "documents",
   {
     id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
     templateId: text("template_id").notNull().references(() => documentTemplates.id),
     templateCode: text("template_code"),
@@ -123,6 +217,7 @@ export const documentFiles = sqliteTable(
   "document_files",
   {
     id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     documentId: text("document_id").references(() => documents.id, { onDelete: "cascade" }),
     ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
     kind: text("kind").notNull(),
@@ -130,6 +225,7 @@ export const documentFiles = sqliteTable(
     fileName: text("file_name").notNull(),
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
+    sha256: text("sha256"),
     archivedAt: text("archived_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -137,6 +233,7 @@ export const documentFiles = sqliteTable(
   (table) => [
     index("document_files_document_idx").on(table.documentId),
     index("document_files_owner_idx").on(table.ownerUserId),
+    index("document_files_workspace_idx").on(table.workspaceId, table.createdAt),
   ],
 );
 
@@ -316,6 +413,7 @@ export const notifications = sqliteTable(
   "notifications",
   {
     id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
     documentId: text("document_id").references(() => documents.id, { onDelete: "cascade" }),
     type: text("type").notNull(),
@@ -434,10 +532,10 @@ export const userAcceptances = sqliteTable("user_acceptances", {
 }, (table) => [uniqueIndex("user_acceptances_uidx").on(table.userId, table.documentKey, table.documentVersion)]);
 
 export const cases = sqliteTable("cases", {
-  id: text("id").primaryKey(), ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }), ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
   accountType: text("account_type").notNull(), locale: text("locale").notNull(), title: text("title").notNull(), description: text("description"), legalArea: text("legal_area").notNull(),
   status: text("status").notNull().default("open"), currentRevision: integer("current_revision").notNull().default(1), nextDeadlineAt: text("next_deadline_at"), archivedAt: text("archived_at"), ...timestamps,
-}, (table) => [index("cases_owner_idx").on(table.ownerUserId, table.updatedAt)]);
+}, (table) => [index("cases_owner_idx").on(table.ownerUserId, table.updatedAt), index("cases_workspace_idx").on(table.workspaceId, table.updatedAt)]);
 
 export const caseEvents = sqliteTable("case_events", {
   id: text("id").primaryKey(), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), actorUserId: text("actor_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
@@ -463,6 +561,219 @@ export const consultationSlots = sqliteTable("consultation_slots", {
 
 export const consultationBookings = sqliteTable("consultation_bookings", {
   id: text("id").primaryKey(), slotId: text("slot_id").notNull().references(() => consultationSlots.id), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
-  caseId: text("case_id").references(() => cases.id, { onDelete: "set null" }), planStepId: text("plan_step_id").references(() => actionPlanSteps.id, { onDelete: "set null" }),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").references(() => cases.id, { onDelete: "set null" }), planStepId: text("plan_step_id").references(() => actionPlanSteps.id, { onDelete: "set null" }),
   status: text("status").notNull().default("confirmed"), contextJson: text("context_json").notNull(), ...timestamps,
 }, (table) => [uniqueIndex("consultation_bookings_slot_uidx").on(table.slotId), index("consultation_bookings_user_idx").on(table.requesterUserId, table.createdAt)]);
+
+export const conversations = sqliteTable("conversations", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  caseId: text("case_id").references(() => cases.id, { onDelete: "set null" }),
+  title: text("title").notNull(),
+  locale: text("locale").notNull(),
+  status: text("status").notNull().default("active"),
+  ...timestamps,
+}, (table) => [index("conversations_workspace_idx").on(table.workspaceId, table.updatedAt)]);
+
+export const conversationMessages = sqliteTable("conversation_messages", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  authorType: text("author_type").notNull(),
+  content: text("content").notNull(),
+  structuredJson: text("structured_json"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("conversation_messages_conversation_idx").on(table.conversationId, table.createdAt)]);
+
+export const confirmedFacts = sqliteTable("confirmed_facts", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  caseId: text("case_id").references(() => cases.id, { onDelete: "cascade" }),
+  statement: text("statement").notNull(),
+  status: text("status").notNull().default("proposed"),
+  confirmedByUserId: text("confirmed_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  confirmedAt: text("confirmed_at"),
+  ...timestamps,
+}, (table) => [index("confirmed_facts_case_idx").on(table.caseId, table.status)]);
+
+export const legalSources = sqliteTable("legal_sources", {
+  id: text("id").primaryKey(),
+  officialUrl: text("official_url").notNull(),
+  actTitle: text("act_title").notNull(),
+  actIdentifier: text("act_identifier"),
+  publishedAt: text("published_at"),
+  revisionDate: text("revision_date"),
+  locale: text("locale").notNull(),
+  sourceType: text("source_type").notNull(),
+  status: text("status").notNull().default("verified"),
+  lastCheckedAt: text("last_checked_at").notNull(),
+  ...timestamps,
+}, (table) => [uniqueIndex("legal_sources_url_locale_uidx").on(table.officialUrl, table.locale)]);
+
+export const conversationSources = sqliteTable("conversation_sources", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  messageId: text("message_id").references(() => conversationMessages.id, { onDelete: "cascade" }),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  citationLabel: text("citation_label"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("conversation_sources_uidx").on(table.conversationId, table.messageId, table.sourceId)]);
+
+export const legislationUpdates = sqliteTable("legislation_updates", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  externalId: text("external_id").notNull(),
+  titleOriginal: text("title_original").notNull(),
+  originalLanguage: text("original_language").notNull(),
+  titleRu: text("title_ru"),
+  titleUz: text("title_uz"),
+  summaryRu: text("summary_ru"),
+  summaryUz: text("summary_uz"),
+  changeSummaryRu: text("change_summary_ru"),
+  changeSummaryUz: text("change_summary_uz"),
+  recommendedActionRu: text("recommended_action_ru"),
+  recommendedActionUz: text("recommended_action_uz"),
+  topicsJson: text("topics_json").notNull().default("[]"),
+  affectedAudiencesJson: text("affected_audiences_json").notNull().default("[]"),
+  adoptedAt: text("adopted_at"),
+  effectiveAt: text("effective_at"),
+  publishedAt: text("published_at").notNull(),
+  status: text("status").notNull().default("draft"),
+  verifiedAt: text("verified_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("legislation_updates_source_uidx").on(table.sourceId, table.externalId),
+  index("legislation_updates_status_idx").on(table.status, table.publishedAt),
+]);
+
+export const monitoringPreferences = sqliteTable("monitoring_preferences", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  audience: text("audience").notNull(),
+  topicsJson: text("topics_json").notNull().default("[]"),
+  channelsJson: text("channels_json").notNull().default("[\"in_app\"]"),
+  frequency: text("frequency").notNull().default("weekly"),
+  locale: text("locale").notNull().default("ru"),
+  documentImpactConsent: integer("document_impact_consent", { mode: "boolean" }).notNull().default(false),
+  lastDeliveredAt: text("last_delivered_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("monitoring_preferences_user_workspace_uidx").on(table.workspaceId, table.userId),
+  index("monitoring_preferences_delivery_idx").on(table.frequency, table.lastDeliveredAt),
+]);
+
+export const subscriptions = sqliteTable("subscriptions", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull(),
+  providerCustomerId: text("provider_customer_id"),
+  providerSubscriptionId: text("provider_subscription_id"),
+  planCode: text("plan_code").notNull(),
+  status: text("status").notNull(),
+  currentPeriodEndsAt: text("current_period_ends_at"),
+  cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" }).notNull().default(false),
+  ...timestamps,
+}, (table) => [uniqueIndex("subscriptions_workspace_uidx").on(table.workspaceId), index("subscriptions_status_idx").on(table.status, table.updatedAt)]);
+
+export const payments = sqliteTable("payments", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  subscriptionId: text("subscription_id").references(() => subscriptions.id, { onDelete: "set null" }),
+  providerPaymentId: text("provider_payment_id"),
+  amountMinor: integer("amount_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  status: text("status").notNull(),
+  receiptObjectKey: text("receipt_object_key"),
+  ...timestamps,
+}, (table) => [index("payments_workspace_idx").on(table.workspaceId, table.createdAt)]);
+
+export const accountDeletionRequests = sqliteTable("account_deletion_requests", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("requested"),
+  reason: text("reason"),
+  requestedAt: text("requested_at").notNull(),
+  completedAt: text("completed_at"),
+}, (table) => [index("account_deletion_requests_user_idx").on(table.userId, table.requestedAt)]);
+
+export const documentAnalyses = sqliteTable("document_analyses", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  uploadedFileId: text("uploaded_file_id").notNull().references(() => documentFiles.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  summaryJson: text("summary_json"),
+  errorCode: text("error_code"),
+  consentVersion: text("consent_version").notNull(),
+  ...timestamps,
+}, (table) => [index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt), uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId)]);
+
+export const documentRisks = sqliteTable("document_risks", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  level: text("level").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  excerpt: text("excerpt"),
+  confidencePercent: integer("confidence_percent"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("document_risks_analysis_idx").on(table.analysisId, table.level)]);
+
+export const documentComparisons = sqliteTable("document_comparisons", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  versionOneFileId: text("version_one_file_id").notNull().references(() => documentFiles.id, { onDelete: "restrict" }),
+  versionTwoFileId: text("version_two_file_id").notNull().references(() => documentFiles.id, { onDelete: "restrict" }),
+  caseId: text("case_id").references(() => cases.id, { onDelete: "set null" }),
+  status: text("status").notNull(),
+  stage: text("stage").notNull(),
+  locale: text("locale").notNull(),
+  summaryJson: text("summary_json"),
+  versionOneJsonKey: text("version_one_json_key"),
+  versionTwoJsonKey: text("version_two_json_key"),
+  similarityPercent: integer("similarity_percent"),
+  overallRisk: text("overall_risk"),
+  aiStatus: text("ai_status"),
+  modelName: text("model_name"),
+  modelVersion: text("model_version"),
+  errorCode: text("error_code"),
+  deletedAt: text("deleted_at"),
+  ...timestamps,
+}, (table) => [
+  index("document_comparisons_workspace_idx").on(table.workspaceId, table.createdAt),
+  index("document_comparisons_owner_idx").on(table.ownerUserId, table.createdAt),
+  index("document_comparisons_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const comparisonChanges = sqliteTable("comparison_changes", {
+  id: text("id").primaryKey(),
+  comparisonId: text("comparison_id").notNull().references(() => documentComparisons.id, { onDelete: "cascade" }),
+  ordinal: integer("ordinal").notNull(),
+  changeType: text("change_type").notNull(),
+  beforeSectionId: text("before_section_id"),
+  afterSectionId: text("after_section_id"),
+  beforeLabel: text("before_label"),
+  afterLabel: text("after_label"),
+  beforeHeading: text("before_heading"),
+  afterHeading: text("after_heading"),
+  beforeText: text("before_text"),
+  afterText: text("after_text"),
+  wordDiffJson: text("word_diff_json").notNull(),
+  summary: text("summary").notNull(),
+  legalEffect: text("legal_effect").notNull(),
+  affectedParty: text("affected_party").notNull(),
+  riskEffect: text("risk_effect").notNull(),
+  riskLevel: text("risk_level").notNull(),
+  recommendation: text("recommendation").notNull(),
+  sourceIdsJson: text("source_ids_json").notNull().default("[]"),
+  confidencePercent: integer("confidence_percent"),
+  reviewedAt: text("reviewed_at"),
+  extractionWarning: integer("extraction_warning", { mode: "boolean" }).notNull().default(false),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("comparison_changes_order_uidx").on(table.comparisonId, table.ordinal),
+  index("comparison_changes_type_idx").on(table.comparisonId, table.changeType),
+  index("comparison_changes_risk_idx").on(table.comparisonId, table.riskLevel, table.riskEffect),
+]);

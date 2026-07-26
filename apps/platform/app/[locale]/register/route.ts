@@ -1,2 +1,2 @@
 export function GET(request:Request,{params}:{params:Promise<{locale:string}>}){return redirect(request,params);}
-async function redirect(request:Request,params:Promise<{locale:string}>){const {locale}=await params;return Response.redirect(new URL(`/register?lang=${locale==="uz"?"uz":"ru"}`,request.url),308);}
+async function redirect(request:Request,params:Promise<{locale:string}>){const {locale}=await params;const source=new URL(request.url);const destination=new URL(`/register?lang=${locale==="uz"?"uz":"ru"}`,request.url);for(const key of ["accountType","returnTo"])if(source.searchParams.has(key))destination.searchParams.set(key,source.searchParams.get(key)!);return Response.redirect(destination,308);}
