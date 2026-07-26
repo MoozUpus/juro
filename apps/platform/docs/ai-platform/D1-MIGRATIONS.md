@@ -1,7 +1,7 @@
 # JURO D1 migrations
 
 Updated: 2026-07-26  
-Latest source migration: `0019_broad_mongu.sql`
+Latest source migration: `0020_elite_leo.sql`
 Remote application status: not applied.
 
 ## Migration policy
@@ -189,6 +189,32 @@ provider credential. It deliberately retains the proposed raw email and legacy
 SHA evidence while checked-in identity mode remains `legacy`; removing either
 requires a later verified contract migration.
 
+## Migration 0020
+
+`0020_elite_leo.sql` creates the separate platform staff assignment boundary.
+It does not create a staff user, bootstrap a role, add an admin route, or grant
+access to a workspace, case, document, or customer record. It:
+
+- allows only `administrator`, `support`, and `legal_reviewer`; workspace
+  `owner`, `admin`, and `lawyer` values are intentionally invalid;
+- records whether a grant came from a separately authorized operator bootstrap
+  or another administrator, including the actor, reason, and expiry;
+- requires every assignment to expire and limits a user to one unrevoked
+  assignment for each role;
+- prevents self-grant through the administrator path;
+- makes identity, role, source, reason, grant time, expiry, and creation
+  evidence immutable;
+- permits only one transition from active to revoked, then rejects
+  reactivation, further mutation, and deletion;
+- keeps subject/grant/revoke actor foreign keys restrictive so privileged
+  evidence cannot disappear through profile deletion.
+
+The application policy rechecks the live D1 session, active TOTP credential,
+MFA timestamp, device/session revocation, assignment start/expiry/revocation,
+and an explicit capability on each invocation. Administrator, support, and
+legal-review capabilities are non-inheriting; combining duties requires
+separate assignments. No checked-in route invokes the boundary yet.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -196,7 +222,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0019` with foreign keys enabled;
+- apply migrations `0000`–`0020` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -249,8 +275,16 @@ target-ownership races, revoked-session denial, one-winner confirmation,
 identity rotation, challenge invalidation, other-session/device revocation,
 and full rollback when audit insertion fails.
 
+Migration 0020 tests additionally prove additive-only SQL, snapshot/index
+agreement, exact role vocabulary, no workspace/account-type coupling,
+restrictive foreign keys, one-active-role uniqueness, self-grant rejection,
+immutable grant evidence, one-way revocation, reactivation/delete rejection,
+and zero foreign-key errors. Policy tests cover capability separation, local
+MFA/TOTP enforcement, session and credential revocation, role expiry, and
+optional fresh-MFA windows.
+
 The full local migration sequence changes the SQLite table count from 79 to
-95 and reports zero foreign-key integrity errors. This is compatibility
+96 and reports zero foreign-key integrity errors. This is compatibility
 evidence for the checked-in migration sequence, not
 evidence about the live production schema.
 
@@ -263,7 +297,7 @@ After remote inventory and backup/restore gates:
 3. record its bookmark/checksum/manifest without storing secret values;
 4. verify that no user has multiple `requested`/`reviewing` deletion rows,
    because 0015 intentionally installs a partial unique index;
-5. apply only pending migrations, including 0011–0019 if absent;
+5. apply only pending migrations, including 0011–0020 if absent;
 6. verify table/index/trigger presence and foreign keys;
 7. run existing route/security tests and isolated document-builder/comparison smoke flows;
 8. verify outbox/job lease behavior and Queue/DLQ delivery;
@@ -276,14 +310,17 @@ After remote inventory and backup/restore gates:
 12. use an isolated reviewed invocation of the bounded identity backfill,
     verify every profile decrypts and matches retained plaintext, then prove
     old-key read/current-key rewrite before proposing `dual_write`;
-13. verify rendered RU/UZ policy digests and run real deletion-code delivery,
+13. verify `platform_staff_assignments` is empty; any operator bootstrap,
+    admin/support/legal-review route, or role-management write requires a
+    separate reviewed release with immutable access-event evidence;
+14. verify rendered RU/UZ policy digests and run real deletion-code delivery,
     concurrent confirmation, audit, and session-revocation checks;
-14. verify OTP/deletion keyed fields and both lookup-key versions without
+15. verify OTP/deletion keyed fields and both lookup-key versions without
     logging digests; keep cleanup disabled and record legacy/keyed counts;
-15. verify the email-change table, triggers, unique fences, two-address
+16. verify the email-change table, triggers, unique fences, two-address
     provider batch, one-winner D1 confirmation, canonical identity rotation,
     current-session preservation, other-session/device revocation, and
     old/new challenge invalidation without logging addresses or codes;
-16. retain the backup until the release window and restore test are complete.
+17. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

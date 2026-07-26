@@ -404,3 +404,31 @@ admin prompt. Future official sources require an intentional code/config review
 and tests. This origin check does not prove that an act, article, revision, or
 quoted fragment is correct; exact citation/version verification remains a
 separate Phase 3 gate.
+
+## D-027 — platform staff authorization is separate, expiring, and MFA-only
+
+Status: accepted
+Date: 2026-07-27
+
+Workspace membership and onboarding attributes are tenant/product data, not
+platform staff authority. A workspace `owner`, `admin`, or `lawyer`,
+`account_type`, organization role, trusted platform header, and upstream
+assurance therefore grant no `/admin`, support, or legal-review capability.
+
+Migration 0020 adds only expiring `administrator`, `support`, and
+`legal_reviewer` assignments. Grant evidence is immutable, administrator
+self-grant is rejected, revocation is one-way, and rows cannot be deleted.
+Capabilities do not inherit across roles: an administrator is not implicitly
+support or a legal reviewer. Combining duties requires separate active
+assignments.
+
+The shared request boundary accepts only a live JURO local session with MFA
+assurance and an active TOTP credential, then rechecks the session, device,
+MFA time, assignment start/expiry/revocation, and requested capability in D1.
+Sensitive future routes can require a narrower fresh-MFA window. The helper
+does not grant case, document, workspace, or customer-content access.
+
+This is a disabled authorization foundation, not a staff feature. No role is
+inserted by migration, no management mutation or admin/support UI exists, and
+lawyer client access still requires the separate user-confirmed case-grant and
+immutable access-event design from Phase 7.

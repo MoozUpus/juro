@@ -21,6 +21,7 @@ const identityProtectionEntry = journal.entries.find(({ idx }) => idx === 16);
 const invitationEvidenceEntry = journal.entries.find(({ idx }) => idx === 17);
 const challengeEvidenceEntry = journal.entries.find(({ idx }) => idx === 18);
 const emailChangeEntry = journal.entries.find(({ idx }) => idx === 19);
+const platformStaffEntry = journal.entries.find(({ idx }) => idx === 20);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -45,6 +46,10 @@ assert.ok(
 assert.ok(
   emailChangeEntry,
   "Drizzle journal must contain migration 0019",
+);
+assert.ok(
+  platformStaffEntry,
+  "Drizzle journal must contain migration 0020",
 );
 
 function migrationSql(entry: JournalEntry): string {
@@ -634,8 +639,10 @@ test("0015 enforces immutable policies and exact deletion evidence", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for (const entry of journal.entries) applyMigration(db, entry);
-    assert.equal(tableDefinitions(db).size, 95);
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 15)) {
+      applyMigration(db, entry);
+    }
+    assert.equal(tableDefinitions(db).size, 94);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
     const now = "2026-07-26T12:00:00.000Z";
     db.prepare(
@@ -1268,7 +1275,9 @@ test("0019 accepts rollback-safe legacy rows and rejects partial or impossible s
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for (const entry of journal.entries) applyMigration(db, entry);
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 19)) {
+      applyMigration(db, entry);
+    }
     const now = "2026-07-26T12:00:00.000Z";
     db.prepare(
       `INSERT INTO user_profiles (id,email,created_at,updated_at)
@@ -1363,6 +1372,201 @@ test("0019 accepts rollback-safe legacy rows and rejects partial or impossible s
       /email change challenge state invalid/,
     );
     assert.equal(tableDefinitions(db).size, 95);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0020 adds only a separate, expiring platform staff assignment boundary", () => {
+  const sql = migrationSql(platformStaffEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i,
+      `unexpected platform-staff migration statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const name of [
+    "platform_staff_assignments",
+    "platform_staff_assignments_active_uidx",
+    "platform_staff_assignments_user_idx",
+    "platform_staff_assignments_role_idx",
+    "platform_staff_assignments_revoke_only",
+    "platform_staff_assignments_no_delete",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.match(
+    sql,
+    /'administrator','support','legal_reviewer'/,
+  );
+  assert.doesNotMatch(
+    sql,
+    /workspace_members|account_type|IDENTITY_KEYRING|RESEND_API_KEY/i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0020_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, {
+      indexes: Record<string, { where?: string }>;
+      foreignKeys: Record<string, { onDelete: string }>;
+      checkConstraints: Record<string, unknown>;
+    }>;
+  };
+  const table = snapshot.tables.platform_staff_assignments;
+  assert.ok(table);
+  assert.match(
+    table.indexes.platform_staff_assignments_active_uidx.where ?? "",
+    /revoked_at.*IS NULL/,
+  );
+  assert.ok(table.checkConstraints.platform_staff_assignments_role_check);
+  assert.ok(
+    table.checkConstraints.platform_staff_assignments_revocation_check,
+  );
+  for (const foreignKey of Object.values(table.foreignKeys)) {
+    assert.equal(foreignKey.onDelete, "no action");
+  }
+});
+
+test("0020 rejects role confusion, self-grant, mutation, reactivation, and deletion", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const createdAt = "2026-07-26T12:00:00.000Z";
+    const expiresAt = "2026-08-26T12:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES (?,?,?,?),(?,?,?,?)`,
+    ).run(
+      "staff-subject",
+      "staff-subject@example.test",
+      createdAt,
+      createdAt,
+      "staff-grantor",
+      "staff-grantor@example.test",
+      createdAt,
+      createdAt,
+    );
+    const insertSql = `
+      INSERT INTO platform_staff_assignments (
+        id,user_id,role,grant_source,granted_by_user_id,grant_reason,
+        granted_at,expires_at,created_at,updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?)
+    `;
+    db.prepare(insertSql).run(
+      "staff-bootstrap",
+      "staff-subject",
+      "administrator",
+      "operator_bootstrap",
+      null,
+      "Approved bootstrap",
+      createdAt,
+      expiresAt,
+      createdAt,
+      createdAt,
+    );
+    assert.throws(
+      () => db.prepare(insertSql).run(
+        "workspace-admin-confusion",
+        "staff-subject",
+        "admin",
+        "operator_bootstrap",
+        null,
+        "Workspace admin is not platform staff",
+        createdAt,
+        expiresAt,
+        createdAt,
+        createdAt,
+      ),
+      /CHECK constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(insertSql).run(
+        "staff-self-grant",
+        "staff-subject",
+        "support",
+        "administrator",
+        "staff-subject",
+        "Self grant must fail",
+        createdAt,
+        expiresAt,
+        createdAt,
+        createdAt,
+      ),
+      /CHECK constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(insertSql).run(
+        "staff-duplicate",
+        "staff-subject",
+        "administrator",
+        "administrator",
+        "staff-grantor",
+        "Duplicate active role",
+        createdAt,
+        expiresAt,
+        createdAt,
+        createdAt,
+      ),
+      /UNIQUE constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE platform_staff_assignments
+         SET role='support',updated_at=?
+         WHERE id='staff-bootstrap'`,
+      ).run("2026-07-26T12:01:00.000Z"),
+      /immutable except revocation/,
+    );
+    db.prepare(
+      `UPDATE platform_staff_assignments SET
+         revoked_at=?,revocation_source='operator',
+         revocation_reason='Operator deprovisioned role',updated_at=?
+       WHERE id='staff-bootstrap'`,
+    ).run(
+      "2026-07-26T12:02:00.000Z",
+      "2026-07-26T12:02:00.000Z",
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE platform_staff_assignments SET
+           revoked_at=NULL,revocation_source=NULL,revocation_reason=NULL,
+           updated_at=?
+         WHERE id='staff-bootstrap'`,
+      ).run("2026-07-26T12:03:00.000Z"),
+      /immutable except revocation/,
+    );
+    assert.throws(
+      () => db.prepare(
+        "DELETE FROM platform_staff_assignments WHERE id='staff-bootstrap'",
+      ).run(),
+      /cannot be deleted/,
+    );
+    db.prepare(insertSql).run(
+      "staff-renewed",
+      "staff-subject",
+      "administrator",
+      "administrator",
+      "staff-grantor",
+      "Approved renewal after explicit revocation",
+      "2026-07-26T12:03:00.000Z",
+      expiresAt,
+      "2026-07-26T12:03:00.000Z",
+      "2026-07-26T12:03:00.000Z",
+    );
+    assert.throws(
+      () => db.prepare(
+        "DELETE FROM user_profiles WHERE id='staff-subject'",
+      ).run(),
+      /FOREIGN KEY constraint failed/,
+    );
+    assert.equal(tableDefinitions(db).size, 96);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

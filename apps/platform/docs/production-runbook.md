@@ -49,7 +49,7 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 ## Database migration
 
 Migrations are ordered in `drizzle/0000_*.sql` through
-`drizzle/0019_*.sql`. Before any remote deployment:
+`drizzle/0020_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -66,7 +66,9 @@ Migrations are ordered in `drizzle/0000_*.sql` through
    evidence columns, lookup indexes, and completeness triggers from 0017,
    plus the nullable OTP/deletion challenge HMAC fields, OTP lookup indexes,
    and completeness triggers from 0018, plus the dedicated dual-email
-   challenge table, unique fences, and lifecycle/evidence triggers from 0019.
+   challenge table, unique fences, and lifecycle/evidence triggers from 0019,
+   plus the empty `platform_staff_assignments` table, restrictive foreign keys,
+   capability-role vocabulary, and one-way revocation triggers from 0020.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 9. Require both tenant-link audits to return zero:
 
@@ -78,7 +80,7 @@ Migrations are ordered in `drizzle/0000_*.sql` through
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migrations `0011`–`0019` have passed local sequence, foreign-key,
+Migrations `0011`–`0020` have passed local sequence, foreign-key,
 sentinel-preservation, tenant-backfill, append-only trigger, chain-fork, and
 snapshot tests. They have not been applied to staging or production.
 
@@ -139,6 +141,9 @@ through a dry-run retention plan.
 - Platform-auth headers cannot manage or satisfy JURO MFA. Keep
   `ALLOW_PLATFORM_AUTH_HEADERS` absent unless the trusted edge has been proven
   to strip client values and inject authenticated headers.
+- After migration 0020, `platform_staff_assignments` is empty. No workspace
+  role, onboarding field, account type, or platform header can open a staff
+  surface; no such surface is enabled by this source.
 - Onboarding persists locale, account type, goal, workspace, consent, and audit event.
 - Private routes redirect a guest to `/login`.
 - `/document-builder-test/*` returns `308` to `/document-builder/*`.
@@ -169,8 +174,11 @@ through a dry-run retention plan.
    configuration only under the incident runbook, preserve 0019 rows and the
    identity key ring, and investigate before changing canonical identity or
    restoring sessions. Do not manually delete a challenge as rollback.
-6. Revoke sessions and invitation/share tokens if authorization boundaries may have been affected.
-7. Verify email-only and MFA login, one tenant-isolation query, one private
+6. If a future staff route is unstable, keep every staff surface disabled,
+   revoke affected 0020 assignments through the one-way lifecycle, and
+   preserve assignment evidence. Never delete or reactivate a role row.
+7. Revoke sessions and invitation/share tokens if authorization boundaries may have been affected.
+8. Verify email-only and MFA login, one tenant-isolation query, one private
    file request, and one legacy redirect before reopening traffic.
 
 Rolling back application code without rolling back an incompatible database change is not considered a complete rollback.

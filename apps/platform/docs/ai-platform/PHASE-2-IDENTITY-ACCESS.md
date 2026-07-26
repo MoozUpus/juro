@@ -201,6 +201,33 @@ The security page exposes setup, confirmation, one-time backup-code display,
 regeneration, and disable flows in RU/UZ. If `IDENTITY_KEYRING` is absent or
 invalid, the feature fails closed and setup is not offered.
 
+### Platform staff authorization foundation
+
+- platform `administrator`, `support`, and `legal_reviewer` assignments are
+  stored separately from workspace membership, onboarding role, and
+  `account_type`;
+- assignments are expiring, allow only one unrevoked row per user/role, reject
+  administrator self-grant, and preserve explicit grant source, actor, reason,
+  and timestamps;
+- grant evidence is immutable; the only update is a complete one-time
+  revocation, after which reactivation, further mutation, and deletion fail at
+  the database layer;
+- the request boundary accepts only a live JURO local session and rechecks
+  `assurance_level='mfa'`, the MFA timestamp, session/device revocation,
+  absolute/idle expiry, and an active non-disabled TOTP credential;
+- capabilities are explicit and non-inheriting: administrator, support, and
+  legal-review duties require their own assignments;
+- no platform capability names or authorizes customer, workspace, case,
+  document, or file access; lawyer client access remains a separate future
+  user-confirmed grant boundary;
+- no assignment, admin/support route, role-management mutation, or staff UI is
+  created by this slice.
+
+Migration 0020 creates the additive assignment table, restrictive foreign
+keys, partial uniqueness fence, lifecycle checks, and one-way revocation
+triggers. It remains unapplied remotely and must be empty after any future
+staging migration until a separately reviewed bootstrap procedure exists.
+
 ### Versioned policy evidence
 
 - all five RU/UZ application policy pages have a server-owned machine version
@@ -270,6 +297,7 @@ node --import tsx --test \
   tests/auth-mfa.test.ts \
   tests/account-deletion.test.ts \
   tests/email-change.test.ts \
+  tests/staff-access.test.ts \
   tests/policy-acceptance.test.ts \
   tests/document-access.test.ts \
   tests/migration-safety.test.ts \
@@ -289,13 +317,14 @@ challenge purpose/record/session binding, retained-key rate-limit lookup,
 legacy-row preservation, SHA-divergence failure, email-change dual-address
 proof, provider acceptance gating, target races, revoked-session attempt
 fencing, identity rotation, session/challenge invalidation, DB completeness
-guards, and the full existing builder/comparison/rendered Worker regression
-suite.
+guards, platform/workspace role separation, staff capability non-inheritance,
+live MFA/TOTP/session/device checks, role expiry/revocation/immutability, and
+the full existing builder/comparison/rendered Worker regression suite.
 
-The final local full suite passes 242/242 checks: 23 rendered
-Worker/security checks, 175 core/document/auth checks, and 44 Cloudflare
+The final local full suite passes 248/248 checks: 23 rendered
+Worker/security checks, 179 core/document/auth checks, and 46 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
-95 tables with zero foreign-key integrity errors. Local evidence is not
+96 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
@@ -315,7 +344,7 @@ staging:
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests, then apply
-   pending migrations through 0019 while keeping identity mode `legacy`;
+   pending migrations through 0020 while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -349,6 +378,9 @@ staging:
     denial, target-ownership races, one-winner D1 confirmation, canonical
     identity rotation, current-session preservation, other-session/device
     revocation, and invalidation of old/new login/deletion/MFA challenges.
+18. prove `platform_staff_assignments` is empty; do not bootstrap a role or
+    expose a staff route until grant/revoke administration and immutable
+    privileged access-event evidence have their own reviewed vertical.
 
 Required read-only queries:
 
@@ -380,12 +412,15 @@ SELECT email_key_version,email_lookup_key_version,count(*)
 FROM user_profiles
 WHERE email_ciphertext IS NOT NULL
 GROUP BY email_key_version,email_lookup_key_version;
+
+SELECT count(*) AS platform_staff_assignments
+FROM platform_staff_assignments;
 ```
 
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0019 are not applied to staging or production;
+- migrations 0011–0020 are not applied to staging or production;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, D1 migration, real-device authenticator flow, or remote D1
 concurrency test has been completed;
@@ -413,6 +448,9 @@ concurrency test has been completed;
 - protected email change is implemented and verified locally, but migration
   0019, real Resend batch delivery, remote D1 race tests, alert mail, and
   staging session/device revocation evidence are still absent;
+- the platform staff policy and migration 0020 are local-only; no bootstrap,
+  grant/revoke API, `/admin` or support UI, privileged content grant, access
+  event, or staging MFA evidence exists;
 - saved-contact identity fields and document/AI content remain outside the
   protected expand layers;
 - NAT-wide OTP limits preserve existing behavior and need staging product

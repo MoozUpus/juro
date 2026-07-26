@@ -67,7 +67,7 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 | T-15 | cost exhaustion | no complete usage/circuit-breaker service | per-feature/user/workspace limits, anomaly alerts, emergency kill switch |
 | T-16 | destructive deletion/evidence loss | hard delete and cascading audit confirmed | soft delete, delayed purge, immutable evidence, protected export |
 | T-17 | backup/migration corruption | in-D1 copies only; no restore evidence | external export, integrity check, isolated restore rehearsal, rollback trigger |
-| T-18 | privileged insider misuse | admin/support suite and 2FA absent | least roles, mandatory TOTP, immutable view/download/edit audit, immediate revoke |
+| T-18 | privileged insider misuse | local expiring, non-inheriting staff-role/MFA boundary exists; no bootstrap, staff routes, content grants, or immutable access-event ledger | keep deny-by-default capability checks; add reviewed bootstrap/revoke, per-resource grants, immutable view/download/edit audit, immediate revoke, and privileged E2E |
 | T-19 | weak signature representation | evidence package incomplete | explicit method labels, version/file hashes, consent/OTP/device evidence |
 | T-20 | public status/info disclosure | status unavailable | high-level component states only; exclude topology, IDs, incident attack details |
 | T-21 | canonical email takeover | local dual-address proof and one-winner rotation exist; no remote D1/two-mailbox evidence or security alert | fresh MFA session, current/new mailbox proof, uniqueness fence, revoke other sessions/devices, immutable audit, prior-address alert |

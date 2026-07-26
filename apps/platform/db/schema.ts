@@ -843,6 +843,91 @@ export const securityEvents = sqliteTable("security_events", {
   index("security_events_type_idx").on(table.eventType, table.createdAt),
 ]);
 
+export const platformStaffAssignments = sqliteTable(
+  "platform_staff_assignments",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => userProfiles.id),
+    role: text("role").notNull(),
+    grantSource: text("grant_source").notNull(),
+    grantedByUserId: text("granted_by_user_id").references(
+      () => userProfiles.id,
+    ),
+    grantReason: text("grant_reason").notNull(),
+    grantedAt: text("granted_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+    revokedAt: text("revoked_at"),
+    revocationSource: text("revocation_source"),
+    revokedByUserId: text("revoked_by_user_id").references(
+      () => userProfiles.id,
+    ),
+    revocationReason: text("revocation_reason"),
+    ...timestamps,
+  },
+  (table) => [
+    check(
+      "platform_staff_assignments_role_check",
+      sql`${table.role} IN ('administrator','support','legal_reviewer')`,
+    ),
+    check(
+      "platform_staff_assignments_grant_source_check",
+      sql`${table.grantSource} IN ('operator_bootstrap','administrator')`,
+    ),
+    check(
+      "platform_staff_assignments_grant_actor_check",
+      sql`(
+        (${table.grantSource} = 'operator_bootstrap'
+          AND ${table.grantedByUserId} IS NULL)
+        OR
+        (${table.grantSource} = 'administrator'
+          AND ${table.grantedByUserId} IS NOT NULL
+          AND ${table.grantedByUserId} <> ${table.userId})
+      )`,
+    ),
+    check(
+      "platform_staff_assignments_grant_reason_check",
+      sql`length(trim(${table.grantReason})) BETWEEN 1 AND 500`,
+    ),
+    check(
+      "platform_staff_assignments_time_check",
+      sql`${table.expiresAt} > ${table.grantedAt}
+        AND ${table.updatedAt} >= ${table.createdAt}`,
+    ),
+    check(
+      "platform_staff_assignments_revocation_check",
+      sql`(
+        ${table.revokedAt} IS NULL
+        AND ${table.revocationSource} IS NULL
+        AND ${table.revokedByUserId} IS NULL
+        AND ${table.revocationReason} IS NULL
+      ) OR (
+        ${table.revokedAt} IS NOT NULL
+        AND ${table.revocationSource} IN ('operator','administrator')
+        AND (
+          (${table.revocationSource} = 'operator'
+            AND ${table.revokedByUserId} IS NULL)
+          OR
+          (${table.revocationSource} = 'administrator'
+            AND ${table.revokedByUserId} IS NOT NULL)
+        )
+        AND length(trim(${table.revocationReason})) BETWEEN 1 AND 500
+        AND ${table.revokedAt} >= ${table.grantedAt}
+      )`,
+    ),
+    uniqueIndex("platform_staff_assignments_active_uidx")
+      .on(table.userId, table.role)
+      .where(sql`${table.revokedAt} IS NULL`),
+    index("platform_staff_assignments_user_idx").on(
+      table.userId,
+      table.expiresAt,
+    ),
+    index("platform_staff_assignments_role_idx").on(
+      table.role,
+      table.expiresAt,
+    ),
+  ],
+);
+
 export const policyDocuments = sqliteTable("policy_documents", {
   id: text("id").primaryKey(),
   documentKey: text("document_key").notNull(),

@@ -177,7 +177,11 @@ Missing:
 
 ### Admin
 
-All required `/admin` modules are absent. They must use a separate staff authorization boundary and mandatory 2FA rather than the general account router.
+All required `/admin` modules remain absent. The local 0020 foundation now
+defines a separate expiring platform-staff/capability boundary that accepts
+only a live JURO MFA session and does not recognize workspace roles,
+`account_type`, or platform headers. No role is bootstrapped and no staff route,
+mutation, content grant, or UI invokes that boundary yet.
 
 ### Help and status
 

@@ -392,6 +392,32 @@ test("email change binds both address proofs to one fresh local session", async 
   assert.match(profileUi, /Защищённая смена email/);
 });
 
+test("platform staff access is separate, local-MFA-only, and grants no customer-content capability", async () => {
+  const [policy, httpBoundary] = await Promise.all([
+    readFile(new URL("../lib/auth/staff-access.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/auth/staff-http.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(
+    policy,
+    /"administrator",\s*"support",\s*"legal_reviewer"/,
+  );
+  assert.doesNotMatch(
+    policy,
+    /"owner"|"admin"|"lawyer"|"employee"/,
+  );
+  assert.match(policy, /s\.assurance_level='mfa'/);
+  assert.match(policy, /auth_totp_credentials/);
+  assert.match(policy, /a\.revoked_at IS NULL/);
+  assert.match(policy, /a\.expires_at>\?/);
+  assert.doesNotMatch(
+    policy,
+    /documents?\.|cases?\.|customer\.|workspace\.content/,
+  );
+  assert.match(httpBoundary, /localSessionForRequest/);
+  assert.match(httpBoundary, /requirePlatformStaffAccess/);
+  assert.doesNotMatch(httpBoundary, /getChatGPTUser|getAuthPrincipal/);
+});
+
 test("canonical platform route classifier is stable", () => {
   assert.ok(isLocale("ru"));assert.ok(isLocale("uz"));assert.ok(!isLocale("en"));
   assert.ok(isAccountType("individual"));assert.ok(isAccountType("business"));assert.ok(!isAccountType("admin"));
