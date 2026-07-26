@@ -17,11 +17,11 @@ jobs:
         uses: actions/checkout@v4
       - name: Package source
         shell: bash
-        run: tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=dist -czf juro-source.tgz .
+        run: tar --exclude=.git --exclude=node_modules --exclude=.next --exclude=dist -czf /tmp/juro-source.tgz .
       - name: Upload private artifact
         uses: actions/upload-artifact@v4
         with:
           name: juro-source-${{ github.sha }}
-          path: juro-source.tgz
+          path: /tmp/juro-source.tgz
           retention-days: 1
           if-no-files-found: error
