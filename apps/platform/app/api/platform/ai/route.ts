@@ -2,6 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { aiProviderStatus, legalAiProvider, type LegalSourceContext } from "../../../../lib/ai/provider";
+import { filterTrustedVerifiedLegalSources } from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -48,7 +49,9 @@ export const GET = withApiErrors(async function GET(request: Request) {
         conversationId: conversation.conversationId,
         result: parseJson(conversation.structuredJson, null),
         facts: facts.results,
-        sources: sourceRows.results,
+        sources: filterTrustedVerifiedLegalSources(
+          sourceRows.results as unknown as LegalSourceContext[],
+        ),
       };
     }
   }
@@ -103,7 +106,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
       locale,source_type AS sourceType,status
      FROM legal_sources WHERE status='verified' AND locale=? ORDER BY last_checked_at DESC LIMIT 16`,
   ).bind(locale).all();
-  const sources = sourceRows.results as unknown as LegalSourceContext[];
+  const sources = filterTrustedVerifiedLegalSources(
+    sourceRows.results as unknown as LegalSourceContext[],
+  );
   const result = await provider.runIntake({ question, locale, sources });
   const now = isoNow();
   const userMessageId = crypto.randomUUID();

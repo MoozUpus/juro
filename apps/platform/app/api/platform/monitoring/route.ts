@@ -1,6 +1,7 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
+import { isTrustedVerifiedLegalSource } from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const topics = new Set([
@@ -75,6 +76,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
         return {
           ...item,
           officialUrl: String(item.officialUrl || ""),
+          sourceStatus: String(item.sourceStatus || ""),
           title: locale === "uz" ? (item.titleUz || item.titleOriginal) : (item.titleRu || item.titleOriginal),
           summary: locale === "uz" ? item.summaryUz : item.summaryRu,
           changeSummary: locale === "uz" ? item.changeSummaryUz : item.changeSummaryRu,
@@ -85,7 +87,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
       })
       .filter((item) => {
         try {
-          const hasSafeSource = new URL(String(item.officialUrl)).protocol === "https:";
+          const hasSafeSource = isTrustedVerifiedLegalSource({
+            officialUrl: String(item.officialUrl),
+            status: String(item.sourceStatus || ""),
+          });
           const matchesTopic = !selectedTopics.size || item.topics.some((topic: string) => selectedTopics.has(topic));
           const matchesAudience = !selectedAudience || item.affectedAudiences.length === 0
             || item.affectedAudiences.includes(selectedAudience);

@@ -59,7 +59,7 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 | T-07 | malicious file/polyglot/archive | no quarantine/scanner pipeline | magic bytes, archive limits, scan, quarantine, fail closed |
 | T-08 | SSRF/public URL fetch | target URL ingestion not yet built | scheme/domain/IP checks, DNS recheck, redirect/size/time limits, no credentials |
 | T-09 | prompt injection/tool abuse | documents can reach provider without a dedicated guard | untrusted-content boundary, fixed tool allowlist, no document-directed tools/secrets |
-| T-10 | fabricated/outdated legal basis | source system and citation validator absent | allowlisted sources, exact citation/version checks, freshness and historical applicability |
+| T-10 | fabricated/outdated legal basis | exact-host allowlist is implemented; citation/version validator and ingestion remain absent | keep allowlist protected; add exact citation/version checks, freshness and historical applicability |
 | T-11 | vector cross-tenant leak | user index absent, target risk high | physical environment isolation, pre/post D1 auth, metadata filters, leak tests |
 | T-12 | secret/log leakage | no values found; runtime inventory incomplete | secret store, generated type/config validation, redaction, bundle/history/log scans |
 | T-13 | provider payload retention | direct calls and gateway policy unverified | data minimization, payload-log opt-out, privacy disclosure, protected diagnostics |

@@ -183,6 +183,9 @@ release gate rather than a remotely closed finding.
 - production sends CSP, HSTS, no-store, and noindex protections;
 - production dependency audit reported zero vulnerabilities;
 - targeted source/client scan found no provider API-key values or private keys.
+- AI, comparison, monitoring, citation retrieval, and global search apply one
+  server-owned exact-host allowlist for `lex.uz` and `advice.uz`; a database
+  `verified` flag can no longer promote an arbitrary HTTPS URL.
 
 ## Required test additions
 

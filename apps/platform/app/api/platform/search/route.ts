@@ -1,5 +1,6 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { filterTrustedVerifiedLegalSources } from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -72,7 +73,18 @@ export const GET = withApiErrors(async function GET(request: Request) {
       ...withType("conversation", conversations.results),
       ...withType("comparison", comparisons.results),
       ...withType("template", templates.results),
-      ...withType("source", sources.results),
+      ...withType(
+        "source",
+        filterTrustedVerifiedLegalSources(
+          sources.results.map((item) => ({
+            ...(item as Record<string, unknown>),
+            officialUrl: String(
+              (item as Record<string, unknown>).officialUrl || "",
+            ),
+            status: "verified",
+          })),
+        ),
+      ),
     ],
   });
 });

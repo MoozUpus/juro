@@ -386,3 +386,21 @@ Migration 0019 is additive and keeps rollback-safe raw/SHA fields while adding
 versioned encrypted/HMAC evidence. Checked-in identity mode remains `legacy`,
 the UI is unavailable without Resend configuration, and no remote migration,
 real-email delivery, or D1 concurrency test is implied by local evidence.
+
+## D-026 — database status alone cannot make a legal source trusted
+
+Status: accepted
+Date: 2026-07-27
+
+A `legal_sources.status='verified'` row is necessary but insufficient for
+legal-source trust. Before a source can enter an AI context, comparison result,
+monitoring feed, citation response, or global-search result, the server also
+requires an exact HTTPS origin in the protected allowlist: `lex.uz`,
+`www.lex.uz`, `advice.uz`, or `www.advice.uz`. Credentials, lookalike
+subdomains, alternate schemes, and arbitrary HTTPS hosts fail closed.
+
+The allowlist lives in server code, not in editable database content or an
+admin prompt. Future official sources require an intentional code/config review
+and tests. This origin check does not prove that an act, article, revision, or
+quoted fragment is correct; exact citation/version verification remains a
+separate Phase 3 gate.

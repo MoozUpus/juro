@@ -529,7 +529,7 @@ test("legislation monitoring never auto-publishes or invents feed entries", asyn
   assert.match(source, /u\.verified_at IS NOT NULL/);
   assert.match(source, /s\.status='verified'/);
   assert.match(source, /automaticPublication: false/);
-  assert.ok(source.includes('new URL(String(item.officialUrl)).protocol === "https:"'));
+  assert.match(source, /isTrustedVerifiedLegalSource/);
 });
 
 test("JURO motion tokens are bounded and reduced motion resolves to a static route", async () => {

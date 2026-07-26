@@ -1,5 +1,6 @@
 import { parseJson } from "../document-builder/storage/db";
 import { getPrivateObject } from "../document-builder/storage/files";
+import { filterTrustedVerifiedLegalSources } from "../legal/source-trust";
 import type { ComparisonChange, ComparisonSummary, ExtractedDocument, WordDiffPart } from "./types";
 
 export type VerifiedLegalSource = {
@@ -136,7 +137,9 @@ export async function verifiedSourcesForChanges(
       status,last_checked_at AS lastCheckedAt
      FROM legal_sources WHERE status='verified' AND id IN (${placeholders})`,
   ).bind(...ids).all();
-  return rows.results as unknown as VerifiedLegalSource[];
+  return filterTrustedVerifiedLegalSources(
+    rows.results as unknown as VerifiedLegalSource[],
+  );
 }
 
 export function parsedSummary(value: string | null): ComparisonSummary | null {

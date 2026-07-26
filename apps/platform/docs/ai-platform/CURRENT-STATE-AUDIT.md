@@ -112,7 +112,7 @@ No production snapshot or migration was performed because the control plane is n
 | Legal knowledge | Not implemented | no Advice/Lex ingestion, versions, hybrid retrieval, citation validator, sync jobs, or editor |
 | Lawyer marketplace | Not implemented | consultation records are not the required directory/conflict/access-grant workflow |
 | Billing | Adapter-ready only | configuration and records exist; checkout explicitly returns `PAYMENT_ADAPTER_REQUIRED` |
-| Monitoring | Preferences only | verified updates can be displayed; source ingestion adapter is absent |
+| Monitoring | Preferences only | displayed sources are restricted to exact LexUZ/AdviceUZ HTTPS hosts; source ingestion and exact citation/version verification remain absent |
 | Admin / support / status | Not implemented | no protected admin suite, support workflow, or operational status site |
 | Voice / realtime calls | Not implemented | must remain feature-flagged, without simulated completion |
 
@@ -153,4 +153,3 @@ A targeted source/client scan found no provider key values or private keys. The 
 The Phase 0 audit, threat model, design audit, reproducible baseline, and source reconciliation are complete in draft PR #3. External control-plane prerequisites remain open: authenticated Cloudflare inventory and a verified independent backup/restore rehearsal are mandatory before any remote migration or staging resource claim.
 
 The disabled, source-only Phase 1 foundation now passes 135 local tests (17 rendered/security, 91 existing unit/integration, and 27 Cloudflare/migration/runtime), type-check, lint, generated-type freshness, three-environment build/dry-run validation, production dependency audit, artifact validation, and secret-pattern scanning. This does not close the Phase 1 staging gate. Live consumers are blocked until quarantine/DLQ consumer, alert, redrive, ledger-reconciliation, per-kind flag, and side-effect fencing policies are implemented. The critical builder isolation defects and OTP race remain Phase 2 implementation blockers.
-
