@@ -67,8 +67,31 @@ sessions; a later failure requires a fresh code.
 - missing, malformed, unknown-version, and wrong-AAD keys fail closed;
 - old-key read/current-key write rotation is covered by tests.
 
-The key ring is not committed or configured in source. Existing raw identity
-columns and unkeyed legacy lookup hashes have not yet been migrated.
+The key ring is not committed or configured in source.
+
+### Canonical profile identity expand layer
+
+- migration 0016 adds nullable, independently versioned AES-GCM and lookup-HMAC
+  fields for `user_profiles.email` and `user_profiles.phone`;
+- insert/update triggers reject every partial protected group, while the
+  existing plaintext columns and email uniqueness constraint remain intact;
+- registration, trusted-header bootstrap, session reads, workspace bootstrap,
+  profile/export, team, and document collaboration use the central identity
+  lookup/projection boundary;
+- `dual_write` reads prefer ciphertext, verify retained plaintext equality,
+  try every retained lookup-key version, and fail closed on corruption,
+  divergence, ambiguity, or a missing key;
+- new/changed profile writes use the active key, and a bounded optimistic
+  backfill can idempotently protect or rotate existing rows without changing
+  their user-facing `updated_at`;
+- API/session projections construct explicit public objects and never spread
+  ciphertext, IV, digest, or key-version fields into responses.
+
+Every checked-in environment remains
+`IDENTITY_PROTECTION_MODE=legacy`. Migration 0016 has not been applied, the
+backfill has no live invocation, and plaintext has not been cleared. Workspace
+and document invitations, OTP/deletion challenges, saved contacts, and
+document/AI content remain separate protection slices.
 
 ### Two-factor authentication
 
@@ -161,6 +184,7 @@ npm run lint
 node --import tsx --test \
   tests/auth-otp.test.ts \
   tests/auth-keyring.test.ts \
+  tests/identity-protection.test.ts \
   tests/auth-sessions.test.ts \
   tests/auth-mfa-crypto.test.ts \
   tests/auth-mfa.test.ts \
@@ -178,11 +202,12 @@ pre-accept denial, shared/workspace list scope, accept replay, decline,
 migration backfill, TOTP vectors and drift, encrypted enrollment, one-time
 backup codes, pre-auth session gating, attempt exhaustion, concurrent login,
 concurrent disable, failed-enrollment side effects, out-of-order audit
-timestamps, and the full existing builder/comparison/rendered Worker
-regression suite.
+timestamps, protected profile read/write/backfill/rotation, response
+projection, and the full existing builder/comparison/rendered Worker regression
+suite.
 
-The final local full suite passes 203/203 checks: 22 rendered
-Worker/security checks, 145 core/document/auth checks, and 36 Cloudflare
+The final local full suite passes 211/211 checks: 22 rendered
+Worker/security checks, 151 core/document/auth checks, and 38 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
 94 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
@@ -204,7 +229,7 @@ staging:
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests, then apply
-   pending migrations through 0015;
+   pending migrations through 0016 while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -215,18 +240,21 @@ staging:
 10. configure the versioned identity key ring in protected staging secret
     storage, prove old-key read/current-key write rotation, and retain a
     separately protected recovery copy;
-11. run the full MFA lifecycle through the built Worker: enroll, confirm,
+11. invoke the bounded canonical-profile backfill only through a reviewed
+    isolated harness, then require zero legacy, divergent, corrupt, or
+    rotation-required rows before proposing `dual_write`;
+12. run the full MFA lifecycle through the built Worker: enroll, confirm,
     save and consume one backup code, login with TOTP, login with a backup
     code, regenerate, disable, and verify all session/audit effects;
-12. test missing/wrong key versions, stale/revoked sessions, cross-origin
+13. test missing/wrong key versions, stale/revoked sessions, cross-origin
     writes, user-agent mismatch, attempt exhaustion, and parallel D1 login
     and disable operations;
-13. verify that `ALLOW_PLATFORM_AUTH_HEADERS` remains absent unless the edge
+14. verify that `ALLOW_PLATFORM_AUTH_HEADERS` remains absent unless the edge
     demonstrably strips client input and injects authenticated headers;
-14. send and confirm real RU and UZ deletion OTP messages, then verify
+15. send and confirm real RU and UZ deletion OTP messages, then verify
     one-winner D1 concurrency, exact challenge evidence, audit-chain entry,
     all-local-session revocation, and provider-failure invalidation;
-15. compare every new policy registry digest with the rendered RU/UZ page and
+16. compare every new policy registry digest with the rendered RU/UZ page and
     obtain owner/legal approval before changing any status from draft through
     a new immutable version.
 
@@ -249,12 +277,23 @@ HAVING count(*) > 1;
 SELECT acceptance_method, count(*)
 FROM user_acceptances
 GROUP BY acceptance_method;
+
+SELECT
+  count(*) AS total,
+  sum(email_ciphertext IS NULL) AS legacy_email,
+  sum(phone IS NOT NULL AND phone_ciphertext IS NULL) AS legacy_phone
+FROM user_profiles;
+
+SELECT email_key_version,email_lookup_key_version,count(*)
+FROM user_profiles
+WHERE email_ciphertext IS NOT NULL
+GROUP BY email_key_version,email_lookup_key_version;
 ```
 
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0015 are not applied to staging or production;
+- migrations 0011–0016 are not applied to staging or production;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, D1 migration, real-device authenticator flow, or remote D1
 concurrency test has been completed;
@@ -267,9 +306,13 @@ concurrency test has been completed;
   and proof-of-erasure orchestration are not implemented;
 - device-aware management covers JURO local email sessions only; an external
   identity provider's other sessions cannot be listed or revoked here;
-- raw email storage and unkeyed legacy lookup hashes still require a
-  dual-read/write, backfill, verify, and contract migration onto the new
-  versioned encryption/HMAC primitives;
+- canonical profile dual-read/write and local backfill/verify primitives now
+  exist, but mode remains `legacy`; staging key configuration, reviewed
+  invocation, verification, plaintext contract removal, and key retirement
+  are not implemented or authorized;
+- raw workspace/document invitation identifiers, OTP/deletion identity
+  digests, saved-contact identity fields, and document/AI content remain
+  outside the canonical profile expand layer;
 - NAT-wide OTP limits preserve existing behavior and need staging product
   review;
 - cleanup scheduling for expired pending credentials and consumed/invalidated

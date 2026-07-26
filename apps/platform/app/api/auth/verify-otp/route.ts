@@ -1,5 +1,11 @@
 import { normalizeEmail, sha256 } from "../../../../lib/auth/crypto";
 import {
+  prepareUserIdentityWrite,
+  userIdByEmail,
+  userIdentityWriteBindings,
+} from "../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
+import {
   consumeOtpChallenge,
   type OtpChallengeResult,
 } from "../../../../lib/auth/otp-challenge";
@@ -107,6 +113,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (purpose === "register" && (!body.acceptTerms || !body.acceptPrivacy || !body.acceptPersonalData)) return json({ error: locale === "ru" ? "Нужно принять обязательные документы." : "Majburiy hujjatlarni qabul qilish kerak." }, 400);
 
   const db = requireD1();
+  const identityContext = runtimeIdentityProtection();
   const now = new Date().toISOString();
   const emailHash = await sha256(email);
   const verification = await consumeOtpChallenge(db, {
@@ -120,8 +127,16 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return otpError(verification, locale);
   }
 
-  let user = await db.prepare("SELECT id, onboarding_completed_at AS onboardingCompletedAt FROM user_profiles WHERE lower(email) = lower(?) LIMIT 1")
-    .bind(email).first<{ id: string; onboardingCompletedAt: string | null }>();
+  const existingUserId = await userIdByEmail(db, identityContext, email);
+  let user = existingUserId
+    ? await db.prepare(
+      `SELECT id,onboarding_completed_at AS onboardingCompletedAt
+       FROM user_profiles WHERE id=? LIMIT 1`,
+    ).bind(existingUserId).first<{
+      id: string;
+      onboardingCompletedAt: string | null;
+    }>()
+    : null;
   if (purpose === "login" && !user) return json({ error: locale === "ru" ? "Не удалось завершить вход." : "Kirishni yakunlab bo‘lmadi." }, 400);
   if (purpose === "register" && user) {
     return json({
@@ -135,8 +150,30 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const fullName = [body?.firstName?.trim(), body?.lastName?.trim()].filter(Boolean).join(" ").slice(0, 160) || null;
   if (!user) {
     user = { id: crypto.randomUUID(), onboardingCompletedAt: null };
-    await db.prepare("INSERT INTO user_profiles (id,email,full_name,locale,account_type,company_name,onboarding_completed_at,created_at,updated_at) VALUES (?,?,?,?,?,?,NULL,?,?)")
-      .bind(user.id, email, fullName, locale, accountType, body?.companyName?.trim().slice(0, 180) || null, now, now).run();
+    const identity = await prepareUserIdentityWrite(identityContext, {
+      userId: user.id,
+      email,
+      phone: null,
+    });
+    await db.prepare(
+      `INSERT INTO user_profiles (
+         id,email,email_ciphertext,email_iv,email_key_version,
+         email_lookup_hash,email_lookup_key_version,
+         phone,phone_ciphertext,phone_iv,phone_key_version,
+         phone_lookup_hash,phone_lookup_key_version,
+         full_name,locale,account_type,company_name,
+         onboarding_completed_at,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,NULL,?,?)`,
+    ).bind(
+      user.id,
+      ...userIdentityWriteBindings(identity),
+      fullName,
+      locale,
+      accountType,
+      body?.companyName?.trim().slice(0, 180) || null,
+      now,
+      now,
+    ).run();
   }
   await ensureDefaultWorkspace(user.id);
 

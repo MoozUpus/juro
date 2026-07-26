@@ -52,6 +52,23 @@ test("identity keyring fails closed for missing or malformed material", () => {
         && error.code === "KEYRING_INVALID",
     );
   }
+  const tooManyVersions = Object.fromEntries(
+    Array.from({ length: 9 }, (_, index) => [
+      `v${index + 1}`,
+      {
+        aead: encodedKey(index + 1),
+        hmac: encodedKey(index + 33),
+      },
+    ]),
+  );
+  assert.throws(
+    () => parseIdentityKeyring(JSON.stringify({
+      active: "v1",
+      versions: tooManyVersions,
+    })),
+    (error: unknown) => error instanceof IdentityKeyringError
+      && error.code === "KEYRING_INVALID",
+  );
 });
 
 test("AES-GCM protects identity values with record-bound AAD", async () => {

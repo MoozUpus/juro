@@ -234,7 +234,12 @@ test("concurrent enrollment confirmation has one exact-claim winner", async () =
     new URL("../app/chatgpt-auth.ts", import.meta.url),
     "utf8",
   );
-  assert.match(authSource, /await hasActiveMfa\(db, localUser\.id\)/);
+  assert.match(
+    authSource,
+    /localUserId && await hasActiveMfa\(db, localUserId\)/,
+  );
+  assert.match(authSource, /userIdByEmail/);
+  assert.match(authSource, /runtimeIdentityProtection/);
   assert.match(
     authSource,
     /catch\s*\{[\s\S]*fail closed[\s\S]*return null;/,

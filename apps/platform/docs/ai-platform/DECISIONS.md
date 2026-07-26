@@ -268,3 +268,29 @@ proof-of-erasure require a separate reviewed workflow. Append-only legal
 evidence must be retained or pseudonymized under an approved policy before any
 user-row deletion. Remote migration 0015 also requires a preflight check for
 legacy duplicate active requests before its partial unique index is applied.
+
+## D-022 — canonical identity encryption uses an expand/backfill/contract gate
+
+Status: accepted
+Date: 2026-07-26
+
+Canonical `user_profiles` email and phone protection is not a one-step SQL
+migration. D1 cannot derive AES-GCM ciphertext or a keyed lookup digest without
+the server-only identity key ring, while those fields participate in login,
+sessions, workspace bootstrap, team display, and document collaboration.
+
+Migration 0016 therefore adds only nullable, versioned ciphertext/IV and
+lookup-HMAC columns plus completeness triggers and lookup indexes. The checked
+in environment remains `IDENTITY_PROTECTION_MODE=legacy`. In the later
+`dual_write` mode, reads prefer protected values, compare them with retained
+plaintext, and fail closed on partial state or divergence; writes use the
+active key version while lookups try every retained version and the legacy
+column during expansion.
+
+Backfill is explicit, bounded, optimistic, idempotent, and independently
+verified. Rotation rewrites protected fields only. Plaintext columns and their
+existing uniqueness constraint remain the compatibility and concurrency fence
+until staging has proven complete backfill, old-key read/current-key write,
+zero divergence, and rollback. Clearing plaintext, retiring a key version, and
+migrating invitation/auth-challenge identifiers are separate contract slices;
+they must not be inferred from the expand migration.

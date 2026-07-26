@@ -16,6 +16,7 @@ import {
   requireD1,
   runtimeEnv,
 } from "../document-builder/storage/runtime";
+import { runtimeIdentityProtection } from "./identity-runtime";
 
 export type MfaLocale = "ru" | "uz";
 
@@ -66,7 +67,11 @@ export async function localSessionForRequest(
   const session = await localSessionFromCookie(
     requireD1(),
     cookie,
-    { touch: false, now: options.now },
+    {
+      touch: false,
+      now: options.now,
+      identity: runtimeIdentityProtection(),
+    },
   );
   if (!options.recent) {
     if (!session) throw new MfaError("LOCAL_SESSION_REQUIRED");

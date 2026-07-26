@@ -11,6 +11,7 @@
     "APP_ENV": "development",
     "ASYNC_RUNTIME_ENABLED": "false",
     "CRON_ENABLED": "false",
+    "IDENTITY_PROTECTION_MODE": "legacy",
     "JOB_SCHEMA_VERSION": "1"
   },
   "d1_databases": [
@@ -177,6 +178,7 @@
         "APP_ENV": "staging",
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
+        "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1"
       },
       "d1_databases": [
@@ -331,6 +333,7 @@
         "APP_ENV": "production",
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
+        "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1"
       },
       "d1_databases": [

@@ -1,4 +1,13 @@
 import type { ChatGPTUser } from "../../../app/chatgpt-auth";
+import {
+  resolveUserIdentity,
+  USER_IDENTITY_SELECT,
+  userIdByEmail,
+  userIdentityWriteBindings,
+  prepareUserIdentityWrite,
+  type UserIdentityRow,
+} from "../../auth/identity-protection";
+import { runtimeIdentityProtection } from "../../auth/identity-runtime";
 import { ensureDefaultWorkspace } from "../../platform/workspace";
 import type { UserProfile } from "../types";
 import type { DocumentDefinition } from "../registry";
@@ -51,29 +60,70 @@ export async function ensureConfiguredTemplateSeed(definition: DocumentDefinitio
 
 export async function getOrCreateUserProfile(user: ChatGPTUser): Promise<UserProfile> {
   const db = requireD1();
-  const existing = await db.prepare(
-    "SELECT id, email, full_name AS fullName, birth_date AS birthDate, id_document_type AS idDocumentType, id_document_number AS idDocumentNumber, id_issued_by AS idIssuedBy, id_issue_date AS idIssueDate, pinfl, registered_address AS registeredAddress, phone FROM user_profiles WHERE lower(email) = lower(?) LIMIT 1",
-  ).bind(user.email).first<UserProfile>();
+  const identityContext = runtimeIdentityProtection();
+  const existingId = await userIdByEmail(db, identityContext, user.email);
+  const existing = existingId
+    ? await db.prepare(
+      `SELECT id,${USER_IDENTITY_SELECT},
+        full_name AS fullName,birth_date AS birthDate,
+        id_document_type AS idDocumentType,
+        id_document_number AS idDocumentNumber,
+        id_issued_by AS idIssuedBy,id_issue_date AS idIssueDate,
+        pinfl,registered_address AS registeredAddress
+       FROM user_profiles WHERE id=? LIMIT 1`,
+    ).bind(existingId).first<UserProfile & UserIdentityRow>()
+    : null;
   if (existing) {
+    const identity = await resolveUserIdentity(identityContext, existing);
+    const profile: UserProfile = {
+      id: existing.id,
+      email: identity.email,
+      fullName: existing.fullName,
+      birthDate: existing.birthDate,
+      idDocumentType: existing.idDocumentType,
+      idDocumentNumber: existing.idDocumentNumber,
+      idIssuedBy: existing.idIssuedBy,
+      idIssueDate: existing.idIssueDate,
+      pinfl: existing.pinfl,
+      registeredAddress: existing.registeredAddress,
+      phone: identity.phone,
+    };
     if (user.fullName && user.fullName !== existing.fullName) {
       await db.prepare("UPDATE user_profiles SET full_name = ?, updated_at = ? WHERE id = ?")
         .bind(user.fullName, isoNow(), existing.id).run();
       await ensureDefaultWorkspace(existing.id);
-      return { ...existing, fullName: user.fullName };
+      return { ...profile, fullName: user.fullName };
     }
     await ensureDefaultWorkspace(existing.id);
-    return existing;
+    return profile;
   }
 
   const id = crypto.randomUUID();
   const now = isoNow();
+  const identity = await prepareUserIdentityWrite(identityContext, {
+    userId: id,
+    email: user.email,
+    phone: null,
+  });
   await db.prepare(
-    "INSERT INTO user_profiles (id, email, full_name, locale, account_type, created_at, updated_at) VALUES (?, ?, ?, 'ru', 'individual', ?, ?)",
-  ).bind(id, user.email.toLocaleLowerCase(), user.fullName, now, now).run();
+    `INSERT INTO user_profiles (
+       id,email,email_ciphertext,email_iv,email_key_version,
+       email_lookup_hash,email_lookup_key_version,
+       phone,phone_ciphertext,phone_iv,phone_key_version,
+       phone_lookup_hash,phone_lookup_key_version,
+       full_name,locale,account_type,created_at,updated_at
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'ru','individual',?,?)`,
+  ).bind(
+    id,
+    ...userIdentityWriteBindings(identity),
+    user.fullName,
+    now,
+    now,
+  ).run();
   await ensureDefaultWorkspace(id);
   return {
     id,
-    email: user.email.toLocaleLowerCase(),
+    email: identity.email,
     fullName: user.fullName,
     birthDate: null,
     idDocumentType: null,
@@ -82,7 +132,7 @@ export async function getOrCreateUserProfile(user: ChatGPTUser): Promise<UserPro
     idIssueDate: null,
     pinfl: null,
     registeredAddress: null,
-    phone: null,
+    phone: identity.phone,
   };
 }
 

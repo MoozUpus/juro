@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { userIdByEmail } from "../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../lib/auth/identity-runtime";
 import { hasActiveMfa } from "../lib/auth/mfa-service";
 import { getSessionUser } from "../lib/auth/session";
 import {
@@ -42,10 +44,12 @@ export async function getAuthPrincipal(): Promise<AuthPrincipal | null> {
 
   try {
     const db = requireD1();
-    const localUser = await db.prepare(
-      "SELECT id FROM user_profiles WHERE lower(email)=lower(?) LIMIT 1",
-    ).bind(email).first<{ id: string }>();
-    if (localUser && await hasActiveMfa(db, localUser.id)) return null;
+    const localUserId = await userIdByEmail(
+      db,
+      runtimeIdentityProtection(),
+      email,
+    );
+    if (localUserId && await hasActiveMfa(db, localUserId)) return null;
   } catch {
     // Trusted-header authentication must fail closed when JURO cannot prove
     // that the account has no active local MFA credential.

@@ -97,6 +97,14 @@ Document deletion cascades through collaboration/history. The database delete oc
 
 Email, phone, identity fields, user content, document text, and AI results lack the required protected lookup/envelope-encryption model.
 
+Local remediation status: migration 0016 and the application now contain a
+disabled expand layer for canonical `user_profiles` email/phone ciphertext and
+versioned lookup HMACs. All checked-in environments remain in `legacy`, no
+remote row was backfilled, and plaintext columns are intentionally retained.
+Invitation identifiers, OTP/deletion challenge identity digests, contact
+identity fields, document/AI content, staging key configuration, and the
+contract migration remain open; SEC-009 is therefore not closed.
+
 ### SEC-010 — append-only audit is erasable
 
 No tamper-evident chain or protected periodic export exists; cascades can remove audit and consent evidence.

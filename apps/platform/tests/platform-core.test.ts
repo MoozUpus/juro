@@ -81,7 +81,47 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
   assert.match(source, /assuranceLevel: "upstream"/);
   assert.match(source, /sessionId: null/);
   assert.match(source, /hasActiveMfa/);
-  assert.match(source, /localUser && await hasActiveMfa/);
+  assert.match(
+    source,
+    /localUserId && await hasActiveMfa\(db, localUserId\)/,
+  );
+  assert.match(source, /userIdByEmail/);
+  assert.match(source, /runtimeIdentityProtection/);
+});
+
+test("canonical identity expand stays disabled and public projections omit protected fields", async () => {
+  const [
+    identity,
+    session,
+    profile,
+    storage,
+    team,
+    collaboration,
+    config,
+  ] = await Promise.all([
+    readFile(new URL("../lib/auth/identity-protection.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/auth/session-management.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/profile/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/document-builder/storage/db.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/team/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/document-builder/documents/[id]/collaboration/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
+  ]);
+  assert.match(identity, /"legacy" \| "dual_write"/);
+  assert.match(identity, /backfillUserIdentityBatch/);
+  assert.match(identity, /IDENTITY_VALUE_DIVERGED/);
+  assert.equal(
+    (config.match(/"IDENTITY_PROTECTION_MODE": "legacy"/g) ?? []).length,
+    3,
+  );
+  assert.match(session, /return \{\s*sessionId:/);
+  assert.doesNotMatch(storage, /\.\.\.existing/);
+  assert.doesNotMatch(profile, /profile:\s*profile\.results/);
+  assert.doesNotMatch(team, /members:\s*members\.results/);
+  assert.doesNotMatch(
+    collaboration,
+    /collaborators:\s*collaborators\.results/,
+  );
 });
 
 test("session management distinguishes the current local device and audits revocation", async () => {

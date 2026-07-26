@@ -32,6 +32,11 @@ export const userProfiles = sqliteTable(
   {
     id: text("id").primaryKey(),
     email: text("email").notNull(),
+    emailCiphertext: text("email_ciphertext"),
+    emailIv: text("email_iv"),
+    emailKeyVersion: text("email_key_version"),
+    emailLookupHash: text("email_lookup_hash"),
+    emailLookupKeyVersion: text("email_lookup_key_version"),
     fullName: text("full_name"),
     birthDate: text("birth_date"),
     idDocumentType: text("id_document_type"),
@@ -41,6 +46,11 @@ export const userProfiles = sqliteTable(
     pinfl: text("pinfl"),
     registeredAddress: text("registered_address"),
     phone: text("phone"),
+    phoneCiphertext: text("phone_ciphertext"),
+    phoneIv: text("phone_iv"),
+    phoneKeyVersion: text("phone_key_version"),
+    phoneLookupHash: text("phone_lookup_hash"),
+    phoneLookupKeyVersion: text("phone_lookup_key_version"),
     locale: text("locale").notNull().default("ru"),
     accountType: text("account_type").notNull().default("individual"),
     companyName: text("company_name"),
@@ -51,7 +61,15 @@ export const userProfiles = sqliteTable(
     onboardingCompletedAt: text("onboarding_completed_at"),
     ...timestamps,
   },
-  (table) => [uniqueIndex("user_profiles_email_uidx").on(table.email)],
+  (table) => [
+    uniqueIndex("user_profiles_email_uidx").on(table.email),
+    uniqueIndex("user_profiles_email_lookup_uidx")
+      .on(table.emailLookupKeyVersion, table.emailLookupHash)
+      .where(sql`${table.emailLookupHash} IS NOT NULL`),
+    index("user_profiles_phone_lookup_idx")
+      .on(table.phoneLookupKeyVersion, table.phoneLookupHash)
+      .where(sql`${table.phoneLookupHash} IS NOT NULL`),
+  ],
 );
 
 export const workspaceMembers = sqliteTable(

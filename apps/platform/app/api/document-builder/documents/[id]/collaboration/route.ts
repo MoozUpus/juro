@@ -1,4 +1,11 @@
 import { assertSafeWrite, requireApiUser } from "../../../../../../lib/document-builder/auth/api";
+import {
+  resolveUserIdentity,
+  userIdsByIdentifier,
+  userIdentitySelect,
+  type UserIdentityRow,
+} from "../../../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../../../lib/auth/identity-runtime";
 import { apiError, badRequest, forbidden, jsonResponse, notFound } from "../../../../../../lib/document-builder/auth/responses";
 import { getDocumentAccess, hasDocumentPermission, loadStoredDocument } from "../../../../../../lib/document-builder/permissions";
 import type { ParticipantRole } from "../../../../../../lib/document-builder/registry";
@@ -11,9 +18,11 @@ type Context = { params: Promise<{ id: string }> };
 
 async function snapshot(documentId: string): Promise<Record<string, unknown>> {
   const db = requireD1();
+  const identityContext = runtimeIdentityProtection();
   const [collaborators, comments, proposals, activity] = await Promise.all([
     db.prepare(
-      `SELECT c.id, c.user_id AS userId, u.email, COALESCE(u.full_name, u.email) AS displayName,
+      `SELECT c.id, c.user_id AS userId, u.full_name AS fullName,
+       ${userIdentitySelect("u")},
        c.status, c.role, c.party_number AS partyNumber, c.approval_status AS approvalStatus,
        c.confirmed_at AS confirmedAt, c.opened_at AS openedAt,
        c.can_view AS canView, c.can_download AS canDownload,
@@ -26,7 +35,8 @@ async function snapshot(documentId: string): Promise<Record<string, unknown>> {
        WHERE c.document_id = ? AND c.status <> 'revoked' ORDER BY c.created_at`,
     ).bind(documentId).all(),
     db.prepare(
-      `SELECT c.id, c.author_user_id AS authorUserId, COALESCE(u.full_name, u.email) AS authorName,
+      `SELECT c.id, c.author_user_id AS authorUserId,
+       u.full_name AS authorFullName,${userIdentitySelect("u")},
        c.body, c.anchor, c.thread_id AS threadId, c.parent_comment_id AS parentCommentId,
        t.status AS threadStatus, t.anchor_type AS anchorType, t.anchor_key AS anchorKey, c.created_at AS createdAt
        FROM document_comments c JOIN user_profiles u ON u.id = c.author_user_id
@@ -41,9 +51,82 @@ async function snapshot(documentId: string): Promise<Record<string, unknown>> {
     db.prepare("SELECT id, type, created_at AS createdAt FROM activity_events WHERE document_id = ? ORDER BY created_at DESC LIMIT 100")
       .bind(documentId).all(),
   ]);
+  const resolvedCollaborators = await Promise.all(
+    (collaborators.results as Array<UserIdentityRow & {
+      userId: string;
+      fullName: string | null;
+      status: string;
+      role: string | null;
+      partyNumber: number | null;
+      approvalStatus: string | null;
+      confirmedAt: string | null;
+      openedAt: string | null;
+      canView: number;
+      canDownload: number;
+      signedViewAllowed: number;
+      signedDownloadAllowed: number;
+      signedOpened: number;
+      restoredViewOnly: number;
+    }>).map(async item => {
+      const identity = await resolveUserIdentity(
+        identityContext,
+        { ...item, id: item.userId },
+      );
+      return {
+        id: item.id,
+        userId: item.userId,
+        email: identity.email,
+        displayName: item.fullName || identity.email,
+        status: item.status,
+        role: item.role,
+        partyNumber: item.partyNumber,
+        approvalStatus: item.approvalStatus,
+        confirmedAt: item.confirmedAt,
+        openedAt: item.openedAt,
+        canView: Boolean(item.canView),
+        canDownload: Boolean(item.canDownload),
+        signedViewAllowed: Boolean(item.signedViewAllowed),
+        signedDownloadAllowed: Boolean(item.signedDownloadAllowed),
+        signedOpened: Boolean(item.signedOpened),
+        restoredViewOnly: Boolean(item.restoredViewOnly),
+      };
+    }),
+  );
+  const resolvedComments = await Promise.all(
+    (comments.results as Array<UserIdentityRow & {
+      authorUserId: string;
+      authorFullName: string | null;
+      body: string;
+      anchor: string | null;
+      threadId: string | null;
+      parentCommentId: string | null;
+      threadStatus: string | null;
+      anchorType: string | null;
+      anchorKey: string | null;
+      createdAt: string;
+    }>).map(async item => {
+      const identity = await resolveUserIdentity(
+        identityContext,
+        { ...item, id: item.authorUserId },
+      );
+      return {
+        id: item.id,
+        authorUserId: item.authorUserId,
+        authorName: item.authorFullName || identity.email,
+        body: item.body,
+        anchor: item.anchor,
+        threadId: item.threadId,
+        parentCommentId: item.parentCommentId,
+        threadStatus: item.threadStatus,
+        anchorType: item.anchorType,
+        anchorKey: item.anchorKey,
+        createdAt: item.createdAt,
+      };
+    }),
+  );
   return {
-    collaborators: collaborators.results.map((item) => ({ ...item, canView: Boolean(item.canView), canDownload: Boolean(item.canDownload), signedViewAllowed: Boolean(item.signedViewAllowed), signedDownloadAllowed: Boolean(item.signedDownloadAllowed), signedOpened: Boolean(item.signedOpened), restoredViewOnly: Boolean(item.restoredViewOnly) })),
-    comments: comments.results,
+    collaborators: resolvedCollaborators,
+    comments: resolvedComments,
     proposals: proposals.results.map((item) => ({ ...item, ownerAccepted: Boolean(item.ownerAccepted), collaboratorAccepted: Boolean(item.collaboratorAccepted) })),
     activity: activity.results,
   };
@@ -82,11 +165,29 @@ export async function POST(request: Request, context: Context): Promise<Response
       const allowedRoles = new Set<ParticipantRole>(["party", "counterparty", "co-party", "representative", "editor", "commenter", "viewer", "legal-reviewer", "approver"]);
       const requestedRole = typeof body.role === "string" && allowedRoles.has(body.role as ParticipantRole) ? body.role as ParticipantRole : "counterparty";
       const partyNumber = typeof body.partyNumber === "number" && Number.isInteger(body.partyNumber) && body.partyNumber >= 2 && body.partyNumber <= 3 ? body.partyNumber : 2;
-      const candidates = await db.prepare(
-        "SELECT id, email, COALESCE(full_name, email) AS displayName FROM user_profiles WHERE lower(email) = lower(?) OR phone = ? LIMIT 2",
-      ).bind(identifier, identifier).all<{ id: string; email: string; displayName: string }>();
-      if (candidates.results.length > 1) return badRequest("Найдено несколько профилей. Уточните email.");
-      const invitee = candidates.results[0] ?? null;
+      const identityContext = runtimeIdentityProtection();
+      const candidateIds = await userIdsByIdentifier(
+        db,
+        identityContext,
+        identifier,
+      );
+      if (candidateIds.length > 1) return badRequest("Найдено несколько профилей. Уточните email.");
+      const candidate = candidateIds[0]
+        ? await db.prepare(
+          `SELECT id,full_name AS fullName,${userIdentitySelect("user_profiles")}
+           FROM user_profiles WHERE id=? LIMIT 1`,
+        ).bind(candidateIds[0]).first<UserIdentityRow & {
+          fullName: string | null;
+        }>()
+        : null;
+      const candidateIdentity = candidate
+        ? await resolveUserIdentity(identityContext, candidate)
+        : null;
+      const invitee = candidate && candidateIdentity ? {
+        id: candidate.id,
+        email: candidateIdentity.email,
+        displayName: candidate.fullName || candidateIdentity.email,
+      } : null;
       if (invitee?.id === user.id) return badRequest("Нельзя пригласить самого себя.");
       if (invitee) {
         const accepted = await db.prepare(

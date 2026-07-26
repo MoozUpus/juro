@@ -38,6 +38,11 @@ assert.equal(artifact.name, selected.name);
 assert.equal(artifact.vars?.APP_ENV, requestedEnvironment);
 assert.deepEqual(artifact.vars, selected.vars);
 assert.equal(
+  artifact.vars?.IDENTITY_PROTECTION_MODE,
+  "legacy",
+  "identity protection must remain in expand-safe legacy mode",
+);
+assert.equal(
   Object.hasOwn(artifact.vars ?? {}, "ALLOW_PLATFORM_AUTH_HEADERS"),
   false,
   "development authentication bypass must never be packaged",

@@ -1,6 +1,14 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import {
+  prepareUserIdentityWrite,
+  resolveUserIdentity,
+  userIdentityById,
+  userIdentitySelect,
+  type UserIdentityRow,
+} from "../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -14,7 +22,8 @@ export const GET = withApiErrors(async function GET() {
   const [profile, workspaceRow, consents, acceptances, deletionRequest] =
     await db.batch([
     db.prepare(
-      `SELECT id,email,full_name AS fullName,phone,locale,account_type AS accountType,
+      `SELECT id,${userIdentitySelect("user_profiles")},
+        full_name AS fullName,locale,account_type AS accountType,
         company_name AS companyName,organization_role AS organizationRole,primary_goal AS primaryGoal,
         timezone,onboarding_completed_at AS onboardingCompletedAt,created_at AS createdAt
        FROM user_profiles WHERE id=? LIMIT 1`,
@@ -50,8 +59,35 @@ export const GET = withApiErrors(async function GET() {
        LIMIT 1`,
     ).bind(user.id),
   ]);
+  const profileRow = profile.results[0] as (UserIdentityRow & {
+    fullName: string | null;
+    locale: string;
+    accountType: string;
+    companyName: string | null;
+    organizationRole: string | null;
+    primaryGoal: string | null;
+    timezone: string;
+    onboardingCompletedAt: string | null;
+    createdAt: string;
+  }) | undefined;
+  const identity = profileRow
+    ? await resolveUserIdentity(runtimeIdentityProtection(), profileRow)
+    : null;
   return response({
-    profile: profile.results[0] ?? null,
+    profile: profileRow && identity ? {
+      id: profileRow.id,
+      email: identity.email,
+      fullName: profileRow.fullName,
+      phone: identity.phone,
+      locale: profileRow.locale,
+      accountType: profileRow.accountType,
+      companyName: profileRow.companyName,
+      organizationRole: profileRow.organizationRole,
+      primaryGoal: profileRow.primaryGoal,
+      timezone: profileRow.timezone,
+      onboardingCompletedAt: profileRow.onboardingCompletedAt,
+      createdAt: profileRow.createdAt,
+    } : null,
     workspace: workspaceRow.results[0] ?? null,
     role: workspace.role,
     consents: consents.results,
@@ -75,10 +111,69 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
   const organizationRole = body.organizationRole?.trim().slice(0, 120) || null;
   const now = isoNow();
   const db = requireD1();
+  const identityContext = runtimeIdentityProtection();
+  const currentIdentity = await userIdentityById(
+    db,
+    identityContext,
+    user.id,
+  );
+  if (!currentIdentity) {
+    return response({ error: "Профиль не найден." }, 404);
+  }
+  const protectedIdentity = identityContext.mode === "dual_write"
+    ? await prepareUserIdentityWrite(identityContext, {
+        userId: user.id,
+        email: currentIdentity.email,
+        phone,
+      })
+    : null;
+  const profileUpdate = protectedIdentity
+    ? db.prepare(
+      `UPDATE user_profiles SET
+         full_name=?,phone=?,
+         email_ciphertext=?,email_iv=?,email_key_version=?,
+         email_lookup_hash=?,email_lookup_key_version=?,
+         phone_ciphertext=?,phone_iv=?,phone_key_version=?,
+         phone_lookup_hash=?,phone_lookup_key_version=?,
+         locale=?,timezone=?,company_name=?,organization_role=?,updated_at=?
+       WHERE id=?`,
+    ).bind(
+      fullName,
+      protectedIdentity.phone,
+      protectedIdentity.emailCiphertext,
+      protectedIdentity.emailIv,
+      protectedIdentity.emailKeyVersion,
+      protectedIdentity.emailLookupHash,
+      protectedIdentity.emailLookupKeyVersion,
+      protectedIdentity.phoneCiphertext,
+      protectedIdentity.phoneIv,
+      protectedIdentity.phoneKeyVersion,
+      protectedIdentity.phoneLookupHash,
+      protectedIdentity.phoneLookupKeyVersion,
+      locale,
+      timezone,
+      companyName,
+      organizationRole,
+      now,
+      user.id,
+    )
+    : db.prepare(
+      `UPDATE user_profiles SET
+         full_name=?,phone=?,locale=?,timezone=?,
+         company_name=?,organization_role=?,updated_at=?
+       WHERE id=?`,
+    ).bind(
+      fullName,
+      phone,
+      locale,
+      timezone,
+      companyName,
+      organizationRole,
+      now,
+      user.id,
+    );
   await db.batch([
-    db.prepare(
-      "UPDATE user_profiles SET full_name=?,phone=?,locale=?,timezone=?,company_name=?,organization_role=?,updated_at=? WHERE id=?",
-    ).bind(fullName, phone, locale, timezone, companyName, organizationRole, now, user.id),
+    profileUpdate,
     db.prepare("UPDATE workspaces SET locale=?,name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE name END,updated_at=? WHERE id=?")
       .bind(locale, companyName, companyName, now, workspace.id),
     db.prepare(

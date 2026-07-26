@@ -1,13 +1,18 @@
 import type { UserProfile } from "../document-builder/types";
 import { requireD1 } from "../document-builder/storage/runtime";
+import {
+  resolveUserIdentity,
+  USER_IDENTITY_SELECT,
+  type UserIdentityRow,
+} from "../auth/identity-protection";
+import { runtimeIdentityProtection } from "../auth/identity-runtime";
 
-type WorkspaceProfileRow = {
+type WorkspaceProfileRow = UserIdentityRow & {
   defaultWorkspaceId: string | null;
   accountType: string;
   locale: string;
   companyName: string | null;
   fullName: string | null;
-  email: string;
 };
 
 export type WorkspaceOption = {
@@ -38,11 +43,17 @@ export async function workspacesForUser(userId: string): Promise<WorkspaceOption
 export async function ensureDefaultWorkspace(userId: string): Promise<string> {
   const db = requireD1();
   const profile = await db.prepare(
-    `SELECT default_workspace_id AS defaultWorkspaceId, account_type AS accountType, locale,
-      company_name AS companyName, full_name AS fullName, email
+    `SELECT id,${USER_IDENTITY_SELECT},
+      default_workspace_id AS defaultWorkspaceId,
+      account_type AS accountType,locale,
+      company_name AS companyName,full_name AS fullName
      FROM user_profiles WHERE id = ? LIMIT 1`,
   ).bind(userId).first<WorkspaceProfileRow>();
   if (!profile) throw new Error("USER_PROFILE_NOT_FOUND");
+  const identity = await resolveUserIdentity(
+    runtimeIdentityProtection(),
+    profile,
+  );
 
   if (profile.defaultWorkspaceId) {
     const membership = await db.prepare(
@@ -68,7 +79,11 @@ export async function ensureDefaultWorkspace(userId: string): Promise<string> {
   // Never reuse an invalid default_workspace_id: it might identify a tenant
   // from which this user was removed.
   const workspaceId = `ws_${crypto.randomUUID().replaceAll("-", "")}`;
-  const workspaceName = (profile.companyName || profile.fullName || profile.email).slice(0, 180);
+  const workspaceName = (
+    profile.companyName
+    || profile.fullName
+    || identity.email
+  ).slice(0, 180);
   await db.batch([
     db.prepare(
       "INSERT OR IGNORE INTO workspaces (id,type,name,locale,created_at,updated_at) VALUES (?,?,?,?,?,?)",

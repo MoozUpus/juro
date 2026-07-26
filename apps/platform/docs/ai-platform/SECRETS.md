@@ -41,8 +41,15 @@ Requirements:
   encrypt/decrypt/rotation test succeeds.
 
 The current source provides the cryptographic primitive, encrypted TOTP
-enrollment, backup-code hashing, and tests. It does not contain a real key
-ring, and no live environment was changed.
+enrollment, backup-code hashing, canonical profile dual-read/write primitives,
+bounded backfill/verification, and tests. It does not contain a real key ring,
+and no live environment was changed.
+
+`IDENTITY_PROTECTION_MODE` is not a secret, but it is a security-sensitive
+deployment control. All checked-in development/staging/production
+configurations are fixed to `legacy`. Do not change staging to `dual_write`
+until migration 0016 is applied, the protected key ring is configured, and a
+backup/restore rehearsal succeeds. Do not change production in this phase.
 
 ## Local MFA flow
 

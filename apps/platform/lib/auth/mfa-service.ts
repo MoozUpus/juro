@@ -10,6 +10,11 @@ import {
   protectIdentityValue,
   revealIdentityValue,
 } from "./keyring";
+import {
+  createIdentityProtectionContext,
+  userIdByEmail,
+  type IdentityProtectionContext,
+} from "./identity-protection";
 import { batchWithSecurityEvent } from "./security-events";
 import {
   guardedSessionInsertStatements,
@@ -78,7 +83,6 @@ type LoginChallenge = TotpCredential & {
   challengeInvalidatedAt: string | null;
   requestUserAgentHmac: string | null;
   evidenceKeyVersion: string | null;
-  email: string;
   locale: string;
   accountType: string;
   onboardingCompletedAt: string | null;
@@ -131,14 +135,11 @@ export async function hasActiveMfa(
 export async function userEmailHasActiveMfa(
   db: D1Database,
   email: string,
+  identity: IdentityProtectionContext =
+    createIdentityProtectionContext("legacy", null),
 ): Promise<boolean> {
-  return Boolean(await db.prepare(
-    `SELECT 1
-     FROM auth_totp_credentials t
-     JOIN user_profiles u ON u.id=t.user_id
-     WHERE lower(u.email)=lower(?) AND t.status='active'
-     LIMIT 1`,
-  ).bind(email).first());
+  const userId = await userIdByEmail(db, identity, email);
+  return userId ? hasActiveMfa(db, userId) : false;
 }
 
 export function requireRecentLocalSession(
@@ -781,7 +782,7 @@ async function challengeFromToken(
        t.backup_key_version AS backupKeyVersion,
        t.enrollment_expires_at AS enrollmentExpiresAt,
        t.verified_at AS verifiedAt,
-       u.email,u.locale,u.account_type AS accountType,
+       u.locale,u.account_type AS accountType,
        u.onboarding_completed_at AS onboardingCompletedAt
      FROM auth_mfa_challenges c
      JOIN auth_totp_credentials t ON t.id=c.credential_id

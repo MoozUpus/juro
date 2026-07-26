@@ -1,4 +1,5 @@
 import { getChatGPTUser } from "../../../app/chatgpt-auth";
+import { IdentityProtectionError } from "../../auth/identity-protection";
 import type { UserProfile } from "../types";
 import { getOrCreateUserProfile } from "../storage/db";
 
@@ -40,6 +41,21 @@ export function withApiErrors<TArgs extends unknown[]>(handler: (...args: TArgs)
         return Response.json(
           { error: error.message },
           { status: error.status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } },
+        );
+      }
+      if (error instanceof IdentityProtectionError) {
+        return Response.json(
+          {
+            code: "IDENTITY_PROTECTION_UNAVAILABLE",
+            error: "Защищённое хранилище идентификационных данных временно недоступно.",
+          },
+          {
+            status: 503,
+            headers: {
+              "cache-control": "private, no-store",
+              pragma: "no-cache",
+            },
+          },
         );
       }
       throw error;

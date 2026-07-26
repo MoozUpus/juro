@@ -19,6 +19,7 @@ export interface BuilderRuntimeEnv {
   LEGISLATION_FEED_PROVIDER?: string;
   LEGISLATION_FEED_API_KEY?: string;
   IDENTITY_KEYRING?: string;
+  IDENTITY_PROTECTION_MODE?: string;
 }
 
 export class ServiceUnavailableError extends Error {

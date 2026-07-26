@@ -17,6 +17,7 @@ const phaseTwoEntry = journal.entries.find(({ idx }) => idx === 12);
 const sessionSecurityEntry = journal.entries.find(({ idx }) => idx === 13);
 const mfaEntry = journal.entries.find(({ idx }) => idx === 14);
 const policyDeletionEntry = journal.entries.find(({ idx }) => idx === 15);
+const identityProtectionEntry = journal.entries.find(({ idx }) => idx === 16);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -25,6 +26,10 @@ assert.ok(mfaEntry, "Drizzle journal must contain migration 0014");
 assert.ok(
   policyDeletionEntry,
   "Drizzle journal must contain migration 0015",
+);
+assert.ok(
+  identityProtectionEntry,
+  "Drizzle journal must contain migration 0016",
 );
 
 function migrationSql(entry: JournalEntry): string {
@@ -683,6 +688,142 @@ test("0015 enforces immutable policies and exact deletion evidence", () => {
       ),
       /policy evidence mismatch/,
     );
+  } finally {
+    db.close();
+  }
+});
+
+test("0016 is an additive expand migration with protected lookup indexes", () => {
+  const sql = migrationSql(identityProtectionEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^(?:ALTER TABLE|CREATE (?:UNIQUE )?INDEX|CREATE TRIGGER)\b/i,
+      `unexpected identity migration statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const column of [
+    "email_ciphertext",
+    "email_iv",
+    "email_key_version",
+    "email_lookup_hash",
+    "email_lookup_key_version",
+    "phone_ciphertext",
+    "phone_iv",
+    "phone_key_version",
+    "phone_lookup_hash",
+    "phone_lookup_key_version",
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`ALTER TABLE \\\`user_profiles\\\` ADD \\\`${column}\\\``),
+    );
+  }
+  for (const name of [
+    "user_profiles_email_lookup_uidx",
+    "user_profiles_phone_lookup_idx",
+    "user_profiles_identity_insert_guard",
+    "user_profiles_identity_update_guard",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.doesNotMatch(
+    sql,
+    /IDENTITY_KEYRING|BEGIN (?:RSA |EC )?PRIVATE KEY|RESEND_API_KEY/i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0016_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, { indexes: Record<string, unknown> }>;
+  };
+  assert.ok(
+    snapshot.tables.user_profiles.indexes.user_profiles_email_lookup_uidx,
+  );
+  assert.ok(
+    snapshot.tables.user_profiles.indexes.user_profiles_phone_lookup_idx,
+  );
+});
+
+test("0016 preserves raw identities and rejects partial protected state", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 16)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-07-26T12:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,phone,created_at,updated_at)
+       VALUES (?,?,?,?,?)`,
+    ).run(
+      "identity-sentinel",
+      "sentinel@example.test",
+      "+998 90 123 45 67",
+      now,
+      now,
+    );
+    applyMigration(db, identityProtectionEntry);
+
+    const preserved = db.prepare(
+      `SELECT email,phone,email_ciphertext AS emailCiphertext,
+        phone_ciphertext AS phoneCiphertext
+       FROM user_profiles WHERE id='identity-sentinel'`,
+    ).get() as {
+      email: string;
+      phone: string;
+      emailCiphertext: string | null;
+      phoneCiphertext: string | null;
+    };
+    assert.deepEqual({ ...preserved }, {
+      email: "sentinel@example.test",
+      phone: "+998 90 123 45 67",
+      emailCiphertext: null,
+      phoneCiphertext: null,
+    });
+    assert.throws(
+      () => db.prepare(
+        `UPDATE user_profiles
+         SET email_ciphertext='${"a".repeat(22)}'
+         WHERE id='identity-sentinel'`,
+      ).run(),
+      /identity protection fields incomplete/,
+    );
+    db.prepare(
+      `UPDATE user_profiles SET
+         email_ciphertext=?,email_iv=?,email_key_version=?,
+         email_lookup_hash=?,email_lookup_key_version=?
+       WHERE id='identity-sentinel'`,
+    ).run(
+      "a".repeat(22),
+      "b".repeat(16),
+      "v1",
+      "c".repeat(43),
+      "v1",
+    );
+    assert.throws(
+      () => db.prepare(
+        `INSERT INTO user_profiles (
+           id,email,email_ciphertext,email_iv,email_key_version,
+           email_lookup_hash,email_lookup_key_version,created_at,updated_at
+         ) VALUES (?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        "identity-duplicate",
+        "different@example.test",
+        "d".repeat(22),
+        "e".repeat(16),
+        "v1",
+        "c".repeat(43),
+        "v1",
+        now,
+        now,
+      ),
+      /UNIQUE constraint failed/,
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
   }

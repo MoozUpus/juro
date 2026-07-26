@@ -1,4 +1,6 @@
 import { assertSafeWrite, optionalApiUser, requireApiUser } from "../../../../lib/document-builder/auth/api";
+import { prepareUserIdentityWrite } from "../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
 import { apiError, badRequest, jsonResponse } from "../../../../lib/document-builder/auth/responses";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
@@ -56,10 +58,66 @@ export async function PATCH(request: Request): Promise<Response> {
       registeredAddress: optionalText(body.registeredAddress, 1_000),
       phone: optionalText(body.phone, 100),
     };
-    await runtimeEnv().DB!.prepare(
-      `UPDATE user_profiles SET full_name = ?, birth_date = ?, id_document_type = ?, id_document_number = ?,
-       id_issued_by = ?, id_issue_date = ?, pinfl = ?, registered_address = ?, phone = ?, updated_at = ? WHERE id = ?`,
-    ).bind(profile.fullName, profile.birthDate, profile.idDocumentType, profile.idDocumentNumber, profile.idIssuedBy, profile.idIssueDate, profile.pinfl, profile.registeredAddress, profile.phone, isoNow(), user.id).run();
+    const identityContext = runtimeIdentityProtection();
+    const protectedIdentity = identityContext.mode === "dual_write"
+      ? await prepareUserIdentityWrite(identityContext, {
+          userId: user.id,
+          email: user.email,
+          phone: profile.phone,
+        })
+      : null;
+    const statement = protectedIdentity
+      ? runtimeEnv().DB!.prepare(
+        `UPDATE user_profiles SET
+         full_name=?,birth_date=?,id_document_type=?,id_document_number=?,
+         id_issued_by=?,id_issue_date=?,pinfl=?,registered_address=?,phone=?,
+         email_ciphertext=?,email_iv=?,email_key_version=?,
+         email_lookup_hash=?,email_lookup_key_version=?,
+         phone_ciphertext=?,phone_iv=?,phone_key_version=?,
+         phone_lookup_hash=?,phone_lookup_key_version=?,updated_at=?
+         WHERE id=?`,
+      ).bind(
+        profile.fullName,
+        profile.birthDate,
+        profile.idDocumentType,
+        profile.idDocumentNumber,
+        profile.idIssuedBy,
+        profile.idIssueDate,
+        profile.pinfl,
+        profile.registeredAddress,
+        protectedIdentity.phone,
+        protectedIdentity.emailCiphertext,
+        protectedIdentity.emailIv,
+        protectedIdentity.emailKeyVersion,
+        protectedIdentity.emailLookupHash,
+        protectedIdentity.emailLookupKeyVersion,
+        protectedIdentity.phoneCiphertext,
+        protectedIdentity.phoneIv,
+        protectedIdentity.phoneKeyVersion,
+        protectedIdentity.phoneLookupHash,
+        protectedIdentity.phoneLookupKeyVersion,
+        isoNow(),
+        user.id,
+      )
+      : runtimeEnv().DB!.prepare(
+        `UPDATE user_profiles SET
+         full_name=?,birth_date=?,id_document_type=?,id_document_number=?,
+         id_issued_by=?,id_issue_date=?,pinfl=?,registered_address=?,
+         phone=?,updated_at=? WHERE id=?`,
+      ).bind(
+        profile.fullName,
+        profile.birthDate,
+        profile.idDocumentType,
+        profile.idDocumentNumber,
+        profile.idIssuedBy,
+        profile.idIssueDate,
+        profile.pinfl,
+        profile.registeredAddress,
+        profile.phone,
+        isoNow(),
+        user.id,
+      );
+    await statement.run();
     return jsonResponse({ user: profile });
   } catch (error) {
     return apiError(error);

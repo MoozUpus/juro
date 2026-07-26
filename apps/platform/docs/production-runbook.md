@@ -15,6 +15,9 @@ The following values are configured in the deployment environment and never comm
 - `ALLOW_PLATFORM_AUTH_HEADERS` — leave empty unless a trusted edge strips client-supplied `oai-authenticated-*` headers and injects authenticated values.
 - `IDENTITY_KEYRING` — versioned server-only AES/HMAC key ring. Required before
   enabling TOTP or identity encryption; never store it in `wrangler.jsonc`.
+- `IDENTITY_PROTECTION_MODE` — non-secret rollout gate. Keep `legacy` in all
+  checked-in environments; `dual_write` requires the reviewed staging gates
+  below and is not authorized for production.
 - `DB` — Cloudflare D1 binding.
 - `BUCKET` — private Cloudflare R2 binding.
 - `BACKUP_BUCKET`, `QUARANTINE_BUCKET` — environment-specific protected R2 bindings.
@@ -46,7 +49,7 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 ## Database migration
 
 Migrations are ordered in `drizzle/0000_*.sql` through
-`drizzle/0014_*.sql`. Before any remote deployment:
+`drizzle/0016_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -58,7 +61,8 @@ Migrations are ordered in `drizzle/0000_*.sql` through
    `legislation_updates`, `monitoring_preferences`, `job_outbox`, `job_runs`,
    `auth_devices`, `security_events`, `auth_totp_credentials`,
    `auth_backup_codes`, `auth_mfa_challenges`, and
-   `auth_mfa_factor_claims`.
+   `auth_mfa_factor_claims`, plus the nullable profile identity-protection
+   columns and completeness triggers from 0016.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 9. Require both tenant-link audits to return zero:
 
@@ -70,9 +74,15 @@ Migrations are ordered in `drizzle/0000_*.sql` through
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migrations `0011`–`0014` have passed local sequence, foreign-key,
+Migrations `0011`–`0016` have passed local sequence, foreign-key,
 sentinel-preservation, tenant-backfill, append-only trigger, chain-fork, and
 snapshot tests. They have not been applied to staging or production.
+
+Keep `IDENTITY_PROTECTION_MODE=legacy` while applying 0016. Before any
+staging-only `dual_write` proposal, configure the protected key ring, invoke
+the bounded backfill through a reviewed isolated harness, prove zero
+legacy/divergent/rotation-required profile rows, and rehearse rollback. The
+current source does not authorize clearing plaintext or changing production.
 
 ## Smoke checklist
 

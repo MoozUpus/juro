@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { requireD1 } from "../document-builder/storage/runtime";
+import { runtimeIdentityProtection } from "./identity-runtime";
 import {
   MFA_CHALLENGE_COOKIE,
   SESSION_COOKIE,
@@ -27,6 +28,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     const session = await localSessionFromCookie(
       requireD1(),
       requestHeaders.get("cookie"),
+      { identity: runtimeIdentityProtection() },
     );
     if (!session) return null;
     return {

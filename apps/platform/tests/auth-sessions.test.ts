@@ -104,6 +104,17 @@ function databaseFixture(): {
     CREATE TABLE user_profiles (
       id TEXT PRIMARY KEY NOT NULL,
       email TEXT NOT NULL,
+      email_ciphertext TEXT,
+      email_iv TEXT,
+      email_key_version TEXT,
+      email_lookup_hash TEXT,
+      email_lookup_key_version TEXT,
+      phone TEXT,
+      phone_ciphertext TEXT,
+      phone_iv TEXT,
+      phone_key_version TEXT,
+      phone_lookup_hash TEXT,
+      phone_lookup_key_version TEXT,
       full_name TEXT
     );
 

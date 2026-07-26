@@ -1,5 +1,6 @@
 const KEY_BYTES = 32;
 const IV_BYTES = 12;
+const MAX_KEY_VERSIONS = 8;
 
 type KeyVersionConfig = {
   aead: string;
@@ -107,7 +108,11 @@ export function parseIdentityKeyring(
     }
     versions.set(version, { aead, hmac });
   }
-  if (!versions.has(serialized.active)) {
+  if (
+    versions.size === 0
+    || versions.size > MAX_KEY_VERSIONS
+    || !versions.has(serialized.active)
+  ) {
     throw new IdentityKeyringError("KEYRING_INVALID");
   }
   return { activeVersion: serialized.active, versions };

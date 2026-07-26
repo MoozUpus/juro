@@ -1,4 +1,11 @@
 import { randomToken, sha256 } from "./crypto";
+import {
+  createIdentityProtectionContext,
+  resolveUserIdentity,
+  userIdentitySelect,
+  type IdentityProtectionContext,
+  type UserIdentityRow,
+} from "./identity-protection";
 import { sessionTokenFromCookie } from "./session-token";
 import {
   batchWithSecurityEvent,
@@ -305,7 +312,11 @@ export async function createPrimarySessionIfMfaDisabled(
 export async function localSessionFromCookie(
   db: D1Database,
   cookie: string | null,
-  options: { now?: Date; touch?: boolean } = {},
+  options: {
+    now?: Date;
+    touch?: boolean;
+    identity?: IdentityProtectionContext;
+  } = {},
 ): Promise<LocalSession | null> {
   const token = sessionTokenFromCookie(cookie);
   if (!token) return null;
@@ -313,7 +324,8 @@ export async function localSessionFromCookie(
   const nowIso = now.toISOString();
   const session = await db.prepare(
     `SELECT
-       s.id AS sessionId,s.user_id AS userId,u.email,
+       s.id AS sessionId,s.user_id AS userId,u.id,
+       ${userIdentitySelect("u")},
        u.full_name AS fullName,s.device_id AS deviceId,
        d.display_name AS deviceName,s.auth_method AS authMethod,
        s.assurance_level AS assuranceLevel,
@@ -331,13 +343,20 @@ export async function localSessionFromCookie(
        AND (s.device_id IS NULL OR d.revoked_at IS NULL)
      LIMIT 1`,
   ).bind(await sha256(token), nowIso, nowIso).first<
-    Omit<LocalSession, "assuranceLevel"> & { assuranceLevel: string }
+    Omit<LocalSession, "assuranceLevel"> & UserIdentityRow & {
+      assuranceLevel: string;
+    }
   >();
   if (!session) return null;
   if (
     session.assuranceLevel !== "primary"
     && session.assuranceLevel !== "mfa"
   ) return null;
+  const identity = await resolveUserIdentity(
+    options.identity ?? createIdentityProtectionContext("legacy", null),
+    session,
+  );
+  session.email = identity.email;
 
   if (
     options.touch !== false
@@ -365,7 +384,22 @@ export async function localSessionFromCookie(
     session.lastSeenAt = nowIso;
     session.idleExpiresAt = idleExpiresAt;
   }
-  return session as LocalSession;
+  return {
+    sessionId: session.sessionId,
+    userId: session.userId,
+    email: identity.email,
+    fullName: session.fullName,
+    deviceId: session.deviceId,
+    deviceName: session.deviceName,
+    authMethod: session.authMethod,
+    assuranceLevel: session.assuranceLevel,
+    authenticatedAt: session.authenticatedAt,
+    mfaVerifiedAt: session.mfaVerifiedAt,
+    createdAt: session.createdAt,
+    lastSeenAt: session.lastSeenAt,
+    expiresAt: session.expiresAt,
+    idleExpiresAt: session.idleExpiresAt,
+  };
 }
 
 function eventMetadata(scope: "all" | "others" | "single") {

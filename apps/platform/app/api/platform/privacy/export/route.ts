@@ -1,4 +1,6 @@
 import { requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
+import { userIdentityById } from "../../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../../lib/auth/identity-runtime";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
@@ -6,8 +8,13 @@ export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const db = requireD1();
+  const identity = await userIdentityById(
+    db,
+    runtimeIdentityProtection(),
+    user.id,
+  );
   const [profile, workspaceRow, memberships, cases, documents, consents, acceptances, consultations, audit] = await db.batch([
-    db.prepare("SELECT id,email,full_name,phone,locale,account_type,company_name,organization_role,primary_goal,timezone,created_at,updated_at FROM user_profiles WHERE id=?").bind(user.id),
+    db.prepare("SELECT id,full_name,locale,account_type,company_name,organization_role,primary_goal,timezone,created_at,updated_at FROM user_profiles WHERE id=?").bind(user.id),
     db.prepare("SELECT id,type,name,locale,created_at,updated_at FROM workspaces WHERE id=?").bind(workspace.id),
     db.prepare("SELECT user_id,role,status,joined_at,created_at,updated_at FROM workspace_members WHERE workspace_id=? AND user_id=?").bind(workspace.id, user.id),
     db.prepare("SELECT id,title,description,legal_area,status,next_deadline_at,created_at,updated_at FROM cases WHERE workspace_id=?").bind(workspace.id),
@@ -27,7 +34,9 @@ export const GET = withApiErrors(async function GET() {
   const body = JSON.stringify({
     exportedAt: new Date().toISOString(),
     scope: "user-owned metadata and workspace activity visible to the requester",
-    profile: profile.results[0] ?? null,
+    profile: profile.results[0] && identity
+      ? { ...profile.results[0], email: identity.email, phone: identity.phone }
+      : null,
     workspace: workspaceRow.results[0] ?? null,
     memberships: memberships.results,
     cases: cases.results,

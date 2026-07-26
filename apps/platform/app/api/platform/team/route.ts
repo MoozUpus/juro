@@ -1,4 +1,11 @@
 import { normalizeEmail, randomToken, sha256 } from "../../../../lib/auth/crypto";
+import {
+  resolveUserIdentity,
+  userIdByEmail,
+  userIdentitySelect,
+  type UserIdentityRow,
+} from "../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../lib/auth/identity-runtime";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
@@ -24,10 +31,11 @@ export const GET = withApiErrors(async function GET() {
     db.prepare("SELECT id,name,type,locale FROM workspaces WHERE id=? LIMIT 1").bind(workspace.id),
     db.prepare(
       `SELECT m.id,m.user_id AS userId,m.role,m.status,m.joined_at AS joinedAt,
-        u.full_name AS fullName,u.email
+        u.full_name AS fullName,${userIdentitySelect("u")}
        FROM workspace_members m JOIN user_profiles u ON u.id=m.user_id
        WHERE m.workspace_id=? AND m.status='active'
-       ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,u.full_name,u.email`,
+       ORDER BY CASE m.role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+        u.full_name,m.joined_at`,
     ).bind(workspace.id),
     db.prepare(
       `SELECT id,email,role,expires_at AS expiresAt,created_at AS createdAt
@@ -36,10 +44,34 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY created_at DESC`,
     ).bind(workspace.id),
   ]);
+  const identityContext = runtimeIdentityProtection();
+  const resolvedMembers = await Promise.all(
+    (members.results as Array<UserIdentityRow & {
+      userId: string;
+      role: string;
+      status: string;
+      joinedAt: string;
+      fullName: string | null;
+    }>).map(async member => {
+      const identity = await resolveUserIdentity(
+        identityContext,
+        { ...member, id: member.userId },
+      );
+      return {
+        id: member.id,
+        userId: member.userId,
+        role: member.role,
+        status: member.status,
+        joinedAt: member.joinedAt,
+        fullName: member.fullName,
+        email: identity.email,
+      };
+    }),
+  );
   return response({
     workspace: workspaceRow.results[0] ?? null,
     currentRole: workspace.role,
-    members: members.results,
+    members: resolvedMembers,
     invitations: invitations.results,
   });
 });
@@ -66,11 +98,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
 
   const db = requireD1();
+  const identityContext = runtimeIdentityProtection();
   const emailHash = await sha256(email);
-  const existingMember = await db.prepare(
-    `SELECT m.id FROM workspace_members m JOIN user_profiles u ON u.id=m.user_id
-     WHERE m.workspace_id=? AND lower(u.email)=? AND m.status='active' LIMIT 1`,
-  ).bind(workspace.id, email).first();
+  const existingUserId = await userIdByEmail(db, identityContext, email);
+  const existingMember = existingUserId
+    ? await db.prepare(
+      `SELECT id FROM workspace_members
+       WHERE workspace_id=? AND user_id=? AND status='active' LIMIT 1`,
+    ).bind(workspace.id, existingUserId).first()
+    : null;
   if (existingMember) return response({ error: locale === "ru" ? "Этот пользователь уже в команде." : "Bu foydalanuvchi allaqachon jamoada." }, 409);
 
   const now = isoNow();
