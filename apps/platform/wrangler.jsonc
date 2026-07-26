@@ -1,0 +1,48 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "juro",
+  "compatibility_date": "2026-07-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "main": "./worker/index.ts",
+  "keep_vars": true,
+  "assets": {
+    "directory": "dist/client",
+    "not_found_handling": "none",
+    "binding": "ASSETS"
+  },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "juro-production",
+      "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
+      "migrations_dir": "drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "juro-private-documents"
+    }
+  ],
+  "env": {
+    "development": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "juro-development",
+          "database_id": "d07670cf-f7bf-460c-a668-101671d4c330",
+          "migrations_dir": "drizzle"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "BUCKET",
+          "bucket_name": "juro-private-documents"
+        }
+      ]
+    }
+  }
+}
