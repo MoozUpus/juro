@@ -3,6 +3,7 @@ import { apiError, badRequest, jsonResponse } from "../../../../lib/document-bui
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import type { IdentityDocumentType, UserProfile } from "../../../../lib/document-builder/types";
+import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,9 @@ export async function GET(): Promise<Response> {
     const user = await optionalApiUser();
     let counts = { documents: 0, notifications: 0 };
     if (user) {
-      const documents = await bindings.DB.prepare("SELECT count(*) AS count FROM documents WHERE owner_user_id = ?")
-        .bind(user.id).first<{ count: number }>();
+      const workspace = await workspaceForUser(user);
+      const documents = await bindings.DB.prepare("SELECT count(*) AS count FROM documents WHERE owner_user_id = ? AND workspace_id = ?")
+        .bind(user.id, workspace.id).first<{ count: number }>();
       const notifications = await bindings.DB.prepare("SELECT count(*) AS count FROM notifications WHERE user_id = ? AND read_at IS NULL")
         .bind(user.id).first<{ count: number }>();
       counts = { documents: Number(documents?.count ?? 0), notifications: Number(notifications?.count ?? 0) };

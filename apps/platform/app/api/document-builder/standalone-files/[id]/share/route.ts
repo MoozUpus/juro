@@ -3,6 +3,7 @@ import { apiError, badRequest, forbidden, jsonResponse } from "../../../../../..
 import { addHours, fourDigitCode, randomToken, sha256 } from "../../../../../../lib/document-builder/share-links/crypto";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ id: string }> };
@@ -10,10 +11,11 @@ type Context = { params: Promise<{ id: string }> };
 export async function GET(request: Request, context: Context): Promise<Response> {
   try {
     const user = await requireApiUser();
+    const workspace = await workspaceForUser(user);
     const { id } = await context.params;
     const db = requireD1();
-    const file = await db.prepare("SELECT id, archived_at AS archivedAt FROM document_files WHERE id = ? AND owner_user_id = ? AND kind = 'standalone_signed_pdf' LIMIT 1")
-      .bind(id, user.id).first<{ id: string; archivedAt: string | null }>();
+    const file = await db.prepare("SELECT id, archived_at AS archivedAt FROM document_files WHERE id = ? AND owner_user_id = ? AND workspace_id = ? AND kind = 'standalone_signed_pdf' LIMIT 1")
+      .bind(id, user.id, workspace.id).first<{ id: string; archivedAt: string | null }>();
     if (!file) return forbidden();
     const share = await db.prepare(
       `SELECT id, public_token AS publicToken, access_code AS accessCode, expires_at AS expiresAt,
@@ -45,11 +47,12 @@ export async function POST(request: Request, context: Context): Promise<Response
   try {
     assertSafeWrite(request);
     const user = await requireApiUser();
+    const workspace = await workspaceForUser(user);
     const { id } = await context.params;
     const body = await request.json() as { action?: string };
     const db = requireD1();
-    const file = await db.prepare("SELECT id, archived_at AS archivedAt FROM document_files WHERE id = ? AND owner_user_id = ? AND kind = 'standalone_signed_pdf' LIMIT 1")
-      .bind(id, user.id).first<{ id: string; archivedAt: string | null }>();
+    const file = await db.prepare("SELECT id, archived_at AS archivedAt FROM document_files WHERE id = ? AND owner_user_id = ? AND workspace_id = ? AND kind = 'standalone_signed_pdf' LIMIT 1")
+      .bind(id, user.id, workspace.id).first<{ id: string; archivedAt: string | null }>();
     if (!file) return forbidden();
     const now = isoNow();
     const latest = await db.prepare(

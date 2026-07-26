@@ -155,6 +155,38 @@ test("rejects unauthenticated document writes and disables caching", async () =>
   assert.match(response.headers.get("cache-control") ?? "", /no-store/);
 });
 
+test("built auth routes reject missing and cross-origin CSRF writes", async () => {
+  const worker = await createWorker();
+  for (const route of [
+    "/api/auth/request-otp",
+    "/api/auth/verify-otp",
+    "/api/auth/logout",
+  ]) {
+    const missingHeader = await worker.fetch(new Request(
+      `http://localhost${route}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      },
+    ), runtime, context);
+    assert.equal(missingHeader.status, 403, route);
+    const foreignOrigin = await worker.fetch(new Request(
+      `http://localhost${route}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          origin: "https://attacker.example",
+          "x-juro-csrf": "1",
+        },
+        body: "{}",
+      },
+    ), runtime, context);
+    assert.equal(foreignOrigin.status, 403, route);
+  }
+});
+
 test("platform workflow APIs return private 401 responses without a session", async () => {
   const worker = await createWorker();
   for (const route of [

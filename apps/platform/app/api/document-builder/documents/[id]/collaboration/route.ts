@@ -88,8 +88,29 @@ export async function POST(request: Request, context: Context): Promise<Response
       if (candidates.results.length > 1) return badRequest("Найдено несколько профилей. Уточните email.");
       const invitee = candidates.results[0] ?? null;
       if (invitee?.id === user.id) return badRequest("Нельзя пригласить самого себя.");
+      if (invitee) {
+        const accepted = await db.prepare(
+          `SELECT id
+           FROM document_collaborators
+           WHERE document_id = ?
+             AND user_id = ?
+             AND invitation_status = 'accepted'
+             AND can_view = 1
+             AND status IN ('active', 'opened', 'confirmed')
+           LIMIT 1`,
+        ).bind(id, invitee.id).first<{ id: string }>();
+        if (accepted) {
+          return jsonResponse(
+            {
+              error: "Этот пользователь уже имеет доступ к документу.",
+              code: "ALREADY_COLLABORATOR",
+            },
+            { status: 409 },
+          );
+        }
+      }
       const pendingCount = await db.prepare("SELECT COUNT(*) AS count FROM document_invitations WHERE document_id = ? AND revoked_at IS NULL AND declined_at IS NULL AND accepted_at IS NULL AND expires_at > ?").bind(id, now).first<{ count: number }>();
-      const activeCount = await db.prepare("SELECT COUNT(*) AS count FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).first<{ count: number }>();
+      const activeCount = await db.prepare("SELECT COUNT(*) AS count FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).first<{ count: number }>();
       if ((pendingCount?.count ?? 0) + (activeCount?.count ?? 0) >= 2) return badRequest("Для этого документа уже добавлено максимально допустимое число участников.", "PARTICIPANT_LIMIT");
       const token = randomToken();
       const normalizedIdentifier = identifier.toLocaleLowerCase();
@@ -101,11 +122,22 @@ export async function POST(request: Request, context: Context): Promise<Response
       if (invitee) {
         const existing = await db.prepare("SELECT id FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1").bind(id, invitee.id).first<{ id: string }>();
         if (existing) {
-          await db.prepare("UPDATE document_collaborators SET invited_by_user_id = ?, role = ?, party_number = ?, permission_set_json = NULL, invitation_status = 'invited', approval_status = 'pending', can_view = 1, status = 'invited', opened_at = NULL, confirmed_at = NULL, joined_at = NULL, revoked_at = NULL, updated_at = ? WHERE id = ?")
+          const staged = await db.prepare("UPDATE document_collaborators SET invited_by_user_id = ?, role = ?, party_number = ?, permission_set_json = NULL, invitation_status = 'invited', approval_status = 'pending', can_view = 0, can_download = 0, status = 'invited', opened_at = NULL, confirmed_at = NULL, joined_at = NULL, revoked_at = NULL, updated_at = ? WHERE id = ? AND NOT (invitation_status = 'accepted' AND can_view = 1 AND status IN ('active', 'opened', 'confirmed'))")
             .bind(user.id, requestedRole, partyNumber, now, existing.id).run();
+          if (!staged.meta.changes) {
+            await db.prepare("UPDATE document_invitations SET revoked_at = ?, updated_at = ? WHERE id = ? AND accepted_at IS NULL")
+              .bind(now, now, invitationId).run();
+            return jsonResponse(
+              {
+                error: "Этот пользователь уже имеет доступ к документу.",
+                code: "ALREADY_COLLABORATOR",
+              },
+              { status: 409 },
+            );
+          }
         } else {
           await db.prepare(
-            "INSERT INTO document_collaborators (id, document_id, user_id, invited_by_user_id, role, party_number, permission_set_json, invitation_status, approval_status, can_view, can_download, status, opened_at, confirmed_at, joined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'invited', 'pending', 1, 0, 'invited', NULL, NULL, NULL, NULL, ?, ?)",
+            "INSERT INTO document_collaborators (id, document_id, user_id, invited_by_user_id, role, party_number, permission_set_json, invitation_status, approval_status, can_view, can_download, status, opened_at, confirmed_at, joined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'invited', 'pending', 0, 0, 'invited', NULL, NULL, NULL, NULL, ?, ?)",
           ).bind(crypto.randomUUID(), id, invitee.id, user.id, requestedRole, partyNumber, now, now).run();
         }
         await addNotification(invitee.id, id, "invitation", "Приглашение к документу", `${user.fullName || user.email} приглашает вас проверить документ «${document.title}».`);
@@ -137,7 +169,7 @@ export async function POST(request: Request, context: Context): Promise<Response
       if (access.role === "collaborator") {
         await addNotification(document.ownerUserId, id, "comment_added", "Добавлен комментарий", `${user.fullName || user.email} оставил(а) комментарий к документу.`);
       } else {
-        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).all<{ userId: string }>();
+        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).all<{ userId: string }>();
         await Promise.all(collaborators.results.map((item) => addNotification(item.userId, id, "comment_added", "Добавлен комментарий", "Создатель документа оставил комментарий.")));
       }
       return jsonResponse({ created: true, snapshot: await snapshot(id) }, { status: 201 });
@@ -168,7 +200,7 @@ export async function POST(request: Request, context: Context): Promise<Response
       ).bind(proposalId, id, user.id, oldText, newText, typeof body.anchor === "string" ? body.anchor : null, access.role === "owner" ? 1 : 0, access.role === "collaborator" ? 1 : 0, now, now).run();
       if (access.role === "collaborator") await addNotification(document.ownerUserId, id, "change_proposed", "Предложено изменение", `${user.fullName || user.email} предложил(а) изменение документа.`);
       else {
-        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).all<{ userId: string }>();
+        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).all<{ userId: string }>();
         await Promise.all(collaborators.results.map((item) => addNotification(item.userId, id, "change_proposed", "Предложено изменение", "Создатель предложил изменение документа.")));
       }
       await addActivity(id, user.id, "change_proposed");
@@ -201,7 +233,7 @@ export async function POST(request: Request, context: Context): Promise<Response
           .bind(ownerAccepted ? 1 : 0, collaboratorAccepted ? 1 : 0, now, proposalId).run();
       }
       const notifyUserIds = access.role === "owner"
-        ? (await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).all<{ userId: string }>()).results.map((item) => item.userId)
+        ? (await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).all<{ userId: string }>()).results.map((item) => item.userId)
         : [document.ownerUserId];
       await Promise.all(notifyUserIds.map((userId) => addNotification(userId, id, "change_confirmed", "Изменение подтверждено", ownerAccepted && collaboratorAccepted ? "Изменение согласовано обеими сторонами и применено." : "Одна из сторон подтвердила предложенное изменение.")));
       return jsonResponse({ accepted: true, applied: ownerAccepted && collaboratorAccepted, snapshot: await snapshot(id) });
@@ -231,7 +263,7 @@ export async function POST(request: Request, context: Context): Promise<Response
     if (action === "signed_access") {
       if (!hasDocumentPermission(access, "invite_participant") || !document.signedFileId) return forbidden();
       const collaboratorUserId = typeof body.collaboratorUserId === "string" ? body.collaboratorUserId : "";
-      const collaborator = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND user_id = ? AND status <> 'revoked' LIMIT 1")
+      const collaborator = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND user_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed') LIMIT 1")
         .bind(id, collaboratorUserId).first<{ userId: string }>();
       if (!collaborator) return notFound("Участник не найден.");
       const existing = await db.prepare("SELECT id, restored_view_only AS restoredViewOnly FROM signed_document_access WHERE document_id = ? AND collaborator_user_id = ? LIMIT 1")

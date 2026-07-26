@@ -120,3 +120,36 @@ per-kind producer/handler flags are implemented. Side-effecting handlers also
 require provider idempotency or immutable subject-version identifiers plus
 lease renewal/fencing; the current short lease is sufficient only for the
 read-only D1 probe.
+
+## D-014 — OTP claim and request atomicity
+
+Status: accepted  
+Date: 2026-07-26
+
+A valid OTP is spent by a guarded `UPDATE ... RETURNING` before account or
+session side effects. Incorrect attempts use a separately guarded increment.
+OTP creation uses a conditional `INSERT ... SELECT` in one D1 batch with
+previous-challenge invalidation and a result snapshot. Resend is called only
+after the reservation succeeds.
+
+The fail-closed consequence is deliberate: a downstream account/session
+failure can consume a valid code, but it cannot create two sessions. The user
+must request a new code.
+
+Missing `CF-Connecting-IP` is represented as null; it is never hashed into a
+shared `"unknown"` bucket.
+
+## D-015 — active workspace and external document grants
+
+Status: accepted  
+Date: 2026-07-26
+
+Owner authorization requires the document or standalone file to belong to the
+owner's verified active workspace. A null workspace fails closed. Accepted
+external collaborator grants remain usable across workspaces and appear only
+in the explicit shared scope.
+
+Invitation rows grant no access before acceptance. Accept and decline update
+the invitation, collaborator grant, and deterministic audit event in one D1
+batch. Legacy accepted collaborators do not require `joined_at`, and an
+already accepted active collaborator cannot be demoted by a new invitation.

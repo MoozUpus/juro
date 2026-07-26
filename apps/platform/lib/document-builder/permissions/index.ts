@@ -2,6 +2,11 @@ import type { DocumentRecord, ReceiptAnswers, StoredDocument } from "../types";
 import { parseJson } from "../storage/db";
 import { requireD1 } from "../storage/runtime";
 import type { DocumentPermission, ParticipantRole } from "../registry";
+import { ensureDefaultWorkspace } from "../../platform/workspace";
+import {
+  isAcceptedDocumentCollaborator,
+  isActiveWorkspaceDocumentOwner,
+} from "./collaboration-policy";
 
 const ALL_PERMISSIONS: readonly DocumentPermission[] = [
   "view_document", "edit_assigned_fields", "edit_all_fields", "add_comment", "reply_comment", "resolve_comment",
@@ -29,6 +34,7 @@ interface DocumentRow {
   templateCode?: string | null;
   templateVersion?: string | null;
   ownerUserId: string;
+  workspaceId: string | null;
   language: string;
   participantMode: string;
   actingSide: string | null;
@@ -52,6 +58,7 @@ interface DocumentRow {
 
 export interface DocumentAccess {
   document: DocumentRecord & { ownerUserId: string };
+  workspaceId: string | null;
   role: "owner" | "collaborator";
   participantRole: ParticipantRole;
   permissions: readonly DocumentPermission[];
@@ -85,7 +92,8 @@ function mapDocument(row: DocumentRow): DocumentRecord & { ownerUserId: string }
 export async function getDocumentAccess(documentId: string, userId: string): Promise<DocumentAccess | null> {
   const db = requireD1();
   const row = await db.prepare(
-    `SELECT d.id, d.owner_user_id AS ownerUserId, d.template_id AS templateId, d.template_code AS templateCode,
+    `SELECT d.id, d.owner_user_id AS ownerUserId, d.workspace_id AS workspaceId,
+      d.template_id AS templateId, d.template_code AS templateCode,
       d.template_version AS templateVersion, d.language, d.participant_mode AS participantMode,
       d.acting_side AS actingSide, d.title, d.category, d.status, d.lender_name AS lenderName,
       d.borrower_name AS borrowerName, d.is_favorite AS isFavorite, d.archived_at AS archivedAt,
@@ -95,17 +103,33 @@ export async function getDocumentAccess(documentId: string, userId: string): Pro
   ).bind(documentId).first<DocumentRow>();
   if (!row) return null;
   if (row.ownerUserId === userId) {
-    return { document: mapDocument(row), role: "owner", participantRole: "owner", permissions: ALL_PERMISSIONS, canView: true, canDownload: true };
+    const activeWorkspaceId = await ensureDefaultWorkspace(userId);
+    if (!isActiveWorkspaceDocumentOwner({
+      documentOwnerUserId: row.ownerUserId,
+      requestingUserId: userId,
+      documentWorkspaceId: row.workspaceId,
+      activeWorkspaceId,
+    })) return null;
+    return {
+      document: mapDocument(row),
+      workspaceId: row.workspaceId,
+      role: "owner",
+      participantRole: "owner",
+      permissions: ALL_PERMISSIONS,
+      canView: true,
+      canDownload: true,
+    };
   }
   const collaborator = await db.prepare(
-    "SELECT role, permission_set_json AS permissionSetJson, can_view AS canView, can_download AS canDownload, status FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1",
-  ).bind(documentId, userId).first<{ role: string; permissionSetJson: string | null; canView: number; canDownload: number; status: string }>();
-  if (!collaborator || collaborator.status === "revoked") return null;
+    "SELECT role, permission_set_json AS permissionSetJson, invitation_status AS invitationStatus, can_view AS canView, can_download AS canDownload, status FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1",
+  ).bind(documentId, userId).first<{ role: string; permissionSetJson: string | null; invitationStatus: string; canView: number; canDownload: number; status: string }>();
+  if (!collaborator || !isAcceptedDocumentCollaborator(collaborator)) return null;
   const participantRole = collaborator.role in ROLE_PERMISSIONS ? collaborator.role as ParticipantRole : "counterparty";
   const explicit = parseJson<DocumentPermission[]>(collaborator.permissionSetJson, []);
   const permissions = explicit.length ? explicit.filter((permission) => ALL_PERMISSIONS.includes(permission)) : ROLE_PERMISSIONS[participantRole];
   return {
     document: mapDocument(row),
+    workspaceId: row.workspaceId,
     role: "collaborator",
     participantRole,
     permissions,

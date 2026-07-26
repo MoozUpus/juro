@@ -194,6 +194,7 @@ export const documents = sqliteTable(
     index("documents_owner_idx").on(table.ownerUserId),
     index("documents_status_idx").on(table.status),
     index("documents_updated_idx").on(table.updatedAt),
+    index("documents_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
     index("documents_case_idx").on(table.caseId, table.updatedAt),
     index("documents_plan_step_idx").on(table.planStepId),
   ],
@@ -519,7 +520,11 @@ export const authOtpChallenges = sqliteTable("auth_otp_challenges", {
   locale: text("locale").notNull().default("ru"), accountType: text("account_type").notNull().default("individual"), codeSalt: text("code_salt").notNull(),
   codeHash: text("code_hash").notNull(), attemptCount: integer("attempt_count").notNull().default(0), maxAttempts: integer("max_attempts").notNull().default(5),
   expiresAt: text("expires_at").notNull(), consumedAt: text("consumed_at"), invalidatedAt: text("invalidated_at"), requestIpHash: text("request_ip_hash"), createdAt: text("created_at").notNull(),
-}, (table) => [index("auth_otp_email_idx").on(table.emailHash, table.createdAt), index("auth_otp_expiry_idx").on(table.expiresAt)]);
+}, (table) => [
+  index("auth_otp_email_idx").on(table.emailHash, table.createdAt),
+  index("auth_otp_ip_created_idx").on(table.requestIpHash, table.createdAt),
+  index("auth_otp_expiry_idx").on(table.expiresAt),
+]);
 
 export const authSessions = sqliteTable("auth_sessions", {
   id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), tokenHash: text("token_hash").notNull(),

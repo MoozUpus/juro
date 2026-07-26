@@ -43,7 +43,7 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 
 ## Database migration
 
-Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0011_*.sql`. Before any remote deployment:
+Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0012_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -53,17 +53,29 @@ Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0011_*.sql`. Bef
 6. Confirm that pre-existing user profiles received a default workspace and that tenant-owned records received `workspace_id`.
 7. Verify `document_comparisons`, `comparison_changes`, `legislation_updates`, `monitoring_preferences`, `job_outbox`, and `job_runs`.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
+9. Require both tenant-link audits to return zero:
+
+   ```sql
+   SELECT count(*) FROM documents WHERE workspace_id IS NULL;
+   SELECT count(*) FROM document_files WHERE workspace_id IS NULL;
+   ```
 
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migration `0011` has passed local additive and sentinel-preservation tests. It has not been applied to staging or production.
+Migrations `0011` and `0012` have passed local sequence, foreign-key,
+sentinel-preservation, tenant-backfill, and snapshot tests. They have not been
+applied to staging or production.
 
 ## Smoke checklist
 
 - `/login` and `/register` render without exposing environment values.
 - Resend returns a real success before the UI moves to the OTP step.
 - Invalid, expired, replaced, and exhausted OTP states are distinct.
+- Parallel OTP requests create one active challenge, and one valid OTP creates
+  at most one session claim.
+- OTP request, verification, and logout reject missing or foreign-origin CSRF
+  writes.
 - Onboarding persists locale, account type, goal, workspace, consent, and audit event.
 - Private routes redirect a guest to `/login`.
 - `/document-builder-test/*` returns `308` to `/document-builder/*`.
@@ -73,6 +85,10 @@ Migration `0011` has passed local additive and sentinel-preservation tests. It h
 - Deterministic comparison, side-by-side data, redline, PDF report, and editable DOCX export complete without an AI key.
 - Legislation monitoring returns no synthetic entries and keeps automatic publication disabled.
 - Workspace switching rejects every workspace without an active membership.
+- Pending document invitations cannot read document content; access starts
+  only after acceptance.
+- Owned documents and standalone files from a non-active workspace are denied;
+  accepted external collaboration remains available in the shared scope.
 - Archive invalidates active signed links; restore does not reactivate them.
 - `robots.txt` blocks the application and response headers include `X-Robots-Tag: noindex`.
 

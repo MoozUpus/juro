@@ -1,7 +1,7 @@
 # JURO D1 migrations
 
 Updated: 2026-07-26  
-Latest source migration: `0011_thankful_masked_marvel.sql`  
+Latest source migration: `0012_groovy_ben_parker.sql`  
 Remote application status: not applied.
 
 ## Migration policy
@@ -35,6 +35,28 @@ No raw queue payload, prompt, document text, OCR, filename, email, token, object
 
 `backup_runs` includes fields for the D1 source bookmark, schema/app version, protected object reference, SHA-256 checksum, byte size, manifest version, verification time, and restore-test time. Empty fields do not constitute backup evidence.
 
+## Migration 0012
+
+`0012_groovy_ben_parker.sql` is an expand/backfill migration for the Phase 2
+authorization boundary. It:
+
+- backfills a null `documents.workspace_id` only from the owner's current
+  default workspace when the owner still has an active membership;
+- backfills linked `document_files.workspace_id` from the linked document;
+- backfills remaining files from the owner's active default workspace;
+- intentionally leaves unresolved or removed-membership rows null so
+  application authorization fails closed;
+- adds `auth_otp_ip_created_idx` for OTP IP/time gating;
+- adds `documents_workspace_updated_idx` for active-workspace lists.
+
+The migration does not invent a workspace for ambiguous records. Staging is
+blocked unless post-migration audits report zero unresolved rows:
+
+```sql
+SELECT count(*) FROM documents WHERE workspace_id IS NULL;
+SELECT count(*) FROM document_files WHERE workspace_id IS NULL;
+```
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -42,10 +64,14 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0011` with foreign keys enabled;
+- apply migrations `0000`–`0012` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
+
+Migration 0012 tests additionally prove that active memberships backfill
+documents and files, while a removed membership stays null, and that the
+Drizzle snapshot contains both lookup indexes.
 
 The full local migration sequence changes the SQLite table count from 79 to 86. This is compatibility evidence for the checked-in migration sequence, not evidence about the live production schema.
 
@@ -56,10 +82,11 @@ After remote inventory and backup/restore gates:
 1. record the staging D1 database ID and current migration ledger;
 2. create and verify an external backup;
 3. record its bookmark/checksum/manifest without storing secret values;
-4. apply only pending migrations;
+4. apply only pending migrations, including 0011 and 0012 if absent;
 5. verify table/index presence and foreign keys;
 6. run existing route/security tests and isolated document-builder/comparison smoke flows;
 7. verify outbox/job lease behavior and Queue/DLQ delivery;
-8. retain the backup until the release window and restore test are complete.
+8. run both null-workspace audits and stop if either is non-zero;
+9. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

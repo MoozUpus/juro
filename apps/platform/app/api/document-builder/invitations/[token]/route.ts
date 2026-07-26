@@ -1,8 +1,12 @@
 import { assertSafeWrite, requireApiUser } from "../../../../../lib/document-builder/auth/api";
 import { apiError, forbidden, jsonResponse, notFound } from "../../../../../lib/document-builder/auth/responses";
 import { sha256 } from "../../../../../lib/document-builder/share-links/crypto";
-import { addActivity, isoNow } from "../../../../../lib/document-builder/storage/db";
+import { isoNow } from "../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import {
+  acceptDocumentInvitation,
+  declineDocumentInvitation,
+} from "../../../../../lib/document-builder/permissions/invitation-transition";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ token: string }> };
@@ -79,23 +83,39 @@ export async function POST(request: Request, context: Context): Promise<Response
     const db = requireD1();
     const now = isoNow();
     if (body.action === "decline") {
-      await db.prepare("UPDATE document_invitations SET declined_at = ?, updated_at = ? WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL").bind(now, now, invitation.id).run();
-      await addActivity(invitation.documentId, user.id, "invitation_declined");
+      const declined = await declineDocumentInvitation(db, {
+        invitationId: invitation.id,
+        documentId: invitation.documentId,
+        userId: user.id,
+        now,
+      });
+      if (!declined) {
+        const current = await loadInvitation(token);
+        return current
+          ? activeError(current) ?? jsonResponse(
+            { error: "Приглашение уже изменено.", code: "INVITATION_CONFLICT" },
+            { status: 409 },
+          )
+          : notFound("Приглашение не найдено.");
+      }
       return jsonResponse({ declined: true });
     }
     if (body.action !== "accept") return jsonResponse({ error: "Неизвестное действие.", code: "BAD_ACTION" }, { status: 400 });
-    const existing = await db.prepare("SELECT id FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1").bind(invitation.documentId, user.id).first<{ id: string }>();
-    if (existing) {
-      await db.prepare("UPDATE document_collaborators SET role = ?, party_number = ?, invitation_status = 'accepted', approval_status = 'pending', status = 'active', can_view = 1, joined_at = ?, revoked_at = NULL, updated_at = ? WHERE id = ?")
-        .bind(invitation.role, invitation.partyNumber, now, now, existing.id).run();
-    } else {
-      await db.prepare(
-        "INSERT INTO document_collaborators (id, document_id, user_id, invited_by_user_id, role, party_number, permission_set_json, invitation_status, approval_status, can_view, can_download, status, opened_at, confirmed_at, joined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'accepted', 'pending', 1, 0, 'active', NULL, NULL, ?, NULL, ?, ?)",
-      ).bind(crypto.randomUUID(), invitation.documentId, user.id, invitation.invitedByUserId, invitation.role, invitation.partyNumber, now, now, now).run();
+    const accepted = await acceptDocumentInvitation(db, {
+      invitationId: invitation.id,
+      documentId: invitation.documentId,
+      userId: user.id,
+      now,
+    });
+    if (!accepted) {
+      const current = await loadInvitation(token);
+      return current
+        ? activeError(current) ?? jsonResponse(
+          { error: "Приглашение уже изменено.", code: "INVITATION_CONFLICT" },
+          { status: 409 },
+        )
+        : notFound("Приглашение не найдено.");
     }
-    await db.prepare("UPDATE document_invitations SET target_user_id = ?, accepted_at = ?, updated_at = ? WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL")
-      .bind(user.id, now, now, invitation.id).run();
-    await addActivity(invitation.documentId, user.id, "invitation_accepted", { role: invitation.role, partyNumber: invitation.partyNumber ?? 0 });
     return jsonResponse({ accepted: true, documentId: invitation.documentId });
   } catch (error) {
     return apiError(error);

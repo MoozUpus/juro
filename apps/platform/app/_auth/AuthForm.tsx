@@ -93,7 +93,10 @@ export function AuthForm({
     try {
       const response = await fetch("/api/auth/request-otp", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+        },
         body: JSON.stringify({ email, purpose: mode, locale, accountType }),
       });
       const data = await response.json() as OtpResponse;
@@ -124,7 +127,10 @@ export function AuthForm({
     try {
       const response = await fetch("/api/auth/verify-otp", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+        },
         body: JSON.stringify({
           challengeId,
           email,

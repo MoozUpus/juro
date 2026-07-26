@@ -24,6 +24,37 @@ test("session cookies are HttpOnly, secure and revocable", async () => {
   assert.match(source,/HttpOnly/);assert.match(source,/Secure/);assert.match(source,/SameSite=Lax/);assert.match(source,/Max-Age=0/);assert.doesNotMatch(source,/Domain=/);
 });
 
+test("OTP and logout writes require the application CSRF contract", async () => {
+  const [authForm, logoutButton, requestRoute, verifyRoute, logoutRoute] =
+    await Promise.all([
+      readFile(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8"),
+      readFile(
+        new URL("../app/_platform/LogoutButton.tsx", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/api/auth/request-otp/route.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/api/auth/verify-otp/route.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/api/auth/logout/route.ts", import.meta.url),
+        "utf8",
+      ),
+    ]);
+  assert.equal(authForm.match(/"x-juro-csrf": "1"/g)?.length, 2);
+  assert.match(logoutButton, /"x-juro-csrf":"1"/);
+  for (const route of [requestRoute, verifyRoute, logoutRoute]) {
+    assert.match(route, /assertSafeWrite\(request\)/);
+    assert.match(route, /withApiErrors/);
+  }
+  assert.match(requestRoute, /requestOtpInputSchema/);
+  assert.match(verifyRoute, /verifyOtpInputSchema/);
+});
+
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
   const source = await readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
   assert.ok(source.indexOf("const sessionUser = await getSessionUser()") < source.indexOf("const requestHeaders = await headers()"));

@@ -130,12 +130,46 @@ test("DOCX footer содержит бренд JURO", () => { const zip = new Piz
 test("DOCX footer содержит поля PAGE и NUMPAGES", () => { const zip = new PizZip(ruDocx); const footer = Object.keys(zip.files).filter((name) => name.includes("footer") && name.endsWith(".xml")).map((name) => zip.file(name)?.asText()).join("\n"); assert.match(footer, /PAGE/); assert.match(footer, /NUMPAGES/); });
 
 test("My Documents реализован как защищенный D1 route", async () => { const source = await readFile(new URL("app/api/document-builder/documents/route.ts", root), "utf8"); assert.match(source, /requireApiUser/); assert.match(source, /FROM documents/); });
+test("document и file routes сохраняют active-workspace boundary", async () => {
+  const [
+    permissions,
+    listRoute,
+    generatedRoute,
+    configuredRoute,
+    signedRoute,
+    attachmentRoute,
+    standaloneRoute,
+    standaloneShareRoute,
+  ] = await Promise.all([
+    readFile(new URL("lib/document-builder/permissions/index.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/generate/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/configured-documents/[id]/generate/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/signed-file/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/attachments/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/standalone-files/[id]/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/standalone-files/[id]/share/route.ts", root), "utf8"),
+  ]);
+  assert.match(permissions, /isActiveWorkspaceDocumentOwner/);
+  assert.match(listRoute, /documentListScope/);
+  assert.match(listRoute, /workspace_id = \?/);
+  for (const source of [
+    generatedRoute,
+    configuredRoute,
+    signedRoute,
+    attachmentRoute,
+  ]) {
+    assert.match(source, /INSERT INTO document_files \(id, workspace_id,/);
+  }
+  assert.match(standaloneRoute, /owner_user_id = \? AND workspace_id = \?/);
+  assert.match(standaloneShareRoute, /owner_user_id = \? AND workspace_id = \?/);
+});
 test("duplicate создает новую независимую запись", async () => { const source = await readFile(new URL("app/api/document-builder/documents/route.ts", root), "utf8"); assert.match(source, /createStoredDocument/); assert.match(source, /— копия/); });
 test("archive и restore следуют утвержденным статусам", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/route.ts", root), "utf8"); assert.match(source, /status = 'Архив'/); assert.match(source, /status = 'Готов'/); });
 test("удаление требует решения только для подписанного PDF", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/route.ts", root), "utf8"); assert.match(source, /SIGNED_FILE_DECISION_REQUIRED/); });
 test("подписанный файл ограничен PDF и 10 МБ", async () => { const source = await readFile(new URL("lib/document-builder/storage/file-validation.ts", root), "utf8"); assert.match(source, /10 \* 1024 \* 1024/); assert.match(source, /signedPdfOnly/); });
 
-test("collaboration проверяет owner и collaborator", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /hasDocumentPermission\(access, "invite_participant"\)/); assert.match(source, /access\.role === "collaborator"/); });
+test("collaboration проверяет owner и collaborator", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /hasDocumentPermission\(access, "invite_participant"\)/); assert.match(source, /access\.role === "collaborator"/); assert.match(source, /ALREADY_COLLABORATOR/); });
 test("collaboration назначает роль, вторую или третью сторону и проверяет server-side permissions", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /partyNumber/); assert.match(source, /requestedRole/); assert.match(source, /hasDocumentPermission/); });
 test("приглашение использует случайный token, hash, срок действия и привязку к пользователю", async () => { const invitation = await readFile(new URL("app/api/document-builder/invitations/[token]/route.ts", root), "utf8"); const collaboration = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(collaboration, /randomToken\(\)/); assert.match(collaboration, /sha256\(token\)/); assert.match(collaboration, /addDays\(now, 7\)/); assert.match(invitation, /targetIdentifierHash/); assert.match(invitation, /assertSafeWrite/); });
 test("комментарии и двусторонние proposals сохраняются", async () => { const source = await readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"); assert.match(source, /INSERT INTO document_comments/); assert.match(source, /owner_accepted/); assert.match(source, /collaborator_accepted/); });

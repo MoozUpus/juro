@@ -12,7 +12,7 @@
     "build:staging": "CLOUDFLARE_ENV=staging bash scripts/build-verified.sh",
     "build:production": "CLOUDFLARE_ENV=production bash scripts/build-verified.sh",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --experimental-loader ./scripts/cloudflare-workers-loader.mjs --test tests/rendered-html.test.mjs && node --import tsx --test tests/document-builder.test.ts tests/document-comparison.test.ts tests/document-registry.test.ts tests/platform-core.test.ts && npm run test:cloudflare",
+    "test": "npm run build && node --experimental-loader ./scripts/cloudflare-workers-loader.mjs --test tests/rendered-html.test.mjs && node --import tsx --test tests/document-builder.test.ts tests/document-comparison.test.ts tests/document-registry.test.ts tests/document-access.test.ts tests/auth-otp.test.ts tests/platform-core.test.ts && npm run test:cloudflare",
     "smoke:document-builder": "node --import tsx scripts/smoke-document-builder.ts",
     "smoke:document-comparison": "node --import tsx scripts/smoke-document-comparison.ts",
     "validate:artifact": "bash scripts/validate-artifact.sh",

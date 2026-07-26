@@ -13,8 +13,10 @@ const journal = JSON.parse(
   readFileSync(new URL("meta/_journal.json", drizzleRoot), "utf8"),
 ) as { entries: JournalEntry[] };
 const phaseOneEntry = journal.entries.find(({ idx }) => idx === 11);
+const phaseTwoEntry = journal.entries.find(({ idx }) => idx === 12);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
+assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 
 function migrationSql(entry: JournalEntry): string {
   return readFileSync(new URL(`${entry.tag}.sql`, drizzleRoot), "utf8");
@@ -172,4 +174,101 @@ test("0011 preserves existing schema and workspace data", () => {
   } finally {
     db.close();
   }
+});
+
+test("0012 backfills tenant links only through active workspace ownership", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec(`
+      CREATE TABLE user_profiles (
+        id TEXT PRIMARY KEY,
+        default_workspace_id TEXT
+      );
+      CREATE TABLE workspace_members (
+        workspace_id TEXT NOT NULL,
+        user_id TEXT NOT NULL,
+        status TEXT NOT NULL
+      );
+      CREATE TABLE documents (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        workspace_id TEXT,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE document_files (
+        id TEXT PRIMARY KEY,
+        owner_user_id TEXT NOT NULL,
+        document_id TEXT,
+        workspace_id TEXT
+      );
+      CREATE TABLE auth_otp_challenges (
+        id TEXT PRIMARY KEY,
+        request_ip_hash TEXT,
+        created_at TEXT NOT NULL
+      );
+      INSERT INTO user_profiles VALUES
+        ('active-owner', 'workspace-active'),
+        ('removed-owner', 'workspace-removed');
+      INSERT INTO workspace_members VALUES
+        ('workspace-active', 'active-owner', 'active'),
+        ('workspace-removed', 'removed-owner', 'removed');
+      INSERT INTO documents VALUES
+        ('active-document', 'active-owner', NULL, '2026-07-26T00:00:00.000Z'),
+        ('removed-document', 'removed-owner', NULL, '2026-07-26T00:00:00.000Z');
+      INSERT INTO document_files VALUES
+        ('linked-file', 'active-owner', 'active-document', NULL),
+        ('standalone-file', 'active-owner', NULL, NULL),
+        ('removed-file', 'removed-owner', NULL, NULL);
+    `);
+    applyMigration(db, phaseTwoEntry);
+    assert.equal(
+      (
+        db.prepare("SELECT workspace_id AS workspaceId FROM documents WHERE id = 'active-document'")
+          .get() as { workspaceId: string | null }
+      ).workspaceId,
+      "workspace-active",
+    );
+    assert.equal(
+      (
+        db.prepare("SELECT workspace_id AS workspaceId FROM documents WHERE id = 'removed-document'")
+          .get() as { workspaceId: string | null }
+      ).workspaceId,
+      null,
+    );
+    const files = db.prepare(`
+      SELECT id, workspace_id AS workspaceId
+      FROM document_files
+      ORDER BY id
+    `).all() as Array<{ id: string; workspaceId: string | null }>;
+    assert.deepEqual(
+      files.map((row) => ({ ...row })),
+      [
+        { id: "linked-file", workspaceId: "workspace-active" },
+        { id: "removed-file", workspaceId: null },
+        { id: "standalone-file", workspaceId: "workspace-active" },
+      ],
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test("0012 snapshot and SQL declare workspace and OTP lookup indexes", () => {
+  const sql = migrationSql(phaseTwoEntry);
+  assert.match(sql, /UPDATE `documents`/);
+  assert.match(sql, /UPDATE `document_files`/);
+  assert.match(sql, /m\.`status` = 'active'/);
+  assert.match(sql, /auth_otp_ip_created_idx/);
+  assert.match(sql, /documents_workspace_updated_idx/);
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0012_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    tables: Record<string, { indexes: Record<string, unknown> }>;
+  };
+  assert.ok(
+    snapshot.tables.auth_otp_challenges.indexes.auth_otp_ip_created_idx,
+  );
+  assert.ok(
+    snapshot.tables.documents.indexes.documents_workspace_updated_idx,
+  );
 });

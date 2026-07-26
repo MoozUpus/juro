@@ -224,12 +224,26 @@ async function main(): Promise<void> {
   assert.match(publicResponse.headers.get("x-robots-tag") ?? "", /noindex/);
   assert.match(publicResponse.headers.get("cache-control") ?? "", /no-store/);
 
-  const invited = await api<{ user: { id: string } }>(`/api/document-builder/documents/${documentId}/collaboration`, {
+  const invited = await api<{
+    user: { id: string };
+    invitation: { path: string };
+  }>(`/api/document-builder/documents/${documentId}/collaboration`, {
     method: "POST",
     user: ownerEmail,
     json: { action: "invite", identifier: collaboratorEmail },
   });
   assert.equal(invited.data.user.id, collaboratorId);
+  await api(`/api/document-builder/documents/${documentId}`, {
+    user: collaboratorEmail,
+    expected: 404,
+  });
+  const invitationToken = invited.data.invitation.path.split("/").at(-1);
+  assert.ok(invitationToken);
+  await api(`/api/document-builder/invitations/${invitationToken}`, {
+    method: "POST",
+    user: collaboratorEmail,
+    json: { action: "accept" },
+  });
 
   const collaboratorDocument = await api<{ document: { accessRole: string }; files: unknown[] }>(`/api/document-builder/documents/${documentId}`, { user: collaboratorEmail });
   assert.equal(collaboratorDocument.data.document.accessRole, "collaborator");

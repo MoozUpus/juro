@@ -15,7 +15,7 @@ export async function POST(request: Request, context: Context): Promise<Response
     const user = await requireApiUser();
     const { id } = await context.params;
     const access = await requireOwner(id, user.id);
-    if (!access) return forbidden();
+    if (!access?.workspaceId) return forbidden();
     if (access.document.signedFileId) return jsonResponse({ error: "Подписанный PDF уже загружен и не может быть заменён.", code: "SIGNED_FILE_EXISTS" }, { status: 409 });
     const form = await request.formData();
     const file = form.get("file");
@@ -29,8 +29,8 @@ export async function POST(request: Request, context: Context): Promise<Response
     const now = isoNow();
     const db = requireD1();
     await db.batch([
-      db.prepare("INSERT INTO document_files (id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, 'signed_pdf', ?, ?, 'application/pdf', ?, NULL, ?, ?)")
-        .bind(fileId, id, user.id, key, safeName, file.size, now, now),
+      db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'signed_pdf', ?, ?, 'application/pdf', ?, NULL, ?, ?)")
+        .bind(fileId, access.workspaceId, id, user.id, key, safeName, file.size, now, now),
       db.prepare("UPDATE documents SET signed_file_id = ?, status = 'Подписан', revision = revision + 1, updated_at = ? WHERE id = ?").bind(fileId, now, id),
     ]);
     await addActivity(id, user.id, "signed_pdf_uploaded");

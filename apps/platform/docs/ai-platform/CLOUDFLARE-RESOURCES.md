@@ -110,11 +110,12 @@ Before staging deployment:
 2. inventory existing resources and resolve exact IDs/names;
 3. create only missing development/staging resources;
 4. record D1 backup evidence and perform an isolated restore rehearsal;
-5. apply migration `0011` to staging only;
+5. apply pending migrations `0011` and `0012` to staging only;
 6. verify Queue/DLQ delivery, R2 operations, Vectorize tenant filters, Analytics redaction, and alerts;
 7. implement quarantine/DLQ consumption, alerts, redrive, ledger reconciliation, and per-kind producer/handler flags;
 8. require globally namespaced server-generated idempotency keys until a tenant-scoped composite key migration exists;
 9. prove the Sites production build command selects `CLOUDFLARE_ENV=production`;
-10. keep production unchanged.
+10. require zero null-workspace document and file rows after migration 0012;
+11. keep production unchanged.
 
 No secret value belongs in `wrangler.jsonc`, Git, logs, or this document.

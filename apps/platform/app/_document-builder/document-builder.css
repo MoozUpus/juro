@@ -493,7 +493,7 @@
   .dbt-attachment-list article { align-items: flex-start; flex-wrap: wrap; }
   .dbt-editor textarea { padding: 34px 30px; min-height: 500px; }
   .dbt-docs-layout { grid-template-columns: 1fr; }
-  .dbt-folders { grid-template-columns: repeat(4, 1fr); overflow-x: auto; }
+  .dbt-folders { grid-template-columns: repeat(5, minmax(94px, 1fr)); overflow-x: auto; }
   .dbt-folders button { justify-content: center; }
   .dbt-doc-filters { grid-template-columns: 1fr 1fr; }
   .dbt-doc-search { grid-column: 1 / -1; }
@@ -559,7 +559,7 @@
   .dbt-page-title h1 { font-size: 24px; }
   .dbt-page-title > a span { display: none; }
   .dbt-documents-page, .dbt-simple-page { width: calc(100% - 18px); padding-top: 22px; }
-  .dbt-folders { grid-template-columns: repeat(4, minmax(94px, 1fr)); overflow-x: auto; }
+  .dbt-folders { grid-template-columns: repeat(5, minmax(94px, 1fr)); overflow-x: auto; }
   .dbt-folders button { white-space: nowrap; }
   .dbt-doc-filters { grid-template-columns: 1fr; }
   .dbt-doc-search { grid-column: auto; }
