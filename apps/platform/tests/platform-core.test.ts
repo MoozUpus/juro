@@ -24,8 +24,15 @@ test("session cookies are HttpOnly, secure and revocable", async () => {
   assert.match(source,/HttpOnly/);assert.match(source,/Secure/);assert.match(source,/SameSite=Lax/);assert.match(source,/Max-Age=0/);assert.doesNotMatch(source,/Domain=/);
 });
 
-test("OTP and logout writes require the application CSRF contract", async () => {
-  const [authForm, logoutButton, requestRoute, verifyRoute, logoutRoute] =
+test("OTP, MFA, and logout writes require the application CSRF contract", async () => {
+  const [
+    authForm,
+    logoutButton,
+    requestRoute,
+    verifyRoute,
+    verifyMfaRoute,
+    logoutRoute,
+  ] =
     await Promise.all([
       readFile(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8"),
       readFile(
@@ -41,18 +48,28 @@ test("OTP and logout writes require the application CSRF contract", async () => 
         "utf8",
       ),
       readFile(
+        new URL("../app/api/auth/verify-mfa/route.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
         new URL("../app/api/auth/logout/route.ts", import.meta.url),
         "utf8",
       ),
     ]);
-  assert.equal(authForm.match(/"x-juro-csrf": "1"/g)?.length, 2);
+  assert.equal(authForm.match(/"x-juro-csrf": "1"/g)?.length, 3);
   assert.match(logoutButton, /"x-juro-csrf":"1"/);
-  for (const route of [requestRoute, verifyRoute, logoutRoute]) {
+  for (const route of [
+    requestRoute,
+    verifyRoute,
+    verifyMfaRoute,
+    logoutRoute,
+  ]) {
     assert.match(route, /assertSafeWrite\(request\)/);
     assert.match(route, /withApiErrors/);
   }
   assert.match(requestRoute, /requestOtpInputSchema/);
   assert.match(verifyRoute, /verifyOtpInputSchema/);
+  assert.match(verifyMfaRoute, /verifyMfaInputSchema/);
 });
 
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
@@ -63,6 +80,8 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
   assert.match(source, /authSource: "platform_header"/);
   assert.match(source, /assuranceLevel: "upstream"/);
   assert.match(source, /sessionId: null/);
+  assert.match(source, /hasActiveMfa/);
+  assert.match(source, /localUser && await hasActiveMfa/);
 });
 
 test("session management distinguishes the current local device and audits revocation", async () => {
@@ -101,7 +120,96 @@ test("session management distinguishes the current local device and audits revoc
   assert.match(singleRoute, /assertSafeWrite\(request\)/);
   assert.match(settings, /JURO email-сессии/);
   assert.match(settings, /внешнего защищённого провайдера/);
-  assert.match(settings, /TOTP и резервные коды пока не включены/);
+  assert.match(settings, /2FA включена/);
+  assert.match(settings, /резервн/);
+});
+
+test("MFA cookies and logout use narrow, server-only boundaries", async () => {
+  const [session, logout] = await Promise.all([
+    readFile(new URL("../lib/auth/session.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/api/auth/logout/route.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(
+    session,
+    /Path=\/api\/auth\/verify-mfa; HttpOnly; Secure; SameSite=Strict/,
+  );
+  assert.match(session, /clearMfaChallengeCookie/);
+  assert.match(logout, /clearSessionCookie/);
+  assert.match(logout, /clearMfaChallengeCookie/);
+  assert.match(logout, /headers\.append\("set-cookie"/);
+});
+
+test("email OTP defers primary-session issuance while MFA is active", async () => {
+  const [verifyOtp, sessionManagement] = await Promise.all([
+    readFile(
+      new URL("../app/api/auth/verify-otp/route.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../lib/auth/session-management.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(verifyOtp, /hasActiveMfa/);
+  assert.match(verifyOtp, /createLoginMfaChallenge/);
+  assert.match(verifyOtp, /requiresTwoFactor: true/);
+  assert.match(verifyOtp, /createPrimarySessionIfMfaDisabled/);
+  assert.match(
+    sessionManagement,
+    /NOT EXISTS \(\s*SELECT 1 FROM auth_totp_credentials/s,
+  );
+});
+
+test("MFA HTTP helpers fail closed and accept only a local session", async () => {
+  const source = await readFile(
+    new URL("../lib/auth/mfa-http.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /sessionTokenFromCookie/);
+  assert.match(source, /LOCAL_SESSION_REQUIRED/);
+  assert.ok(
+    source.indexOf("sessionTokenFromCookie(cookie)")
+      < source.indexOf("requireD1()"),
+  );
+  assert.match(source, /MfaConfigurationError/);
+  assert.match(source, /IdentityKeyringError/);
+  assert.match(source, /cache-control": "private, no-store"/);
+});
+
+test("MFA management routes require protected writes and local reauthentication", async () => {
+  const routes = await Promise.all([
+    "../app/api/platform/security/mfa/route.ts",
+    "../app/api/platform/security/mfa/setup/route.ts",
+    "../app/api/platform/security/mfa/confirm/route.ts",
+    "../app/api/platform/security/mfa/backup-codes/route.ts",
+  ].map((path) => readFile(new URL(path, import.meta.url), "utf8")));
+  for (const route of routes) {
+    assert.match(route, /localSessionForRequest/);
+  }
+  for (const route of routes) {
+    if (!/export const (POST|DELETE)/.test(route)) continue;
+    assert.match(route, /assertSafeWrite\(request\)/);
+  }
+  assert.match(routes[1], /recent: true/);
+  assert.match(routes[2], /recent: true/);
+  assert.match(routes[2], /confirmTotpEnrollmentInputSchema/);
+  assert.match(routes[3], /manageMfaInputSchema/);
+});
+
+test("MFA factor claims bind replay fences to the exact operation and credential", async () => {
+  const source = await readFile(
+    new URL("../lib/auth/mfa-service.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /auth_mfa_factor_claims/);
+  assert.match(source, /id=\? AND operation_id=\? AND credential_id=\?/);
+  assert.match(source, /used_at IS NULL AND revoked_at IS NULL/);
+  assert.match(source, /last_used_step IS NULL OR last_used_step<\?/);
+  assert.match(source, /disabledByOperationGuard/);
+  assert.match(source, /batchWithSecurityEvent/);
 });
 
 test("canonical platform route classifier is stable", () => {

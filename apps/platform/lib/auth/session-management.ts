@@ -22,6 +22,7 @@ export type LocalSession = {
   authMethod: string;
   assuranceLevel: LocalAssuranceLevel;
   authenticatedAt: string | null;
+  mfaVerifiedAt: string | null;
   createdAt: string;
   lastSeenAt: string;
   expiresAt: string;
@@ -34,6 +35,22 @@ export type CreatedSession = {
   deviceId: string;
   expiresAt: string;
   idleExpiresAt: string;
+};
+
+export type PreparedSessionCreation = {
+  session: CreatedSession;
+  userId: string;
+  tokenHash: string;
+  displayName: string;
+  authMethod: string;
+  assuranceLevel: LocalAssuranceLevel;
+  createdAt: string;
+  statements: D1PreparedStatement[];
+};
+
+export type SessionInsertGuard = {
+  selectSql: string;
+  bindings: Array<string | number | null>;
 };
 
 function dateAt(timestamp: number): string {
@@ -72,14 +89,78 @@ function cappedIdleExpiry(nowMs: number, absoluteExpiry: string): string {
   ));
 }
 
-export async function createEmailOtpSession(
+function assertGuard(guard: SessionInsertGuard): void {
+  if (
+    !/^\s*SELECT\b/i.test(guard.selectSql)
+    || guard.selectSql.includes(";")
+  ) {
+    throw new Error("INVALID_SESSION_INSERT_GUARD");
+  }
+}
+
+export function guardedSessionInsertStatements(
+  db: D1Database,
+  prepared: Omit<PreparedSessionCreation, "statements">,
+  guard: SessionInsertGuard,
+): D1PreparedStatement[] {
+  assertGuard(guard);
+  return [
+    db.prepare(
+      `INSERT INTO auth_devices (
+         id,user_id,display_name,user_agent_hash,first_seen_at,last_seen_at
+       )
+       SELECT ?,?,?,NULL,?,?
+       WHERE EXISTS (${guard.selectSql})`,
+    ).bind(
+      prepared.session.deviceId,
+      prepared.userId,
+      prepared.displayName,
+      prepared.createdAt,
+      prepared.createdAt,
+      ...guard.bindings,
+    ),
+    db.prepare(
+      `INSERT INTO auth_sessions (
+         id,user_id,device_id,token_hash,auth_method,assurance_level,
+         authenticated_at,mfa_verified_at,expires_at,idle_expires_at,
+         created_at,last_seen_at
+       )
+       SELECT ?,?,?,?,?,?,?,?,?,?,?,?
+       WHERE EXISTS (${guard.selectSql})
+         AND EXISTS (
+           SELECT 1 FROM auth_devices
+           WHERE id=? AND user_id=? AND revoked_at IS NULL
+         )`,
+    ).bind(
+      prepared.session.sessionId,
+      prepared.userId,
+      prepared.session.deviceId,
+      prepared.tokenHash,
+      prepared.authMethod,
+      prepared.assuranceLevel,
+      prepared.createdAt,
+      prepared.assuranceLevel === "mfa" ? prepared.createdAt : null,
+      prepared.session.expiresAt,
+      prepared.session.idleExpiresAt,
+      prepared.createdAt,
+      prepared.createdAt,
+      ...guard.bindings,
+      prepared.session.deviceId,
+      prepared.userId,
+    ),
+  ];
+}
+
+export async function prepareLocalSessionCreation(
   db: D1Database,
   input: {
     userId: string;
     userAgent: string | null;
+    authMethod: string;
+    assuranceLevel: LocalAssuranceLevel;
     now?: Date;
   },
-): Promise<CreatedSession> {
+): Promise<PreparedSessionCreation> {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
   const token = randomToken(32);
@@ -93,20 +174,15 @@ export async function createEmailOtpSession(
   // until the versioned identity HMAC key ring is configured.
   const userAgentHash = null;
 
-  await batchWithSecurityEvent(
-    db,
-    {
-      userId: input.userId,
-      sessionId,
-      deviceId,
-      eventType: "session.created",
-      authSource: "local_session",
-      assuranceLevel: "primary",
-      userAgentHash,
-      metadata: { authMethod: "email_otp", deviceName: displayName },
-      createdAt: nowIso,
-    },
-    () => [
+  return {
+    session: { token, sessionId, deviceId, expiresAt, idleExpiresAt },
+    userId: input.userId,
+    tokenHash,
+    displayName,
+    authMethod: input.authMethod,
+    assuranceLevel: input.assuranceLevel,
+    createdAt: nowIso,
+    statements: [
       db.prepare(
         `INSERT INTO auth_devices (
            id,user_id,display_name,user_agent_hash,first_seen_at,last_seen_at
@@ -122,23 +198,108 @@ export async function createEmailOtpSession(
       db.prepare(
         `INSERT INTO auth_sessions (
            id,user_id,device_id,token_hash,auth_method,assurance_level,
-           authenticated_at,expires_at,idle_expires_at,created_at,last_seen_at
-         ) VALUES (?,?,?,?,'email_otp','primary',?,?,?,?,?)`,
+           authenticated_at,mfa_verified_at,expires_at,idle_expires_at,
+           created_at,last_seen_at
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
       ).bind(
         sessionId,
         input.userId,
         deviceId,
         tokenHash,
+        input.authMethod,
+        input.assuranceLevel,
         nowIso,
+        input.assuranceLevel === "mfa" ? nowIso : null,
         expiresAt,
         idleExpiresAt,
         nowIso,
         nowIso,
       ),
     ],
+  };
+}
+
+export async function createEmailOtpSession(
+  db: D1Database,
+  input: {
+    userId: string;
+    userAgent: string | null;
+    now?: Date;
+  },
+): Promise<CreatedSession> {
+  const prepared = await prepareLocalSessionCreation(db, {
+    ...input,
+    authMethod: "email_otp",
+    assuranceLevel: "primary",
+  });
+  await batchWithSecurityEvent(
+    db,
+    {
+      userId: input.userId,
+      sessionId: prepared.session.sessionId,
+      deviceId: prepared.session.deviceId,
+      eventType: "session.created",
+      authSource: "local_session",
+      assuranceLevel: "primary",
+      userAgentHash: null,
+      metadata: {
+        authMethod: "email_otp",
+        deviceName: prepared.displayName,
+      },
+      createdAt: prepared.createdAt,
+    },
+    () => prepared.statements,
   );
 
-  return { token, sessionId, deviceId, expiresAt, idleExpiresAt };
+  return prepared.session;
+}
+
+export async function createPrimarySessionIfMfaDisabled(
+  db: D1Database,
+  input: {
+    userId: string;
+    userAgent: string | null;
+    now?: Date;
+  },
+): Promise<CreatedSession | null> {
+  const prepared = await prepareLocalSessionCreation(db, {
+    ...input,
+    authMethod: "email_otp",
+    assuranceLevel: "primary",
+  });
+  const guard = {
+    selectSql: `SELECT 1
+      WHERE NOT EXISTS (
+        SELECT 1 FROM auth_totp_credentials
+        WHERE user_id=? AND status='active'
+      )`,
+    bindings: [input.userId],
+  } satisfies SessionInsertGuard;
+  const statements = guardedSessionInsertStatements(db, prepared, guard);
+  const results = await batchWithSecurityEvent(
+    db,
+    {
+      userId: input.userId,
+      sessionId: prepared.session.sessionId,
+      deviceId: prepared.session.deviceId,
+      eventType: "session.created",
+      authSource: "local_session",
+      assuranceLevel: "primary",
+      metadata: {
+        authMethod: "email_otp",
+        deviceName: prepared.displayName,
+      },
+      createdAt: prepared.createdAt,
+    },
+    () => statements,
+    {
+      selectSql: "SELECT 1 FROM auth_sessions WHERE id=? AND user_id=?",
+      bindings: [prepared.session.sessionId, input.userId],
+    },
+  );
+  return Number(results[1]?.meta?.changes ?? 0) === 1
+    ? prepared.session
+    : null;
 }
 
 export async function localSessionFromCookie(
@@ -157,6 +318,7 @@ export async function localSessionFromCookie(
        d.display_name AS deviceName,s.auth_method AS authMethod,
        s.assurance_level AS assuranceLevel,
        s.authenticated_at AS authenticatedAt,s.created_at AS createdAt,
+       s.mfa_verified_at AS mfaVerifiedAt,
        s.last_seen_at AS lastSeenAt,s.expires_at AS expiresAt,
        s.idle_expires_at AS idleExpiresAt
      FROM auth_sessions s

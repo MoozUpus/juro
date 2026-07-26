@@ -15,10 +15,12 @@ const journal = JSON.parse(
 const phaseOneEntry = journal.entries.find(({ idx }) => idx === 11);
 const phaseTwoEntry = journal.entries.find(({ idx }) => idx === 12);
 const sessionSecurityEntry = journal.entries.find(({ idx }) => idx === 13);
+const mfaEntry = journal.entries.find(({ idx }) => idx === 14);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
+assert.ok(mfaEntry, "Drizzle journal must contain migration 0014");
 
 function migrationSql(entry: JournalEntry): string {
   return readFileSync(new URL(`${entry.tag}.sql`, drizzleRoot), "utf8");
@@ -356,6 +358,129 @@ test("0013 security events reject mutation, deletion, and chain forks", () => {
         "0".repeat(64),
         "2".repeat(64),
         "2026-07-26T12:01:00.000Z",
+      ),
+      /UNIQUE constraint failed/,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test("0014 adds encrypted MFA state and exact factor-claim constraints", () => {
+  const sql = migrationSql(mfaEntry);
+  for (const table of [
+    "auth_totp_credentials",
+    "auth_backup_codes",
+    "auth_mfa_challenges",
+    "auth_mfa_factor_claims",
+  ]) {
+    assert.match(sql, new RegExp(`CREATE TABLE \\\`${table}\\\``));
+  }
+  assert.match(
+    sql,
+    /ALTER TABLE `auth_sessions` ADD `mfa_verified_at` text/,
+  );
+  for (const name of [
+    "auth_totp_live_user_uidx",
+    "auth_backup_codes_hmac_uidx",
+    "auth_mfa_challenges_token_uidx",
+    "auth_mfa_challenges_email_otp_uidx",
+    "auth_mfa_claims_operation_uidx",
+    "auth_mfa_claims_factor_uidx",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.doesNotMatch(
+    sql,
+    /IDENTITY_KEYRING|BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY|otpauth:\/\//i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0014_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, { indexes: Record<string, unknown> }>;
+  };
+  assert.ok(snapshot.tables.auth_totp_credentials);
+  assert.ok(snapshot.tables.auth_backup_codes);
+  assert.ok(snapshot.tables.auth_mfa_challenges);
+  assert.ok(snapshot.tables.auth_mfa_factor_claims);
+  assert.ok(
+    snapshot.tables.auth_mfa_factor_claims
+      .indexes.auth_mfa_claims_operation_uidx,
+  );
+});
+
+test("0014 reaches 92 tables and rejects operation or factor replay", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    assert.equal(tableDefinitions(db).size, 92);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    assert.ok(
+      (
+        db.prepare("PRAGMA table_info(auth_sessions)").all() as Array<{
+          name: string;
+        }>
+      ).some(({ name }) => name === "mfa_verified_at"),
+    );
+
+    const timestamp = "2026-07-26T00:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES (?,?,?,?)`,
+    ).run("mfa-user", "mfa@example.com", timestamp, timestamp);
+    db.prepare(
+      `INSERT INTO auth_totp_credentials (
+         id,user_id,status,secret_ciphertext,secret_iv,key_version,
+         enrollment_expires_at,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "mfa-credential",
+      "mfa-user",
+      "active",
+      "ciphertext",
+      "iv",
+      "v1",
+      "2026-07-27T00:00:00.000Z",
+      timestamp,
+      timestamp,
+    );
+    const insert = db.prepare(
+      `INSERT INTO auth_mfa_factor_claims (
+         id,operation_id,credential_id,factor_type,factor_key,created_at
+       ) VALUES (?,?,?,?,?,?)`,
+    );
+    insert.run(
+      "claim-1",
+      "operation-1",
+      "mfa-credential",
+      "totp",
+      "100",
+      timestamp,
+    );
+    assert.throws(
+      () => insert.run(
+        "claim-2",
+        "operation-1",
+        "mfa-credential",
+        "totp",
+        "101",
+        timestamp,
+      ),
+      /UNIQUE constraint failed/,
+    );
+    assert.throws(
+      () => insert.run(
+        "claim-3",
+        "operation-2",
+        "mfa-credential",
+        "totp",
+        "100",
+        timestamp,
       ),
       /UNIQUE constraint failed/,
     );

@@ -27,6 +27,11 @@ export type SecurityEventRecord = {
   metadataJson: string | null;
 };
 
+export type SecurityEventGuard = {
+  selectSql: string;
+  bindings: Array<string | number | null>;
+};
+
 function canonicalize(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(canonicalize);
   if (value && typeof value === "object") {
@@ -48,10 +53,15 @@ async function chainHead(
   userId: string,
 ): Promise<string> {
   const row = await db.prepare(
-    `SELECT event_hash AS eventHash
-     FROM security_events
-     WHERE user_id=?
-     ORDER BY created_at DESC,id DESC
+    `SELECT event.event_hash AS eventHash
+     FROM security_events event
+     WHERE event.user_id=?
+       AND NOT EXISTS (
+         SELECT 1
+         FROM security_events child
+         WHERE child.user_id=event.user_id
+           AND child.previous_hash=event.event_hash
+       )
      LIMIT 1`,
   ).bind(userId).first<{ eventHash: string }>();
   return row?.eventHash ?? GENESIS_HASH;
@@ -87,14 +97,18 @@ function eventStatement(
   db: D1Database,
   input: SecurityEventInput,
   record: SecurityEventRecord,
+  guard?: SecurityEventGuard,
 ): D1PreparedStatement {
-  return db.prepare(
-    `INSERT INTO security_events (
-       id,user_id,session_id,device_id,event_type,severity,auth_source,
-       assurance_level,ip_hash,user_agent_hash,metadata_json,previous_hash,
-       event_hash,created_at
-     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-  ).bind(
+  if (
+    guard
+    && (
+      !/^\s*SELECT\b/i.test(guard.selectSql)
+      || guard.selectSql.includes(";")
+    )
+  ) {
+    throw new Error("INVALID_SECURITY_EVENT_GUARD");
+  }
+  const values = [
     record.id,
     input.userId,
     input.sessionId ?? null,
@@ -109,6 +123,23 @@ function eventStatement(
     record.previousHash,
     record.eventHash,
     input.createdAt,
+  ];
+  const statement = guard
+    ? `INSERT INTO security_events (
+       id,user_id,session_id,device_id,event_type,severity,auth_source,
+       assurance_level,ip_hash,user_agent_hash,metadata_json,previous_hash,
+       event_hash,created_at
+     )
+     SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?
+     WHERE EXISTS (${guard.selectSql})`
+    : `INSERT INTO security_events (
+       id,user_id,session_id,device_id,event_type,severity,auth_source,
+       assurance_level,ip_hash,user_agent_hash,metadata_json,previous_hash,
+       event_hash,created_at
+     ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`;
+  return db.prepare(statement).bind(
+    ...values,
+    ...(guard?.bindings ?? []),
   );
 }
 
@@ -128,6 +159,7 @@ export async function batchWithSecurityEvent(
   db: D1Database,
   input: SecurityEventInput,
   statements: (record: SecurityEventRecord) => D1PreparedStatement[],
+  eventGuard?: SecurityEventGuard,
 ): Promise<D1Result[]> {
   let lastError: unknown;
   for (let attempt = 0; attempt < MAX_CHAIN_RETRIES; attempt += 1) {
@@ -135,7 +167,7 @@ export async function batchWithSecurityEvent(
     try {
       return await db.batch([
         ...statements(record),
-        eventStatement(db, input, record),
+        eventStatement(db, input, record, eventGuard),
       ]);
     } catch (error) {
       lastError = error;

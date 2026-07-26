@@ -160,6 +160,7 @@ test("built auth routes reject missing and cross-origin CSRF writes", async () =
   for (const route of [
     "/api/auth/request-otp",
     "/api/auth/verify-otp",
+    "/api/auth/verify-mfa",
     "/api/auth/logout",
   ]) {
     const missingHeader = await worker.fetch(new Request(
@@ -236,6 +237,98 @@ test("session revocation routes reject missing and foreign CSRF proof", async ()
     ), runtime, context);
     assert.equal(foreignOrigin.status, 403, route);
   }
+});
+
+test("MFA management mutations reject missing and foreign CSRF proof", async () => {
+  const worker = await createWorker();
+  for (const [method, route] of [
+    ["POST", "/api/platform/security/mfa/setup?lang=ru"],
+    ["POST", "/api/platform/security/mfa/confirm"],
+    ["POST", "/api/platform/security/mfa/backup-codes"],
+    ["DELETE", "/api/platform/security/mfa"],
+  ]) {
+    const missingHeader = await worker.fetch(new Request(
+      `http://localhost${route}`,
+      {
+        method,
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      },
+    ), runtime, context);
+    assert.equal(missingHeader.status, 403, route);
+    const foreignOrigin = await worker.fetch(new Request(
+      `http://localhost${route}`,
+      {
+        method,
+        headers: {
+          "content-type": "application/json",
+          origin: "https://attacker.example",
+          "x-juro-csrf": "1",
+        },
+        body: "{}",
+      },
+    ), runtime, context);
+    assert.equal(foreignOrigin.status, 403, route);
+  }
+});
+
+test("MFA boundaries do not accept platform headers or a missing pre-auth cookie", async () => {
+  const worker = await createWorker();
+  const platformHeaders = {
+    "oai-authenticated-user-email": "mfa@example.com",
+    "oai-authenticated-user-full-name": "MFA%20User",
+    "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+  };
+  const status = await worker.fetch(
+    new Request("http://localhost/api/platform/security/mfa", {
+      headers: platformHeaders,
+    }),
+    runtime,
+    context,
+  );
+  assert.equal(status.status, 200);
+  assert.match(status.headers.get("cache-control") ?? "", /no-store/);
+  assert.deepEqual(await status.json(), {
+    available: false,
+    canManage: false,
+    enabled: false,
+    verifiedAt: null,
+    backupCodesRemaining: 0,
+    reason: "LOCAL_SESSION_REQUIRED",
+  });
+
+  const setup = await worker.fetch(
+    new Request("http://localhost/api/platform/security/mfa/setup?lang=ru", {
+      method: "POST",
+      headers: {
+        ...platformHeaders,
+        "x-juro-csrf": "1",
+      },
+    }),
+    runtime,
+    context,
+  );
+  assert.equal(setup.status, 401);
+  assert.match(setup.headers.get("cache-control") ?? "", /no-store/);
+
+  const verify = await worker.fetch(
+    new Request("http://localhost/api/auth/verify-mfa", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-juro-csrf": "1",
+      },
+      body: JSON.stringify({ code: "123456", locale: "ru" }),
+    }),
+    runtime,
+    context,
+  );
+  assert.equal(verify.status, 401);
+  assert.match(verify.headers.get("cache-control") ?? "", /no-store/);
+  assert.match(
+    verify.headers.get("set-cookie") ?? "",
+    /juro_mfa_challenge=; Path=\/api\/auth\/verify-mfa;[^,]*Max-Age=0/,
+  );
 });
 
 test("serves app-specific legal pages in both languages with noindex", async () => {

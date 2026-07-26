@@ -32,12 +32,30 @@ Requirements:
 - retain prior versions only while rows still reference them;
 - back up and restore the key ring through the approved secret-store process,
   separately from D1/R2 backups;
+- record key-version activation and retirement as audited operational changes,
+  without recording key material;
+- retain a separately protected recovery copy before rotating or retiring a
+  version, and prove restore before the change;
 - treat a missing or malformed ring as a fail-closed configuration error;
 - do not enable TOTP or encrypted identity migration until a staging
   encrypt/decrypt/rotation test succeeds.
 
-The current source provides the cryptographic primitive and tests. It does not
-contain a real key ring and no live environment was changed.
+The current source provides the cryptographic primitive, encrypted TOTP
+enrollment, backup-code hashing, and tests. It does not contain a real key
+ring, and no live environment was changed.
+
+## Local MFA flow
+
+`IDENTITY_KEYRING` is consumed only in server code. Enrollment encrypts the
+TOTP secret with record-bound AAD; backup codes are stored as
+domain-separated HMAC values. Email-OTP verification creates a hashed
+short-lived pre-auth challenge when MFA is active, and the primary session is
+issued only after TOTP or backup-code verification.
+
+Missing, malformed, or unknown key versions fail closed with a safe service
+error. Never solve this by exposing the key ring to browser code, weakening
+AAD, storing plaintext recovery codes, or falling back to a platform-header
+principal.
 
 ## Other server-only values
 

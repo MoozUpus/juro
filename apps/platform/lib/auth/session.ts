@@ -1,12 +1,13 @@
 import { headers } from "next/headers";
 import { requireD1 } from "../document-builder/storage/runtime";
 import {
+  MFA_CHALLENGE_COOKIE,
   SESSION_COOKIE,
 } from "./session-token";
 import { localSessionFromCookie } from "./session-management";
 import type { LocalAssuranceLevel } from "./session-management";
 
-export { SESSION_COOKIE } from "./session-token";
+export { MFA_CHALLENGE_COOKIE, SESSION_COOKIE } from "./session-token";
 
 export type SessionUser = {
   email: string;
@@ -17,6 +18,7 @@ export type SessionUser = {
   authSource: "local_session";
   assuranceLevel: LocalAssuranceLevel;
   authenticatedAt: string | null;
+  mfaVerifiedAt: string | null;
 };
 
 export async function getSessionUser(): Promise<SessionUser | null> {
@@ -36,6 +38,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       authSource: "local_session",
       assuranceLevel: session.assuranceLevel,
       authenticatedAt: session.authenticatedAt,
+      mfaVerifiedAt: session.mfaVerifiedAt,
     };
   } catch {
     return null;
@@ -48,4 +51,15 @@ export function sessionCookie(token: string, maxAgeSeconds = 60 * 60 * 24 * 30):
 
 export function clearSessionCookie(): string {
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+}
+
+export function mfaChallengeCookie(
+  token: string,
+  maxAgeSeconds = 5 * 60,
+): string {
+  return `${MFA_CHALLENGE_COOKIE}=${encodeURIComponent(token)}; Path=/api/auth/verify-mfa; HttpOnly; Secure; SameSite=Strict; Max-Age=${maxAgeSeconds}`;
+}
+
+export function clearMfaChallengeCookie(): string {
+  return `${MFA_CHALLENGE_COOKIE}=; Path=/api/auth/verify-mfa; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
 }

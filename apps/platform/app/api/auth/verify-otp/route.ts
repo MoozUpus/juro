@@ -4,11 +4,24 @@ import {
   type OtpChallengeResult,
 } from "../../../../lib/auth/otp-challenge";
 import {
+  identityKeyring,
+  mfaErrorResponse,
+} from "../../../../lib/auth/mfa-http";
+import {
+  createLoginMfaChallenge,
+  hasActiveMfa,
+} from "../../../../lib/auth/mfa-service";
+import {
   parseJsonRequest,
   verifyOtpInputSchema,
 } from "../../../../lib/auth/input";
-import { sessionCookie } from "../../../../lib/auth/session";
-import { createEmailOtpSession } from "../../../../lib/auth/session-management";
+import {
+  mfaChallengeCookie,
+  sessionCookie,
+} from "../../../../lib/auth/session";
+import {
+  createPrimarySessionIfMfaDisabled,
+} from "../../../../lib/auth/session-management";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -92,9 +105,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const db = requireD1();
   const now = new Date().toISOString();
+  const emailHash = await sha256(email);
   const verification = await consumeOtpChallenge(db, {
     challengeId: body.challengeId,
-    emailHash: await sha256(email),
+    emailHash,
     purpose,
     code,
     now,
@@ -106,15 +120,20 @@ export const POST = withApiErrors(async function POST(request: Request) {
   let user = await db.prepare("SELECT id, onboarding_completed_at AS onboardingCompletedAt FROM user_profiles WHERE lower(email) = lower(?) LIMIT 1")
     .bind(email).first<{ id: string; onboardingCompletedAt: string | null }>();
   if (purpose === "login" && !user) return json({ error: locale === "ru" ? "Не удалось завершить вход." : "Kirishni yakunlab bo‘lmadi." }, 400);
+  if (purpose === "register" && user) {
+    return json({
+      code: "ACCOUNT_EXISTS",
+      error: locale === "ru"
+        ? "Аккаунт уже существует. Используйте вход."
+        : "Hisob allaqachon mavjud. Kirishdan foydalaning.",
+    }, 409);
+  }
   const accountType = verification.accountType;
   const fullName = [body?.firstName?.trim(), body?.lastName?.trim()].filter(Boolean).join(" ").slice(0, 160) || null;
   if (!user) {
     user = { id: crypto.randomUUID(), onboardingCompletedAt: null };
     await db.prepare("INSERT INTO user_profiles (id,email,full_name,locale,account_type,company_name,onboarding_completed_at,created_at,updated_at) VALUES (?,?,?,?,?,?,NULL,?,?)")
       .bind(user.id, email, fullName, locale, accountType, body?.companyName?.trim().slice(0, 180) || null, now, now).run();
-  } else if (purpose === "register") {
-    await db.prepare("UPDATE user_profiles SET full_name = coalesce(?,full_name), locale = ?, account_type = ?, company_name = ?, updated_at = ? WHERE id = ?")
-      .bind(fullName, locale, accountType, body?.companyName?.trim().slice(0, 180) || null, now, user.id).run();
   }
   await ensureDefaultWorkspace(user.id);
 
@@ -122,15 +141,64 @@ export const POST = withApiErrors(async function POST(request: Request) {
     const acceptances = [["terms", true], ["privacy-policy", true], ["personal-data-processing", true], ["marketing", Boolean(body?.marketing)]] as const;
     await db.batch(acceptances.filter(([, accepted]) => accepted).map(([key]) => db.prepare("INSERT OR IGNORE INTO user_acceptances (id,user_id,document_key,document_version,accepted_at) VALUES (?,?,?,?,?)").bind(crypto.randomUUID(), user!.id, key, "2026-07-24", now)));
   }
-  const session = await createEmailOtpSession(db, {
+  const redirectTo = purpose === "register" || !user.onboardingCompletedAt
+    ? `/onboarding?lang=${locale}`
+    : `/${locale}/${accountType}/main`;
+  if (await hasActiveMfa(db, user.id)) {
+    try {
+      const challenge = await createLoginMfaChallenge(
+        db,
+        identityKeyring(),
+        {
+          userId: user.id,
+          emailHash,
+          emailOtpChallengeId: body.challengeId,
+          userAgent: request.headers.get("user-agent"),
+          now: new Date(now),
+        },
+      );
+      return json({
+        ok: true,
+        requiresTwoFactor: true,
+        expiresInSeconds: 300,
+      }, 200, mfaChallengeCookie(challenge.token));
+    } catch (error) {
+      const response = mfaErrorResponse(error, locale);
+      if (response) return response;
+      throw error;
+    }
+  }
+  const session = await createPrimarySessionIfMfaDisabled(db, {
     userId: user.id,
     userAgent: request.headers.get("user-agent"),
     now: new Date(now),
   });
+  if (!session) {
+    try {
+      const challenge = await createLoginMfaChallenge(
+        db,
+        identityKeyring(),
+        {
+          userId: user.id,
+          emailHash,
+          emailOtpChallengeId: body.challengeId,
+          userAgent: request.headers.get("user-agent"),
+          now: new Date(now),
+        },
+      );
+      return json({
+        ok: true,
+        requiresTwoFactor: true,
+        expiresInSeconds: 300,
+      }, 200, mfaChallengeCookie(challenge.token));
+    } catch (error) {
+      const response = mfaErrorResponse(error, locale);
+      if (response) return response;
+      throw error;
+    }
+  }
   return json({
     ok: true,
-    redirectTo: purpose === "register" || !user.onboardingCompletedAt
-      ? `/onboarding?lang=${locale}`
-      : `/${locale}/${accountType}/main`,
+    redirectTo,
   }, 200, sessionCookie(session.token));
 });

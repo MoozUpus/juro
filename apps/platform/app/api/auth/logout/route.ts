@@ -1,4 +1,5 @@
 import {
+  clearMfaChallengeCookie,
   clearSessionCookie,
 } from "../../../../lib/auth/session";
 import {
@@ -23,5 +24,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
       currentSessionId: session.sessionId,
     });
   }
-  return new Response(null, { status: 204, headers: { "set-cookie": clearSessionCookie(), "cache-control": "private, no-store" } });
+  const headers = new Headers({ "cache-control": "private, no-store" });
+  headers.append("set-cookie", clearSessionCookie());
+  headers.append("set-cookie", clearMfaChallengeCookie());
+  return new Response(null, { status: 204, headers });
 });

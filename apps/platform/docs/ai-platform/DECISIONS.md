@@ -4,7 +4,7 @@ This log records material implementation decisions. Status values are `accepted`
 
 ## D-001 — implementation baseline
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Use the Sites source revision `86843ca` as the implementation baseline because it is materially ahead of GitHub `main`. Synchronize it into `feature/juro-ai-platform` before relying on GitHub CI or deployment.
@@ -13,7 +13,7 @@ Consequence: GitHub `main` must not be deployed over the current application.
 
 ## D-002 — production freeze
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Do not modify production schema, resources, secrets, or deployment during phases 0–9. Production requires a separate explicit approval after staging gates.
@@ -185,3 +185,43 @@ email-OTP pre-auth challenge, mandatory TOTP/backup verification before
 session issuance, replay fencing, recent re-authentication, and rollback-safe
 audit. Merely adding an enrollment toggle would create an authentication
 bypass and is prohibited.
+
+## D-018 — MFA pre-authentication and exact factor claims
+
+Status: accepted
+Date: 2026-07-26
+
+When an account has an active TOTP credential, a successful email OTP consumes
+that OTP but creates only a short-lived, hashed pre-auth challenge. A primary
+session is created only after a valid TOTP step or one-time backup code.
+Pre-auth state is stored in a separate HttpOnly, Secure, SameSite=Strict cookie
+scoped to `/api/auth/verify-mfa`; it is never accepted as an application
+session.
+
+Every confirmation, login, backup-code regeneration, and disable operation
+uses a unique factor claim bound to the exact operation ID and credential ID.
+All downstream credential, session, backup-code, and audit mutations check
+that exact claim in the same D1 batch. A losing concurrent operation therefore
+cannot reuse the winner's factor proof or revoke/downgrade the winner's
+session.
+
+MFA management requires a current, active, absolute-unexpired and
+idle-unexpired JURO local session. Trusted platform headers cannot enroll,
+manage, or satisfy JURO MFA, and an account with active MFA cannot fall back to
+a platform-header principal.
+
+## D-019 — security-event chain tail follows topology
+
+Status: accepted
+Date: 2026-07-26
+
+The current per-user security-event head is the event whose hash is not
+referenced as another event's `previous_hash`. It is not the event with the
+latest client-provided timestamp. Choosing by `created_at` can select a
+non-tail after concurrent or out-of-order writes and permanently reject later
+events through the chain uniqueness fence.
+
+Tail selection therefore follows the stored hash graph using a `NOT EXISTS`
+child query. The database uniqueness constraint remains the concurrency fence;
+callers retry from the newly observed tail instead of weakening append-only or
+fork protection.

@@ -1,7 +1,11 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { hasActiveMfa } from "../lib/auth/mfa-service";
 import { getSessionUser } from "../lib/auth/session";
-import { runtimeEnv } from "../lib/document-builder/storage/runtime";
+import {
+  requireD1,
+  runtimeEnv,
+} from "../lib/document-builder/storage/runtime";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -35,6 +39,18 @@ export async function getAuthPrincipal(): Promise<AuthPrincipal | null> {
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!email) return null;
+
+  try {
+    const db = requireD1();
+    const localUser = await db.prepare(
+      "SELECT id FROM user_profiles WHERE lower(email)=lower(?) LIMIT 1",
+    ).bind(email).first<{ id: string }>();
+    if (localUser && await hasActiveMfa(db, localUser.id)) return null;
+  } catch {
+    // Trusted-header authentication must fail closed when JURO cannot prove
+    // that the account has no active local MFA credential.
+    return null;
+  }
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =

@@ -3,8 +3,8 @@
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated profile data is hydrated after the first browser render */
 
 import Link from "next/link";
-import { CircleAlert, Database, Download, Languages, LoaderCircle, LogOut, MonitorSmartphone, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { CircleAlert, Copy, Database, Download, KeyRound, Languages, LoaderCircle, LogOut, MonitorSmartphone, RefreshCcw, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 type View = "profile" | "settings" | "security" | "privacy";
@@ -29,6 +29,20 @@ type Session = {
   deviceName: string;
   isCurrent: number | boolean;
 };
+type MfaStatus = {
+  available: boolean;
+  canManage: boolean;
+  enabled: boolean;
+  verifiedAt: string | null;
+  backupCodesRemaining: number;
+  reason?: string;
+};
+type MfaSetup = {
+  credentialId: string;
+  secret: string;
+  otpauthUri: string;
+  expiresAt: string;
+};
 
 export function ProfileSettingsClient({ locale, accountType, view }: { locale: PlatformLocale; accountType: AccountType; view: View }) {
   const ru = locale === "ru";
@@ -37,10 +51,17 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [retrying, setRetrying] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState({ fullName: "", phone: "", locale, timezone: "Asia/Tashkent", companyName: "", organizationRole: "" });
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [mfa, setMfa] = useState<MfaStatus | null>(null);
+  const [mfaSetup, setMfaSetup] = useState<MfaSetup | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const mfaSetupRegion = useRef<HTMLDivElement>(null);
+  const backupCodesRegion = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -62,6 +83,10 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
         const sessionBody = await sessionResponse.json() as { sessions?: Session[]; error?: string };
         if (!sessionResponse.ok) throw new Error(sessionBody.error || (ru ? "Сессии не загрузились." : "Sessiyalar yuklanmadi."));
         setSessions(sessionBody.sessions ?? []);
+        const mfaResponse = await fetch("/api/platform/security/mfa", { cache: "no-store" });
+        const mfaBody = await mfaResponse.json() as MfaStatus & { error?: string };
+        if (!mfaResponse.ok) throw new Error(mfaBody.error || (ru ? "Настройки 2FA не загрузились." : "2FA sozlamalari yuklanmadi."));
+        setMfa(mfaBody);
       }
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -70,6 +95,21 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
     }
   }, [ru, view]);
   useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    if (mfaSetup) mfaSetupRegion.current?.focus();
+  }, [mfaSetup]);
+  useEffect(() => {
+    if (backupCodes.length > 0) backupCodesRegion.current?.focus();
+  }, [backupCodes.length]);
+
+  async function retryLoad() {
+    setRetrying(true);
+    try {
+      await load();
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   async function save(event: FormEvent) {
     event.preventDefault();
@@ -136,6 +176,143 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
     await load();
   }
 
+  async function startMfaSetup() {
+    setSaving(true);
+    setError("");
+    setNotice("");
+    setBackupCodes([]);
+    try {
+      const response = await fetch(
+        `/api/platform/security/mfa/setup?lang=${locale}`,
+        {
+          method: "POST",
+          headers: { "x-juro-csrf": "1" },
+        },
+      );
+      const body = await response.json() as MfaSetup & { error?: string };
+      if (!response.ok || !body.credentialId) {
+        throw new Error(body.error || (ru
+          ? "Настройка 2FA не началась."
+          : "2FA sozlash boshlanmadi."));
+      }
+      setMfaSetup(body);
+      setMfaCode("");
+    } catch (value) {
+      setError(value instanceof Error
+        ? value.message
+        : (ru ? "Настройка 2FA не началась." : "2FA sozlash boshlanmadi."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function confirmMfaSetup() {
+    if (!mfaSetup) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/platform/security/mfa/confirm", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({
+          credentialId: mfaSetup.credentialId,
+          code: mfaCode,
+          locale,
+        }),
+      });
+      const body = await response.json() as {
+        backupCodes?: string[];
+        error?: string;
+      };
+      if (!response.ok || !body.backupCodes?.length) {
+        throw new Error(body.error || (ru
+          ? "2FA не включена."
+          : "2FA yoqilmadi."));
+      }
+      setBackupCodes(body.backupCodes);
+      setMfaSetup(null);
+      setMfaCode("");
+      setNotice(ru
+        ? "2FA включена. Сохраните резервные коды сейчас."
+        : "2FA yoqildi. Zaxira kodlarni hozir saqlang.");
+      await load();
+    } catch (value) {
+      setError(value instanceof Error
+        ? value.message
+        : (ru ? "2FA не включена." : "2FA yoqilmadi."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function manageMfa(action: "disable" | "regenerate") {
+    if (!mfaCode.trim()) return;
+    if (action === "disable" && !window.confirm(ru
+      ? "Отключить двухфакторную защиту и завершить остальные сессии?"
+      : "Ikki bosqichli himoyani o‘chirib, boshqa sessiyalarni yakunlaysizmi?")) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    if (action === "regenerate") setBackupCodes([]);
+    try {
+      const response = await fetch(
+        action === "disable"
+          ? "/api/platform/security/mfa"
+          : "/api/platform/security/mfa/backup-codes",
+        {
+          method: action === "disable" ? "DELETE" : "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+          },
+          body: JSON.stringify({ code: mfaCode, locale }),
+        },
+      );
+      const body = await response.json() as {
+        backupCodes?: string[];
+        error?: string;
+      };
+      if (!response.ok || (action === "regenerate" && !body.backupCodes?.length)) {
+        throw new Error(body.error || (ru
+          ? "Операция не выполнена."
+          : "Amal bajarilmadi."));
+      }
+      setMfaCode("");
+      if (action === "regenerate" && body.backupCodes?.length) {
+        setBackupCodes(body.backupCodes);
+        setNotice(ru
+          ? "Создан новый набор. Старые резервные коды отозваны."
+          : "Yangi to‘plam yaratildi. Eski zaxira kodlar bekor qilindi.");
+      } else {
+        setBackupCodes([]);
+        setNotice(ru ? "2FA отключена." : "2FA o‘chirildi.");
+      }
+      await load();
+    } catch (value) {
+      setError(value instanceof Error
+        ? value.message
+        : (ru ? "Операция не выполнена." : "Amal bajarilmadi."));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function copyBackupCodes() {
+    setError("");
+    try {
+      await navigator.clipboard.writeText(backupCodes.join("\n"));
+      setNotice(ru ? "Резервные коды скопированы." : "Zaxira kodlar nusxalandi.");
+    } catch {
+      setError(ru
+        ? "Не удалось скопировать. Сохраните коды вручную."
+        : "Nusxalab bo‘lmadi. Kodlarni qo‘lda saqlang.");
+    }
+  }
+
   async function requestDeletion(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -150,10 +327,10 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
     else { setNotice(ru ? "Запрос на удаление зарегистрирован." : "O‘chirish so‘rovi ro‘yxatdan o‘tkazildi."); setDeleteConfirmation(""); }
   }
 
-  if (loading) return <div className="profile-loading"><LoaderCircle className="spin" /></div>;
+  if (loading) return <div className="profile-loading" role="status"><LoaderCircle className="spin" aria-hidden="true" /><span className="sr-only">{ru ? "Загрузка настроек" : "Sozlamalar yuklanmoqda"}</span></div>;
   const title = view === "profile" ? (ru ? "Профиль" : "Profil") : view === "security" ? (ru ? "Безопасность" : "Xavfsizlik") : view === "privacy" ? (ru ? "Приватность и данные" : "Maxfiylik va ma’lumotlar") : (ru ? "Настройки" : "Sozlamalar");
   const Icon = view === "profile" ? UserRound : view === "security" ? ShieldCheck : view === "privacy" ? Database : Languages;
-  return <section className="profile-workspace"><header><Icon /><div><small>JURO</small><h1>{title}</h1><p>{ru ? "Данные и права изменяются через защищённые серверные операции." : "Ma’lumotlar va huquqlar himoyalangan server amallari orqali o‘zgartiriladi."}</p></div></header><nav aria-label={ru ? "Настройки аккаунта" : "Hisob sozlamalari"}><Link className={view === "profile" ? "active" : ""} href={`${base}/profile`}>{ru ? "Профиль" : "Profil"}</Link><Link className={view === "settings" ? "active" : ""} href={`${base}/settings`}>{ru ? "Настройки" : "Sozlamalar"}</Link><Link className={view === "security" ? "active" : ""} href={`${base}/settings/security`}>{ru ? "Безопасность" : "Xavfsizlik"}</Link><Link className={view === "privacy" ? "active" : ""} href={`${base}/settings/privacy`}>{ru ? "Приватность" : "Maxfiylik"}</Link></nav>{error && <p className="profile-message error" role="alert"><CircleAlert />{error}</p>}{notice && <p className="profile-message success" role="status"><ShieldCheck />{notice}</p>}
+  return <section className="profile-workspace"><header><Icon /><div><small>JURO</small><h1>{title}</h1><p>{ru ? "Данные и права изменяются через защищённые серверные операции." : "Ma’lumotlar va huquqlar himoyalangan server amallari orqali o‘zgartiriladi."}</p></div></header><nav aria-label={ru ? "Настройки аккаунта" : "Hisob sozlamalari"}><Link className={view === "profile" ? "active" : ""} href={`${base}/profile`}>{ru ? "Профиль" : "Profil"}</Link><Link className={view === "settings" ? "active" : ""} href={`${base}/settings`}>{ru ? "Настройки" : "Sozlamalar"}</Link><Link className={view === "security" ? "active" : ""} href={`${base}/settings/security`}>{ru ? "Безопасность" : "Xavfsizlik"}</Link><Link className={view === "privacy" ? "active" : ""} href={`${base}/settings/privacy`}>{ru ? "Приватность" : "Maxfiylik"}</Link></nav>{error && <p className="profile-message error" role="alert"><CircleAlert aria-hidden="true" />{error}</p>}{view === "security" && error && !mfa && <button className="profile-retry" type="button" disabled={retrying} aria-busy={retrying} onClick={() => void retryLoad()}>{retrying && <LoaderCircle className="spin" aria-hidden="true" />}{ru ? "Повторить загрузку" : "Qayta yuklash"}</button>}{notice && <p className="profile-message success" role="status"><ShieldCheck aria-hidden="true" />{notice}</p>}
     {(view === "profile" || view === "settings") && data && <form className="profile-form" onSubmit={save}><section><h2>{ru ? "Основные данные" : "Asosiy ma’lumotlar"}</h2><label>{ru ? "Имя" : "Ism"}<input required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></label><label>Email<input disabled value={data.profile.email} /><small>{ru ? "Смена email требует отдельного подтверждения." : "Emailni o‘zgartirish alohida tasdiqni talab qiladi."}</small></label><label>{ru ? "Телефон" : "Telefon"}<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} autoComplete="tel" /></label></section><section><h2>{ru ? "Пространство" : "Makon"}</h2><label>{ru ? "Язык" : "Til"}<select value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value as PlatformLocale })}><option value="ru">Русский</option><option value="uz">O‘zbekcha</option></select></label><label>{ru ? "Часовой пояс" : "Vaqt mintaqasi"}<select value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })}><option value="Asia/Tashkent">Asia/Tashkent</option><option value="UTC">UTC</option></select></label>{accountType === "business" && <><label>{ru ? "Организация" : "Tashkilot"}<input value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} /></label><label>{ru ? "Роль в организации" : "Tashkilotdagi rol"}<input value={form.organizationRole} onChange={(event) => setForm({ ...form, organizationRole: event.target.value })} /></label></>}</section><button disabled={saving}>{saving ? <LoaderCircle className="spin" /> : <Save />}{ru ? "Сохранить изменения" : "O‘zgarishlarni saqlash"}</button></form>}
     {view === "security" && <div className="profile-panels">
       <section>
@@ -179,17 +356,92 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
           <button className="danger-outline" type="button" onClick={() => void closeAllSessions()}>{ru ? "Завершить все email-сессии" : "Barcha email sessiyalarini yakunlash"}</button>
         </div>
       </section>
+      <section className="mfa-panel">
+        <h2><KeyRound aria-hidden="true" />{ru ? "Двухфакторная защита" : "Ikki bosqichli himoya"}</h2>
+        {mfa && !mfa.canManage && <p>{ru
+          ? "Управление 2FA доступно только из локальной JURO email-сессии. Внешняя защищённая сессия не считается вторым фактором JURO."
+          : "2FA boshqaruvi faqat mahalliy JURO email sessiyasida mavjud. Tashqi himoyalangan sessiya JURO ikkinchi omili hisoblanmaydi."}</p>}
+        {mfa?.canManage && !mfa.available && <p>{ru
+          ? "Серверный ключ шифрования 2FA ещё не подключён. Настройка скрыта и не создаёт незавершённый фактор."
+          : "2FA server shifrlash kaliti hali ulanmagan. Sozlash yashirilgan va tugallanmagan omil yaratmaydi."}</p>}
+        {mfa?.available && !mfa.enabled && !mfaSetup && <div className="mfa-state">
+          <span>{ru ? "Статус: выключена" : "Holat: o‘chirilgan"}</span>
+          <p>{ru
+            ? "После включения каждый вход по email потребует шестизначный TOTP-код или одноразовый резервный код."
+            : "Yoqilgandan so‘ng har bir email orqali kirish olti xonali TOTP yoki bir martalik zaxira kodni talab qiladi."}</p>
+          <button type="button" disabled={saving} aria-busy={saving} onClick={() => void startMfaSetup()}>
+            {saving ? <LoaderCircle className="spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+            {ru ? "Подключить 2FA" : "2FA ni ulash"}
+          </button>
+        </div>}
+        {mfaSetup && <div
+          ref={mfaSetupRegion}
+          className="mfa-setup"
+          role="region"
+          tabIndex={-1}
+          aria-label={ru ? "Настройка 2FA" : "2FA sozlash"}
+          aria-describedby="mfa-setup-description"
+        >
+          <p id="mfa-setup-description">{ru
+            ? "Добавьте JURO в приложение-аутентификатор. Секрет показан только во время этой настройки."
+            : "JURO ni autentifikator ilovasiga qo‘shing. Sir faqat shu sozlash vaqtida ko‘rsatiladi."}</p>
+          <a href={mfaSetup.otpauthUri}>{ru ? "Открыть в аутентификаторе" : "Autentifikatorda ochish"}</a>
+          <code>{mfaSetup.secret}</code>
+          <small>{ru ? "Настройка действует до" : "Sozlash muddati"}: {formatDateTime(mfaSetup.expiresAt, ru)}</small>
+          <label>{ru ? "Код из приложения" : "Ilovadagi kod"}
+            <input value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="mfa-setup-description" />
+          </label>
+          <div className="mfa-actions">
+            <button type="button" disabled={saving || mfaCode.length !== 6} aria-busy={saving} onClick={() => void confirmMfaSetup()}>
+              {saving ? <LoaderCircle className="spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+              {ru ? "Подтвердить и включить" : "Tasdiqlash va yoqish"}
+            </button>
+            <button className="danger-outline" type="button" disabled={saving} onClick={() => { setMfaSetup(null); setMfaCode(""); }}>
+              {ru ? "Отмена" : "Bekor qilish"}
+            </button>
+          </div>
+        </div>}
+        {mfa?.enabled && <div className="mfa-state">
+          <span className="mfa-enabled"><ShieldCheck aria-hidden="true" />{ru ? "2FA включена" : "2FA yoqilgan"}</span>
+          <p id="mfa-manage-description">{ru
+            ? `Неиспользованных резервных кодов: ${mfa.backupCodesRemaining}. Для изменения введите свежий TOTP или резервный код.`
+            : `Ishlatilmagan zaxira kodlar: ${mfa.backupCodesRemaining}. O‘zgartirish uchun yangi TOTP yoki zaxira kodni kiriting.`}</p>
+          <label>{ru ? "Код подтверждения" : "Tasdiqlash kodi"}
+            <input value={mfaCode} onChange={(event) => setMfaCode(event.target.value.toUpperCase().replace(/[^A-Z0-9 -]/g, "").slice(0, 64))} autoComplete="one-time-code" maxLength={64} aria-describedby="mfa-manage-description" />
+          </label>
+          <div className="mfa-actions">
+            <button type="button" disabled={saving || mfaCode.trim().length < 6} aria-busy={saving} onClick={() => void manageMfa("regenerate")}>
+              <RefreshCcw aria-hidden="true" />{ru ? "Новые резервные коды" : "Yangi zaxira kodlar"}
+            </button>
+            <button className="danger-outline" type="button" disabled={saving || mfaCode.trim().length < 6} aria-busy={saving} onClick={() => void manageMfa("disable")}>
+              {ru ? "Отключить 2FA" : "2FA ni o‘chirish"}
+            </button>
+          </div>
+        </div>}
+        {backupCodes.length > 0 && <div
+          ref={backupCodesRegion}
+          className="backup-codes"
+          role="region"
+          tabIndex={-1}
+          aria-label={ru ? "Новые резервные коды" : "Yangi zaxira kodlar"}
+          aria-describedby="backup-codes-description"
+        >
+          <strong>{ru ? "Сохраните эти коды сейчас" : "Bu kodlarni hozir saqlang"}</strong>
+          <p id="backup-codes-description">{ru
+            ? "После закрытия страницы JURO больше не покажет этот набор. Каждый код работает один раз."
+            : "Sahifa yopilgach JURO bu to‘plamni qayta ko‘rsatmaydi. Har bir kod bir marta ishlaydi."}</p>
+          <div>{backupCodes.map(code => <code key={code}>{code}</code>)}</div>
+          <button type="button" onClick={() => void copyBackupCodes()}><Copy aria-hidden="true" />{ru ? "Скопировать коды" : "Kodlarni nusxalash"}</button>
+        </div>}
+      </section>
       <section>
         <h2><ShieldCheck />{ru ? "Механизмы защиты" : "Himoya mexanizmlari"}</h2>
         <ul>
           <li>{ru ? "HttpOnly, Secure, SameSite=Lax cookie" : "HttpOnly, Secure, SameSite=Lax cookie"}</li>
           <li>{ru ? "Абсолютный и семидневный idle-срок сессии" : "Mutlaq va yetti kunlik idle sessiya muddati"}</li>
-          <li>{ru ? "Точечный отзыв с серверной проверкой владельца" : "Egani serverda tekshirish bilan alohida bekor qilish"}</li>
+          <li>{ru ? "TOTP replay-fence и одноразовые резервные коды" : "TOTP replay-fence va bir martalik zaxira kodlar"}</li>
           <li>{ru ? "Append-only цепочка событий безопасности" : "Append-only xavfsizlik hodisalari zanjiri"}</li>
         </ul>
-        <p>{ru
-          ? "TOTP и резервные коды пока не включены: они появятся только вместе с обязательной проверкой второго фактора при входе."
-          : "TOTP va zaxira kodlari hozircha yoqilmagan: ular faqat kirishda ikkinchi omil majburiy tekshirilishi bilan birga paydo bo‘ladi."}</p>
       </section>
     </div>}
     {view === "privacy" && data && <div className="profile-panels"><section><h2><Download />{ru ? "Экспорт данных" : "Ma’lumotlarni eksport qilish"}</h2><p>{ru ? "Скачайте переносимый JSON с данными профиля, делами, метаданными документов, согласиями и вашей историей действий. Содержимое приватных файлов не включается автоматически." : "Profil, ishlar, hujjat metama’lumotlari, roziliklar va harakatlar tarixini JSON formatida yuklab oling. Maxfiy fayllar mazmuni avtomatik kiritilmaydi."}</p><Link className="profile-download" href="/api/platform/privacy/export" prefetch={false}><Download />{ru ? "Скачать экспорт" : "Eksportni yuklab olish"}</Link></section><section><h2>{ru ? "История согласий" : "Roziliklar tarixi"}</h2>{data.consents.length ? data.consents.map(consent => <div className="consent-row" key={`${consent.type}-${consent.grantedAt}`}><strong>{consent.type}</strong><span>v{consent.version}</span><time>{formatDateTime(consent.grantedAt, ru)}</time></div>) : <p>{ru ? "Записей пока нет." : "Hozircha yozuvlar yo‘q."}</p>}</section><form className="delete-request" onSubmit={requestDeletion}><Trash2 /><div><h2>{ru ? "Запросить удаление аккаунта" : "Hisobni o‘chirishni so‘rash"}</h2><p>{ru ? "Это отдельный процесс, а не архивирование документов. Введите DELETE, чтобы зарегистрировать запрос." : "Bu hujjatlarni arxivlash emas, alohida jarayon. So‘rovni ro‘yxatdan o‘tkazish uchun DELETE yozing."}</p><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder="DELETE" /><button disabled={deleteConfirmation !== "DELETE"}>{ru ? "Создать запрос" : "So‘rov yaratish"}</button></div></form></div>}

@@ -30,6 +30,24 @@ export const verifyOtpInputSchema = z.object({
   marketing: z.boolean().optional(),
 }).strict();
 
+const mfaCodeInput = z.string().trim().min(6).max(64);
+
+export const verifyMfaInputSchema = z.object({
+  code: mfaCodeInput,
+  locale: localeInput,
+}).strict();
+
+export const confirmTotpEnrollmentInputSchema = z.object({
+  credentialId: z.string().uuid(),
+  code: z.string().regex(/^\d{6}$/),
+  locale: localeInput,
+}).strict();
+
+export const manageMfaInputSchema = z.object({
+  code: mfaCodeInput,
+  locale: localeInput,
+}).strict();
+
 export type JsonRequestError =
   | "invalid_content_type"
   | "invalid_json"

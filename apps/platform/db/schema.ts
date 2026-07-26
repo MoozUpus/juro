@@ -1,4 +1,12 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
+import {
+  check,
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 const timestamps = {
   createdAt: text("created_at").notNull(),
@@ -546,6 +554,7 @@ export const authSessions = sqliteTable("auth_sessions", {
   authMethod: text("auth_method").notNull().default("email_otp"),
   assuranceLevel: text("assurance_level").notNull().default("primary"),
   authenticatedAt: text("authenticated_at"),
+  mfaVerifiedAt: text("mfa_verified_at"),
   expiresAt: text("expires_at").notNull(),
   idleExpiresAt: text("idle_expires_at"),
   revokedAt: text("revoked_at"),
@@ -555,6 +564,122 @@ export const authSessions = sqliteTable("auth_sessions", {
   uniqueIndex("auth_sessions_token_uidx").on(table.tokenHash),
   index("auth_sessions_user_idx").on(table.userId, table.expiresAt),
   index("auth_sessions_device_idx").on(table.deviceId, table.expiresAt),
+]);
+
+export const authTotpCredentials = sqliteTable("auth_totp_credentials", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"),
+  secretCiphertext: text("secret_ciphertext").notNull(),
+  secretIv: text("secret_iv").notNull(),
+  keyVersion: text("key_version").notNull(),
+  algorithm: text("algorithm").notNull().default("SHA1"),
+  digits: integer("digits").notNull().default(6),
+  periodSeconds: integer("period_seconds").notNull().default(30),
+  verificationAttemptCount: integer("verification_attempt_count").notNull().default(0),
+  verificationMaxAttempts: integer("verification_max_attempts").notNull().default(5),
+  lastUsedStep: integer("last_used_step"),
+  backupBatchId: text("backup_batch_id"),
+  backupKeyVersion: text("backup_key_version"),
+  enrollmentExpiresAt: text("enrollment_expires_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  verifiedAt: text("verified_at"),
+  disabledAt: text("disabled_at"),
+}, (table) => [
+  check(
+    "auth_totp_status_check",
+    sql`${table.status} IN ('pending','active','disabled')`,
+  ),
+  check("auth_totp_algorithm_check", sql`${table.algorithm} = 'SHA1'`),
+  check("auth_totp_digits_check", sql`${table.digits} = 6`),
+  check("auth_totp_period_check", sql`${table.periodSeconds} = 30`),
+  check(
+    "auth_totp_attempts_check",
+    sql`${table.verificationAttemptCount} >= 0 AND ${table.verificationMaxAttempts} BETWEEN 1 AND 10`,
+  ),
+  index("auth_totp_user_status_idx").on(table.userId, table.status),
+  uniqueIndex("auth_totp_live_user_uidx")
+    .on(table.userId)
+    .where(sql`${table.status} IN ('pending','active')`),
+]);
+
+export const authBackupCodes = sqliteTable("auth_backup_codes", {
+  id: text("id").primaryKey(),
+  credentialId: text("credential_id").notNull().references(() => authTotpCredentials.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  batchId: text("batch_id").notNull(),
+  codeHmac: text("code_hmac").notNull(),
+  keyVersion: text("key_version").notNull(),
+  usedAt: text("used_at"),
+  revokedAt: text("revoked_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("auth_backup_codes_hmac_uidx").on(table.codeHmac),
+  index("auth_backup_codes_user_batch_idx").on(
+    table.userId,
+    table.batchId,
+    table.usedAt,
+  ),
+  index("auth_backup_codes_credential_idx").on(
+    table.credentialId,
+    table.createdAt,
+  ),
+]);
+
+export const authMfaChallenges = sqliteTable("auth_mfa_challenges", {
+  id: text("id").primaryKey(),
+  tokenHash: text("token_hash").notNull(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  credentialId: text("credential_id").notNull().references(() => authTotpCredentials.id, { onDelete: "cascade" }),
+  emailOtpChallengeId: text("email_otp_challenge_id").notNull().references(() => authOtpChallenges.id, { onDelete: "cascade" }),
+  purpose: text("purpose").notNull().default("login"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  maxAttempts: integer("max_attempts").notNull().default(5),
+  requestUserAgentHmac: text("request_user_agent_hmac"),
+  evidenceKeyVersion: text("evidence_key_version"),
+  expiresAt: text("expires_at").notNull(),
+  consumedAt: text("consumed_at"),
+  invalidatedAt: text("invalidated_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check(
+    "auth_mfa_challenges_purpose_check",
+    sql`${table.purpose} IN ('login')`,
+  ),
+  check(
+    "auth_mfa_challenges_attempts_check",
+    sql`${table.attemptCount} >= 0 AND ${table.maxAttempts} BETWEEN 1 AND 10`,
+  ),
+  uniqueIndex("auth_mfa_challenges_token_uidx").on(table.tokenHash),
+  uniqueIndex("auth_mfa_challenges_email_otp_uidx").on(
+    table.emailOtpChallengeId,
+  ),
+  uniqueIndex("auth_mfa_challenges_active_user_uidx")
+    .on(table.userId, table.purpose)
+    .where(sql`${table.consumedAt} IS NULL AND ${table.invalidatedAt} IS NULL`),
+  index("auth_mfa_challenges_expiry_idx").on(table.expiresAt),
+]);
+
+export const authMfaFactorClaims = sqliteTable("auth_mfa_factor_claims", {
+  id: text("id").primaryKey(),
+  operationId: text("operation_id").notNull(),
+  credentialId: text("credential_id").notNull().references(() => authTotpCredentials.id, { onDelete: "cascade" }),
+  factorType: text("factor_type").notNull(),
+  factorKey: text("factor_key").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check(
+    "auth_mfa_claims_factor_type_check",
+    sql`${table.factorType} IN ('totp','backup_code')`,
+  ),
+  uniqueIndex("auth_mfa_claims_operation_uidx").on(table.operationId),
+  uniqueIndex("auth_mfa_claims_factor_uidx").on(
+    table.credentialId,
+    table.factorType,
+    table.factorKey,
+  ),
+  index("auth_mfa_claims_created_idx").on(table.createdAt),
 ]);
 
 export const securityEvents = sqliteTable("security_events", {

@@ -126,6 +126,7 @@ function databaseFixture(): {
       auth_method TEXT NOT NULL DEFAULT 'email_otp',
       assurance_level TEXT NOT NULL DEFAULT 'primary',
       authenticated_at TEXT,
+      mfa_verified_at TEXT,
       expires_at TEXT NOT NULL,
       idle_expires_at TEXT,
       revoked_at TEXT,
@@ -722,6 +723,47 @@ test("security events form a canonical append-only per-user hash chain", async (
       ).run(),
       /append-only/,
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("security-event tail follows hashes instead of out-of-order timestamps", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    insertUser(sqlite, "user-a");
+    for (const [id, createdAt] of [
+      ["event-a", "2026-07-26T12:00:00.000Z"],
+      ["event-b", "2026-07-26T12:02:00.000Z"],
+      ["event-c", "2026-07-26T12:01:00.000Z"],
+      ["event-d", "2026-07-26T12:03:00.000Z"],
+    ] as const) {
+      await batchWithSecurityEvent(
+        d1,
+        {
+          id,
+          userId: "user-a",
+          eventType: `security.${id}`,
+          createdAt,
+        },
+        () => [],
+      );
+    }
+    const events = sqlite.prepare(`
+      SELECT id,previous_hash AS previousHash,event_hash AS eventHash
+      FROM security_events
+      WHERE user_id='user-a'
+      ORDER BY rowid
+    `).all() as Array<{
+      id: string;
+      previousHash: string;
+      eventHash: string;
+    }>;
+    assert.equal(events.length, 4);
+    assert.equal(events[0].previousHash, "0".repeat(64));
+    for (let index = 1; index < events.length; index += 1) {
+      assert.equal(events[index].previousHash, events[index - 1].eventHash);
+    }
   } finally {
     sqlite.close();
   }

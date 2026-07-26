@@ -243,10 +243,16 @@
   text-align: center;
 }
 
+.auth-mfa-code {
+  font-size: 22px !important;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+}
+
 .auth-hint {
   display: block;
   margin-top: -12px;
-  color: #728096;
+  color: #65737d;
   font-size: 12px;
 }
 

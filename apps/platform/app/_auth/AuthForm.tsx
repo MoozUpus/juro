@@ -13,7 +13,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 type AccountType = "individual" | "business";
 type Locale = "ru" | "uz";
@@ -33,6 +33,7 @@ type OtpResponse = {
   resendAfterSeconds?: number;
   retryAfterSeconds?: number;
   redirectTo?: string;
+  requiresTwoFactor?: boolean;
   error?: string;
   code?: string;
 };
@@ -59,10 +60,11 @@ export function AuthForm({
 }: Props) {
   const [locale, setLocale] = useState<Locale>(initialLocale);
   const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
-  const [step, setStep] = useState<"details" | "code">("details");
+  const [step, setStep] = useState<"details" | "code" | "mfa">("details");
   const [challengeId, setChallengeId] = useState("");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [companyName, setCompanyName] = useState("");
@@ -73,6 +75,10 @@ export function AuthForm({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [cooldown, setCooldown] = useState(0);
+  const previousStep = useRef(step);
+  const emailInput = useRef<HTMLInputElement>(null);
+  const otpInput = useRef<HTMLInputElement>(null);
+  const mfaInput = useRef<HTMLInputElement>(null);
   const ru = locale === "ru";
   const explicitReturnTo = safeReturnPath(returnTo);
   const protectedReturnTo = explicitReturnTo ?? "/";
@@ -86,6 +92,17 @@ export function AuthForm({
     const timer = window.setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
     return () => window.clearInterval(timer);
   }, [cooldown]);
+
+  useEffect(() => {
+    if (previousStep.current === step) return;
+    previousStep.current = step;
+    const target = step === "details"
+      ? emailInput.current
+      : step === "code"
+        ? otpInput.current
+        : mfaInput.current;
+    target?.focus();
+  }, [step]);
 
   async function sendCode() {
     setError("");
@@ -148,12 +165,65 @@ export function AuthForm({
         }),
       });
       const data = await response.json() as OtpResponse;
-      if (!response.ok || !data.redirectTo) {
+      if (!response.ok) {
         throw new Error(data.error || (ru ? "Не удалось подтвердить код." : "Kodni tasdiqlab bo‘lmadi."));
+      }
+      if (data.requiresTwoFactor) {
+        setMfaCode("");
+        setStep("mfa");
+        return;
+      }
+      if (!data.redirectTo) {
+        throw new Error(ru
+          ? "Сервер не вернул безопасный маршрут продолжения."
+          : "Server xavfsiz davom etish yo‘lini qaytarmadi.");
       }
       window.location.assign(explicitReturnTo ?? data.redirectTo);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function verifySecondFactor(event: FormEvent) {
+    event.preventDefault();
+    setError("");
+    setPending(true);
+    try {
+      const response = await fetch("/api/auth/verify-mfa", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({ code: mfaCode.trim(), locale }),
+      });
+      const data = await response.json() as OtpResponse;
+      if (!response.ok || !data.redirectTo) {
+        const message = data.error || (ru
+          ? "Не удалось подтвердить второй фактор."
+          : "Ikkinchi omilni tasdiqlab bo‘lmadi.");
+        if ([
+          "MFA_CHALLENGE_INVALID",
+          "MFA_CHALLENGE_EXPIRED",
+          "MFA_CHALLENGE_USED",
+          "MFA_ATTEMPTS_EXCEEDED",
+        ].includes(data.code ?? "")) {
+          setStep("details");
+          setChallengeId("");
+          setCode("");
+          setMfaCode("");
+          setCooldown(0);
+          setError(message);
+          return;
+        }
+        throw new Error(message);
+      }
+      window.location.assign(explicitReturnTo ?? data.redirectTo);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
       setPending(false);
     }
   }
@@ -218,7 +288,7 @@ export function AuthForm({
               </>
             )}
 
-            <label>Email<input type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" inputMode="email" placeholder="name@example.com" /></label>
+            <label>Email<input ref={emailInput} type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" inputMode="email" placeholder="name@example.com" /></label>
 
             {mode === "register" && (
               <div className="auth-consents">
@@ -229,12 +299,12 @@ export function AuthForm({
               </div>
             )}
 
-            <button className="auth-submit" disabled={pending}>
-              {pending ? <LoaderCircle className="spin" /> : <ArrowRight />}
+            <button className="auth-submit" disabled={pending} aria-busy={pending}>
+              {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
               {ru ? "Получить код" : "Kodni olish"}
             </button>
           </form>
-        ) : (
+        ) : step === "code" ? (
           <form onSubmit={verifyCode}>
             <header>
               <CheckCircle2 />
@@ -244,11 +314,11 @@ export function AuthForm({
               </div>
             </header>
             <label>{ru ? "Шестизначный код" : "Olti xonali kod"}
-              <input className="auth-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="otp-hint" />
+              <input ref={otpInput} className="auth-code" value={code} onChange={(event) => setCode(event.target.value.replace(/\D/g, "").slice(0, 6))} required inputMode="numeric" autoComplete="one-time-code" pattern="[0-9]{6}" maxLength={6} aria-describedby="otp-hint" />
             </label>
             <small id="otp-hint" className="auth-hint">{ru ? "Не передавайте этот код другим людям." : "Bu kodni boshqa odamlarga bermang."}</small>
-            <button className="auth-submit" disabled={pending || code.length !== 6}>
-              {pending ? <LoaderCircle className="spin" /> : <ArrowRight />}
+            <button className="auth-submit" disabled={pending || code.length !== 6} aria-busy={pending}>
+              {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
               {ru ? "Подтвердить" : "Tasdiqlash"}
             </button>
             <div className="auth-code-actions">
@@ -256,11 +326,64 @@ export function AuthForm({
                 {ru ? "Изменить email" : "Emailni o‘zgartirish"}
               </button>
               <button type="button" className="auth-resend" onClick={() => void sendCode()} disabled={pending || cooldown > 0}>
-                <RotateCcw />{cooldown > 0
+                <RotateCcw aria-hidden="true" />{cooldown > 0
                   ? (ru ? `Повторить через ${cooldown} с` : `${cooldown} s dan keyin`)
                   : (ru ? "Отправить код повторно" : "Kodni qayta yuborish")}
               </button>
             </div>
+          </form>
+        ) : (
+          <form onSubmit={verifySecondFactor}>
+            <header>
+              <ShieldCheck aria-hidden="true" />
+              <div>
+                <h2>{ru
+                  ? "Подтвердите второй фактор"
+                  : "Ikkinchi omilni tasdiqlang"}</h2>
+                <p>{ru
+                  ? "Введите код из приложения-аутентификатора или один резервный код."
+                  : "Autentifikator ilovasidagi kodni yoki bitta zaxira kodni kiriting."}</p>
+              </div>
+            </header>
+            <label>{ru ? "Код подтверждения" : "Tasdiqlash kodi"}
+              <input
+                ref={mfaInput}
+                className="auth-code auth-mfa-code"
+                value={mfaCode}
+                onChange={(event) => setMfaCode(
+                  event.target.value
+                    .toUpperCase()
+                    .replace(/[^A-Z0-9 -]/g, "")
+                    .slice(0, 64),
+                )}
+                required
+                inputMode="text"
+                autoComplete="one-time-code"
+                maxLength={64}
+                aria-describedby="mfa-hint"
+              />
+            </label>
+            <small id="mfa-hint" className="auth-hint">{ru
+              ? "TOTP-код содержит 6 цифр. Резервный код можно вводить с дефисами или без."
+              : "TOTP kodi 6 raqamdan iborat. Zaxira kodni chiziqcha bilan yoki chiziqchasiz kiriting."}</small>
+            <button className="auth-submit" disabled={pending || mfaCode.trim().length < 6} aria-busy={pending}>
+              {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
+              {ru ? "Завершить вход" : "Kirishni yakunlash"}
+            </button>
+            <button
+              type="button"
+              className="auth-back"
+              disabled={pending}
+              onClick={() => {
+                setStep("details");
+                setChallengeId("");
+                setCode("");
+                setMfaCode("");
+                setError("");
+              }}
+            >
+              {ru ? "Начать вход заново" : "Kirishni qaytadan boshlash"}
+            </button>
           </form>
         )}
 

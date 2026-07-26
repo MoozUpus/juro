@@ -45,7 +45,8 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 
 ## Database migration
 
-Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0013_*.sql`. Before any remote deployment:
+Migrations are ordered in `drizzle/0000_*.sql` through
+`drizzle/0014_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -53,7 +54,11 @@ Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0013_*.sql`. Bef
 4. Apply the pending migrations in order.
 5. Verify the migration ledger and foreign keys.
 6. Confirm that pre-existing user profiles received a default workspace and that tenant-owned records received `workspace_id`.
-7. Verify `document_comparisons`, `comparison_changes`, `legislation_updates`, `monitoring_preferences`, `job_outbox`, `job_runs`, `auth_devices`, and `security_events`.
+7. Verify `document_comparisons`, `comparison_changes`,
+   `legislation_updates`, `monitoring_preferences`, `job_outbox`, `job_runs`,
+   `auth_devices`, `security_events`, `auth_totp_credentials`,
+   `auth_backup_codes`, `auth_mfa_challenges`, and
+   `auth_mfa_factor_claims`.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 9. Require both tenant-link audits to return zero:
 
@@ -65,7 +70,7 @@ Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0013_*.sql`. Bef
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migrations `0011`–`0013` have passed local sequence, foreign-key,
+Migrations `0011`–`0014` have passed local sequence, foreign-key,
 sentinel-preservation, tenant-backfill, append-only trigger, chain-fork, and
 snapshot tests. They have not been applied to staging or production.
 
@@ -78,6 +83,15 @@ snapshot tests. They have not been applied to staging or production.
   at most one session claim.
 - A new email-code login creates one device-aware primary-assurance session,
   with a 30-day absolute and seven-day idle limit.
+- For an account with active MFA, email OTP creates only a five-minute
+  pre-auth challenge; it must not create a primary session.
+- TOTP enrollment encrypts the secret, confirmation displays ten backup codes
+  once, and a consumed backup code cannot be reused.
+- TOTP and backup-code login, regeneration, and disable remain replay-safe
+  under parallel requests; a losing operation cannot revoke or downgrade the
+  winner's session.
+- Missing, malformed, and unknown-version `IDENTITY_KEYRING` values fail
+  closed without issuing a session or exposing configuration detail.
 - Session listing marks the current local session, never claims to include
   external-provider sessions, and allows only owner-scoped single/other/all
   revocation.
@@ -85,6 +99,11 @@ snapshot tests. They have not been applied to staging or production.
   or revocation, and stored events reject update/delete.
 - OTP request, verification, and logout reject missing or foreign-origin CSRF
   writes.
+- MFA verification, setup, confirmation, backup-code regeneration, and
+  disable reject missing or foreign-origin CSRF writes.
+- Platform-auth headers cannot manage or satisfy JURO MFA. Keep
+  `ALLOW_PLATFORM_AUTH_HEADERS` absent unless the trusted edge has been proven
+  to strip client values and inject authenticated headers.
 - Onboarding persists locale, account type, goal, workspace, consent, and audit event.
 - Private routes redirect a guest to `/login`.
 - `/document-builder-test/*` returns `308` to `/document-builder/*`.
@@ -106,7 +125,13 @@ snapshot tests. They have not been applied to staging or production.
 1. Stop new writes if a migration or authorization regression is detected.
 2. Redeploy the previously saved Sites version.
 3. If the schema migration changed production data, restore the pre-migration D1 backup; do not attempt a destructive reverse migration in place.
-4. Revoke sessions and invitation/share tokens if authorization boundaries may have been affected.
-5. Verify login, one tenant-isolation query, one private file request, and one legacy redirect before reopening traffic.
+4. If MFA authentication is unstable, stop new enrollments and preserve the
+   additive MFA rows and key versions. Roll back only to an MFA-aware saved
+   version that still enforces the pre-auth gate; never deploy pre-MFA code
+   while any active credential exists. Do not delete credentials or rotate
+   keys during the incident.
+5. Revoke sessions and invitation/share tokens if authorization boundaries may have been affected.
+6. Verify email-only and MFA login, one tenant-isolation query, one private
+   file request, and one legacy redirect before reopening traffic.
 
 Rolling back application code without rolling back an incompatible database change is not considered a complete rollback.
