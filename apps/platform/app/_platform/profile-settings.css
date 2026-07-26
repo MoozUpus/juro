@@ -177,3 +177,43 @@
     grid-template-columns: 1fr;
   }
 }
+
+.delete-request label {
+  display: grid;
+  max-width: 420px;
+  gap: 7px;
+  color: #465965;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.delete-request .deletion-code-destination {
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #fff4d7;
+  color: #684e1f;
+}
+
+.deletion-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.delete-request .deletion-actions .danger-outline {
+  margin-top: 0;
+  border: 1px solid #ba5b56;
+  background: #fff;
+  color: #8f3430;
+}
+
+@media(max-width:720px) {
+  .delete-request button,
+  .deletion-actions {
+    width: 100%;
+  }
+
+  .deletion-actions {
+    flex-direction: column;
+  }
+}

@@ -100,6 +100,57 @@ The security page exposes setup, confirmation, one-time backup-code display,
 regeneration, and disable flows in RU/UZ. If `IDENTITY_KEYRING` is absent or
 invalid, the feature fails closed and setup is not offered.
 
+### Versioned policy evidence
+
+- all five RU/UZ application policy pages have a server-owned machine version
+  and an exact SHA-256 digest over canonical semantic content;
+- the displayed version is `2026-07-26.draft.1` and is visibly marked as a
+  draft because operator identity placeholders and legal approval remain
+  unresolved;
+- runtime verification fails closed if content changes without an intentional
+  version/digest update;
+- registration records the exact policy row, locale, digest, method,
+  authentication source, OTP challenge evidence, and acceptance time;
+- policy documents and user acceptance evidence are append-only at the
+  database layer; an insert trigger rejects mismatched key/version/locale/hash
+  evidence;
+- legacy version-only acceptances remain visible as `legacy_unverified`; the
+  migration does not invent a content digest;
+- optional marketing choice is stored in `consents` as
+  `marketing_email`, not misrepresented as an accepted legal document;
+- profile history and portable export expose policy evidence separately from
+  revocable operational consents.
+
+Append-only acceptance evidence deliberately blocks a future cascading user
+delete. An approved retention/pseudonymization design is required before the
+purge phase; the current deletion-request flow does not erase rows.
+
+### Verified account-deletion request
+
+- the endpoint accepts only strict, size-bounded two-step JSON:
+  `request_code` followed by `confirm`;
+- both steps require CSRF/origin proof and a JURO local email session
+  authenticated within the last ten minutes; platform headers cannot satisfy
+  the requirement;
+- deletion uses a dedicated challenge table and email template, never a login
+  or registration OTP;
+- challenge creation has atomic cooldown, five-per-hour accounting, a
+  single-active-challenge fence, provider idempotency, and invalidation when
+  Resend fails;
+- codes are salted and hashed at rest, expire after ten minutes, allow five
+  guarded attempts, and are bound to the exact user and local session;
+- exact challenge consumption, request insertion, workspace audit, append-only
+  security event, and revocation of all local sessions share one D1 batch;
+- an operation fence and partial unique active-request index produce one
+  winner under concurrent confirmation;
+- the database rejects a deletion request whose user/session/verification time
+  does not match the consumed challenge;
+- the UI explains that this creates a verified operator-review request, not an
+  immediate purge, and signs out after the server revokes sessions.
+
+Migration 0015 adds the immutable policy registry/evidence columns and deletion
+challenge/evidence fields. It remains local only.
+
 ## Local evidence
 
 Verified commands:
@@ -113,6 +164,8 @@ node --import tsx --test \
   tests/auth-sessions.test.ts \
   tests/auth-mfa-crypto.test.ts \
   tests/auth-mfa.test.ts \
+  tests/account-deletion.test.ts \
+  tests/policy-acceptance.test.ts \
   tests/document-access.test.ts \
   tests/migration-safety.test.ts \
   tests/platform-core.test.ts
@@ -128,10 +181,10 @@ concurrent disable, failed-enrollment side effects, out-of-order audit
 timestamps, and the full existing builder/comparison/rendered Worker
 regression suite.
 
-The final local full suite passes 191/191 checks: 21 rendered
-Worker/security checks, 137 core/document/auth checks, and 33 Cloudflare
+The final local full suite passes 203/203 checks: 22 rendered
+Worker/security checks, 145 core/document/auth checks, and 36 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
-92 tables with zero foreign-key integrity errors. Local evidence is not
+94 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
@@ -150,7 +203,8 @@ staging:
 1. complete the approved Cloudflare inventory and independent D1 backup;
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
-4. apply pending migrations through 0014;
+4. prove there are no duplicate active legacy deletion requests, then apply
+   pending migrations through 0015;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -168,7 +222,13 @@ staging:
     writes, user-agent mismatch, attempt exhaustion, and parallel D1 login
     and disable operations;
 13. verify that `ALLOW_PLATFORM_AUTH_HEADERS` remains absent unless the edge
-    demonstrably strips client input and injects authenticated headers.
+    demonstrably strips client input and injects authenticated headers;
+14. send and confirm real RU and UZ deletion OTP messages, then verify
+    one-winner D1 concurrency, exact challenge evidence, audit-chain entry,
+    all-local-session revocation, and provider-failure invalidation;
+15. compare every new policy registry digest with the rendered RU/UZ page and
+    obtain owner/legal approval before changing any status from draft through
+    a new immutable version.
 
 Required read-only queries:
 
@@ -179,17 +239,32 @@ GROUP BY invitation_status, status, can_view, joined_at IS NULL;
 
 SELECT count(*) FROM documents WHERE workspace_id IS NULL;
 SELECT count(*) FROM document_files WHERE workspace_id IS NULL;
+
+SELECT user_id, count(*)
+FROM account_deletion_requests
+WHERE status IN ('requested','reviewing')
+GROUP BY user_id
+HAVING count(*) > 1;
+
+SELECT acceptance_method, count(*)
+FROM user_acceptances
+GROUP BY acceptance_method;
 ```
 
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0014 are not applied to staging or production;
+- migrations 0011–0015 are not applied to staging or production;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, D1 migration, real-device authenticator flow, or remote D1
-  concurrency test has been completed;
-- trusted-device bypass, administrator-assisted recovery, deletion OTP, and
-  complete policy versioning are not implemented by this slice;
+concurrency test has been completed;
+- trusted-device bypass and administrator-assisted recovery are not
+  implemented by this slice;
+- operator identity placeholders, final RU/UZ policy text, policy effective
+  dates, and the language-priority rule still require legal approval;
+- account deletion now creates a verified request only; cancellation,
+  retention classification, export hold, provider/R2 erasure, delayed purge,
+  and proof-of-erasure orchestration are not implemented;
 - device-aware management covers JURO local email sessions only; an external
   identity provider's other sessions cannot be listed or revoked here;
 - raw email storage and unkeyed legacy lookup hashes still require a
@@ -198,8 +273,8 @@ SELECT count(*) FROM document_files WHERE workspace_id IS NULL;
 - NAT-wide OTP limits preserve existing behavior and need staging product
   review;
 - cleanup scheduling for expired pending credentials and consumed/invalidated
-  MFA challenges remains inactive until the reviewed cleanup queue/Cron
-  lifecycle is enabled;
+  MFA/deletion challenges remains inactive until the reviewed cleanup
+  queue/Cron lifecycle is enabled;
 - remote D1 race tests and authenticated full HTTP MFA/invitation/workspace
   E2E remain release gates;
 - production remains frozen pending the later explicit owner confirmation.

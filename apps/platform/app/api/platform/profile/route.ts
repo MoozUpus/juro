@@ -11,7 +11,8 @@ export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const db = requireD1();
-  const [profile, workspaceRow, consents] = await db.batch([
+  const [profile, workspaceRow, consents, acceptances, deletionRequest] =
+    await db.batch([
     db.prepare(
       `SELECT id,email,full_name AS fullName,phone,locale,account_type AS accountType,
         company_name AS companyName,organization_role AS organizationRole,primary_goal AS primaryGoal,
@@ -22,8 +23,41 @@ export const GET = withApiErrors(async function GET() {
     db.prepare(
       "SELECT type,version,granted_at AS grantedAt,revoked_at AS revokedAt FROM consents WHERE user_id=? ORDER BY granted_at DESC",
     ).bind(user.id),
+    db.prepare(
+      `SELECT
+         acceptance.document_key AS type,
+         acceptance.document_version AS version,
+         acceptance.locale,
+         acceptance.content_sha256 AS contentSha256,
+         acceptance.accepted_at AS acceptedAt,
+         CASE
+           WHEN acceptance.policy_document_id IS NULL
+             THEN 'legacy_unverified'
+           ELSE coalesce(policy.status,'registry_missing')
+         END AS status
+       FROM user_acceptances acceptance
+       LEFT JOIN policy_documents policy
+         ON policy.id=acceptance.policy_document_id
+       WHERE acceptance.user_id=?
+       ORDER BY acceptance.accepted_at DESC`,
+    ).bind(user.id),
+    db.prepare(
+      `SELECT
+         id,status,requested_at AS requestedAt,verified_at AS verifiedAt
+       FROM account_deletion_requests
+       WHERE user_id=? AND status IN ('requested','reviewing')
+       ORDER BY requested_at DESC
+       LIMIT 1`,
+    ).bind(user.id),
   ]);
-  return response({ profile: profile.results[0] ?? null, workspace: workspaceRow.results[0] ?? null, role: workspace.role, consents: consents.results });
+  return response({
+    profile: profile.results[0] ?? null,
+    workspace: workspaceRow.results[0] ?? null,
+    role: workspace.role,
+    consents: consents.results,
+    acceptances: acceptances.results,
+    deletionRequest: deletionRequest.results[0] ?? null,
+  });
 });
 
 export const PATCH = withApiErrors(async function PATCH(request: Request) {

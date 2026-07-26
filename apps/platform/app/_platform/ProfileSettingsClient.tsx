@@ -16,6 +16,20 @@ type ProfileData = {
   workspace: { name: string; type: string; locale: string };
   role: string;
   consents: Array<{ type: string; version: string; grantedAt: string; revokedAt: string | null }>;
+  acceptances: Array<{
+    type: string;
+    version: string;
+    locale: string | null;
+    contentSha256: string | null;
+    acceptedAt: string;
+    status: string;
+  }>;
+  deletionRequest: {
+    id: string;
+    status: string;
+    requestedAt: string;
+    verifiedAt: string | null;
+  } | null;
 };
 type Session = {
   id: string;
@@ -43,6 +57,11 @@ type MfaSetup = {
   otpauthUri: string;
   expiresAt: string;
 };
+type DeletionChallenge = {
+  challengeId: string;
+  destination: string;
+  expiresInSeconds: number;
+};
 
 export function ProfileSettingsClient({ locale, accountType, view }: { locale: PlatformLocale; accountType: AccountType; view: View }) {
   const ru = locale === "ru";
@@ -56,6 +75,8 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const [notice, setNotice] = useState("");
   const [form, setForm] = useState({ fullName: "", phone: "", locale, timezone: "Asia/Tashkent", companyName: "", organizationRole: "" });
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletionCode, setDeletionCode] = useState("");
+  const [deletionChallenge, setDeletionChallenge] = useState<DeletionChallenge | null>(null);
   const [mfa, setMfa] = useState<MfaStatus | null>(null);
   const [mfaSetup, setMfaSetup] = useState<MfaSetup | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -315,16 +336,66 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
 
   async function requestDeletion(event: FormEvent) {
     event.preventDefault();
+    setSaving(true);
     setError("");
     setNotice("");
-    const response = await fetch("/api/platform/privacy/deletion-request", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-      body: JSON.stringify({ confirmation: deleteConfirmation }),
-    });
-    const body = await response.json() as { error?: string };
-    if (!response.ok) setError(body.error || (ru ? "Запрос не создан." : "So‘rov yaratilmadi."));
-    else { setNotice(ru ? "Запрос на удаление зарегистрирован." : "O‘chirish so‘rovi ro‘yxatdan o‘tkazildi."); setDeleteConfirmation(""); }
+    try {
+      const response = await fetch(
+        "/api/platform/privacy/deletion-request",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+          },
+          body: JSON.stringify(deletionChallenge
+            ? {
+              action: "confirm",
+              challengeId: deletionChallenge.challengeId,
+              code: deletionCode,
+              confirmation: deleteConfirmation,
+              locale,
+            }
+            : { action: "request_code", locale }),
+        },
+      );
+      const body = await response.json() as {
+        error?: string;
+        challengeId?: string;
+        destination?: string;
+        expiresInSeconds?: number;
+        logout?: boolean;
+      };
+      if (!response.ok) {
+        setError(body.error || (ru
+          ? "Запрос не создан."
+          : "So‘rov yaratilmadi."));
+      } else if (body.logout) {
+        setNotice(ru
+          ? "Проверенный запрос зарегистрирован. Сессии завершены."
+          : "Tasdiqlangan so‘rov ro‘yxatdan o‘tdi. Sessiyalar yakunlandi.");
+        window.location.assign("/signout-with-chatgpt?return_to=/login");
+      } else if (
+        body.challengeId
+        && body.destination
+        && body.expiresInSeconds
+      ) {
+        setDeletionChallenge({
+          challengeId: body.challengeId,
+          destination: body.destination,
+          expiresInSeconds: body.expiresInSeconds,
+        });
+        setNotice(ru
+          ? `Код отправлен на ${body.destination}.`
+          : `Kod ${body.destination} manziliga yuborildi.`);
+      }
+    } catch {
+      setError(ru
+        ? "Не удалось связаться с сервером. Повторите запрос."
+        : "Server bilan bog‘lanib bo‘lmadi. So‘rovni takrorlang.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) return <div className="profile-loading" role="status"><LoaderCircle className="spin" aria-hidden="true" /><span className="sr-only">{ru ? "Загрузка настроек" : "Sozlamalar yuklanmoqda"}</span></div>;
@@ -444,7 +515,109 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
         </ul>
       </section>
     </div>}
-    {view === "privacy" && data && <div className="profile-panels"><section><h2><Download />{ru ? "Экспорт данных" : "Ma’lumotlarni eksport qilish"}</h2><p>{ru ? "Скачайте переносимый JSON с данными профиля, делами, метаданными документов, согласиями и вашей историей действий. Содержимое приватных файлов не включается автоматически." : "Profil, ishlar, hujjat metama’lumotlari, roziliklar va harakatlar tarixini JSON formatida yuklab oling. Maxfiy fayllar mazmuni avtomatik kiritilmaydi."}</p><Link className="profile-download" href="/api/platform/privacy/export" prefetch={false}><Download />{ru ? "Скачать экспорт" : "Eksportni yuklab olish"}</Link></section><section><h2>{ru ? "История согласий" : "Roziliklar tarixi"}</h2>{data.consents.length ? data.consents.map(consent => <div className="consent-row" key={`${consent.type}-${consent.grantedAt}`}><strong>{consent.type}</strong><span>v{consent.version}</span><time>{formatDateTime(consent.grantedAt, ru)}</time></div>) : <p>{ru ? "Записей пока нет." : "Hozircha yozuvlar yo‘q."}</p>}</section><form className="delete-request" onSubmit={requestDeletion}><Trash2 /><div><h2>{ru ? "Запросить удаление аккаунта" : "Hisobni o‘chirishni so‘rash"}</h2><p>{ru ? "Это отдельный процесс, а не архивирование документов. Введите DELETE, чтобы зарегистрировать запрос." : "Bu hujjatlarni arxivlash emas, alohida jarayon. So‘rovni ro‘yxatdan o‘tkazish uchun DELETE yozing."}</p><input value={deleteConfirmation} onChange={(event) => setDeleteConfirmation(event.target.value)} placeholder="DELETE" /><button disabled={deleteConfirmation !== "DELETE"}>{ru ? "Создать запрос" : "So‘rov yaratish"}</button></div></form></div>}
+    {view === "privacy" && data && <div className="profile-panels">
+      <section>
+        <h2><Download />{ru ? "Экспорт данных" : "Ma’lumotlarni eksport qilish"}</h2>
+        <p>{ru
+          ? "Скачайте переносимый JSON с данными профиля, делами, метаданными документов, согласиями и вашей историей действий. Содержимое приватных файлов не включается автоматически."
+          : "Profil, ishlar, hujjat metama’lumotlari, roziliklar va harakatlar tarixini JSON formatida yuklab oling. Maxfiy fayllar mazmuni avtomatik kiritilmaydi."}</p>
+        <Link className="profile-download" href="/api/platform/privacy/export" prefetch={false}>
+          <Download />{ru ? "Скачать экспорт" : "Eksportni yuklab olish"}
+        </Link>
+      </section>
+      <section>
+        <h2>{ru ? "История согласий" : "Roziliklar tarixi"}</h2>
+        {data.acceptances.map(acceptance => <div className="consent-row" key={`${acceptance.type}-${acceptance.version}`}>
+          <strong>{acceptance.type}</strong>
+          <span>
+            v{acceptance.version} · {acceptance.locale || "—"} · {acceptance.status}
+          </span>
+          <time>{formatDateTime(acceptance.acceptedAt, ru)}</time>
+        </div>)}
+        {data.consents.map(consent => <div className="consent-row" key={`${consent.type}-${consent.grantedAt}`}>
+          <strong>{consent.type}</strong>
+          <span>v{consent.version}</span>
+          <time>{formatDateTime(consent.grantedAt, ru)}</time>
+        </div>)}
+        {!data.acceptances.length && !data.consents.length && <p>
+          {ru ? "Записей пока нет." : "Hozircha yozuvlar yo‘q."}
+        </p>}
+      </section>
+      {data.deletionRequest
+        ? <section className="deletion-request-status">
+          <h2><Trash2 />{ru ? "Запрос на удаление зарегистрирован" : "O‘chirish so‘rovi ro‘yxatdan o‘tgan"}</h2>
+          <p>{ru
+            ? "JURO принял проверенный запрос. Данные не стираются автоматически: оператор должен проверить обязательные сроки хранения и последующие действия."
+            : "JURO tasdiqlangan so‘rovni qabul qildi. Ma’lumotlar avtomatik o‘chirilmaydi: operator majburiy saqlash muddati va keyingi amallarni tekshiradi."}</p>
+          <div className="consent-row">
+            <strong>{data.deletionRequest.status}</strong>
+            <span>{data.deletionRequest.id}</span>
+            <time>{formatDateTime(data.deletionRequest.requestedAt, ru)}</time>
+          </div>
+        </section>
+        : <form className="delete-request" onSubmit={requestDeletion}>
+        <Trash2 />
+        <div>
+          <h2>{ru ? "Запросить удаление аккаунта" : "Hisobni o‘chirishni so‘rash"}</h2>
+          <p id="deletion-request-description">{ru
+            ? "Это проверенный запрос, а не немедленное стирание: после подтверждения JURO завершит все email-сессии, а оператор проверит обязательные сроки хранения. Архивирование документов к этому процессу не относится."
+            : "Bu darhol o‘chirish emas, tasdiqlangan so‘rov: tasdiqlangach JURO barcha email sessiyalarini yakunlaydi, operator esa majburiy saqlash muddatlarini tekshiradi. Hujjatlarni arxivlash bu jarayonga kirmaydi."}</p>
+          {!deletionChallenge
+            ? <button type="submit" disabled={saving} aria-busy={saving}>
+              {saving && <LoaderCircle className="spin" aria-hidden="true" />}
+              {ru ? "Получить код по email" : "Email orqali kod olish"}
+            </button>
+            : <>
+              <p className="deletion-code-destination" role="status">{ru
+                ? `Код отправлен на ${deletionChallenge.destination} и действует ${Math.floor(deletionChallenge.expiresInSeconds / 60)} минут.`
+                : `Kod ${deletionChallenge.destination} manziliga yuborildi va ${Math.floor(deletionChallenge.expiresInSeconds / 60)} daqiqa amal qiladi.`}</p>
+              <label>{ru ? "Код из письма" : "Xatdagi kod"}
+                <input
+                  value={deletionCode}
+                  onChange={(event) => setDeletionCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  aria-describedby="deletion-request-description"
+                  required
+                />
+              </label>
+              <label>{ru ? "Контрольное подтверждение" : "Nazorat tasdig‘i"}
+                <input
+                  value={deleteConfirmation}
+                  onChange={(event) => setDeleteConfirmation(event.target.value)}
+                  placeholder="DELETE"
+                  autoComplete="off"
+                  required
+                />
+              </label>
+              <div className="deletion-actions">
+                <button
+                  type="submit"
+                  disabled={saving || deletionCode.length !== 6 || deleteConfirmation !== "DELETE"}
+                  aria-busy={saving}
+                >
+                  {saving && <LoaderCircle className="spin" aria-hidden="true" />}
+                  {ru ? "Подтвердить запрос" : "So‘rovni tasdiqlash"}
+                </button>
+                <button
+                  className="danger-outline"
+                  type="button"
+                  disabled={saving}
+                  onClick={() => {
+                    setDeletionChallenge(null);
+                    setDeletionCode("");
+                    setDeleteConfirmation("");
+                  }}
+                >
+                  {ru ? "Отмена" : "Bekor qilish"}
+                </button>
+              </div>
+            </>}
+        </div>
+        </form>}
+    </div>}
   </section>;
 }
 

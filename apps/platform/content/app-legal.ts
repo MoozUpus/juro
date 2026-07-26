@@ -1,6 +1,6 @@
 export type AppLegalSlug = "terms" | "privacy" | "cookies" | "ai-rules" | "personal-data";
 
-type LegalDocument = {
+export type LegalDocument = {
   title: string;
   description: string;
   updated: string;

@@ -118,8 +118,16 @@ contracts. Service tests cover competing login/disable operations and verify
 that a losing exact claim cannot perform the winner's session or audit
 side-effects.
 
+Migration 0015 tests additionally prove immutable policy rows and acceptance
+evidence, honest legacy backfill without an invented content hash, dedicated
+deletion challenges, exact request-verification triggers, one active challenge
+and request per user, and snapshot agreement. Service tests cover cooldown and
+hourly limits, stale/revoked session denial, concurrent reservation and
+confirmation, attempt exhaustion, expiry, foreign-session denial, and full
+rollback when audit insertion fails.
+
 The full local migration sequence changes the SQLite table count from 79 to
-92 and reports zero foreign-key integrity errors. This is compatibility
+94 and reports zero foreign-key integrity errors. This is compatibility
 evidence for the checked-in migration sequence, not
 evidence about the live production schema.
 
@@ -130,15 +138,19 @@ After remote inventory and backup/restore gates:
 1. record the staging D1 database ID and current migration ledger;
 2. create and verify an external backup;
 3. record its bookmark/checksum/manifest without storing secret values;
-4. apply only pending migrations, including 0011–0014 if absent;
-5. verify table/index presence and foreign keys;
-6. run existing route/security tests and isolated document-builder/comparison smoke flows;
-7. verify outbox/job lease behavior and Queue/DLQ delivery;
-8. run both null-workspace audits and stop if either is non-zero;
-9. verify local-session creation, idle expiry, single/other/all revocation, and
+4. verify that no user has multiple `requested`/`reviewing` deletion rows,
+   because 0015 intentionally installs a partial unique index;
+5. apply only pending migrations, including 0011–0015 if absent;
+6. verify table/index/trigger presence and foreign keys;
+7. run existing route/security tests and isolated document-builder/comparison smoke flows;
+8. verify outbox/job lease behavior and Queue/DLQ delivery;
+9. run both null-workspace audits and stop if either is non-zero;
+10. verify local-session creation, idle expiry, single/other/all revocation, and
    the security-event chain without exposing token or device fingerprints;
-10. configure the protected identity key ring and run enrollment, TOTP,
+11. configure the protected identity key ring and run enrollment, TOTP,
     one-time backup-code, regeneration, disable, and concurrent-claim tests;
-11. retain the backup until the release window and restore test are complete.
+12. verify rendered RU/UZ policy digests and run real deletion-code delivery,
+    concurrent confirmation, audit, and session-revocation checks;
+13. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

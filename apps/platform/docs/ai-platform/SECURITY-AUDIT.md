@@ -119,7 +119,9 @@ When `ALLOW_PLATFORM_AUTH_HEADERS=true`, `oai-authenticated-user-*` headers are 
 - public-share downloads have incomplete access auditing;
 - the CSP still permits unsafe inline script/style behavior;
 - support/admin 2FA and role boundaries do not exist;
-- account deletion does not require email OTP and has no purge orchestration.
+- baseline account deletion did not require email OTP. The local Phase 2
+  migration 0015 adds a dedicated verified request flow, but it is not
+  deployed and purge/retention orchestration still does not exist.
 
 ## Positive controls verified
 
@@ -179,4 +181,3 @@ Staging may be deployed only after the four critical findings have fixes and neg
 - verified secrets and no client/log leakage;
 - restore rehearsal;
 - documented residual-risk review.
-

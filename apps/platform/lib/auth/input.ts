@@ -48,6 +48,21 @@ export const manageMfaInputSchema = z.object({
   locale: localeInput,
 }).strict();
 
+export const accountDeletionInputSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("request_code"),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("confirm"),
+    challengeId: z.string().uuid(),
+    code: z.string().regex(/^\d{6}$/),
+    confirmation: z.literal("DELETE"),
+    reason: z.string().trim().max(500).optional(),
+    locale: localeInput,
+  }).strict(),
+]);
+
 export type JsonRequestError =
   | "invalid_content_type"
   | "invalid_json"

@@ -27,6 +27,9 @@ import {
   withApiErrors,
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import {
+  recordRegistrationAcceptances,
+} from "../../../../lib/legal/acceptance";
 import { ensureDefaultWorkspace } from "../../../../lib/platform/workspace";
 
 function json(body: unknown, status = 200, cookie?: string) {
@@ -138,8 +141,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
   await ensureDefaultWorkspace(user.id);
 
   if (purpose === "register") {
-    const acceptances = [["terms", true], ["privacy-policy", true], ["personal-data-processing", true], ["marketing", Boolean(body?.marketing)]] as const;
-    await db.batch(acceptances.filter(([, accepted]) => accepted).map(([key]) => db.prepare("INSERT OR IGNORE INTO user_acceptances (id,user_id,document_key,document_version,accepted_at) VALUES (?,?,?,?,?)").bind(crypto.randomUUID(), user!.id, key, "2026-07-24", now)));
+    await recordRegistrationAcceptances(db, {
+      userId: user.id,
+      locale,
+      otpChallengeId: body.challengeId,
+      acceptedMarketing: Boolean(body.marketing),
+      acceptedAt: now,
+    });
   }
   const redirectTo = purpose === "register" || !user.onboardingCompletedAt
     ? `/onboarding?lang=${locale}`

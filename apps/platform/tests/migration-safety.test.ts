@@ -16,11 +16,16 @@ const phaseOneEntry = journal.entries.find(({ idx }) => idx === 11);
 const phaseTwoEntry = journal.entries.find(({ idx }) => idx === 12);
 const sessionSecurityEntry = journal.entries.find(({ idx }) => idx === 13);
 const mfaEntry = journal.entries.find(({ idx }) => idx === 14);
+const policyDeletionEntry = journal.entries.find(({ idx }) => idx === 15);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
 assert.ok(mfaEntry, "Drizzle journal must contain migration 0014");
+assert.ok(
+  policyDeletionEntry,
+  "Drizzle journal must contain migration 0015",
+);
 
 function migrationSql(entry: JournalEntry): string {
   return readFileSync(new URL(`${entry.tag}.sql`, drizzleRoot), "utf8");
@@ -417,7 +422,9 @@ test("0014 reaches 92 tables and rejects operation or factor replay", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for (const entry of journal.entries) applyMigration(db, entry);
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 14)) {
+      applyMigration(db, entry);
+    }
     assert.equal(tableDefinitions(db).size, 92);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
     assert.ok(
@@ -483,6 +490,198 @@ test("0014 reaches 92 tables and rejects operation or factor replay", () => {
         timestamp,
       ),
       /UNIQUE constraint failed/,
+    );
+  } finally {
+    db.close();
+  }
+});
+
+test("0015 adds immutable policy evidence and deletion verification state", () => {
+  const sql = migrationSql(policyDeletionEntry);
+  for (const table of [
+    "policy_documents",
+    "account_deletion_challenges",
+  ]) {
+    assert.match(sql, new RegExp(`CREATE TABLE \\\`${table}\\\``));
+  }
+  for (const name of [
+    "policy_documents_version_uidx",
+    "account_deletion_challenges_active_user_uidx",
+    "account_deletion_challenges_operation_uidx",
+    "account_deletion_requests_active_user_uidx",
+    "account_deletion_requests_challenge_uidx",
+    "user_acceptances_policy_idx",
+    "policy_documents_no_update",
+    "policy_documents_no_delete",
+    "user_acceptances_policy_guard",
+    "user_acceptances_no_update",
+    "user_acceptances_no_delete",
+    "account_deletion_requests_verification_guard",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  for (const column of [
+    "policy_document_id",
+    "locale",
+    "content_sha256",
+    "acceptance_method",
+    "auth_source",
+    "session_id",
+    "evidence_json",
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`ALTER TABLE \\\`user_acceptances\\\` ADD \\\`${column}\\\``),
+    );
+  }
+  assert.match(sql, /legacy_unverified/);
+  assert.match(sql, /verification_method/);
+  assert.match(sql, /verified_at/);
+  assert.doesNotMatch(
+    sql,
+    /RESEND_API_KEY|IDENTITY_KEYRING|BEGIN (?:RSA |EC )?PRIVATE KEY/i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0015_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, { indexes: Record<string, unknown> }>;
+  };
+  assert.ok(snapshot.tables.policy_documents);
+  assert.ok(snapshot.tables.account_deletion_challenges);
+  assert.ok(
+    snapshot.tables.account_deletion_requests
+      .indexes.account_deletion_requests_active_user_uidx,
+  );
+});
+
+test("0015 backfills legacy acceptance without inventing content evidence", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 15)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-07-26T00:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (
+         id,email,locale,created_at,updated_at
+       ) VALUES (?,?,?,?,?)`,
+    ).run("legacy-policy-user", "legacy@example.test", "uz", now, now);
+    db.prepare(
+      `INSERT INTO user_acceptances (
+         id,user_id,document_key,document_version,accepted_at
+       ) VALUES (?,?,?,?,?)`,
+    ).run(
+      "legacy-acceptance",
+      "legacy-policy-user",
+      "terms",
+      "2026-07-24",
+      now,
+    );
+
+    applyMigration(db, policyDeletionEntry);
+    const row = db.prepare(
+      `SELECT
+         policy_document_id AS policyDocumentId,locale,content_sha256 AS digest,
+         acceptance_method AS method,auth_source AS authSource,evidence_json AS evidence
+       FROM user_acceptances WHERE id='legacy-acceptance'`,
+    ).get() as {
+      policyDocumentId: string | null;
+      locale: string;
+      digest: string | null;
+      method: string;
+      authSource: string;
+      evidence: string;
+    };
+    assert.deepEqual({ ...row }, {
+      policyDocumentId: null,
+      locale: "uz",
+      digest: null,
+      method: "legacy_unverified",
+      authSource: "legacy",
+      evidence: "{\"migration\":\"0015\",\"evidence\":\"legacy_version_only\"}",
+    });
+  } finally {
+    db.close();
+  }
+});
+
+test("0015 enforces immutable policies and exact deletion evidence", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    assert.equal(tableDefinitions(db).size, 94);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    const now = "2026-07-26T12:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES (?,?,?,?)`,
+    ).run("policy-user", "policy@example.test", now, now);
+    db.prepare(
+      `INSERT INTO policy_documents (
+         id,document_key,document_version,locale,content_sha256,status,created_at
+       ) VALUES (?,?,?,?,?,'draft',?)`,
+    ).run(
+      "policy:terms:test:ru",
+      "terms",
+      "test",
+      "ru",
+      "a".repeat(64),
+      now,
+    );
+    db.prepare(
+      `INSERT INTO user_acceptances (
+         id,user_id,policy_document_id,document_key,document_version,locale,
+         content_sha256,acceptance_method,auth_source,accepted_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "acceptance-exact",
+      "policy-user",
+      "policy:terms:test:ru",
+      "terms",
+      "test",
+      "ru",
+      "a".repeat(64),
+      "registration_checkbox",
+      "email_otp",
+      now,
+    );
+    assert.throws(
+      () => db.prepare(
+        "UPDATE policy_documents SET status='approved' WHERE id=?",
+      ).run("policy:terms:test:ru"),
+      /append-only/,
+    );
+    assert.throws(
+      () => db.prepare(
+        "DELETE FROM user_acceptances WHERE id='acceptance-exact'",
+      ).run(),
+      /append-only/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `INSERT INTO user_acceptances (
+           id,user_id,policy_document_id,document_key,document_version,locale,
+           content_sha256,acceptance_method,auth_source,accepted_at
+         ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        "acceptance-mismatch",
+        "policy-user",
+        "policy:terms:test:ru",
+        "terms",
+        "test-incorrect",
+        "ru",
+        "b".repeat(64),
+        "registration_checkbox",
+        "email_otp",
+        now,
+      ),
+      /policy evidence mismatch/,
     );
   } finally {
     db.close();

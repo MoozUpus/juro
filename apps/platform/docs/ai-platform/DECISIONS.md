@@ -225,3 +225,46 @@ Tail selection therefore follows the stored hash graph using a `NOT EXISTS`
 child query. The database uniqueness constraint remains the concurrency fence;
 callers retry from the newly observed tail instead of weakening append-only or
 fork protection.
+
+## D-020 — policy versions are immutable content evidence
+
+Status: accepted
+Date: 2026-07-26
+
+Policy acceptance is bound to a server-owned document key, machine version,
+locale, and SHA-256 digest over canonical semantic content. The client never
+submits a version or digest. Runtime verification fails closed when displayed
+content changes without an intentional version update.
+
+Policy rows and acceptance evidence are append-only. Legacy version-only rows
+are marked `legacy_unverified`; migration must not invent a hash. Optional
+marketing belongs in the revocable `consents` model, not in legal document
+acceptances.
+
+The current application policies remain `draft`: operator identity placeholders
+and legal approval are unresolved. A visible draft label is mandatory.
+Publishing an approved text requires a new immutable version and approved
+effective date, not mutation of the draft row.
+
+## D-021 — deletion request requires exact email challenge proof
+
+Status: accepted
+Date: 2026-07-26
+
+An account-deletion request is accepted only from a JURO local email session
+authenticated within ten minutes and after a dedicated, salted-and-hashed email
+OTP bound to the exact user and session. Trusted platform headers, login OTP
+state, and a typed `DELETE` value alone are insufficient.
+
+Challenge consumption, deletion-request insertion, workspace audit,
+append-only security event, and all-local-session revocation are guarded by one
+operation ID in one D1 batch. Database constraints reject concurrent active
+requests and mismatched challenge evidence. Resend is called only after atomic
+reservation and uses the challenge ID as its idempotency key.
+
+This operation records a verified request; it does not purge data. Retention,
+legal hold, export, provider/R2 deletion, cancellation, delayed purge, and
+proof-of-erasure require a separate reviewed workflow. Append-only legal
+evidence must be retained or pseudonymized under an approved policy before any
+user-row deletion. Remote migration 0015 also requires a preflight check for
+legacy duplicate active requests before its partial unique index is applied.

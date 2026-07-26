@@ -331,6 +331,50 @@ test("MFA boundaries do not accept platform headers or a missing pre-auth cookie
   );
 });
 
+test("account deletion requires CSRF and a recent local JURO session", async () => {
+  const worker = await createWorker();
+  const route = "/api/platform/privacy/deletion-request";
+  const missingHeader = await worker.fetch(new Request(
+    `http://localhost${route}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "request_code", locale: "ru" }),
+    },
+  ), runtime, context);
+  assert.equal(missingHeader.status, 403);
+
+  const foreignOrigin = await worker.fetch(new Request(
+    `http://localhost${route}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://attacker.example",
+        "x-juro-csrf": "1",
+      },
+      body: JSON.stringify({ action: "request_code", locale: "ru" }),
+    },
+  ), runtime, context);
+  assert.equal(foreignOrigin.status, 403);
+
+  const platformOnly = await worker.fetch(new Request(
+    `http://localhost${route}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-juro-csrf": "1",
+        "oai-authenticated-user-email": "owner@example.test",
+      },
+      body: JSON.stringify({ action: "request_code", locale: "ru" }),
+    },
+  ), runtime, context);
+  assert.equal(platformOnly.status, 401);
+  assert.match(platformOnly.headers.get("cache-control") ?? "", /no-store/);
+  assert.match(await platformOnly.text(), /LOCAL_SESSION_REQUIRED/);
+});
+
 test("serves app-specific legal pages in both languages with noindex", async () => {
   const worker = await createWorker();
   for (const route of ["/legal/terms?lang=ru", "/legal/privacy?lang=uz", "/legal/cookies?lang=ru", "/legal/ai-rules?lang=uz", "/legal/personal-data?lang=ru"]) {
@@ -340,6 +384,9 @@ test("serves app-specific legal pages in both languages with noindex", async () 
     const html = await response.text();
     assert.match(html, /JURO/);
     assert.match(html, /Условия|Политика|cookies|AIdan|Shaxsiy|maxfiylik|cookie|qoidalari/);
+    assert.match(html, /2026-07-26\.draft\.1/);
+    assert.match(html, /SHA-256/);
+    assert.match(html, /Проект для юридического утверждения|Yuridik tasdiqlash uchun loyiha/);
   }
 });
 

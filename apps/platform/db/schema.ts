@@ -704,10 +704,61 @@ export const securityEvents = sqliteTable("security_events", {
   index("security_events_type_idx").on(table.eventType, table.createdAt),
 ]);
 
+export const policyDocuments = sqliteTable("policy_documents", {
+  id: text("id").primaryKey(),
+  documentKey: text("document_key").notNull(),
+  documentVersion: text("document_version").notNull(),
+  locale: text("locale").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  status: text("status").notNull(),
+  effectiveAt: text("effective_at"),
+  publishedAt: text("published_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check("policy_documents_locale_check", sql`${table.locale} IN ('ru','uz')`),
+  check(
+    "policy_documents_status_check",
+    sql`${table.status} IN ('draft','approved','superseded')`,
+  ),
+  check(
+    "policy_documents_sha256_check",
+    sql`length(${table.contentSha256}) = 64`,
+  ),
+  uniqueIndex("policy_documents_version_uidx").on(
+    table.documentKey,
+    table.documentVersion,
+    table.locale,
+  ),
+  index("policy_documents_status_idx").on(
+    table.status,
+    table.documentKey,
+  ),
+]);
+
 export const userAcceptances = sqliteTable("user_acceptances", {
-  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), documentKey: text("document_key").notNull(),
-  documentVersion: text("document_version").notNull(), acceptedAt: text("accepted_at").notNull(),
-}, (table) => [uniqueIndex("user_acceptances_uidx").on(table.userId, table.documentKey, table.documentVersion)]);
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  policyDocumentId: text("policy_document_id").references(() => policyDocuments.id, { onDelete: "restrict" }),
+  documentKey: text("document_key").notNull(),
+  documentVersion: text("document_version").notNull(),
+  locale: text("locale"),
+  contentSha256: text("content_sha256"),
+  acceptanceMethod: text("acceptance_method"),
+  authSource: text("auth_source"),
+  sessionId: text("session_id").references(() => authSessions.id, { onDelete: "set null" }),
+  evidenceJson: text("evidence_json"),
+  acceptedAt: text("accepted_at").notNull(),
+}, (table) => [
+  uniqueIndex("user_acceptances_uidx").on(
+    table.userId,
+    table.documentKey,
+    table.documentVersion,
+  ),
+  index("user_acceptances_policy_idx").on(
+    table.policyDocumentId,
+    table.acceptedAt,
+  ),
+]);
 
 export const cases = sqliteTable("cases", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }), ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
@@ -866,14 +917,70 @@ export const payments = sqliteTable("payments", {
   ...timestamps,
 }, (table) => [index("payments_workspace_idx").on(table.workspaceId, table.createdAt)]);
 
+export const accountDeletionChallenges = sqliteTable(
+  "account_deletion_challenges",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+    sessionId: text("session_id").references(() => authSessions.id, { onDelete: "set null" }),
+    emailHash: text("email_hash").notNull(),
+    locale: text("locale").notNull(),
+    codeSalt: text("code_salt").notNull(),
+    codeHash: text("code_hash").notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    expiresAt: text("expires_at").notNull(),
+    consumedAt: text("consumed_at"),
+    consumedByOperationId: text("consumed_by_operation_id"),
+    invalidatedAt: text("invalidated_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "account_deletion_challenges_locale_check",
+      sql`${table.locale} IN ('ru','uz')`,
+    ),
+    check(
+      "account_deletion_challenges_attempts_check",
+      sql`${table.attemptCount} >= 0 AND ${table.maxAttempts} BETWEEN 1 AND 10`,
+    ),
+    uniqueIndex("account_deletion_challenges_operation_uidx").on(
+      table.consumedByOperationId,
+    ),
+    uniqueIndex("account_deletion_challenges_active_user_uidx")
+      .on(table.userId)
+      .where(sql`${table.consumedAt} IS NULL AND ${table.invalidatedAt} IS NULL`),
+    index("account_deletion_challenges_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    index("account_deletion_challenges_expiry_idx").on(table.expiresAt),
+  ],
+);
+
 export const accountDeletionRequests = sqliteTable("account_deletion_requests", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  verificationChallengeId: text("verification_challenge_id").references(() => accountDeletionChallenges.id, { onDelete: "restrict" }),
+  requestedSessionId: text("requested_session_id").references(() => authSessions.id, { onDelete: "set null" }),
   status: text("status").notNull().default("requested"),
   reason: text("reason"),
+  verificationMethod: text("verification_method"),
+  verifiedAt: text("verified_at"),
   requestedAt: text("requested_at").notNull(),
   completedAt: text("completed_at"),
-}, (table) => [index("account_deletion_requests_user_idx").on(table.userId, table.requestedAt)]);
+}, (table) => [
+  index("account_deletion_requests_user_idx").on(
+    table.userId,
+    table.requestedAt,
+  ),
+  uniqueIndex("account_deletion_requests_challenge_uidx").on(
+    table.verificationChallengeId,
+  ),
+  uniqueIndex("account_deletion_requests_active_user_uidx")
+    .on(table.userId)
+    .where(sql`${table.status} IN ('requested','reviewing')`),
+]);
 
 export const documentAnalyses = sqliteTable("document_analyses", {
   id: text("id").primaryKey(),
