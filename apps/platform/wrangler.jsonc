@@ -1,7 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "juro",
-  "compatibility_date": "2026-07-27",
+  "compatibility_date": "2026-07-26",
   "compatibility_flags": ["nodejs_compat"],
   "main": "./worker/index.ts",
   "keep_vars": true,
