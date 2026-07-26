@@ -18,6 +18,7 @@ const sessionSecurityEntry = journal.entries.find(({ idx }) => idx === 13);
 const mfaEntry = journal.entries.find(({ idx }) => idx === 14);
 const policyDeletionEntry = journal.entries.find(({ idx }) => idx === 15);
 const identityProtectionEntry = journal.entries.find(({ idx }) => idx === 16);
+const invitationEvidenceEntry = journal.entries.find(({ idx }) => idx === 17);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -30,6 +31,10 @@ assert.ok(
 assert.ok(
   identityProtectionEntry,
   "Drizzle journal must contain migration 0016",
+);
+assert.ok(
+  invitationEvidenceEntry,
+  "Drizzle journal must contain migration 0017",
 );
 
 function migrationSql(entry: JournalEntry): string {
@@ -823,6 +828,223 @@ test("0016 preserves raw identities and rejects partial protected state", () => 
       ),
       /UNIQUE constraint failed/,
     );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0017 is additive and declares invitation evidence guards", () => {
+  const sql = migrationSql(invitationEvidenceEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^(?:ALTER TABLE|CREATE INDEX|CREATE TRIGGER)\b/i,
+      `unexpected invitation migration statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const column of [
+    "target_identifier_kind",
+    "target_identifier_lookup_hash",
+    "target_identifier_lookup_key_version",
+    "email_ciphertext",
+    "email_iv",
+    "email_key_version",
+    "email_lookup_hash",
+    "email_lookup_key_version",
+  ]) {
+    assert.match(sql, new RegExp(`ADD \\\`${column}\\\``));
+  }
+  for (const name of [
+    "workspace_invitations_email_lookup_idx",
+    "document_invitations_target_lookup_idx",
+    "workspace_invitations_identity_insert_guard",
+    "workspace_invitations_identity_update_guard",
+    "document_invitations_identity_insert_guard",
+    "document_invitations_identity_update_guard",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.doesNotMatch(
+    sql,
+    /IDENTITY_KEYRING|BEGIN (?:RSA |EC )?PRIVATE KEY|RESEND_API_KEY/i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0017_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, { indexes: Record<string, unknown> }>;
+  };
+  assert.ok(
+    snapshot.tables.workspace_invitations
+      .indexes.workspace_invitations_email_lookup_idx,
+  );
+  assert.ok(
+    snapshot.tables.document_invitations
+      .indexes.document_invitations_target_lookup_idx,
+  );
+});
+
+test("0017 preserves legacy invitations and rejects partial evidence", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 17)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-07-26T12:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES (?,?,?,?)`,
+    ).run("invitation-owner", "owner@example.test", now, now);
+    db.prepare(
+      `INSERT INTO workspaces (
+         id,type,name,locale,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?)`,
+    ).run(
+      "invitation-workspace",
+      "business",
+      "Invitation workspace",
+      "ru",
+      now,
+      now,
+    );
+    db.prepare(
+      `INSERT INTO workspace_invitations (
+         id,workspace_id,invited_by_user_id,email,email_hash,token_hash,
+         role,expires_at,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "legacy-workspace-invitation",
+      "invitation-workspace",
+      "invitation-owner",
+      "invitee@example.test",
+      "legacy-email-hash",
+      "legacy-workspace-token",
+      "viewer",
+      "2026-08-02T12:00:00.000Z",
+      now,
+      now,
+    );
+    db.prepare(
+      `INSERT INTO document_templates (
+         id,key,category,active,created_at,updated_at
+       ) VALUES (?,?,?,1,?,?)`,
+    ).run("invitation-template", "invitation-test", "other", now, now);
+    db.prepare(
+      `INSERT INTO documents (
+         id,workspace_id,owner_user_id,template_id,language,
+         participant_mode,title,category,status,revision,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,1,?,?)`,
+    ).run(
+      "invitation-document",
+      "invitation-workspace",
+      "invitation-owner",
+      "invitation-template",
+      "ru",
+      "single",
+      "Invitation document",
+      "other",
+      "draft",
+      now,
+      now,
+    );
+    db.prepare(
+      `INSERT INTO document_invitations (
+         id,document_id,invited_by_user_id,target_identifier_hash,role,
+         token_hash,expires_at,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "legacy-document-invitation",
+      "invitation-document",
+      "invitation-owner",
+      "legacy-target-hash",
+      "viewer",
+      "legacy-document-token",
+      "2026-08-02T12:00:00.000Z",
+      now,
+      now,
+    );
+
+    applyMigration(db, invitationEvidenceEntry);
+    const workspace = db.prepare(
+      `SELECT email,email_hash AS emailHash,
+        email_ciphertext AS emailCiphertext
+       FROM workspace_invitations
+       WHERE id='legacy-workspace-invitation'`,
+    ).get() as {
+      email: string;
+      emailHash: string;
+      emailCiphertext: string | null;
+    };
+    assert.deepEqual({ ...workspace }, {
+      email: "invitee@example.test",
+      emailHash: "legacy-email-hash",
+      emailCiphertext: null,
+    });
+    const document = db.prepare(
+      `SELECT target_identifier_hash AS targetIdentifierHash,
+        target_identifier_kind AS targetIdentifierKind
+       FROM document_invitations
+       WHERE id='legacy-document-invitation'`,
+    ).get() as {
+      targetIdentifierHash: string;
+      targetIdentifierKind: string | null;
+    };
+    assert.deepEqual({ ...document }, {
+      targetIdentifierHash: "legacy-target-hash",
+      targetIdentifierKind: null,
+    });
+
+    assert.throws(
+      () => db.prepare(
+        `UPDATE workspace_invitations
+         SET email_ciphertext=?
+         WHERE id='legacy-workspace-invitation'`,
+      ).run("a".repeat(22)),
+      /workspace invitation identity protection fields incomplete/,
+    );
+    db.prepare(
+      `UPDATE workspace_invitations SET
+         email_ciphertext=?,email_iv=?,email_key_version=?,
+         email_lookup_hash=?,email_lookup_key_version=?
+       WHERE id='legacy-workspace-invitation'`,
+    ).run(
+      "a".repeat(22),
+      "b".repeat(16),
+      "v1",
+      "c".repeat(43),
+      "v1",
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE document_invitations
+         SET target_identifier_kind='email'
+         WHERE id='legacy-document-invitation'`,
+      ).run(),
+      /document invitation identity protection fields incomplete/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE document_invitations SET
+           target_identifier_kind='username',
+           target_identifier_lookup_hash=?,
+           target_identifier_lookup_key_version='v1'
+         WHERE id='legacy-document-invitation'`,
+      ).run("d".repeat(43)),
+      /document invitation identity protection fields incomplete/,
+    );
+    db.prepare(
+      `UPDATE document_invitations SET
+         target_identifier_kind='email',
+         target_identifier_lookup_hash=?,
+         target_identifier_lookup_key_version='v1'
+       WHERE id='legacy-document-invitation'`,
+    ).run("d".repeat(43));
+    assert.equal(tableDefinitions(db).size, 94);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

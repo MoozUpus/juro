@@ -97,13 +97,16 @@ Document deletion cascades through collaboration/history. The database delete oc
 
 Email, phone, identity fields, user content, document text, and AI results lack the required protected lookup/envelope-encryption model.
 
-Local remediation status: migration 0016 and the application now contain a
-disabled expand layer for canonical `user_profiles` email/phone ciphertext and
-versioned lookup HMACs. All checked-in environments remain in `legacy`, no
-remote row was backfilled, and plaintext columns are intentionally retained.
-Invitation identifiers, OTP/deletion challenge identity digests, contact
-identity fields, document/AI content, staging key configuration, and the
-contract migration remain open; SEC-009 is therefore not closed.
+Local remediation status: migrations 0016–0017 and the application now contain
+disabled expand layers for canonical `user_profiles` email/phone and
+workspace/document invitation evidence. Workspace invitation email has
+record-bound ciphertext plus keyed lookup; document targets have
+purpose-separated keyed lookup. All checked-in environments remain in
+`legacy`, no remote row was backfilled, and workspace/profile plaintext plus
+legacy SHA fields are intentionally retained. OTP/deletion challenge identity
+digests, contact identity fields, document/AI content, staging key
+configuration, TTL drain, and contract migrations remain open; SEC-009 is
+therefore not closed.
 
 ### SEC-010 — append-only audit is erasable
 

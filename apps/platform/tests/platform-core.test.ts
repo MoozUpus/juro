@@ -97,6 +97,9 @@ test("canonical identity expand stays disabled and public projections omit prote
     storage,
     team,
     collaboration,
+    workspaceInvitation,
+    documentInvitation,
+    identityEvidence,
     config,
   ] = await Promise.all([
     readFile(new URL("../lib/auth/identity-protection.ts", import.meta.url), "utf8"),
@@ -105,6 +108,24 @@ test("canonical identity expand stays disabled and public projections omit prote
     readFile(new URL("../lib/document-builder/storage/db.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/team/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/document-builder/documents/[id]/collaboration/route.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL(
+        "../app/api/platform/team/invitations/accept/route.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL(
+        "../app/api/document-builder/invitations/[token]/route.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL("../lib/auth/identity-evidence.ts", import.meta.url),
+      "utf8",
+    ),
     readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
   ]);
   assert.match(identity, /"legacy" \| "dual_write"/);
@@ -118,10 +139,21 @@ test("canonical identity expand stays disabled and public projections omit prote
   assert.doesNotMatch(storage, /\.\.\.existing/);
   assert.doesNotMatch(profile, /profile:\s*profile\.results/);
   assert.doesNotMatch(team, /members:\s*members\.results/);
+  assert.doesNotMatch(team, /invitations:\s*invitations\.results/);
+  assert.match(team, /invitations:\s*resolvedInvitations/);
   assert.doesNotMatch(
     collaboration,
     /collaborators:\s*collaborators\.results/,
   );
+  assert.match(
+    collaboration,
+    /target_identifier_lookup_hash/,
+  );
+  assert.match(workspaceInvitation, /identityEvidenceMatches/);
+  assert.match(documentInvitation, /identityEvidenceMatches/);
+  assert.match(identityEvidence, /context\.mode === "legacy"/);
+  assert.match(identityEvidence, /IDENTITY_VALUE_DIVERGED/);
+  assert.match(identityEvidence, /secureEqual/);
 });
 
 test("session management distinguishes the current local device and audits revocation", async () => {

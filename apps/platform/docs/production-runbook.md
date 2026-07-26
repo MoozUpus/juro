@@ -49,7 +49,7 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 ## Database migration
 
 Migrations are ordered in `drizzle/0000_*.sql` through
-`drizzle/0016_*.sql`. Before any remote deployment:
+`drizzle/0017_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -62,7 +62,8 @@ Migrations are ordered in `drizzle/0000_*.sql` through
    `auth_devices`, `security_events`, `auth_totp_credentials`,
    `auth_backup_codes`, `auth_mfa_challenges`, and
    `auth_mfa_factor_claims`, plus the nullable profile identity-protection
-   columns and completeness triggers from 0016.
+   columns and completeness triggers from 0016, plus the nullable invitation
+   evidence columns, lookup indexes, and completeness triggers from 0017.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 9. Require both tenant-link audits to return zero:
 
@@ -74,15 +75,17 @@ Migrations are ordered in `drizzle/0000_*.sql` through
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migrations `0011`–`0016` have passed local sequence, foreign-key,
+Migrations `0011`–`0017` have passed local sequence, foreign-key,
 sentinel-preservation, tenant-backfill, append-only trigger, chain-fork, and
 snapshot tests. They have not been applied to staging or production.
 
-Keep `IDENTITY_PROTECTION_MODE=legacy` while applying 0016. Before any
+Keep `IDENTITY_PROTECTION_MODE=legacy` while applying 0016 and 0017. Before any
 staging-only `dual_write` proposal, configure the protected key ring, invoke
 the bounded backfill through a reviewed isolated harness, prove zero
 legacy/divergent/rotation-required profile rows, and rehearse rollback. The
-current source does not authorize clearing plaintext or changing production.
+current source does not authorize clearing plaintext, removing legacy
+invitation hashes, or changing production. Active legacy invitations must
+expire or be revoked/reissued before a later contract migration.
 
 ## Smoke checklist
 

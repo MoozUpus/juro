@@ -1,4 +1,6 @@
 import { normalizeEmail, sha256 } from "../../../../../../lib/auth/crypto";
+import { identityEvidenceMatches } from "../../../../../../lib/auth/identity-evidence";
+import { runtimeIdentityProtection } from "../../../../../../lib/auth/identity-runtime";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
@@ -13,14 +15,35 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const body = await request.json().catch(() => null) as { token?: string } | null;
   if (!body?.token || body.token.length > 256) return response({ error: "Ссылка приглашения недействительна." }, 400);
   const tokenHash = await sha256(body.token);
-  const emailHash = await sha256(normalizeEmail(user.email));
+  const normalizedEmail = normalizeEmail(user.email);
   const db = requireD1();
   const invitation = await db.prepare(
-    `SELECT id,workspace_id AS workspaceId,role,email_hash AS emailHash,expires_at AS expiresAt
+    `SELECT id,workspace_id AS workspaceId,role,
+      email_hash AS emailHash,email_lookup_hash AS emailLookupHash,
+      email_lookup_key_version AS emailLookupKeyVersion,
+      expires_at AS expiresAt
      FROM workspace_invitations
      WHERE token_hash=? AND accepted_at IS NULL AND revoked_at IS NULL LIMIT 1`,
-  ).bind(tokenHash).first<{ id: string; workspaceId: string; role: string; emailHash: string; expiresAt: string }>();
-  if (!invitation || invitation.emailHash !== emailHash) return response({ error: "Приглашение не найдено для этого аккаунта." }, 403);
+  ).bind(tokenHash).first<{
+    id: string;
+    workspaceId: string;
+    role: string;
+    emailHash: string;
+    emailLookupHash: string | null;
+    emailLookupKeyVersion: string | null;
+    expiresAt: string;
+  }>();
+  const matches = invitation && await identityEvidenceMatches(
+    runtimeIdentityProtection(),
+    {
+      normalizedValue: normalizedEmail,
+      purpose: "workspace-invitation-email",
+      legacyHash: invitation.emailHash,
+      lookupHash: invitation.emailLookupHash,
+      lookupKeyVersion: invitation.emailLookupKeyVersion,
+    },
+  );
+  if (!invitation || !matches) return response({ error: "Приглашение не найдено для этого аккаунта." }, 403);
   if (Date.parse(invitation.expiresAt) <= Date.now()) return response({ code: "INVITATION_EXPIRED", error: "Срок действия приглашения истёк." }, 410);
   const now = isoNow();
   await db.batch([

@@ -89,9 +89,34 @@ The key ring is not committed or configured in source.
 
 Every checked-in environment remains
 `IDENTITY_PROTECTION_MODE=legacy`. Migration 0016 has not been applied, the
-backfill has no live invocation, and plaintext has not been cleared. Workspace
-and document invitations, OTP/deletion challenges, saved contacts, and
-document/AI content remain separate protection slices.
+backfill has no live invocation, and plaintext has not been cleared.
+OTP/deletion challenges, saved contacts, and document/AI content remain
+separate protection slices.
+
+### Invitation identity evidence expand layer
+
+- migration 0017 adds nullable, versioned protection fields without changing
+  or deleting any legacy invitation field;
+- workspace invitation email uses record-bound AES-256-GCM plus a
+  domain-separated lookup HMAC scoped by workspace and invitation ID;
+- document invitation targets use an explicit email/phone kind and separate
+  versioned lookup-HMAC purposes without adding recoverable plaintext;
+- team responses decrypt through the central boundary and construct an
+  explicit public projection that excludes ciphertext, IV, digest, and key
+  version;
+- acceptance prefers keyed evidence in `dual_write`; a keyed mismatch cannot
+  fall back to legacy SHA-256, while pre-0017 rows retain bounded compatibility;
+- insert/update triggers reject partial protected groups, invalid document
+  identifier kinds, malformed digest lengths, and malformed base64url values;
+- explicit `legacy` mode retains the pre-existing SHA comparison for
+  application rollback.
+
+Migration 0017 is not applied remotely and checked-in mode remains `legacy`,
+so no live invitation is encrypted or keyed by this source change. Workspace
+plaintext email and both legacy SHA columns remain during expansion. Active
+legacy invitations must expire within their seven-day TTL or be revoked and
+reissued before a later contract step; login/deletion challenge digests are a
+separate short-lived evidence slice.
 
 ### Two-factor authentication
 
@@ -185,6 +210,7 @@ node --import tsx --test \
   tests/auth-otp.test.ts \
   tests/auth-keyring.test.ts \
   tests/identity-protection.test.ts \
+  tests/identity-evidence.test.ts \
   tests/auth-sessions.test.ts \
   tests/auth-mfa-crypto.test.ts \
   tests/auth-mfa.test.ts \
@@ -203,11 +229,12 @@ migration backfill, TOTP vectors and drift, encrypted enrollment, one-time
 backup codes, pre-auth session gating, attempt exhaustion, concurrent login,
 concurrent disable, failed-enrollment side effects, out-of-order audit
 timestamps, protected profile read/write/backfill/rotation, response
-projection, and the full existing builder/comparison/rendered Worker regression
-suite.
+projection, invitation AAD/domain separation/keyed-authoritative matching,
+legacy-row preservation, DB completeness guards, and the full existing
+builder/comparison/rendered Worker regression suite.
 
-The final local full suite passes 211/211 checks: 22 rendered
-Worker/security checks, 151 core/document/auth checks, and 38 Cloudflare
+The final local full suite passes 217/217 checks: 22 rendered
+Worker/security checks, 155 core/document/auth checks, and 40 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
 94 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
@@ -229,7 +256,7 @@ staging:
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests, then apply
-   pending migrations through 0016 while keeping identity mode `legacy`;
+   pending migrations through 0017 while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -293,7 +320,7 @@ GROUP BY email_key_version,email_lookup_key_version;
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0016 are not applied to staging or production;
+- migrations 0011–0017 are not applied to staging or production;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, D1 migration, real-device authenticator flow, or remote D1
 concurrency test has been completed;
@@ -310,9 +337,12 @@ concurrency test has been completed;
   exist, but mode remains `legacy`; staging key configuration, reviewed
   invocation, verification, plaintext contract removal, and key retirement
   are not implemented or authorized;
-- raw workspace/document invitation identifiers, OTP/deletion identity
-  digests, saved-contact identity fields, and document/AI content remain
-  outside the canonical profile expand layer;
+- invitation evidence now has a disabled local expand layer, but workspace
+  plaintext email and legacy SHA digests remain; no remote TTL drain,
+  revocation/reissue rehearsal, contract migration, or key activation has
+  occurred;
+- OTP/deletion identity digests, saved-contact identity fields, and
+  document/AI content remain outside the protected expand layers;
 - NAT-wide OTP limits preserve existing behavior and need staging product
   review;
 - cleanup scheduling for expired pending credentials and consumed/invalidated

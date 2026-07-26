@@ -97,6 +97,11 @@ export const workspaceInvitations = sqliteTable(
     invitedByUserId: text("invited_by_user_id").notNull().references(() => userProfiles.id),
     email: text("email"),
     emailHash: text("email_hash").notNull(),
+    emailCiphertext: text("email_ciphertext"),
+    emailIv: text("email_iv"),
+    emailKeyVersion: text("email_key_version"),
+    emailLookupHash: text("email_lookup_hash"),
+    emailLookupKeyVersion: text("email_lookup_key_version"),
     tokenHash: text("token_hash").notNull(),
     role: text("role").notNull(),
     expiresAt: text("expires_at").notNull(),
@@ -107,6 +112,13 @@ export const workspaceInvitations = sqliteTable(
   (table) => [
     uniqueIndex("workspace_invitations_token_uidx").on(table.tokenHash),
     index("workspace_invitations_workspace_idx").on(table.workspaceId, table.expiresAt),
+    index("workspace_invitations_email_lookup_idx")
+      .on(
+        table.workspaceId,
+        table.emailLookupKeyVersion,
+        table.emailLookupHash,
+      )
+      .where(sql`${table.emailLookupHash} IS NOT NULL`),
   ],
 );
 
@@ -312,6 +324,9 @@ export const documentInvitations = sqliteTable(
     invitedByUserId: text("invited_by_user_id").notNull().references(() => userProfiles.id),
     targetUserId: text("target_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
     targetIdentifierHash: text("target_identifier_hash"),
+    targetIdentifierKind: text("target_identifier_kind"),
+    targetIdentifierLookupHash: text("target_identifier_lookup_hash"),
+    targetIdentifierLookupKeyVersion: text("target_identifier_lookup_key_version"),
     role: text("role").notNull(),
     partyNumber: integer("party_number"),
     tokenHash: text("token_hash").notNull().unique(),
@@ -321,7 +336,17 @@ export const documentInvitations = sqliteTable(
     revokedAt: text("revoked_at"),
     ...timestamps,
   },
-  (table) => [index("document_invitations_document_idx").on(table.documentId), index("document_invitations_target_idx").on(table.targetUserId)],
+  (table) => [
+    index("document_invitations_document_idx").on(table.documentId),
+    index("document_invitations_target_idx").on(table.targetUserId),
+    index("document_invitations_target_lookup_idx")
+      .on(
+        table.targetIdentifierKind,
+        table.targetIdentifierLookupKeyVersion,
+        table.targetIdentifierLookupHash,
+      )
+      .where(sql`${table.targetIdentifierLookupHash} IS NOT NULL`),
+  ],
 );
 
 export const documentPermissions = sqliteTable(

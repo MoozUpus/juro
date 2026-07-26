@@ -1,7 +1,7 @@
 # JURO D1 migrations
 
 Updated: 2026-07-26  
-Latest source migration: `0016_brief_madelyne_pryor.sql`
+Latest source migration: `0017_ancient_thunderbird.sql`
 Remote application status: not applied.
 
 ## Migration policy
@@ -123,6 +123,27 @@ in `legacy` mode. A protected staging key ring, reviewed backfill invocation,
 verification, and a separate contract migration are required before plaintext
 can be cleared.
 
+## Migration 0017
+
+`0017_ancient_thunderbird.sql` is the additive invitation-evidence expand
+step. It:
+
+- adds nullable AES-GCM ciphertext/IV/key-version and versioned lookup-HMAC
+  fields to workspace invitation email;
+- adds nullable email/phone kind and versioned lookup-HMAC fields to document
+  invitation targets;
+- adds partial lookup indexes for workspace and document authorization paths;
+- rejects partial or malformed protected groups with insert/update triggers;
+- preserves workspace plaintext email, legacy SHA-256 fields, tokens,
+  invitation lifecycle state, and every pre-existing row;
+- stores no key, secret, ciphertext backfill, or fabricated keyed digest.
+
+The migration alone protects no invitation. Checked-in mode remains `legacy`.
+After a reviewed staging switch to `dual_write`, newly created invitations use
+keyed evidence while pre-0017 invitations retain legacy compatibility for
+their bounded seven-day lifetime. A later contract migration requires a
+verified TTL drain or revocation/reissue process.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -130,7 +151,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0016` with foreign keys enabled;
+- apply migrations `0000`–`0017` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -162,6 +183,12 @@ agreement, protected dual-read, bounded idempotent backfill, divergence
 failure, old-key read/current-key rewrite, and response/session projection
 without ciphertext fields.
 
+Migration 0017 tests additionally prove legacy workspace/document invitation
+preservation, additive-only SQL, snapshot/index agreement, DB rejection of
+partial or invalid evidence, record-bound encryption, purpose separation,
+keyed-authoritative matching, unknown-key failure, and explicit legacy
+rollback behavior.
+
 The full local migration sequence changes the SQLite table count from 79 to
 94 and reports zero foreign-key integrity errors. This is compatibility
 evidence for the checked-in migration sequence, not
@@ -176,7 +203,7 @@ After remote inventory and backup/restore gates:
 3. record its bookmark/checksum/manifest without storing secret values;
 4. verify that no user has multiple `requested`/`reviewing` deletion rows,
    because 0015 intentionally installs a partial unique index;
-5. apply only pending migrations, including 0011–0016 if absent;
+5. apply only pending migrations, including 0011–0017 if absent;
 6. verify table/index/trigger presence and foreign keys;
 7. run existing route/security tests and isolated document-builder/comparison smoke flows;
 8. verify outbox/job lease behavior and Queue/DLQ delivery;

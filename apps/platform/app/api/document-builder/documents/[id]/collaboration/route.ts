@@ -1,5 +1,8 @@
 import { assertSafeWrite, requireApiUser } from "../../../../../../lib/document-builder/auth/api";
+import { normalizeEmail } from "../../../../../../lib/auth/crypto";
+import { prepareKeyedIdentityEvidence } from "../../../../../../lib/auth/identity-evidence";
 import {
+  normalizePhoneForLookup,
   resolveUserIdentity,
   userIdsByIdentifier,
   userIdentitySelect,
@@ -214,12 +217,47 @@ export async function POST(request: Request, context: Context): Promise<Response
       const activeCount = await db.prepare("SELECT COUNT(*) AS count FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).first<{ count: number }>();
       if ((pendingCount?.count ?? 0) + (activeCount?.count ?? 0) >= 2) return badRequest("Для этого документа уже добавлено максимально допустимое число участников.", "PARTICIPANT_LIMIT");
       const token = randomToken();
-      const normalizedIdentifier = identifier.toLocaleLowerCase();
+      const legacyNormalizedIdentifier = identifier.toLocaleLowerCase();
+      const identifierKind = identifier.includes("@") ? "email" : "phone";
+      const normalizedEvidenceIdentifier = identifierKind === "email"
+        ? normalizeEmail(identifier)
+        : normalizePhoneForLookup(identifier);
+      const identityEvidence = await prepareKeyedIdentityEvidence(
+        identityContext,
+        {
+          normalizedValue: normalizedEvidenceIdentifier,
+          purpose: identifierKind === "email"
+            ? "document-invitation-email"
+            : "document-invitation-phone",
+        },
+      );
       const invitationId = crypto.randomUUID();
       const expiresAt = addDays(now, 7);
       await db.prepare(
-        "INSERT INTO document_invitations (id, document_id, invited_by_user_id, target_user_id, target_identifier_hash, role, party_number, token_hash, expires_at, accepted_at, declined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
-      ).bind(invitationId, id, user.id, invitee?.id ?? null, await sha256(normalizedIdentifier), requestedRole, partyNumber, await sha256(token), expiresAt, now, now).run();
+        `INSERT INTO document_invitations (
+           id,document_id,invited_by_user_id,target_user_id,
+           target_identifier_hash,target_identifier_kind,
+           target_identifier_lookup_hash,
+           target_identifier_lookup_key_version,
+           role,party_number,token_hash,expires_at,
+           accepted_at,declined_at,revoked_at,created_at,updated_at
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?)`,
+      ).bind(
+        invitationId,
+        id,
+        user.id,
+        invitee?.id ?? null,
+        await sha256(legacyNormalizedIdentifier),
+        identityEvidence.lookupHash ? identifierKind : null,
+        identityEvidence.lookupHash,
+        identityEvidence.lookupKeyVersion,
+        requestedRole,
+        partyNumber,
+        await sha256(token),
+        expiresAt,
+        now,
+        now,
+      ).run();
       if (invitee) {
         const existing = await db.prepare("SELECT id FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1").bind(id, invitee.id).first<{ id: string }>();
         if (existing) {

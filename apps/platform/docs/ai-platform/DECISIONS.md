@@ -294,3 +294,29 @@ until staging has proven complete backfill, old-key read/current-key write,
 zero divergence, and rollback. Clearing plaintext, retiring a key version, and
 migrating invitation/auth-challenge identifiers are separate contract slices;
 they must not be inferred from the expand migration.
+
+## D-023 — invitation identity evidence follows purpose and retention
+
+Status: accepted
+Date: 2026-07-26
+
+Invitation identifiers are authorization evidence and must not share lookup
+domains with canonical profiles or with each other. A workspace invitation
+needs to display its email to authorized team managers, so its expand form is
+record-bound AES-256-GCM plus a versioned, workspace-scoped lookup HMAC. A
+document invitation needs only equality authorization, so it stores an
+explicit `email`/`phone` kind and a domain-separated versioned lookup HMAC.
+
+Migration 0017 is additive. It retains workspace plaintext email and both
+legacy SHA-256 columns for rollback and for invitations created before
+activation. In `dual_write`, keyed evidence is authoritative whenever present:
+a mismatch, partial field group, unknown key version, wrong AAD, or plaintext
+divergence fails closed and never falls back to a matching legacy hash.
+Explicit `legacy` mode preserves the historical SHA comparison as the
+application rollback path.
+
+Active legacy invitations are allowed to drain through their seven-day TTL or
+be revoked and reissued before a later contract migration. Short-lived login
+and deletion challenges have separate user/session/challenge binding,
+rate-limit, consumption, and cleanup semantics; their digest migration is a
+separate slice and is not implied by 0017.

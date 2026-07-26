@@ -1,5 +1,9 @@
 import { normalizeEmail, randomToken, sha256 } from "../../../../lib/auth/crypto";
 import {
+  prepareEncryptedIdentityEvidence,
+  resolveEncryptedIdentityEvidence,
+} from "../../../../lib/auth/identity-evidence";
+import {
   resolveUserIdentity,
   userIdByEmail,
   userIdentitySelect,
@@ -14,6 +18,20 @@ import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INVITABLE_ROLES = new Set(["admin", "lawyer", "employee", "viewer", "external"]);
+
+type WorkspaceInvitationRow = {
+  id: string;
+  workspaceId: string;
+  email: string | null;
+  emailCiphertext: string | null;
+  emailIv: string | null;
+  emailKeyVersion: string | null;
+  emailLookupHash: string | null;
+  emailLookupKeyVersion: string | null;
+  role: string;
+  expiresAt: string;
+  createdAt: string;
+};
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -38,7 +56,12 @@ export const GET = withApiErrors(async function GET() {
         u.full_name,m.joined_at`,
     ).bind(workspace.id),
     db.prepare(
-      `SELECT id,email,role,expires_at AS expiresAt,created_at AS createdAt
+      `SELECT id,workspace_id AS workspaceId,email,
+        email_ciphertext AS emailCiphertext,email_iv AS emailIv,
+        email_key_version AS emailKeyVersion,
+        email_lookup_hash AS emailLookupHash,
+        email_lookup_key_version AS emailLookupKeyVersion,
+        role,expires_at AS expiresAt,created_at AS createdAt
        FROM workspace_invitations
        WHERE workspace_id=? AND accepted_at IS NULL AND revoked_at IS NULL
        ORDER BY created_at DESC`,
@@ -68,11 +91,39 @@ export const GET = withApiErrors(async function GET() {
       };
     }),
   );
+  const resolvedInvitations = await Promise.all(
+    (invitations.results as WorkspaceInvitationRow[]).map(
+      async invitation => {
+        const identity = await resolveEncryptedIdentityEvidence(
+          identityContext,
+          {
+            rawValue: invitation.email,
+            ciphertext: invitation.emailCiphertext,
+            iv: invitation.emailIv,
+            keyVersion: invitation.emailKeyVersion,
+            lookupHash: invitation.emailLookupHash,
+            lookupKeyVersion: invitation.emailLookupKeyVersion,
+            purpose: "workspace-invitation-email",
+            subjectId: invitation.workspaceId,
+            recordId: invitation.id,
+            normalize: normalizeEmail,
+          },
+        );
+        return {
+          id: invitation.id,
+          email: identity.value,
+          role: invitation.role,
+          expiresAt: invitation.expiresAt,
+          createdAt: invitation.createdAt,
+        };
+      },
+    ),
+  );
   return response({
     workspace: workspaceRow.results[0] ?? null,
     currentRole: workspace.role,
     members: resolvedMembers,
-    invitations: invitations.results,
+    invitations: resolvedInvitations,
   });
 });
 
@@ -111,6 +162,16 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const now = isoNow();
   const invitationId = crypto.randomUUID();
+  const emailEvidence = await prepareEncryptedIdentityEvidence(
+    identityContext,
+    {
+      plaintext: email,
+      normalizedValue: email,
+      purpose: "workspace-invitation-email",
+      subjectId: workspace.id,
+      recordId: invitationId,
+    },
+  );
   const rawToken = randomToken(32);
   const tokenHash = await sha256(rawToken);
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -120,9 +181,28 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ).bind(now, now, workspace.id, emailHash),
     db.prepare(
       `INSERT INTO workspace_invitations
-       (id,workspace_id,invited_by_user_id,email,email_hash,token_hash,role,expires_at,created_at,updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    ).bind(invitationId, workspace.id, user.id, email, emailHash, tokenHash, role, expiresAt, now, now),
+       (id,workspace_id,invited_by_user_id,email,email_hash,
+        email_ciphertext,email_iv,email_key_version,
+        email_lookup_hash,email_lookup_key_version,
+        token_hash,role,expires_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).bind(
+      invitationId,
+      workspace.id,
+      user.id,
+      email,
+      emailHash,
+      emailEvidence.ciphertext,
+      emailEvidence.iv,
+      emailEvidence.keyVersion,
+      emailEvidence.lookupHash,
+      emailEvidence.lookupKeyVersion,
+      tokenHash,
+      role,
+      expiresAt,
+      now,
+      now,
+    ),
   ]);
 
   const requestOrigin = new URL(request.url).origin;
