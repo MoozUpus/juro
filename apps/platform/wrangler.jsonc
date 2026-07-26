@@ -13,6 +13,9 @@
   "images": {
     "binding": "IMAGES"
   },
+  "vars": {
+    "EMAIL_FROM": "JURO <no-reply@juro.uz>"
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -29,6 +32,12 @@
   ],
   "env": {
     "development": {
+      "images": {
+        "binding": "IMAGES"
+      },
+      "vars": {
+        "EMAIL_FROM": "JURO <no-reply@juro.uz>"
+      },
       "d1_databases": [
         {
           "binding": "DB",
