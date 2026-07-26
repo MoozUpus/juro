@@ -355,3 +355,34 @@ dry-run-first retention/pseudonymization plan classifies those references.
 Clearing raw email and legacy digests, deleting expired rows, and retiring a
 key version are later contract actions requiring staging counts, backup and
 restore proof, dependency-safe predicates, and explicit authorization.
+
+## D-025 — email change requires dual-address proof and a one-winner identity rotation
+
+Status: accepted
+Date: 2026-07-26
+
+A canonical account email can change only from a JURO local session
+authenticated within ten minutes. When TOTP is active, that session must have
+MFA assurance; a trusted platform-header principal or a primary-only session
+cannot manage the operation.
+
+The server creates two different six-digit codes, binds each code to the exact
+challenge, user, local session, and destination role, and sends both messages
+in one idempotent Resend batch request to the current and proposed addresses.
+The challenge is not confirmable until Resend has accepted that batch request.
+Provider acceptance is queueing evidence, not proof that either mailbox
+delivered or opened the message.
+
+Successful confirmation is one D1 batch with an operation fence. It consumes
+the exact challenge, rechecks the current protected identity and target
+uniqueness, rotates the canonical email, invalidates old/new login OTP,
+deletion, MFA-login, and competing email-change challenges, revokes every
+other local session/device, and appends both workspace audit and security-chain
+evidence. The current verified session remains usable and resolves the new
+canonical address. Parallel confirmations have one winner; audit failure rolls
+back identity rotation, consumption, and revocation.
+
+Migration 0019 is additive and keeps rollback-safe raw/SHA fields while adding
+versioned encrypted/HMAC evidence. Checked-in identity mode remains `legacy`,
+the UI is unavailable without Resend configuration, and no remote migration,
+real-email delivery, or D1 concurrency test is implied by local evidence.

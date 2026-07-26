@@ -49,7 +49,7 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 ## Database migration
 
 Migrations are ordered in `drizzle/0000_*.sql` through
-`drizzle/0018_*.sql`. Before any remote deployment:
+`drizzle/0019_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -65,7 +65,8 @@ Migrations are ordered in `drizzle/0000_*.sql` through
    columns and completeness triggers from 0016, plus the nullable invitation
    evidence columns, lookup indexes, and completeness triggers from 0017,
    plus the nullable OTP/deletion challenge HMAC fields, OTP lookup indexes,
-   and completeness triggers from 0018.
+   and completeness triggers from 0018, plus the dedicated dual-email
+   challenge table, unique fences, and lifecycle/evidence triggers from 0019.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 9. Require both tenant-link audits to return zero:
 
@@ -77,11 +78,11 @@ Migrations are ordered in `drizzle/0000_*.sql` through
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migrations `0011`–`0018` have passed local sequence, foreign-key,
+Migrations `0011`–`0019` have passed local sequence, foreign-key,
 sentinel-preservation, tenant-backfill, append-only trigger, chain-fork, and
 snapshot tests. They have not been applied to staging or production.
 
-Keep `IDENTITY_PROTECTION_MODE=legacy` while applying 0016–0018. Before any
+Keep `IDENTITY_PROTECTION_MODE=legacy` while applying 0016–0019. Before any
 staging-only `dual_write` proposal, configure the protected key ring, invoke
 the bounded backfill through a reviewed isolated harness, prove zero
 legacy/divergent/rotation-required profile rows, and rehearse rollback. The
@@ -116,6 +117,16 @@ through a dry-run retention plan.
 - Deletion-code evidence is bound to challenge, user, and current local
   session; keyed/SHA divergence cannot create a deletion request, audit event,
   or session revocation.
+- Email change requires a fresh local session and, when active, MFA assurance;
+  trusted platform headers and revoked/stale sessions cannot request, confirm,
+  cancel, or spend challenge attempts.
+- One idempotent Resend batch sends different codes to controlled current and
+  proposed staging mailboxes; provider failure invalidates the challenge and
+  provider acceptance is not reported as mailbox delivery.
+- Parallel email-change confirmation has one winner, preserves the verified
+  current session, revokes every other local session/device, invalidates
+  old/new OTP, deletion, MFA-login, and competing email-change challenges, and
+  appends both workspace and security-chain evidence.
 - Session listing marks the current local session, never claims to include
   external-provider sessions, and allows only owner-scoped single/other/all
   revocation.
@@ -154,8 +165,12 @@ through a dry-run retention plan.
    version that still enforces the pre-auth gate; never deploy pre-MFA code
    while any active credential exists. Do not delete credentials or rotate
    keys during the incident.
-5. Revoke sessions and invitation/share tokens if authorization boundaries may have been affected.
-6. Verify email-only and MFA login, one tenant-isolation query, one private
+5. If email change is unstable, disable its UI by removing the hosted Resend
+   configuration only under the incident runbook, preserve 0019 rows and the
+   identity key ring, and investigate before changing canonical identity or
+   restoring sessions. Do not manually delete a challenge as rollback.
+6. Revoke sessions and invitation/share tokens if authorization boundaries may have been affected.
+7. Verify email-only and MFA login, one tenant-isolation query, one private
    file request, and one legacy redirect before reopening traffic.
 
 Rolling back application code without rolling back an incompatible database change is not considered a complete rollback.

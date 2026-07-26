@@ -191,6 +191,7 @@ All required `/admin` modules are absent. They must use a separate staff authori
 ```text
 POST /api/auth/request-otp
 POST /api/auth/verify-otp
+POST /api/auth/verify-mfa
 POST /api/auth/logout
 POST /api/onboarding
 ```
@@ -220,6 +221,12 @@ POST /api/platform/privacy/deletion-request
 GET,PATCH /api/platform/profile
 GET /api/platform/search
 GET,DELETE /api/platform/security/sessions
+DELETE /api/platform/security/sessions/:sessionId
+GET,POST /api/platform/security/email-change
+GET,DELETE /api/platform/security/mfa
+POST /api/platform/security/mfa/setup
+POST /api/platform/security/mfa/confirm
+POST /api/platform/security/mfa/backup-codes
 GET,POST /api/platform/team
 DELETE /api/platform/team/invitations/:invitationId
 POST /api/platform/team/invitations/accept
@@ -265,4 +272,3 @@ GET /api/document-builder/standalone-signed-shares/:token/file
 5. Return neutral not-found behavior when tenant access is absent.
 6. Add route and security tests for every redirect.
 7. Re-run `/ru/individual/document-builder` regression after every routing change.
-

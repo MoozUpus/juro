@@ -51,7 +51,7 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 | ID | Threat | Current exposure | Required controls |
 |---|---|---|---|
 | T-01 | OTP enumeration/brute force | local atomic claims and disabled keyed evidence exist; independent limits, Turnstile, remote activation, and legacy-digest drain are absent | generic response, Turnstile, per-email/IP limits, staged HMAC activation, atomic attempts/lock |
-| T-02 | session fixation/replay | rotation/device binding absent | rotation, device record, security-event revoke, one/all logout |
+| T-02 | session fixation/replay | local device/session revocation foundation exists; rotation, remote evidence, regional signals, and security mail remain absent | rotation, staged device/session tests, security-event revoke, one/all logout, alerts |
 | T-03 | IDOR/cross-tenant access | confirmed builder listing and invitation gaps | central object authorization, active-workspace scope, negative matrix, neutral response |
 | T-04 | invitation/token replay | acceptance is not consistently atomic | one-time conditional consume, expiry, email binding, resend invalidation |
 | T-05 | CSRF | optional Origin check and static header | strict same-origin policy, CSRF token/binding, safe method/content checks |
@@ -70,6 +70,7 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 | T-18 | privileged insider misuse | admin/support suite and 2FA absent | least roles, mandatory TOTP, immutable view/download/edit audit, immediate revoke |
 | T-19 | weak signature representation | evidence package incomplete | explicit method labels, version/file hashes, consent/OTP/device evidence |
 | T-20 | public status/info disclosure | status unavailable | high-level component states only; exclude topology, IDs, incident attack details |
+| T-21 | canonical email takeover | local dual-address proof and one-winner rotation exist; no remote D1/two-mailbox evidence or security alert | fresh MFA session, current/new mailbox proof, uniqueness fence, revoke other sessions/devices, immutable audit, prior-address alert |
 
 ## Security invariants
 
@@ -83,6 +84,9 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 8. Deletion hides content immediately while required minimized evidence remains tamper-evident.
 9. Staff/lawyer content access always requires a current role/grant and produces immutable audit evidence.
 10. Production migration/deployment requires verified backup, rollback, staging evidence, and explicit approval.
+11. Canonical email change requires proof from both current and proposed
+    addresses, preserves only the verified current session, and cannot succeed
+    twice or without immutable audit evidence.
 
 ## Abuse and crisis considerations
 
@@ -95,7 +99,8 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 
 - unit tests for crypto, validation, policy, source and job invariants;
 - integration tests with real local/staging D1/R2/Queue bindings;
-- concurrency tests for OTP, invitations, signatures, usage, and queue replay;
+- concurrency tests for OTP, email change, invitations, signatures, usage, and
+  queue replay;
 - IDOR matrix across every profile/workspace/object route;
 - file/ZIP/polyglot/SSRF/prompt-injection corpus;
 - browser CSRF/XSS/CSP/accessibility tests;

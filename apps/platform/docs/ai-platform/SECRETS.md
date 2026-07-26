@@ -43,16 +43,17 @@ Requirements:
 The current source provides the cryptographic primitive, encrypted TOTP
 enrollment, backup-code hashing, canonical profile dual-read/write primitives,
 bounded profile backfill/verification, invitation evidence primitives, and
-short-lived OTP/deletion challenge HMAC evidence. It does not contain a real
-key ring, and no live environment was changed. Migration 0018 deliberately
-retains legacy SHA digests during expansion, so keyed code evidence is not a
-claim that a D1-only compromise is already resistant to offline OTP guessing;
-that requires the later verified contract/drain step.
+short-lived OTP/deletion challenge HMAC evidence plus protected email-change
+address/code evidence. It does not contain a real key ring, and no live
+environment was changed. Migrations 0018–0019 deliberately retain legacy SHA
+digests and rollback-safe raw fields during expansion, so keyed code evidence
+is not a claim that a D1-only compromise is already resistant to offline OTP
+guessing; that requires the later verified contract/drain step.
 
 `IDENTITY_PROTECTION_MODE` is not a secret, but it is a security-sensitive
 deployment control. All checked-in development/staging/production
 configurations are fixed to `legacy`. Do not change staging to `dual_write`
-until migrations 0016–0018 are applied, the protected key ring is
+until migrations 0016–0019 are applied, the protected key ring is
 configured, and a backup/restore rehearsal succeeds. Do not change production
 in this phase.
 
@@ -79,3 +80,8 @@ principal.
 
 Provider secrets must remain separate per environment and may not use
 `NEXT_PUBLIC_*`.
+
+`RESEND_API_KEY` and `EMAIL_FROM` gate both login/deletion delivery and the
+protected email-change UI. Email change uses one provider batch request with a
+challenge-derived idempotency key; neither the API key, either code, nor an
+unmasked address may be written to logs or durable audit metadata.

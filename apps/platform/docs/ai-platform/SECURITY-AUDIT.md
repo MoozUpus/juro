@@ -93,6 +93,14 @@ no remote D1/Resend test has run. SEC-005 is therefore not closed.
 - no rotation, device record, location, activity update, single-session revoke, fixation/replay detection, or security-event revocation;
 - no new-device or region security mail.
 
+Local remediation status: migration 0013 and the application add device-aware
+JURO sessions, seven-day idle expiry, current/single/other/all revocation, and
+an append-only security-event chain. Protected email change also revokes every
+other local session/device while preserving the verified current session.
+Session-token rotation/fixation detection, 24-hour non-remember mode, regional
+signals, new-device/security alert mail, remote migration, and staging replay
+tests remain absent; SEC-006 is therefore not closed.
+
 ### SEC-007 — weak standalone share secret
 
 The standalone signed share uses a four-digit code, stores both plaintext and hash, and has no attempt rate limit or lock.
@@ -129,6 +137,22 @@ The write guard checks `Origin` only when supplied and accepts a static `x-juro-
 
 When `ALLOW_PLATFORM_AUTH_HEADERS=true`, `oai-authenticated-user-*` headers are accepted without an application signature. This is safe only if a trusted upstream always strips inbound copies and injects verified values. The production topology and header sanitization are not documented or tested.
 
+### SEC-013 — account email change needs dual-address proof
+
+Changing the canonical login identifier can transfer control of the account,
+strand the owner, preserve stolen sessions, or permit a target-address race if
+it relies only on the current session or a single mailbox code.
+
+Local remediation status: migration 0019 and the application add a dedicated
+session-bound challenge, separate current/new mailbox codes, idempotent Resend
+batch acceptance, fresh-session and MFA-assurance checks, target uniqueness
+fences, one-winner identity rotation, other-session/device revocation, related
+challenge invalidation, and atomic workspace/security audit evidence. The
+built Worker also rejects missing/cross-origin CSRF and platform-header-only
+management. No staging migration, real two-mailbox delivery, remote D1 race,
+security-alert email, or rollback rehearsal has run, so SEC-013 remains a
+release gate rather than a remotely closed finding.
+
 ## Medium findings
 
 - team invitation acceptance is not a conditional atomic consume;
@@ -150,6 +174,9 @@ When `ALLOW_PLATFORM_AUTH_HEADERS=true`, `oai-authenticated-user-*` headers are 
 - OTP is six digits, expires after ten minutes, has a 60-second resend cooldown, invalidates the previous challenge, and stores a salted hash rather than the code;
 - the disabled local 0018 expand path additionally binds keyed OTP/deletion
   code evidence to its purpose and record/session context;
+- the local 0019 email-change path binds two distinct codes to the exact
+  challenge, session, and current/new destination roles and preserves only the
+  verified current session after identity rotation;
 - no OTP logging was found;
 - R2 object keys do not include the original filename or direct PII;
 - unauthenticated protected API smoke returns `401`;
@@ -192,6 +219,13 @@ When `ALLOW_PLATFORM_AUTH_HEADERS=true`, `oai-authenticated-user-*` headers are 
    - XSS from AI/document content;
    - open redirect;
    - CSP regression.
+8. Account email change:
+   - real current/new mailbox delivery and provider-failure invalidation;
+   - stale/revoked/primary-only session denial;
+   - target-address ownership race and concurrent one-winner confirmation;
+   - current-session preservation and all-other-session/device revocation;
+   - old/new OTP, deletion, MFA-login, and competing challenge invalidation;
+   - audit rollback and safe alerting to the prior address.
 
 ## Staging security gate
 

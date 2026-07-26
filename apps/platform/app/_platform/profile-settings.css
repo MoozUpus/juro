@@ -23,6 +23,114 @@
   width: 17px;
 }
 
+.email-change-panel {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgba(6, 40, 68, .13);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.email-change-panel h2 {
+  display: flex;
+  margin: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 19px;
+}
+
+.email-change-panel h2 svg {
+  width: 20px;
+  color: #8a6728;
+}
+
+.email-change-panel > p,
+.email-change-verification > p {
+  margin: 0;
+  color: #64737d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.email-change-panel form,
+.email-change-verification {
+  display: grid;
+  gap: 12px;
+}
+
+.email-change-verification {
+  padding: 16px;
+  border: 1px solid #d7bd7d;
+  border-radius: 14px;
+  background: #fff9e9;
+}
+
+.email-change-verification:focus {
+  outline: 3px solid rgba(190, 151, 79, .42);
+  outline-offset: 2px;
+}
+
+.email-change-verification > p {
+  color: #684e1f;
+}
+
+.email-change-panel label {
+  display: grid;
+  max-width: 460px;
+  gap: 7px;
+  color: #465965;
+  font-size: 12px;
+  font-weight: 780;
+}
+
+.email-change-panel input {
+  min-height: 46px;
+  padding: 0 12px;
+  border: 1px solid rgba(6, 40, 68, .18);
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+}
+
+.email-change-panel form > button,
+.email-change-actions > button {
+  display: inline-flex;
+  width: max-content;
+  min-height: 44px;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 9px;
+  background: #062844;
+  color: #fff;
+  font-weight: 820;
+}
+
+.email-change-panel button svg {
+  width: 17px;
+}
+
+.email-change-panel button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.email-change-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.email-change-actions .danger-outline {
+  margin-top: 0;
+  border: 1px solid #ba5b56;
+  background: #fff;
+  color: #8f3430;
+}
+
 .mfa-panel {
   display: grid;
   gap: 16px;
@@ -162,6 +270,8 @@
 
 @media(max-width:720px) {
   .profile-retry,
+  .email-change-panel form > button,
+  .email-change-actions > button,
   .mfa-state > button,
   .mfa-setup a,
   .backup-codes > button,
@@ -170,6 +280,10 @@
   }
 
   .mfa-actions {
+    flex-direction: column;
+  }
+
+  .email-change-actions {
     flex-direction: column;
   }
 

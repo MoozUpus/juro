@@ -331,6 +331,74 @@ test("MFA boundaries do not accept platform headers or a missing pre-auth cookie
   );
 });
 
+test("email change requires CSRF and a recent local JURO session", async () => {
+  const worker = await createWorker();
+  const route = "/api/platform/security/email-change";
+  const body = JSON.stringify({
+    action: "cancel",
+    challengeId: "11111111-1111-4111-8111-111111111111",
+    locale: "ru",
+  });
+  const missingHeader = await worker.fetch(new Request(
+    `http://localhost${route}`,
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    },
+  ), runtime, context);
+  assert.equal(missingHeader.status, 403);
+
+  const foreignOrigin = await worker.fetch(new Request(
+    `http://localhost${route}`,
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        origin: "https://attacker.example",
+        "x-juro-csrf": "1",
+      },
+      body,
+    },
+  ), runtime, context);
+  assert.equal(foreignOrigin.status, 403);
+
+  const platformHeaders = {
+    "oai-authenticated-user-email": "owner@example.test",
+    "oai-authenticated-user-full-name": "Owner%20User",
+    "oai-authenticated-user-full-name-encoding": "percent-encoded-utf-8",
+  };
+  const status = await worker.fetch(
+    new Request(`http://localhost${route}`, { headers: platformHeaders }),
+    runtime,
+    context,
+  );
+  assert.equal(status.status, 200);
+  assert.match(status.headers.get("cache-control") ?? "", /no-store/);
+  assert.deepEqual(await status.json(), {
+    available: false,
+    canManage: false,
+    reason: "LOCAL_SESSION_REQUIRED",
+    active: null,
+  });
+
+  const platformOnly = await worker.fetch(new Request(
+    `http://localhost${route}`,
+    {
+      method: "POST",
+      headers: {
+        ...platformHeaders,
+        "content-type": "application/json",
+        "x-juro-csrf": "1",
+      },
+      body,
+    },
+  ), runtime, context);
+  assert.equal(platformOnly.status, 401);
+  assert.match(platformOnly.headers.get("cache-control") ?? "", /no-store/);
+  assert.match(await platformOnly.text(), /LOCAL_SESSION_REQUIRED/);
+});
+
 test("account deletion requires CSRF and a recent local JURO session", async () => {
   const worker = await createWorker();
   const route = "/api/platform/privacy/deletion-request";

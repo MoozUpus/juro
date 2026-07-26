@@ -63,6 +63,26 @@ export const accountDeletionInputSchema = z.discriminatedUnion("action", [
   }).strict(),
 ]);
 
+export const emailChangeInputSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("request_codes"),
+    newEmail: emailInput,
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("confirm"),
+    challengeId: z.string().uuid(),
+    currentCode: z.string().regex(/^\d{6}$/),
+    newCode: z.string().regex(/^\d{6}$/),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("cancel"),
+    challengeId: z.string().uuid(),
+    locale: localeInput,
+  }).strict(),
+]);
+
 export type JsonRequestError =
   | "invalid_content_type"
   | "invalid_json"

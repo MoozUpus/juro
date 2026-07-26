@@ -95,11 +95,12 @@ Current sensitive fields and content are generally plaintext in D1:
 
 No workspace data-key model, AES-GCM envelope encryption, protected lookup hashes, or key-rotation metadata exists. OTP has a per-record salt but no server-side pepper. A standalone signed-share code is stored both as plaintext and as a hash.
 
-Local expand status (not remote evidence): migrations 0016–0018 now define
+Local expand status (not remote evidence): migrations 0016–0019 now define
 disabled, versioned AES/HMAC boundaries for canonical profile and invitation
-identity plus equality-only HMAC evidence for OTP/deletion challenges. All
-checked-in environments remain `legacy`; plaintext and legacy SHA fields are
-retained, and document/AI/contact/workspace-key encryption is still absent.
+identity plus equality-only HMAC evidence for OTP/deletion challenges and a
+dedicated dual-address email-change record. All checked-in environments remain
+`legacy`; plaintext and legacy SHA fields are retained, migration 0019 is not
+remote, and document/AI/contact/workspace-key encryption is still absent.
 
 ## Duplicate or overlapping concepts
 
@@ -120,6 +121,7 @@ The exact SQL will be generated only after staging D1 inventory and backup verif
 1. **Identity security**
    - devices, security events, TOTP credentials, backup-code hashes;
    - OTP lock/rate fields and event records;
+   - session-bound dual-address email-change challenges and rotation evidence;
    - session device/rotation fields;
    - policy documents and immutable acceptances.
 2. **Tenant and audit hardening**

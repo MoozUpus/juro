@@ -346,6 +346,52 @@ test("MFA factor claims bind replay fences to the exact operation and credential
   assert.match(source, /batchWithSecurityEvent/);
 });
 
+test("email change binds both address proofs to one fresh local session", async () => {
+  const [route, service, profileUi] = await Promise.all([
+    readFile(
+      new URL(
+        "../app/api/platform/security/email-change/route.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(new URL("../lib/auth/email-change.ts", import.meta.url), "utf8"),
+    readFile(
+      new URL("../app/_platform/ProfileSettingsClient.tsx", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /emailChangeInputSchema/);
+  assert.match(route, /recentEmailChangeSession/);
+  assert.match(route, /hasActiveMfa/);
+  assert.match(route, /while \(newCode === currentCode\)/);
+  assert.match(route, /https:\/\/api\.resend\.com\/emails\/batch/);
+  assert.match(route, /"idempotency-key"/);
+  assert.match(route, /markEmailChangeCodesQueued/);
+  assert.ok(
+    route.indexOf("localSessionForRequest(request)")
+      < route.indexOf("invalidateEmailChangeChallenge(requireD1()"),
+  );
+
+  assert.match(service, /batchWithSecurityEvent/);
+  assert.match(service, /account\.email_changed/);
+  assert.match(service, /account_email_changed/);
+  for (const table of [
+    "auth_sessions",
+    "auth_otp_challenges",
+    "account_deletion_challenges",
+    "auth_mfa_challenges",
+  ]) {
+    assert.match(service, new RegExp(table));
+  }
+
+  assert.match(profileUi, /\/api\/platform\/security\/email-change/);
+  assert.match(profileUi, /currentEmailCode/);
+  assert.match(profileUi, /newEmailCode/);
+  assert.match(profileUi, /Защищённая смена email/);
+});
+
 test("canonical platform route classifier is stable", () => {
   assert.ok(isLocale("ru"));assert.ok(isLocale("uz"));assert.ok(!isLocale("en"));
   assert.ok(isAccountType("individual"));assert.ok(isAccountType("business"));assert.ok(!isAccountType("admin"));

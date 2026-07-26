@@ -141,6 +141,36 @@ historical rows are not assumed deletable: MFA, policy, and deletion-request
 references require a reviewed dry-run retention/pseudonymization plan before
 raw email or legacy SHA fields can be cleared.
 
+### Protected account email change
+
+- `GET,POST /api/platform/security/email-change` accepts only a JURO local
+  session; request and confirmation require authentication within ten minutes,
+  and an account with active TOTP requires MFA assurance;
+- request and confirmation use strict, size-bounded discriminated JSON plus
+  the application CSRF/origin contract;
+- two different six-digit codes are bound to the exact challenge, user,
+  session, and current/new destination roles;
+- Resend receives one idempotent batch request containing both messages, and
+  confirmation stays closed until the provider accepts that batch;
+- cooldown, five-per-hour accounting, a single active challenge, five shared
+  wrong attempts, expiry, session binding, and target uniqueness are enforced
+  with database predicates and indexes;
+- one guarded D1 batch consumes the challenge, rotates the canonical protected
+  email, invalidates old/new auth OTP, deletion, MFA-login, and competing
+  email-change challenges, revokes every other local session/device, and
+  appends workspace and security-chain evidence;
+- the verified current session is preserved and subsequently resolves the new
+  canonical email; parallel confirmations have exactly one winner;
+- a revoked/stale or insufficient-assurance session cannot consume a challenge
+  or spend its wrong-code attempt budget;
+- the profile/settings UI shows the two-code flow in RU/UZ only when the
+  current principal is a local session and Resend is configured.
+
+Migration 0019 creates the dedicated additive challenge table and state
+triggers. It has not been applied remotely. The provider call has not been
+exercised with real staging mailboxes, and Resend acceptance must not be
+described as mailbox delivery.
+
 ### Two-factor authentication
 
 - RFC 6238 TOTP uses SHA-1, six digits, a 30-second period, and a bounded
@@ -239,6 +269,7 @@ node --import tsx --test \
   tests/auth-mfa-crypto.test.ts \
   tests/auth-mfa.test.ts \
   tests/account-deletion.test.ts \
+  tests/email-change.test.ts \
   tests/policy-acceptance.test.ts \
   tests/document-access.test.ts \
   tests/migration-safety.test.ts \
@@ -255,14 +286,16 @@ concurrent disable, failed-enrollment side effects, out-of-order audit
 timestamps, protected profile read/write/backfill/rotation, response
 projection, invitation AAD/domain separation/keyed-authoritative matching,
 challenge purpose/record/session binding, retained-key rate-limit lookup,
-legacy-row preservation, SHA-divergence failure, DB completeness guards, and
-the full existing
-builder/comparison/rendered Worker regression suite.
+legacy-row preservation, SHA-divergence failure, email-change dual-address
+proof, provider acceptance gating, target races, revoked-session attempt
+fencing, identity rotation, session/challenge invalidation, DB completeness
+guards, and the full existing builder/comparison/rendered Worker regression
+suite.
 
-The final local full suite passes 227/227 checks: 22 rendered
-Worker/security checks, 163 core/document/auth checks, and 42 Cloudflare
+The final local full suite passes 239/239 checks: 23 rendered
+Worker/security checks, 172 core/document/auth checks, and 44 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
-94 tables with zero foreign-key integrity errors. Local evidence is not
+95 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
@@ -282,7 +315,7 @@ staging:
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests, then apply
-   pending migrations through 0018 while keeping identity mode `legacy`;
+   pending migrations through 0019 while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -310,7 +343,12 @@ staging:
     all-local-session revocation, and provider-failure invalidation;
 16. compare every new policy registry digest with the rendered RU/UZ page and
     obtain owner/legal approval before changing any status from draft through
-    a new immutable version.
+    a new immutable version;
+17. send both RU and UZ email-change batches to controlled current/new
+    staging mailboxes, verify provider-failure invalidation, stale/MFA/session
+    denial, target-ownership races, one-winner D1 confirmation, canonical
+    identity rotation, current-session preservation, other-session/device
+    revocation, and invalidation of old/new login/deletion/MFA challenges.
 
 Required read-only queries:
 
@@ -347,7 +385,7 @@ GROUP BY email_key_version,email_lookup_key_version;
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0018 are not applied to staging or production;
+- migrations 0011–0019 are not applied to staging or production;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, D1 migration, real-device authenticator flow, or remote D1
 concurrency test has been completed;
@@ -372,6 +410,9 @@ concurrency test has been completed;
   OTP email and all legacy SHA digests remain; no remote activation,
   dependency-safe retention drain, pseudonymization, contract migration, or
   key retirement has occurred;
+- protected email change is implemented and verified locally, but migration
+  0019, real Resend batch delivery, remote D1 race tests, alert mail, and
+  staging session/device revocation evidence are still absent;
 - saved-contact identity fields and document/AI content remain outside the
   protected expand layers;
 - NAT-wide OTP limits preserve existing behavior and need staging product

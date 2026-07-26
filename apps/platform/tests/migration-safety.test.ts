@@ -20,6 +20,7 @@ const policyDeletionEntry = journal.entries.find(({ idx }) => idx === 15);
 const identityProtectionEntry = journal.entries.find(({ idx }) => idx === 16);
 const invitationEvidenceEntry = journal.entries.find(({ idx }) => idx === 17);
 const challengeEvidenceEntry = journal.entries.find(({ idx }) => idx === 18);
+const emailChangeEntry = journal.entries.find(({ idx }) => idx === 19);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -40,6 +41,10 @@ assert.ok(
 assert.ok(
   challengeEvidenceEntry,
   "Drizzle journal must contain migration 0018",
+);
+assert.ok(
+  emailChangeEntry,
+  "Drizzle journal must contain migration 0019",
 );
 
 function migrationSql(entry: JournalEntry): string {
@@ -630,7 +635,7 @@ test("0015 enforces immutable policies and exact deletion evidence", () => {
   try {
     db.exec("PRAGMA foreign_keys = ON");
     for (const entry of journal.entries) applyMigration(db, entry);
-    assert.equal(tableDefinitions(db).size, 94);
+    assert.equal(tableDefinitions(db).size, 95);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
     const now = "2026-07-26T12:00:00.000Z";
     db.prepare(
@@ -1186,6 +1191,179 @@ test("0018 preserves legacy challenges and rejects partial keyed groups", () => 
          code_hmac=?,code_key_version='v1'
        WHERE id='legacy-deletion'`,
     ).run("e".repeat(43), "f".repeat(43));
+  } finally {
+    db.close();
+  }
+});
+
+test("0019 adds an additive, state-gated dual-email challenge table", () => {
+  const sql = migrationSql(emailChangeEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i,
+      `unexpected email-change migration statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const name of [
+    "email_change_challenges",
+    "email_change_challenges_operation_uidx",
+    "email_change_challenges_active_user_uidx",
+    "email_change_challenges_new_email_lookup_idx",
+    "email_change_challenge_evidence_insert_guard",
+    "email_change_challenge_evidence_update_guard",
+    "email_change_challenge_state_insert_guard",
+    "email_change_challenge_state_update_guard",
+    "email_change_challenge_attempt_update_guard",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  for (const column of [
+    "current_email_hash",
+    "current_email_lookup_hash",
+    "new_email_ciphertext",
+    "new_email_lookup_hash",
+    "current_code_hmac",
+    "new_code_hmac",
+    "codes_queued_at",
+    "consumed_by_operation_id",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${column}\\\``));
+  }
+  assert.doesNotMatch(
+    sql,
+    /IDENTITY_KEYRING|RESEND_API_KEY|BEGIN (?:RSA |EC )?PRIVATE KEY/i,
+  );
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0019_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, {
+      columns: Record<string, unknown>;
+      indexes: Record<string, unknown>;
+    }>;
+  };
+  assert.ok(snapshot.tables.email_change_challenges);
+  assert.ok(
+    snapshot.tables.email_change_challenges
+      .columns.current_email_lookup_hash,
+  );
+  assert.ok(
+    snapshot.tables.email_change_challenges.columns.new_email_ciphertext,
+  );
+  assert.ok(
+    snapshot.tables.email_change_challenges
+      .indexes.email_change_challenges_active_user_uidx,
+  );
+  assert.ok(
+    snapshot.tables.email_change_challenges
+      .indexes.email_change_challenges_new_email_lookup_idx,
+  );
+});
+
+test("0019 accepts rollback-safe legacy rows and rejects partial or impossible states", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-26T12:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES (?,?,?,?)`,
+    ).run("email-change-migration-user", "old@example.test", now, now);
+    db.prepare(
+      `INSERT INTO email_change_challenges (
+         id,user_id,current_email_hash,new_email,
+         current_code_salt,current_code_hash,new_code_salt,new_code_hash,
+         locale,expires_at,created_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      "email-change-legacy",
+      "email-change-migration-user",
+      "current-email-hash",
+      "new@example.test",
+      "current-salt",
+      "current-code-hash",
+      "new-salt",
+      "new-code-hash",
+      "ru",
+      "2026-07-26T12:10:00.000Z",
+      now,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE email_change_challenges
+         SET current_code_hmac=? WHERE id=?`,
+      ).run("a".repeat(43), "email-change-legacy"),
+      /email change challenge evidence incomplete/,
+    );
+    db.prepare(
+      `UPDATE email_change_challenges
+       SET codes_queued_at=? WHERE id=?`,
+    ).run(
+      "2026-07-26T12:00:01.000Z",
+      "email-change-legacy",
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE email_change_challenges
+         SET codes_queued_at=NULL WHERE id=?`,
+      ).run("email-change-legacy"),
+      /email change challenge state invalid/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE email_change_challenges
+         SET attempt_count=6 WHERE id=?`,
+      ).run("email-change-legacy"),
+      /email change challenge attempt state invalid/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE email_change_challenges
+         SET consumed_at=? WHERE id=?`,
+      ).run(
+        "2026-07-26T12:01:00.000Z",
+        "email-change-legacy",
+      ),
+      /email change challenge state invalid/,
+    );
+    db.prepare(
+      `UPDATE email_change_challenges
+       SET consumed_at=?,consumed_by_operation_id=?
+       WHERE id=?`,
+    ).run(
+      "2026-07-26T12:01:00.000Z",
+      "email-change-operation",
+      "email-change-legacy",
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE email_change_challenges
+         SET consumed_at=?,consumed_by_operation_id=?
+         WHERE id=?`,
+      ).run(
+        "2026-07-26T12:01:01.000Z",
+        "email-change-operation-rewritten",
+        "email-change-legacy",
+      ),
+      /email change challenge state invalid/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE email_change_challenges
+         SET invalidated_at=? WHERE id=?`,
+      ).run(
+        "2026-07-26T12:01:01.000Z",
+        "email-change-legacy",
+      ),
+      /email change challenge state invalid/,
+    );
+    assert.equal(tableDefinitions(db).size, 95);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
   }

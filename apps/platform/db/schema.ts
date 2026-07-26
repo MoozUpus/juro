@@ -636,6 +636,75 @@ export const authSessions = sqliteTable("auth_sessions", {
   index("auth_sessions_device_idx").on(table.deviceId, table.expiresAt),
 ]);
 
+export const emailChangeChallenges = sqliteTable(
+  "email_change_challenges",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    sessionId: text("session_id").references(() => authSessions.id, {
+      onDelete: "set null",
+    }),
+    currentEmailHash: text("current_email_hash").notNull(),
+    currentEmailLookupHash: text("current_email_lookup_hash"),
+    currentEmailLookupKeyVersion: text(
+      "current_email_lookup_key_version",
+    ),
+    newEmail: text("new_email").notNull(),
+    newEmailCiphertext: text("new_email_ciphertext"),
+    newEmailIv: text("new_email_iv"),
+    newEmailKeyVersion: text("new_email_key_version"),
+    newEmailLookupHash: text("new_email_lookup_hash"),
+    newEmailLookupKeyVersion: text("new_email_lookup_key_version"),
+    currentCodeSalt: text("current_code_salt").notNull(),
+    currentCodeHash: text("current_code_hash").notNull(),
+    currentCodeHmac: text("current_code_hmac"),
+    currentCodeKeyVersion: text("current_code_key_version"),
+    newCodeSalt: text("new_code_salt").notNull(),
+    newCodeHash: text("new_code_hash").notNull(),
+    newCodeHmac: text("new_code_hmac"),
+    newCodeKeyVersion: text("new_code_key_version"),
+    locale: text("locale").notNull(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    maxAttempts: integer("max_attempts").notNull().default(5),
+    expiresAt: text("expires_at").notNull(),
+    codesQueuedAt: text("codes_queued_at"),
+    consumedAt: text("consumed_at"),
+    consumedByOperationId: text("consumed_by_operation_id"),
+    invalidatedAt: text("invalidated_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "email_change_challenges_locale_check",
+      sql`${table.locale} IN ('ru','uz')`,
+    ),
+    check(
+      "email_change_challenges_attempts_check",
+      sql`${table.attemptCount} >= 0 AND ${table.attemptCount} <= ${table.maxAttempts} AND ${table.maxAttempts} BETWEEN 1 AND 10`,
+    ),
+    uniqueIndex("email_change_challenges_operation_uidx").on(
+      table.consumedByOperationId,
+    ),
+    uniqueIndex("email_change_challenges_active_user_uidx")
+      .on(table.userId)
+      .where(
+        sql`${table.consumedAt} IS NULL AND ${table.invalidatedAt} IS NULL`,
+      ),
+    index("email_change_challenges_user_created_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    index("email_change_challenges_new_email_lookup_idx").on(
+      table.newEmailLookupKeyVersion,
+      table.newEmailLookupHash,
+      table.createdAt,
+    ),
+    index("email_change_challenges_expiry_idx").on(table.expiresAt),
+  ],
+);
+
 export const authTotpCredentials = sqliteTable("auth_totp_credentials", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),

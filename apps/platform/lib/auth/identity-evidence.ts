@@ -19,7 +19,11 @@ export type IdentityEvidencePurpose =
   | "auth-otp-request-ip"
   | "auth-otp-code"
   | "account-deletion-email"
-  | "account-deletion-code";
+  | "account-deletion-code"
+  | "email-change-current-email"
+  | "email-change-new-email"
+  | "email-change-current-code"
+  | "email-change-new-code";
 
 export type KeyedIdentityEvidence = {
   lookupHash: string | null;

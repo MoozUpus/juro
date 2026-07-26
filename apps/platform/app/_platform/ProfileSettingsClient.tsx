@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated profile data is hydrated after the first browser render */
 
 import Link from "next/link";
-import { CircleAlert, Copy, Database, Download, KeyRound, Languages, LoaderCircle, LogOut, MonitorSmartphone, RefreshCcw, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import { CircleAlert, Copy, Database, Download, KeyRound, Languages, LoaderCircle, LogOut, MailCheck, MonitorSmartphone, RefreshCcw, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
@@ -62,6 +62,18 @@ type DeletionChallenge = {
   destination: string;
   expiresInSeconds: number;
 };
+type EmailChangeStatus = {
+  available: boolean;
+  canManage: boolean;
+  reason?: string | null;
+  currentEmail?: string;
+  active: {
+    challengeId: string;
+    currentDestination: string;
+    newDestination: string;
+    expiresAt: string;
+  } | null;
+};
 
 export function ProfileSettingsClient({ locale, accountType, view }: { locale: PlatformLocale; accountType: AccountType; view: View }) {
   const ru = locale === "ru";
@@ -81,8 +93,13 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const [mfaSetup, setMfaSetup] = useState<MfaSetup | null>(null);
   const [mfaCode, setMfaCode] = useState("");
   const [backupCodes, setBackupCodes] = useState<string[]>([]);
+  const [emailChange, setEmailChange] = useState<EmailChangeStatus | null>(null);
+  const [newEmail, setNewEmail] = useState("");
+  const [currentEmailCode, setCurrentEmailCode] = useState("");
+  const [newEmailCode, setNewEmailCode] = useState("");
   const mfaSetupRegion = useRef<HTMLDivElement>(null);
   const backupCodesRegion = useRef<HTMLDivElement>(null);
+  const emailChangeRegion = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -99,6 +116,20 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
         companyName: profileBody.profile.companyName || "",
         organizationRole: profileBody.profile.organizationRole || "",
       });
+      if (view === "profile" || view === "settings") {
+        const emailChangeResponse = await fetch(
+          "/api/platform/security/email-change",
+          { cache: "no-store" },
+        );
+        const emailChangeBody = await emailChangeResponse.json() as
+          EmailChangeStatus & { error?: string };
+        if (!emailChangeResponse.ok) {
+          throw new Error(emailChangeBody.error || (ru
+            ? "Настройки смены email не загрузились."
+            : "Emailni almashtirish sozlamalari yuklanmadi."));
+        }
+        setEmailChange(emailChangeBody);
+      }
       if (view === "security") {
         const sessionResponse = await fetch("/api/platform/security/sessions", { cache: "no-store" });
         const sessionBody = await sessionResponse.json() as { sessions?: Session[]; error?: string };
@@ -122,6 +153,9 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   useEffect(() => {
     if (backupCodes.length > 0) backupCodesRegion.current?.focus();
   }, [backupCodes.length]);
+  useEffect(() => {
+    if (emailChange?.active) emailChangeRegion.current?.focus();
+  }, [emailChange?.active]);
 
   async function retryLoad() {
     setRetrying(true);
@@ -150,6 +184,148 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
       else await load();
     }
     setSaving(false);
+  }
+
+  async function submitEmailChange(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(
+        "/api/platform/security/email-change",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+          },
+          body: JSON.stringify(emailChange?.active
+            ? {
+              action: "confirm",
+              challengeId: emailChange.active.challengeId,
+              currentCode: currentEmailCode,
+              newCode: newEmailCode,
+              locale,
+            }
+            : {
+              action: "request_codes",
+              newEmail,
+              locale,
+            }),
+        },
+      );
+      const body = await response.json() as {
+        code?: string;
+        error?: string;
+        challengeId?: string;
+        currentDestination?: string;
+        newDestination?: string;
+        expiresInSeconds?: number;
+        email?: string;
+        revokedSessions?: number;
+      };
+      if (!response.ok) {
+        setError(body.error || (ru
+          ? "Email не изменён."
+          : "Email o‘zgartirilmadi."));
+        if ([
+          "EMAIL_CHANGE_EXPIRED",
+          "EMAIL_CHANGE_REPLACED",
+          "EMAIL_CHANGE_ATTEMPTS_EXCEEDED",
+          "EMAIL_CHANGE_ADDRESS_UNAVAILABLE",
+          "EMAIL_CHANGE_STATE_CHANGED",
+        ].includes(body.code ?? "")) {
+          await load();
+        }
+      } else if (
+        body.challengeId
+        && body.currentDestination
+        && body.newDestination
+        && body.expiresInSeconds
+      ) {
+        setEmailChange(previous => ({
+          available: previous?.available ?? true,
+          canManage: true,
+          reason: null,
+          currentEmail: previous?.currentEmail ?? data?.profile.email,
+          active: {
+            challengeId: body.challengeId!,
+            currentDestination: body.currentDestination!,
+            newDestination: body.newDestination!,
+            expiresAt: new Date(
+              Date.now() + body.expiresInSeconds! * 1_000,
+            ).toISOString(),
+          },
+        }));
+        setCurrentEmailCode("");
+        setNewEmailCode("");
+        setNotice(ru
+          ? "Почтовый сервис принял два разных письма для текущего и нового адресов."
+          : "Pochta xizmati joriy va yangi manzillar uchun ikki xil xatni qabul qildi.");
+      } else if (body.email) {
+        setNewEmail("");
+        setCurrentEmailCode("");
+        setNewEmailCode("");
+        setNotice(ru
+          ? `Email изменён. Завершено других сессий: ${body.revokedSessions ?? 0}.`
+          : `Email o‘zgartirildi. Boshqa yakunlangan sessiyalar: ${body.revokedSessions ?? 0}.`);
+        await load();
+      }
+    } catch {
+      setError(ru
+        ? "Не удалось связаться с сервером. Повторите запрос."
+        : "Server bilan bog‘lanib bo‘lmadi. So‘rovni takrorlang.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function cancelEmailChange() {
+    if (!emailChange?.active) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(
+        "/api/platform/security/email-change",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+          },
+          body: JSON.stringify({
+            action: "cancel",
+            challengeId: emailChange.active.challengeId,
+            locale,
+          }),
+        },
+      );
+      const body = await response.json() as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || (ru
+          ? "Проверка не отменена."
+          : "Tekshiruv bekor qilinmadi."));
+      }
+      setEmailChange(previous => previous
+        ? { ...previous, active: null }
+        : previous);
+      setNewEmail("");
+      setCurrentEmailCode("");
+      setNewEmailCode("");
+      setNotice(ru
+        ? "Смена email отменена."
+        : "Emailni almashtirish bekor qilindi.");
+    } catch (value) {
+      setError(value instanceof Error
+        ? value.message
+        : (ru
+          ? "Проверка не отменена."
+          : "Tekshiruv bekor qilinmadi."));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function closeAllSessions() {
@@ -403,6 +579,89 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const Icon = view === "profile" ? UserRound : view === "security" ? ShieldCheck : view === "privacy" ? Database : Languages;
   return <section className="profile-workspace"><header><Icon /><div><small>JURO</small><h1>{title}</h1><p>{ru ? "Данные и права изменяются через защищённые серверные операции." : "Ma’lumotlar va huquqlar himoyalangan server amallari orqali o‘zgartiriladi."}</p></div></header><nav aria-label={ru ? "Настройки аккаунта" : "Hisob sozlamalari"}><Link className={view === "profile" ? "active" : ""} href={`${base}/profile`}>{ru ? "Профиль" : "Profil"}</Link><Link className={view === "settings" ? "active" : ""} href={`${base}/settings`}>{ru ? "Настройки" : "Sozlamalar"}</Link><Link className={view === "security" ? "active" : ""} href={`${base}/settings/security`}>{ru ? "Безопасность" : "Xavfsizlik"}</Link><Link className={view === "privacy" ? "active" : ""} href={`${base}/settings/privacy`}>{ru ? "Приватность" : "Maxfiylik"}</Link></nav>{error && <p className="profile-message error" role="alert"><CircleAlert aria-hidden="true" />{error}</p>}{view === "security" && error && !mfa && <button className="profile-retry" type="button" disabled={retrying} aria-busy={retrying} onClick={() => void retryLoad()}>{retrying && <LoaderCircle className="spin" aria-hidden="true" />}{ru ? "Повторить загрузку" : "Qayta yuklash"}</button>}{notice && <p className="profile-message success" role="status"><ShieldCheck aria-hidden="true" />{notice}</p>}
     {(view === "profile" || view === "settings") && data && <form className="profile-form" onSubmit={save}><section><h2>{ru ? "Основные данные" : "Asosiy ma’lumotlar"}</h2><label>{ru ? "Имя" : "Ism"}<input required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></label><label>Email<input disabled value={data.profile.email} /><small>{ru ? "Смена email требует отдельного подтверждения." : "Emailni o‘zgartirish alohida tasdiqni talab qiladi."}</small></label><label>{ru ? "Телефон" : "Telefon"}<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} autoComplete="tel" /></label></section><section><h2>{ru ? "Пространство" : "Makon"}</h2><label>{ru ? "Язык" : "Til"}<select value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value as PlatformLocale })}><option value="ru">Русский</option><option value="uz">O‘zbekcha</option></select></label><label>{ru ? "Часовой пояс" : "Vaqt mintaqasi"}<select value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })}><option value="Asia/Tashkent">Asia/Tashkent</option><option value="UTC">UTC</option></select></label>{accountType === "business" && <><label>{ru ? "Организация" : "Tashkilot"}<input value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} /></label><label>{ru ? "Роль в организации" : "Tashkilotdagi rol"}<input value={form.organizationRole} onChange={(event) => setForm({ ...form, organizationRole: event.target.value })} /></label></>}</section><button disabled={saving}>{saving ? <LoaderCircle className="spin" /> : <Save />}{ru ? "Сохранить изменения" : "O‘zgarishlarni saqlash"}</button></form>}
+    {(view === "profile" || view === "settings") && data && emailChange && <section className="email-change-panel">
+      <h2><MailCheck aria-hidden="true" />{ru ? "Защищённая смена email" : "Himoyalangan email almashtirish"}</h2>
+      <p id="email-change-description">{ru
+        ? "JURO отправит разные коды на текущий и новый адреса. Изменение применяется только после проверки обоих кодов и завершает остальные JURO email-сессии."
+        : "JURO joriy va yangi manzillarga turli kodlarni yuboradi. O‘zgarish faqat ikkala kod tekshirilgach qo‘llanadi va boshqa JURO email sessiyalarini yakunlaydi."}</p>
+      {!emailChange.canManage && <p>{ru
+        ? "Смена email доступна только из локальной JURO email-сессии."
+        : "Emailni almashtirish faqat mahalliy JURO email sessiyasida mavjud."}</p>}
+      {emailChange.canManage && !emailChange.available && !emailChange.active && <p>{ru
+        ? "Почтовая отправка ещё не настроена. Незавершённая проверка не создаётся."
+        : "Pochta yuborish hali sozlanmagan. Tugallanmagan tekshiruv yaratilmaydi."}</p>}
+      {emailChange.canManage && emailChange.available && !emailChange.active && <form onSubmit={submitEmailChange}>
+        <label>{ru ? "Новый email" : "Yangi email"}
+          <input
+            type="email"
+            value={newEmail}
+            onChange={(event) => setNewEmail(event.target.value.slice(0, 254))}
+            autoComplete="email"
+            maxLength={254}
+            aria-describedby="email-change-description"
+            required
+          />
+        </label>
+        <button type="submit" disabled={saving || newEmail.trim().length < 3} aria-busy={saving}>
+          {saving ? <LoaderCircle className="spin" aria-hidden="true" /> : <MailCheck aria-hidden="true" />}
+          {ru ? "Отправить два кода" : "Ikki kodni yuborish"}
+        </button>
+      </form>}
+      {emailChange.canManage && emailChange.active && <div
+        ref={emailChangeRegion}
+        className="email-change-verification"
+        role="region"
+        tabIndex={-1}
+        aria-label={ru ? "Подтверждение смены email" : "Emailni almashtirishni tasdiqlash"}
+        aria-describedby="email-change-description"
+      >
+        <p role="status">{ru
+          ? `Почтовый сервис принял письма для ${emailChange.active.currentDestination} и ${emailChange.active.newDestination}. Коды действуют до ${formatDateTime(emailChange.active.expiresAt, ru)}.`
+          : `Pochta xizmati ${emailChange.active.currentDestination} va ${emailChange.active.newDestination} uchun xatlarni qabul qildi. Kodlar ${formatDateTime(emailChange.active.expiresAt, ru)} gacha amal qiladi.`}</p>
+        <form onSubmit={submitEmailChange}>
+          <label>{ru ? "Код с текущего email" : "Joriy email kodi"}
+            <input
+              value={currentEmailCode}
+              onChange={(event) => setCurrentEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              required
+            />
+          </label>
+          <label>{ru ? "Код с нового email" : "Yangi email kodi"}
+            <input
+              value={newEmailCode}
+              onChange={(event) => setNewEmailCode(event.target.value.replace(/\D/g, "").slice(0, 6))}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxLength={6}
+              required
+            />
+          </label>
+          <div className="email-change-actions">
+            <button
+              type="submit"
+              disabled={saving || currentEmailCode.length !== 6 || newEmailCode.length !== 6}
+              aria-busy={saving}
+            >
+              {saving ? <LoaderCircle className="spin" aria-hidden="true" /> : <ShieldCheck aria-hidden="true" />}
+              {ru ? "Проверить и изменить" : "Tekshirish va almashtirish"}
+            </button>
+            <button
+              className="danger-outline"
+              type="button"
+              disabled={saving}
+              onClick={() => void cancelEmailChange()}
+            >
+              {ru ? "Отмена" : "Bekor qilish"}
+            </button>
+          </div>
+        </form>
+      </div>}
+    </section>}
     {view === "security" && <div className="profile-panels">
       <section>
         <h2><MonitorSmartphone />{ru ? "JURO email-сессии" : "JURO email sessiyalari"}</h2>

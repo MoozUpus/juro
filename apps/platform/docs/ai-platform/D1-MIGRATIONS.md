@@ -1,7 +1,7 @@
 # JURO D1 migrations
 
 Updated: 2026-07-26  
-Latest source migration: `0018_loud_puck.sql`
+Latest source migration: `0019_broad_mongu.sql`
 Remote application status: not applied.
 
 ## Migration policy
@@ -168,6 +168,27 @@ key versions for rate limiting. Contract cleanup is separate: a ten-minute TTL
 does not prove that an historical row is unreferenced by MFA, policy, or
 deletion-request evidence.
 
+## Migration 0019
+
+`0019_broad_mongu.sql` adds the dedicated email-change challenge boundary. It:
+
+- creates `email_change_challenges` without modifying or deleting an existing
+  table or row;
+- binds each challenge to one user and one local session;
+- stores separate salted code evidence for the current and proposed email;
+- adds rollback-safe raw/SHA fields plus nullable, versioned encrypted/HMAC
+  evidence for `dual_write`;
+- limits a user to one active challenge and one successful operation ID;
+- indexes protected new-email lookup, expiry, and user/time paths;
+- rejects partial evidence groups, malformed digests/key versions, provider
+  queueing before reservation, consumption before queueing, mixed consumed
+  state, and invalidation after successful consumption.
+
+The migration stores no plaintext code, key material, fabricated backfill, or
+provider credential. It deliberately retains the proposed raw email and legacy
+SHA evidence while checked-in identity mode remains `legacy`; removing either
+requires a later verified contract migration.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -175,7 +196,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0018` with foreign keys enabled;
+- apply migrations `0000`–`0019` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -219,8 +240,17 @@ email/code/IP keyed groups, old-key rate-limit lookup, record/purpose/session
 code binding, keyed-authoritative verification, retained-SHA divergence
 failure, exact legacy rollback, attempt fencing, and one-winner concurrency.
 
+Migration 0019 tests additionally prove additive-only SQL, snapshot/index
+agreement, rollback-safe legacy rows, complete dual-write groups, the
+one-active-challenge and one-operation fences, and DB rejection of partial or
+impossible queue/consume/invalidate states. Service tests cover provider
+acceptance gating, dual-code attempt accounting, session/MFA binding,
+target-ownership races, revoked-session denial, one-winner confirmation,
+identity rotation, challenge invalidation, other-session/device revocation,
+and full rollback when audit insertion fails.
+
 The full local migration sequence changes the SQLite table count from 79 to
-94 and reports zero foreign-key integrity errors. This is compatibility
+95 and reports zero foreign-key integrity errors. This is compatibility
 evidence for the checked-in migration sequence, not
 evidence about the live production schema.
 
@@ -233,7 +263,7 @@ After remote inventory and backup/restore gates:
 3. record its bookmark/checksum/manifest without storing secret values;
 4. verify that no user has multiple `requested`/`reviewing` deletion rows,
    because 0015 intentionally installs a partial unique index;
-5. apply only pending migrations, including 0011–0018 if absent;
+5. apply only pending migrations, including 0011–0019 if absent;
 6. verify table/index/trigger presence and foreign keys;
 7. run existing route/security tests and isolated document-builder/comparison smoke flows;
 8. verify outbox/job lease behavior and Queue/DLQ delivery;
@@ -250,6 +280,10 @@ After remote inventory and backup/restore gates:
     concurrent confirmation, audit, and session-revocation checks;
 14. verify OTP/deletion keyed fields and both lookup-key versions without
     logging digests; keep cleanup disabled and record legacy/keyed counts;
-15. retain the backup until the release window and restore test are complete.
+15. verify the email-change table, triggers, unique fences, two-address
+    provider batch, one-winner D1 confirmation, canonical identity rotation,
+    current-session preservation, other-session/device revocation, and
+    old/new challenge invalidation without logging addresses or codes;
+16. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.
