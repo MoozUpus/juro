@@ -13,6 +13,8 @@ The following values are configured in the deployment environment and never comm
 - `LEGISLATION_FEED_PROVIDER`, `LEGISLATION_FEED_API_KEY` — server-only adapter for an approved official Uzbekistan legislation feed. Their presence does not enable automatic publication.
 - `PAYMENT_PROVIDER`, `PAYMENT_API_KEY`, `PAYMENT_WEBHOOK_SECRET` — payment adapter configuration.
 - `ALLOW_PLATFORM_AUTH_HEADERS` — leave empty unless a trusted edge strips client-supplied `oai-authenticated-*` headers and injects authenticated values.
+- `IDENTITY_KEYRING` — versioned server-only AES/HMAC key ring. Required before
+  enabling TOTP or identity encryption; never store it in `wrangler.jsonc`.
 - `DB` — Cloudflare D1 binding.
 - `BUCKET` — private Cloudflare R2 binding.
 - `BACKUP_BUCKET`, `QUARANTINE_BUCKET` — environment-specific protected R2 bindings.
@@ -43,7 +45,7 @@ The smoke flows create and remove test documents, comparisons, share links, coll
 
 ## Database migration
 
-Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0012_*.sql`. Before any remote deployment:
+Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0013_*.sql`. Before any remote deployment:
 
 1. Record the exact environment, D1 ID, schema ledger, and application version.
 2. Take an independent D1 backup and verify its checksum/manifest.
@@ -51,7 +53,7 @@ Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0012_*.sql`. Bef
 4. Apply the pending migrations in order.
 5. Verify the migration ledger and foreign keys.
 6. Confirm that pre-existing user profiles received a default workspace and that tenant-owned records received `workspace_id`.
-7. Verify `document_comparisons`, `comparison_changes`, `legislation_updates`, `monitoring_preferences`, `job_outbox`, and `job_runs`.
+7. Verify `document_comparisons`, `comparison_changes`, `legislation_updates`, `monitoring_preferences`, `job_outbox`, `job_runs`, `auth_devices`, and `security_events`.
 8. Run read-only counts for users, documents, cases, comparisons, and bookings before and after migration.
 9. Require both tenant-link audits to return zero:
 
@@ -63,9 +65,9 @@ Migrations are ordered in `drizzle/0000_*.sql` through `drizzle/0012_*.sql`. Bef
 Do not delete the backup tables created by migration `0004` during the release window.
 Those same-database tables are not a substitute for the independent backup and restore rehearsal.
 
-Migrations `0011` and `0012` have passed local sequence, foreign-key,
-sentinel-preservation, tenant-backfill, and snapshot tests. They have not been
-applied to staging or production.
+Migrations `0011`–`0013` have passed local sequence, foreign-key,
+sentinel-preservation, tenant-backfill, append-only trigger, chain-fork, and
+snapshot tests. They have not been applied to staging or production.
 
 ## Smoke checklist
 
@@ -74,6 +76,13 @@ applied to staging or production.
 - Invalid, expired, replaced, and exhausted OTP states are distinct.
 - Parallel OTP requests create one active challenge, and one valid OTP creates
   at most one session claim.
+- A new email-code login creates one device-aware primary-assurance session,
+  with a 30-day absolute and seven-day idle limit.
+- Session listing marks the current local session, never claims to include
+  external-provider sessions, and allows only owner-scoped single/other/all
+  revocation.
+- A forced security-event failure rolls back the associated session creation
+  or revocation, and stored events reject update/delete.
 - OTP request, verification, and logout reject missing or foreign-origin CSRF
   writes.
 - Onboarding persists locale, account type, goal, workspace, consent, and audit event.

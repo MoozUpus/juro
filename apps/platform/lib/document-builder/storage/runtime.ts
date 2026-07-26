@@ -18,6 +18,7 @@ export interface BuilderRuntimeEnv {
   ALLOW_PLATFORM_AUTH_HEADERS?: string;
   LEGISLATION_FEED_PROVIDER?: string;
   LEGISLATION_FEED_API_KEY?: string;
+  IDENTITY_KEYRING?: string;
 }
 
 export class ServiceUnavailableError extends Error {

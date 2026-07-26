@@ -9,6 +9,12 @@ export type ChatGPTUser = {
   fullName: string | null;
 };
 
+export type AuthPrincipal = ChatGPTUser & {
+  authSource: "local_session" | "platform_header";
+  assuranceLevel: "primary" | "mfa" | "upstream";
+  sessionId: string | null;
+};
+
 const USER_EMAIL_HEADER = "oai-authenticated-user-email";
 const USER_FULL_NAME_HEADER = "oai-authenticated-user-full-name";
 const USER_FULL_NAME_ENCODING_HEADER =
@@ -18,7 +24,7 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
-export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+export async function getAuthPrincipal(): Promise<AuthPrincipal | null> {
   const sessionUser = await getSessionUser();
   if (sessionUser) return sessionUser;
 
@@ -41,6 +47,19 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     displayName: fullName ?? email,
     email,
     fullName,
+    authSource: "platform_header",
+    assuranceLevel: "upstream",
+    sessionId: null,
+  };
+}
+
+export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
+  const principal = await getAuthPrincipal();
+  if (!principal) return null;
+  return {
+    displayName: principal.displayName,
+    email: principal.email,
+    fullName: principal.fullName,
   };
 }
 

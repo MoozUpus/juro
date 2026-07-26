@@ -1,28 +1,42 @@
 import { headers } from "next/headers";
 import { requireD1 } from "../document-builder/storage/runtime";
-import { sha256 } from "./crypto";
 import {
   SESSION_COOKIE,
-  sessionTokenFromCookie,
 } from "./session-token";
+import { localSessionFromCookie } from "./session-management";
+import type { LocalAssuranceLevel } from "./session-management";
 
 export { SESSION_COOKIE } from "./session-token";
 
-type SessionUser = { email: string; fullName: string | null; displayName: string };
+export type SessionUser = {
+  email: string;
+  fullName: string | null;
+  displayName: string;
+  userId: string;
+  sessionId: string;
+  authSource: "local_session";
+  assuranceLevel: LocalAssuranceLevel;
+  authenticatedAt: string | null;
+};
 
 export async function getSessionUser(): Promise<SessionUser | null> {
   try {
     const requestHeaders = await headers();
-    const token = sessionTokenFromCookie(requestHeaders.get("cookie"));
-    if (!token) return null;
-    const tokenHash = await sha256(token);
-    const row = await requireD1().prepare(
-      `SELECT u.email, u.full_name AS fullName
-       FROM auth_sessions s JOIN user_profiles u ON u.id = s.user_id
-       WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ? LIMIT 1`,
-    ).bind(tokenHash, new Date().toISOString()).first<{ email: string; fullName: string | null }>();
-    if (!row) return null;
-    return { ...row, displayName: row.fullName || row.email };
+    const session = await localSessionFromCookie(
+      requireD1(),
+      requestHeaders.get("cookie"),
+    );
+    if (!session) return null;
+    return {
+      email: session.email,
+      fullName: session.fullName,
+      displayName: session.fullName || session.email,
+      userId: session.userId,
+      sessionId: session.sessionId,
+      authSource: "local_session",
+      assuranceLevel: session.assuranceLevel,
+      authenticatedAt: session.authenticatedAt,
+    };
   } catch {
     return null;
   }

@@ -526,10 +526,58 @@ export const authOtpChallenges = sqliteTable("auth_otp_challenges", {
   index("auth_otp_expiry_idx").on(table.expiresAt),
 ]);
 
+export const authDevices = sqliteTable("auth_devices", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  displayName: text("display_name").notNull(),
+  userAgentHash: text("user_agent_hash"),
+  firstSeenAt: text("first_seen_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+  revokedAt: text("revoked_at"),
+}, (table) => [
+  index("auth_devices_user_idx").on(table.userId, table.lastSeenAt),
+]);
+
 export const authSessions = sqliteTable("auth_sessions", {
-  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), tokenHash: text("token_hash").notNull(),
-  expiresAt: text("expires_at").notNull(), revokedAt: text("revoked_at"), createdAt: text("created_at").notNull(), lastSeenAt: text("last_seen_at").notNull(),
-}, (table) => [uniqueIndex("auth_sessions_token_uidx").on(table.tokenHash), index("auth_sessions_user_idx").on(table.userId, table.expiresAt)]);
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  deviceId: text("device_id").references(() => authDevices.id, { onDelete: "set null" }),
+  tokenHash: text("token_hash").notNull(),
+  authMethod: text("auth_method").notNull().default("email_otp"),
+  assuranceLevel: text("assurance_level").notNull().default("primary"),
+  authenticatedAt: text("authenticated_at"),
+  expiresAt: text("expires_at").notNull(),
+  idleExpiresAt: text("idle_expires_at"),
+  revokedAt: text("revoked_at"),
+  createdAt: text("created_at").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+}, (table) => [
+  uniqueIndex("auth_sessions_token_uidx").on(table.tokenHash),
+  index("auth_sessions_user_idx").on(table.userId, table.expiresAt),
+  index("auth_sessions_device_idx").on(table.deviceId, table.expiresAt),
+]);
+
+export const securityEvents = sqliteTable("security_events", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  sessionId: text("session_id"),
+  deviceId: text("device_id"),
+  eventType: text("event_type").notNull(),
+  severity: text("severity").notNull().default("info"),
+  authSource: text("auth_source"),
+  assuranceLevel: text("assurance_level"),
+  ipHash: text("ip_hash"),
+  userAgentHash: text("user_agent_hash"),
+  metadataJson: text("metadata_json"),
+  previousHash: text("previous_hash").notNull(),
+  eventHash: text("event_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("security_events_hash_uidx").on(table.eventHash),
+  uniqueIndex("security_events_chain_uidx").on(table.userId, table.previousHash),
+  index("security_events_user_idx").on(table.userId, table.createdAt),
+  index("security_events_type_idx").on(table.eventType, table.createdAt),
+]);
 
 export const userAcceptances = sqliteTable("user_acceptances", {
   id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), documentKey: text("document_key").notNull(),

@@ -1,7 +1,7 @@
 # JURO D1 migrations
 
 Updated: 2026-07-26  
-Latest source migration: `0012_groovy_ben_parker.sql`  
+Latest source migration: `0013_new_jubilee.sql`  
 Remote application status: not applied.
 
 ## Migration policy
@@ -57,6 +57,22 @@ SELECT count(*) FROM documents WHERE workspace_id IS NULL;
 SELECT count(*) FROM document_files WHERE workspace_id IS NULL;
 ```
 
+## Migration 0013
+
+`0013_new_jubilee.sql` is an additive identity-security migration. It:
+
+- creates `auth_devices` for sanitized local-login device labels;
+- adds nullable device linkage, explicit authentication method and assurance,
+  authentication time, and idle expiry to `auth_sessions`;
+- creates the user-scoped `security_events` chain;
+- prevents `UPDATE` and `DELETE` on security events with database triggers;
+- prevents two events for the same user from claiming the same previous hash;
+- leaves legacy session device/authentication/idle fields nullable so the
+  existing absolute-expiry behavior remains readable during expansion.
+
+No TOTP secret, backup code, raw IP address, raw user agent, encryption key, or
+key-ring value is inserted by the migration.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -64,7 +80,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0012` with foreign keys enabled;
+- apply migrations `0000`–`0013` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -73,7 +89,12 @@ Migration 0012 tests additionally prove that active memberships backfill
 documents and files, while a removed membership stays null, and that the
 Drizzle snapshot contains both lookup indexes.
 
-The full local migration sequence changes the SQLite table count from 79 to 86. This is compatibility evidence for the checked-in migration sequence, not evidence about the live production schema.
+Migration 0013 tests additionally prove the new tables/columns/indexes,
+database-enforced immutability, chain-fork rejection, and snapshot agreement.
+
+The full local migration sequence changes the SQLite table count from 79 to
+88. This is compatibility evidence for the checked-in migration sequence, not
+evidence about the live production schema.
 
 ## Staging procedure
 
@@ -82,11 +103,13 @@ After remote inventory and backup/restore gates:
 1. record the staging D1 database ID and current migration ledger;
 2. create and verify an external backup;
 3. record its bookmark/checksum/manifest without storing secret values;
-4. apply only pending migrations, including 0011 and 0012 if absent;
+4. apply only pending migrations, including 0011–0013 if absent;
 5. verify table/index presence and foreign keys;
 6. run existing route/security tests and isolated document-builder/comparison smoke flows;
 7. verify outbox/job lease behavior and Queue/DLQ delivery;
 8. run both null-workspace audits and stop if either is non-zero;
-9. retain the backup until the release window and restore test are complete.
+9. verify local-session creation, idle expiry, single/other/all revocation, and
+   the security-event chain without exposing token or device fingerprints;
+10. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

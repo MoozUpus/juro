@@ -153,3 +153,35 @@ Invitation rows grant no access before acceptance. Accept and decline update
 the invitation, collaborator grant, and deterministic audit event in one D1
 batch. Legacy accepted collaborators do not require `joined_at`, and an
 already accepted active collaborator cannot be demoted by a new invitation.
+
+## D-016 — authentication principal and local session scope
+
+Status: accepted  
+Date: 2026-07-26
+
+Authentication state carries its source, local session ID, and assurance
+level. A trusted edge header is `platform_header/upstream`; it is not silently
+treated as a JURO local session or as JURO MFA. The session/device UI manages
+only JURO email-code sessions and states this boundary explicitly.
+
+New local sessions use both a 30-day absolute lifetime and a seven-day idle
+lifetime. Last-seen writes are throttled to five minutes. Login and revocation
+state changes are committed with an append-only, per-user hash-chained
+security event.
+
+## D-017 — identity key rotation and MFA activation
+
+Status: accepted  
+Date: 2026-07-26
+
+Identity encryption uses a versioned server-only key ring: AES-256-GCM with
+record-bound AAD for recoverable secrets and domain-separated HMAC-SHA-256 for
+lookups and high-entropy recovery codes. Writes use the active version; reads
+may use retained prior versions during rotation.
+
+TOTP enrollment must not become user-visible until one complete vertical is
+ready: encrypted enrollment, confirmation, one-time backup-code display,
+email-OTP pre-auth challenge, mandatory TOTP/backup verification before
+session issuance, replay fencing, recent re-authentication, and rollback-safe
+audit. Merely adding an enrollment toggle would create an authentication
+bypass and is prohibited.

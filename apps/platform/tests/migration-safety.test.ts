@@ -14,9 +14,11 @@ const journal = JSON.parse(
 ) as { entries: JournalEntry[] };
 const phaseOneEntry = journal.entries.find(({ idx }) => idx === 11);
 const phaseTwoEntry = journal.entries.find(({ idx }) => idx === 12);
+const sessionSecurityEntry = journal.entries.find(({ idx }) => idx === 13);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
+assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
 
 function migrationSql(entry: JournalEntry): string {
   return readFileSync(new URL(`${entry.tag}.sql`, drizzleRoot), "utf8");
@@ -271,4 +273,93 @@ test("0012 snapshot and SQL declare workspace and OTP lookup indexes", () => {
   assert.ok(
     snapshot.tables.documents.indexes.documents_workspace_updated_idx,
   );
+});
+
+test("0013 adds device-aware sessions and an append-only security chain", () => {
+  const sql = migrationSql(sessionSecurityEntry);
+  for (const table of ["auth_devices", "security_events"]) {
+    assert.match(sql, new RegExp(`CREATE TABLE \\\`${table}\\\``));
+  }
+  for (const column of [
+    "device_id",
+    "auth_method",
+    "assurance_level",
+    "authenticated_at",
+    "idle_expires_at",
+  ]) {
+    assert.match(
+      sql,
+      new RegExp(`ALTER TABLE \\\`auth_sessions\\\` ADD \\\`${column}\\\``),
+    );
+  }
+  for (const name of [
+    "auth_sessions_device_idx",
+    "security_events_hash_uidx",
+    "security_events_chain_uidx",
+    "security_events_no_update",
+    "security_events_no_delete",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.doesNotMatch(sql, /TOTP_ENCRYPTION|IDENTITY_KEYRING|secret[_-]?key/i);
+
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0013_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    tables: Record<string, { indexes: Record<string, unknown> }>;
+  };
+  assert.ok(snapshot.tables.auth_devices);
+  assert.ok(snapshot.tables.security_events);
+  assert.ok(
+    snapshot.tables.security_events.indexes.security_events_chain_uidx,
+  );
+});
+
+test("0013 security events reject mutation, deletion, and chain forks", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const insert = db.prepare(`
+      INSERT INTO security_events (
+        id,user_id,event_type,severity,previous_hash,event_hash,created_at
+      ) VALUES (?,?,?,'info',?,?,?)
+    `);
+    insert.run(
+      "event-1",
+      "user-1",
+      "session.created",
+      "0".repeat(64),
+      "1".repeat(64),
+      "2026-07-26T12:00:00.000Z",
+    );
+    assert.throws(
+      () => db.prepare(
+        "UPDATE security_events SET severity='warning' WHERE id='event-1'",
+      ).run(),
+      /append-only/,
+    );
+    assert.throws(
+      () => db.prepare(
+        "DELETE FROM security_events WHERE id='event-1'",
+      ).run(),
+      /append-only/,
+    );
+    assert.throws(
+      () => insert.run(
+        "event-2",
+        "user-1",
+        "session.revoked",
+        "0".repeat(64),
+        "2".repeat(64),
+        "2026-07-26T12:01:00.000Z",
+      ),
+      /UNIQUE constraint failed/,
+    );
+  } finally {
+    db.close();
+  }
 });

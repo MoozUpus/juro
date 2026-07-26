@@ -40,6 +40,36 @@ sessions; a later failure requires a fresh code.
 - migration 0012 backfills only provable active-workspace links and adds the
   required document and OTP indexes.
 
+### Session and device foundation
+
+- every new email-OTP login creates a dedicated device record and a local
+  session with explicit `auth_method`, assurance level, authentication time,
+  absolute expiry, and seven-day idle expiry;
+- session validation rejects revoked, absolute-expired, idle-expired, and
+  device-revoked rows and throttles `last_seen_at` writes to five minutes;
+- the identity principal preserves `local_session` versus
+  `platform_header`, assurance, and the current local session ID;
+- the security page identifies the current JURO email session, revokes one,
+  all other, or all local sessions, and explicitly excludes external-provider
+  sessions from its claim;
+- login, logout, and revocation state changes share a D1 transaction with a
+  user-scoped security event;
+- `security_events` is append-only at the database layer and uses a
+  per-user SHA-256 chain with a uniqueness fence against forks;
+- migration 0013 adds the device/session fields and append-only event store
+  without enabling TOTP or changing a live environment.
+
+### Identity cryptography foundation
+
+- `lib/auth/keyring.ts` parses a versioned server-only key ring;
+- AES-256-GCM values use record-bound additional authenticated data;
+- lookup HMACs are SHA-256, versioned, and domain separated;
+- missing, malformed, unknown-version, and wrong-AAD keys fail closed;
+- old-key read/current-key write rotation is covered by tests.
+
+The key ring is not committed or configured in source. Existing raw identity
+columns and unkeyed legacy lookup hashes have not yet been migrated.
+
 ## Local evidence
 
 Verified commands:
@@ -49,6 +79,8 @@ npm run type-check
 npm run lint
 node --import tsx --test \
   tests/auth-otp.test.ts \
+  tests/auth-keyring.test.ts \
+  tests/auth-sessions.test.ts \
   tests/document-access.test.ts \
   tests/migration-safety.test.ts \
   tests/platform-core.test.ts
@@ -61,9 +93,11 @@ pre-accept denial, shared/workspace list scope, accept replay, decline,
 migration backfill, and the full existing builder/comparison/rendered Worker
 regression suite.
 
-The final local `npm test` run passed 156 tests: 18 rendered Worker/security,
-109 core/document/auth tests, and 29 Cloudflare configuration/migration/job
-tests.
+The full local `npm test` run passed 171 tests: 19 rendered Worker/security,
+121 core/document/auth tests, and 31 Cloudflare
+configuration/migration/job tests. `cf:types:check`, lint, typecheck, artifact
+validation, the development/staging/production Cloudflare build matrix,
+dependency audit, diff check, and the high-confidence secret scan also pass.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
 
@@ -80,13 +114,16 @@ Before applying migration 0012 or enabling OTP in staging:
 1. complete the approved Cloudflare inventory and independent D1 backup;
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
-4. apply pending migrations;
+4. apply pending migrations through 0013;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
    sender;
 8. exercise same-email and same-IP concurrency against D1, not only SQLite;
-9. confirm CSRF failures, session revocation, tenant isolation, and audit rows.
+9. confirm CSRF failures, current/single/other/all session revocation, idle
+   expiry, tenant isolation, and the append-only audit chain;
+10. configure the versioned identity key ring in protected staging secret
+    storage before enabling any feature that consumes it.
 
 Required read-only queries:
 
@@ -102,11 +139,14 @@ SELECT count(*) FROM document_files WHERE workspace_id IS NULL;
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011/0012 are not applied to staging or production;
-- TOTP, backup codes, device management, deletion OTP, and complete policy
+- migrations 0011–0013 are not applied to staging or production;
+- TOTP, backup codes, trusted-device bypass, deletion OTP, and complete policy
   versioning are not implemented by this slice;
-- raw email storage and unkeyed lookup hashes still require a versioned
-  encryption/HMAC rollout;
+- device-aware management covers JURO local email sessions only; an external
+  identity provider's other sessions cannot be listed or revoked here;
+- raw email storage and unkeyed legacy lookup hashes still require a
+  dual-read/write, backfill, verify, and contract migration onto the new
+  versioned encryption/HMAC primitives;
 - NAT-wide OTP limits preserve existing behavior and need staging product
   review;
 - Miniflare/remote D1 race tests and full HTTP invitation/workspace E2E remain

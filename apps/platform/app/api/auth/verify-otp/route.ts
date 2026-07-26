@@ -1,4 +1,4 @@
-import { normalizeEmail, randomToken, sha256 } from "../../../../lib/auth/crypto";
+import { normalizeEmail, sha256 } from "../../../../lib/auth/crypto";
 import {
   consumeOtpChallenge,
   type OtpChallengeResult,
@@ -8,6 +8,7 @@ import {
   verifyOtpInputSchema,
 } from "../../../../lib/auth/input";
 import { sessionCookie } from "../../../../lib/auth/session";
+import { createEmailOtpSession } from "../../../../lib/auth/session-management";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -121,14 +122,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
     const acceptances = [["terms", true], ["privacy-policy", true], ["personal-data-processing", true], ["marketing", Boolean(body?.marketing)]] as const;
     await db.batch(acceptances.filter(([, accepted]) => accepted).map(([key]) => db.prepare("INSERT OR IGNORE INTO user_acceptances (id,user_id,document_key,document_version,accepted_at) VALUES (?,?,?,?,?)").bind(crypto.randomUUID(), user!.id, key, "2026-07-24", now)));
   }
-  const token = randomToken(32);
-  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-  await db.prepare("INSERT INTO auth_sessions (id,user_id,token_hash,expires_at,created_at,last_seen_at) VALUES (?,?,?,?,?,?)")
-    .bind(crypto.randomUUID(), user.id, await sha256(token), expiresAt, now, now).run();
+  const session = await createEmailOtpSession(db, {
+    userId: user.id,
+    userAgent: request.headers.get("user-agent"),
+    now: new Date(now),
+  });
   return json({
     ok: true,
     redirectTo: purpose === "register" || !user.onboardingCompletedAt
       ? `/onboarding?lang=${locale}`
       : `/${locale}/${accountType}/main`,
-  }, 200, sessionCookie(token));
+  }, 200, sessionCookie(session.token));
 });

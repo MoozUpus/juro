@@ -60,6 +60,48 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
   assert.ok(source.indexOf("const sessionUser = await getSessionUser()") < source.indexOf("const requestHeaders = await headers()"));
   assert.match(source, /ALLOW_PLATFORM_AUTH_HEADERS/);
   assert.match(source, /NODE_ENV !== "production"/);
+  assert.match(source, /authSource: "platform_header"/);
+  assert.match(source, /assuranceLevel: "upstream"/);
+  assert.match(source, /sessionId: null/);
+});
+
+test("session management distinguishes the current local device and audits revocation", async () => {
+  const [sessionStore, sessionRoute, singleRoute, settings] =
+    await Promise.all([
+      readFile(
+        new URL("../lib/auth/session-management.ts", import.meta.url),
+        "utf8",
+      ),
+      readFile(
+        new URL(
+          "../app/api/platform/security/sessions/route.ts",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(
+        new URL(
+          "../app/api/platform/security/sessions/[sessionId]/route.ts",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(
+        new URL("../app/_platform/ProfileSettingsClient.tsx", import.meta.url),
+        "utf8",
+      ),
+    ]);
+  assert.match(sessionStore, /coalesce\(s\.idle_expires_at,s\.expires_at\)>\?/);
+  assert.match(sessionStore, /TOUCH_INTERVAL_MS/);
+  assert.match(sessionStore, /batchWithSecurityEvent/);
+  assert.match(sessionRoute, /s\.user_id=\?/);
+  assert.match(sessionRoute, /externalProviderSessionsIncluded: false/);
+  assert.match(sessionRoute, /scope !== "all" && scope !== "others"/);
+  assert.match(singleRoute, /userId: user\.id,\s*sessionId/s);
+  assert.match(singleRoute, /assertSafeWrite\(request\)/);
+  assert.match(settings, /JURO email-сессии/);
+  assert.match(settings, /внешнего защищённого провайдера/);
+  assert.match(settings, /TOTP и резервные коды пока не включены/);
 });
 
 test("canonical platform route classifier is stable", () => {

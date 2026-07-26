@@ -213,6 +213,31 @@ test("platform workflow APIs return private 401 responses without a session", as
   }
 });
 
+test("session revocation routes reject missing and foreign CSRF proof", async () => {
+  const worker = await createWorker();
+  for (const route of [
+    "/api/platform/security/sessions?scope=all",
+    "/api/platform/security/sessions/11111111-1111-4111-8111-111111111111",
+  ]) {
+    const missingHeader = await worker.fetch(new Request(
+      `http://localhost${route}`,
+      { method: "DELETE" },
+    ), runtime, context);
+    assert.equal(missingHeader.status, 403, route);
+    const foreignOrigin = await worker.fetch(new Request(
+      `http://localhost${route}`,
+      {
+        method: "DELETE",
+        headers: {
+          origin: "https://attacker.example",
+          "x-juro-csrf": "1",
+        },
+      },
+    ), runtime, context);
+    assert.equal(foreignOrigin.status, 403, route);
+  }
+});
+
 test("serves app-specific legal pages in both languages with noindex", async () => {
   const worker = await createWorker();
   for (const route of ["/legal/terms?lang=ru", "/legal/privacy?lang=uz", "/legal/cookies?lang=ru", "/legal/ai-rules?lang=uz", "/legal/personal-data?lang=ru"]) {
