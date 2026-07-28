@@ -141,10 +141,10 @@ migration is claimed.
 - bulk discovery, sitemap traversal, or scheduled crawling;
 - remote robots-aware Lex acquisition evidence;
 - Advice acquisition approval or activation;
-- verified section/chunk publication from normalized snapshots;
 - Advice scenario/version/link models;
 - RU/UZ historical version and effective-date diffing;
-- privileged reviewer assignment, decision service, and editor UI;
+- protected reviewer/publisher HTTP routes and editor UI;
+- replacement-version activation and current/historical version switching;
 - lexical search, multilingual embeddings, Vectorize indexing, metadata
   authorization, reranking, and retrieval evaluation;
 - server-side citation existence/article/version verification;
@@ -171,17 +171,32 @@ immutable. Same-evidence replay by the same reviewer is safe; conflicting
 evidence, a second assignee, stale MFA, a changed R2 object, or a mismatched
 version fails closed.
 
-An approval is not a verified publication. It leaves the source version in
-`pending_review`, leaves the source in `fetched`, and creates no sections,
+An approval is not itself a verified publication. It leaves the source version
+in `pending_review`, leaves the source in `fetched`, and creates no sections,
 chunks, vectors, citations, or AI context. Rejection closes the untrusted
-version atomically. A separate publisher with its own tests and protected
-entry point remains required before any source can pass the consumer trust
-gate.
+version atomically.
+
+## Verified publication evidence boundary
+
+The separate local publisher requires its own `legal.sources.publish`
+capability, active TOTP, fresh MFA, and the exact approved review-evidence
+SHA-256. It reloads and validates the normalized R2 snapshot again, then
+deterministically creates bounded version-specific reading sections/chunks and
+the canonical identifiers-only publication evidence in one D1 batch with the
+source/version verified transition. The publication and published reading rows
+are immutable and undeletable. Same-evidence replay verifies every stored row;
+concurrent or conflicting publication fails closed.
+
+This first publisher slice intentionally rejects a source that already has a
+verified version. A replacement-version activation model, historical/current
+version switching, retrieval, citations, Vectorize, HTTP entry points, and UI
+remain separate gates. Published reading rows have no vector ID or indexed-at
+marker and are not available to AI merely because publication succeeded.
 
 ## Local evidence
 
-The migration test applies `0000`–`0027` to an in-memory SQLite database,
-asserts 104 non-internal tables and 142 foreign keys, verifies zero foreign-key
+The migration test applies `0000`–`0028` to an in-memory SQLite database,
+asserts 105 non-internal tables and 146 foreign keys, verifies zero foreign-key
 violations, proves legacy sources remain draft, rejects evidence-free
 verification, protects verified hashes, rejects impossible sync/review states,
 and rejects unsafe request scope/lifecycle changes. Source-fetch/acquisition
@@ -197,10 +212,14 @@ absence of trusted sections/chunks, and the `legal.parse` consumer path.
 Legal-review tests cover dedicated-role/fresh-MFA enforcement, one-assignee
 claim, exact evidence hashes, idempotent replay, conflicting evidence and R2
 tamper rejection, immutable terminal records, non-publishing approval, and
-atomic rejection.
+atomic rejection. Publisher tests cover separate capability/fresh-MFA
+enforcement, approved-review and R2 revalidation, exact reading-row creation,
+one-winner concurrency, idempotent replay, tamper and pre-existing-data
+rejection, immutable publication evidence, and immutable reading rows.
 Source-trust tests exercise host/type/hash/timestamp failures and
 evidence-backed acceptance.
 
-Remote staging remains at `0000`–`0021`. No remote database, Worker, Queue,
+Remote staging remains at `0000`–`0021`; migrations `0022`–`0028` are local
+only. No remote database, Worker, Queue,
 Vectorize index content, R2 object, route, DNS record, secret, or production
 resource was changed by this local checkpoint.

@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
 Updated: 2026-07-28
-Latest source migration: `0027_closed_masked_marvel.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0027` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0027` have not been applied remotely.
+Latest source migration: `0028_orange_nightmare.sql`
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0028` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0028` have not been applied remotely.
 
 ## Migration policy
 
@@ -324,6 +324,33 @@ writes an immutable content-addressed R2 object first, then performs
 idempotent D1 persistence. A D1 failure can leave an unreferenced immutable
 object for later inventory/cleanup, but cannot create a trusted source.
 
+## Migration 0027
+
+`0027_closed_masked_marvel.sql` adds canonical legal-review decision evidence
+to the existing review queue. It records the exact reviewer, session, source,
+version, raw/parsed hashes, decision, substantive notes, fresh-MFA time,
+canonical evidence JSON, and its SHA-256 without fabricating evidence for
+legacy terminal rows. Guards enforce one-assignee review, coherent relational/
+JSON evidence, restrictive reviewer identity, and immutable/undeletable
+terminal decisions. Approval deliberately does not publish trusted content.
+
+## Migration 0028
+
+`0028_orange_nightmare.sql` additively creates
+`legal_source_publications`. Each publication is uniquely bound to one approved
+review and one version and records the exact review/raw/parsed evidence, the
+publisher, canonical identifiers-only publication evidence, and its SHA-256.
+Insert guards require an approved coherent `0027` decision, a still-pending
+version, matching unverified source identity, canonical reviewer/publisher
+session/assignment/MFA references, and exact bounded section/chunk counts and
+1:1 row shape. The server service validates those access references against
+live staff, session, and TOTP state. Missing JSON fields fail closed via
+explicit `COALESCE`.
+Publication records are immutable and undeletable. Once published, the
+version-specific reading sections and chunks are also immutable and
+undeletable. The application performs canonical SHA-256 verification because
+SQLite/D1 has no built-in SHA-256 function.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -331,7 +358,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0027` with foreign keys enabled;
+- apply migrations `0000`–`0028` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -441,17 +468,28 @@ tests additionally cover dedicated-role and fresh-MFA denial, one-assignee
 claim, same-evidence replay, conflicting evidence rejection, R2 tamper
 rejection, approval without publication, and atomic source/version rejection.
 
+Migration 0028 tests additionally prove additive-only SQL, snapshot/journal/
+foreign-key agreement, exact approved-review and publication evidence,
+fail-closed missing JSON fields, restrictive source/version/reviewer/publisher
+keys, bounded 1:1 section/chunk evidence, rejection of malformed metadata,
+immutable/undeletable publication rows, and immutable/undeletable published
+reading rows. Service tests cover separate capability and fresh-MFA
+denial, R2 and approved-evidence revalidation, deterministic bounded reading
+rows, one-winner concurrency, exact idempotent replay, and tamper/pre-existing-
+data rejection.
+
 The full local migration sequence changes the SQLite table count from 79 to
-104, contains 142 foreign keys, and reports zero foreign-key integrity errors. Migration `0025` adds six
+105, contains 146 foreign keys, and reports zero foreign-key integrity errors. Migration `0025` adds six
 tables and expands `legal_sources`; migrations `0022`–`0024` alter existing
 tables and add indexes/triggers rather than tables; migration `0026` adds one
-request table. This is compatibility evidence for the checked-in
-`0000`–`0027` sequence. Remote
+request table; migration `0027` expands the review queue; migration `0028` adds
+one publication table. This is compatibility evidence for the checked-in
+`0000`–`0028` sequence. Remote
 production and development each report 61 non-internal tables and ledger
 entries only through `0004`. Isolated staging reports those 97
 application/non-internal tables plus `d1_migrations`, the exact
 `0000`–`0021` ledger, 275 schema objects, `PRAGMA quick_check = ok`, and zero
-foreign-key violations. It does not contain `0022`–`0027`.
+foreign-key violations. It does not contain `0022`–`0028`.
 
 ## Staging bootstrap evidence and remaining procedure
 
@@ -470,7 +508,7 @@ and accepted the same statement with LF. Repository-root `.gitattributes` now
 pins `apps/platform/drizzle/*.sql text eol=lf`. No checked-in migration content
 was rewritten.
 
-This is staging schema-bootstrap evidence only; local migrations `0022`–`0027`
+This is staging schema-bootstrap evidence only; local migrations `0022`–`0028`
 remain pending. Portable SQL export/import,
 protected backup-object evidence, application/runtime binding, row-level
 business invariants, and RTO remain unverified. Before application enablement
@@ -528,6 +566,10 @@ or any further staging migration:
     review entry points unreachable until a reviewed legal-reviewer bootstrap,
     fresh-MFA flow, immutable decision evidence, R2 tamper rejection, and
     non-publishing approval behavior pass protected staging tests;
-23. retain the backup until the release window and restore test are complete.
+23. apply and verify `0028` only after `0027` passes; keep the publisher
+    unreachable until separate publish capability/fresh-MFA enforcement, R2
+    revalidation, one-winner publication, immutable reading rows, and exact
+    replay pass protected staging tests; keep indexing and AI consumption off;
+24. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

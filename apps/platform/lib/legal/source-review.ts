@@ -63,7 +63,7 @@ const decisionInputSchema = z.object({
   expectedRawContentSha256: sha256Schema,
   expectedParsedContentSha256: sha256Schema,
 }).strict();
-const decisionEvidenceSchema = z.object({
+export const legalSourceDecisionEvidenceSchema = z.object({
   schemaVersion: z.literal(1),
   reviewId: identifierSchema,
   sourceId: identifierSchema,
@@ -261,9 +261,9 @@ async function terminalReplay(
   ) {
     return null;
   }
-  let evidence: z.infer<typeof decisionEvidenceSchema>;
+  let evidence: z.infer<typeof legalSourceDecisionEvidenceSchema>;
   try {
-    evidence = decisionEvidenceSchema.parse(
+    evidence = legalSourceDecisionEvidenceSchema.parse(
       JSON.parse(row.decision_evidence_json),
     );
   } catch {
@@ -344,7 +344,7 @@ export async function decideLegalSourceReview(
   }
 
   const decidedAt = now.toISOString();
-  const evidence = JSON.stringify(decisionEvidenceSchema.parse({
+  const evidence = JSON.stringify(legalSourceDecisionEvidenceSchema.parse({
     schemaVersion: 1,
     reviewId: row.id,
     sourceId: row.source_id,
@@ -450,5 +450,102 @@ export async function decideLegalSourceReview(
     decidedAt,
     publicationRequired: input.decision === "approve",
     changed: true,
+  };
+}
+
+export type ApprovedLegalSourceReview = {
+  reviewId: string;
+  sourceId: string;
+  versionId: string;
+  reviewerUserId: string;
+  decisionEvidenceSha256: string;
+  decidedAt: string;
+  source: StoredNormalizedLegalSource;
+};
+
+export async function loadApprovedLegalSourceReview(
+  env: LegalSourceReviewEnv,
+  reviewIdInput: string,
+): Promise<ApprovedLegalSourceReview> {
+  const reviewId = identifierSchema.parse(reviewIdInput);
+  const row = await loadReview(env.DB, reviewId);
+  if (!row) {
+    throw new LegalSourceReviewError("LEGAL_SOURCE_REVIEW_NOT_FOUND");
+  }
+  if (
+    row.status !== "approved"
+    || row.decision !== "approve"
+    || !row.version_id
+    || !row.assigned_to_user_id
+    || row.decided_by_user_id !== row.assigned_to_user_id
+    || !row.decision_evidence_json
+    || !row.decision_evidence_sha256
+    || !row.reviewed_parsed_sha256
+    || !row.decided_at
+    || !["pending_review", "verified"].includes(row.version_status ?? "")
+  ) {
+    throw new LegalSourceReviewError(
+      "LEGAL_SOURCE_REVIEW_STATE_CONFLICT",
+    );
+  }
+  let evidence: z.infer<typeof legalSourceDecisionEvidenceSchema>;
+  try {
+    evidence = legalSourceDecisionEvidenceSchema.parse(
+      JSON.parse(row.decision_evidence_json),
+    );
+  } catch {
+    throw new LegalSourceReviewError(
+      "LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT",
+    );
+  }
+  if (
+    await sha256Text(row.decision_evidence_json)
+      !== row.decision_evidence_sha256
+    || evidence.reviewId !== row.id
+    || evidence.sourceId !== row.source_id
+    || evidence.versionId !== row.version_id
+    || evidence.rawContentSha256 !== row.version_content_sha256
+    || evidence.parsedContentSha256 !== row.reviewed_parsed_sha256
+    || evidence.decision !== "approve"
+    || evidence.reviewerUserId !== row.decided_by_user_id
+    || evidence.decidedAt !== row.decided_at
+  ) {
+    throw new LegalSourceReviewError(
+      "LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT",
+    );
+  }
+  let source: StoredNormalizedLegalSource;
+  try {
+    source = await loadStoredNormalizedLegalSource(env, row.version_id);
+  } catch (error) {
+    if (error instanceof LegalSourceNormalizationError) {
+      throw new LegalSourceReviewError(
+        "LEGAL_SOURCE_REVIEW_SOURCE_UNAVAILABLE",
+      );
+    }
+    throw error;
+  }
+  if (
+    source.sourceId !== row.source_id
+    || source.rawContentSha256 !== evidence.rawContentSha256
+    || source.parsedContentSha256 !== evidence.parsedContentSha256
+    || source.sourceKind !== evidence.sourceKind
+    || source.locale !== evidence.locale
+    || source.canonicalId !== evidence.canonicalId
+    || source.canonicalUrl !== evidence.canonicalUrl
+    || source.snapshot.parser.profile !== evidence.parserProfile
+  ) {
+    throw new LegalSourceReviewError(
+      "LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT",
+    );
+  }
+  return {
+    reviewId: row.id,
+    sourceId: row.source_id,
+    versionId: row.version_id,
+    reviewerUserId: row.decided_by_user_id,
+    decisionEvidenceSha256: row.decision_evidence_sha256,
+    decidedAt: row.decided_at,
+    source,
   };
 }

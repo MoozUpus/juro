@@ -1308,6 +1308,26 @@ export const legalReviewQueue = sqliteTable("legal_review_queue", {
   uniqueIndex("legal_review_queue_version_reason_uidx").on(table.versionId, table.reasonCode),
 ]);
 
+export const legalSourcePublications = sqliteTable("legal_source_publications", {
+  id: text("id").primaryKey(),
+  reviewId: text("review_id").notNull().references(() => legalReviewQueue.id, { onDelete: "restrict" }),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  versionId: text("version_id").notNull().references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  reviewEvidenceSha256: text("review_evidence_sha256").notNull(),
+  rawContentSha256: text("raw_content_sha256").notNull(),
+  parsedContentSha256: text("parsed_content_sha256").notNull(),
+  publishedByUserId: text("published_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  publicationEvidenceJson: text("publication_evidence_json").notNull(),
+  publicationEvidenceSha256: text("publication_evidence_sha256").notNull(),
+  publishedAt: text("published_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("legal_source_publications_review_uidx").on(table.reviewId),
+  uniqueIndex("legal_source_publications_version_uidx").on(table.versionId),
+  index("legal_source_publications_source_idx").on(table.sourceId, table.publishedAt),
+  index("legal_source_publications_publisher_idx").on(table.publishedByUserId, table.publishedAt),
+]);
+
 export const conversationSources = sqliteTable("conversation_sources", {
   id: text("id").primaryKey(),
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),

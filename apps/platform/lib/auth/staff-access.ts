@@ -15,6 +15,7 @@ export const platformStaffCapabilities = [
   "staff.operations.manage",
   "support.tickets.manage",
   "legal.sources.review",
+  "legal.sources.publish",
 ] as const;
 
 export type PlatformStaffCapability =
@@ -36,6 +37,7 @@ const roleCapabilities: Readonly<
   legal_reviewer: new Set([
     "staff.console.view",
     "legal.sources.review",
+    "legal.sources.publish",
   ]),
 };
 

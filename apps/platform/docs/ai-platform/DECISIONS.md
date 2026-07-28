@@ -1002,3 +1002,36 @@ there is no verified version. A separate privileged publisher must reload the
 R2 snapshot, validate this decision evidence, create versioned reading data,
 and perform the verified-state transition. No remote migration, route, UI,
 source publication, or production change is claimed.
+
+## D-052 — publication is a separate fresh-MFA evidence boundary
+
+Status: accepted and locally verified; HTTP/admin UI, retrieval, and remote
+activation gates open
+Date: 2026-07-28
+
+Migration `0028` and the internal publisher service add a distinct
+`legal.sources.publish` capability. Only an active dedicated legal reviewer
+with TOTP and MFA verified no more than 15 minutes ago may publish; the generic
+administrator and support roles do not inherit this capability. Publication
+requires the exact approved `0027` decision-evidence SHA-256 and independently
+reloads and validates the private normalized R2 snapshot, source identity, raw
+hash, parsed hash, and approved-review evidence.
+
+The service deterministically materializes bounded version-specific reading
+sections and chunks and records a canonical identifiers-only publication
+evidence document plus its SHA-256 in the same D1 batch that marks the source
+and version verified. D1 guards require the approved review, hashes, source
+identity, bounded reading-row shape/counts, and canonical session/assignment/
+MFA references to agree; the server service proves those access references
+against live staff, session, and TOTP state before input parsing or any write.
+Publication evidence and all published section/chunk rows are
+immutable and undeletable. Same-evidence replay verifies every stored reading
+row and is idempotent; concurrent or conflicting publication fails closed.
+
+The database cannot calculate SHA-256 itself, so the application verifies the
+canonical publication-evidence hash on replay while D1 enforces the relational
+and JSON identity constraints. The slice intentionally publishes only the
+first verified version for a source: activation of a replacement historical or
+current version needs a later explicit version-switch model. It creates no
+Vectorize entry, lexical index, citation, AI context, HTTP route, admin UI, or
+remote resource, and makes no production change.

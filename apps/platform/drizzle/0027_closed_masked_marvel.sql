@@ -15,7 +15,7 @@ WHEN NEW.`status` IN ('approved','rejected') OR
      NEW.`decision_evidence_sha256` IS NOT NULL OR NEW.`decided_at` IS NOT NULL
 BEGIN
   SELECT CASE
-    WHEN NOT (
+    WHEN COALESCE((
       ((NEW.`status` = 'approved' AND NEW.`decision` = 'approve') OR
        (NEW.`status` = 'rejected' AND NEW.`decision` = 'reject')) AND
       NEW.`decision_notes` IS NOT NULL AND
@@ -46,7 +46,7 @@ BEGIN
       length(NEW.`decision_evidence_sha256`) = 64 AND
       NEW.`decision_evidence_sha256` NOT GLOB '*[^0-9a-f]*' AND
       NEW.`decided_at` IS NOT NULL
-    )
+    ), 0) = 0
     THEN RAISE(ABORT, 'legal review decision evidence invalid')
   END;
 END;--> statement-breakpoint
@@ -61,7 +61,7 @@ WHEN NEW.`status` IN ('approved','rejected') OR
      NEW.`decision_evidence_sha256` IS NOT NULL OR NEW.`decided_at` IS NOT NULL
 BEGIN
   SELECT CASE
-    WHEN NOT (
+    WHEN COALESCE((
       ((NEW.`status` = 'approved' AND NEW.`decision` = 'approve') OR
        (NEW.`status` = 'rejected' AND NEW.`decision` = 'reject')) AND
       NEW.`decision_notes` IS NOT NULL AND
@@ -92,7 +92,7 @@ BEGIN
       length(NEW.`decision_evidence_sha256`) = 64 AND
       NEW.`decision_evidence_sha256` NOT GLOB '*[^0-9a-f]*' AND
       NEW.`decided_at` IS NOT NULL
-    )
+    ), 0) = 0
     THEN RAISE(ABORT, 'legal review decision evidence invalid')
   END;
 END;--> statement-breakpoint

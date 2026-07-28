@@ -14,6 +14,10 @@ import {
   LegalSourceReviewError,
   type LegalSourceReviewEnv,
 } from "../lib/legal/source-review";
+import {
+  LegalSourcePublicationError,
+  publishApprovedLegalSource,
+} from "../lib/legal/source-publication";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 type StoredObject = {
@@ -106,10 +110,10 @@ function sourceFetch(responses: Response[]): typeof fetch {
   }) as typeof fetch;
 }
 
-function legalDocument(title: string): string {
+function legalDocument(title: string, leadParagraph?: string): string {
   return `<html><head><title>${title}</title></head><body><main>
     <h1>${title}</h1>
-    <p>${"Норма описывает права, обязанности и применимый порядок действий. ".repeat(5)}</p>
+    <p>${leadParagraph ?? "Норма описывает права, обязанности и применимый порядок действий. ".repeat(5)}</p>
     <h2>Статья 1</h2>
     <p>${"Уполномоченный орган проверяет документы по законодательству Республики Узбекистан. ".repeat(5)}</p>
   </main></body></html>`;
@@ -118,6 +122,7 @@ function legalDocument(title: string): string {
 async function normalizedReviewFixture(
   env: LegalSourceReviewEnv & LegalSourceAcquisitionEnv,
   canonicalId: number,
+  documentHtml?: string,
 ) {
   const request = await createLegalSourceFetchRequest(env, {
     url: `https://lex.uz/ru/docs/-${canonicalId}`,
@@ -128,7 +133,7 @@ async function normalizedReviewFixture(
       new Response("User-agent: *\nAllow: /\n", {
         headers: { "content-type": "text/plain; charset=utf-8" },
       }),
-      new Response(legalDocument(`Закон ${canonicalId}`), {
+      new Response(documentHtml ?? legalDocument(`Закон ${canonicalId}`), {
         headers: { "content-type": "text/html; charset=utf-8" },
       }),
     ]),
@@ -244,6 +249,39 @@ async function expectReviewError(
   await assert.rejects(
     promise,
     (error) => error instanceof LegalSourceReviewError
+      && error.code === code,
+  );
+}
+
+async function approvedReviewFixture(
+  env: LegalSourceReviewEnv & LegalSourceAcquisitionEnv,
+  sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
+  canonicalId: number,
+  suffix: string,
+  documentHtml?: string,
+) {
+  const fixture = await normalizedReviewFixture(env, canonicalId, documentHtml);
+  const reviewer = insertStaff(sqlite, `decision-${suffix}`, "legal_reviewer");
+  await claimLegalSourceReview(env, reviewer, fixture.reviewId, {
+    now: REVIEW_AT,
+  });
+  const decision = await decideLegalSourceReview(env, reviewer, {
+    reviewId: fixture.reviewId,
+    decision: "approve",
+    notes: "Источник и нормализованная структура проверены для публикации.",
+    expectedRawContentSha256: fixture.rawContentSha256,
+    expectedParsedContentSha256: fixture.parsedContentSha256,
+  }, { now: new Date("2026-07-28T01:12:00.000Z") });
+  return { fixture, reviewer, decision };
+}
+
+async function expectPublicationError(
+  promise: Promise<unknown>,
+  code: string,
+) {
+  await assert.rejects(
+    promise,
+    (error) => error instanceof LegalSourcePublicationError
       && error.code === code,
   );
 }
@@ -500,5 +538,287 @@ test("decision fails closed when the normalized R2 evidence changes", async () =
     );
   } finally {
     sqlite.close();
+  }
+});
+
+test("publication atomically creates verified reading rows and immutable evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const approved = await approvedReviewFixture(env, sqlite, 205, "publish");
+    const publisher = insertStaff(sqlite, "publisher", "legal_reviewer");
+    const input = {
+      reviewId: approved.fixture.reviewId,
+      expectedDecisionEvidenceSha256:
+        approved.decision.decisionEvidenceSha256,
+    };
+    const result = await publishApprovedLegalSource(
+      env,
+      publisher,
+      input,
+      { now: new Date("2026-07-28T01:14:00.000Z") },
+    );
+    assert.equal(result.changed, true);
+    assert.ok(result.sectionCount > 0);
+    assert.equal(result.chunkCount, result.sectionCount);
+    assert.match(result.publicationEvidenceSha256, /^[0-9a-f]{64}$/);
+
+    const state = sqlite.prepare(`
+      SELECT
+        (SELECT status FROM legal_sources WHERE id=?) AS source_status,
+        (SELECT verification_state FROM legal_sources WHERE id=?) AS source_state,
+        (SELECT status FROM legal_source_versions WHERE id=?) AS version_status,
+        (SELECT count(*) FROM legal_source_sections WHERE version_id=?) AS sections,
+        (SELECT count(*) FROM legal_source_chunks WHERE version_id=?) AS chunks,
+        (SELECT count(*) FROM legal_source_chunks
+          WHERE version_id=? AND (vector_id IS NOT NULL OR indexed_at IS NOT NULL)
+        ) AS indexed_chunks
+    `).get(
+      result.sourceId,
+      result.sourceId,
+      result.versionId,
+      result.versionId,
+      result.versionId,
+      result.versionId,
+    ) as Record<string, unknown>;
+    assert.deepEqual({ ...state }, {
+      source_status: "verified",
+      source_state: "verified",
+      version_status: "verified",
+      sections: result.sectionCount,
+      chunks: result.chunkCount,
+      indexed_chunks: 0,
+    });
+    const publication = sqlite.prepare(`
+      SELECT publication_evidence_json,publication_evidence_sha256,
+        published_by_user_id
+      FROM legal_source_publications WHERE id=?
+    `).get(result.publicationId) as Record<string, string>;
+    const publicationHash = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(publication.publication_evidence_json),
+    ).then((digest) => Array.from(new Uint8Array(digest), (byte) =>
+      byte.toString(16).padStart(2, "0")
+    ).join(""));
+    assert.equal(publicationHash, publication.publication_evidence_sha256);
+    assert.equal(publication.published_by_user_id, publisher.userId);
+    assert.equal((await publishApprovedLegalSource(
+      env,
+      publisher,
+      input,
+      { now: new Date("2026-07-28T01:15:00.000Z") },
+    )).changed, false);
+    assert.throws(
+      () => sqlite.prepare(`
+        UPDATE legal_source_publications SET published_at=? WHERE id=?
+      `).run("2026-07-28T01:16:00.000Z", result.publicationId),
+      /legal source publication evidence is immutable/,
+    );
+    assert.throws(
+      () => sqlite.prepare("DELETE FROM legal_source_publications WHERE id=?")
+        .run(result.publicationId),
+      /legal source publication evidence cannot be deleted/,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("publication splits an oversized normalized block into bounded anchored rows", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const approved = await approvedReviewFixture(
+      env,
+      sqlite,
+      210,
+      "oversized-block",
+      legalDocument("Большой закон", "Длинная норма закона ".repeat(700)),
+    );
+    const publisher = insertStaff(
+      sqlite,
+      "publisher-oversized",
+      "legal_reviewer",
+    );
+    const input = {
+      reviewId: approved.fixture.reviewId,
+      expectedDecisionEvidenceSha256:
+        approved.decision.decisionEvidenceSha256,
+    };
+    const result = await publishApprovedLegalSource(env, publisher, input, {
+      now: new Date("2026-07-28T01:14:00.000Z"),
+    });
+    const bounds = sqlite.prepare(`
+      SELECT max(length(body_text)) AS max_length,
+        count(*) AS row_count,
+        count(DISTINCT canonical_ref) AS ref_count,
+        sum(CASE WHEN canonical_ref LIKE '%:chars:%' THEN 1 ELSE 0 END)
+          AS ranged_count
+      FROM legal_source_sections WHERE version_id=?
+    `).get(result.versionId) as Record<string, number>;
+    assert.ok(result.sectionCount > 2);
+    assert.ok(bounds.max_length <= 8_000);
+    assert.equal(bounds.row_count, result.sectionCount);
+    assert.equal(bounds.ref_count, result.sectionCount);
+    assert.ok(bounds.ranged_count >= 2);
+    assert.equal((await publishApprovedLegalSource(
+      env,
+      publisher,
+      input,
+      { now: new Date("2026-07-28T01:15:00.000Z") },
+    )).changed, false);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("publication access and evidence mismatches fail before trust promotion", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const approved = await approvedReviewFixture(env, sqlite, 206, "denial");
+    const support = insertStaff(sqlite, "publish-support", "support");
+    await assert.rejects(
+      publishApprovedLegalSource(env, support, { malformed: true }, {
+        now: REVIEW_AT,
+      }),
+      PlatformStaffAccessError,
+    );
+    const publisher = insertStaff(sqlite, "publish-evidence", "legal_reviewer");
+    await expectPublicationError(
+      publishApprovedLegalSource(env, publisher, {
+        reviewId: approved.fixture.reviewId,
+        expectedDecisionEvidenceSha256: "f".repeat(64),
+      }, { now: new Date("2026-07-28T01:14:00.000Z") }),
+      "LEGAL_SOURCE_PUBLICATION_EVIDENCE_CONFLICT",
+    );
+    assert.equal(
+      (
+        sqlite.prepare(`
+          SELECT verification_state FROM legal_sources WHERE id=(
+            SELECT source_id FROM legal_source_versions WHERE id=?
+          )
+        `).get(approved.fixture.versionId) as { verification_state: string }
+      ).verification_state,
+      "fetched",
+    );
+    assert.equal(
+      (
+        sqlite.prepare("SELECT count(*) AS value FROM legal_source_publications")
+          .get() as { value: number }
+      ).value,
+      0,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("concurrent publication has one durable winner and one verified replay", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const approved = await approvedReviewFixture(env, sqlite, 207, "race");
+    const first = insertStaff(sqlite, "publisher-race-a", "legal_reviewer");
+    const second = insertStaff(sqlite, "publisher-race-b", "legal_reviewer");
+    const input = {
+      reviewId: approved.fixture.reviewId,
+      expectedDecisionEvidenceSha256:
+        approved.decision.decisionEvidenceSha256,
+    };
+    const results = await Promise.all([
+      publishApprovedLegalSource(env, first, input, {
+        now: new Date("2026-07-28T01:14:00.000Z"),
+      }),
+      publishApprovedLegalSource(env, second, input, {
+        now: new Date("2026-07-28T01:14:01.000Z"),
+      }),
+    ]);
+    assert.deepEqual(
+      results.map((result) => result.changed).sort(),
+      [false, true],
+    );
+    assert.equal(results[0].publicationId, results[1].publicationId);
+    assert.equal(
+      (
+        sqlite.prepare("SELECT count(*) AS value FROM legal_source_publications")
+          .get() as { value: number }
+      ).value,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("publication rejects a changed normalized object and pre-existing reading data", async () => {
+  const tampered = sqliteD1Fixture();
+  const tamperedBucket = new FakeR2Bucket();
+  const tamperedEnv = reviewEnv(tampered.d1, tamperedBucket);
+  try {
+    const approved = await approvedReviewFixture(
+      tamperedEnv,
+      tampered.sqlite,
+      208,
+      "tampered-publish",
+    );
+    const publisher = insertStaff(
+      tampered.sqlite,
+      "publisher-tampered",
+      "legal_reviewer",
+    );
+    const parsed = tamperedBucket.objects.get(approved.fixture.parsedObjectKey);
+    assert.ok(parsed);
+    parsed.bytes = new TextEncoder().encode('{"changed":true}');
+    await expectPublicationError(
+      publishApprovedLegalSource(tamperedEnv, publisher, {
+        reviewId: approved.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          approved.decision.decisionEvidenceSha256,
+      }, { now: new Date("2026-07-28T01:14:00.000Z") }),
+      "LEGAL_SOURCE_PUBLICATION_SOURCE_UNAVAILABLE",
+    );
+  } finally {
+    tampered.sqlite.close();
+  }
+
+  const seeded = sqliteD1Fixture();
+  const seededBucket = new FakeR2Bucket();
+  const seededEnv = reviewEnv(seeded.d1, seededBucket);
+  try {
+    const approved = await approvedReviewFixture(
+      seededEnv,
+      seeded.sqlite,
+      209,
+      "seeded-publish",
+    );
+    const publisher = insertStaff(
+      seeded.sqlite,
+      "publisher-seeded",
+      "legal_reviewer",
+    );
+    seeded.sqlite.prepare(`
+      INSERT INTO legal_source_sections (
+        id,version_id,canonical_ref,body_text,sequence,content_sha256,created_at
+      ) VALUES ('foreign-section',?,'foreign','unexpected',0,?,?)
+    `).run(
+      approved.fixture.versionId,
+      "a".repeat(64),
+      "2026-07-28T01:13:00.000Z",
+    );
+    await expectPublicationError(
+      publishApprovedLegalSource(seededEnv, publisher, {
+        reviewId: approved.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          approved.decision.decisionEvidenceSha256,
+      }, { now: new Date("2026-07-28T01:14:00.000Z") }),
+      "LEGAL_SOURCE_PUBLICATION_STATE_CONFLICT",
+    );
+  } finally {
+    seeded.sqlite.close();
   }
 });

@@ -43,6 +43,9 @@ const legalSourceFetchEntry = journal.entries.find(
 const legalSourceReviewEvidenceEntry = journal.entries.find(
   ({ idx }) => idx === 27,
 );
+const legalSourcePublicationEntry = journal.entries.find(
+  ({ idx }) => idx === 28,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -95,6 +98,10 @@ assert.ok(
 assert.ok(
   legalSourceReviewEvidenceEntry,
   "Drizzle journal must contain migration 0027",
+);
+assert.ok(
+  legalSourcePublicationEntry,
+  "Drizzle journal must contain migration 0028",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2706,8 +2713,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 104);
-    assert.equal(foreignKeyCount(db), 142);
+    assert.equal(tableDefinitions(db).size, 105);
+    assert.equal(foreignKeyCount(db), 146);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -2849,6 +2856,27 @@ test("0027 preserves legacy decisions but requires coherent evidence for new one
       mfaVerifiedAt: now,
       decidedAt: now,
     });
+    const missingSessionEvidence = JSON.parse(evidence) as Record<
+      string,
+      unknown
+    >;
+    delete missingSessionEvidence.reviewerSessionId;
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_review_queue
+        SET status='approved',decision='approve',decision_notes=?,
+          reviewed_parsed_sha256=?,decided_by_user_id='reviewer-27',
+          decision_evidence_json=?,decision_evidence_sha256=?,decided_at=?
+        WHERE id='new-review-27'
+      `).run(
+        notes,
+        parsedHash,
+        JSON.stringify(missingSessionEvidence),
+        "c".repeat(64),
+        now,
+      ),
+      /legal review decision evidence invalid/,
+    );
     assert.throws(
       () => db.prepare(`
         UPDATE legal_review_queue
@@ -2881,6 +2909,315 @@ test("0027 preserves legacy decisions but requires coherent evidence for new one
     );
     assert.equal(tableDefinitions(db).size, 104);
     assert.equal(foreignKeyCount(db), 142);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0028 adds only append-only, review-bound publication evidence", () => {
+  const sql = migrationSql(legalSourcePublicationEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 14);
+  for (const statement of migrationStatements) {
+    assert.match(
+      statement,
+      /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i,
+      `unexpected legal publication statement: ${statement.slice(0, 100)}`,
+    );
+  }
+  assert.match(sql, /CREATE TABLE `legal_source_publications`/);
+  assert.match(sql, /legal source publication review evidence invalid/);
+  assert.match(sql, /legal source publication canonical evidence invalid/);
+  assert.match(sql, /legal source publication evidence is immutable/);
+  assert.match(sql, /legal source publication evidence cannot be deleted/);
+  assert.match(sql, /published legal source sections are immutable/);
+  assert.match(sql, /published legal source chunks are immutable/);
+  assert.doesNotMatch(
+    sql,
+    /(?:^|\n)\s*(?:DROP|ALTER|DELETE|UPDATE)\b/im,
+  );
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0027_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0028_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(legalSourcePublicationEntry.idx, 28);
+  assert.equal(legalSourcePublicationEntry.tag, "0028_orange_nightmare");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 79);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    144,
+  );
+});
+
+test("0028 rejects incoherent publication and preserves accepted evidence", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-28T13:00:00.000Z";
+    const rawHash = "a".repeat(64);
+    const parsedHash = "b".repeat(64);
+    const reviewHash = "c".repeat(64);
+    const publicationHash = "d".repeat(64);
+    const notes = "Exact normalized source evidence approved for publication.";
+    db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,locale,account_type,timezone,created_at,updated_at
+      ) VALUES ('publisher-28','publisher28@example.test','ru','individual',
+        'Asia/Tashkent',?,?)
+    `).run(now, now);
+    db.prepare(`
+      INSERT INTO legal_sources (
+        id,canonical_id,official_url,act_title,act_identifier,locale,
+        source_type,status,verification_state,content_sha256,fetched_at,
+        last_checked_at,created_at,updated_at
+      ) VALUES (
+        'source-28','-28','https://lex.uz/ru/docs/-28','Act 28','-28','ru',
+        'lex','pending_review','fetched',?,?,?,?,?
+      )
+    `).run(rawHash, now, now, now, now);
+    db.prepare(`
+      INSERT INTO legal_source_versions (
+        id,source_id,language,status,content_sha256,raw_object_key,
+        parsed_object_key,fetched_at,created_at,updated_at
+      ) VALUES (
+        'version-28','source-28','ru','pending_review',?,
+        'legal-sources/raw/lex/ru/aa/raw.html',
+        'legal-sources/parsed/lex/ru/aa/parsed.json',?,?,?
+      )
+    `).run(rawHash, now, now, now);
+    const reviewEvidence = JSON.stringify({
+      schemaVersion: 1,
+      reviewId: "review-28",
+      sourceId: "source-28",
+      versionId: "version-28",
+      sourceKind: "lex",
+      locale: "ru",
+      canonicalId: "-28",
+      canonicalUrl: "https://lex.uz/ru/docs/-28",
+      rawContentSha256: rawHash,
+      parsedContentSha256: parsedHash,
+      parserProfile: "juro-legal-blocks-v1",
+      decision: "approve",
+      notes,
+      reviewerUserId: "publisher-28",
+      reviewerSessionId: "review-session-28",
+      reviewerAssignmentIds: ["review-assignment-28"],
+      mfaVerifiedAt: now,
+      decidedAt: now,
+    });
+    db.prepare(`
+      INSERT INTO legal_review_queue (
+        id,source_id,version_id,reason_code,confidence,status,
+        assigned_to_user_id,decision,decision_notes,reviewed_parsed_sha256,
+        decided_by_user_id,decision_evidence_json,decision_evidence_sha256,
+        decided_at,created_at,updated_at
+      ) VALUES (
+        'review-28','source-28','version-28','new_source_version','low',
+        'approved','publisher-28','approve',?,?,'publisher-28',?,?,?, ?,?
+      )
+    `).run(notes, parsedHash, reviewEvidence, reviewHash, now, now, now);
+    db.prepare(`
+      INSERT INTO legal_source_sections (
+        id,version_id,canonical_ref,heading,body_text,sequence,
+        content_sha256,created_at
+      ) VALUES (
+        'section-28','version-28','blocks:0-1','Act 28','Verified text',0,?,?
+      )
+    `).run("e".repeat(64), now);
+    db.prepare(`
+      INSERT INTO legal_source_chunks (
+        id,version_id,section_id,chunk_index,language,content_text,
+        content_sha256,metadata_json,created_at
+      ) VALUES (
+        'chunk-28','version-28','section-28',0,'ru','Verified text',?, '{}',?
+      )
+    `).run("e".repeat(64), now);
+    const publicationEvidence = JSON.stringify({
+      schemaVersion: 1,
+      publicationId: "publication-28",
+      reviewId: "review-28",
+      sourceId: "source-28",
+      versionId: "version-28",
+      sourceKind: "lex",
+      locale: "ru",
+      canonicalId: "-28",
+      canonicalUrl: "https://lex.uz/ru/docs/-28",
+      reviewEvidenceSha256: reviewHash,
+      rawContentSha256: rawHash,
+      parsedContentSha256: parsedHash,
+      parserProfile: "juro-legal-blocks-v1",
+      publishedByUserId: "publisher-28",
+      publisherSessionId: "publish-session-28",
+      publisherAssignmentIds: ["publish-assignment-28"],
+      mfaVerifiedAt: now,
+      sectionCount: 1,
+      chunkCount: 1,
+      publishedAt: now,
+    });
+    const missingSessionEvidence = JSON.parse(
+      publicationEvidence,
+    ) as Record<string, unknown>;
+    missingSessionEvidence.publicationId = "missing-session-publication-28";
+    delete missingSessionEvidence.publisherSessionId;
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO legal_source_publications (
+          id,review_id,source_id,version_id,review_evidence_sha256,
+          raw_content_sha256,parsed_content_sha256,published_by_user_id,
+          publication_evidence_json,publication_evidence_sha256,
+          published_at,created_at
+        ) VALUES (
+          'missing-session-publication-28','review-28','source-28','version-28',?,?,?,
+          'publisher-28',?,?,?,?
+        )
+      `).run(
+        reviewHash,
+        rawHash,
+        parsedHash,
+        JSON.stringify(missingSessionEvidence),
+        publicationHash,
+        now,
+        now,
+      ),
+      /legal source publication canonical evidence invalid/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO legal_source_publications (
+          id,review_id,source_id,version_id,review_evidence_sha256,
+          raw_content_sha256,parsed_content_sha256,published_by_user_id,
+          publication_evidence_json,publication_evidence_sha256,
+          published_at,created_at
+        ) VALUES (
+          'bad-publication-28','review-28','source-28','version-28',?,?,?,
+          'publisher-28',?,?,?,?
+        )
+      `).run(
+        reviewHash,
+        rawHash,
+        parsedHash,
+        publicationEvidence,
+        publicationHash,
+        now,
+        now,
+      ),
+      /legal source publication canonical evidence invalid/,
+    );
+    const badShapeEvidence = JSON.parse(
+      publicationEvidence,
+    ) as Record<string, unknown>;
+    badShapeEvidence.publicationId = "bad-shape-publication-28";
+    db.prepare(`
+      UPDATE legal_source_chunks SET metadata_json='not-json'
+      WHERE id='chunk-28'
+    `).run();
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO legal_source_publications (
+          id,review_id,source_id,version_id,review_evidence_sha256,
+          raw_content_sha256,parsed_content_sha256,published_by_user_id,
+          publication_evidence_json,publication_evidence_sha256,
+          published_at,created_at
+        ) VALUES (
+          'bad-shape-publication-28','review-28','source-28','version-28',?,?,?,
+          'publisher-28',?,?,?,?
+        )
+      `).run(
+        reviewHash,
+        rawHash,
+        parsedHash,
+        JSON.stringify(badShapeEvidence),
+        publicationHash,
+        now,
+        now,
+      ),
+      /legal source publication canonical evidence invalid/,
+    );
+    db.prepare(`
+      UPDATE legal_source_chunks SET metadata_json='{}'
+      WHERE id='chunk-28'
+    `).run();
+    db.prepare(`
+      INSERT INTO legal_source_publications (
+        id,review_id,source_id,version_id,review_evidence_sha256,
+        raw_content_sha256,parsed_content_sha256,published_by_user_id,
+        publication_evidence_json,publication_evidence_sha256,
+        published_at,created_at
+      ) VALUES (
+        'publication-28','review-28','source-28','version-28',?,?,?,
+        'publisher-28',?,?,?,?
+      )
+    `).run(
+      reviewHash,
+      rawHash,
+      parsedHash,
+      publicationEvidence,
+      publicationHash,
+      now,
+      now,
+    );
+    db.prepare(`
+      UPDATE legal_source_versions
+      SET status='verified',verified_at=?,verified_by_user_id='publisher-28'
+      WHERE id='version-28'
+    `).run(now);
+    db.prepare(`
+      UPDATE legal_sources
+      SET status='verified',verification_state='verified',verified_at=?,
+        verified_by_user_id='publisher-28',content_sha256=?
+      WHERE id='source-28'
+    `).run(now, rawHash);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_source_publications SET published_at=?
+        WHERE id='publication-28'
+      `).run("2026-07-28T13:01:00.000Z"),
+      /legal source publication evidence is immutable/,
+    );
+    assert.throws(
+      () => db.prepare(
+        "DELETE FROM legal_source_publications WHERE id='publication-28'",
+      ).run(),
+      /legal source publication evidence cannot be deleted/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_source_sections SET body_text='tampered'
+        WHERE id='section-28'
+      `).run(),
+      /published legal source sections are immutable/,
+    );
+    assert.throws(
+      () => db.prepare("DELETE FROM legal_source_chunks WHERE id='chunk-28'")
+        .run(),
+      /published legal source chunks are immutable/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO legal_source_chunks (
+          id,version_id,section_id,chunk_index,language,content_text,
+          content_sha256,metadata_json,created_at
+        ) VALUES (
+          'late-chunk-28','version-28','section-28',1,'ru','late',?, '{}',?
+        )
+      `).run("f".repeat(64), now),
+      /published legal source chunks are immutable/,
+    );
+    assert.equal(tableDefinitions(db).size, 105);
+    assert.equal(foreignKeyCount(db), 146);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

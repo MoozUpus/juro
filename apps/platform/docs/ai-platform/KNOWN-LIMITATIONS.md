@@ -6,7 +6,7 @@ foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0027` have not been applied to `juro-staging`; the
+- migrations `0022`–`0028` have not been applied to `juro-staging`; the
   staging ledger remains exactly `0000`–`0021`;
 - a portable D1 export/import rehearsal and protected backup object remain
   unverified, so the consumed verified-empty bootstrap exception cannot be
@@ -17,7 +17,7 @@ foundation checkpoint.
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain
   authorization, and provider-failure behavior have not been verified live;
-- local test totals (25 rendered route + 229 core + 65 Cloudflare = 319) are
+- local test totals (25 rendered route + 234 core + 67 Cloudflare = 326) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
@@ -28,9 +28,9 @@ foundation checkpoint.
   has fetched a live Lex page or passed staging network/robots/latency checks;
 - Advice ingestion is deliberately disabled in every environment because this
   checkpoint did not establish sufficiently explicit broad-use authorization;
-- no discovery crawler, sitemap traversal, historical diff, verified section/
-  chunk publication, Vectorize write, lexical index, citation validator,
-  protected reviewer HTTP route/UI, verified publisher, legal editor, Cron, Queue consumer, DLQ, or alert is
+- no discovery crawler, sitemap traversal, historical diff, replacement-version
+  activation, Vectorize write, lexical index, citation validator, protected
+  reviewer/publisher HTTP route/UI, legal editor, Cron, Queue consumer, DLQ, or alert is
   active;
 - raw public-source HTML currently shares the existing private `BUCKET`
   binding under a content-addressed `legal-sources/raw/` prefix. A dedicated
@@ -39,8 +39,9 @@ foundation checkpoint.
 - the fetcher intentionally rejects any positive `Crawl-delay` directive
   until durable host-rate scheduling exists; it does not sleep inside a Worker;
 - stored HTML remains untrusted. A deterministic bounded parser now creates a
-  separate private normalized JSON snapshot, but the snapshot is not trusted,
-  indexed, published as sections/chunks, or sent to an AI model.
+  separate private normalized JSON snapshot. A reviewed snapshot can now be
+  published locally as immutable reading rows, but nothing is remotely active,
+  indexed, retrieved, cited, or sent to an AI model.
 
 ## Identity and session gaps
 
@@ -81,16 +82,21 @@ foundation checkpoint.
 
 ## Legal knowledge gaps
 
-- migrations `0025`–`0027` and the trust filter are local-only; no remote
+- migrations `0025`–`0028` and the trust filter are local-only; no remote
   legal-source schema, fetch request, R2 evidence object, or source record was
   created;
 - one exact-page fetch adapter, robots/rate-policy enforcement, and private
   content-addressed R2 write and pre-verification normalization contracts are
   implemented locally, but no bulk discovery crawler, Advice scenario model,
-  historical diff, protected review UI, verified publisher, Vectorize indexing, lexical retrieval, reranking, or
-  citation validator is implemented;
+  historical diff, protected review/publisher UI, replacement-version
+  activation, Vectorize indexing, lexical retrieval, reranking, or citation
+  validator is implemented; the internal first-version publisher is not an
+  externally reachable feature;
 - no Cron or Queue consumer is attached, and a passing one-active-sync lock
   test is not evidence that synchronization runs;
+- published rows are intentionally immutable, but a protected withdrawal/
+  supersession flow and replacement-version activation model do not yet exist;
+  therefore the local publisher must remain unreachable in staging;
 - source freshness and language-priority rules still need legally approved
   configuration. Consequently no AI legal answer may be described as
   legislation-verified by this checkpoint.
