@@ -263,6 +263,12 @@ A bounded authenticated Chrome pass now confirms canonical RU/UZ builder renderi
    - current-session preservation and all-other-session/device revocation;
    - old/new OTP, deletion, MFA-login, and competing challenge invalidation;
    - audit rollback and safe alerting to the prior address.
+9. Legal-source staff inbox:
+   - locally proved neutral disabled page/API behavior and no session lookup;
+   - locally proved capability-first filter/body parsing, keyset pagination,
+     claim isolation, exact-host links, and D1/R2 evidence flow;
+   - still requires Cloudflare Access, protected staging browser CSRF tests,
+     reviewer bootstrap/revoke, 2FA-expiry behavior, and audit export review.
 
 ## Staging security gate
 

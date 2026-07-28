@@ -20,10 +20,10 @@ staging or production evidence.
 
 The latest recorded successful local full suite contains:
 
-- 25 rendered-route/security tests;
-- 237 core/auth/document tests;
+- 26 rendered-route/security tests;
+- 241 core/auth/document tests;
 - 67 Cloudflare/migration/job tests;
-- 329 tests total.
+- 334 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. It does not substitute for remote migrations,
@@ -40,7 +40,7 @@ staging hostname.
 | Untrusted snapshot normalization | Exact `parse5@8.0.1`; deterministic semantic blocks from explicit primary content only; raw/parsed size, SHA-256, UTF-8, schema, and source-identity replay checks; private content-addressed parsed JSON; identifiers-only `legal.parse` handler; structure failures routed to review; no verified sections/chunks or AI/index use | Real Lex/Advice markup compatibility, successful live source evidence, remote R2/Queue execution, privileged review/publication, historical parsing, section/chunk creation, indexing/retrieval/citations |
 | Privileged legal-review evidence | Additive migration `0027`; dedicated legal-reviewer capability; active TOTP and fresh local MFA; single-assignee claim; exact raw/parsed hash confirmation; canonical evidence JSON plus SHA-256; coherent D1 guards; immutable/undeletable terminal decisions; approval does not publish; rejection atomically closes the untrusted version | Staff UI/legal editor; remote `0027`; reviewed feature activation, staging reviewer bootstrap, and browser evidence |
 | Verified source publication | Additive migration `0028`; separate publish capability with fresh TOTP-backed MFA; exact approved-review and private-R2 revalidation; deterministic bounded version-specific sections/chunks; one atomic verified-state transition; canonical publication evidence plus SHA-256; immutable publication and reading rows; one-winner concurrency and exact replay verification | Staff UI; replacement-version activation model; lexical/Vectorize indexing; retrieval/citation validation; remote `0028`, reviewed feature activation, and staging browser evidence |
-| Protected staff HTTP boundary | Three POST routes for claim, decision, and publication; same-origin/CSRF enforcement; session and capability authorization before bounded JSON parsing; RU/UZ no-store errors; response omits duplicate full plain text; disabled flag is indistinguishable and does not resolve a session; real D1/R2 handler flow is tested | `LEGAL_SOURCE_STAFF_API_ENABLED=false` in every checked-in environment; no remote Worker/route, staff UI, reviewer bootstrap, or protected staging browser evidence |
+| Protected staff review inbox | Keyset-paginated metadata-only D1 list plus claim, decision, and publication routes; exact-host source-link validation; authorization precedes query/body parsing; same-origin/CSRF boundary; RU/UZ no-store responses; normalized R2 blocks are loaded only after a single-owner claim; dense responsive RU/UZ staff UI covers loading, empty, recoverable error, review, approve/reject, and separate publication; server page and API share the exact disabled flag | `LEGAL_SOURCE_STAFF_API_ENABLED=false` in every checked-in environment; no remote Worker/route, reviewer bootstrap, protected staging browser/accessibility/performance evidence, withdrawal, or replacement-version activation |
 | Advice ingestion policy | Request path is implemented but `LEGAL_ADVICE_INGESTION_ENABLED=false` is asserted in every environment, generated types, config tests, and artifact validation; disabled requests perform no network/D1/R2 action | Recorded legal/owner authorization, current terms/robots review, staging activation evidence |
 
 ## Deployment truth

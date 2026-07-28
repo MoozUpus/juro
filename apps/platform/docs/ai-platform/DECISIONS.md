@@ -1065,3 +1065,39 @@ from the preceding publisher checkpoint; the client build remains at 1,921
 modules. This decision does not authorize a remote migration, reviewer bootstrap,
 Worker upload, route/DNS attachment, feature activation, staff UI, or production
 change.
+
+## D-054 — the legal-source inbox is a separate dense staff surface
+
+Status: accepted and locally implemented; staging activation gate open
+Date: 2026-07-28
+
+The legal-source review workflow is exposed locally at
+`/:locale/admin/legal-sources/reviews` instead of being placed inside a
+customer account/workspace shell. Review assignments are platform duties, not
+tenant objects. The route therefore uses a small staff-specific shell and
+never infers authorization from an individual, entrepreneur, business, or
+lawyer URL segment.
+
+Both the server-rendered page and the API require the exact
+`LEGAL_SOURCE_STAFF_API_ENABLED=true` value. When false, the page and list,
+claim, decision, and publication operations return neutral not-found behavior
+before resolving a session or touching D1/R2. When enabled, the page
+independently proves a local session, active legal-reviewer assignment, active
+TOTP, and MFA freshness no older than 15 minutes. API authorization precedes
+filter, cursor, path, and body parsing.
+
+The list is metadata-only, exact-host validates official links, uses bounded
+keyset pagination, and never returns R2 keys or source text. Source blocks and
+evidence hashes become available only after the atomic single-owner claim.
+Approve/reject and publication remain separate explicit actions. The UI uses
+an Operate/admin design profile: dense sans-serif controls, a reading-first
+legal canvas, semantic status colors, no decorative motion, responsive table-
+to-record layout, and no new runtime dependency. This does not activate the
+flag, bootstrap a reviewer, deploy staging, or change production.
+
+The first three-environment dry-run after this slice measured the production
+Worker at `8245.45 KiB` raw / `2059.19 KiB` gzip. Relative to D-053 this is
+`+42.44 KiB` raw / `+9.52 KiB` gzip. The staff client code is an isolated
+dynamic chunk of `15,833` bytes raw / `5,113` bytes gzip; the client graph
+increased from 1,921 to 1,922 modules. Final numbers must be re-recorded after
+any later code or CSS change.

@@ -196,8 +196,10 @@ marker and are not available to AI merely because publication succeeded.
 
 ## Protected staff HTTP boundary
 
-The integration branch exposes three POST handlers in the built route table:
+The integration branch exposes one GET and three POST handlers in the built
+route table:
 
+- `GET /api/platform/legal-sources/reviews`;
 - `/api/platform/legal-sources/reviews/:reviewId/claim`;
 - `/api/platform/legal-sources/reviews/:reviewId/decision`;
 - `/api/platform/legal-sources/reviews/:reviewId/publication`.
@@ -208,12 +210,21 @@ staging, and production values are all `false`, and the artifact validator and
 generated binding types enforce that state. A disabled request receives a
 neutral RU/UZ `404` and does not resolve a session.
 
-When dependency-injected in tests, the enabled boundary requires canonical
-same-origin and CSRF proof, then a local session, active staff assignment,
-active TOTP, and MFA no more than 15 minutes old before it parses bounded JSON.
+When dependency-injected in tests, the enabled boundary requires a custom
+same-origin read header for GET or canonical same-origin and CSRF proof for
+mutations, then a local session, active staff assignment, active TOTP, and MFA
+no more than 15 minutes old before it parses bounded filters, cursor, path, or
+JSON. The list returns only bounded metadata, exact-host validates its official
+URLs, and uses a keyset cursor; it does not expose R2 keys or source content.
 Claim responses return normalized blocks and evidence hashes but omit the
 duplicated full `plainText` value. This is locally verified route/service code,
 not a deployed or owner-approved staff feature.
+
+The corresponding `/:locale/admin/legal-sources/reviews` staff page is also
+behind the exact false flag and repeats server-side role/TOTP/fresh-MFA checks.
+It is not linked from customer navigation. It connects the real list, claim,
+decision, and publication endpoints in RU/UZ, but remains unreachable until a
+separate reviewed staging activation.
 
 ## Local evidence
 
@@ -238,9 +249,10 @@ atomic rejection. Publisher tests cover separate capability/fresh-MFA
 enforcement, approved-review and R2 revalidation, exact reading-row creation,
 one-winner concurrency, idempotent replay, tamper and pre-existing-data
 rejection, immutable publication evidence, and immutable reading rows.
-HTTP-boundary tests additionally prove the disabled no-session path,
-authorization before malformed-body parsing, and the real
-claim/approve/publish/idempotent-replay D1/R2 flow.
+HTTP-boundary tests additionally prove disabled no-session list and mutation
+paths, authorization before malformed query/body parsing, bounded metadata
+pagination and assignment isolation, and the real claim/approve/publish/
+idempotent-replay D1/R2 flow.
 Source-trust tests exercise host/type/hash/timestamp failures and
 evidence-backed acceptance.
 

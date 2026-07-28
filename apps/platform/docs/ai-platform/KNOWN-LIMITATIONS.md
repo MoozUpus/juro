@@ -89,11 +89,11 @@ foundation checkpoint.
   created;
 - one exact-page fetch adapter, robots/rate-policy enforcement, and private
   content-addressed R2 write and pre-verification normalization contracts are
-  implemented locally, but no bulk discovery crawler, Advice scenario model,
-  historical diff, protected review/publisher UI, replacement-version
-  activation, Vectorize indexing, lexical retrieval, reranking, or citation
-  validator is implemented; the internal first-version publisher is not an
-  externally reachable feature;
+  implemented locally; a protected review/publisher UI now exists behind the
+  exact false feature flag, but no bulk discovery crawler, Advice scenario
+  model, historical diff, replacement-version activation, Vectorize indexing,
+  lexical retrieval, reranking, or citation validator is implemented; the
+  first-version publisher remains externally unreachable;
 - no Cron or Queue consumer is attached, and a passing one-active-sync lock
   test is not evidence that synchronization runs;
 - published rows are intentionally immutable, but a protected withdrawal/
@@ -102,3 +102,14 @@ foundation checkpoint.
 - source freshness and language-priority rules still need legally approved
   configuration. Consequently no AI legal answer may be described as
   legislation-verified by this checkpoint.
+
+## Staff inbox gaps
+
+- `LEGAL_SOURCE_STAFF_API_ENABLED` remains false in every checked-in
+  environment, so neither the page nor its API is remotely reachable;
+- no reviewer account/assignment bootstrap, Cloudflare Access policy, remote
+  D1 migrations `0022`–`0028`, or protected staging browser session exists;
+- local service and HTTP tests do not replace keyboard, screen-reader, 200%
+  zoom, forced-colors, touch, or real-device review of the staff surface;
+- review withdrawal, reassignment, supervisor override, replacement-version
+  activation, and published-source supersession are not yet implemented.

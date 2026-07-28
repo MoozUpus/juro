@@ -19,8 +19,10 @@ import {
 import {
   claimLegalSourceReview,
   decideLegalSourceReview,
+  legalSourceReviewListInputSchema,
   legalSourceReviewDecisionInputSchema,
   LegalSourceReviewError,
+  listLegalSourceReviews,
   type LegalSourceReviewEnv,
 } from "./source-review";
 import {
@@ -55,6 +57,9 @@ const publicationRequestSchema = legalSourcePublicationInputSchema.omit({
 const reviewIdSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
 const FRESH_MFA_WINDOW_MS = 15 * 60 * 1_000;
+const listRequestSchema = legalSourceReviewListInputSchema.extend({
+  lang: z.enum(["ru", "uz"]).optional(),
+});
 
 function jsonNoStore(body: unknown, status = 200): Response {
   return Response.json(body, {
@@ -232,8 +237,19 @@ async function authorize(
   dependencies: LegalSourceStaffHttpDependencies,
   capability: PlatformStaffCapability,
   now: Date,
+  options: { write?: boolean } = {},
 ): Promise<{ env: LegalSourceReviewEnv; session: StaffHttpSession }> {
-  assertSafeWrite(request);
+  if (options.write === false) {
+    const fetchSite = request.headers.get("sec-fetch-site");
+    if (
+      (fetchSite !== null && fetchSite !== "same-origin")
+      || request.headers.get("x-juro-csrf") !== "1"
+    ) {
+      throw new ApiAuthError("Запрос отклонён проверкой безопасности.", 403);
+    }
+  } else {
+    assertSafeWrite(request);
+  }
   const env = dependencies.env;
   if (!env) throw new Error("LEGAL_SOURCE_STAFF_API_BINDINGS_UNAVAILABLE");
   const session = await dependencies.sessionForRequest(request, { now });
@@ -261,6 +277,50 @@ function reviewSourceDto(
     documentTitle: source.snapshot.documentTitle,
     blocks: source.snapshot.blocks,
   };
+}
+
+export async function handleLegalSourceReviewListRequest(
+  request: Request,
+  dependencies: LegalSourceStaffHttpDependencies,
+): Promise<Response> {
+  const locale = localeForRequest(request);
+  if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
+    return disabledResponse(locale);
+  }
+  if (!dependencies.env) return unavailableResponse(locale);
+  const now = dependencies.now?.() ?? new Date();
+  try {
+    const { env, session } = await authorize(
+      request,
+      dependencies,
+      "legal.sources.review",
+      now,
+      { write: false },
+    );
+    const params = new URL(request.url).searchParams;
+    const raw: Record<string, string> = {};
+    for (const [key, value] of params) {
+      if (Object.hasOwn(raw, key)) {
+        listRequestSchema.parse({ duplicateParameter: key });
+      }
+      raw[key] = value;
+    }
+    const parsed = listRequestSchema.parse(raw);
+    const input = {
+      status: parsed.status,
+      scope: parsed.scope,
+      sourceKind: parsed.sourceKind,
+      language: parsed.language,
+      limit: parsed.limit,
+      cursor: parsed.cursor,
+    };
+    const result = await listLegalSourceReviews(env, session, input, { now });
+    return jsonNoStore({ ok: true, ...result });
+  } catch (error) {
+    const response = legalSourceErrorResponse(error, locale);
+    if (response) return response;
+    return unavailableResponse(locale);
+  }
 }
 
 export async function handleLegalSourceReviewClaimRequest(

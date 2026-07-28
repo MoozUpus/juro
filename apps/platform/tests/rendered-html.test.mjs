@@ -103,6 +103,22 @@ test("serves public login and registration routes", async () => {
   }
 });
 
+test("keeps the legal-source staff inbox hidden while its exact flag is false", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(
+    new Request("http://localhost/ru/admin/legal-sources/reviews", {
+      headers: { accept: "text/html" },
+    }),
+    {
+      ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+      LEGAL_SOURCE_STAFF_API_ENABLED: "false",
+    },
+    context,
+  );
+  assert.equal(response.status, 404);
+  assert.doesNotMatch(await response.text(), /Проверка юридических источников/);
+});
+
 test("localized legacy auth routes redirect to the canonical auth surface", async () => {
   const worker = await createWorker();
   for (const [source, target] of [

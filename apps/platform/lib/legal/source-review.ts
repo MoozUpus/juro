@@ -10,6 +10,7 @@ import {
   type LegalSourceNormalizationEnv,
   type StoredNormalizedLegalSource,
 } from "./source-normalization";
+import { trustedLegalSourceKind } from "./source-trust";
 
 export const LEGAL_SOURCE_REVIEW_ERROR_CODES = [
   "LEGAL_SOURCE_REVIEW_NOT_FOUND",
@@ -56,6 +57,25 @@ type ReviewRow = {
 const identifierSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
+const reviewStatusSchema = z.enum([
+  "pending",
+  "in_review",
+  "approved",
+  "rejected",
+  "closed",
+]);
+const reviewConfidenceSchema = z.enum(["high", "medium", "low"]);
+const reviewSourceKindSchema = z.enum(["lex", "advice"]);
+const reviewLocaleSchema = z.enum(["ru", "uz"]);
+export const legalSourceReviewListInputSchema = z.object({
+  status: reviewStatusSchema.default("pending"),
+  scope: z.enum(["workable", "mine", "unassigned", "all"])
+    .default("workable"),
+  sourceKind: z.enum(["all", "lex", "advice"]).default("all"),
+  language: z.enum(["all", "ru", "uz"]).default("all"),
+  limit: z.coerce.number().int().min(1).max(50).default(25),
+  cursor: z.string().min(1).max(512).optional(),
+}).strict();
 export const legalSourceReviewDecisionInputSchema = z.object({
   reviewId: identifierSchema,
   decision: z.enum(["approve", "reject"]),
@@ -86,6 +106,88 @@ export const legalSourceDecisionEvidenceSchema = z.object({
 
 const FRESH_MFA_WINDOW_MS = 15 * 60 * 1_000;
 
+type ReviewListRow = {
+  review_id: string;
+  source_id: string;
+  version_id: string | null;
+  reason_code: string;
+  confidence: string;
+  review_status: string;
+  assigned_to_user_id: string | null;
+  decision: string | null;
+  decision_evidence_sha256: string | null;
+  decided_at: string | null;
+  created_at: string;
+  updated_at: string;
+  source_kind: string;
+  language: string | null;
+  official_url: string;
+  act_title: string;
+  act_identifier: string | null;
+  canonical_id: string | null;
+  version_status: string | null;
+  fetched_at: string | null;
+  parsed_object_key: string | null;
+};
+
+const reviewCursorSchema = z.object({
+  createdAt: z.string().datetime(),
+  reviewId: identifierSchema,
+}).strict();
+
+function encodeReviewCursor(value: z.infer<typeof reviewCursorSchema>): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/u, "");
+}
+
+function decodeReviewCursor(value: string | undefined): z.infer<typeof reviewCursorSchema> | null {
+  if (!value) return null;
+  try {
+    const normalized = value.replaceAll("-", "+").replaceAll("_", "/");
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return reviewCursorSchema.parse(JSON.parse(new TextDecoder().decode(bytes)));
+  } catch {
+    throw new z.ZodError([{
+      code: "custom",
+      path: ["cursor"],
+      message: "Invalid review cursor.",
+    }]);
+  }
+}
+
+export type LegalSourceReviewListItem = {
+  reviewId: string;
+  sourceId: string;
+  versionId: string;
+  reasonCode: string;
+  confidence: "high" | "medium" | "low";
+  status: "pending" | "in_review" | "approved" | "rejected" | "closed";
+  assignedToMe: boolean;
+  decision: "approve" | "reject" | null;
+  decisionEvidenceSha256: string | null;
+  decidedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  sourceKind: "lex" | "advice";
+  language: "ru" | "uz";
+  officialUrl: string;
+  title: string;
+  actIdentifier: string | null;
+  canonicalId: string | null;
+  versionStatus: string;
+  fetchedAt: string;
+  parsedSnapshotReady: boolean;
+};
+
+export type LegalSourceReviewListResult = {
+  items: LegalSourceReviewListItem[];
+  nextCursor: string | null;
+};
+
 async function sha256Text(value: string): Promise<string> {
   const bytes = new TextEncoder().encode(value);
   const digest = await crypto.subtle.digest("SHA-256", bytes);
@@ -105,6 +207,134 @@ async function reviewerAccess(
     "legal.sources.review",
     { now, freshMfaWithinMs: FRESH_MFA_WINDOW_MS },
   );
+}
+
+export async function listLegalSourceReviews(
+  env: LegalSourceReviewEnv,
+  session: ReviewSession,
+  inputValue: unknown,
+  options: { now?: Date } = {},
+): Promise<LegalSourceReviewListResult> {
+  const now = options.now ?? new Date();
+  const access = await reviewerAccess(env.DB, session, now);
+  const input = legalSourceReviewListInputSchema.parse(inputValue);
+  const cursor = decodeReviewCursor(input.cursor);
+  const clauses = ["review.status = ?"];
+  const bindings: Array<string | number> = [input.status];
+
+  if (input.scope === "workable") {
+    if (input.status === "pending") {
+      clauses.push("review.assigned_to_user_id IS NULL");
+    } else {
+      clauses.push("review.assigned_to_user_id = ?");
+      bindings.push(access.userId);
+    }
+  } else if (input.scope === "mine") {
+    clauses.push("review.assigned_to_user_id = ?");
+    bindings.push(access.userId);
+  } else if (input.scope === "unassigned") {
+    clauses.push("review.assigned_to_user_id IS NULL");
+  }
+  if (input.sourceKind !== "all") {
+    clauses.push("source.source_type = ?");
+    bindings.push(input.sourceKind);
+  }
+  if (input.language !== "all") {
+    clauses.push("version.language = ?");
+    bindings.push(input.language);
+  }
+  if (cursor) {
+    clauses.push("(review.created_at < ? OR (review.created_at = ? AND review.id < ?))");
+    bindings.push(cursor.createdAt, cursor.createdAt, cursor.reviewId);
+  }
+  bindings.push(input.limit + 1);
+
+  const rows = await env.DB.prepare(`
+    SELECT
+      review.id AS review_id,
+      review.source_id,
+      review.version_id,
+      review.reason_code,
+      review.confidence,
+      review.status AS review_status,
+      review.assigned_to_user_id,
+      review.decision,
+      review.decision_evidence_sha256,
+      review.decided_at,
+      review.created_at,
+      review.updated_at,
+      source.source_type AS source_kind,
+      version.language,
+      source.official_url,
+      source.act_title,
+      source.act_identifier,
+      source.canonical_id,
+      version.status AS version_status,
+      version.fetched_at,
+      version.parsed_object_key
+    FROM legal_review_queue AS review
+    JOIN legal_sources AS source ON source.id = review.source_id
+    LEFT JOIN legal_source_versions AS version ON version.id = review.version_id
+    WHERE ${clauses.join(" AND ")}
+    ORDER BY review.created_at DESC, review.id DESC
+    LIMIT ?
+  `).bind(...bindings).all<ReviewListRow>();
+
+  const pageRows = rows.results.slice(0, input.limit);
+  const items = pageRows.map((row): LegalSourceReviewListItem => {
+    const status = reviewStatusSchema.parse(row.review_status);
+    const confidence = reviewConfidenceSchema.parse(row.confidence);
+    const sourceKind = reviewSourceKindSchema.parse(row.source_kind);
+    const language = reviewLocaleSchema.parse(row.language);
+    const officialUrl = z.string().url().max(2_048).parse(row.official_url);
+    if (
+      !row.version_id
+      || !row.version_status
+      || !row.fetched_at
+      || !Number.isFinite(Date.parse(row.created_at))
+      || !Number.isFinite(Date.parse(row.updated_at))
+      || !Number.isFinite(Date.parse(row.fetched_at))
+      || (row.decided_at !== null && !Number.isFinite(Date.parse(row.decided_at)))
+      || (row.decision !== null && row.decision !== "approve" && row.decision !== "reject")
+      || (
+        row.decision_evidence_sha256 !== null
+        && !sha256Schema.safeParse(row.decision_evidence_sha256).success
+      )
+      || trustedLegalSourceKind(officialUrl) !== sourceKind
+    ) {
+      throw new LegalSourceReviewError("LEGAL_SOURCE_REVIEW_PERSISTENCE_FAILED");
+    }
+    return {
+      reviewId: identifierSchema.parse(row.review_id),
+      sourceId: identifierSchema.parse(row.source_id),
+      versionId: identifierSchema.parse(row.version_id),
+      reasonCode: row.reason_code,
+      confidence,
+      status,
+      assignedToMe: row.assigned_to_user_id === access.userId,
+      decision: row.decision,
+      decisionEvidenceSha256: row.decision_evidence_sha256,
+      decidedAt: row.decided_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      sourceKind,
+      language,
+      officialUrl,
+      title: z.string().min(1).max(1_000).parse(row.act_title),
+      actIdentifier: row.act_identifier,
+      canonicalId: row.canonical_id,
+      versionStatus: row.version_status,
+      fetchedAt: row.fetched_at,
+      parsedSnapshotReady: row.parsed_object_key !== null,
+    };
+  });
+  const last = pageRows.at(-1);
+  return {
+    items,
+    nextCursor: rows.results.length > input.limit && last
+      ? encodeReviewCursor({ createdAt: last.created_at, reviewId: last.review_id })
+      : null,
+  };
 }
 
 async function loadReview(

@@ -12,6 +12,7 @@ import {
   claimLegalSourceReview,
   decideLegalSourceReview,
   LegalSourceReviewError,
+  listLegalSourceReviews,
   type LegalSourceReviewEnv,
 } from "../lib/legal/source-review";
 import {
@@ -22,6 +23,7 @@ import {
   handleLegalSourcePublicationRequest,
   handleLegalSourceReviewClaimRequest,
   handleLegalSourceReviewDecisionRequest,
+  handleLegalSourceReviewListRequest,
 } from "../lib/legal/source-staff-http";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -306,6 +308,104 @@ function staffRequest(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 }
+
+function staffListRequest(path: string): Request {
+  return new Request(`https://app.juro.test${path}`, {
+    headers: {
+      "sec-fetch-site": "same-origin",
+      "x-juro-csrf": "1",
+    },
+  });
+}
+
+test("legal review inbox is keyset-paginated and excludes stored content", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const fixture = await normalizedReviewFixture(env, 221);
+    const source = sqlite.prepare(
+      "SELECT source_id FROM legal_source_versions WHERE id=?",
+    ).get(fixture.versionId) as { source_id: string };
+    sqlite.prepare(`
+      INSERT INTO legal_review_queue (
+        id,source_id,version_id,reason_code,confidence,status,
+        created_at,updated_at
+      ) VALUES (?,?,?,'pagination_regression','medium','pending',?,?)
+    `).run(
+      "review-pagination-second",
+      source.source_id,
+      fixture.versionId,
+      "2026-07-28T01:02:00.000Z",
+      "2026-07-28T01:02:00.000Z",
+    );
+    const reviewer = insertStaff(sqlite, "list-pagination", "legal_reviewer");
+    const first = await listLegalSourceReviews(env, reviewer, {
+      status: "pending",
+      scope: "all",
+      sourceKind: "all",
+      language: "all",
+      limit: 1,
+    }, { now: REVIEW_AT });
+    assert.equal(first.items.length, 1);
+    assert.ok(first.nextCursor);
+    assert.equal(Object.hasOwn(first.items[0], "rawObjectKey"), false);
+    assert.equal(Object.hasOwn(first.items[0], "parsedObjectKey"), false);
+    assert.equal(Object.hasOwn(first.items[0], "content"), false);
+    const second = await listLegalSourceReviews(env, reviewer, {
+      status: "pending",
+      scope: "all",
+      sourceKind: "lex",
+      language: "ru",
+      limit: 1,
+      cursor: first.nextCursor,
+    }, { now: REVIEW_AT });
+    assert.equal(second.items.length, 1);
+    assert.notEqual(first.items[0].reviewId, second.items[0].reviewId);
+    assert.equal(second.nextCursor, null);
+    await assert.rejects(
+      listLegalSourceReviews(env, reviewer, {
+        status: "pending",
+        scope: "all",
+        sourceKind: "all",
+        language: "all",
+        cursor: "not-a-cursor",
+      }, { now: REVIEW_AT }),
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("workable review inbox reveals an active claim only to its reviewer", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const fixture = await normalizedReviewFixture(env, 223);
+    const firstReviewer = insertStaff(sqlite, "list-owner", "legal_reviewer");
+    const secondReviewer = insertStaff(sqlite, "list-other", "legal_reviewer");
+    await claimLegalSourceReview(env, firstReviewer, fixture.reviewId, {
+      now: REVIEW_AT,
+    });
+    const mine = await listLegalSourceReviews(env, firstReviewer, {
+      status: "in_review", scope: "workable",
+    }, { now: REVIEW_AT });
+    assert.equal(mine.items.length, 1);
+    assert.equal(mine.items[0].assignedToMe, true);
+    const otherWork = await listLegalSourceReviews(env, secondReviewer, {
+      status: "in_review", scope: "workable",
+    }, { now: REVIEW_AT });
+    assert.equal(otherWork.items.length, 0);
+    const visibleForAudit = await listLegalSourceReviews(env, secondReviewer, {
+      status: "in_review", scope: "all",
+    }, { now: REVIEW_AT });
+    assert.equal(visibleForAudit.items.length, 1);
+    assert.equal(visibleForAudit.items[0].assignedToMe, false);
+  } finally {
+    sqlite.close();
+  }
+});
 
 test("legal review requires the dedicated role and recent local MFA before lookup", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
@@ -843,6 +943,76 @@ test("publication rejects a changed normalized object and pre-existing reading d
     seeded.sqlite.close();
   }
 });
+
+test("disabled legal-source staff list is indistinguishable and touches no session", async () => {
+  let sessionRequested = false;
+  const response = await handleLegalSourceReviewListRequest(
+    staffListRequest("/api/platform/legal-sources/reviews?lang=ru"),
+    {
+      enabled: "false",
+      sessionForRequest: async () => {
+        sessionRequested = true;
+        throw new Error("Disabled route must not resolve a session.");
+      },
+    },
+  );
+  assert.equal(response.status, 404);
+  assert.equal(sessionRequested, false);
+  assert.deepEqual(await response.json(), {
+    code: "NOT_FOUND",
+    error: "Маршрут не найден.",
+  });
+});
+
+test("legal-source staff list authorizes before query parsing and returns bounded metadata", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    await normalizedReviewFixture(env, 224);
+    const support = insertStaff(sqlite, "list-http-support", "support");
+    const denied = await handleLegalSourceReviewListRequest(
+      staffListRequest("/api/platform/legal-sources/reviews?status=invalid"),
+      {
+        enabled: "true", env,
+        sessionForRequest: async () => support,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(denied.status, 403);
+    assert.equal(((await denied.json()) as { code: string }).code, "ACCESS_DENIED");
+
+    const reviewer = insertStaff(sqlite, "list-http-reviewer", "legal_reviewer");
+    const duplicate = await handleLegalSourceReviewListRequest(
+      staffListRequest("/api/platform/legal-sources/reviews?status=pending&status=pending"),
+      {
+        enabled: "true", env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(duplicate.status, 400);
+    const response = await handleLegalSourceReviewListRequest(
+      staffListRequest("/api/platform/legal-sources/reviews?lang=uz&status=pending&scope=workable&limit=10"),
+      {
+        enabled: "true", env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json() as ListResponseForTest;
+    assert.equal(body.items.length, 1);
+    assert.equal(body.items[0].sourceKind, "lex");
+    assert.equal(Object.hasOwn(body.items[0], "parsedObjectKey"), false);
+  } finally {
+    sqlite.close();
+  }
+});
+
+type ListResponseForTest = {
+  items: Array<Record<string, unknown> & { sourceKind: string }>;
+};
 
 test("disabled legal-source staff HTTP routes are indistinguishable and touch no session", async () => {
   let sessionRequested = false;

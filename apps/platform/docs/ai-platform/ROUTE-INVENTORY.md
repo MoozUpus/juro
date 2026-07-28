@@ -268,7 +268,21 @@ DELETE /api/platform/team/invitations/:invitationId
 POST /api/platform/team/invitations/accept
 PATCH,DELETE /api/platform/team/members/:memberId
 GET,POST /api/platform/workspaces
+GET /api/platform/legal-sources/reviews
+POST /api/platform/legal-sources/reviews/:reviewId/claim
+POST /api/platform/legal-sources/reviews/:reviewId/decision
+POST /api/platform/legal-sources/reviews/:reviewId/publication
 ```
+
+### Inactive staff surface
+
+| Current URL | State | Access contract | Activation |
+|---|---|---|---|
+| `/:locale/admin/legal-sources/reviews` | Implemented locally; hidden | Exact RU/UZ locale, local session, `legal.sources.review`, active TOTP, MFA not older than 15 minutes | Exact `LEGAL_SOURCE_STAFF_API_ENABLED=true` only after reviewed staging setup |
+
+The page and its four API operations return neutral `404` behavior while the
+flag is false. It is not linked from customer navigation and is not enabled in
+development, staging, or production configuration.
 
 ### Document builder
 

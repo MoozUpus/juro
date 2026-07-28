@@ -205,3 +205,29 @@ Every migrated surface requires semantic landmarks/headings, logical focus order
 ## Evidence boundary
 
 The token candidates were contrast-calculated, and a bounded browser pass exists for the current builder, but font metrics, forced/high contrast, focus visibility over every adjacent color, zoom, motion, touch, GPU/memory, and visual regression remain open until the staging route is implemented and the full matrix passes. This document defines what to implement and test; it does not claim that production already uses the system.
+
+## Dense staff surface implementation
+
+The inactive legal-source review inbox is the first implemented admin-density
+surface. It deliberately uses the staff profile `variance 2 / motion 1 /
+density 9` rather than the cinematic customer shell.
+
+| Before | After | Why |
+|---|---|---|
+| No operator surface for the locally implemented review services | Separate RU/UZ staff route with bounded list, filters, review canvas, decision, and publication states | Joins real service behavior without placing staff duties in a tenant shell |
+| Review data available only through service tests | Dense metadata table that becomes stacked labeled records below 600 px | Preserves scanning efficiency on desktop and removes mobile horizontal dependency |
+| Normalized evidence inspectable only in R2/service output | Light reading canvas with staged 80-block rendering and exact hashes in disclosure | Long legal text remains readable without mounting thousands of blocks at once |
+| No motion contract for the staff workflow | Immediate filters/actions, small press feedback, progress spinner only, reduced-motion removal | State and task completion are clear without decorative animation |
+
+The surface maps local semantic variables to navy shell, neutral work surface,
+white reading canvas, muted structural border, rare gold accent, and functional
+success/warning/error colors. No font, motion, table, state, or UI dependency was
+added. Full browser/contrast/zoom/forced-colors verification remains a staging
+gate and is not claimed by this implementation record.
+
+Static sRGB contrast calculations for the implemented staff pairs are:
+accent/white `5.08:1`, muted/white `5.05:1`, white/navy `17.62:1`,
+error/error-surface `6.51:1`, warning/warning-surface `4.94:1`, and
+success/success-surface `5.27:1`. The light-surface focus outline is `6.34:1`
+against white; the topbar focus outline is `11.77:1` against navy. These
+calculations cover declared pairs, not a complete browser contrast audit.
