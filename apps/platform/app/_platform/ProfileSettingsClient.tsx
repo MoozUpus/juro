@@ -78,6 +78,7 @@ type EmailChangeStatus = {
 export function ProfileSettingsClient({ locale, accountType, view }: { locale: PlatformLocale; accountType: AccountType; view: View }) {
   const ru = locale === "ru";
   const base = `/${locale}/${accountType}`;
+  const localizedSignOut = `/signout-with-chatgpt?return_to=${encodeURIComponent(`/${locale}/auth/login`)}`;
   const [data, setData] = useState<ProfileData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
@@ -332,7 +333,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
     if (!window.confirm(ru ? "Завершить все JURO email-сессии и выйти?" : "Barcha JURO email sessiyalarini yakunlab chiqasizmi?")) return;
     const response = await fetch("/api/platform/security/sessions?scope=all", { method: "DELETE", headers: { "x-juro-csrf": "1" } });
     if (!response.ok) { const body = await response.json() as { error?: string }; setError(body.error || (ru ? "Сессии не завершены." : "Sessiyalar yakunlanmadi.")); return; }
-    window.location.assign("/signout-with-chatgpt?return_to=/login");
+    window.location.assign(localizedSignOut);
   }
 
   async function closeOtherSessions() {
@@ -366,7 +367,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
       return;
     }
     if (body.revokedCurrent) {
-      window.location.assign("/signout-with-chatgpt?return_to=/login");
+      window.location.assign(localizedSignOut);
       return;
     }
     setNotice(ru ? "Сессия завершена." : "Sessiya yakunlandi.");
@@ -550,7 +551,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
         setNotice(ru
           ? "Проверенный запрос зарегистрирован. Сессии завершены."
           : "Tasdiqlangan so‘rov ro‘yxatdan o‘tdi. Sessiyalar yakunlandi.");
-        window.location.assign("/signout-with-chatgpt?return_to=/login");
+        window.location.assign(localizedSignOut);
       } else if (
         body.challengeId
         && body.destination

@@ -10,7 +10,7 @@ Method: source review, production HTTP smoke checks, current test suite, targete
 | Scope | Current state | Release consequence |
 |---|---|---|
 | Deployed Sites v20 | four original critical findings remain unproven in production | production remains frozen |
-| Integration branch | SEC-001, SEC-002, and SEC-003 have local fixes and concurrency/tenant regression tests; their schema is bootstrapped in isolated staging; SEC-004 remains open | no upload/AI staging enablement; all fixes still require runtime/full-HTTP staging evidence |
+| Integration branch | SEC-001 and SEC-002 have local fixes; SEC-003 has atomic verification plus the local `0023` lock; SEC-005 has local independent rate controls and Turnstile integration; structured onboarding is additive in `0024`; source migrations `0022`–`0024` are not in staging and SEC-004 remains open | no upload/AI staging enablement; identity changes still require remote migrations, live-provider, runtime, and full-HTTP staging evidence |
 | High/medium findings | several local identity/security foundations exist, but broad file, deletion, CSP, alerting, and privileged-access controls remain open | affected features remain disabled or unavailable |
 
 ## Critical findings
@@ -59,7 +59,7 @@ Required fix:
 - 15-minute verification lock after maximum failures;
 - concurrency tests.
 
-Local branch status: atomic guarded claims and concurrent valid/invalid verification tests pass locally. Turnstile, the exact independent limits, a 15-minute lock policy, live Resend delivery, and remote D1 concurrency evidence remain open.
+Local branch status: atomic guarded claims and concurrent valid/invalid verification tests pass locally. The fifth failed verification atomically exhausts the challenge and records a 15-minute `verification_locked_until`; a new challenge for that email is refused while the lock is active. Migration `0023`, live Resend/Turnstile behavior, and the full HTTP race against remote D1 remain unverified, so the production finding is not closed.
 
 ### SEC-004 — unsafe file reaches AI before scan
 
@@ -77,7 +77,7 @@ Required fix:
 
 ## High findings
 
-### SEC-005 — OTP controls do not meet policy
+### SEC-005 — deployed OTP controls do not meet policy
 
 - email and IP requests are combined with `OR` under a single 8/hour cap;
 - required independent 5/email and 20/IP limits are absent;
@@ -87,13 +87,19 @@ Required fix:
 
 Local remediation status: migration 0018 and the application contain a
 disabled expand layer for domain-separated, versioned HMAC evidence covering
-OTP email/IP lookup and challenge-bound codes. It preserves cross-key-version
-rate-limit buckets and fails closed on keyed/SHA divergence. Checked-in mode
-is still `legacy`, the combined eight/hour policy is unchanged, Turnstile and
-independent limits remain absent, legacy salted code SHA remains stored, and
-no remote D1/Resend test has run. SEC-005 is therefore not closed.
+OTP email/IP lookup and challenge-bound codes. The request path now enforces
+separate `5/email/hour` and `20/IP/hour` predicates and counters, preserves
+rate buckets across retained lookup-key versions, counts invalidated provider
+failures toward the email limit, and omits the IP gate when Cloudflare supplies
+no connecting IP rather than merging unrelated users. The server/client
+Turnstile integration validates the official Siteverify response, exact
+`auth_otp` action, and expected hostname and fails closed on invalid,
+malformed, timeout, or transport results. Checked-in identity protection mode
+is still `legacy`, legacy salted code SHA remains stored, and no live
+Turnstile, live Resend, remote migration `0023`, or full-HTTP staging test has
+run. SEC-005 is therefore not remotely closed.
 
-### SEC-006 — session and device security incomplete
+### SEC-006 — deployed session and device security incomplete
 
 - all sessions use a 30-day expiry;
 - no 24-hour non-remember mode;
@@ -101,12 +107,15 @@ no remote D1/Resend test has run. SEC-005 is therefore not closed.
 - no new-device or region security mail.
 
 Local remediation status: migration 0013 and the application add device-aware
-JURO sessions, seven-day idle expiry, current/single/other/all revocation, and
-an append-only security-event chain. Protected email change also revokes every
-other local session/device while preserving the verified current session.
-Session-token rotation/fixation detection, 24-hour non-remember mode, regional
-signals, new-device/security alert mail, remote migration, and staging replay
-tests remain absent; SEC-006 is therefore not closed.
+JURO sessions, a 24-hour standard absolute lifetime, a 30-day remember-me
+absolute lifetime, cookie/persisted-expiry alignment, a seven-day idle cap,
+current/single/other/all revocation, and an append-only security-event chain.
+The same lifetime choice flows through both direct OTP and MFA completion.
+Protected email change also revokes every other local session/device while
+preserving the verified current session. Session-token rotation/fixation and
+replay detection, regional signals, new-device/security alert mail, remote
+runtime evidence, and staging replay tests remain absent; SEC-006 is therefore
+not closed.
 
 ### SEC-007 — weak standalone share secret
 
@@ -138,7 +147,7 @@ In deployed Sites v20, no tamper-evident chain or protected periodic export exis
 
 ### SEC-011 — CSRF validation is weak
 
-The deployed baseline write guard checks `Origin` only when supplied and accepts a static `x-juro-csrf: 1`. The integration branch now rejects missing/cross-origin writes for authentication and sensitive identity routes and enforces strict content/size contracts. A complete inventory and runtime negative suite for every document/platform mutation is still required before closing this finding.
+The deployed baseline write guard checks `Origin` only when supplied and accepts a static `x-juro-csrf: 1`. The integration branch now requires a canonical single-value same-origin `Origin`, rejects foreign `Sec-Fetch-Site`, requires `x-juro-csrf: 1`, and applies the same guard through authentication, identity, platform, and legacy document-builder mutation helpers. Rendered negative tests cover missing, duplicated, and cross-origin proof. Protected-staging runtime evidence and a complete route inventory remain required before closing this finding.
 
 ### SEC-012 — trusted header mode needs a hard boundary
 
@@ -162,7 +171,7 @@ release gate rather than a remotely closed finding.
 
 ## Medium findings
 
-- deployed team invitation acceptance is not a conditional atomic consume; the integration branch has local one-winner/replay/rollback coverage, but no remote D1/full HTTP staging evidence;
+- deployed team invitation acceptance is not a conditional atomic consume; local migration `0022` and the acceptance service use a unique immutable claim plus one D1 batch for the guarded claim, membership/default-workspace effects, and audit, with one-winner, stale-identity, owner-role preservation, replay, and rollback tests; `0022` is not remote and no full-HTTP staging evidence exists;
 - several authorization errors reveal object/workspace existence instead of neutral not-found behavior;
 - deployed Sites v20 has no `security_events` store; migration 0013 is present in isolated staging schema only, with no runtime evidence, and does not replace the broader access-audit model;
 - document attachments rely on declared MIME/extension rather than complete magic-byte validation;
@@ -197,7 +206,9 @@ Local integration-branch evidence only:
 
 - migration/application 0018 binds keyed OTP/deletion code evidence to its purpose and record/session context while the checked-in mode remains disabled/legacy;
 - migration/application 0019 binds two distinct codes to the exact challenge, session, and current/new destination roles and preserves only the verified current session after identity rotation;
-- OTP atomic-claim concurrency, device/session revoke, invitation pre-accept denial/replay/one-winner, and active-workspace builder isolation tests pass locally;
+- migration/application 0022 binds workspace membership and audit effects to one immutable invitation acceptance claim; an existing owner cannot be downgraded by an invitation;
+- migration/application 0023 records an immutable 15-minute lock only after attempt exhaustion; local tests cover the fifth-failure lock and refusal of a replacement challenge during the lock;
+- OTP atomic-claim concurrency, independent `5/email/hour` and `20/IP/hour` gates, missing-IP isolation, Turnstile response/action/hostname/failure handling, 24-hour/30-day session persistence, device/session revoke, invitation pre-accept denial/replay/one-winner, and active-workspace builder isolation tests pass locally;
 - AI, comparison, monitoring, citation retrieval, and global search apply one
   server-owned exact-host allowlist for `lex.uz` and `advice.uz`; a database
   `verified` flag can no longer promote an arbitrary HTTPS URL.
@@ -211,14 +222,14 @@ A bounded authenticated Chrome pass now confirms canonical RU/UZ builder renderi
 ## Required test additions
 
 1. OTP:
-   - independent email/IP limits;
-   - Turnstile;
-   - repeat the locally passing atomic verify race against remote staging D1 through the full HTTP boundary;
-   - five failures and 15-minute lock;
+   - repeat the locally passing independent email/IP limits and atomic verify race against remote staging D1 through the full HTTP boundary;
+   - configure and test real Turnstile Siteverify plus the rendered client widget on the protected staging hostname;
+   - apply migration `0023` and repeat the locally passing fifth-failure/15-minute-lock path remotely;
+   - send and verify a real Resend OTP without logging the code or address;
    - enumeration parity.
 2. Sessions:
    - fixation/rotation;
-   - 24h/30d duration;
+   - repeat the locally passing 24-hour/30-day persisted/cookie duration matrix through staging HTTP;
    - repeat current/one/all revoke through full staging HTTP/session/cookie boundaries;
    - replay and security-event revoke.
 3. Tenant isolation:
@@ -232,7 +243,7 @@ A bounded authenticated Chrome pass now confirms canonical RU/UZ builder renderi
    - prompt injection and secret-exfiltration attempts.
 5. Shares and invitations:
    - token/code brute force;
-   - repeat locally passing document invitation replay/concurrent accept tests through staging HTTP and add workspace invitation equivalents;
+   - apply migration `0022` and repeat the locally passing document and workspace invitation replay/concurrent-accept/rollback tests through staging HTTP;
    - expiry/revoke/download constraints.
 6. Audit and deletion:
    - hash-chain validation;

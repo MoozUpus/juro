@@ -4,8 +4,18 @@ import { InviteAcceptClient } from "./InviteAcceptClient";
 export const dynamic = "force-dynamic";
 export const metadata = { robots: { index: false, follow: false } };
 
-export default async function InvitePage({ params }: { params: Promise<{ token: string }> }) {
+export default async function InvitePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ lang?: string | string[] }>;
+}) {
   const { token } = await params;
-  await requireChatGPTUser(`/invite/${encodeURIComponent(token)}`);
-  return <InviteAcceptClient token={token} />;
+  const query = await searchParams;
+  const locale = query.lang === "uz" ? "uz" : "ru";
+  await requireChatGPTUser(
+    `/invite/${encodeURIComponent(token)}?lang=${locale}`,
+  );
+  return <InviteAcceptClient token={token} locale={locale} />;
 }

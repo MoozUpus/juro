@@ -207,7 +207,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const requestOrigin = new URL(request.url).origin;
   const configuredOrigin = env.APP_URL && /^https:\/\/[^/]+$/i.test(env.APP_URL) ? env.APP_URL : requestOrigin;
-  const inviteUrl = new URL(`/invite/${encodeURIComponent(rawToken)}`, configuredOrigin).toString();
+  const inviteUrl = new URL(`/invite/${encodeURIComponent(rawToken)}?lang=${locale}`, configuredOrigin).toString();
   const subject = locale === "ru" ? "Приглашение в пространство JURO" : "JURO makoniga taklif";
   const safeUrl = escapeHtml(inviteUrl);
   const html = locale === "ru"

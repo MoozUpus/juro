@@ -96,10 +96,22 @@ test("protects My Documents and preserves return_to", async () => {
 
 test("serves public login and registration routes", async () => {
   const worker = await createWorker();
-  for (const route of ["/login?lang=ru", "/register?lang=uz"]) {
+  for (const route of ["/login?lang=ru", "/register?lang=uz", "/ru/auth/login", "/uz/auth/register?accountType=lawyer"]) {
     const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(response.status, 200, route);
     assert.match(await response.text(), /Защищённый вход|Himoyalangan kirish|одноразовому коду|Email orqali/);
+  }
+});
+
+test("localized legacy auth routes redirect to the canonical auth surface", async () => {
+  const worker = await createWorker();
+  for (const [source, target] of [
+    ["/ru/login?returnTo=%2Fru%2Flawyer%2Fmain", "/ru/auth/login?returnTo=%2Fru%2Flawyer%2Fmain"],
+    ["/uz/register?accountType=entrepreneur", "/uz/auth/register?accountType=entrepreneur"],
+  ]) {
+    const response = await worker.fetch(new Request(`http://localhost${source}`, { redirect: "manual" }), runtime, context);
+    assert.equal(response.status, 308, source);
+    assert.equal(response.headers.get("location"), `http://localhost${target}`, source);
   }
 });
 
@@ -146,13 +158,123 @@ test("invitation page requires sign-in without exposing document data", async ()
 
 test("rejects unauthenticated document writes and disables caching", async () => {
   const worker = await createWorker();
+  const csrfRejected = await worker.fetch(new Request(
+    "http://localhost/api/document-builder/drafts",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-juro-csrf": "1",
+      },
+      body: "{}",
+    },
+  ), runtime, context);
+  assert.equal(csrfRejected.status, 403);
+  assert.equal((await csrfRejected.json()).code, "FORBIDDEN");
+  assert.match(csrfRejected.headers.get("cache-control") ?? "", /no-store/);
+
   const response = await worker.fetch(new Request("http://localhost/api/document-builder/drafts", {
     method: "POST",
-    headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+    headers: {
+      "content-type": "application/json",
+      origin: "http://localhost",
+      "x-juro-csrf": "1",
+    },
     body: "{}",
   }), runtime, context);
   assert.equal(response.status, 401);
   assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+});
+
+test("protected writes require a canonical same-origin browser context", async () => {
+  const worker = await createWorker();
+  const route = "http://localhost/api/platform/cases";
+
+  for (const [label, headers] of [
+    ["missing Origin", { "x-juro-csrf": "1" }],
+    [
+      "cross-origin",
+      { origin: "https://attacker.example", "x-juro-csrf": "1" },
+    ],
+    [
+      "cross-site Fetch Metadata",
+      {
+        origin: "http://localhost",
+        "sec-fetch-site": "cross-site",
+        "x-juro-csrf": "1",
+      },
+    ],
+    [
+      "same-site Fetch Metadata",
+      {
+        origin: "http://localhost",
+        "sec-fetch-site": "same-site",
+        "x-juro-csrf": "1",
+      },
+    ],
+    [
+      "navigation Fetch Metadata",
+      {
+        origin: "http://localhost",
+        "sec-fetch-site": "none",
+        "x-juro-csrf": "1",
+      },
+    ],
+    [
+      "origin with a path",
+      {
+        origin: "http://localhost/forged",
+        "x-juro-csrf": "1",
+      },
+    ],
+    [
+      "combined Origin values",
+      {
+        origin: "http://localhost, https://attacker.example",
+        "x-juro-csrf": "1",
+      },
+    ],
+    [
+      "malformed Fetch Metadata",
+      {
+        origin: "http://localhost",
+        "sec-fetch-site": "same-origin, cross-site",
+        "x-juro-csrf": "1",
+      },
+    ],
+    ["missing CSRF header", { origin: "http://localhost" }],
+  ]) {
+    const response = await worker.fetch(
+      new Request(route, { method: "POST", headers, body: "{}" }),
+      runtime,
+      context,
+    );
+    assert.equal(response.status, 403, label);
+    assert.match(response.headers.get("cache-control") ?? "", /no-store/, label);
+  }
+
+  for (const [label, headers] of [
+    [
+      "same-origin without Fetch Metadata",
+      { origin: "http://localhost", "x-juro-csrf": "1" },
+    ],
+    [
+      "same-origin browser fetch",
+      {
+        origin: "http://localhost",
+        "sec-fetch-site": "same-origin",
+        "x-juro-csrf": "1",
+      },
+    ],
+  ]) {
+    const response = await worker.fetch(
+      new Request(route, { method: "POST", headers, body: "{}" }),
+      runtime,
+      context,
+    );
+    assert.equal(response.status, 401, label);
+    assert.match(response.headers.get("cache-control") ?? "", /no-store/, label);
+  }
 });
 
 test("built auth routes reject missing and cross-origin CSRF writes", async () => {
@@ -302,6 +424,7 @@ test("MFA boundaries do not accept platform headers or a missing pre-auth cookie
       method: "POST",
       headers: {
         ...platformHeaders,
+        origin: "http://localhost",
         "x-juro-csrf": "1",
       },
     }),
@@ -316,6 +439,7 @@ test("MFA boundaries do not accept platform headers or a missing pre-auth cookie
       method: "POST",
       headers: {
         "content-type": "application/json",
+        origin: "http://localhost",
         "x-juro-csrf": "1",
       },
       body: JSON.stringify({ code: "123456", locale: "ru" }),
@@ -389,6 +513,7 @@ test("email change requires CSRF and a recent local JURO session", async () => {
       headers: {
         ...platformHeaders,
         "content-type": "application/json",
+        origin: "http://localhost",
         "x-juro-csrf": "1",
       },
       body,
@@ -432,6 +557,7 @@ test("account deletion requires CSRF and a recent local JURO session", async () 
       method: "POST",
       headers: {
         "content-type": "application/json",
+        origin: "http://localhost",
         "x-juro-csrf": "1",
         "oai-authenticated-user-email": "owner@example.test",
       },

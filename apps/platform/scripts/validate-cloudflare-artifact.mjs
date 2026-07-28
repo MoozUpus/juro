@@ -49,6 +49,25 @@ assert.equal(
   false,
   "development authentication bypass must never be packaged",
 );
+for (const secretBinding of [
+  "OPENAI_API_KEY",
+  "ANTHROPIC_API_KEY",
+  "RESEND_API_KEY",
+  "SESSION_SECRET",
+  "ENCRYPTION_KEY",
+  "OTP_HASH_SECRET",
+  "CRON_SECRET",
+  "TURNSTILE_SECRET_KEY",
+  "TOTP_ENCRYPTION_KEY",
+  "SIGNED_URL_SECRET",
+  "IDENTITY_KEYRING",
+]) {
+  assert.equal(
+    Object.hasOwn(artifact.vars ?? {}, secretBinding),
+    false,
+    `${secretBinding} must be supplied by Cloudflare secret storage, not packaged vars`,
+  );
+}
 assert.equal(artifact.compatibility_date, source.compatibility_date);
 assert.deepEqual(artifact.compatibility_flags, source.compatibility_flags);
 assert.equal(artifact.assets?.binding, "ASSETS");

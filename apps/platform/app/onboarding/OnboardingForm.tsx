@@ -2,36 +2,100 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, BriefcaseBusiness, Check, LoaderCircle, Scale, UserRound } from "lucide-react";
+import {
+  ArrowRight,
+  BriefcaseBusiness,
+  Check,
+  FileCheck2,
+  FilePlus2,
+  FolderKanban,
+  LoaderCircle,
+  MessageCircleQuestion,
+  Scale,
+  UserRound,
+  UsersRound,
+} from "lucide-react";
 import { FormEvent, useState } from "react";
+import type {
+  AccountPersona,
+  OnboardingGoal,
+} from "../../lib/platform/onboarding";
 
 type Locale = "ru" | "uz";
-type AccountType = "individual" | "business";
 
 type Props = {
   initialLocale: Locale;
-  initialAccountType: AccountType;
-  initialName: string;
-  initialCompanyName: string;
+  initialAccountPersona: AccountPersona;
+  initialLastName: string;
+  initialFirstName: string;
+  initialMiddleName: string;
+  initialPhone: string;
 };
 
-const goalOptions = [
-  ["personal_issue", "Решить личный вопрос", "Shaxsiy masalani hal qilish"],
-  ["review_document", "Проверить документ", "Hujjatni tekshirish"],
-  ["create_document", "Создать документ", "Hujjat yaratish"],
-  ["business_cases", "Вести дела бизнеса", "Biznes ishlarini yuritish"],
-  ["legal_automation", "Автоматизировать работу юриста", "Yurist ishini avtomatlashtirish"],
+const personaOptions = [
+  ["individual", "Физическое лицо", "Jismoniy shaxs", UserRound],
+  [
+    "entrepreneur",
+    "Индивидуальный предприниматель",
+    "Yakka tartibdagi tadbirkor",
+    BriefcaseBusiness,
+  ],
+  ["lawyer", "Юрист", "Yurist", Scale],
 ] as const;
-type Goal = (typeof goalOptions)[number][0];
 
-export function OnboardingForm({ initialLocale, initialAccountType, initialName, initialCompanyName }: Props) {
+const goalOptions = [
+  [
+    "legal_answer",
+    "Получить юридический ответ",
+    "Huquqiy javob olish",
+    MessageCircleQuestion,
+  ],
+  [
+    "review_document",
+    "Проверить документ",
+    "Hujjatni tekshirish",
+    FileCheck2,
+  ],
+  [
+    "create_document",
+    "Создать документ",
+    "Hujjat yaratish",
+    FilePlus2,
+  ],
+  [
+    "manage_case",
+    "Вести юридическое дело",
+    "Huquqiy ishni yuritish",
+    FolderKanban,
+  ],
+  ["find_lawyer", "Найти юриста", "Yurist topish", UsersRound],
+  [
+    "professional_work",
+    "Использовать JURO в профессиональной работе",
+    "JURO’dan professional ishda foydalanish",
+    Scale,
+  ],
+] as const;
+
+export function OnboardingForm({
+  initialLocale,
+  initialAccountPersona,
+  initialLastName,
+  initialFirstName,
+  initialMiddleName,
+  initialPhone,
+}: Props) {
   const [locale, setLocale] = useState(initialLocale);
-  const [accountType, setAccountType] = useState(initialAccountType);
-  const [displayName, setDisplayName] = useState(initialName);
-  const [companyName, setCompanyName] = useState(initialCompanyName);
-  const [organizationRole, setOrganizationRole] = useState("owner");
-  const [primaryGoal, setPrimaryGoal] = useState<Goal>(goalOptions[accountType === "business" ? 3 : 0][0]);
-  const [acceptPolicies, setAcceptPolicies] = useState(false);
+  const [accountPersona, setAccountPersona] = useState<AccountPersona>(
+    initialAccountPersona,
+  );
+  const [lastName, setLastName] = useState(initialLastName);
+  const [firstName, setFirstName] = useState(initialFirstName);
+  const [middleName, setMiddleName] = useState(initialMiddleName);
+  const [phone, setPhone] = useState(initialPhone);
+  const [primaryGoal, setPrimaryGoal] = useState<OnboardingGoal>(
+    "legal_answer",
+  );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const ru = locale === "ru";
@@ -43,11 +107,32 @@ export function OnboardingForm({ initialLocale, initialAccountType, initialName,
     try {
       const response = await fetch("/api/onboarding", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ locale, accountType, displayName, companyName, organizationRole, primaryGoal, acceptPolicies }),
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({
+          locale,
+          accountPersona,
+          lastName,
+          firstName,
+          middleName,
+          phone,
+          primaryGoal,
+        }),
       });
-      const data = await response.json() as { redirectTo?: string; error?: string };
-      if (!response.ok || !data.redirectTo) throw new Error(data.error || (ru ? "Не удалось сохранить настройки." : "Sozlamalarni saqlab bo‘lmadi."));
+      const data = await response.json() as {
+        redirectTo?: string;
+        error?: string;
+      };
+      if (!response.ok || !data.redirectTo) {
+        throw new Error(
+          data.error ||
+            (ru
+              ? "Не удалось сохранить настройки."
+              : "Sozlamalarni saqlab bo‘lmadi."),
+        );
+      }
       window.location.assign(data.redirectTo);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -60,47 +145,163 @@ export function OnboardingForm({ initialLocale, initialAccountType, initialName,
       <section className="onboarding-card">
         <div className="onboarding-copy">
           <span>JURO · 01/01</span>
-          <h1>{ru ? "Настроим рабочее пространство" : "Ish makonini sozlaymiz"}</h1>
-          <p>{ru ? "Только данные, необходимые для первого действия. Коллег и дополнительные настройки можно добавить позже." : "Faqat birinchi harakat uchun zarur ma’lumotlar. Hamkasblar va qo‘shimcha sozlamalarni keyin qo‘shish mumkin."}</p>
+          <h1>
+            {ru
+              ? "Настроим ваш личный кабинет"
+              : "Shaxsiy kabinetingizni sozlaymiz"}
+          </h1>
+          <p>
+            {ru
+              ? "Укажите данные, необходимые для персональной юридической работы. Бизнес-пространство можно создать отдельно после входа."
+              : "Shaxsiy huquqiy ish uchun zarur ma’lumotlarni kiriting. Biznes makonini tizimga kirgandan so‘ng alohida yaratish mumkin."}
+          </p>
         </div>
         <figure className="onboarding-jurobek">
-          <Image src="/jurobek-avatar.webp" alt={ru ? "Jurobek — помощник JURO" : "Jurobek — JURO yordamchisi"} width={1024} height={1792} priority unoptimized />
+          <Image
+            src="/jurobek-avatar.webp"
+            alt={ru
+              ? "Журобек — помощник JURO"
+              : "Jurobek — JURO yordamchisi"}
+            width={1024}
+            height={1792}
+            priority
+            unoptimized
+          />
         </figure>
         <form onSubmit={submit}>
           <fieldset>
             <legend>{ru ? "Язык" : "Til"}</legend>
-            <div className="onboarding-segments">
-              <button type="button" className={locale === "ru" ? "active" : ""} aria-pressed={locale === "ru"} onClick={() => setLocale("ru")}>Русский</button>
-              <button type="button" className={locale === "uz" ? "active" : ""} aria-pressed={locale === "uz"} onClick={() => setLocale("uz")}>O‘zbekcha</button>
+            <div className="onboarding-segments onboarding-segments-language">
+              <button
+                type="button"
+                className={locale === "ru" ? "active" : ""}
+                aria-pressed={locale === "ru"}
+                onClick={() => setLocale("ru")}
+              >
+                Русский
+              </button>
+              <button
+                type="button"
+                className={locale === "uz" ? "active" : ""}
+                aria-pressed={locale === "uz"}
+                onClick={() => setLocale("uz")}
+              >
+                O‘zbekcha
+              </button>
             </div>
           </fieldset>
           <fieldset>
-            <legend>{ru ? "Тип пространства" : "Makon turi"}</legend>
-            <div className="onboarding-segments">
-              <button type="button" className={accountType === "individual" ? "active" : ""} aria-pressed={accountType === "individual"} onClick={() => { setAccountType("individual"); setPrimaryGoal("personal_issue"); }}><UserRound />{ru ? "Личное" : "Shaxsiy"}</button>
-              <button type="button" className={accountType === "business" ? "active" : ""} aria-pressed={accountType === "business"} onClick={() => { setAccountType("business"); setPrimaryGoal("business_cases"); }}><BriefcaseBusiness />{ru ? "Бизнес" : "Biznes"}</button>
-            </div>
-          </fieldset>
-          <label>{ru ? "Как к вам обращаться" : "Sizga qanday murojaat qilamiz"}<input value={displayName} onChange={(event) => setDisplayName(event.target.value.slice(0, 160))} required autoComplete="name" /></label>
-          {accountType === "business" && (
-            <div className="onboarding-row">
-              <label>{ru ? "Организация" : "Tashkilot"}<input value={companyName} onChange={(event) => setCompanyName(event.target.value.slice(0, 180))} required autoComplete="organization" /></label>
-              <label>{ru ? "Ваша роль" : "Sizning rolingiz"}<select value={organizationRole} onChange={(event) => setOrganizationRole(event.target.value)}><option value="owner">{ru ? "Владелец" : "Egasi"}</option><option value="director">{ru ? "Руководитель" : "Rahbar"}</option><option value="lawyer">{ru ? "Юрист" : "Yurist"}</option><option value="employee">{ru ? "Сотрудник" : "Xodim"}</option><option value="other">{ru ? "Другая" : "Boshqa"}</option></select></label>
-            </div>
-          )}
-          <fieldset>
-            <legend>{ru ? "С чего хотите начать" : "Nimadan boshlamoqchisiz"}</legend>
-            <div className="onboarding-goals">
-              {goalOptions.map(([id, ruLabel, uzLabel]) => (
-                <button type="button" className={primaryGoal === id ? "active" : ""} aria-pressed={primaryGoal === id} onClick={() => setPrimaryGoal(id)} key={id}>
-                  <Scale /><span>{ru ? ruLabel : uzLabel}</span>{primaryGoal === id && <Check />}
+            <legend>{ru ? "Тип профиля" : "Profil turi"}</legend>
+            <div className="onboarding-segments onboarding-personas">
+              {personaOptions.map(([id, ruLabel, uzLabel, Icon]) => (
+                <button
+                  type="button"
+                  className={accountPersona === id ? "active" : ""}
+                  aria-pressed={accountPersona === id}
+                  onClick={() => setAccountPersona(id)}
+                  key={id}
+                >
+                  <Icon />
+                  <span>{ru ? ruLabel : uzLabel}</span>
                 </button>
               ))}
             </div>
           </fieldset>
-          <label className="onboarding-consent"><input type="checkbox" checked={acceptPolicies} onChange={(event) => setAcceptPolicies(event.target.checked)} required /><span>{ru ? "Подтверждаю настройки и принимаю " : "Sozlamalarni tasdiqlayman va "}<Link href={`/legal/terms?lang=${locale}`} target="_blank">{ru ? "условия приложения" : "ilova shartlarini"}</Link>{ru ? " и правила AI." : " hamda AI qoidalarini qabul qilaman."}</span></label>
-          {error && <p className="onboarding-error" role="alert">{error}</p>}
-          <button className="onboarding-submit" disabled={pending || !acceptPolicies}>{pending ? <LoaderCircle className="spin" /> : <ArrowRight />}{ru ? "Открыть моё пространство" : "Mening makonimni ochish"}</button>
+          <div className="onboarding-row">
+            <label>
+              {ru ? "Фамилия" : "Familiya"}
+              <input
+                value={lastName}
+                onChange={(event) =>
+                  setLastName(event.target.value.slice(0, 80))}
+                required
+                autoComplete="family-name"
+              />
+            </label>
+            <label>
+              {ru ? "Имя" : "Ism"}
+              <input
+                value={firstName}
+                onChange={(event) =>
+                  setFirstName(event.target.value.slice(0, 80))}
+                required
+                autoComplete="given-name"
+              />
+            </label>
+          </div>
+          <div className="onboarding-row">
+            <label>
+              {ru ? "Отчество, если имеется" : "Otasining ismi, agar bo‘lsa"}
+              <input
+                value={middleName}
+                onChange={(event) =>
+                  setMiddleName(event.target.value.slice(0, 80))}
+                autoComplete="additional-name"
+              />
+            </label>
+            <label>
+              {ru ? "Телефон" : "Telefon"}
+              <input
+                value={phone}
+                onChange={(event) => setPhone(event.target.value.slice(0, 40))}
+                required
+                autoComplete="tel"
+                inputMode="tel"
+                placeholder="+998 90 123 45 67"
+              />
+            </label>
+          </div>
+          <fieldset>
+            <legend>
+              {ru ? "Основная цель" : "Asosiy maqsad"}
+            </legend>
+            <div className="onboarding-goals">
+              {goalOptions.map(([id, ruLabel, uzLabel, Icon]) => (
+                <button
+                  type="button"
+                  className={primaryGoal === id ? "active" : ""}
+                  aria-pressed={primaryGoal === id}
+                  onClick={() => setPrimaryGoal(id)}
+                  key={id}
+                >
+                  <Icon />
+                  <span>{ru ? ruLabel : uzLabel}</span>
+                  {primaryGoal === id && <Check aria-hidden="true" />}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+          <p className="onboarding-policy-evidence">
+            {ru
+              ? "Обязательные документы подтверждены при регистрации по email-коду: "
+              : "Majburiy hujjatlar email-kod orqali ro‘yxatdan o‘tishda tasdiqlangan: "}
+            <Link href={`/legal/terms?lang=${locale}`} target="_blank">
+              {ru ? "условия" : "shartlar"}
+            </Link>
+            {", "}
+            <Link href={`/legal/privacy?lang=${locale}`} target="_blank">
+              {ru ? "конфиденциальность" : "maxfiylik"}
+            </Link>
+            {ru ? " и " : " va "}
+            <Link
+              href={`/legal/personal-data?lang=${locale}`}
+              target="_blank"
+            >
+              {ru ? "обработка данных" : "ma’lumotlarni qayta ishlash"}
+            </Link>
+            .
+          </p>
+          {error && (
+            <p className="onboarding-error" role="alert">
+              {error}
+            </p>
+          )}
+          <button className="onboarding-submit" disabled={pending}>
+            {pending
+              ? <LoaderCircle className="spin" aria-hidden="true" />
+              : <ArrowRight aria-hidden="true" />}
+            {ru ? "Открыть личный кабинет" : "Shaxsiy kabinetni ochish"}
+          </button>
         </form>
       </section>
     </main>

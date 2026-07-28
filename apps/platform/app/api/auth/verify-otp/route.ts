@@ -37,6 +37,7 @@ import {
   recordRegistrationAcceptances,
 } from "../../../../lib/legal/acceptance";
 import { ensureDefaultWorkspace } from "../../../../lib/platform/workspace";
+import { isPersonalAccountType } from "../../../../lib/platform/routing";
 
 function json(body: unknown, status = 200, cookie?: string) {
   const headers = new Headers({ "content-type": "application/json", "cache-control": "private, no-store", pragma: "no-cache" });
@@ -77,6 +78,14 @@ function otpError(
         error: ru
           ? "Попытки закончились. Запросите новый код."
           : "Urinishlar tugadi. Yangi kod so‘rang.",
+      }, 429);
+    case "locked":
+      return json({
+        code: "OTP_VERIFICATION_LOCKED",
+        retryAfterSeconds: result.retryAfterSeconds,
+        error: ru
+          ? "Слишком много неверных попыток. Повторите через 15 минут."
+          : "Juda ko‘p noto‘g‘ri urinish. 15 daqiqadan keyin qayta urinib ko‘ring.",
       }, 429);
     case "incorrect":
       return json({
@@ -131,10 +140,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const existingUserId = await userIdByEmail(db, identityContext, email);
   let user = existingUserId
     ? await db.prepare(
-      `SELECT id,onboarding_completed_at AS onboardingCompletedAt
+      `SELECT id,account_type AS accountType,
+        onboarding_completed_at AS onboardingCompletedAt
        FROM user_profiles WHERE id=? LIMIT 1`,
     ).bind(existingUserId).first<{
       id: string;
+      accountType: string;
       onboardingCompletedAt: string | null;
     }>()
     : null;
@@ -147,10 +158,16 @@ export const POST = withApiErrors(async function POST(request: Request) {
         : "Hisob allaqachon mavjud. Kirishdan foydalaning.",
     }, 409);
   }
-  const accountType = verification.accountType;
+  const accountType = user && isPersonalAccountType(user.accountType)
+    ? user.accountType
+    : verification.accountType;
   const fullName = [body?.firstName?.trim(), body?.lastName?.trim()].filter(Boolean).join(" ").slice(0, 160) || null;
   if (!user) {
-    user = { id: crypto.randomUUID(), onboardingCompletedAt: null };
+    user = {
+      id: crypto.randomUUID(),
+      accountType,
+      onboardingCompletedAt: null,
+    };
     const identity = await prepareUserIdentityWrite(identityContext, {
       userId: user.id,
       email,
@@ -171,7 +188,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       fullName,
       locale,
       accountType,
-      body?.companyName?.trim().slice(0, 180) || null,
+      null,
       now,
       now,
     ).run();
@@ -188,7 +205,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     });
   }
   const redirectTo = purpose === "register" || !user.onboardingCompletedAt
-    ? `/onboarding?lang=${locale}`
+    ? `/${locale}/onboarding`
     : `/${locale}/${accountType}/main`;
   if (await hasActiveMfa(db, user.id)) {
     try {
@@ -217,6 +234,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const session = await createPrimarySessionIfMfaDisabled(db, {
     userId: user.id,
     userAgent: request.headers.get("user-agent"),
+    rememberMe: body.rememberMe,
     now: new Date(now),
   });
   if (!session) {
@@ -246,5 +264,5 @@ export const POST = withApiErrors(async function POST(request: Request) {
   return json({
     ok: true,
     redirectTo,
-  }, 200, sessionCookie(session.token));
+  }, 200, sessionCookie(session.token, body.rememberMe));
 });

@@ -1,2 +1,2 @@
 export function GET(request:Request,{params}:{params:Promise<{locale:string}>}){return redirect(request,params);}
-async function redirect(request:Request,params:Promise<{locale:string}>){const {locale}=await params;return Response.redirect(new URL(`/login?lang=${locale==="uz"?"uz":"ru"}`,request.url),308);}
+async function redirect(request:Request,params:Promise<{locale:string}>){const {locale}=await params;const safeLocale=locale==="ru"?"ru":"uz";const source=new URL(request.url);const destination=new URL(`/${safeLocale}/auth/login`,request.url);if(source.searchParams.has("returnTo"))destination.searchParams.set("returnTo",source.searchParams.get("returnTo")!);return Response.redirect(destination,308);}

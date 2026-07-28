@@ -71,6 +71,13 @@ test("OTP, MFA, and logout writes require the application CSRF contract", async 
   assert.match(requestRoute, /requestOtpInputSchema/);
   assert.match(verifyRoute, /verifyOtpInputSchema/);
   assert.match(verifyMfaRoute, /verifyMfaInputSchema/);
+  assert.match(authForm, /rememberMe/);
+  assert.match(verifyRoute, /rememberMe: body\.rememberMe/);
+  assert.match(
+    verifyRoute,
+    /sessionCookie\(session\.token, body\.rememberMe\)/,
+  );
+  assert.match(verifyMfaRoute, /sessionCookie\(result\.session\.token, rememberMe\)/);
 });
 
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
@@ -461,9 +468,17 @@ test("staff role lifecycle is internal, fresh-MFA-gated, and atomically audited"
 
 test("canonical platform route classifier is stable", () => {
   assert.ok(isLocale("ru"));assert.ok(isLocale("uz"));assert.ok(!isLocale("en"));
-  assert.ok(isAccountType("individual"));assert.ok(isAccountType("business"));assert.ok(!isAccountType("admin"));
+  assert.ok(isAccountType("individual"));assert.ok(isAccountType("entrepreneur"));assert.ok(isAccountType("lawyer"));assert.ok(isAccountType("business"));assert.ok(!isAccountType("admin"));
   assert.ok(isPlatformModule("action-plan"));assert.ok(!isPlatformModule("document-builder-test"));
   assert.equal(platformPath("uz","business","document-builder"),"/uz/business/document-builder");
+  assert.equal(platformPath("ru","lawyer","main"),"/ru/lawyer/main");
+});
+
+test("legacy builder routing preserves every supported profile persona", async () => {
+  const source = await readFile(new URL("../app/document-builder/route-helpers.ts", import.meta.url), "utf8");
+  assert.match(source, /isAccountType\(queryType\)/);
+  assert.match(source, /isAccountType\(storedType\)/);
+  assert.doesNotMatch(source, /queryType === "business"/);
 });
 
 test("workspace role permissions deny management and writes by default", () => {
@@ -574,7 +589,9 @@ test("workspace switching is membership-scoped and never reuses an invalid defau
     readFile(new URL("../app/api/platform/workspaces/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(route, /m\.user_id=\? AND m\.status='active'/);
-  assert.match(route, /UPDATE user_profiles SET default_workspace_id=\?,account_type=\?/);
+  assert.match(route, /UPDATE user_profiles SET default_workspace_id=\?,updated_at=\?/);
+  assert.doesNotMatch(route, /SET default_workspace_id=\?,account_type=\?/);
+  assert.match(route, /isPersonalAccountType\(target\.accountPersona\)/);
   assert.match(route, /workspace_selected/);
   assert.match(workspaceLibrary, /const workspaceId = `ws_\$\{crypto\.randomUUID\(\)/);
   assert.doesNotMatch(workspaceLibrary, /profile\.defaultWorkspaceId \?\? `ws_/);

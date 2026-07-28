@@ -157,7 +157,8 @@ already accepted active collaborator cannot be demoted by a new invitation.
 
 ## D-016 — authentication principal and local session scope
 
-Status: accepted  
+Status: accepted
+Session-lifetime clause: superseded by D-045
 Date: 2026-07-26
 
 Authentication state carries its source, local session ID, and assurance
@@ -165,10 +166,10 @@ level. A trusted edge header is `platform_header/upstream`; it is not silently
 treated as a JURO local session or as JURO MFA. The session/device UI manages
 only JURO email-code sessions and states this boundary explicitly.
 
-New local sessions use both a 30-day absolute lifetime and a seven-day idle
-lifetime. Last-seen writes are throttled to five minutes. Login and revocation
-state changes are committed with an append-only, per-user hash-chained
-security event.
+The principal/source boundary, device scope, seven-day idle cap, throttled
+last-seen writes, and security-event behavior remain accepted. D-045 replaces
+only the original universal 30-day absolute lifetime with the required
+24-hour standard and 30-day remember-me choice.
 
 ## D-017 — identity key rotation and MFA activation
 
@@ -789,3 +790,91 @@ For the first version, rollback is the exposure kill switch: keep subdomain and
 previews disabled and detach only a staging hostname if one was later added;
 retain the Worker and data resources for evidence. D1 rollback remains a
 separate Time Travel/export and expand-contract process.
+
+## D-043 — workspace invitation acceptance uses an immutable one-winner claim
+
+Status: accepted and locally verified; remote migration/staging HTTP gate open
+Date: 2026-07-28
+
+Migration `0022` adds a unique nullable acceptance claim that must be recorded
+with `accepted_at` and becomes immutable after acceptance. The application
+claims the exact token and identity evidence through a guarded
+`UPDATE ... RETURNING`, then conditions membership, default-workspace, and
+audit effects on that claim within one D1 batch. A pre-existing owner role is
+never downgraded. Concurrent acceptance has one durable winner, and an audit
+failure rolls the batch back.
+
+This does not make `workspace_audit_events` a global append-only or
+tamper-evident ledger. The current redirect remains
+`/:locale/:accountType/main` and does not yet introduce the target
+`workspaceId` business route. Migration `0022` and the full HTTP flow remain
+unverified in remote staging.
+
+## D-044 — OTP abuse controls are independent and Turnstile is fail-closed
+
+Status: accepted and locally verified; live-provider and remote-migration gate open
+Date: 2026-07-28
+
+OTP request limits are separate: five challenges per email per hour and 20 per
+Cloudflare connecting IP per hour. Key rotation must preserve the same logical
+rate bucket across retained lookup versions. A missing connecting IP omits the
+IP predicate rather than grouping unrelated users. Provider failures that
+invalidate a reserved challenge still count against the email limit.
+
+The fifth incorrect verification atomically exhausts the challenge and sets
+an immutable 15-minute lock under migration `0023`; a replacement challenge
+for the same email is rejected while that lock is active. Turnstile uses the
+official Siteverify endpoint, exact action `auth_otp`, exact expected hostname,
+an optional remote IP, and fail-closed invalid/unavailable outcomes.
+`TURNSTILE_SECRET_KEY` is server-only; `TURNSTILE_SITE_KEY` is environment-
+specific public widget configuration. No live Turnstile, live Resend, remote
+`0023`, or protected staging HTTP verification is claimed.
+
+## D-045 — session persistence is 24 hours by default and 30 days by choice
+
+Status: accepted and locally verified; staging HTTP gate open
+Date: 2026-07-28
+
+A local session has a 24-hour absolute lifetime unless the user explicitly
+selects remember-me, in which case it has a 30-day absolute lifetime. The
+cookie `Max-Age` and persisted `expires_at` use the same choice for both direct
+email-OTP completion and MFA completion. The existing idle expiry remains
+capped at seven days, so inactivity may end a remembered session earlier.
+
+This decision supersedes only D-016's universal 30-day lifetime. It does not
+claim session-token rotation, fixation/replay detection, regional alerts,
+security email, or remote staging behavior; those gates remain open.
+
+## D-046 — profile persona and active workspace type are independent
+
+Status: accepted and locally verified; staging HTTP gate open
+Date: 2026-07-28
+
+`user_profiles.account_type` records the user's personal persona:
+`individual`, `entrepreneur`, or `lawyer`. A business workspace is a tenant
+context, not a replacement login persona. Selecting a workspace therefore
+updates only `default_workspace_id`; routing derives `business` from the
+active workspace type and otherwise retains the stored personal persona.
+
+This removes the previous coupling that rewrote `account_type` to `business`
+or `individual` during a workspace switch. It does not yet introduce the
+required `/:locale/business/:workspaceId/*` route shape; that remains a
+separate expand/redirect migration with regression coverage.
+
+## D-047 — localized auth/onboarding is canonical and guest default is Uzbek
+
+Status: accepted and locally verified; staging/browser gate open
+Date: 2026-07-28
+
+Canonical entry surfaces are `/:locale/auth/login`,
+`/:locale/auth/register`, and `/:locale/onboarding`. Unauthenticated root and
+incomplete-profile root default to Uzbek when there is no saved preference;
+completed users retain the saved profile locale and personal persona. Legacy
+unlocalized and `/:locale/login|register` entries remain compatibility
+surfaces so inbound links are not broken.
+
+Registration no longer presents business as a login persona; it presents
+individual, entrepreneur, or lawyer. A business workspace is created or
+joined after identity onboarding. The current product module still uses
+`/main`; changing it to `/dashboard` is explicitly deferred to the route
+migration instead of silently breaking existing links.

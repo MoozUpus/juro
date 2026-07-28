@@ -94,6 +94,7 @@ const coreTestFiles = [
   "tests/document-registry.test.ts",
   "tests/document-access.test.ts",
   "tests/auth-otp.test.ts",
+  "tests/auth-turnstile.test.ts",
   "tests/auth-sessions.test.ts",
   "tests/auth-keyring.test.ts",
   "tests/identity-protection.test.ts",
@@ -107,6 +108,8 @@ const coreTestFiles = [
   "tests/staff-access.test.ts",
   "tests/staff-role-management.test.ts",
   "tests/policy-acceptance.test.ts",
+  "tests/onboarding-profile.test.ts",
+  "tests/workspace-invitations.test.ts",
   "tests/platform-core.test.ts",
 ];
 

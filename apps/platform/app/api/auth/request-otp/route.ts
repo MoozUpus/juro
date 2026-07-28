@@ -5,6 +5,7 @@ import {
   requestOtpInputSchema,
 } from "../../../../lib/auth/input";
 import { reserveOtpChallenge } from "../../../../lib/auth/otp-request";
+import { validateAuthTurnstile } from "../../../../lib/auth/turnstile";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -24,7 +25,11 @@ function escapeHtml(value: string) {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const env = runtimeEnv();
-  if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return json({ error: "Отправка кода временно не настроена." }, 503);
+  if (
+    !env.RESEND_API_KEY || !env.EMAIL_FROM || !env.TURNSTILE_SECRET_KEY
+  ) {
+    return json({ error: "Защищённый вход временно не настроен." }, 503);
+  }
   const parsed = await parseJsonRequest(request, requestOtpInputSchema);
   if (!parsed.ok) {
     const status = parsed.error === "payload_too_large"
@@ -43,6 +48,25 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const db = requireD1();
   const connectingIp = request.headers.get("cf-connecting-ip")?.trim() || null;
+  const turnstile = await validateAuthTurnstile({
+    secretKey: env.TURNSTILE_SECRET_KEY,
+    token: parsed.data.turnstileToken,
+    remoteIp: connectingIp,
+    expectedHostname: new URL(request.url).hostname,
+  });
+  if (turnstile.status !== "verified") {
+    const unavailable = turnstile.status === "unavailable";
+    return json({
+      code: unavailable ? "TURNSTILE_UNAVAILABLE" : "TURNSTILE_INVALID",
+      error: locale === "ru"
+        ? (unavailable
+          ? "Проверка безопасности временно недоступна. Повторите позже."
+          : "Подтвердите проверку безопасности и повторите.")
+        : (unavailable
+          ? "Xavfsizlik tekshiruvi vaqtincha mavjud emas. Keyinroq urinib ko‘ring."
+          : "Xavfsizlik tekshiruvini tasdiqlab, qayta urinib ko‘ring."),
+    }, unavailable ? 503 : 400);
+  }
   const id = crypto.randomUUID();
   const code = randomOtp();
   const salt = randomToken(16);
@@ -65,6 +89,26 @@ export const POST = withApiErrors(async function POST(request: Request) {
     hourlySince: new Date(nowMs - 60 * 60 * 1000).toISOString(),
   });
   if (reservation.status === "blocked") {
+    const verificationLockTimestamp = reservation.verificationLockedUntil
+      ? Date.parse(reservation.verificationLockedUntil)
+      : Number.NaN;
+    const verificationRetryAfterSeconds = Number.isFinite(
+        verificationLockTimestamp,
+      )
+      ? Math.max(
+        1,
+        Math.ceil((verificationLockTimestamp - nowMs) / 1000),
+      )
+      : 0;
+    if (verificationRetryAfterSeconds > 0) {
+      return json({
+        code: "OTP_VERIFICATION_LOCKED",
+        retryAfterSeconds: verificationRetryAfterSeconds,
+        error: locale === "ru"
+          ? "Слишком много неверных попыток. Повторите через 15 минут."
+          : "Juda ko‘p noto‘g‘ri urinish. 15 daqiqadan keyin qayta urinib ko‘ring.",
+      }, 429);
+    }
     const latestTimestamp = reservation.latestActiveCreatedAt
       ? Date.parse(reservation.latestActiveCreatedAt)
       : Number.NaN;

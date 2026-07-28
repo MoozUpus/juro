@@ -25,6 +25,15 @@ const platformStaffEntry = journal.entries.find(({ idx }) => idx === 20);
 const platformStaffRoleEventEntry = journal.entries.find(
   ({ idx }) => idx === 21,
 );
+const workspaceInvitationClaimEntry = journal.entries.find(
+  ({ idx }) => idx === 22,
+);
+const otpVerificationLockEntry = journal.entries.find(
+  ({ idx }) => idx === 23,
+);
+const onboardingProfileEntry = journal.entries.find(
+  ({ idx }) => idx === 24,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -58,6 +67,18 @@ assert.ok(
   platformStaffRoleEventEntry,
   "Drizzle journal must contain migration 0021",
 );
+assert.ok(
+  workspaceInvitationClaimEntry,
+  "Drizzle journal must contain migration 0022",
+);
+assert.ok(
+  otpVerificationLockEntry,
+  "Drizzle journal must contain migration 0023",
+);
+assert.ok(
+  onboardingProfileEntry,
+  "Drizzle journal must contain migration 0024",
+);
 
 function migrationSql(entry: JournalEntry): string {
   return readFileSync(new URL(`${entry.tag}.sql`, drizzleRoot), "utf8");
@@ -84,6 +105,15 @@ function tableDefinitions(db: DatabaseSync): Map<string, string> {
     ORDER BY name
   `).all() as Array<{ name: string; sql: string }>;
   return new Map(rows.map(({ name, sql }) => [name, sql]));
+}
+
+function foreignKeyCount(db: DatabaseSync): number {
+  let count = 0;
+  for (const table of tableDefinitions(db).keys()) {
+    const escaped = table.replaceAll('"', '""');
+    count += db.prepare(`PRAGMA foreign_key_list("${escaped}")`).all().length;
+  }
+  return count;
 }
 
 test("remote D1 migrations retain LF line endings on every checkout", () => {
@@ -1824,6 +1854,458 @@ test("0021 rejects mismatched role-event evidence and makes accepted events immu
       /append-only/,
     );
     assert.equal(tableDefinitions(db).size, 97);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0022 adds a single-winner workspace invitation claim with sequential metadata", () => {
+  const sql = migrationSql(workspaceInvitationClaimEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^(?:ALTER TABLE|CREATE (?:UNIQUE INDEX|TRIGGER))\b/i,
+      `unexpected workspace invitation claim statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const name of [
+    "acceptance_claim_id",
+    "workspace_invitations_acceptance_claim_uidx",
+    "workspace_invitations_acceptance_insert_guard",
+    "workspace_invitations_acceptance_update_guard",
+    "workspace_invitations_acceptance_immutable_guard",
+  ]) {
+    assert.match(sql, new RegExp(`\`${name}\``));
+  }
+  assert.doesNotMatch(sql, /account_type|DROP TABLE|DELETE FROM/i);
+
+  const previous = JSON.parse(
+    readFileSync(
+      new URL("meta/0021_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0022_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, {
+      columns: Record<string, unknown>;
+      indexes: Record<string, { isUnique: boolean }>;
+    }>;
+  };
+  assert.equal(workspaceInvitationClaimEntry.idx, 22);
+  assert.equal(
+    workspaceInvitationClaimEntry.tag,
+    "0022_workspace_invitation_claim",
+  );
+  assert.equal(snapshot.prevId, previous.id);
+  assert.ok(
+    snapshot.tables.workspace_invitations.columns.acceptance_claim_id,
+  );
+  assert.equal(
+    snapshot.tables.workspace_invitations.indexes
+      .workspace_invitations_acceptance_claim_uidx.isUnique,
+    true,
+  );
+  assert.equal(
+    Object.hasOwn(
+      snapshot.tables.auth_otp_challenges.columns,
+      "verification_locked_until",
+    ),
+    false,
+  );
+});
+
+test("0022 permits exactly one guarded acceptance claim and makes it immutable", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 22)) {
+      applyMigration(db, entry);
+    }
+    const createdAt = "2026-07-28T12:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,created_at,updated_at)
+       VALUES (?,?,?,?),(?,?,?,?)`,
+    ).run(
+      "invitation-owner",
+      "invitation-owner@example.test",
+      createdAt,
+      createdAt,
+      "invitation-recipient",
+      "invitation-recipient@example.test",
+      createdAt,
+      createdAt,
+    );
+    db.prepare(
+      `INSERT INTO workspaces
+       (id,type,name,locale,created_at,updated_at)
+       VALUES (?,?,?,?,?,?)`,
+    ).run(
+      "invitation-workspace",
+      "business",
+      "Invitation workspace",
+      "ru",
+      createdAt,
+      createdAt,
+    );
+    const insertInvitation = db.prepare(
+      `INSERT INTO workspace_invitations (
+         id,workspace_id,invited_by_user_id,email_hash,token_hash,role,
+         expires_at,accepted_at,acceptance_claim_id,created_at,updated_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    insertInvitation.run(
+      "invitation-claim-one",
+      "invitation-workspace",
+      "invitation-owner",
+      "recipient-email-hash",
+      "recipient-token-hash",
+      "viewer",
+      "2026-08-04T12:00:00.000Z",
+      null,
+      null,
+      createdAt,
+      createdAt,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE workspace_invitations
+         SET accepted_at=? WHERE id='invitation-claim-one'`,
+      ).run(createdAt),
+      /acceptance evidence incomplete/,
+    );
+
+    const claim = db.prepare(
+      `UPDATE workspace_invitations
+       SET accepted_at=?,acceptance_claim_id=?,updated_at=?
+       WHERE id=? AND accepted_at IS NULL AND acceptance_claim_id IS NULL
+       RETURNING id`,
+    );
+    assert.equal(
+      claim.all(
+        createdAt,
+        "acceptance-claim-one",
+        createdAt,
+        "invitation-claim-one",
+      ).length,
+      1,
+    );
+    assert.equal(
+      claim.all(
+        createdAt,
+        "acceptance-claim-two",
+        createdAt,
+        "invitation-claim-one",
+      ).length,
+      0,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE workspace_invitations
+         SET accepted_at=?,acceptance_claim_id=?
+         WHERE id='invitation-claim-one'`,
+      ).run(
+        "2026-07-28T12:01:00.000Z",
+        "acceptance-claim-rewritten",
+      ),
+      /acceptance is immutable/,
+    );
+    assert.throws(
+      () => insertInvitation.run(
+        "invitation-claim-two",
+        "invitation-workspace",
+        "invitation-owner",
+        "other-email-hash",
+        "other-token-hash",
+        "viewer",
+        "2026-08-04T12:00:00.000Z",
+        createdAt,
+        "acceptance-claim-one",
+        createdAt,
+        createdAt,
+      ),
+      /UNIQUE constraint failed/,
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0023 adds OTP verification lock evidence after the invitation claim snapshot", () => {
+  const sql = migrationSql(otpVerificationLockEntry);
+  for (const statement of statements(sql)) {
+    assert.match(
+      statement,
+      /^(?:ALTER TABLE|CREATE (?:INDEX|TRIGGER))\b/i,
+      `unexpected OTP verification lock statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const name of [
+    "verification_locked_until",
+    "auth_otp_email_verification_lock_idx",
+    "auth_otp_keyed_email_verification_lock_idx",
+    "auth_otp_verification_lock_insert_guard",
+    "auth_otp_verification_lock_update_guard",
+    "auth_otp_verification_lock_immutable_guard",
+  ]) {
+    assert.match(sql, new RegExp(`\`${name}\``));
+  }
+
+  const previous = JSON.parse(
+    readFileSync(
+      new URL("meta/0022_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0023_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, {
+      columns: Record<string, unknown>;
+      indexes: Record<string, { isUnique: boolean }>;
+      foreignKeys: Record<string, unknown>;
+    }>;
+  };
+  assert.equal(otpVerificationLockEntry.idx, 23);
+  assert.equal(
+    otpVerificationLockEntry.tag,
+    "0023_otp_verification_lock",
+  );
+  assert.equal(snapshot.prevId, previous.id);
+  assert.ok(
+    snapshot.tables.workspace_invitations.columns.acceptance_claim_id,
+  );
+  assert.ok(
+    snapshot.tables.auth_otp_challenges.columns.verification_locked_until,
+  );
+  assert.equal(
+    snapshot.tables.auth_otp_challenges.indexes
+      .auth_otp_email_verification_lock_idx.isUnique,
+    false,
+  );
+  assert.equal(
+    snapshot.tables.auth_otp_challenges.indexes
+      .auth_otp_keyed_email_verification_lock_idx.isUnique,
+    false,
+  );
+  assert.equal(Object.keys(snapshot.tables).length, 71);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    127,
+  );
+});
+
+test("0023 requires exhausted attempts and keeps a verification lock immutable", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const createdAt = "2026-07-28T12:00:00.000Z";
+    const expiresAt = "2026-07-28T12:10:00.000Z";
+    const lockedUntil = "2026-07-28T12:15:00.000Z";
+    const insertChallenge = db.prepare(
+      `INSERT INTO auth_otp_challenges (
+         id,email,email_hash,purpose,locale,account_type,code_salt,code_hash,
+         attempt_count,max_attempts,expires_at,verification_locked_until,
+         created_at
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
+    assert.throws(
+      () => insertChallenge.run(
+        "otp-lock-incomplete",
+        "locked@example.test",
+        "locked-email-hash",
+        "login",
+        "ru",
+        "individual",
+        "salt",
+        "code-hash",
+        4,
+        5,
+        expiresAt,
+        lockedUntil,
+        createdAt,
+      ),
+      /lock requires exhausted attempts/,
+    );
+    insertChallenge.run(
+      "otp-lock-complete",
+      "locked@example.test",
+      "locked-email-hash",
+      "login",
+      "ru",
+      "individual",
+      "salt",
+      "code-hash",
+      5,
+      5,
+      expiresAt,
+      lockedUntil,
+      createdAt,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE auth_otp_challenges
+         SET attempt_count=4 WHERE id='otp-lock-complete'`,
+      ).run(),
+      /lock requires exhausted attempts/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE auth_otp_challenges
+         SET verification_locked_until=? WHERE id='otp-lock-complete'`,
+      ).run("2026-07-28T12:20:00.000Z"),
+      /verification lock is immutable/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE auth_otp_challenges
+         SET verification_locked_until=NULL WHERE id='otp-lock-complete'`,
+      ).run(),
+      /verification lock is immutable/,
+    );
+    assert.equal(tableDefinitions(db).size, 97);
+    assert.equal(foreignKeyCount(db), 129);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0024 adds only nullable names and unverified phone evidence", () => {
+  const sql = migrationSql(onboardingProfileEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 5);
+  for (const statement of migrationStatements) {
+    assert.match(
+      statement,
+      /^ALTER TABLE `user_profiles` ADD\b/i,
+      `unexpected onboarding profile statement: ${statement.slice(0, 80)}`,
+    );
+  }
+  for (const name of [
+    "last_name",
+    "first_name",
+    "middle_name",
+    "phone_verified",
+    "phone_verified_at",
+  ]) {
+    assert.match(sql, new RegExp(`\\\`${name}\\\``));
+  }
+  assert.match(
+    sql,
+    /`phone_verified` integer DEFAULT false NOT NULL/i,
+  );
+  assert.doesNotMatch(
+    sql,
+    /DROP TABLE|DELETE FROM|UPDATE `user_profiles`|account_type/i,
+  );
+
+  const previous = JSON.parse(
+    readFileSync(
+      new URL("meta/0023_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(
+      new URL("meta/0024_snapshot.json", drizzleRoot),
+      "utf8",
+    ),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, {
+      columns: Record<string, {
+        notNull: boolean;
+        default?: unknown;
+      }>;
+      foreignKeys: Record<string, unknown>;
+    }>;
+  };
+  assert.equal(onboardingProfileEntry.idx, 24);
+  assert.equal(onboardingProfileEntry.tag, "0024_parched_catseye");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(
+    snapshot.tables.user_profiles.columns.last_name.notNull,
+    false,
+  );
+  assert.equal(
+    snapshot.tables.user_profiles.columns.first_name.notNull,
+    false,
+  );
+  assert.equal(
+    snapshot.tables.user_profiles.columns.middle_name.notNull,
+    false,
+  );
+  assert.equal(
+    snapshot.tables.user_profiles.columns.phone_verified.notNull,
+    true,
+  );
+  assert.equal(
+    snapshot.tables.user_profiles.columns.phone_verified.default,
+    false,
+  );
+  assert.equal(
+    snapshot.tables.user_profiles.columns.phone_verified_at.notNull,
+    false,
+  );
+  assert.equal(Object.keys(snapshot.tables).length, 71);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    127,
+  );
+});
+
+test("0024 preserves existing profiles with phone verification unset", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 23)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-07-28T12:00:00.000Z";
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,account_type,created_at,updated_at)
+       VALUES (?,?,?,?,?)`,
+    ).run("onboarding-existing", "existing@example.test", "business", now, now);
+    applyMigration(db, onboardingProfileEntry);
+    const profile = db.prepare(
+      `SELECT account_type AS accountType,last_name AS lastName,
+         first_name AS firstName,middle_name AS middleName,
+         phone_verified AS phoneVerified,
+         phone_verified_at AS phoneVerifiedAt
+       FROM user_profiles WHERE id='onboarding-existing'`,
+    ).get() as Record<string, unknown>;
+    assert.deepEqual({ ...profile }, {
+      accountType: "business",
+      lastName: null,
+      firstName: null,
+      middleName: null,
+      phoneVerified: 0,
+      phoneVerifiedAt: null,
+    });
+    assert.equal(tableDefinitions(db).size, 97);
+    assert.equal(foreignKeyCount(db), 129);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

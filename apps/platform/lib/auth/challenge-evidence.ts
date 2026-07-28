@@ -127,6 +127,17 @@ async function prepareLookupEvidence(
   };
 }
 
+export async function prepareAuthOtpEmailLookupEvidence(
+  context: IdentityProtectionContext,
+  email: string,
+): Promise<PreparedChallengeLookupEvidence> {
+  return prepareLookupEvidence(
+    context,
+    normalizeEmail(email),
+    "auth-otp-email",
+  );
+}
+
 async function prepareCodeEvidence(
   context: IdentityProtectionContext,
   input: {

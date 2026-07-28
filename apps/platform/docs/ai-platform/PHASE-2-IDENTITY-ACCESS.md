@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
-Updated: 2026-07-26  
-Status: local identity/access foundations implemented and partially verified; provider-backed, full-HTTP, remote-D1, lifecycle, and staging gates remain open; nothing has been applied or deployed remotely.
+Updated: 2026-07-28
+Status: local identity/access foundations are implemented and partially verified. Isolated staging contains schema migrations through `0021`; source migrations `0022`–`0024`, live providers, full-HTTP remote-D1 behavior, lifecycle gates, and a staging Worker/deployment remain unverified. Production was not changed.
 
 ## Implemented
 
@@ -9,8 +9,18 @@ Status: local identity/access foundations implemented and partially verified; pr
 
 - atomic correct-code claim with `UPDATE ... RETURNING`;
 - guarded incorrect-attempt increments capped by `max_attempts`;
-- atomic cooldown and eight-per-hour reservation in one D1 batch;
+- atomic 60-second cooldown plus independent `5/email/hour` and
+  `20/IP/hour` reservation gates in one D1 batch;
 - nullable IP bucket when Cloudflare does not provide a connecting IP;
+- retained lookup-key versions preserve one logical email/IP rate bucket;
+- invalidated provider failures still count toward the email limit;
+- the fifth wrong verification atomically exhausts the challenge and records
+  an immutable 15-minute verification lock under migration `0023`;
+- a replacement challenge for the same email is refused while that lock is
+  active;
+- Cloudflare Turnstile is integrated in the request route and auth UI; server
+  verification requires action `auth_otp`, the exact expected hostname, and
+  fails closed on invalid or unavailable Siteverify responses;
 - challenge-bound purpose, email hash, and account type;
 - strict Zod input, JSON content type, and 4 KiB body limit;
 - CSRF/origin contract on request, verify, and logout;
@@ -31,6 +41,22 @@ sessions; a later failure requires a fresh code.
 - accepted external grants use the explicit shared folder;
 - direct owner access and duplicate operations require the active workspace.
 
+### Workspace invitation acceptance
+
+- migration `0022` adds a unique nullable `acceptance_claim_id` that must be
+  paired with `accepted_at` and is immutable after acceptance;
+- a guarded `UPDATE ... RETURNING` binds acceptance to the exact token,
+  invitation identity evidence, unrevoked state, and expiry;
+- claim, membership activation, default-workspace selection, and the
+  deterministic acceptance audit event execute in one D1 batch;
+- an existing workspace owner is not downgraded by a lower-role invitation;
+- local tests cover one-winner concurrency, replay, stale identity evidence,
+  owner-role preservation, and full rollback when audit insertion fails.
+
+The redirect still uses `/:locale/:accountType/main` rather than the target
+business route containing `workspaceId`. The immutable acceptance claim does
+not make `workspace_audit_events` a general append-only hash chain.
+
 ### Files
 
 - every builder-generated file, signed PDF, and attachment now stores
@@ -44,7 +70,11 @@ sessions; a later failure requires a fresh code.
 
 - every new email-OTP login creates a dedicated device record and a local
   session with explicit `auth_method`, assurance level, authentication time,
-  absolute expiry, and seven-day idle expiry;
+  absolute expiry, and capped idle expiry;
+- the absolute lifetime is 24 hours by default and 30 days only when the user
+  explicitly selects remember-me; cookie `Max-Age` and persisted expiry use
+  the same choice after direct OTP or MFA completion;
+- idle expiry remains capped at seven days, or the shorter absolute lifetime;
 - session validation rejects revoked, absolute-expired, idle-expired, and
   device-revoked rows and throttles `last_seen_at` writes to five minutes;
 - the identity principal preserves `local_session` versus
@@ -58,6 +88,28 @@ sessions; a later failure requires a fresh code.
   per-user SHA-256 chain with a uniqueness fence against forks;
 - migration 0013 adds the device/session fields and append-only event store
   without enabling TOTP or changing a live environment.
+
+### Structured onboarding and persona routing
+
+- migration `0024` additively adds separate name fields and explicit phone
+  verification evidence without inventing values for existing users;
+- the onboarding endpoint accepts only strict JSON up to 4 KiB and requires
+  surname, given name, optional middle name, normalized phone, language,
+  personal persona, one approved primary goal, and exact current policy
+  version/digest evidence;
+- phone remains explicitly unverified (`phoneVerified=false`,
+  `phoneVerifiedAt=null`); no UI or backend claim implies SMS verification;
+- completion deterministically preserves or creates one personal workspace,
+  does not replace an existing business workspace, and is concurrency-safe;
+- canonical `/:locale/auth/login`, `/:locale/auth/register`, and
+  `/:locale/onboarding` routes exist locally; guest root defaults to Uzbek;
+- registration offers individual, entrepreneur, and lawyer personas;
+  selecting a business workspace changes the active workspace route but no
+  longer rewrites the user's persistent personal persona.
+
+The current canonical platform module remains `/main`; migration to the target
+`/dashboard` path and business routes containing `workspaceId` are separate
+route-migration work and are not claimed by this checkpoint.
 
 ### Identity cryptography foundation
 
@@ -88,8 +140,9 @@ The key ring is not committed or configured in source.
   ciphertext, IV, digest, or key-version fields into responses.
 
 Every checked-in environment remains
-`IDENTITY_PROTECTION_MODE=legacy`. Migration 0016 has not been applied, the
-backfill has no live invocation, and plaintext has not been cleared.
+`IDENTITY_PROTECTION_MODE=legacy`. Migration 0016 is schema-applied only to
+isolated staging; the backfill has no live invocation, and plaintext has not
+been cleared.
 Saved contacts and document/AI content remain separate protection slices.
 
 ### Invitation identity evidence expand layer
@@ -169,9 +222,9 @@ raw email or legacy SHA fields can be cleared.
   current principal is a local session and Resend is configured.
 
 Migration 0019 creates the dedicated additive challenge table and state
-triggers. It has not been applied remotely. The provider call has not been
-exercised with real staging mailboxes, and Resend acceptance must not be
-described as mailbox delivery.
+triggers. Its schema is present only in isolated staging; no remote application
+runtime uses it. The provider call has not been exercised with real staging
+mailboxes, and Resend acceptance must not be described as mailbox delivery.
 
 ### Two-factor authentication
 
@@ -227,8 +280,8 @@ invalid, the feature fails closed and setup is not offered.
 
 Migration 0020 creates the additive assignment table, restrictive foreign
 keys, partial uniqueness fence, lifecycle checks, and one-way revocation
-triggers. It remains unapplied remotely and must be empty after any future
-staging migration until a separately reviewed bootstrap procedure exists.
+triggers. Its schema is present only in isolated staging and must remain empty
+until a separately reviewed bootstrap procedure exists.
 
 Migration 0021 adds an append-only, per-actor role-change chain and an internal
 administrator grant/revoke service. The actor must have exactly one active
@@ -339,11 +392,15 @@ fencing, identity rotation, session/challenge invalidation, DB completeness
 guards, platform/workspace role separation, staff capability non-inheritance,
 live MFA/TOTP/session/device checks, role expiry/revocation/immutability,
 fresh-MFA administrator grant/revoke, subject-MFA and TTL bounds, chained
-append-only role events, concurrency/rollback behavior, and the full existing
-builder/comparison/rendered Worker regression suite.
+append-only role events, workspace-invitation one-winner/owner-preservation/
+rollback behavior, independent email/IP rate controls, missing-IP isolation,
+fifth-failure verification locking, Turnstile response/action/hostname/failure
+handling, 24-hour/30-day session persistence, structured onboarding,
+persona-preserving workspace selection, canonical localized auth routes, and the full existing builder/
+comparison/rendered Worker regression suite.
 
-The final local full suite passes 255/255 checks: 23 rendered
-Worker/security checks, 184 core/document/auth checks, and 48 Cloudflare
+The latest recorded local full suite passes 288/288 checks: 25 rendered
+Worker/security checks, 204 core/document/auth checks, and 59 Cloudflare
 configuration/migration/job checks. The generated migration schema contains
 97 tables with zero foreign-key integrity errors. Local evidence is not
 staging or production evidence.
@@ -364,42 +421,51 @@ staging:
 1. re-read the completed approved Cloudflare inventory, then create, retrieve, and verify the independent D1 backup;
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
-4. prove there are no duplicate active legacy deletion requests, then apply
-   pending migrations through 0021 while keeping identity mode `legacy`;
+4. prove there are no duplicate active legacy deletion requests, confirm the
+   existing exact `0000`–`0021` ledger, then apply pending migrations `0022`
+   and `0023` while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
    sender;
-8. exercise same-email and same-IP concurrency, retained-key lookup, keyed/SHA
-   divergence failure, and one-winner consume against D1, not only SQLite;
-9. confirm CSRF failures, current/single/other/all session revocation, idle
-   expiry, tenant isolation, and the append-only audit chain;
-10. configure the versioned identity key ring in protected staging secret
+8. configure the environment-specific Turnstile site/secret bindings and
+   prove the client widget plus real Siteverify action/hostname behavior;
+9. exercise same-email and same-IP concurrency, independent `5/email/hour`
+   and `20/IP/hour` limits, missing-IP behavior, retained-key lookup, keyed/SHA
+   divergence failure, the 15-minute verification lock, and one-winner consume
+   against D1, not only SQLite;
+10. confirm CSRF failures, 24-hour/30-day persistence,
+    current/single/other/all session revocation, idle expiry, tenant isolation,
+    and the append-only audit chain;
+11. configure the versioned identity key ring in protected staging secret
     storage, prove old-key read/current-key write rotation, and retain a
     separately protected recovery copy;
-11. invoke the bounded canonical-profile backfill only through a reviewed
+12. invoke the bounded canonical-profile backfill only through a reviewed
     isolated harness, then require zero legacy, divergent, corrupt, or
     rotation-required rows before proposing `dual_write`;
-12. run the full MFA lifecycle through the built Worker: enroll, confirm,
+13. run the full MFA lifecycle through the built Worker: enroll, confirm,
     save and consume one backup code, login with TOTP, login with a backup
     code, regenerate, disable, and verify all session/audit effects;
-13. test missing/wrong key versions, stale/revoked sessions, cross-origin
+14. test missing/wrong key versions, stale/revoked sessions, cross-origin
     writes, user-agent mismatch, attempt exhaustion, and parallel D1 login
     and disable operations;
-14. verify that `ALLOW_PLATFORM_AUTH_HEADERS` remains absent unless the edge
+15. verify that `ALLOW_PLATFORM_AUTH_HEADERS` remains absent unless the edge
     demonstrably strips client input and injects authenticated headers;
-15. send and confirm real RU and UZ deletion OTP messages, then verify
+16. send and confirm real RU and UZ deletion OTP messages, then verify
     one-winner D1 concurrency, exact challenge evidence, audit-chain entry,
     all-local-session revocation, and provider-failure invalidation;
-16. compare every new policy registry digest with the rendered RU/UZ page and
+17. compare every new policy registry digest with the rendered RU/UZ page and
     obtain owner/legal approval before changing any status from draft through
     a new immutable version;
-17. send both RU and UZ email-change batches to controlled current/new
+18. send both RU and UZ email-change batches to controlled current/new
     staging mailboxes, verify provider-failure invalidation, stale/MFA/session
     denial, target-ownership races, one-winner D1 confirmation, canonical
     identity rotation, current-session preservation, other-session/device
-    revocation, and invalidation of old/new login/deletion/MFA challenges.
-18. prove `platform_staff_assignments` and `platform_staff_role_events` are
+    revocation, and invalidation of old/new login/deletion/MFA challenges;
+19. repeat workspace-invitation one-winner, identity-binding,
+    owner-role preservation, expiry/revocation, and audit rollback through the
+    full staging HTTP boundary;
+20. prove `platform_staff_assignments` and `platform_staff_role_events` are
     empty; keep the internal grant/revoke service unreachable and do not
     bootstrap a role or expose a staff route until operator identity,
     emergency revocation, and immutable customer-resource access evidence
@@ -445,10 +511,10 @@ FROM platform_staff_role_events;
 
 ## Not complete
 
-- no live Resend delivery has been verified;
+- no live Turnstile or Resend delivery has been verified;
 - migrations 0011–0021 are schema-applied to isolated staging but not
-  production; no identity runtime, backfill, provider, or full-HTTP behavior is
-  proven by that bootstrap;
+  production; migrations 0022–0024 are local-only; no identity runtime,
+  backfill, provider, or full-HTTP behavior is proven by the staging bootstrap;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, runtime activation, real-device authenticator flow, or remote D1
   concurrency test has been completed;
@@ -473,21 +539,31 @@ FROM platform_staff_role_events;
   OTP email and all legacy SHA digests remain; no remote activation,
   dependency-safe retention drain, pseudonymization, contract migration, or
   key retirement has occurred;
-- protected email change is implemented and verified locally, but migration
-  0019, real Resend batch delivery, remote D1 race tests, alert mail, and
-  staging session/device revocation evidence are still absent;
-- the platform staff policy and migrations 0020–0021 are local-only; an
+- protected email change is implemented and verified locally, and its schema
+  is in isolated staging, but real Resend batch delivery, remote D1 race tests,
+  alert mail, and staging session/device revocation evidence are still absent;
+- the platform staff policy and migrations 0020–0021 are schema-only in
+  isolated staging; an
   internal fresh-MFA grant/revoke service and immutable role-change events now
   exist, but there is no bootstrap, route/API, `/admin` or support UI,
   privileged content grant, customer-resource access event, or staging MFA
   evidence;
 - saved-contact identity fields and document/AI content remain outside the
   protected expand layers;
-- NAT-wide OTP limits preserve existing behavior and need staging product
-  review;
+- independent `5/email/hour` and `20/IP/hour` OTP limits are locally tested,
+  but live staging behavior and product impact behind shared NATs remain
+  unverified;
+- session persistence now has locally verified 24-hour standard and 30-day
+  remember-me paths, but token rotation/fixation/replay detection, regional
+  signals, security email, and remote cookie/session evidence remain absent;
+- workspace invitation migration 0022 and OTP-lock migration 0023 are not
+  applied to staging; their local one-winner/rollback/15-minute-lock evidence
+  is not full-HTTP remote evidence;
 - cleanup scheduling for expired pending credentials and consumed/invalidated
   MFA/deletion challenges remains inactive until the reviewed cleanup
   queue/Cron lifecycle is enabled;
+- no staging Worker, route, DNS, Turnstile binding, secret configuration, or
+  deployment has been verified; Wrangler authentication remains blocked;
 - remote D1 race tests and authenticated full HTTP MFA/invitation/workspace
   E2E remain release gates;
 - production remains frozen pending the later explicit owner confirmation.

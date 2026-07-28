@@ -3,7 +3,11 @@ import { z } from "zod";
 const emailInput = z.string().trim().min(3).max(254);
 const localeInput = z.enum(["ru", "uz"]).default("ru");
 const purposeInput = z.enum(["login", "register"]);
-const accountTypeInput = z.enum(["individual", "business"]).default(
+const accountTypeInput = z.enum([
+  "individual",
+  "entrepreneur",
+  "lawyer",
+]).default(
   "individual",
 );
 
@@ -12,6 +16,7 @@ export const requestOtpInputSchema = z.object({
   purpose: purposeInput,
   locale: localeInput,
   accountType: accountTypeInput,
+  turnstileToken: z.string().trim().min(1).max(2_048),
 }).strict();
 
 export const verifyOtpInputSchema = z.object({
@@ -20,14 +25,14 @@ export const verifyOtpInputSchema = z.object({
   code: z.string().regex(/^\d{6}$/),
   purpose: purposeInput,
   locale: localeInput,
-  accountType: z.enum(["individual", "business"]).optional(),
+  accountType: accountTypeInput.optional(),
   firstName: z.string().max(80).optional(),
   lastName: z.string().max(80).optional(),
-  companyName: z.string().max(180).optional(),
   acceptTerms: z.boolean().optional(),
   acceptPrivacy: z.boolean().optional(),
   acceptPersonalData: z.boolean().optional(),
   marketing: z.boolean().optional(),
+  rememberMe: z.boolean().default(false),
 }).strict();
 
 const mfaCodeInput = z.string().trim().min(6).max(64);
@@ -35,6 +40,7 @@ const mfaCodeInput = z.string().trim().min(6).max(64);
 export const verifyMfaInputSchema = z.object({
   code: mfaCodeInput,
   locale: localeInput,
+  rememberMe: z.boolean().default(false),
 }).strict();
 
 export const confirmTotpEnrollmentInputSchema = z.object({

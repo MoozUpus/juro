@@ -21,6 +21,7 @@ import {
   withApiErrors,
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { isPersonalAccountType } from "../../../../lib/platform/routing";
 
 function terminalMfaError(error: unknown): boolean {
   return error instanceof MfaError
@@ -46,7 +47,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       error: "Проверьте формат запроса.",
     }, status);
   }
-  const { code, locale } = parsed.data;
+  const { code, locale, rememberMe } = parsed.data;
   const token = mfaChallengeTokenFromCookie(request.headers.get("cookie"));
   if (!token) {
     return jsonNoStore({
@@ -64,18 +65,19 @@ export const POST = withApiErrors(async function POST(request: Request) {
         token,
         code,
         userAgent: request.headers.get("user-agent"),
+        rememberMe,
       },
     );
     const userLocale = result.locale === "uz" ? "uz" : "ru";
-    const accountType = result.accountType === "business"
-      ? "business"
+    const accountType = isPersonalAccountType(result.accountType)
+      ? result.accountType
       : "individual";
     const redirectTo = result.onboardingCompletedAt
       ? `/${userLocale}/${accountType}/main`
-      : `/onboarding?lang=${userLocale}`;
+      : `/${userLocale}/onboarding`;
     return jsonNoStore({ ok: true, redirectTo }, 200, [
       clearMfaChallengeCookie(),
-      sessionCookie(result.session.token),
+      sessionCookie(result.session.token, rememberMe),
     ]);
   } catch (error) {
     const response = mfaErrorResponse(error, locale);

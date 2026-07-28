@@ -9,8 +9,15 @@ export type OtpReservationResult =
   | {
     status: "blocked";
     latestActiveCreatedAt: string | null;
+    verificationLockedUntil: string | null;
+    emailHourlyCount: number;
+    ipHourlyCount: number;
+    /** @deprecated Use emailHourlyCount. Retained for source compatibility. */
     hourlyCount: number;
   };
+
+export const OTP_EMAIL_HOURLY_LIMIT = 5;
+export const OTP_IP_HOURLY_LIMIT = 20;
 
 type LookupColumns = {
   legacy: string;
@@ -59,7 +66,7 @@ export async function reserveOtpChallenge(
     requestIp: string | null;
     purpose: "login" | "register";
     locale: "ru" | "uz";
-    accountType: "individual" | "business";
+    accountType: "individual" | "entrepreneur" | "lawyer";
     codeSalt: string;
     code: string;
     expiresAt: string;
@@ -97,13 +104,22 @@ export async function reserveOtpChallenge(
         evidence.requestIpEvidence,
       )
     : null;
-  const requesterPredicate = ipPredicate
-    ? `(${emailPredicate.sql} OR ${ipPredicate.sql})`
-    : emailPredicate.sql;
-  const requesterBindings = [
-    ...emailPredicate.bindings,
-    ...(ipPredicate?.bindings ?? []),
-  ];
+  const ipHourlyGate = ipPredicate
+    ? `AND (
+        SELECT count(*)
+        FROM auth_otp_challenges
+        WHERE created_at > ?
+          AND ${ipPredicate.sql}
+      ) < ${OTP_IP_HOURLY_LIMIT}`
+    : "";
+  const ipHourlySnapshot = ipPredicate
+    ? `(
+          SELECT count(*)
+          FROM auth_otp_challenges
+          WHERE created_at > ?
+            AND ${ipPredicate.sql}
+        )`
+    : "0";
   const results = await db.batch([
     db.prepare(`
       INSERT INTO auth_otp_challenges (
@@ -131,16 +147,23 @@ export async function reserveOtpChallenge(
       WHERE NOT EXISTS (
         SELECT 1
         FROM auth_otp_challenges
+        WHERE verification_locked_until > ?
+          AND ${emailPredicate.sql}
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM auth_otp_challenges
         WHERE invalidated_at IS NULL
           AND created_at > ?
-          AND ${requesterPredicate}
+          AND ${emailPredicate.sql}
       )
       AND (
         SELECT count(*)
         FROM auth_otp_challenges
         WHERE created_at > ?
-          AND ${requesterPredicate}
-      ) < 8
+          AND ${emailPredicate.sql}
+      ) < ${OTP_EMAIL_HOURLY_LIMIT}
+      ${ipHourlyGate}
     `).bind(
       input.id,
       evidence.email,
@@ -159,10 +182,15 @@ export async function reserveOtpChallenge(
       evidence.requestIpEvidence?.lookupHash ?? null,
       evidence.requestIpEvidence?.lookupKeyVersion ?? null,
       input.now,
+      input.now,
+      ...emailPredicate.bindings,
       input.cooldownSince,
-      ...requesterBindings,
+      ...emailPredicate.bindings,
       input.hourlySince,
-      ...requesterBindings,
+      ...emailPredicate.bindings,
+      ...(ipPredicate
+        ? [input.hourlySince, ...ipPredicate.bindings]
+        : []),
     ),
     db.prepare(`
       UPDATE auth_otp_challenges
@@ -192,35 +220,54 @@ export async function reserveOtpChallenge(
           WHERE id = ?
         ) AS inserted,
         (
+          SELECT max(verification_locked_until)
+          FROM auth_otp_challenges
+          WHERE verification_locked_until > ?
+            AND ${emailPredicate.sql}
+        ) AS verificationLockedUntil,
+        (
           SELECT max(created_at)
           FROM auth_otp_challenges
           WHERE invalidated_at IS NULL
             AND created_at > ?
-            AND ${requesterPredicate}
+            AND ${emailPredicate.sql}
         ) AS latestActiveCreatedAt,
         (
           SELECT count(*)
           FROM auth_otp_challenges
           WHERE created_at > ?
-            AND ${requesterPredicate}
-        ) AS hourlyCount
+            AND ${emailPredicate.sql}
+        ) AS emailHourlyCount,
+        ${ipHourlySnapshot} AS ipHourlyCount
     `).bind(
       input.id,
+      input.now,
+      ...emailPredicate.bindings,
       input.cooldownSince,
-      ...requesterBindings,
+      ...emailPredicate.bindings,
       input.hourlySince,
-      ...requesterBindings,
+      ...emailPredicate.bindings,
+      ...(ipPredicate
+        ? [input.hourlySince, ...ipPredicate.bindings]
+        : []),
     ),
   ]);
   const snapshot = results[2]?.results[0] as {
     inserted?: number | boolean;
+    verificationLockedUntil?: string | null;
     latestActiveCreatedAt?: string | null;
-    hourlyCount?: number;
+    emailHourlyCount?: number;
+    ipHourlyCount?: number;
   } | undefined;
   if (snapshot?.inserted) return { status: "reserved" };
+  const emailHourlyCount = Number(snapshot?.emailHourlyCount ?? 0);
+  const ipHourlyCount = Number(snapshot?.ipHourlyCount ?? 0);
   return {
     status: "blocked",
     latestActiveCreatedAt: snapshot?.latestActiveCreatedAt ?? null,
-    hourlyCount: Number(snapshot?.hourlyCount ?? 0),
+    verificationLockedUntil: snapshot?.verificationLockedUntil ?? null,
+    emailHourlyCount,
+    ipHourlyCount,
+    hourlyCount: emailHourlyCount,
   };
 }

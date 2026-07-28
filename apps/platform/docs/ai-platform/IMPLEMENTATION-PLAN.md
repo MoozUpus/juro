@@ -1,12 +1,12 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-28
-Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified; portable backup/import, full browser/a11y/performance, Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint now includes source migrations `0022`–`0024`, atomic workspace-invitation claiming, independent OTP rate limits, a 15-minute verification lock, Turnstile source/client integration, 24-hour/30-day session persistence, structured onboarding, canonical localized auth/onboarding routes, and persona-preserving workspace selection. Portable backup/import, remote migrations `0022`–`0024`, live Turnstile/Resend, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
 - Extend the current working system; do not rewrite the document builder.
-- Treat `app.juro.uz` Sites v20 revision `4031078` as the preserved runtime baseline and the local `feature/juro-ai-platform` branch as the reconciled integration branch. It includes GitHub `main` through `a1c572e` via merge commit `702960e`. Remote draft PR #3 is still at `926ca1a` and does not contain the eight later local commits or current audit edits until they are intentionally committed and pushed.
+- Treat `app.juro.uz` Sites v20 revision `4031078` as the preserved runtime baseline and the local `feature/juro-ai-platform` branch as the reconciled integration branch. It includes GitHub `main` through `a1c572e` via merge commit `702960e`. Draft PR #3 tracks that feature branch; `8ab1693` is the base of this Phase 2 checkpoint, while current commit/push state must be read from Git.
 - Use additive, expand-contract migrations.
 - Prove each vertical slice through type-check, lint, unit/integration/security tests, build, artifact validation, secret scan, and staging smoke.
 - Never expose a feature as working when its provider, storage, queue, or authorization path is absent.
@@ -64,6 +64,33 @@ The existing Sites project cannot be used as staging: it has no preview URL and 
 
 ## Phase 2 — identity, workspaces, and policies
 
+Local checkpoint only; none of these statements is a staging or production claim:
+
+- workspace invitation acceptance is guarded by migration `0022` and one D1
+  batch; concurrent attempts have one winner, an existing owner is not
+  downgraded, and audit failure rolls the claim and membership effects back;
+- OTP request controls are independent at `5/email/hour` and `20/IP/hour`,
+  preserve keyed lookup-version buckets, and avoid treating a missing
+  `cf-connecting-ip` value as one shared identity;
+- migration `0023` records an immutable 15-minute verification lock when the
+  fifth wrong attempt exhausts a challenge and blocks replacement challenges
+  for the same email while the lock is active;
+- the request route and auth UI integrate Cloudflare Turnstile with the
+  `auth_otp` action and exact-host validation; live provider configuration and
+  delivery have not been exercised;
+- direct OTP and MFA completion use a 24-hour standard session or 30-day
+  remember-me session, with the cookie maximum age aligned to the persisted
+  absolute expiry; the existing seven-day idle cap still applies;
+- migration `0024` and the onboarding service require structured names,
+  normalized but explicitly unverified phone evidence, personal persona,
+  primary goal, and exact current policy digests while deterministically
+  preserving or creating one personal workspace;
+- canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
+  root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
+  and selecting a workspace no longer rewrites the stored persona;
+- the latest recorded successful local full suite is 288 tests: 25 rendered
+  route, 204 core, and 59 Cloudflare tests.
+
 Vertical slices:
 
 1. atomic OTP + Turnstile + independent rate limits + generic responses;
@@ -82,7 +109,8 @@ The two existing document-builder isolation defects are fixed in this phase befo
 
 Gate:
 
-- auth E2E and race tests pass;
+- local auth/race tests pass; remote migrations `0022`–`0024`, live
+  Turnstile/Resend, and protected staging full-HTTP E2E remain required;
 - cross-account/workspace leaks: zero;
 - privileged access requires 2FA;
 - staff assignment/event tables remain empty and the internal role-management
@@ -219,8 +247,8 @@ Then stop and request two separate explicit approvals: first for production depl
 ## Current blockers that do not stop local implementation
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
-2. Production D1 cannot be migrated before a verified external backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; `0005`–`0021` are local-only.
-3. Provider and security secrets are absent by name except `RESEND_API_KEY`; they must be entered directly in the Cloudflare/provider secret store, never in chat.
+2. Production D1 cannot be migrated before a verified external backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0021`; source migrations `0022`–`0024` are local-only.
+3. Provider and security secrets are absent by name except `RESEND_API_KEY`; `TURNSTILE_SECRET_KEY` and the environment-specific public `TURNSTILE_SITE_KEY` are not configured on the inspected surfaces. Required values must be entered directly in the Cloudflare/provider controls, never in chat. Real Turnstile and Resend delivery are unverified.
 4. Operator legal identity placeholders require owner-supplied approved legal details.
 5. Final RU/UZ policies and the legal-language priority rule require legal approval.
 6. Malware scanner and audio/video providers require selection only after adapter and privacy/cost evaluation.

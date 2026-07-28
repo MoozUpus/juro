@@ -14,6 +14,8 @@ type FrameworkEnv = PlatformJobEnv & {
   AI_PROVIDER_API_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  TURNSTILE_SECRET_KEY?: string;
+  TURNSTILE_SITE_KEY?: string;
   APP_URL?: string;
   PUBLIC_SITE_URL?: string;
   PAYMENT_PROVIDER?: string;
@@ -46,7 +48,7 @@ function withSecurityHeaders(response: Response, url: URL): Response {
   headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; upgrade-insecure-requests",
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; frame-src https://challenges.cloudflare.com; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; upgrade-insecure-requests",
   );
   if (url.protocol === "https:") headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });

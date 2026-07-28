@@ -10,12 +10,14 @@ import {
   Languages,
   LoaderCircle,
   RotateCcw,
+  Scale,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { TurnstileWidget } from "./TurnstileWidget";
 
-type AccountType = "individual" | "business";
+type AccountType = "individual" | "entrepreneur" | "lawyer";
 type Locale = "ru" | "uz";
 
 type Props = {
@@ -25,6 +27,7 @@ type Props = {
   returnTo?: string;
   otpEnabled: boolean;
   platformAuthEnabled: boolean;
+  turnstileSiteKey?: string;
 };
 
 type OtpResponse = {
@@ -44,6 +47,7 @@ function safeReturnPath(value?: string): string | null {
     const url = new URL(value, "https://app.juro.uz");
     if (url.origin !== "https://app.juro.uz") return null;
     if (["/login", "/register", "/signin-with-chatgpt", "/signout-with-chatgpt", "/callback"].includes(url.pathname)) return null;
+    if (/^\/(?:ru|uz)\/auth\/(?:login|register)\/?$/.test(url.pathname)) return null;
     return `${url.pathname}${url.search}${url.hash}`;
   } catch {
     return null;
@@ -57,6 +61,7 @@ export function AuthForm({
   returnTo,
   otpEnabled,
   platformAuthEnabled,
+  turnstileSiteKey,
 }: Props) {
   const [locale, setLocale] = useState<Locale>(initialLocale);
   const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
@@ -67,11 +72,13 @@ export function AuthForm({
   const [mfaCode, setMfaCode] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  const [companyName, setCompanyName] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [acceptPrivacy, setAcceptPrivacy] = useState(false);
   const [acceptPersonalData, setAcceptPersonalData] = useState(false);
   const [marketing, setMarketing] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileReset, setTurnstileReset] = useState(0);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [cooldown, setCooldown] = useState(0);
@@ -106,6 +113,12 @@ export function AuthForm({
 
   async function sendCode() {
     setError("");
+    if (!turnstileToken) {
+      setError(ru
+        ? "Дождитесь завершения проверки безопасности."
+        : "Xavfsizlik tekshiruvi tugashini kuting.");
+      return;
+    }
     setPending(true);
     try {
       const response = await fetch("/api/auth/request-otp", {
@@ -114,7 +127,13 @@ export function AuthForm({
           "content-type": "application/json",
           "x-juro-csrf": "1",
         },
-        body: JSON.stringify({ email, purpose: mode, locale, accountType }),
+        body: JSON.stringify({
+          email,
+          purpose: mode,
+          locale,
+          accountType,
+          turnstileToken,
+        }),
       });
       const data = await response.json() as OtpResponse;
       if (!response.ok || !data.challengeId) {
@@ -128,6 +147,8 @@ export function AuthForm({
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
+      setTurnstileToken("");
+      setTurnstileReset((value) => value + 1);
       setPending(false);
     }
   }
@@ -157,11 +178,11 @@ export function AuthForm({
           accountType,
           firstName,
           lastName,
-          companyName,
           acceptTerms,
           acceptPrivacy,
           acceptPersonalData,
           marketing,
+          rememberMe,
         }),
       });
       const data = await response.json() as OtpResponse;
@@ -197,7 +218,7 @@ export function AuthForm({
           "content-type": "application/json",
           "x-juro-csrf": "1",
         },
-        body: JSON.stringify({ code: mfaCode.trim(), locale }),
+        body: JSON.stringify({ code: mfaCode.trim(), locale, rememberMe }),
       });
       const data = await response.json() as OtpResponse;
       if (!response.ok || !data.redirectTo) {
@@ -245,7 +266,7 @@ export function AuthForm({
           </header>
           {platformAuthEnabled
             ? <Link className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Продолжить защищённый вход" : "Himoyalangan kirishni davom ettirish"}</Link>
-            : <p className="auth-error" role="status">{ru ? "Владелец проекта должен подключить RESEND_API_KEY и EMAIL_FROM." : "Loyiha egasi RESEND_API_KEY va EMAIL_FROM ni ulashi kerak."}</p>}
+            : <p className="auth-error" role="status">{ru ? "Владелец проекта должен подключить Resend и Cloudflare Turnstile через защищённое хранилище." : "Loyiha egasi Resend va Cloudflare Turnstile xizmatlarini himoyalangan saqlash orqali ulashi kerak."}</p>}
         </section>
       </main>
     );
@@ -270,25 +291,36 @@ export function AuthForm({
 
             {mode === "register" && (
               <>
-                <div className="auth-account-type" aria-label={ru ? "Тип пространства" : "Makon turi"}>
+                <div className="auth-account-type" aria-label={ru ? "Тип профиля" : "Profil turi"}>
                   <button type="button" className={accountType === "individual" ? "active" : ""} aria-pressed={accountType === "individual"} onClick={() => setAccountType("individual")}>
-                    <UserRound />{ru ? "Личное" : "Shaxsiy"}
+                    <UserRound />{ru ? "Физлицо" : "Jismoniy shaxs"}
                   </button>
-                  <button type="button" className={accountType === "business" ? "active" : ""} aria-pressed={accountType === "business"} onClick={() => setAccountType("business")}>
-                    <BriefcaseBusiness />{ru ? "Бизнес" : "Biznes"}
+                  <button type="button" className={accountType === "entrepreneur" ? "active" : ""} aria-pressed={accountType === "entrepreneur"} onClick={() => setAccountType("entrepreneur")}>
+                    <BriefcaseBusiness />{ru ? "ИП" : "Yakka tartibdagi tadbirkor"}
+                  </button>
+                  <button type="button" className={accountType === "lawyer" ? "active" : ""} aria-pressed={accountType === "lawyer"} onClick={() => setAccountType("lawyer")}>
+                    <Scale />{ru ? "Юрист" : "Yurist"}
                   </button>
                 </div>
                 <div className="auth-row">
                   <label>{ru ? "Имя" : "Ism"}<input value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 80))} required autoComplete="given-name" /></label>
                   <label>{ru ? "Фамилия" : "Familiya"}<input value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 80))} required autoComplete="family-name" /></label>
                 </div>
-                {accountType === "business" && (
-                  <label>{ru ? "Название организации" : "Tashkilot nomi"}<input value={companyName} onChange={(event) => setCompanyName(event.target.value.slice(0, 180))} required autoComplete="organization" /></label>
-                )}
               </>
             )}
 
             <label>Email<input ref={emailInput} type="email" value={email} onChange={(event) => setEmail(event.target.value.slice(0, 254))} required autoComplete="email" inputMode="email" placeholder="name@example.com" /></label>
+
+            <label className="auth-remember">
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(event) => setRememberMe(event.target.checked)}
+              />
+              <span>{ru
+                ? "Запомнить меня на этом устройстве на 30 дней"
+                : "Meni ushbu qurilmada 30 kun eslab qolish"}</span>
+            </label>
 
             {mode === "register" && (
               <div className="auth-consents">
@@ -299,7 +331,16 @@ export function AuthForm({
               </div>
             )}
 
-            <button className="auth-submit" disabled={pending} aria-busy={pending}>
+            {turnstileSiteKey && (
+              <TurnstileWidget
+                siteKey={turnstileSiteKey}
+                locale={locale}
+                resetSignal={turnstileReset}
+                onToken={setTurnstileToken}
+              />
+            )}
+
+            <button className="auth-submit" disabled={pending || !turnstileToken} aria-busy={pending}>
               {pending ? <LoaderCircle className="spin" aria-hidden="true" /> : <ArrowRight aria-hidden="true" />}
               {ru ? "Получить код" : "Kodni olish"}
             </button>
@@ -325,7 +366,15 @@ export function AuthForm({
               <button type="button" className="auth-back" onClick={() => { setStep("details"); setCode(""); setChallengeId(""); setError(""); }}>
                 {ru ? "Изменить email" : "Emailni o‘zgartirish"}
               </button>
-              <button type="button" className="auth-resend" onClick={() => void sendCode()} disabled={pending || cooldown > 0}>
+              {cooldown <= 0 && turnstileSiteKey && (
+                <TurnstileWidget
+                  siteKey={turnstileSiteKey}
+                  locale={locale}
+                  resetSignal={turnstileReset}
+                  onToken={setTurnstileToken}
+                />
+              )}
+              <button type="button" className="auth-resend" onClick={() => void sendCode()} disabled={pending || cooldown > 0 || !turnstileToken}>
                 <RotateCcw aria-hidden="true" />{cooldown > 0
                   ? (ru ? `Повторить через ${cooldown} с` : `${cooldown} s dan keyin`)
                   : (ru ? "Отправить код повторно" : "Kodni qayta yuborish")}
@@ -390,8 +439,8 @@ export function AuthForm({
         {error && <p className="auth-error" role="alert">{error}</p>}
         <div className="auth-switch">
           {mode === "register"
-            ? <>{ru ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href={`/login?lang=${locale}`}>{ru ? "Войти" : "Kirish"}</Link></>
-            : <>{ru ? "Нет аккаунта?" : "Hisob yo‘qmi?"} <Link href={`/register?lang=${locale}&accountType=${accountType}`}>{ru ? "Создать" : "Yaratish"}</Link></>}
+            ? <>{ru ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href={`/${locale}/auth/login`}>{ru ? "Войти" : "Kirish"}</Link></>
+            : <>{ru ? "Нет аккаунта?" : "Hisob yo‘qmi?"} <Link href={`/${locale}/auth/register?accountType=${accountType}`}>{ru ? "Создать" : "Yaratish"}</Link></>}
         </div>
         {platformAuthEnabled && <Link className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
           {ru ? "Войти через защищённую учётную запись" : "Himoyalangan hisob orqali kirish"}

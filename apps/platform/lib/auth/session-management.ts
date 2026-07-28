@@ -10,8 +10,8 @@ import { sessionTokenFromCookie } from "./session-token";
 import {
   batchWithSecurityEvent,
 } from "./security-events";
+import { sessionTtlSeconds } from "./session-persistence";
 
-const ABSOLUTE_TTL_MS = 30 * 24 * 60 * 60 * 1_000;
 const IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const TOUCH_INTERVAL_MS = 5 * 60 * 1_000;
 
@@ -165,6 +165,7 @@ export async function prepareLocalSessionCreation(
     userAgent: string | null;
     authMethod: string;
     assuranceLevel: LocalAssuranceLevel;
+    rememberMe?: boolean;
     now?: Date;
   },
 ): Promise<PreparedSessionCreation> {
@@ -174,7 +175,9 @@ export async function prepareLocalSessionCreation(
   const tokenHash = await sha256(token);
   const sessionId = crypto.randomUUID();
   const deviceId = crypto.randomUUID();
-  const expiresAt = dateAt(now.getTime() + ABSOLUTE_TTL_MS);
+  const expiresAt = dateAt(
+    now.getTime() + sessionTtlSeconds(input.rememberMe ?? false) * 1_000,
+  );
   const idleExpiresAt = cappedIdleExpiry(now.getTime(), expiresAt);
   const displayName = deviceDisplayName(input.userAgent);
   // A raw SHA-256 of a user agent is a stable fingerprint. Keep this empty
@@ -231,6 +234,7 @@ export async function createEmailOtpSession(
   input: {
     userId: string;
     userAgent: string | null;
+    rememberMe?: boolean;
     now?: Date;
   },
 ): Promise<CreatedSession> {
@@ -266,6 +270,7 @@ export async function createPrimarySessionIfMfaDisabled(
   input: {
     userId: string;
     userAgent: string | null;
+    rememberMe?: boolean;
     now?: Date;
   },
 ): Promise<CreatedSession | null> {

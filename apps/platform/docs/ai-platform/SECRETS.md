@@ -7,7 +7,7 @@ Status: names, contracts, and read-only presence inventory only; no secret value
 
 The production Sites runtime exposes variables `APP_URL`, `EMAIL_FROM`, and `PUBLIC_SITE_URL`, plus a secret binding named `RESEND_API_KEY`. The inspected legacy production Worker also exposes `EMAIL_FROM` and only `RESEND_API_KEY` among the required secret bindings.
 
-No inspected production surface exposed the following required names: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `OTP_HASH_SECRET`, `CRON_SECRET`, `TURNSTILE_SECRET_KEY`, `TOTP_ENCRYPTION_KEY`, or `SIGNED_URL_SECRET`.
+No inspected production surface exposed the following required names: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `OTP_HASH_SECRET`, `CRON_SECRET`, `TURNSTILE_SECRET_KEY`, `TOTP_ENCRYPTION_KEY`, or `SIGNED_URL_SECRET`. The public environment variable `TURNSTILE_SITE_KEY` was also absent from the inspected surfaces.
 
 Only names were inventoried. A Sites connector operation unexpectedly returned a bypass bearer token in raw connector telemetry. The value was not copied, used, persisted, or committed and is intentionally absent from this document. It must be rotated/revoked before production work.
 
@@ -99,6 +99,23 @@ The last three provider/integration values are optional until the corresponding 
 
 Provider secrets must remain separate per environment and may not use
 `NEXT_PUBLIC_*`.
+
+## Turnstile binding contract
+
+- `TURNSTILE_SECRET_KEY` is a required server-only secret for OTP request
+  verification. It must never be rendered into HTML, serialized to client
+  code, logged, or stored in D1.
+- `TURNSTILE_SITE_KEY` is required public environment configuration for the
+  client widget. It is not a secret, but it must still be isolated by
+  environment and paired with the correct hostname/provider configuration.
+- the OTP request endpoint also requires `RESEND_API_KEY` and `EMAIL_FROM`;
+  login/register expose the OTP flow only when the server delivery and both
+  Turnstile bindings are configured;
+- server validation uses Cloudflare Siteverify, requires action `auth_otp` and
+  an exact expected hostname, and fails closed on invalid, malformed,
+  unavailable, or timed-out verification;
+- neither Turnstile binding is configured on the inspected live surfaces, and
+  no real Turnstile or Resend mailbox flow has been verified in staging.
 
 Model names, feature flags, URLs, and email sender identities are server-side variables/configuration, not secrets. They still require environment isolation and must not contain credentials.
 

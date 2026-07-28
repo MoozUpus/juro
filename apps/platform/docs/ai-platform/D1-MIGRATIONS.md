@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
 Updated: 2026-07-28
-Latest source migration: `0021_supreme_albert_cleary.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0021` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks.
+Latest source migration: `0024_parched_catseye.sql`
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0024` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0024` have not been applied remotely.
 
 ## Migration policy
 
@@ -244,6 +244,52 @@ and event insertion share one D1 batch; a chain race retries against the new
 head, while an assignment race has one winner. No checked-in route, Worker,
 job, or UI imports this service.
 
+## Migration 0022
+
+`0022_workspace_invitation_claim.sql` adds the atomic workspace-invitation
+acceptance fence without deleting or rewriting existing invitation rows. It:
+
+- adds nullable `workspace_invitations.acceptance_claim_id`;
+- creates a unique partial index for non-null claim identifiers;
+- requires `accepted_at` and `acceptance_claim_id` to be present or absent
+  together on insert/update;
+- makes both fields immutable after a claim has been recorded.
+
+The acceptance service uses one D1 batch. A guarded `UPDATE ... RETURNING`
+claims only the exact token and invitation identity evidence while the row is
+unaccepted, unrevoked, and unexpired. Membership activation, default-workspace
+selection, and the deterministic `workspace-invitation:<id>:accepted` audit
+event are all conditional on that exact claim. An existing `owner` role is
+preserved rather than downgraded by an invitation. The immutable claim is not
+a general tamper-evident replacement for `workspace_audit_events`.
+
+## Migration 0023
+
+`0023_otp_verification_lock.sql` adds the verification-abuse lock without
+changing an existing challenge's default behavior. It:
+
+- adds nullable `auth_otp_challenges.verification_locked_until`;
+- adds legacy-email and keyed-email lookup indexes for active locks;
+- permits a lock only when `attempt_count >= max_attempts`;
+- makes a non-null lock timestamp immutable.
+
+The local verification service sets the lock atomically when the fifth wrong
+attempt exhausts the default five-attempt challenge. The lock expires after 15
+minutes, is returned as a distinct unavailable state with retry timing, and
+prevents reservation of a replacement challenge for the same email while
+active. Independent hourly request limits are application logic, not new
+columns in this migration.
+
+## Migration 0024
+
+`0024_parched_catseye.sql` is an additive onboarding-profile expansion. It
+adds nullable `last_name`, `first_name`, `middle_name`,
+`phone_verified`, and `phone_verified_at` columns to `user_profiles`, plus a
+database guard that prevents contradictory phone-verification evidence. It
+does not backfill an asserted name, change an existing `account_type`, or
+claim that legacy phone numbers were verified. Existing profiles remain
+compatible with all new fields unset.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -251,7 +297,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0021` with foreign keys enabled;
+- apply migrations `0000`–`0024` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -320,13 +366,33 @@ subject-MFA enforcement, self-grant denial, expired-role denial,
 self-deprovisioning, one-winner concurrent grants, and rollback when event
 insertion fails.
 
+Migration 0022 tests additionally prove additive-only SQL, snapshot/index
+agreement, preservation of pre-existing invitation rows, completeness and
+immutability guards, one-winner concurrent acceptance, owner-role
+preservation, stale identity-evidence rejection, and rollback of claim,
+membership/default-workspace, and audit effects when the batch fails.
+
+Migration 0023 tests additionally prove additive-only SQL, snapshot/index
+agreement, preservation of pre-existing challenge rows, rejection of a lock
+before attempt exhaustion, immutability of the lock timestamp, the fifth
+wrong-attempt lock, and refusal of a new challenge during the 15-minute lock.
+
+Migration 0024 tests additionally prove additive-only SQL, snapshot/journal
+agreement, preservation of existing account personas and profiles, explicit
+unverified phone defaults, and rejection of partial or contradictory phone
+verification evidence. Onboarding service tests cover strict bounded input,
+exact current policy digests, deterministic one-personal-workspace creation,
+concurrent completion, and preservation of existing business workspaces.
+
 The full local migration sequence changes the SQLite table count from 79 to
-97 and reports zero foreign-key integrity errors. This is compatibility
-evidence for the checked-in migration sequence. Remote production and
-development each report 61 non-internal tables and ledger entries only through
-`0004`. Isolated staging now reports those 97 application/non-internal tables
-plus `d1_migrations`, the exact `0000`–`0021` ledger, 275 schema objects,
-`PRAGMA quick_check = ok`, and zero foreign-key violations.
+97 and reports zero foreign-key integrity errors; migrations `0022`–`0024`
+alter existing tables and add indexes/triggers rather than tables. This is
+compatibility evidence for the checked-in `0000`–`0024` sequence. Remote
+production and development each report 61 non-internal tables and ledger
+entries only through `0004`. Isolated staging reports those 97
+application/non-internal tables plus `d1_migrations`, the exact
+`0000`–`0021` ledger, 275 schema objects, `PRAGMA quick_check = ok`, and zero
+foreign-key violations. It does not contain `0022`, `0023`, or `0024`.
 
 ## Staging bootstrap evidence and remaining procedure
 
@@ -345,7 +411,8 @@ and accepted the same statement with LF. Repository-root `.gitattributes` now
 pins `apps/platform/drizzle/*.sql text eol=lf`. No checked-in migration content
 was rewritten.
 
-This is staging schema-bootstrap evidence only. Portable SQL export/import,
+This is staging schema-bootstrap evidence only; local migrations `0022`,
+`0023`, and `0024` remain pending. Portable SQL export/import,
 protected backup-object evidence, application/runtime binding, row-level
 business invariants, and RTO remain unverified. Before application enablement
 or any further staging migration:
@@ -382,6 +449,15 @@ or any further staging migration:
     provider batch, one-winner D1 confirmation, canonical identity rotation,
     current-session preservation, other-session/device revocation, and
     old/new challenge invalidation without logging addresses or codes;
-17. retain the backup until the release window and restore test are complete.
+17. apply and verify `0022`, then repeat workspace-invitation one-winner,
+    identity-binding, owner-role preservation, expiry/revocation, and audit
+    rollback tests through the full staging HTTP boundary;
+18. apply and verify `0023`, then repeat fifth-failure/15-minute-lock,
+    replacement-challenge denial, independent email/IP rate limits, and
+    concurrency tests through the full staging HTTP boundary;
+19. apply and verify `0024`, then repeat structured profile completion,
+    exact policy-digest validation, personal-workspace idempotency and
+    concurrent onboarding through the full staging HTTP boundary;
+20. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

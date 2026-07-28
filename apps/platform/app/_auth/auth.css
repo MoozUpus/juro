@@ -156,6 +156,20 @@
   box-shadow: 0 0 0 3px rgba(178, 135, 62, .14);
 }
 
+.auth-card .auth-remember {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.auth-card .auth-remember input {
+  min-height: auto;
+  margin-top: 2px;
+}
+
 .auth-row,
 .auth-account-type {
   display: grid;
@@ -165,6 +179,7 @@
 
 .auth-account-type {
   gap: 10px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .auth-account-type button {
@@ -178,6 +193,8 @@
   background: #f8f9fb;
   color: #263653;
   font-weight: 750;
+  line-height: 1.25;
+  text-align: center;
 }
 
 .auth-account-type button.active {
@@ -283,6 +300,28 @@
 
 .auth-resend svg {
   width: 16px;
+}
+
+.auth-turnstile {
+  display: grid;
+  width: 100%;
+  min-height: 44px;
+  gap: 6px;
+  margin: 14px 0;
+}
+
+.auth-turnstile > div:first-child {
+  width: 100%;
+}
+
+.auth-turnstile-status {
+  color: #5c687c;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.auth-code-actions .auth-turnstile {
+  grid-column: 1 / -1;
 }
 
 .auth-error {

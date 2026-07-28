@@ -10,6 +10,7 @@ import {
 import {
   parseJsonRequest,
   requestOtpInputSchema,
+  verifyMfaInputSchema,
   verifyOtpInputSchema,
 } from "../lib/auth/input";
 import { consumeOtpChallenge } from "../lib/auth/otp-challenge";
@@ -138,6 +139,7 @@ function databaseFixture(): {
       expires_at TEXT NOT NULL,
       consumed_at TEXT,
       invalidated_at TEXT,
+      verification_locked_until TEXT,
       account_type TEXT NOT NULL,
       request_ip_hash TEXT,
       request_ip_lookup_hash TEXT,
@@ -355,7 +357,7 @@ test("OTP rate limits match retained lookup-key versions", async () => {
   }
 });
 
-test("OTP hourly limit counts invalidated provider failures", async () => {
+test("OTP email hourly limit counts invalidated provider failures", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {
     const legacyEmailHash = await sha256("user@example.test");
@@ -370,7 +372,7 @@ test("OTP hourly limit counts invalidated provider failures", async () => {
         '2026-07-26T12:10:00.000Z', NULL,
         '2026-07-26T11:30:00.000Z', ?, ?)
     `);
-    for (let index = 0; index < 8; index += 1) {
+    for (let index = 0; index < 5; index += 1) {
       insert.run(
         `failed-${index}`,
         legacyEmailHash,
@@ -380,13 +382,62 @@ test("OTP hourly limit counts invalidated provider failures", async () => {
     }
     const result = await reserveOtpChallenge(d1, reservationInput());
     assert.equal(result.status, "blocked");
-    if (result.status === "blocked") assert.equal(result.hourlyCount, 8);
+    if (result.status === "blocked") {
+      assert.equal(result.emailHourlyCount, 5);
+      assert.equal(result.ipHourlyCount, 5);
+      assert.equal(result.hourlyCount, 5);
+    }
     assert.equal(
       (
         sqlite.prepare("SELECT count(*) AS total FROM auth_otp_challenges")
           .get() as { total: number }
       ).total,
-      8,
+      5,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("OTP IP hourly limit is independent across email buckets", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    const legacyIpHash = await sha256("203.0.113.8");
+    const insert = sqlite.prepare(`
+      INSERT INTO auth_otp_challenges (
+        id, email, email_hash, purpose, locale, account_type, code_salt,
+        code_hash, attempt_count, max_attempts, expires_at, consumed_at,
+        invalidated_at, request_ip_hash, created_at
+      ) VALUES (?, ?, ?, 'login', 'ru',
+        'individual', 'salt', 'hash', 0, 5,
+        '2026-07-26T12:10:00.000Z', NULL,
+        '2026-07-26T11:30:00.000Z', ?, ?)
+    `);
+    for (let index = 0; index < 20; index += 1) {
+      const email = `user-${index}@example.test`;
+      insert.run(
+        `ip-failed-${index}`,
+        email,
+        await sha256(email),
+        legacyIpHash,
+        `2026-07-26T11:${String(30 + index).padStart(2, "0")}:00.000Z`,
+      );
+    }
+
+    const result = await reserveOtpChallenge(d1, reservationInput({
+      email: "fresh@example.test",
+    }));
+    assert.equal(result.status, "blocked");
+    if (result.status === "blocked") {
+      assert.equal(result.emailHourlyCount, 0);
+      assert.equal(result.ipHourlyCount, 20);
+    }
+    assert.equal(
+      (
+        sqlite.prepare("SELECT count(*) AS total FROM auth_otp_challenges")
+          .get() as { total: number }
+      ).total,
+      20,
     );
   } finally {
     sqlite.close();
@@ -434,6 +485,7 @@ test("OTP JSON contracts reject type confusion, extra keys, and large bodies", a
         purpose: "login",
         locale: "ru",
         accountType: "individual",
+        turnstileToken: "test-turnstile-token",
       }),
     }),
     requestOtpInputSchema,
@@ -465,6 +517,59 @@ test("OTP JSON contracts reject type confusion, extra keys, and large bodies", a
   assert.deepEqual(oversized, { ok: false, error: "payload_too_large" });
 });
 
+test("session persistence inputs default safely and reject malformed values", async () => {
+  const verifyBody = {
+    challengeId: "f4fe0582-f957-42f6-aa89-81a39d184ef8",
+    email: "user@example.test",
+    code: "123456",
+    purpose: "login",
+    locale: "ru",
+  };
+  const standard = await parseJsonRequest(
+    new Request("https://app.juro.uz/api/auth/verify-otp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(verifyBody),
+    }),
+    verifyOtpInputSchema,
+  );
+  assert.equal(standard.ok, true);
+  if (standard.ok) assert.equal(standard.data.rememberMe, false);
+
+  const remembered = await parseJsonRequest(
+    new Request("https://app.juro.uz/api/auth/verify-otp", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...verifyBody, rememberMe: true }),
+    }),
+    verifyOtpInputSchema,
+  );
+  assert.equal(remembered.ok, true);
+  if (remembered.ok) assert.equal(remembered.data.rememberMe, true);
+
+  for (const rememberMe of ["true", 1, null]) {
+    const malformedOtp = await parseJsonRequest(
+      new Request("https://app.juro.uz/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ ...verifyBody, rememberMe }),
+      }),
+      verifyOtpInputSchema,
+    );
+    assert.deepEqual(malformedOtp, { ok: false, error: "invalid_input" });
+
+    const malformedMfa = await parseJsonRequest(
+      new Request("https://app.juro.uz/api/auth/verify-mfa", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ code: "123456", locale: "ru", rememberMe }),
+      }),
+      verifyMfaInputSchema,
+    );
+    assert.deepEqual(malformedMfa, { ok: false, error: "invalid_input" });
+  }
+});
+
 test("concurrent wrong OTP requests cannot overshoot the attempt budget", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {
@@ -484,18 +589,48 @@ test("concurrent wrong OTP requests cannot overshoot the attempt budget", async 
       4,
     );
     assert.equal(
-      results.filter(({ status }) => status === "attempts_exceeded").length,
+      results.filter(({ status }) => status === "locked").length,
       4,
     );
+    const row = sqlite.prepare(`
+      SELECT
+        attempt_count AS attemptCount,
+        verification_locked_until AS verificationLockedUntil
+      FROM auth_otp_challenges
+      WHERE id = ?
+    `).get(challenge.id) as {
+      attemptCount: number;
+      verificationLockedUntil: string | null;
+    };
+    assert.equal(row.attemptCount, 5);
+    assert.equal(
+      row.verificationLockedUntil,
+      "2026-07-26T12:15:00.000Z",
+    );
+
+    const blockedReservation = await reserveOtpChallenge(
+      d1,
+      reservationInput({
+        id: "replacement-during-lock",
+        now: "2026-07-26T12:05:00.000Z",
+        cooldownSince: "2026-07-26T12:04:00.000Z",
+        hourlySince: "2026-07-26T11:05:00.000Z",
+      }),
+    );
+    assert.equal(blockedReservation.status, "blocked");
+    if (blockedReservation.status === "blocked") {
+      assert.equal(
+        blockedReservation.verificationLockedUntil,
+        "2026-07-26T12:15:00.000Z",
+      );
+    }
     assert.equal(
       (
-        sqlite.prepare(`
-          SELECT attempt_count AS attemptCount
-          FROM auth_otp_challenges
-          WHERE id = ?
-        `).get(challenge.id) as { attemptCount: number }
-      ).attemptCount,
-      5,
+        sqlite.prepare(
+          "SELECT count(*) AS total FROM auth_otp_challenges",
+        ).get() as { total: number }
+      ).total,
+      1,
     );
   } finally {
     sqlite.close();

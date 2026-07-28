@@ -9,6 +9,7 @@ import { localSessionFromCookie } from "./session-management";
 import type { LocalAssuranceLevel } from "./session-management";
 
 export { MFA_CHALLENGE_COOKIE, SESSION_COOKIE } from "./session-token";
+export { sessionCookie } from "./session-persistence";
 
 export type SessionUser = {
   email: string;
@@ -45,10 +46,6 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   } catch {
     return null;
   }
-}
-
-export function sessionCookie(token: string, maxAgeSeconds = 60 * 60 * 24 * 30): string {
-  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
 }
 
 export function clearSessionCookie(): string {

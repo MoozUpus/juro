@@ -2,6 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser, workspacesForUser } from "../../../../lib/platform/workspace";
+import { isPersonalAccountType } from "../../../../lib/platform/routing";
 
 function response(body: unknown, status = 200, accountType?: string) {
   const headers = new Headers({
@@ -34,10 +35,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   const db = requireD1();
   const target = await db.prepare(
-    `SELECT w.id,w.type,w.name,m.role
-     FROM workspace_members m JOIN workspaces w ON w.id=m.workspace_id
+    `SELECT w.id,w.type,w.name,m.role,p.account_type AS accountPersona
+     FROM workspace_members m
+     JOIN workspaces w ON w.id=m.workspace_id
+     JOIN user_profiles p ON p.user_id=m.user_id
      WHERE w.id=? AND m.user_id=? AND m.status='active' LIMIT 1`,
-  ).bind(body.workspaceId, user.id).first<{ id: string; type: string; name: string; role: string }>();
+  ).bind(body.workspaceId, user.id).first<{ id: string; type: string; name: string; role: string; accountPersona: string }>();
   if (!target) {
     return response({
       error: locale === "ru"
@@ -46,19 +49,24 @@ export const POST = withApiErrors(async function POST(request: Request) {
     }, 403);
   }
   const previous = await workspaceForUser(user);
-  const accountType = target.type === "business" ? "business" : "individual";
+  const accountType = target.type === "business"
+    ? "business"
+    : isPersonalAccountType(target.accountPersona)
+      ? target.accountPersona
+      : "individual";
   const now = isoNow();
   await db.batch([
     db.prepare(
-      "UPDATE user_profiles SET default_workspace_id=?,account_type=?,updated_at=? WHERE id=?",
-    ).bind(target.id, accountType, now, user.id),
+      "UPDATE user_profiles SET default_workspace_id=?,updated_at=? WHERE id=?",
+    ).bind(target.id, now, user.id),
     db.prepare(
       `INSERT INTO workspace_audit_events
        (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
        VALUES (?,?,?,'workspace',?,'workspace_selected',?,?)`,
     ).bind(crypto.randomUUID(), target.id, user.id, target.id, JSON.stringify({
       previousWorkspaceId: previous.id,
-      targetType: accountType,
+      targetWorkspaceType: target.type,
+      routeAccountType: accountType,
       role: target.role,
     }), now),
   ]);

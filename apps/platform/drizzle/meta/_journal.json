@@ -155,6 +155,27 @@
       "when": 1785098202222,
       "tag": "0021_supreme_albert_cleary",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "6",
+      "when": 1785256693282,
+      "tag": "0022_workspace_invitation_claim",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "6",
+      "when": 1785256722225,
+      "tag": "0023_otp_verification_lock",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "6",
+      "when": 1785258204108,
+      "tag": "0024_parched_catseye",
+      "breakpoints": true
     }
   ]
 }

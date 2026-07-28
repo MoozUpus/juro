@@ -11,7 +11,10 @@ export function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
 
 export function apiError(error: unknown): Response {
   if (error instanceof ApiAuthError) {
-    return jsonResponse({ error: error.message, code: "UNAUTHORIZED" }, { status: 401 });
+    return jsonResponse({
+      error: error.message,
+      code: error.status === 403 ? "FORBIDDEN" : "UNAUTHORIZED",
+    }, { status: error.status });
   }
   if (error instanceof ServiceUnavailableError) {
     return jsonResponse({ error: error.message, code: error.code }, { status: 503 });

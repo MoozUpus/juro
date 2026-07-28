@@ -224,6 +224,25 @@ test("pins only verified non-production D1 identifiers and excludes secrets", ()
   );
   assert.doesNotMatch(serialized, /"account_id"\s*:/i);
   assert.doesNotMatch(serialized, /"(?:api_key|secret|token)"\s*:/i);
+  for (const secretBinding of [
+    "OPENAI_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "RESEND_API_KEY",
+    "SESSION_SECRET",
+    "ENCRYPTION_KEY",
+    "OTP_HASH_SECRET",
+    "CRON_SECRET",
+    "TURNSTILE_SECRET_KEY",
+    "TOTP_ENCRYPTION_KEY",
+    "SIGNED_URL_SECRET",
+    "IDENTITY_KEYRING",
+  ]) {
+    assert.equal(
+      serialized.includes(`\"${secretBinding}\"`),
+      false,
+      `${secretBinding} must not be checked into Wrangler vars`,
+    );
+  }
 });
 
 test("does not attach legacy or premature queue contracts", () => {

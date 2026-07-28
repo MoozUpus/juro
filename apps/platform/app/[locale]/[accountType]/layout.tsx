@@ -1,6 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { requireChatGPTUser } from "../../chatgpt-auth";
-import { isAccountType, isLocale } from "../../../lib/platform/routing";
+import {
+  isAccountType,
+  isLocale,
+  workspaceTypeForAccountType,
+} from "../../../lib/platform/routing";
 import { PlatformShell } from "../../_platform/PlatformShell";
 import "../../_platform/platform-shell.css";
 import "../../_platform/global-search.css";
@@ -34,10 +38,25 @@ export default async function WorkspaceLayout({ children, params }: { children: 
   if (!profile) {
     profile = await workspaceProfile(user.email);
   }
-  if (profile && !profile.onboardingCompleted) redirect(`/onboarding?lang=${profile.locale}`);
+  if (profile && !profile.onboardingCompleted) {
+    redirect(`/${profile.locale}/onboarding`);
+  }
   const activeWorkspace = await workspaceForUser(userProfile);
-  if (activeWorkspace.type !== accountType) {
-    redirect(`/${profile?.locale ?? locale}/${activeWorkspace.type}/main`);
+  if (activeWorkspace.type !== workspaceTypeForAccountType(accountType)) {
+    const destination = activeWorkspace.type === "business"
+      ? "business"
+      : profile?.accountType === "business"
+        ? "individual"
+        : (profile?.accountType ?? "individual");
+    redirect(`/${profile?.locale ?? locale}/${destination}/main`);
+  }
+  if (
+    activeWorkspace.type === "individual"
+    && profile
+    && profile.accountType !== "business"
+    && profile.accountType !== accountType
+  ) {
+    redirect(`/${profile.locale}/${profile.accountType}/main`);
   }
   const availableWorkspaces = await workspacesForUser(userProfile.id);
   return <PlatformShell

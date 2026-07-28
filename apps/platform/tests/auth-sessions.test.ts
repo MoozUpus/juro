@@ -14,6 +14,7 @@ import {
   revokeOneSession,
   revokeSessions,
 } from "../lib/auth/session-management";
+import { sessionCookie } from "../lib/auth/session-persistence";
 
 type SqliteBinding = null | number | bigint | string;
 
@@ -350,8 +351,8 @@ test("email OTP session creation atomically stores device, primary assurance, an
     });
 
     assert.match(created.token, /^[A-Za-z0-9_-]{43}$/);
-    assert.equal(created.expiresAt, "2026-08-25T10:00:00.000Z");
-    assert.equal(created.idleExpiresAt, "2026-08-02T10:00:00.000Z");
+    assert.equal(created.expiresAt, "2026-07-27T10:00:00.000Z");
+    assert.equal(created.idleExpiresAt, "2026-07-27T10:00:00.000Z");
 
     const session = sessionRow(sqlite, created.sessionId);
     assert.equal(session.userId, "user-a");
@@ -403,6 +404,52 @@ test("email OTP session creation atomically stores device, primary assurance, an
   }
 });
 
+test("remember-me keeps cookie and persisted absolute expiry aligned", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    const now = new Date("2026-07-26T10:00:00.000Z");
+    const cases = [
+      {
+        rememberMe: false,
+        userId: "standard-session",
+        expiresAt: "2026-07-27T10:00:00.000Z",
+        idleExpiresAt: "2026-07-27T10:00:00.000Z",
+        maxAge: 86_400,
+      },
+      {
+        rememberMe: true,
+        userId: "remembered-session",
+        expiresAt: "2026-08-25T10:00:00.000Z",
+        idleExpiresAt: "2026-08-02T10:00:00.000Z",
+        maxAge: 2_592_000,
+      },
+    ] as const;
+
+    for (const expected of cases) {
+      insertUser(sqlite, expected.userId);
+      const created = await createEmailOtpSession(d1, {
+        userId: expected.userId,
+        userAgent: "Browser/1.0",
+        rememberMe: expected.rememberMe,
+        now,
+      });
+      const persisted = sessionRow(sqlite, created.sessionId);
+      assert.equal(created.expiresAt, expected.expiresAt);
+      assert.equal(created.idleExpiresAt, expected.idleExpiresAt);
+      assert.equal(persisted.expiresAt, expected.expiresAt);
+      assert.equal(persisted.idleExpiresAt, expected.idleExpiresAt);
+      assert.match(
+        sessionCookie(created.token, expected.rememberMe),
+        new RegExp(`(?:^|; )Max-Age=${expected.maxAge}(?:;|$)`),
+      );
+    }
+
+    assert.match(sessionCookie("token"), /(?:^|; )Max-Age=86400(?:;|$)/);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("active lookup enforces idle and absolute expiry and throttles session/device touch", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {
@@ -411,6 +458,7 @@ test("active lookup enforces idle and absolute expiry and throttles session/devi
     const created = await createEmailOtpSession(d1, {
       userId: "user-a",
       userAgent: "Mozilla/5.0 (X11; Linux x86_64) Firefox/128.0",
+      rememberMe: true,
       now: createdAt,
     });
     const cookie = `juro_session=${created.token}`;

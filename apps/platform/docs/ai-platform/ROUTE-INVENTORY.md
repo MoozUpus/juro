@@ -2,7 +2,7 @@
 
 Audit date: 2026-07-28
 Production Sites revision: `4031078` (v20)
-Integration branch baseline: `1d3d23d` before this documentation update
+Integration branch baseline: remote `8ab1693` plus the current local Phase 2 checkpoint
 
 This inventory distinguishes actual routes from target routes. An entry marked `missing` is not represented as working.
 
@@ -12,22 +12,22 @@ Production routing is split: `app.juro.uz` serves Sites v20, while `admin.juro.u
 
 | Current URL | Target URL | Action | Code | Reason / test result |
 |---|---|---|---:|---|
-| `/` | `/uz/auth/login`, `/uz/onboarding`, or `/uz/individual/dashboard` | replace conditional redirect | 307 | Current guest redirect is `/login`; target behavior is missing |
-| `/login` | `/:locale/auth/login` | retain temporarily, redirect after migration | 308 | Existing production entry; localized target absent |
-| `/register` | `/:locale/auth/login` | retain temporarily | 308 | Registration is part of OTP flow |
-| `/:locale/login` | `/:locale/auth/login` | migrate redirect | 308 | Currently redirects back to unlocalized `/login` |
-| `/:locale/register` | `/:locale/auth/login` | migrate redirect | 308 | Currently redirects back to unlocalized `/register` |
-| `/onboarding` | `/:locale/onboarding` | migrate with state preservation | 308 | Current locale is query/profile based |
-| `/main` | `/:locale/:accountType/dashboard` | migrate | 308 | Current post-login destination |
+| `/` | `/uz/auth/login`, `/uz/onboarding`, or localized persona `/main` | implemented locally; production unchanged | 307 | Local guest/default-onboarding behavior is Uzbek; completed profiles retain saved locale/persona; `/dashboard` rename remains pending |
+| `/login` | `/:locale/auth/login` | retain as compatibility surface | — | Canonical RU/UZ auth pages now exist locally; unlocalized page remains for inbound links |
+| `/register` | `/:locale/auth/register` | retain as compatibility surface | — | Canonical RU/UZ registration pages now exist locally |
+| `/:locale/login` | `/:locale/auth/login` | implemented locally | 308 | Preserves a safe `returnTo` |
+| `/:locale/register` | `/:locale/auth/register` | implemented locally | 308 | Preserves safe `accountType` and `returnTo` |
+| `/onboarding` | `/:locale/onboarding` | localized route implemented locally; compatibility page retained | — | Canonical route uses URL locale and protected onboarding state |
+| `/main` | `/:locale/:accountType/dashboard` | pending route migration | 308 | Local compatibility entry now routes by saved locale/persona but canonical modules still use `/main` |
 
-Root defaults to Russian when locale/profile input is absent; the target default is Uzbek.
+Production still defaults through its older unlocalized flow. The local integration branch now defaults unauthenticated root and incomplete onboarding to Uzbek; completed profiles retain their saved locale.
 
 ## Current canonical platform routes
 
 The dynamic platform router currently permits:
 
 - locales: `ru`, `uz`;
-- account types: `individual`, `business`;
+- account types: `individual`, `entrepreneur`, `lawyer`, `business`;
 - modules: `main`, `ai-chat`, `cases`, `document-review`, `monitoring`, `action-plan`, `consultations`, `history`, `archive`, `team`, `billing`, `security`, `help`, `profile`, `settings`.
 
 Current route shells:

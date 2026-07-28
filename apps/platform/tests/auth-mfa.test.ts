@@ -357,12 +357,14 @@ test("MFA login issues exactly one session and fences replay", async () => {
         token: challenge.token,
         code,
         userAgent: "Browser/3.0",
+        rememberMe: true,
         now,
       }),
       verifyLoginMfa(synchronized, keyring(), {
         token: challenge.token,
         code,
         userAgent: "Browser/3.0",
+        rememberMe: true,
         now,
       }),
     ]);
@@ -374,6 +376,13 @@ test("MFA login issues exactly one session and fences replay", async () => {
         WHERE auth_method='email_otp+totp'
       `).get() as { total: number }
     ).total, 2, "enrollment session plus exactly one login session");
+    assert.equal((
+      sqlite.prepare(`
+        SELECT expires_at AS expiresAt FROM auth_sessions
+        WHERE auth_method='email_otp+totp'
+        ORDER BY created_at DESC LIMIT 1
+      `).get() as { expiresAt: string }
+    ).expiresAt, "2026-08-25T12:03:30.000Z");
   } finally {
     sqlite.close();
   }

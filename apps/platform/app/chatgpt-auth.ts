@@ -89,7 +89,10 @@ export async function requireChatGPTUser(
   const user = await getChatGPTUser();
   if (user) return user;
   const safeReturnTo = safeRelativeReturnPath(returnTo);
-  redirect(`/login?returnTo=${encodeURIComponent(safeReturnTo)}`);
+  const locale = /^\/ru(?:\/|$)/.test(safeReturnTo) ? "ru" : "uz";
+  redirect(
+    `/${locale}/auth/login?returnTo=${encodeURIComponent(safeReturnTo)}`,
+  );
 }
 
 export function chatGPTSignInPath(returnTo: string): string {

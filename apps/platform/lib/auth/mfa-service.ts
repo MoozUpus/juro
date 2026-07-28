@@ -1046,6 +1046,7 @@ export async function verifyLoginMfa(
     token: string;
     code: string;
     userAgent: string | null;
+    rememberMe?: boolean;
     now?: Date;
   },
 ): Promise<{
@@ -1110,6 +1111,7 @@ export async function verifyLoginMfa(
       ? "email_otp+totp"
       : "email_otp+backup_code",
     assuranceLevel: "mfa",
+    rememberMe: input.rememberMe,
     now,
   });
   const factorGuard = factorConsumedGuard(

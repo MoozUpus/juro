@@ -51,6 +51,13 @@ export const userProfiles = sqliteTable(
     phoneKeyVersion: text("phone_key_version"),
     phoneLookupHash: text("phone_lookup_hash"),
     phoneLookupKeyVersion: text("phone_lookup_key_version"),
+    lastName: text("last_name"),
+    firstName: text("first_name"),
+    middleName: text("middle_name"),
+    phoneVerified: integer("phone_verified", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    phoneVerifiedAt: text("phone_verified_at"),
     locale: text("locale").notNull().default("ru"),
     accountType: text("account_type").notNull().default("individual"),
     companyName: text("company_name"),
@@ -106,11 +113,15 @@ export const workspaceInvitations = sqliteTable(
     role: text("role").notNull(),
     expiresAt: text("expires_at").notNull(),
     acceptedAt: text("accepted_at"),
+    acceptanceClaimId: text("acceptance_claim_id"),
     revokedAt: text("revoked_at"),
     ...timestamps,
   },
   (table) => [
     uniqueIndex("workspace_invitations_token_uidx").on(table.tokenHash),
+    uniqueIndex("workspace_invitations_acceptance_claim_uidx")
+      .on(table.acceptanceClaimId)
+      .where(sql`${table.acceptanceClaimId} IS NOT NULL`),
     index("workspace_invitations_workspace_idx").on(table.workspaceId, table.expiresAt),
     index("workspace_invitations_email_lookup_idx")
       .on(
@@ -584,6 +595,7 @@ export const authOtpChallenges = sqliteTable("auth_otp_challenges", {
   expiresAt: text("expires_at").notNull(),
   consumedAt: text("consumed_at"),
   invalidatedAt: text("invalidated_at"),
+  verificationLockedUntil: text("verification_locked_until"),
   requestIpHash: text("request_ip_hash"),
   requestIpLookupHash: text("request_ip_lookup_hash"),
   requestIpLookupKeyVersion: text("request_ip_lookup_key_version"),
@@ -594,6 +606,15 @@ export const authOtpChallenges = sqliteTable("auth_otp_challenges", {
     table.emailLookupKeyVersion,
     table.emailLookupHash,
     table.createdAt,
+  ),
+  index("auth_otp_email_verification_lock_idx").on(
+    table.emailHash,
+    table.verificationLockedUntil,
+  ),
+  index("auth_otp_keyed_email_verification_lock_idx").on(
+    table.emailLookupKeyVersion,
+    table.emailLookupHash,
+    table.verificationLockedUntil,
   ),
   index("auth_otp_ip_created_idx").on(table.requestIpHash, table.createdAt),
   index("auth_otp_ip_lookup_created_idx").on(
