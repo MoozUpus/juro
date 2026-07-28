@@ -258,7 +258,9 @@ evidence-backed acceptance.
 
 Remote staging is at `0000`–`0028`; this establishes schema only. No legal
 source row, fetch request, normalized/raw evidence object, publication,
-Vectorize content, Worker, Queue attachment, route, DNS record, runtime secret,
-or production resource was created or changed by this checkpoint. The three
+Vectorize content, Queue consumer, route, DNS record, runtime secret, or
+production resource was created or changed by this checkpoint. The inactive
+staging Worker binds the empty indexes/R2/D1 and seven Queue producers while
+all execution flags remain false. The three
 private R2 objects in `juro-staging-backups` are D1 migration exports, not
 legal-source evidence.

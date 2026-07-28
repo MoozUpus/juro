@@ -1,7 +1,7 @@
 # JURO Cloudflare resources
 
 Updated: 2026-07-29
-Status: owner-approved Wrangler OAuth is active for staging operations. The isolated staging D1 is migrated through `0028`; portable exports, private R2 backup retrieval, and isolated local restore checks are recorded. Development/staging R2 targets, Queue + DLQ sets, and Vectorize indexes exist. The staging Worker, route, DNS record, secret set, consumer, schedule, vector content, and public staging URL do not yet exist. Production resources, traffic, Sites versions, and deployments were not changed.
+Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0028`; portable exports, private R2 retrieval, and isolated local restore checks are recorded. Inactive Worker `juro-platform-staging` is deployed from pushed commit `29a3d9a`: subdomain/previews are disabled, routes/schedules/consumers/secrets are empty, all runtime flags are false, and no public staging URL exists. Staging resource bindings and seven Queue producer bindings are attached. Production resources, traffic, Sites v20, and legacy Worker deployment were re-read unchanged.
 
 ## Verified control-plane identity
 
@@ -60,7 +60,7 @@ The owner-approved target names differ from the older source/runtime names:
 
 Eight development-only queues also remain under the older `juro-*-development` naming convention: AI jobs, file jobs, document jobs, legal sync, email jobs, notification jobs, cleanup jobs, and backup jobs. Each reports zero producers, zero consumers, 24-hour retention, and no verified live DLQ/redrive path. Those legacy names have no staging or production counterparts.
 
-The task-specific development/staging v2 queues and distinct DLQ resources now exist. Every row below was re-read with 86,400-second retention, zero producers, and zero consumers:
+The task-specific development/staging v2 queues and distinct DLQ resources now exist. Every row below was re-read with 86,400-second retention. Development and every DLQ have zero producers/consumers; each staging primary has the single `juro-platform-staging` producer and zero consumers:
 
 | Environment | Purpose | Primary queue ID | DLQ ID |
 |---|---|---|---|
@@ -79,7 +79,7 @@ The task-specific development/staging v2 queues and distinct DLQ resources now e
 | Staging | data retention cleanup | `626ed10539354be1a1476fdd34a78993` | `2f7f59b8a2374616a210ed9dc8074caf` |
 | Staging | notifications | `d438df684a584891ac46a706bd8dc708` | `7ccbd9d4b02c41309af92a6692624a4d` |
 
-Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The local source declares seven producer bindings but no deployed Worker binding, no consumers, no DLQ attachment, and no malware producer. The first API attempt created `development-document-analysis` and then rejected an unsupported settings mutation with generic error `10013`; inventory proved the single partial creation, after which provisioning resumed idempotently without duplicates. The API-supported creation default remains 86,400 seconds; retry, backoff, delivery, and DLQ policies are not claimed until the real consumer is implemented and reviewed. Remote legacy development queues remain unchanged; any later cleanup is a separate reviewed operation.
+Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The inactive staging Worker attaches seven producer bindings; all execution flags are false and there is no consumer, DLQ attachment, schedule, or malware producer. The first API attempt created `development-document-analysis` and then rejected an unsupported settings mutation with generic error `10013`; inventory proved the single partial creation, after which provisioning resumed idempotently without duplicates. The API-supported creation default remains 86,400 seconds; retry, backoff, delivery, and DLQ policies are not claimed until a real consumer is implemented and reviewed. Remote legacy development queues remain unchanged; any later cleanup is a separate reviewed operation.
 
 ### Vectorize, scheduling, observability, and DNS
 
@@ -87,8 +87,8 @@ Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The local
 - Cron triggers: none.
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
-- All legacy and v2 development/staging queues have no producer or consumer binding.
-- Staging Worker, Worker route, runtime secrets, and deployed environment bindings: none. `juro-platform-staging` was queried after OAuth and does not exist.
+- Staging primary queues have one producer binding from `juro-platform-staging`; all DLQs, development queues, and every Queue consumer remain unattached.
+- Staging Worker exists as inactive deployment `e09462ba-b8e6-40fe-abd6-83893652abb9`, version `14d89ac0-19f5-4c0d-89f5-7db97a50bb44`. Script subdomain and previews are disabled; routes, schedules, and secrets are empty.
 - `staging.app.juro.uz`, `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz`: no DNS records.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 
@@ -96,7 +96,7 @@ The source declares the approved Vectorize bindings and exact names (`{environme
 
 ### Runtime bindings and secrets
 
-The production Worker exposes Assets, Images, D1, R2, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. Sites runtime revision 2 exposes `APP_URL`, `PUBLIC_SITE_URL`, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. The public Sites project is active at `app.juro.uz`, has no preview URL, and remains on saved version 20/source commit `40310786188eb545f224e906c2c9506c146a907c`. No production OpenAI, Anthropic, encryption, OTP-HMAC, Cron, Turnstile, TOTP-encryption, or signed-URL secret binding was verified. No staging Worker exists yet, so a staging secret inventory cannot exist yet.
+The production Worker exposes Assets, Images, D1, R2, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. Sites runtime revision 2 exposes `APP_URL`, `PUBLIC_SITE_URL`, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. The public Sites project is active at `app.juro.uz`, has no preview URL, and remains on saved version 20/source commit `40310786188eb545f224e906c2c9506c146a907c`. No production OpenAI, Anthropic, encryption, OTP-HMAC, Cron, Turnstile, TOTP-encryption, or signed-URL secret binding was verified. The staging Worker exposes only the reviewed staging resource/plain-text bindings and has an empty secret list.
 
 Only secret names were inventoried. A read-only Sites connector response unexpectedly exposed a bypass bearer token in connector telemetry. The value was not copied, used, stored, logged into the repository, or committed. It must be rotated/revoked before production work, and the raw connector operation must not be repeated.
 
@@ -222,7 +222,7 @@ Artifact validation proves:
 - the Sites manifest is unchanged;
 - the built Worker exposes all three module handlers.
 
-Dry-run validates deploy shape only. It does not prove that remote resources exist or are correctly attached. The control-plane evidence above separately proves the named D1/R2/Queue/DLQ/Vectorize inventory. Analytics Engine attachment, Worker bindings, consumer/DLQ policy, and staging deployment remain absent or unverified.
+Dry-run validates deploy shape only. The independent post-deploy control-plane read now proves the staging Worker version, exact binding names/types, Analytics Engine attachment, seven Queue producers, disabled subdomain/previews, and absence of routes, schedules, consumers, and secrets. Queue/DLQ execution policy, public staging routing, provider configuration, and authenticated HTTP behavior remain unverified.
 
 The ordinary `npm run build` intentionally selects development. A Sites
 checkpoint or deploy must use the dedicated production build path and prove
@@ -231,12 +231,12 @@ Until the Sites build pipeline is observed setting `CLOUDFLARE_ENV=production`
 or invoking `npm run build:production`, deployment is blocked.
 
 Wrangler is reproducibly pinned to `4.92.0`; the CLI reports a newer
-`4.114.0`. Upgrade compatibility must be tested as its own change rather than
+`4.115.0`. Upgrade compatibility must be tested as its own change rather than
 silently changing the verified deployment toolchain.
 
 ## Provisioning and deployment gates
 
-Before staging deployment:
+Completed inactive-deploy gates and remaining public-staging gates:
 
 1. preserve the locally verified v2 mapping recorded in `DECISIONS.md` and inventory legacy remote resources before additive cutover;
 2. resolve `app.juro.uz` ownership between Sites and the legacy Worker without changing production traffic;
@@ -248,9 +248,9 @@ Before staging deployment:
 8. require globally namespaced server-generated idempotency keys until a tenant-scoped composite key migration exists;
 9. prove the Sites production build command selects `CLOUDFLARE_ENV=production`;
 10. require zero null-workspace document and file rows after migration 0012;
-11. build and validate an inactive staging artifact with `workers_dev: false`, `preview_urls: false`, `routes: []`, no schedules/consumers, async/cron disabled, and no platform-header bypass;
-12. use the owner-approved local Wrangler OAuth session, never chat or Git credentials, then perform the first `deploy` only from a pushed and fully validated commit while the Worker has no public route; `versions upload` cannot create the first Worker;
-13. re-read the control plane and prove subdomain/previews disabled, no route/domain/schedule/consumer attachment, exact staging-only bindings, and unchanged production Worker/domain state;
+11. completed: built and validated the inactive staging artifact with `workers_dev: false`, `preview_urls: false`, `routes: []`, no schedules/consumers, async/cron disabled, and no platform-header bypass;
+12. completed: used owner-approved local Wrangler OAuth to deploy pushed, CI-green commit `29a3d9a` while the Worker had no public route;
+13. completed: re-read the control plane and proved subdomain/previews disabled, no route/domain/schedule/consumer/secret attachment, exact staging-only bindings, and unchanged Sites v20 plus legacy Worker deployment;
 14. provision a distinct staging hostname only after Cloudflare Access is configured and unauthenticated access is proven denied, because Sites has no preview surface;
 15. enter missing secret values only through an approved Cloudflare secret flow; never in chat, Git, docs, screenshots, or logs;
 16. keep production data, traffic, domains, and deployments unchanged.

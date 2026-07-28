@@ -9,9 +9,9 @@ foundation checkpoint.
 - migrations `0022`–`0028` are applied to `juro-staging` and the post-migration
   portable export/private-R2/local-restore checks pass; a disposable remote-D1
   import drill and measured recovery time remain unverified;
-- no staging Worker, route, DNS, deployed runtime binding, secret/configuration
-  set, or deployment has been verified; Wrangler OAuth is available only for
-  the approved staging work;
+- inactive staging Worker and exact staging bindings are verified; route, DNS,
+  runtime secret/configuration set, consumer, schedule, public staging URL, and
+  authenticated HTTP behavior remain absent or unverified;
 - `TURNSTILE_SECRET_KEY` and public `TURNSTILE_SITE_KEY` are absent from the
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain

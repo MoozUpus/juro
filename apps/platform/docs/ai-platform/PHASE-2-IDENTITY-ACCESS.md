@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-29
-Status: local identity/access foundations are implemented and partially verified. Isolated staging contains schema migrations through `0028`, including identity migrations `0022`–`0024`. Live providers, full-HTTP remote-D1 behavior, lifecycle gates, and a staging Worker/deployment remain unverified. Production was not changed.
+Status: local identity/access foundations are implemented and partially verified. Isolated staging contains schema migrations through `0028`, including identity migrations `0022`–`0024`. An inactive staging Worker is deployed without route/secrets; live providers, full-HTTP remote-D1 behavior, and lifecycle gates remain unverified. Production was not changed.
 
 ## Implemented
 
@@ -560,9 +560,9 @@ FROM platform_staff_role_events;
 - cleanup scheduling for expired pending credentials and consumed/invalidated
   MFA/deletion challenges remains inactive until the reviewed cleanup
   queue/Cron lifecycle is enabled;
-- no staging Worker, route, DNS, Turnstile binding, secret configuration, or
-  deployment has been verified; owner-approved Wrangler OAuth is active only
-  for staging work;
+- inactive staging Worker and staging-only resource bindings are verified;
+  route, DNS, Turnstile binding, secret configuration, and protected HTTP
+  deployment remain absent;
 - remote D1 race tests and authenticated full HTTP MFA/invitation/workspace
   E2E remain release gates;
 - production remains frozen pending the later explicit owner confirmation.

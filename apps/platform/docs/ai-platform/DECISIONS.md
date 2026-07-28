@@ -1132,3 +1132,31 @@ The successful additive prefix was not rolled back merely because the later
 migration initially failed. No production/development D1, production Worker,
 Sites version, route, domain, or secret was changed. This decision authorizes
 neither a production migration nor public staging routing.
+
+## D-056 — deploy the first staging Worker as an unreachable foundation
+
+Status: accepted and control-plane verified; public staging gate remains open
+Date: 2026-07-29
+
+After commit `29a3d9a` passed local type-check, lint, the 330-test suite,
+three-environment Cloudflare matrix, generated binding type check, explicit
+staging artifact validation, Drizzle schema check, refined secret scans, and
+both GitHub PR checks, pinned Wrangler `4.92.0` deployed
+`juro-platform-staging`.
+
+The deployment is intentionally unreachable: Worker subdomain and preview
+URLs are disabled; routes, DNS, schedules, Queue consumers, and secrets are
+empty. All async/Cron/legal-ingestion/staff-route flags are false, identity
+mode remains `legacy`, and no platform-header bypass exists. The Worker binds
+only isolated staging D1/R2/Vectorize/Analytics/Images/Assets resources and
+seven Queue producers. With runtime execution false and no consumer or public
+route, this is infrastructure attachment evidence, not functional staging HTTP
+or provider evidence.
+
+The control plane independently returned version
+`14d89ac0-19f5-4c0d-89f5-7db97a50bb44` and deployment
+`e09462ba-b8e6-40fe-abd6-83893652abb9`. Sites remained public version 20 with
+no preview URL; legacy Worker `juro` remained on version
+`91774ed4-72e9-47bb-b93a-a4208d490b24` and deployment
+`54aee3c6-39eb-4a16-ae59-c74418ae599f`. No production deployment, migration,
+route, domain, or resource mutation was authorized or performed.

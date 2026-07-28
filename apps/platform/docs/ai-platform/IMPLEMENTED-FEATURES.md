@@ -51,6 +51,7 @@ staging hostname.
 - `juro-production` and `juro-development` were not changed;
 - `LEGAL_SOURCE_STAFF_API_ENABLED=false` is pinned in development, staging,
   and production source/artifacts;
-- no staging Worker, route, DNS, Turnstile binding, secret configuration, or
-  deployment is verified;
+- inactive staging Worker version `14d89ac0-19f5-4c0d-89f5-7db97a50bb44`
+  is verified with staging-only bindings, no routes/schedules/consumers/secrets,
+  and all execution feature flags false;
 - live Turnstile and Resend delivery are unverified.

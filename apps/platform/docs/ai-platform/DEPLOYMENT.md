@@ -1,7 +1,7 @@
 # JURO deployment boundary
 
 Updated: 2026-07-29
-Status: staging foundation in progress; production deployment is not authorized.
+Status: inactive staging Worker foundation deployed; production deployment is not authorized.
 
 ## Production surfaces that must remain unchanged
 
@@ -25,7 +25,7 @@ bindings are `juro-staging`, `juro-staging-files`,
 Queue producers and four staging Vectorize indexes documented in
 `CLOUDFLARE-RESOURCES.md`.
 
-The first deployment remains deliberately unreachable:
+The first deployment is deliberately unreachable:
 
 - `workers_dev: false`;
 - `preview_urls: false`;
@@ -34,22 +34,27 @@ The first deployment remains deliberately unreachable:
 - no Queue consumer;
 - async runtime, legal ingestion, staff API, and Cron flags are false.
 
-This first deploy may create the Worker and attach staging-only bindings, but
-it is not a public staging release and cannot support HTTP smoke tests. A later
+This deploy created Worker `juro-platform-staging`, version
+`14d89ac0-19f5-4c0d-89f5-7db97a50bb44`, deployment
+`e09462ba-b8e6-40fe-abd6-83893652abb9`, from pushed/CI-green source commit
+`29a3d9a`. It attached staging-only bindings and seven Queue producers. A
+post-deploy API read proved an empty secret list, no routes, schedules, or
+consumers, and disabled Workers.dev subdomain/previews. It is not a public
+staging release and cannot support HTTP smoke tests. A later
 staging hostname requires a separately verified access boundary, runtime
 secrets entered directly in Cloudflare, and proof that unauthenticated access
 is denied.
 
 ## Required sequence
 
-1. Build and validate all environment artifacts from a clean pushed commit.
-2. Run type-check, lint, full tests, Cloudflare matrix validation, generated
+1. **Completed:** build and validate all environment artifacts from a clean pushed commit.
+2. **Completed:** run type-check, lint, full tests, Cloudflare matrix validation, generated
    binding type check, artifact validation, and secret scan.
-3. Confirm `juro-staging` has no pending migration and retain the private
+3. **Completed:** confirm `juro-staging` has no pending migration and retain the private
    pre/post checkpoint exports.
-4. Deploy `juro-platform-staging` with no route, preview URL, schedule, or
+4. **Completed:** deploy `juro-platform-staging` with no route, preview URL, schedule, or
    consumer.
-5. Re-read the Worker deployment, bindings, flags, routes, domains, schedules,
+5. **Completed:** re-read the Worker deployment, bindings, flags, routes, domains, schedules,
    Queue attachments, and secret names; prove production resources unchanged.
 6. Enter missing secret values directly through Cloudflare's approved secret
    UI/CLI flow. Secret values never enter chat, Git, documentation, logs, or
@@ -59,6 +64,11 @@ is denied.
 8. Run authenticated staging HTTP, browser, accessibility, security, and
    provider smoke tests.
 9. Keep feature flags false for every incomplete or unverified integration.
+
+The standalone `validate:artifact` task defaults to the development profile.
+Running it immediately after a staging build without an explicit
+`CLOUDFLARE_ENV=staging` correctly reports a development/staging name mismatch.
+The deploy gate uses the explicit staging environment; that rerun passed.
 
 ## Rollback
 
