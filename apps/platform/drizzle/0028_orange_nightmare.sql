@@ -25,19 +25,17 @@ CREATE TRIGGER `legal_source_publications_insert_guard`
 BEFORE INSERT ON `legal_source_publications`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN length(NEW.`review_evidence_sha256`) <> 64 OR
+  SELECT RAISE(ABORT, 'legal source publication hash evidence invalid')
+  WHERE length(NEW.`review_evidence_sha256`) <> 64 OR
          NEW.`review_evidence_sha256` GLOB '*[^0-9a-f]*' OR
          length(NEW.`raw_content_sha256`) <> 64 OR
          NEW.`raw_content_sha256` GLOB '*[^0-9a-f]*' OR
          length(NEW.`parsed_content_sha256`) <> 64 OR
          NEW.`parsed_content_sha256` GLOB '*[^0-9a-f]*' OR
-         length(NEW.`publication_evidence_sha256`) <> 64 OR
-         NEW.`publication_evidence_sha256` GLOB '*[^0-9a-f]*'
-    THEN RAISE(ABORT, 'legal source publication hash evidence invalid')
-  END;
-  SELECT CASE
-    WHEN NOT EXISTS (
+        length(NEW.`publication_evidence_sha256`) <> 64 OR
+        NEW.`publication_evidence_sha256` GLOB '*[^0-9a-f]*';
+  SELECT RAISE(ABORT, 'legal source publication review evidence invalid')
+  WHERE NOT EXISTS (
       SELECT 1 FROM `legal_review_queue` review
       WHERE review.`id` = NEW.`review_id`
         AND review.`source_id` = NEW.`source_id`
@@ -60,11 +58,9 @@ BEGIN
         AND source.`status` <> 'verified'
         AND source.`verification_state` <> 'verified'
         AND source.`content_sha256` = NEW.`raw_content_sha256`
-    )
-    THEN RAISE(ABORT, 'legal source publication review evidence invalid')
-  END;
-  SELECT CASE
-    WHEN COALESCE((
+    );
+  SELECT RAISE(ABORT, 'legal source publication canonical evidence invalid')
+  WHERE COALESCE((
       length(NEW.`publication_evidence_json`) BETWEEN 2 AND 8192 AND
       json_valid(NEW.`publication_evidence_json`) = 1 AND
       json_extract(NEW.`publication_evidence_json`, '$.schemaVersion') = 1 AND
@@ -127,9 +123,7 @@ BEGIN
           chunk.`vector_id` IS NOT NULL OR chunk.`indexed_at` IS NOT NULL
         )
       )
-    ), 0) = 0
-    THEN RAISE(ABORT, 'legal source publication canonical evidence invalid')
-  END;
+    ), 0) = 0;
 END;--> statement-breakpoint
 CREATE TRIGGER `legal_source_publications_immutable_guard`
 BEFORE UPDATE ON `legal_source_publications`

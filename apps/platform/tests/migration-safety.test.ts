@@ -163,6 +163,17 @@ test("remote D1 migrations retain LF line endings on every checkout", () => {
   }
 });
 
+test("remote D1 trigger guards avoid SELECT CASE raise syntax", () => {
+  for (const entry of journal.entries.filter(({ idx }) => idx >= 25)) {
+    const sql = migrationSql(entry);
+    assert.doesNotMatch(
+      sql,
+      /SELECT\s+CASE\b[\s\S]*?\bTHEN\s+RAISE\s*\(/i,
+      `${entry.tag}.sql uses trigger syntax rejected by remote D1 migration parsing`,
+    );
+  }
+});
+
 const expectedTables = [
   "backup_runs",
   "cleanup_runs",

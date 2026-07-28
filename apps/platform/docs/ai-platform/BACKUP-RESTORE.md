@@ -1,7 +1,7 @@
 # JURO backup and restore boundary
 
 Updated: 2026-07-28
-Status: bookkeeping schema implemented locally; empty-staging Time Travel restore/undo and the subsequent one-time verified-empty staging schema bootstrap through `0021` are verified; portable export retrieval, protected backup object, isolated SQL import/restore, R2 restore, and RTO remain unverified.
+Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, and isolated local SQL restore checks are verified through migration `0028`. A disposable remote-D1 import drill, scheduled backup automation, production protection, and an operational RTO remain unverified.
 
 ## What is not a backup
 
@@ -97,39 +97,39 @@ Outbox and job execution are at-least-once:
 
 Deletion of R2-backed content will require a tombstone/outbox flow so the object key remains recoverable until idempotent R2 deletion succeeds.
 
-## Current evidence and blocker
+## Current evidence and remaining recovery gate
 
-Verified locally:
+Wrangler OAuth was approved only for staging. Three portable SQL checkpoints
+were exported, hashed locally, uploaded to private `juro-staging-backups`,
+downloaded again, and compared byte-for-byte:
 
-- additive migration and foreign-key integrity;
-- backup/cleanup ledger schema;
-- source-to-artifact migration SHA-256 equality;
-- outbox retry/lease behavior in SQLite-backed tests.
+| Checkpoint | Protected object | Bytes | SHA-256 | Restored state |
+|---|---|---:|---|---|
+| before `0022`–`0028` | `d1/juro-staging/20260728T230035Z/pre-0022-0028.sql` | 98,760 | `fb388a77cd4c07af06a7bfb3950e91f69266d1938b66a711f3963fc352bc12bb` | 22 migrations; 99 non-internal tables; integrity `ok`; zero FK errors |
+| after `0022`–`0024`, before retry | `d1/juro-staging/20260728T231145Z/pre-0025-0028.sql` | 101,926 | `27180d625c96f13b370cfedc05d2c290531a9b9106b7ef063cd95f643434474e` | 25 migrations; 99 non-internal tables; integrity `ok`; zero FK errors |
+| after `0028` | `d1/juro-staging/20260728T231347Z/post-0028.sql` | 137,345 | `20e9d14e5eb279160eeebb59cd839882f3ff70afb758924a15bcd735965b981c` | 29 migrations; 107 non-internal tables; 58 triggers; integrity `ok`; zero FK errors |
 
-Verified remotely through the one-time verified-empty EEUR `juro-staging` exception only:
+The first checkpoint restored 325 SQL commands. Each restore used the exact
+downloaded bytes in a separate local SQLite database; no application data or
+signed export URL was printed or committed. The R2 objects are private and
+contain staging schema/data only. This proves portable bytes, protected-object
+retrieval, and local logical recoverability; it does not prove Cloudflare-side
+remote import time or production RTO.
 
-- captured pre-bootstrap bookmark `00000016-00000000-000050b6-d17b2ef8af450f78e2ba993d4272fe26`;
-- proved the synthetic marker table was absent before the drill;
-- created the marker, restored the original bookmark, and proved it was absent;
-- restored the API-provided `previous_bookmark` and proved the marker returned;
-- restored the original bookmark again and proved the final marker count was zero;
-- every verification query was served from EEUR, and the final cleanup state was explicitly re-read.
-- applied exactly 22 migrations in ordered ledger sequence `0000`–`0021`, advancing to post-bootstrap bookmark `00000016-00000036-000050b6-48eec1201b71eda52af14c1ba998f030`;
-- re-read `PRAGMA quick_check = ok`, zero foreign-key violations, 98 tables including `d1_migrations`, 275 schema objects, and all seven migration-0011 control tables;
-- proved the CRLF failure mode for compound `CREATE TRIGGER` statements and the LF success path; `.gitattributes` now pins `apps/platform/drizzle/*.sql` to LF.
+The earlier Time Travel drill remains valid and separate. A pre-migration
+bookmark at `2026-07-28T23:00:35Z` was also recorded as
+`00000017-00000002-000050b6-5518e3818b19ceb53f63bd9b37be4e08`.
+It was not used for a restore because the additive migration completed and all
+post-migration checks passed.
 
-Not verified:
+Still not verified:
 
-- production/development bookmark or export;
-- a retrievable staging SQL export with byte size and SHA-256;
-- protected R2 backup object;
-- restored isolated D1 database;
-- R2 restore;
-- scheduled backup execution;
-- backup-failure alert.
+- a disposable remote-D1 import of the portable artifact and timed recovery;
+- production/development export, backup, restore, or bookmark state;
+- R2 user-file backup and object-level recovery;
+- scheduled backup execution, retention cleanup, failure alert, and RTO;
+- production backup/quarantine buckets.
 
-The staging export API reached `complete`, but the authorized connector's egress policy returned HTTP `403` because requests to the signed `r2.cloudflarestorage.com` host are not allowed. The local Wrangler CLI could not retry because the non-interactive shell has no `CLOUDFLARE_API_TOKEN`; no token is requested in chat. No SQL bytes, checksum, protected R2 object, or isolated restore-drill database were produced, so the portable procedure remains blocked and no backup, portable restore, or RTO is claimed.
-
-No further remote migration or deployment may use this document as evidence that the missing portable operations succeeded. The verified-empty D-040 exception is consumed and cannot be reused for a populated staging database or production.
-
-Remote schema-inventory evidence now records: `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`) each report 61 non-internal tables and applied migrations `0000`–`0004`; `juro-staging` reports the exact `0000`–`0021` ledger and verified manifest above. That bootstrap evidence is not portable-backup, isolated-import, restore, or RTO evidence.
+The verified-empty D-040 exception remains consumed. These staging artifacts
+do not authorize a production migration. Production/development remain through
+`0004`; only `juro-staging` is through `0028`.

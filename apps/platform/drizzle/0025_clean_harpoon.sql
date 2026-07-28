@@ -127,158 +127,110 @@ CREATE TRIGGER `legal_sources_verification_insert_guard`
 BEFORE INSERT ON `legal_sources`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`verification_state` NOT IN ('draft','fetched','pending_review','verified','rejected','archived','unavailable')
-    THEN RAISE(ABORT, 'legal source verification state invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`source_type` NOT IN ('lex','advice','internal')
-    THEN RAISE(ABORT, 'legal source type invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`verification_state` = 'verified' AND (
+  SELECT RAISE(ABORT, 'legal source verification state invalid')
+  WHERE NEW.`verification_state` NOT IN ('draft','fetched','pending_review','verified','rejected','archived','unavailable');
+  SELECT RAISE(ABORT, 'legal source type invalid')
+  WHERE NEW.`source_type` NOT IN ('lex','advice','internal');
+  SELECT RAISE(ABORT, 'verified legal source requires exact evidence')
+  WHERE NEW.`verification_state` = 'verified' AND (
       NEW.`verified_at` IS NULL OR NEW.`verified_by_user_id` IS NULL OR
       NEW.`content_sha256` IS NULL OR length(NEW.`content_sha256`) <> 64 OR
       NEW.`content_sha256` GLOB '*[^0-9a-f]*' OR
       NOT EXISTS (SELECT 1 FROM `user_profiles` WHERE `id` = NEW.`verified_by_user_id`)
-    )
-    THEN RAISE(ABORT, 'verified legal source requires exact evidence')
-  END;
+    );
 END;--> statement-breakpoint
 CREATE TRIGGER `legal_sources_verification_update_guard`
 BEFORE UPDATE OF `verification_state`,`source_type`,`content_sha256`,`verified_at`,`verified_by_user_id` ON `legal_sources`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`verification_state` NOT IN ('draft','fetched','pending_review','verified','rejected','archived','unavailable')
-    THEN RAISE(ABORT, 'legal source verification state invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`source_type` NOT IN ('lex','advice','internal')
-    THEN RAISE(ABORT, 'legal source type invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`verification_state` = 'verified' AND (
+  SELECT RAISE(ABORT, 'legal source verification state invalid')
+  WHERE NEW.`verification_state` NOT IN ('draft','fetched','pending_review','verified','rejected','archived','unavailable');
+  SELECT RAISE(ABORT, 'legal source type invalid')
+  WHERE NEW.`source_type` NOT IN ('lex','advice','internal');
+  SELECT RAISE(ABORT, 'verified legal source requires exact evidence')
+  WHERE NEW.`verification_state` = 'verified' AND (
       NEW.`verified_at` IS NULL OR NEW.`verified_by_user_id` IS NULL OR
       NEW.`content_sha256` IS NULL OR length(NEW.`content_sha256`) <> 64 OR
       NEW.`content_sha256` GLOB '*[^0-9a-f]*' OR
       NOT EXISTS (SELECT 1 FROM `user_profiles` WHERE `id` = NEW.`verified_by_user_id`)
-    )
-    THEN RAISE(ABORT, 'verified legal source requires exact evidence')
-  END;
-  SELECT CASE
-    WHEN OLD.`verification_state` = 'verified' AND NEW.`verification_state` = 'verified' AND (
+    );
+  SELECT RAISE(ABORT, 'verified legal source evidence is immutable')
+  WHERE OLD.`verification_state` = 'verified' AND NEW.`verification_state` = 'verified' AND (
       NEW.`content_sha256` <> OLD.`content_sha256` OR
       NEW.`verified_at` <> OLD.`verified_at` OR
       NEW.`verified_by_user_id` <> OLD.`verified_by_user_id`
-    )
-    THEN RAISE(ABORT, 'verified legal source evidence is immutable')
-  END;
+    );
 END;--> statement-breakpoint
 CREATE TRIGGER `legal_source_versions_insert_guard`
 BEFORE INSERT ON `legal_source_versions`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`status` NOT IN ('pending_review','verified','rejected','archived','unavailable')
-    THEN RAISE(ABORT, 'legal source version status invalid')
-  END;
-  SELECT CASE
-    WHEN length(NEW.`content_sha256`) <> 64 OR NEW.`content_sha256` GLOB '*[^0-9a-f]*'
-    THEN RAISE(ABORT, 'legal source version hash invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`status` = 'verified' AND (NEW.`verified_at` IS NULL OR NEW.`verified_by_user_id` IS NULL)
-    THEN RAISE(ABORT, 'verified legal source version requires evidence')
-  END;
+  SELECT RAISE(ABORT, 'legal source version status invalid')
+  WHERE NEW.`status` NOT IN ('pending_review','verified','rejected','archived','unavailable');
+  SELECT RAISE(ABORT, 'legal source version hash invalid')
+  WHERE length(NEW.`content_sha256`) <> 64 OR NEW.`content_sha256` GLOB '*[^0-9a-f]*';
+  SELECT RAISE(ABORT, 'verified legal source version requires evidence')
+  WHERE NEW.`status` = 'verified' AND (NEW.`verified_at` IS NULL OR NEW.`verified_by_user_id` IS NULL);
 END;--> statement-breakpoint
 CREATE TRIGGER `legal_source_versions_update_guard`
 BEFORE UPDATE OF `status`,`content_sha256`,`verified_at`,`verified_by_user_id` ON `legal_source_versions`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`status` NOT IN ('pending_review','verified','rejected','archived','unavailable')
-    THEN RAISE(ABORT, 'legal source version status invalid')
-  END;
-  SELECT CASE
-    WHEN length(NEW.`content_sha256`) <> 64 OR NEW.`content_sha256` GLOB '*[^0-9a-f]*'
-    THEN RAISE(ABORT, 'legal source version hash invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`status` = 'verified' AND (NEW.`verified_at` IS NULL OR NEW.`verified_by_user_id` IS NULL)
-    THEN RAISE(ABORT, 'verified legal source version requires evidence')
-  END;
-  SELECT CASE
-    WHEN OLD.`status` = 'verified' AND NEW.`status` = 'verified' AND (
+  SELECT RAISE(ABORT, 'legal source version status invalid')
+  WHERE NEW.`status` NOT IN ('pending_review','verified','rejected','archived','unavailable');
+  SELECT RAISE(ABORT, 'legal source version hash invalid')
+  WHERE length(NEW.`content_sha256`) <> 64 OR NEW.`content_sha256` GLOB '*[^0-9a-f]*';
+  SELECT RAISE(ABORT, 'verified legal source version requires evidence')
+  WHERE NEW.`status` = 'verified' AND (NEW.`verified_at` IS NULL OR NEW.`verified_by_user_id` IS NULL);
+  SELECT RAISE(ABORT, 'verified legal source version evidence is immutable')
+  WHERE OLD.`status` = 'verified' AND NEW.`status` = 'verified' AND (
       NEW.`content_sha256` <> OLD.`content_sha256` OR
       NEW.`verified_at` <> OLD.`verified_at` OR
       NEW.`verified_by_user_id` <> OLD.`verified_by_user_id`
-    )
-    THEN RAISE(ABORT, 'verified legal source version evidence is immutable')
-  END;
+    );
 END;--> statement-breakpoint
 CREATE TRIGGER `source_sync_runs_insert_guard`
 BEFORE INSERT ON `source_sync_runs`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`source_kind` NOT IN ('lex','advice') OR NEW.`environment` NOT IN ('development','staging','production')
-    THEN RAISE(ABORT, 'source sync scope invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`status` NOT IN ('running','success','partial','failed','cancelled')
-    THEN RAISE(ABORT, 'source sync status invalid')
-  END;
-  SELECT CASE
-    WHEN (NEW.`status` = 'running' AND NEW.`finished_at` IS NOT NULL) OR
-         (NEW.`status` <> 'running' AND NEW.`finished_at` IS NULL)
-    THEN RAISE(ABORT, 'source sync completion evidence invalid')
-  END;
+  SELECT RAISE(ABORT, 'source sync scope invalid')
+  WHERE NEW.`source_kind` NOT IN ('lex','advice') OR NEW.`environment` NOT IN ('development','staging','production');
+  SELECT RAISE(ABORT, 'source sync status invalid')
+  WHERE NEW.`status` NOT IN ('running','success','partial','failed','cancelled');
+  SELECT RAISE(ABORT, 'source sync completion evidence invalid')
+  WHERE (NEW.`status` = 'running' AND NEW.`finished_at` IS NOT NULL) OR
+        (NEW.`status` <> 'running' AND NEW.`finished_at` IS NULL);
 END;--> statement-breakpoint
 CREATE TRIGGER `source_sync_runs_update_guard`
 BEFORE UPDATE OF `status`,`finished_at`,`discovered_count`,`fetched_count`,`changed_count`,`verified_count`,`error_count` ON `source_sync_runs`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`status` NOT IN ('running','success','partial','failed','cancelled')
-    THEN RAISE(ABORT, 'source sync status invalid')
-  END;
-  SELECT CASE
-    WHEN (NEW.`status` = 'running' AND NEW.`finished_at` IS NOT NULL) OR
-         (NEW.`status` <> 'running' AND NEW.`finished_at` IS NULL)
-    THEN RAISE(ABORT, 'source sync completion evidence invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`discovered_count` < 0 OR NEW.`fetched_count` < 0 OR
-         NEW.`changed_count` < 0 OR NEW.`verified_count` < 0 OR NEW.`error_count` < 0
-    THEN RAISE(ABORT, 'source sync counters invalid')
-  END;
+  SELECT RAISE(ABORT, 'source sync status invalid')
+  WHERE NEW.`status` NOT IN ('running','success','partial','failed','cancelled');
+  SELECT RAISE(ABORT, 'source sync completion evidence invalid')
+  WHERE (NEW.`status` = 'running' AND NEW.`finished_at` IS NOT NULL) OR
+        (NEW.`status` <> 'running' AND NEW.`finished_at` IS NULL);
+  SELECT RAISE(ABORT, 'source sync counters invalid')
+  WHERE NEW.`discovered_count` < 0 OR NEW.`fetched_count` < 0 OR
+        NEW.`changed_count` < 0 OR NEW.`verified_count` < 0 OR NEW.`error_count` < 0;
 END;--> statement-breakpoint
 CREATE TRIGGER `legal_review_queue_insert_guard`
 BEFORE INSERT ON `legal_review_queue`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`confidence` NOT IN ('high','medium','low') OR
-         NEW.`status` NOT IN ('pending','in_review','approved','rejected','closed')
-    THEN RAISE(ABORT, 'legal review state invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`status` IN ('approved','rejected') AND (NEW.`decision` IS NULL OR NEW.`decided_at` IS NULL)
-    THEN RAISE(ABORT, 'legal review decision evidence required')
-  END;
+  SELECT RAISE(ABORT, 'legal review state invalid')
+  WHERE NEW.`confidence` NOT IN ('high','medium','low') OR
+        NEW.`status` NOT IN ('pending','in_review','approved','rejected','closed');
+  SELECT RAISE(ABORT, 'legal review decision evidence required')
+  WHERE NEW.`status` IN ('approved','rejected') AND (NEW.`decision` IS NULL OR NEW.`decided_at` IS NULL);
 END;--> statement-breakpoint
 CREATE TRIGGER `legal_review_queue_update_guard`
 BEFORE UPDATE OF `confidence`,`status`,`decision`,`decided_at` ON `legal_review_queue`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`confidence` NOT IN ('high','medium','low') OR
-         NEW.`status` NOT IN ('pending','in_review','approved','rejected','closed')
-    THEN RAISE(ABORT, 'legal review state invalid')
-  END;
-  SELECT CASE
-    WHEN NEW.`status` IN ('approved','rejected') AND (NEW.`decision` IS NULL OR NEW.`decided_at` IS NULL)
-    THEN RAISE(ABORT, 'legal review decision evidence required')
-  END;
+  SELECT RAISE(ABORT, 'legal review state invalid')
+  WHERE NEW.`confidence` NOT IN ('high','medium','low') OR
+        NEW.`status` NOT IN ('pending','in_review','approved','rejected','closed');
+  SELECT RAISE(ABORT, 'legal review decision evidence required')
+  WHERE NEW.`status` IN ('approved','rejected') AND (NEW.`decision` IS NULL OR NEW.`decided_at` IS NULL);
 END;

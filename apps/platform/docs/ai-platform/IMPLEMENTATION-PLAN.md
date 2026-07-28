@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
-Updated: 2026-07-28
-Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint includes migrations `0022`–`0024` and the identity/workspace controls below. Phase 3 now has migration `0025` trust evidence, migration `0026` with an exact official-page, robots-aware, bounded acquisition contract, deterministic untrusted normalization, migration `0027` with an MFA-bound immutable legal-review decision contract, migration `0028` with a separate fresh-MFA publisher, and protected claim/decision/publication POST routes pinned off by `LEGAL_SOURCE_STAFF_API_ENABLED=false` in every environment. Advice and the global async runtime remain disabled. No bulk crawler, staff UI, replacement-version activation, Vectorize retrieval, citation validator, Cron, editor, or remote legal-source activation is claimed. Portable backup/import, remote migrations `0022`–`0028`, live providers, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
+Updated: 2026-07-29
+Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded browser baseline, empty-staging Time Travel drill, and an inactive-first staging Worker gate are verified. Owner-approved Wrangler OAuth was used to create three portable/private-R2/local-restore checkpoints and apply staging migrations through `0028`. Phase 2 identity/workspace and Phase 3 legal-source schema are therefore present in isolated staging, while all related runtime routes remain undeployed or disabled. Advice and global async runtime remain disabled. No bulk crawler, replacement-version activation, Vectorize retrieval, citation validator, Cron, externally reachable editor, or legal-source activation is claimed. Live providers, full browser/a11y/performance, first staging Worker upload, DNS, consumers, runtime secrets, protected-hostname gates, and a disposable remote-D1 import drill remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -45,9 +45,9 @@ Order and current state:
 6. **Partial/source-only:** scheduled handler is inert with no trigger; locks/run ledgers exist, but reviewed schedules, manual retry, and alerts are pending;
 7. **Candidate selected, quality gate open:** official OpenAI and Cloudflare documentation support `text-embedding-3-large` with an explicit reduced `dimensions=1536` and Vectorize `cosine`; no legal ingestion starts until RU/UZ/cross-language retrieval evaluation and citation checks pass;
 8. **Locally verified/source-only contract v2:** exact approved R2/Queue/Vectorize bindings replace the older generic source contract without relabeling data classes; legacy remote dev resources remain untouched and no data/binding cutover has occurred;
-9. **Partially provisioned and re-read:** staging D1 `bb716a96-b2fb-4823-90d6-6c228fed181a` is schema-bootstrapped through the exact `0000`–`0021` ledger with quick check `ok`, zero FK violations, 98 tables including `d1_migrations`, and 275 schema objects; six empty private EEUR Standard dev/staging R2 targets, 28 unbound primary/DLQ queues, and eight empty 1,536/cosine Vectorize indexes exist; staging Worker/DNS/bindings/consumers and production Queue/Vectorize/backup/quarantine remain absent;
-10. **Partial/source-only:** redacted structured logs and Analytics binding exist; the Time Travel restore/undo passed while staging was empty, and the narrow D-040 bootstrap exception is consumed; portable export retrieval, protected backup object, isolated import, RTO, remote observability, cost metadata, and provider/secrets configuration remain pending;
-11. **Locally verified/remote blocked:** staging source and artifact disable `workers.dev`, preview URLs, and routes and reject schedules, consumers, async execution, cron execution, and platform-header auth bypass; the first inactive Worker upload is blocked on approved local Wrangler authentication, and no hostname may be attached until Cloudflare Access denial is proved.
+9. **Provisioned and re-read:** staging D1 `bb716a96-b2fb-4823-90d6-6c228fed181a` has the exact `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers; its post-migration export restores locally with integrity `ok` and zero FK errors; private dev/staging R2 targets, 28 unbound primary/DLQ queues, and eight empty 1,536/cosine Vectorize indexes exist; staging Worker/DNS/consumers and production Queue/Vectorize/backup/quarantine remain absent;
+10. **Partially verified:** redacted structured logs and Analytics binding exist; Time Travel restore/undo passed while staging was empty; three portable D1 exports were checksum-round-tripped through private staging R2 and restored locally; a remote disposable-D1 import drill, RTO, observability, cost metadata, and provider/secrets configuration remain pending;
+11. **Validated for inactive first upload:** staging source and artifact disable `workers.dev`, preview URLs, routes, schedules, consumers, async execution, cron execution, and platform-header auth bypass; OAuth is approved for staging, but no hostname may be attached until access denial is proved.
 
 Cron for 00:00 Asia/Tashkent is `0 19 * * *` UTC. It will not be configured until the scheduled handler and locking are tested.
 
@@ -88,8 +88,8 @@ Local checkpoint only; none of these statements is a staging or production claim
 - canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
   root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
   and selecting a workspace no longer rewrites the stored persona;
-- the latest recorded successful local full suite is 329 tests: 25 rendered
-  route, 237 core, and 67 Cloudflare tests.
+- the latest recorded successful local full suite is 330 tests: 25 rendered
+  route, 237 core, and 68 Cloudflare tests.
 
 Vertical slices:
 
@@ -109,8 +109,8 @@ The two existing document-builder isolation defects are fixed in this phase befo
 
 Gate:
 
-- local auth/race tests pass; remote migrations `0022`–`0028`, live
-  Turnstile/Resend, and protected staging full-HTTP E2E remain required;
+- local auth/race tests pass and staging schema is through `0028`; live
+  Turnstile/Resend and protected staging full-HTTP E2E remain required;
 - cross-account/workspace leaks: zero;
 - privileged access requires 2FA;
 - staff assignment/event tables remain empty and the internal role-management
@@ -286,7 +286,7 @@ Then stop and request two separate explicit approvals: first for production depl
 ## Current blockers that do not stop local implementation
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
-2. Production D1 cannot be migrated before a verified external backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0021`; migrations `0022`–`0028` are local-only.
+2. Production D1 cannot be migrated before production-specific backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0028` with portable/private-R2/local-restore evidence but no remote disposable-D1 import timing.
 3. Provider and security secrets are absent by name except `RESEND_API_KEY`; `TURNSTILE_SECRET_KEY` and the environment-specific public `TURNSTILE_SITE_KEY` are not configured on the inspected surfaces. Required values must be entered directly in the Cloudflare/provider controls, never in chat. Real Turnstile and Resend delivery are unverified.
 4. Operator legal identity placeholders require owner-supplied approved legal details.
 5. Final RU/UZ policies and the legal-language priority rule require legal approval.

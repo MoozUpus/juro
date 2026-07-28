@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
-Updated: 2026-07-28
-Status: local identity/access foundations are implemented and partially verified. Isolated staging contains schema migrations through `0021`; source migrations `0022`–`0024`, live providers, full-HTTP remote-D1 behavior, lifecycle gates, and a staging Worker/deployment remain unverified. Production was not changed.
+Updated: 2026-07-29
+Status: local identity/access foundations are implemented and partially verified. Isolated staging contains schema migrations through `0028`, including identity migrations `0022`–`0024`. Live providers, full-HTTP remote-D1 behavior, lifecycle gates, and a staging Worker/deployment remain unverified. Production was not changed.
 
 ## Implemented
 
@@ -415,15 +415,13 @@ It has not been executed against a remote environment in this slice.
 
 ## Required staging evidence
 
-Before applying the pending identity/access migrations or enabling OTP/MFA in
-staging:
+Before enabling OTP/MFA in staging:
 
-1. re-read the completed approved Cloudflare inventory, then create, retrieve, and verify the independent D1 backup;
-2. restore the backup into an isolated database;
+1. retain and re-read the completed Cloudflare inventory and the three verified portable staging checkpoints;
+2. complete the remaining disposable remote-D1 import drill before claiming operational RTO;
 3. inspect collaborator state distribution;
-4. prove there are no duplicate active legacy deletion requests, confirm the
-   existing exact `0000`–`0021` ledger, then apply pending migrations `0022`
-   and `0023` while keeping identity mode `legacy`;
+4. prove there are no duplicate active legacy deletion requests and confirm
+   the exact `0000`–`0028` ledger while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -512,9 +510,9 @@ FROM platform_staff_role_events;
 ## Not complete
 
 - no live Turnstile or Resend delivery has been verified;
-- migrations 0011–0021 are schema-applied to isolated staging but not
-  production; migrations 0022–0024 are local-only; no identity runtime,
-  backfill, provider, or full-HTTP behavior is proven by the staging bootstrap;
+- migrations 0011–0028 are schema-applied to isolated staging but not
+  production; no identity runtime, backfill, provider, or full-HTTP behavior is
+  proven by schema application alone;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, runtime activation, real-device authenticator flow, or remote D1
   concurrency test has been completed;
@@ -556,14 +554,15 @@ FROM platform_staff_role_events;
 - session persistence now has locally verified 24-hour standard and 30-day
   remember-me paths, but token rotation/fixation/replay detection, regional
   signals, security email, and remote cookie/session evidence remain absent;
-- workspace invitation migration 0022 and OTP-lock migration 0023 are not
-  applied to staging; their local one-winner/rollback/15-minute-lock evidence
-  is not full-HTTP remote evidence;
+- workspace invitation migration 0022 and OTP-lock migration 0023 are applied
+  to staging; their local one-winner/rollback/15-minute-lock tests are not
+  full-HTTP remote behavior evidence;
 - cleanup scheduling for expired pending credentials and consumed/invalidated
   MFA/deletion challenges remains inactive until the reviewed cleanup
   queue/Cron lifecycle is enabled;
 - no staging Worker, route, DNS, Turnstile binding, secret configuration, or
-  deployment has been verified; Wrangler authentication remains blocked;
+  deployment has been verified; owner-approved Wrangler OAuth is active only
+  for staging work;
 - remote D1 race tests and authenticated full HTTP MFA/invitation/workspace
   E2E remain release gates;
 - production remains frozen pending the later explicit owner confirmation.

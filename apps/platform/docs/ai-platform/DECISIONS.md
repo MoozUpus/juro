@@ -1101,3 +1101,34 @@ Worker at `8245.45 KiB` raw / `2059.19 KiB` gzip. Relative to D-053 this is
 dynamic chunk of `15,833` bytes raw / `5,113` bytes gzip; the client graph
 increased from 1,921 to 1,922 modules. Final numbers must be re-recorded after
 any later code or CSS change.
+
+## D-055 — stage legal migrations with portable checkpoints and D1-native trigger guards
+
+Status: accepted and verified in isolated staging; production remains blocked
+Date: 2026-07-29
+
+Owner-approved Wrangler OAuth is scoped operationally to staging. Before
+mutation, `juro-staging` was exported, hashed, round-tripped through private
+`juro-staging-backups`, and restored into isolated local SQLite with integrity,
+foreign-key, schema, and migration-ledger verification.
+
+The standard migration run applied `0022`–`0024`, then remote D1 rejected
+`0025` with `incomplete input`. The failed migration was atomic and `0026`–
+`0028` remained pending. The incompatibility was limited to trigger-body
+`SELECT CASE ... THEN RAISE(...) END`: local SQLite accepted it, while the
+remote D1 migration parser did not. The guards now use the equivalent
+`SELECT RAISE(...) WHERE condition` form, retaining the exact predicate and
+error message. Tests apply every migration with foreign keys enabled and
+forbid reintroducing the incompatible form in migration `0025` or later.
+
+A second protected checkpoint captured the exact `0000`–`0024` state. The
+retry applied `0025`–`0028`; Wrangler then reported no pending migration.
+Remote inventory verified 29 ledger rows, 107 non-internal tables, and 58
+triggers. A third private export round trip restored with integrity `ok` and
+zero foreign-key errors. Exact bytes, hashes, and object references are kept in
+`BACKUP-RESTORE.md`.
+
+The successful additive prefix was not rolled back merely because the later
+migration initially failed. No production/development D1, production Worker,
+Sites version, route, domain, or secret was changed. This decision authorizes
+neither a production migration nor public staging routing.

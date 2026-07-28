@@ -1,6 +1,6 @@
 # JURO data-model audit
 
-Audit date: 2026-07-28
+Audit date: 2026-07-29
 Production Sites revision: `4031078`
 Integration branch baseline: `1d3d23d` before this documentation update
 
@@ -11,7 +11,7 @@ Integration branch baseline: `1d3d23d` before this documentation update
 - All migrations apply successfully to a new local SQLite database.
 - Local migrated result: 105 non-internal tables, 146 foreign keys; zero foreign-key violations.
 - No destructive `DROP` statement was found.
-- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0028` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) was bootstrapped from verified-empty state through the exact 22-entry `0000`–`0021` ledger and now reports 98 tables including `d1_migrations`, 275 schema objects, `PRAGMA quick_check = ok`, and zero foreign-key violations. Migrations `0022`–`0028` have not been applied remotely. No production/development data or schema was mutated.
+- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0028` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Its post-migration export/private-R2 round trip restores locally with integrity `ok` and zero foreign-key violations. No production/development data or schema was mutated.
 
 ## Existing migration outline
 
@@ -76,7 +76,7 @@ They must not be treated as the pre-migration backup required for production. Re
 
 ### Append-only evidence is only partially durable
 
-The migrations now provide tamper-evident chains for user security events and platform staff role changes, immutable database guards for policy evidence, and an immutable one-winner workspace-invitation acceptance claim in local migration `0022`. Staging is only through `0021`, so the invitation claim is not remote. No runtime flow or periodic protected export is proven, and these controls do not cover all required domains. In particular, `workspace_audit_events` is not a general append-only/tamper-evident chain. The following evidence remains incomplete or not periodically exported to protected R2:
+The migrations now provide tamper-evident chains for user security events and platform staff role changes, immutable database guards for policy evidence, and an immutable one-winner workspace-invitation acceptance claim in staging migration `0022`. No runtime flow or periodic protected audit export is proven, and these controls do not cover all required domains. In particular, `workspace_audit_events` is not a general append-only/tamper-evident chain. The following evidence remains incomplete or not periodically exported to protected R2:
 
 - consent and acceptance;
 - privileged access;
@@ -131,7 +131,7 @@ No table will be dropped during an expand step.
 
 ## Proposed additive migration sequence
 
-Migrations `0005`–`0028` contain checked-in SQL and were verified locally. Isolated staging is schema-bootstrapped only through `0021`; applying `0022`–`0028` requires the normal portable backup/restore gate and a fresh remote preflight. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and that gate is satisfied.
+Migrations `0005`–`0028` contain checked-in SQL, were verified locally, and are present in isolated staging. Portable/private-R2/local-restore checkpoints surround the `0022`–`0028` application. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and a new migration-specific backup/preflight gate is satisfied.
 
 1. **Identity security**
    - devices, security events, TOTP credentials, backup-code hashes;
@@ -184,4 +184,4 @@ Before any further remote migration or any migration of a populated database; D-
 9. validate data invariants and the document-builder regression;
 10. keep production unchanged until explicit approval.
 
-Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0021` ledger, passing quick/FK checks, 98 tables including the ledger, and 275 schema objects. Migrations `0022` and `0023` are local-only and unapplied there. This is schema-bootstrap evidence only. Portable SQL export/import into a separate drill database remains unverified, no protected backup object exists, and production/development remain unchanged.
+Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Three protected portable checkpoints round-trip through private R2 and restore locally with integrity/FK checks. Runtime behavior and a disposable remote-D1 import drill remain unverified; production/development remain unchanged.

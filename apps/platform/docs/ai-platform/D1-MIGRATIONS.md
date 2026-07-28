@@ -2,7 +2,7 @@
 
 Updated: 2026-07-28
 Latest source migration: `0028_orange_nightmare.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0028` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0028` have not been applied remotely.
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0028` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger. Its post-migration export restores with `integrity_check = ok`, zero foreign-key violations, 107 non-internal tables, and 58 triggers. No production migration was run.
 
 ## Migration policy
 
@@ -18,6 +18,34 @@ JURO uses additive expand-contract migrations. A remote migration requires:
 Do not infer remote migration state from source files or a local Wrangler database.
 
 D-040 allowed one bootstrap of a freshly created, immediately re-verified empty staging database without a retrievable portable export. That exception is now consumed. It does not weaken the normal policy above for any further staging mutation, any populated database, or production.
+
+## Staging migration record — 2026-07-28 UTC
+
+Before migration `0022`, Wrangler exported the 22-entry staging database,
+verified its SHA-256, uploaded it to private `juro-staging-backups`, downloaded
+the object again, and restored 325 SQL commands into an isolated local
+database. Integrity, foreign keys, table inventory, and the migration ledger
+passed.
+
+The first standard Wrangler migration run applied `0022`, `0023`, and `0024`.
+Migration `0025` then failed atomically with `incomplete input`; `0026`–`0028`
+did not run. The remote parser rejected `SELECT CASE ... THEN RAISE(...) END`
+inside trigger bodies even though local SQLite accepted it. The trigger guards
+were rewritten without changing their predicates or error messages to the
+D1-compatible form `SELECT RAISE(...) WHERE condition`. A regression test now
+rejects the incompatible form in migrations `0025` and later.
+
+A second portable export/private-R2 retrieval/local-restore checkpoint captured
+the exact `0000`–`0024` state before retry. The retry then applied `0025`–`0028`
+successfully. Wrangler reports no pending staging migrations. A third export
+of the `0000`–`0028` state passed the same restore, integrity, foreign-key,
+table, trigger, and ledger checks. The exact artifact hashes and protected
+object references are recorded in `BACKUP-RESTORE.md`.
+
+Remote D1 rejects `PRAGMA integrity_check` through the service authorization
+boundary. The integrity claim above comes from the exact exported bytes after
+private-R2 round trip, not from an unsupported remote pragma. Remote queries
+separately verified the ledger, tables, and triggers.
 
 ## Migration 0011
 
@@ -484,12 +512,11 @@ tables and expands `legal_sources`; migrations `0022`–`0024` alter existing
 tables and add indexes/triggers rather than tables; migration `0026` adds one
 request table; migration `0027` expands the review queue; migration `0028` adds
 one publication table. This is compatibility evidence for the checked-in
-`0000`–`0028` sequence. Remote
-production and development each report 61 non-internal tables and ledger
-entries only through `0004`. Isolated staging reports those 97
-application/non-internal tables plus `d1_migrations`, the exact
-`0000`–`0021` ledger, 275 schema objects, `PRAGMA quick_check = ok`, and zero
-foreign-key violations. It does not contain `0022`–`0028`.
+`0000`–`0028` sequence. Remote production and development each report 61
+non-internal tables and ledger entries only through `0004`. Isolated staging
+reports 107 non-internal tables, 58 triggers, and the exact `0000`–`0028`
+ledger. The post-migration portable export restores locally with integrity
+`ok` and zero foreign-key violations.
 
 ## Staging bootstrap evidence and remaining procedure
 
@@ -508,14 +535,14 @@ and accepted the same statement with LF. Repository-root `.gitattributes` now
 pins `apps/platform/drizzle/*.sql text eol=lf`. No checked-in migration content
 was rewritten.
 
-This is staging schema-bootstrap evidence only; local migrations `0022`–`0028`
-remain pending. Portable SQL export/import,
-protected backup-object evidence, application/runtime binding, row-level
-business invariants, and RTO remain unverified. Before application enablement
-or any further staging migration:
+The later staging migration record and artifact hashes are documented near the
+top of this file and in `BACKUP-RESTORE.md`. Application/runtime binding,
+remote disposable-D1 import timing, row-level business invariants, and RTO
+remain unverified. Before application enablement or any further staging
+migration:
 
-1. retrieve and verify a portable external backup;
-2. import it into a separate isolated drill database and verify restore;
+1. create and verify a new portable external checkpoint for that migration;
+2. complete a disposable remote-D1 import drill before claiming operational RTO;
 3. record the current staging bookmark, checksum, manifest, and exact ledger
    without storing secret values;
 4. verify that no user has multiple `requested`/`reviewing` deletion rows,

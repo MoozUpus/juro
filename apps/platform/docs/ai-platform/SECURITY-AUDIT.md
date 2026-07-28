@@ -10,7 +10,7 @@ Method: source review, production HTTP smoke checks, current test suite, targete
 | Scope | Current state | Release consequence |
 |---|---|---|
 | Deployed Sites v20 | four original critical findings remain unproven in production | production remains frozen |
-| Integration branch | SEC-001 and SEC-002 have local fixes; SEC-003 has atomic verification plus the local `0023` lock; SEC-005 has local independent rate controls and Turnstile integration; structured onboarding is additive in `0024`; migrations `0025`–`0028` add a local fail-closed legal-source lifecycle from exact official URL and private R2 through deterministic normalization, MFA-bound immutable legal-review evidence, and a separate fresh-MFA atomic publisher with immutable reading/publication evidence; protected claim/decision/publication routes exist locally behind `LEGAL_SOURCE_STAFF_API_ENABLED=false`; source migrations `0022`–`0028` are not in staging and SEC-004 remains open | no upload/AI staging enablement; identity and legal-source changes still require remote migrations, reviewed staff-route activation, staff UI/browser evidence, live-provider/network, runtime, R2, and full-HTTP staging evidence; Advice remains disabled |
+| Integration branch | SEC-001 and SEC-002 have local fixes; SEC-003 has atomic verification plus the staging-applied `0023` lock; SEC-005 has local independent rate controls and Turnstile integration; structured onboarding migration `0024` is applied to staging; migrations `0025`–`0028` add the staging schema for a fail-closed legal-source lifecycle, review evidence, and publication evidence; protected routes remain locally disabled by `LEGAL_SOURCE_STAFF_API_ENABLED=false`; SEC-004 remains open | no upload/AI staging enablement; identity and legal-source changes still require protected Worker/runtime activation, reviewed staff route, browser evidence, live-provider/network, and full-HTTP staging evidence; Advice remains disabled |
 | High/medium findings | several local identity/security foundations exist, but broad file, deletion, CSP, alerting, and privileged-access controls remain open | affected features remain disabled or unavailable |
 
 ## Critical findings
@@ -143,7 +143,7 @@ not closed.
 
 ### SEC-010 — append-only audit is erasable
 
-In deployed Sites v20, no tamper-evident chain or protected periodic export exists and cascades can remove audit and consent evidence. The integration branch locally adds hash-chained `security_events`, immutable policy evidence, and a separate immutable platform-staff role-event chain. Those migrations are not remote, cover only part of the required evidence, and have no protected periodic R2 export, so SEC-010 remains open.
+In deployed Sites v20, no tamper-evident chain or protected periodic export exists and cascades can remove audit and consent evidence. The integration branch adds hash-chained `security_events`, immutable policy evidence, and a separate immutable platform-staff role-event chain; their schema is present in isolated staging. They cover only part of the required evidence and no periodic protected audit export is active, so SEC-010 remains open.
 
 ### SEC-011 — CSRF validation is weak
 

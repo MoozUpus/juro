@@ -29,16 +29,14 @@ CREATE TRIGGER `legal_source_fetch_requests_insert_guard`
 BEFORE INSERT ON `legal_source_fetch_requests`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`environment` NOT IN ('development','staging','production') OR
-         NEW.`source_kind` NOT IN ('lex','advice') OR
-         NEW.`locale` NOT IN ('ru','uz') OR
-         NEW.`status` NOT IN ('queued','running','retrying','completed','failed','cancelled') OR
-         NEW.`attempt_count` < 0
-    THEN RAISE(ABORT, 'legal source fetch request scope invalid')
-  END;
-  SELECT CASE
-    WHEN instr(NEW.`requested_url`, '?') > 0 OR instr(NEW.`requested_url`, '#') > 0 OR
+  SELECT RAISE(ABORT, 'legal source fetch request scope invalid')
+  WHERE NEW.`environment` NOT IN ('development','staging','production') OR
+        NEW.`source_kind` NOT IN ('lex','advice') OR
+        NEW.`locale` NOT IN ('ru','uz') OR
+        NEW.`status` NOT IN ('queued','running','retrying','completed','failed','cancelled') OR
+        NEW.`attempt_count` < 0;
+  SELECT RAISE(ABORT, 'legal source fetch request URL invalid')
+  WHERE instr(NEW.`requested_url`, '?') > 0 OR instr(NEW.`requested_url`, '#') > 0 OR
          (NEW.`source_kind` = 'lex' AND (
            substr(NEW.`requested_url`, 1, length('https://lex.uz/' || NEW.`locale` || '/docs/-')) <>
              'https://lex.uz/' || NEW.`locale` || '/docs/-' OR
@@ -50,11 +48,9 @@ BEGIN
              'https://advice.uz/' || NEW.`locale` || '/questions/' OR
            length(substr(NEW.`requested_url`, length('https://advice.uz/' || NEW.`locale` || '/questions/') + 1)) = 0 OR
            substr(NEW.`requested_url`, length('https://advice.uz/' || NEW.`locale` || '/questions/') + 1) GLOB '*[^0-9]*'
-         ))
-    THEN RAISE(ABORT, 'legal source fetch request URL invalid')
-  END;
-  SELECT CASE
-    WHEN (NEW.`source_id` IS NULL) <> (NEW.`version_id` IS NULL) OR
+         ));
+  SELECT RAISE(ABORT, 'legal source fetch request lifecycle invalid')
+  WHERE (NEW.`source_id` IS NULL) <> (NEW.`version_id` IS NULL) OR
          (NEW.`status` = 'queued' AND (
            NEW.`attempt_count` <> 0 OR NEW.`started_at` IS NOT NULL OR
            NEW.`finished_at` IS NOT NULL OR NEW.`source_id` IS NOT NULL OR
@@ -80,25 +76,21 @@ BEGIN
            NEW.`finished_at` IS NULL OR NEW.`source_id` IS NOT NULL OR
            NEW.`error_code` IS NULL
          )) OR
-         (NEW.`status` = 'cancelled' AND NEW.`finished_at` IS NULL)
-    THEN RAISE(ABORT, 'legal source fetch request lifecycle invalid')
-  END;
+        (NEW.`status` = 'cancelled' AND NEW.`finished_at` IS NULL);
 END;--> statement-breakpoint
 CREATE TRIGGER `legal_source_fetch_requests_update_guard`
 BEFORE UPDATE ON `legal_source_fetch_requests`
 FOR EACH ROW
 BEGIN
-  SELECT CASE
-    WHEN NEW.`environment` <> OLD.`environment` OR
-         NEW.`source_kind` <> OLD.`source_kind` OR
-         NEW.`locale` <> OLD.`locale` OR
-         NEW.`requested_url` <> OLD.`requested_url` OR
-         NEW.`canonical_id` <> OLD.`canonical_id` OR
-         NEW.`idempotency_key` <> OLD.`idempotency_key`
-    THEN RAISE(ABORT, 'legal source fetch request identity is immutable')
-  END;
-  SELECT CASE
-    WHEN NEW.`status` NOT IN ('queued','running','retrying','completed','failed','cancelled') OR
+  SELECT RAISE(ABORT, 'legal source fetch request identity is immutable')
+  WHERE NEW.`environment` <> OLD.`environment` OR
+        NEW.`source_kind` <> OLD.`source_kind` OR
+        NEW.`locale` <> OLD.`locale` OR
+        NEW.`requested_url` <> OLD.`requested_url` OR
+        NEW.`canonical_id` <> OLD.`canonical_id` OR
+        NEW.`idempotency_key` <> OLD.`idempotency_key`;
+  SELECT RAISE(ABORT, 'legal source fetch request lifecycle invalid')
+  WHERE NEW.`status` NOT IN ('queued','running','retrying','completed','failed','cancelled') OR
          NEW.`attempt_count` < OLD.`attempt_count` OR
          (NEW.`source_id` IS NULL) <> (NEW.`version_id` IS NULL) OR
          (OLD.`status` = 'queued' AND NEW.`status` NOT IN ('queued','running','cancelled')) OR
@@ -130,16 +122,12 @@ BEGIN
            NEW.`finished_at` IS NULL OR NEW.`source_id` IS NOT NULL OR
            NEW.`error_code` IS NULL
          )) OR
-         (NEW.`status` = 'cancelled' AND NEW.`finished_at` IS NULL)
-    THEN RAISE(ABORT, 'legal source fetch request lifecycle invalid')
-  END;
-  SELECT CASE
-    WHEN OLD.`status` = 'completed' AND (
+        (NEW.`status` = 'cancelled' AND NEW.`finished_at` IS NULL);
+  SELECT RAISE(ABORT, 'completed legal source fetch request is immutable')
+  WHERE OLD.`status` = 'completed' AND (
       NEW.`status` <> OLD.`status` OR
       NEW.`source_id` <> OLD.`source_id` OR
       NEW.`version_id` <> OLD.`version_id` OR
       NEW.`finished_at` <> OLD.`finished_at`
-    )
-    THEN RAISE(ABORT, 'completed legal source fetch request is immutable')
-  END;
+    );
 END;

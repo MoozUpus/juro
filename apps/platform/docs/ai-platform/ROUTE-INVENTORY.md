@@ -215,7 +215,7 @@ The inventory below describes the reconciled local integration branch, not a cla
 | document invitation pre-accept denial and atomic one-winner consume | insecure deployed behavior remains until approved release |
 | active-workspace builder isolation | cross-workspace deployed behavior remains until approved release |
 | platform staff assignment/role-event foundations | local service/schema only; no role-management route exists and no role is bootstrapped |
-| legal-source claim/decision/publication POST routes | present in local build only; fail closed behind `LEGAL_SOURCE_STAFF_API_ENABLED=false`; migrations `0027`–`0028`, reviewer bootstrap, remote route, and browser evidence are absent |
+| legal-source claim/decision/publication POST routes | present in local build only; fail closed behind `LEGAL_SOURCE_STAFF_API_ENABLED=false`; staging schema `0027`–`0028` is present, while reviewer bootstrap, deployed route, and browser evidence are absent |
 
 This separation is mandatory when reading the route blocks: source presence is not staging or production evidence.
 

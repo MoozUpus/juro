@@ -1,23 +1,22 @@
 # JURO known limitations checkpoint
 
-Updated: 2026-07-28
+Updated: 2026-07-29
 Scope: current integration branch after the first local Phase 3 legal-source
 foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0028` have not been applied to `juro-staging`; the
-  staging ledger remains exactly `0000`–`0021`;
-- a portable D1 export/import rehearsal and protected backup object remain
-  unverified, so the consumed verified-empty bootstrap exception cannot be
-  reused for these migrations;
-- no staging Worker, route, DNS, runtime binding, secret/configuration set, or
-  deployment has been verified; Wrangler authentication remains blocked;
+- migrations `0022`–`0028` are applied to `juro-staging` and the post-migration
+  portable export/private-R2/local-restore checks pass; a disposable remote-D1
+  import drill and measured recovery time remain unverified;
+- no staging Worker, route, DNS, deployed runtime binding, secret/configuration
+  set, or deployment has been verified; Wrangler OAuth is available only for
+  the approved staging work;
 - `TURNSTILE_SECRET_KEY` and public `TURNSTILE_SITE_KEY` are absent from the
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain
   authorization, and provider-failure behavior have not been verified live;
-- local test totals (25 rendered route + 237 core + 67 Cloudflare = 329) are
+- local test totals (25 rendered route + 237 core + 68 Cloudflare = 330) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
@@ -53,16 +52,16 @@ foundation checkpoint.
 - the 24-hour/30-day session choice is locally tested, but remote cookies,
   persisted expiry, idle expiry, and MFA completion have not been exercised
   through staging HTTP;
-- Turnstile, independent rate limits, and the 15-minute verification lock are
-  source/test facts only until the bindings and migration `0023` are active in
-  protected staging;
+- Turnstile and live independent rate-limit behavior remain source/test facts;
+  the immutable 15-minute verification-lock schema from `0023` is active in
+  staging but has not been exercised through protected staging HTTP;
 - generic anti-enumeration behavior still requires full external timing and
   response-parity verification.
 
 ## Workspace invitation gaps
 
-- the one-winner acceptance claim is local-only until migration `0022` is
-  applied and the full route is tested against remote D1;
+- the one-winner acceptance claim schema from `0022` is active in staging, but
+  the full route and remote concurrency behavior remain untested over HTTP;
 - `workspace_audit_events` is not a general append-only/tamper-evident ledger;
 - acceptance redirects to `/:locale/:accountType/main`; the target business
   URL still lacks the required `workspaceId` segment;
@@ -84,9 +83,9 @@ foundation checkpoint.
 
 ## Legal knowledge gaps
 
-- migrations `0025`–`0028` and the trust filter are local-only; no remote
-  legal-source schema, fetch request, R2 evidence object, or source record was
-  created;
+- migrations `0025`–`0028` are active in staging and the trust filter remains
+  application-local; no legal-source fetch request, raw evidence object,
+  source record, published row, vector, or retrieval result was created;
 - one exact-page fetch adapter, robots/rate-policy enforcement, and private
   content-addressed R2 write and pre-verification normalization contracts are
   implemented locally; a protected review/publisher UI now exists behind the
@@ -107,8 +106,8 @@ foundation checkpoint.
 
 - `LEGAL_SOURCE_STAFF_API_ENABLED` remains false in every checked-in
   environment, so neither the page nor its API is remotely reachable;
-- no reviewer account/assignment bootstrap, Cloudflare Access policy, remote
-  D1 migrations `0022`–`0028`, or protected staging browser session exists;
+- no reviewer account/assignment bootstrap, Cloudflare Access policy,
+  protected staging Worker route, or protected staging browser session exists;
 - local service and HTTP tests do not replace keyboard, screen-reader, 200%
   zoom, forced-colors, touch, or real-device review of the staff surface;
 - review withdrawal, reassignment, supervisor override, replacement-version

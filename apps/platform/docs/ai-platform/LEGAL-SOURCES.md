@@ -256,7 +256,9 @@ idempotent-replay D1/R2 flow.
 Source-trust tests exercise host/type/hash/timestamp failures and
 evidence-backed acceptance.
 
-Remote staging remains at `0000`–`0021`; migrations `0022`–`0028` are local
-only. No remote database, Worker, Queue,
-Vectorize index content, R2 object, route, DNS record, secret, or production
-resource was changed by this local checkpoint.
+Remote staging is at `0000`–`0028`; this establishes schema only. No legal
+source row, fetch request, normalized/raw evidence object, publication,
+Vectorize content, Worker, Queue attachment, route, DNS record, runtime secret,
+or production resource was created or changed by this checkpoint. The three
+private R2 objects in `juro-staging-backups` are D1 migration exports, not
+legal-source evidence.
