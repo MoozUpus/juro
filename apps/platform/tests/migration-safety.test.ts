@@ -37,6 +37,9 @@ const onboardingProfileEntry = journal.entries.find(
 const legalSourceLifecycleEntry = journal.entries.find(
   ({ idx }) => idx === 25,
 );
+const legalSourceFetchEntry = journal.entries.find(
+  ({ idx }) => idx === 26,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -81,6 +84,10 @@ assert.ok(
 assert.ok(
   legalSourceLifecycleEntry,
   "Drizzle journal must contain migration 0025",
+);
+assert.ok(
+  legalSourceFetchEntry,
+  "Drizzle journal must contain migration 0026",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2395,7 +2402,9 @@ test("0025 keeps legacy sources untrusted and enforces verification evidence", (
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for (const entry of journal.entries) applyMigration(db, entry);
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 25)) {
+      applyMigration(db, entry);
+    }
     const now = "2026-07-28T12:00:00.000Z";
     const hash = "a".repeat(64);
     db.prepare(
@@ -2495,6 +2504,203 @@ test("0025 keeps legacy sources untrusted and enforces verification evidence", (
     );
     assert.equal(tableDefinitions(db).size, 103);
     assert.equal(foreignKeyCount(db), 138);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0026 adds only the fail-closed legal source fetch request contract", () => {
+  const sql = migrationSql(legalSourceFetchEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 7);
+  for (const statement of migrationStatements) {
+    assert.match(
+      statement,
+      /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i,
+      `unexpected legal source fetch statement: ${statement.slice(0, 100)}`,
+    );
+  }
+  assert.match(sql, /CREATE TABLE `legal_source_fetch_requests`/);
+  assert.match(sql, /legal source fetch request lifecycle invalid/);
+  assert.match(sql, /completed legal source fetch request is immutable/);
+  assert.match(
+    sql,
+    /CREATE UNIQUE INDEX `legal_review_queue_version_reason_uidx`/,
+  );
+  assert.doesNotMatch(sql, /DROP TABLE|DELETE FROM|UPDATE `legal_sources` SET/i);
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0025_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0026_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(legalSourceFetchEntry.idx, 26);
+  assert.equal(legalSourceFetchEntry.tag, "0026_panoramic_toad_men");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 78);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    139,
+  );
+});
+
+test("0026 rejects unsafe fetch scope and makes completed evidence immutable", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-28T12:00:00.000Z";
+    const finished = "2026-07-28T12:01:00.000Z";
+    const hash = "c".repeat(64);
+
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO legal_source_fetch_requests (
+          id, environment, source_kind, locale, requested_url, canonical_id,
+          idempotency_key, status, attempt_count, created_at, updated_at
+        ) VALUES (
+          'unsafe-url', 'staging', 'lex', 'ru',
+          'http://lex.uz/ru/docs/-42', '-42', 'unsafe-url-key',
+          'queued', 0, ?, ?
+        )
+      `).run(now, now),
+      /legal source fetch request URL invalid/,
+    );
+    for (const [id, url] of [
+      ["trailing-slash", "https://lex.uz/ru/docs/-42/"],
+      ["non-numeric", "https://lex.uz/ru/docs/-42garbage"],
+    ]) {
+      assert.throws(
+        () => db.prepare(`
+          INSERT INTO legal_source_fetch_requests (
+            id, environment, source_kind, locale, requested_url, canonical_id,
+            idempotency_key, status, attempt_count, created_at, updated_at
+          ) VALUES (?, 'staging', 'lex', 'ru', ?, '-42', ?, 'queued', 0, ?, ?)
+        `).run(id, url, `${id}-key`, now, now),
+        /legal source fetch request URL invalid/,
+      );
+    }
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO legal_source_fetch_requests (
+          id, environment, source_kind, locale, requested_url, canonical_id,
+          idempotency_key, status, attempt_count, started_at,
+          created_at, updated_at
+        ) VALUES (
+          'bad-lifecycle', 'staging', 'lex', 'ru',
+          'https://lex.uz/ru/docs/-42', '-42', 'bad-lifecycle-key',
+          'queued', 1, ?, ?, ?
+        )
+      `).run(now, now, now),
+      /legal source fetch request lifecycle invalid/,
+    );
+
+    db.prepare(`
+      INSERT INTO legal_source_fetch_requests (
+        id, environment, source_kind, locale, requested_url, canonical_id,
+        idempotency_key, status, attempt_count, created_at, updated_at
+      ) VALUES (
+        'fetch-42', 'staging', 'lex', 'ru',
+        'https://lex.uz/ru/docs/-42', '-42', 'fetch-42-key',
+        'queued', 0, ?, ?
+      )
+    `).run(now, now);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_source_fetch_requests
+        SET requested_url='https://lex.uz/ru/docs/-43'
+        WHERE id='fetch-42'
+      `).run(),
+      /legal source fetch request identity is immutable/,
+    );
+    db.prepare(`
+      UPDATE legal_source_fetch_requests
+      SET status='running', attempt_count=1, started_at=?, updated_at=?
+      WHERE id='fetch-42'
+    `).run(now, now);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_source_fetch_requests
+        SET status='queued', attempt_count=0, started_at=NULL, updated_at=?
+        WHERE id='fetch-42'
+      `).run(now),
+      /legal source fetch request lifecycle invalid/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_source_fetch_requests
+        SET status='completed', finished_at=?
+        WHERE id='fetch-42'
+      `).run(finished),
+      /legal source fetch request lifecycle invalid/,
+    );
+
+    db.prepare(`
+      INSERT INTO legal_sources (
+        id, canonical_id, official_url, act_title, act_identifier,
+        locale, source_type, status, verification_state, content_sha256,
+        fetched_at, last_checked_at, created_at, updated_at
+      ) VALUES (
+        'source-42', '-42', 'https://lex.uz/ru/docs/-42', 'Act 42', '-42',
+        'ru', 'lex', 'pending_review', 'fetched', ?, ?, ?, ?, ?
+      )
+    `).run(hash, now, now, now, now);
+    db.prepare(`
+      INSERT INTO legal_source_versions (
+        id, source_id, language, status, content_sha256, raw_object_key,
+        fetched_at, created_at, updated_at
+      ) VALUES (
+        'version-42', 'source-42', 'ru', 'pending_review', ?,
+        'legal-sources/raw/lex/ru/cc/hash.html', ?, ?, ?
+      )
+    `).run(hash, now, now, now);
+    db.prepare(`
+      UPDATE legal_source_fetch_requests
+      SET status='completed', source_id='source-42', version_id='version-42',
+          finished_at=?, updated_at=?
+      WHERE id='fetch-42'
+    `).run(finished, finished);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_source_fetch_requests
+        SET status='failed', source_id=NULL, version_id=NULL,
+            error_code='rewritten', updated_at=?
+        WHERE id='fetch-42'
+      `).run(finished),
+      /completed legal source fetch request is immutable|legal source fetch request lifecycle invalid/,
+    );
+
+    db.prepare(`
+      INSERT INTO legal_source_fetch_requests (
+        id, environment, source_kind, locale, requested_url, canonical_id,
+        idempotency_key, status, attempt_count, error_code, started_at,
+        finished_at, created_at, updated_at
+      ) VALUES (
+        'failed-42', 'staging', 'lex', 'ru',
+        'https://lex.uz/ru/docs/-43', '-43', 'failed-42-key',
+        'failed', 1, 'LEGAL_SOURCE_UPSTREAM_UNAVAILABLE', ?, ?, ?, ?
+      )
+    `).run(now, finished, now, finished);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_source_fetch_requests
+        SET status='running', error_code=NULL, finished_at=NULL, updated_at=?
+        WHERE id='failed-42'
+      `).run(finished),
+      /legal source fetch request lifecycle invalid/,
+    );
+
+    assert.equal(tableDefinitions(db).size, 104);
+    assert.equal(foreignKeyCount(db), 141);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

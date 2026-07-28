@@ -39,6 +39,7 @@ assert.equal(artifact.vars?.APP_ENV, requestedEnvironment);
 assert.deepEqual(artifact.vars, selected.vars);
 assert.equal(artifact.vars?.ASYNC_RUNTIME_ENABLED, "false");
 assert.equal(artifact.vars?.CRON_ENABLED, "false");
+assert.equal(artifact.vars?.LEGAL_ADVICE_INGESTION_ENABLED, "false");
 assert.equal(
   artifact.vars?.IDENTITY_PROTECTION_MODE,
   "legacy",

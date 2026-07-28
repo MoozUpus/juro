@@ -900,3 +900,36 @@ hybrid retrieval, citation existence/version validation, Cron execution, or
 remote migration. Those are separate Phase 3 gates. Until they pass, the
 absence of trusted sources must remain an honest empty/unavailable state and
 must never be replaced with fabricated legal citations.
+
+## D-049 — legal-source acquisition is explicit, robots-gated, and untrusted
+
+Status: accepted and locally verified; remote migration/network activation and legal-review gates open
+Date: 2026-07-28
+
+Migration `0026` and the acquisition service create one explicit official-page
+request, an identifiers-only outbox message, a bounded `legal.sync` execution,
+a content-addressed private R2 raw object, and a D1 version awaiting review.
+Only exact HTTPS Lex document and Advice question routes are accepted. Every
+redirect is manual and must remain HTTPS, within the same official source
+family, locale, and document identifier. A fresh bounded `robots.txt` request
+must allow the path. Missing/invalid robots policy, positive crawl-delay,
+wrong media/encoding, excessive bytes, body stall, downgrade, or off-source
+redirect fails closed; an empty HTML body is also rejected. Request/outbox
+idempotency is bound to the actor and environment so a conflicting replay
+cannot enqueue an orphan job. Raw HTML is untrusted and is not parsed,
+indexed, or sent to an AI model by this slice.
+
+Lex single-act acquisition is code-enabled based on the narrow official-act
+reuse boundary described at <https://lex.uz/uz/axborot>, still subject to live
+robots policy and later legal approval. Advice acquisition remains disabled by
+`LEGAL_ADVICE_INGESTION_ENABLED=false` because the inspected public usage page
+at <https://advice.uz/uz/page/how-it-works> did not establish sufficiently
+explicit broad ingestion authorization for this decision. Enabling Advice is
+a separate reviewed owner/legal/config/staging action.
+
+All environments still set `ASYNC_RUNTIME_ENABLED=false`, have no Queue
+consumer, and have no Cron trigger. No live official-site request, remote R2
+object, remote `0026`, reviewer approval, source parsing, Vectorize write, or
+production change is claimed. R2 precedes idempotent D1 persistence because
+the services cannot share a transaction; a failure may leave a harmless
+unreferenced content-addressed object, never a verified source.

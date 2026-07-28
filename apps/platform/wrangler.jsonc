@@ -12,6 +12,7 @@
     "APP_ENV": "development",
     "ASYNC_RUNTIME_ENABLED": "false",
     "CRON_ENABLED": "false",
+    "LEGAL_ADVICE_INGESTION_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
     "JOB_SCHEMA_VERSION": "1",
     "EMAIL_FROM": "JURO <no-reply@juro.uz>"
@@ -123,6 +124,7 @@
         "APP_ENV": "staging",
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
+        "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>"
@@ -219,6 +221,7 @@
         "APP_ENV": "production",
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
+        "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>"

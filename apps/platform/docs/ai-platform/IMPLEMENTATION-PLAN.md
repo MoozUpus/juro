@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-28
-Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint includes source migrations `0022`–`0024` and the identity/workspace controls below. The first local Phase 3 slice adds migration `0025`, fail-closed source/version/review evidence, a one-active-sync lock, and trust filtering for current AI/search/monitoring/comparison consumers. No crawler, parser, Vectorize retrieval, citation validator, Cron, editor, or remote legal-source activation is claimed. Portable backup/import, remote migrations `0022`–`0025`, live providers, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint includes source migrations `0022`–`0024` and the identity/workspace controls below. Phase 3 now has migration `0025` trust evidence and migration `0026` with an exact official-page, robots-aware, bounded single-source request/outbox/Queue/private-R2/pending-review contract. Advice and the global async runtime remain disabled. No bulk crawler, parser, Vectorize retrieval, citation validator, Cron, editor, or remote legal-source activation is claimed. Portable backup/import, remote migrations `0022`–`0026`, live providers, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -41,7 +41,7 @@ Order and current state:
 2. **Locally verified:** generated Worker environment types and freshness check;
 3. **Locally verified:** environment-safe binding normalization, artifact validation, and three-environment dry-run matrix;
 4. **Locally verified:** additive D1 job/idempotency/operation tables in migration `0011`;
-5. **Source-only/disabled:** identifiers-only v2 queue envelope/handler boundary, outbox, idempotency, short leases, and fencing tests; seven producers are declared but consumers/DLQs are absent and no handler executes work;
+5. **Source-only/disabled:** identifiers-only v2 queue envelope/handler boundary, outbox, idempotency, short leases, and fencing tests; seven producers are declared but consumers/DLQs are absent; only `legal.sync` has a local implementation, and the global runtime kill switch remains false;
 6. **Partial/source-only:** scheduled handler is inert with no trigger; locks/run ledgers exist, but reviewed schedules, manual retry, and alerts are pending;
 7. **Candidate selected, quality gate open:** official OpenAI and Cloudflare documentation support `text-embedding-3-large` with an explicit reduced `dimensions=1536` and Vectorize `cosine`; no legal ingestion starts until RU/UZ/cross-language retrieval evaluation and citation checks pass;
 8. **Locally verified/source-only contract v2:** exact approved R2/Queue/Vectorize bindings replace the older generic source contract without relabeling data classes; legacy remote dev resources remain untouched and no data/binding cutover has occurred;
@@ -88,8 +88,8 @@ Local checkpoint only; none of these statements is a staging or production claim
 - canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
   root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
   and selecting a workspace no longer rewrites the stored persona;
-- the latest recorded successful local full suite is 290 tests: 25 rendered
-  route, 204 core, and 61 Cloudflare tests.
+- the latest recorded successful local full suite is 304 tests: 25 rendered
+  route, 216 core, and 63 Cloudflare tests.
 
 Vertical slices:
 
@@ -109,7 +109,7 @@ The two existing document-builder isolation defects are fixed in this phase befo
 
 Gate:
 
-- local auth/race tests pass; remote migrations `0022`–`0025`, live
+- local auth/race tests pass; remote migrations `0022`–`0026`, live
   Turnstile/Resend, and protected staging full-HTTP E2E remain required;
 - cross-account/workspace leaks: zero;
 - privileged access requires 2FA;
@@ -130,13 +130,20 @@ Local checkpoint:
 - only one `running` sync may hold a given lock key;
 - current AI, comparison, search, and monitoring reads require exact official
   HTTPS host, matching Lex/Advice type, verified state/time, and SHA-256;
-- this is schema and consumer hardening only. Fetching, parsing, legal review,
-  indexing, hybrid retrieval, citation validation, scheduling, and editor UI
-  remain unimplemented and disabled.
+- migration `0026` and the service add an idempotent single-page request,
+  identifiers-only outbox/`legal.sync` execution, exact URL/redirect/robots/
+  timeout/byte/type/encoding gates, a private content-addressed R2 raw object,
+  safe failure evidence, and only `fetched`/`pending_review` D1 state;
+- global async execution is still false, no Queue consumer is attached, and
+  Advice has a separate false policy gate. Live fetching, parsing, legal
+  review authorization, indexing, hybrid retrieval, citation validation,
+  scheduling, and editor UI remain unimplemented or disabled.
 
 Build:
 
-- respectful public Advice/Lex fetch adapters with allowlist, rate limits, robots/rules compliance, and manual-review fallback;
+- protected staging execution of the implemented single-page Lex adapter,
+  plus a durable host-rate scheduler before positive crawl-delay can be
+  supported; Advice activation remains a separate legal/owner gate;
 - source/version/section/chunk schema;
 - RU/UZ snapshots, hashes, dates, status, historical applicability, and diffs;
 - hybrid lexical/semantic retrieval and reranking;
@@ -262,13 +269,13 @@ Then stop and request two separate explicit approvals: first for production depl
 ## Current blockers that do not stop local implementation
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
-2. Production D1 cannot be migrated before a verified external backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0021`; source migrations `0022`–`0025` are local-only.
+2. Production D1 cannot be migrated before a verified external backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0021`; source migrations `0022`–`0026` are local-only.
 3. Provider and security secrets are absent by name except `RESEND_API_KEY`; `TURNSTILE_SECRET_KEY` and the environment-specific public `TURNSTILE_SITE_KEY` are not configured on the inspected surfaces. Required values must be entered directly in the Cloudflare/provider controls, never in chat. Real Turnstile and Resend delivery are unverified.
 4. Operator legal identity placeholders require owner-supplied approved legal details.
 5. Final RU/UZ policies and the legal-language priority rule require legal approval.
 6. Malware scanner and audio/video providers require selection only after adapter and privacy/cost evaluation.
 7. Live Queue consumers require quarantine/DLQ consumption, alerts, redrive, durable ledger reconciliation, and per-kind producer/handler flags.
-8. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing; currently no handler is enabled, consumers are absent, and every valid v2 job fails closed as `JOB_HANDLER_NOT_ENABLED`.
+8. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing. Consumers remain absent and the global runtime is disabled. Only `legal.sync` has a local handler; every other valid v2 job fails closed as `JOB_HANDLER_NOT_ENABLED`.
 9. The Sites deployment pipeline must prove it selects the explicit production build; ordinary `npm run build` intentionally produces development.
 10. The Browser bootstrap was recovered through a session-local CommonJS package scope without modifying JURO or the user-home package. Bounded builder viewport evidence exists; keyboard/focus, zoom, reduced-motion, axe, Lighthouse, real-device, and broader critical-route validation remain open.
 11. No approved rigged 3D Jurobek asset is present; avatar/voice-with-avatar remains disabled and a static fallback is mandatory.

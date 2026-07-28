@@ -184,12 +184,13 @@ The committed defaults are:
 ```text
 ASYNC_RUNTIME_ENABLED=false
 CRON_ENABLED=false
+LEGAL_ADVICE_INGESTION_ENABLED=false
 JOB_SCHEMA_VERSION=1
 ```
 
 No `triggers` property is present in source configuration. Generated Wrangler artifacts may normalize this to `triggers: {}`; any non-empty trigger is rejected by artifact validation.
 
-The Worker exports `fetch`, `queue`, and `scheduled`. Queue bodies accept strict identifiers-only v2 envelopes, but no supported job kind executes work: every valid v2 kind is recorded as terminal `JOB_HANDLER_NOT_ENABLED` and acknowledged without simulating success. Legacy `ai.request`, `backup.run`, `platform.probe`, and `file.process` are rejected by schema/routing/outbox compatibility checks. The scheduled handler is inert and calls `noRetry()` because no reviewed schedule is attached.
+The Worker exports `fetch`, `queue`, and `scheduled`. Queue bodies accept strict identifiers-only v2 envelopes. Only `legal.sync` has a local request/fetch/R2/pending-review implementation, but it remains unreachable remotely because global async execution is false and no consumer is attached; Advice is separately disabled. Every other valid v2 kind is recorded as terminal `JOB_HANDLER_NOT_ENABLED` and acknowledged without simulating success. Legacy `ai.request`, `backup.run`, `platform.probe`, and `file.process` are rejected by schema/routing/outbox compatibility checks. The scheduled handler is inert and calls `noRetry()` because no reviewed schedule is attached.
 
 A runtime flag does not pause Cloudflare Queue delivery. Source therefore declares seven producer bindings only, `consumers: []`, no DLQ, no trigger, and no malware binding. The current source-only boundary acknowledges malformed envelopes and terminally rejects not-yet-enabled v2 kinds. These are deliberate fail-closed local semantics, not a production-ready delivery policy. A live consumer can be declared only together with its exact resource inventory, handler, DLQ terminal path, alert, redrive/reconciliation policy, and per-kind enablement.
 
@@ -208,7 +209,8 @@ Artifact validation proves:
 - all add-on bindings and selected environment names survive flattening;
 - the exact v2 R2, seven producer-only Queue, and four Vectorize names survive flattening;
 - Queue consumers are empty, malware is unattached, and legacy bindings are absent;
-- `ASYNC_RUNTIME_ENABLED` and `CRON_ENABLED` remain false;
+- `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and
+  `LEGAL_ADVICE_INGESTION_ENABLED` remain false;
 - no duplicate binding names;
 - no Cron trigger;
 - no development auth bypass;

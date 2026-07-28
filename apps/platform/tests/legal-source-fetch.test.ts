@@ -1,0 +1,297 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  LegalSourceFetchError,
+  classifyLegalSourceUrl,
+  fetchLegalSource,
+} from "../lib/legal/source-fetch";
+
+type FetchCall = {
+  url: string;
+  init: RequestInit | undefined;
+};
+
+function sequenceFetch(responses: Response[]): {
+  calls: FetchCall[];
+  fetchImpl: typeof fetch;
+} {
+  const calls: FetchCall[] = [];
+  return {
+    calls,
+    fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      const response = responses.shift();
+      if (!response) throw new Error("Unexpected synthetic fetch.");
+      return response;
+    }) as typeof fetch,
+  };
+}
+
+function robots(body = "User-agent: *\nAllow: /\n"): Response {
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
+function html(body = "<!doctype html><html><body>Official act</body></html>"):
+  Response {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=UTF-8",
+      etag: '"synthetic-etag"',
+      "last-modified": "Tue, 28 Jul 2026 00:00:00 GMT",
+    },
+  });
+}
+
+async function rejectsCode(
+  action: () => Promise<unknown>,
+  code: string,
+): Promise<void> {
+  await assert.rejects(action, (error: unknown) => {
+    assert.ok(error instanceof LegalSourceFetchError);
+    assert.equal(error.code, code);
+    return true;
+  });
+}
+
+test("legal source URL classifier accepts only exact HTTPS document routes", () => {
+  assert.deepEqual(
+    classifyLegalSourceUrl("https://www.lex.uz/ru/docs/-8354256/"),
+    {
+      sourceKind: "lex",
+      locale: "ru",
+      canonicalId: "-8354256",
+      canonicalUrl: "https://lex.uz/ru/docs/-8354256",
+      host: "lex.uz",
+    },
+  );
+  assert.deepEqual(
+    classifyLegalSourceUrl("https://advice.uz/uz/questions/21"),
+    {
+      sourceKind: "advice",
+      locale: "uz",
+      canonicalId: "21",
+      canonicalUrl: "https://advice.uz/uz/questions/21",
+      host: "advice.uz",
+    },
+  );
+
+  for (const value of [
+    "http://lex.uz/ru/docs/-42",
+    "https://lex.uz/",
+    "https://lex.uz/ru/docs/-42?download=1",
+    "https://lex.uz.evil.example/ru/docs/-42",
+    "https://user:password@lex.uz/ru/docs/-42",
+    "https://advice.uz/ru/page/how-it-works",
+    "https://advice.uz/ru/questions/not-a-number",
+  ]) {
+    assert.throws(
+      () => classifyLegalSourceUrl(value),
+      (error: unknown) =>
+        error instanceof LegalSourceFetchError
+        && error.code === "LEGAL_SOURCE_URL_REJECTED",
+    );
+  }
+});
+
+test("Advice acquisition is disabled before any network request", async () => {
+  const synthetic = sequenceFetch([]);
+  await rejectsCode(
+    () => fetchLegalSource("https://advice.uz/ru/questions/21", {
+      adviceEnabled: false,
+      fetchImpl: synthetic.fetchImpl,
+    }),
+    "LEGAL_SOURCE_POLICY_DISABLED",
+  );
+  assert.equal(synthetic.calls.length, 0);
+});
+
+test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", async () => {
+  const synthetic = sequenceFetch([robots(), html()]);
+  const result = await fetchLegalSource("https://lex.uz/ru/docs/-42", {
+    adviceEnabled: false,
+    fetchImpl: synthetic.fetchImpl,
+    now: () => new Date("2026-07-28T00:00:00.000Z"),
+  });
+
+  assert.equal(result.sourceKind, "lex");
+  assert.equal(result.locale, "ru");
+  assert.equal(result.canonicalId, "-42");
+  assert.match(result.contentSha256, /^[0-9a-f]{64}$/);
+  assert.equal(result.fetchedAt, "2026-07-28T00:00:00.000Z");
+  assert.equal(result.etag, '"synthetic-etag"');
+  assert.equal(result.bytes.byteLength > 0, true);
+  assert.deepEqual(
+    synthetic.calls.map((call) => call.url),
+    [
+      "https://lex.uz/robots.txt",
+      "https://lex.uz/ru/docs/-42",
+    ],
+  );
+  for (const call of synthetic.calls) {
+    assert.equal(call.init?.redirect, "manual");
+    assert.equal(call.init?.cache, "no-store");
+    assert.equal(call.init?.credentials, "omit");
+    assert.match(
+      new Headers(call.init?.headers).get("user-agent") ?? "",
+      /^JURO-LegalSourceBot\//,
+    );
+  }
+});
+
+test("robots disallow and crawl-delay policies fail closed", async () => {
+  for (const [body, code] of [
+    ["User-agent: *\nDisallow: /ru/docs/\n", "LEGAL_SOURCE_ROBOTS_DISALLOWED"],
+    ["User-agent: *\nAllow: /\nCrawl-delay: 1\n", "LEGAL_SOURCE_ROBOTS_RATE_POLICY"],
+  ] as const) {
+    const synthetic = sequenceFetch([robots(body)]);
+    await rejectsCode(
+      () => fetchLegalSource("https://lex.uz/ru/docs/-42", {
+        adviceEnabled: false,
+        fetchImpl: synthetic.fetchImpl,
+      }),
+      code,
+    );
+    assert.equal(synthetic.calls.length, 1);
+  }
+});
+
+test("a more specific robots Allow overrides a broader Disallow", async () => {
+  const synthetic = sequenceFetch([
+    robots([
+      "User-agent: *",
+      "Disallow: /ru/docs/",
+      "Allow: /ru/docs/-42$",
+      "",
+    ].join("\n")),
+    html(),
+  ]);
+  const result = await fetchLegalSource("https://lex.uz/ru/docs/-42", {
+    adviceEnabled: false,
+    fetchImpl: synthetic.fetchImpl,
+  });
+  assert.equal(result.canonicalId, "-42");
+});
+
+test("redirects may change www host but never scheme, source, or document", async () => {
+  const accepted = sequenceFetch([
+    new Response(null, {
+      status: 301,
+      headers: { location: "https://www.lex.uz/robots.txt" },
+    }),
+    robots(),
+    new Response(null, {
+      status: 302,
+      headers: { location: "https://www.lex.uz/ru/docs/-42/" },
+    }),
+    html(),
+  ]);
+  const result = await fetchLegalSource("https://lex.uz/ru/docs/-42", {
+    adviceEnabled: false,
+    fetchImpl: accepted.fetchImpl,
+  });
+  assert.equal(result.canonicalUrl, "https://lex.uz/ru/docs/-42");
+
+  for (const location of [
+    "http://lex.uz/ru/docs/-42",
+    "https://evil.example/ru/docs/-42",
+    "https://lex.uz/ru/docs/-43",
+  ]) {
+    const rejected = sequenceFetch([
+      robots(),
+      new Response(null, { status: 302, headers: { location } }),
+    ]);
+    await rejectsCode(
+      () => fetchLegalSource("https://lex.uz/ru/docs/-42", {
+        adviceEnabled: false,
+        fetchImpl: rejected.fetchImpl,
+      }),
+      "LEGAL_SOURCE_REDIRECT_REJECTED",
+    );
+  }
+});
+
+test("content type, encoding, and byte limits are enforced before persistence", async () => {
+  const wrongType = sequenceFetch([
+    robots(),
+    new Response("binary", {
+      headers: { "content-type": "application/octet-stream" },
+    }),
+  ]);
+  await rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/-42", {
+      adviceEnabled: false,
+      fetchImpl: wrongType.fetchImpl,
+    }),
+    "LEGAL_SOURCE_CONTENT_TYPE_REJECTED",
+  );
+
+  const emptyContent = sequenceFetch([
+    robots(),
+    new Response(null, {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }),
+  ]);
+  await rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/-42", {
+      adviceEnabled: false,
+      fetchImpl: emptyContent.fetchImpl,
+    }),
+    "LEGAL_SOURCE_EMPTY_CONTENT",
+  );
+
+  const tooLarge = sequenceFetch([
+    robots(),
+    new Response("123456", {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        "content-length": "6",
+      },
+    }),
+  ]);
+  await rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/-42", {
+      adviceEnabled: false,
+      fetchImpl: tooLarge.fetchImpl,
+      maxBytes: 5,
+    }),
+    "LEGAL_SOURCE_TOO_LARGE",
+  );
+
+  const invalidUtf8 = sequenceFetch([
+    robots(),
+    new Response(new Uint8Array([0xc3, 0x28]), {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }),
+  ]);
+  await rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/-42", {
+      adviceEnabled: false,
+      fetchImpl: invalidUtf8.fetchImpl,
+    }),
+    "LEGAL_SOURCE_ENCODING_REJECTED",
+  );
+
+  const stalledBody = sequenceFetch([
+    robots(),
+    new Response(new ReadableStream<Uint8Array>({
+      pull() {
+        return new Promise<void>(() => undefined);
+      },
+      cancel() {},
+    }), {
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }),
+  ]);
+  await rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/-42", {
+      adviceEnabled: false,
+      fetchImpl: stalledBody.fetchImpl,
+      timeoutMs: 10,
+    }),
+    "LEGAL_SOURCE_TIMEOUT",
+  );
+});

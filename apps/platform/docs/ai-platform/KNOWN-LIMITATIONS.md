@@ -6,7 +6,7 @@ foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0025` have not been applied to `juro-staging`; the
+- migrations `0022`–`0026` have not been applied to `juro-staging`; the
   staging ledger remains exactly `0000`–`0021`;
 - a portable D1 export/import rehearsal and protected backup object remain
   unverified, so the consumed verified-empty bootstrap exception cannot be
@@ -17,8 +17,28 @@ foundation checkpoint.
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain
   authorization, and provider-failure behavior have not been verified live;
-- local test totals (25 rendered route + 204 core + 61 Cloudflare = 290) are
+- local test totals (25 rendered route + 216 core + 63 Cloudflare = 304) are
   not remote D1, live-provider, or protected staging browser evidence.
+
+## Legal-source acquisition gaps
+
+- the Lex fetch contract is locally tested with synthetic upstream responses;
+  it has not fetched a live Lex page from a Worker, stored a remote R2 object,
+  or passed staging network/robots/latency checks;
+- Advice ingestion is deliberately disabled in every environment because this
+  checkpoint did not establish sufficiently explicit broad-use authorization;
+- no discovery crawler, sitemap traversal, parser, historical diff, section/
+  chunk creation, Vectorize write, lexical index, citation validator, reviewer
+  authorization route, legal editor, Cron, Queue consumer, DLQ, or alert is
+  active;
+- raw public-source HTML currently shares the existing private `BUCKET`
+  binding under a content-addressed `legal-sources/raw/` prefix. A dedicated
+  source bucket is not claimed and would require an inventoried Cloudflare
+  resource plus binding/deployment review;
+- the fetcher intentionally rejects any positive `Crawl-delay` directive
+  until durable host-rate scheduling exists; it does not sleep inside a Worker;
+- stored HTML is untrusted data and is neither parsed nor sent to an AI model
+  in this checkpoint.
 
 ## Identity and session gaps
 
@@ -59,12 +79,14 @@ foundation checkpoint.
 
 ## Legal knowledge gaps
 
-- migration `0025` and the trust filter are local-only; no remote legal-source
-  schema or source record was created;
-- no crawler/fetch adapter, robots/rate-policy enforcement, raw R2 snapshot,
-  parser, Advice scenario model, historical diff, privileged review UI,
-  Vectorize indexing, lexical retrieval, reranking, or citation validator is
-  implemented;
+- migrations `0025`–`0026` and the trust filter are local-only; no remote
+  legal-source schema, fetch request, R2 evidence object, or source record was
+  created;
+- one exact-page fetch adapter, robots/rate-policy enforcement, and private
+  content-addressed R2 write contract are implemented locally, but no bulk
+  discovery crawler, parser, Advice scenario model, historical diff,
+  privileged review UI, Vectorize indexing, lexical retrieval, reranking, or
+  citation validator is implemented;
 - no Cron or Queue consumer is attached, and a passing one-active-sync lock
   test is not evidence that synchronization runs;
 - source freshness and language-priority rules still need legally approved

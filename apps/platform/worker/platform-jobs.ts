@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  LegalSourceAcquisitionError,
+  executeLegalSourceFetchRequest,
+} from "../lib/legal/source-acquisition";
 
 export const JOB_KINDS = [
   "document.analyze",
@@ -70,7 +74,8 @@ type JobErrorCode =
   | "JOB_QUEUE_MISMATCH"
   | "JOB_SCHEMA_VERSION_MISMATCH"
   | "JOB_TRANSIENT_FAILURE"
-  | "JOB_VALIDATION_FAILED";
+  | "JOB_VALIDATION_FAILED"
+  | "LEGAL_SOURCE_SYNC_FAILED";
 
 type OperationalError = {
   code: JobErrorCode;
@@ -149,6 +154,7 @@ export type PlatformJobEnv = Omit<
 > & QueueBindingEnv & {
   ASYNC_RUNTIME_ENABLED: string;
   CRON_ENABLED: string;
+  LEGAL_ADVICE_INGESTION_ENABLED: string;
 };
 
 export function expectedQueueName(
@@ -459,6 +465,20 @@ async function executeJob(
 ): Promise<void> {
   if (queueName !== expectedQueueName(envelope.kind, env.APP_ENV)) {
     throw new SafeJobError("JOB_QUEUE_MISMATCH", false);
+  }
+  if (envelope.kind === "legal.sync") {
+    try {
+      await executeLegalSourceFetchRequest(env, envelope.subjectId);
+      return;
+    } catch (error) {
+      if (error instanceof LegalSourceAcquisitionError) {
+        throw new SafeJobError(
+          "LEGAL_SOURCE_SYNC_FAILED",
+          error.retryable,
+        );
+      }
+      throw error;
+    }
   }
   throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
 }

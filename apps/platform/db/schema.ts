@@ -1261,6 +1261,30 @@ export const sourceSyncErrors = sqliteTable("source_sync_errors", {
   occurredAt: text("occurred_at").notNull(),
 }, (table) => [index("source_sync_errors_run_idx").on(table.runId, table.occurredAt)]);
 
+export const legalSourceFetchRequests = sqliteTable("legal_source_fetch_requests", {
+  id: text("id").primaryKey(),
+  environment: text("environment").notNull(),
+  sourceKind: text("source_kind").notNull(),
+  locale: text("locale").notNull(),
+  requestedUrl: text("requested_url").notNull(),
+  canonicalId: text("canonical_id").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  status: text("status").notNull().default("queued"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  requestedByUserId: text("requested_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  sourceId: text("source_id").references(() => legalSources.id, { onDelete: "restrict" }),
+  versionId: text("version_id").references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  errorCode: text("error_code"),
+  startedAt: text("started_at"),
+  finishedAt: text("finished_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("legal_source_fetch_requests_idempotency_uidx").on(table.idempotencyKey),
+  index("legal_source_fetch_requests_status_idx").on(table.environment, table.status, table.createdAt),
+  index("legal_source_fetch_requests_source_idx").on(table.sourceId, table.versionId),
+]);
+
 export const legalReviewQueue = sqliteTable("legal_review_queue", {
   id: text("id").primaryKey(),
   sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
@@ -1275,6 +1299,7 @@ export const legalReviewQueue = sqliteTable("legal_review_queue", {
 }, (table) => [
   index("legal_review_queue_status_idx").on(table.status, table.createdAt),
   index("legal_review_queue_source_idx").on(table.sourceId, table.versionId),
+  uniqueIndex("legal_review_queue_version_reason_uidx").on(table.versionId, table.reasonCode),
 ]);
 
 export const conversationSources = sqliteTable("conversation_sources", {

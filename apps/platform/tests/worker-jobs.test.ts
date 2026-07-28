@@ -209,6 +209,7 @@ function createEnv(
     APP_ENV: "development",
     ASYNC_RUNTIME_ENABLED: options.asyncEnabled ?? "true",
     CRON_ENABLED: options.cronEnabled ?? "false",
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
     JOB_SCHEMA_VERSION: options.schemaVersion ?? "1",
     PLATFORM_ANALYTICS: {
       writeDataPoint(value: unknown) {

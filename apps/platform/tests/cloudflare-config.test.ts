@@ -93,6 +93,7 @@ test("declares isolated, disabled-by-default Cloudflare environments", () => {
     assert.equal(config.vars.APP_ENV, environment);
     assert.equal(config.vars.ASYNC_RUNTIME_ENABLED, "false");
     assert.equal(config.vars.CRON_ENABLED, "false");
+    assert.equal(config.vars.LEGAL_ADVICE_INGESTION_ENABLED, "false");
     assert.equal(config.vars.IDENTITY_PROTECTION_MODE, "legacy");
     assert.equal(config.vars.JOB_SCHEMA_VERSION, "1");
     assert.equal(Object.hasOwn(config, "triggers"), false);
