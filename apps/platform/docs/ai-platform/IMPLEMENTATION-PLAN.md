@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-28
-Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint includes migrations `0022`–`0024` and the identity/workspace controls below. Phase 3 now has migration `0025` trust evidence, migration `0026` with an exact official-page, robots-aware, bounded acquisition contract, deterministic untrusted normalization, migration `0027` with an MFA-bound immutable legal-review decision contract, and migration `0028` with a separate fresh-MFA publisher, atomic verified-state transition, and immutable reading/publication evidence. Advice and the global async runtime remain disabled. No bulk crawler, protected review/publisher route or UI, replacement-version activation, Vectorize retrieval, citation validator, Cron, editor, or remote legal-source activation is claimed. Portable backup/import, remote migrations `0022`–`0028`, live providers, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint includes migrations `0022`–`0024` and the identity/workspace controls below. Phase 3 now has migration `0025` trust evidence, migration `0026` with an exact official-page, robots-aware, bounded acquisition contract, deterministic untrusted normalization, migration `0027` with an MFA-bound immutable legal-review decision contract, migration `0028` with a separate fresh-MFA publisher, and protected claim/decision/publication POST routes pinned off by `LEGAL_SOURCE_STAFF_API_ENABLED=false` in every environment. Advice and the global async runtime remain disabled. No bulk crawler, staff UI, replacement-version activation, Vectorize retrieval, citation validator, Cron, editor, or remote legal-source activation is claimed. Portable backup/import, remote migrations `0022`–`0028`, live providers, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -88,8 +88,8 @@ Local checkpoint only; none of these statements is a staging or production claim
 - canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
   root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
   and selecting a workspace no longer rewrites the stored persona;
-- the latest recorded successful local full suite is 326 tests: 25 rendered
-  route, 234 core, and 67 Cloudflare tests.
+- the latest recorded successful local full suite is 329 tests: 25 rendered
+  route, 237 core, and 67 Cloudflare tests.
 
 Vertical slices:
 
@@ -146,9 +146,13 @@ Local checkpoint:
   evidence and another fresh-MFA capability check, revalidate the R2 snapshot,
   and atomically create bounded immutable reading rows plus canonical
   publication evidence while verifying the first source version;
+- three protected POST routes connect claim, decision, and publication to the
+  services with same-origin/CSRF, local-session, fresh-MFA, capability-first,
+  bounded-input, and RU/UZ no-store error handling; their environment flag is
+  deliberately false everywhere and no remote route or UI is active;
 - global async execution is still false, no Queue consumer is attached, and
   Advice has a separate false policy gate. Successful live fetching,
-  real-markup compatibility, protected review/publisher entry points,
+  real-markup compatibility, reviewed route activation and staff UI,
   replacement-version activation, indexing, hybrid retrieval, citation validation,
   scheduling, and editor UI remain unimplemented or disabled.
 

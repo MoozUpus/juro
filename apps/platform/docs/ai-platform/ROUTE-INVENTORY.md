@@ -186,8 +186,11 @@ All required `/admin` modules remain absent. The local 0020–0021 foundation
 defines a separate expiring platform-staff/capability boundary and an internal
 administrator grant/revoke service with fresh MFA and chained role-change
 evidence. It does not recognize workspace roles, `account_type`, or platform
-headers. No role is bootstrapped, and no route, Worker, job, UI, or
-customer-content grant invokes the internal mutation service.
+headers. No role is bootstrapped. Three narrow legal-source staff POST routes
+now invoke review/publication services locally, but
+`LEGAL_SOURCE_STAFF_API_ENABLED=false` makes them neutral `404` surfaces in
+every checked-in environment. No general admin route, staff UI, Worker
+deployment, job, or customer-content grant is active.
 
 ### Help and status
 
@@ -211,7 +214,8 @@ The inventory below describes the reconciled local integration branch, not a cla
 | verified deletion-challenge semantics on the existing deletion route | prior weaker behavior remains deployed |
 | document invitation pre-accept denial and atomic one-winner consume | insecure deployed behavior remains until approved release |
 | active-workspace builder isolation | cross-workspace deployed behavior remains until approved release |
-| platform staff assignment/role-event foundations | local service/schema only; no route exists and no role is bootstrapped |
+| platform staff assignment/role-event foundations | local service/schema only; no role-management route exists and no role is bootstrapped |
+| legal-source claim/decision/publication POST routes | present in local build only; fail closed behind `LEGAL_SOURCE_STAFF_API_ENABLED=false`; migrations `0027`–`0028`, reviewer bootstrap, remote route, and browser evidence are absent |
 
 This separation is mandatory when reading the route blocks: source presence is not staging or production evidence.
 
@@ -244,6 +248,9 @@ GET /api/platform/document-comparisons/:comparisonId/files/:version
 GET /api/platform/document-comparisons/:comparisonId/export
 GET,POST /api/platform/document-review
 GET /api/platform/document-review/files/:fileId
+POST /api/platform/legal-sources/reviews/:reviewId/claim
+POST /api/platform/legal-sources/reviews/:reviewId/decision
+POST /api/platform/legal-sources/reviews/:reviewId/publication
 GET,POST /api/platform/monitoring
 GET /api/platform/privacy/export
 POST /api/platform/privacy/deletion-request

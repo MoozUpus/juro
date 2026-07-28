@@ -185,6 +185,7 @@ The committed defaults are:
 ASYNC_RUNTIME_ENABLED=false
 CRON_ENABLED=false
 LEGAL_ADVICE_INGESTION_ENABLED=false
+LEGAL_SOURCE_STAFF_API_ENABLED=false
 JOB_SCHEMA_VERSION=1
 ```
 
@@ -209,8 +210,9 @@ Artifact validation proves:
 - all add-on bindings and selected environment names survive flattening;
 - the exact v2 R2, seven producer-only Queue, and four Vectorize names survive flattening;
 - Queue consumers are empty, malware is unattached, and legacy bindings are absent;
-- `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and
-  `LEGAL_ADVICE_INGESTION_ENABLED` remain false;
+- `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`,
+  `LEGAL_ADVICE_INGESTION_ENABLED`, and
+  `LEGAL_SOURCE_STAFF_API_ENABLED` remain false;
 - no duplicate binding names;
 - no Cron trigger;
 - no development auth bypass;

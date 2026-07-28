@@ -93,7 +93,7 @@ type ReadingRow = {
 const identifierSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
-const publicationInputSchema = z.object({
+export const legalSourcePublicationInputSchema = z.object({
   reviewId: identifierSchema,
   expectedDecisionEvidenceSha256: sha256Schema,
 }).strict();
@@ -489,7 +489,7 @@ export async function publishApprovedLegalSource(
 ): Promise<LegalSourcePublicationResult> {
   const now = options.now ?? new Date();
   const access = await publisherAccess(env.DB, session, now);
-  const input = publicationInputSchema.parse(inputValue);
+  const input = legalSourcePublicationInputSchema.parse(inputValue);
   const review = await loadApproved(env, input.reviewId);
   if (
     review.decisionEvidenceSha256

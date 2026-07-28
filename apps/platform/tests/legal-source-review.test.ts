@@ -18,6 +18,11 @@ import {
   LegalSourcePublicationError,
   publishApprovedLegalSource,
 } from "../lib/legal/source-publication";
+import {
+  handleLegalSourcePublicationRequest,
+  handleLegalSourceReviewClaimRequest,
+  handleLegalSourceReviewDecisionRequest,
+} from "../lib/legal/source-staff-http";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 type StoredObject = {
@@ -284,6 +289,22 @@ async function expectPublicationError(
     (error) => error instanceof LegalSourcePublicationError
       && error.code === code,
   );
+}
+
+function staffRequest(
+  path: string,
+  body?: unknown,
+): Request {
+  return new Request(`https://app.juro.test${path}`, {
+    method: "POST",
+    headers: {
+      origin: "https://app.juro.test",
+      "sec-fetch-site": "same-origin",
+      "x-juro-csrf": "1",
+      ...(body === undefined ? {} : { "content-type": "application/json" }),
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
 }
 
 test("legal review requires the dedicated role and recent local MFA before lookup", async () => {
@@ -820,5 +841,209 @@ test("publication rejects a changed normalized object and pre-existing reading d
     );
   } finally {
     seeded.sqlite.close();
+  }
+});
+
+test("disabled legal-source staff HTTP routes are indistinguishable and touch no session", async () => {
+  let sessionRequested = false;
+  const response = await handleLegalSourceReviewClaimRequest(
+    staffRequest("/api/platform/legal-sources/reviews/hidden/claim?lang=uz"),
+    "hidden",
+    {
+      enabled: "false",
+      sessionForRequest: async () => {
+        sessionRequested = true;
+        throw new Error("Disabled route must not resolve a session.");
+      },
+    },
+  );
+  assert.equal(response.status, 404);
+  assert.equal(sessionRequested, false);
+  assert.deepEqual(await response.json(), {
+    code: "NOT_FOUND",
+    error: "Yo‘nalish topilmadi.",
+  });
+});
+
+test("legal-source staff HTTP authorization and path validation precede body parsing", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const fixture = await normalizedReviewFixture(env, 211);
+    const support = insertStaff(sqlite, "staff-http-support", "support");
+    const response = await handleLegalSourceReviewDecisionRequest(
+      new Request(
+        `https://app.juro.test/api/platform/legal-sources/reviews/${fixture.reviewId}/decision`,
+        {
+          method: "POST",
+          headers: {
+            origin: "https://app.juro.test",
+            "sec-fetch-site": "same-origin",
+            "x-juro-csrf": "1",
+            "content-type": "application/json",
+          },
+          body: "{malformed",
+        },
+      ),
+      fixture.reviewId,
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => support,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(response.status, 403);
+    const body = await response.json() as { code: string };
+    assert.equal(body.code, "ACCESS_DENIED");
+    const reviewer = insertStaff(
+      sqlite,
+      "staff-http-path-reviewer",
+      "legal_reviewer",
+    );
+    const invalidPathResponse = await handleLegalSourceReviewDecisionRequest(
+      new Request(
+        "https://app.juro.test/api/platform/legal-sources/reviews/invalid/decision",
+        {
+          method: "POST",
+          headers: {
+            origin: "https://app.juro.test",
+            "sec-fetch-site": "same-origin",
+            "x-juro-csrf": "1",
+            "content-type": "application/json",
+          },
+          body: "{malformed",
+        },
+      ),
+      "../invalid",
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(invalidPathResponse.status, 400);
+    assert.equal(
+      ((await invalidPathResponse.json()) as { code: string }).code,
+      "INVALID_INPUT",
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(`
+        SELECT status,assigned_to_user_id FROM legal_review_queue WHERE id=?
+      `).get(fixture.reviewId) as Record<string, unknown> },
+      { status: "pending", assigned_to_user_id: null },
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("protected legal-source HTTP flow claims, decides, and publishes real D1/R2 evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const fixture = await normalizedReviewFixture(env, 212);
+    const reviewer = insertStaff(sqlite, "staff-http-reviewer", "legal_reviewer");
+    const publisher = insertStaff(sqlite, "staff-http-publisher", "legal_reviewer");
+    const reviewerDependencies = {
+      enabled: "true",
+      env,
+      sessionForRequest: async () => reviewer,
+      now: () => REVIEW_AT,
+    };
+    const claimResponse = await handleLegalSourceReviewClaimRequest(
+      staffRequest(
+        `/api/platform/legal-sources/reviews/${fixture.reviewId}/claim`,
+      ),
+      fixture.reviewId,
+      reviewerDependencies,
+    );
+    assert.equal(claimResponse.status, 200);
+    const claimBody = await claimResponse.json() as {
+      review: { status: string; changed: boolean };
+      source: {
+        rawContentSha256: string;
+        parsedContentSha256: string;
+        blocks: unknown[];
+        plainText?: string;
+      };
+    };
+    assert.deepEqual(claimBody.review, {
+      reviewId: fixture.reviewId,
+      reviewerUserId: reviewer.userId,
+      status: "in_review",
+      changed: true,
+    });
+    assert.ok(claimBody.source.blocks.length > 0);
+    assert.equal(Object.hasOwn(claimBody.source, "plainText"), false);
+
+    const decisionResponse = await handleLegalSourceReviewDecisionRequest(
+      staffRequest(
+        `/api/platform/legal-sources/reviews/${fixture.reviewId}/decision`,
+        {
+          decision: "approve",
+          notes: "HTTP-контур подтвердил точный снимок источника для публикации.",
+          expectedRawContentSha256: claimBody.source.rawContentSha256,
+          expectedParsedContentSha256: claimBody.source.parsedContentSha256,
+        },
+      ),
+      fixture.reviewId,
+      {
+        ...reviewerDependencies,
+        now: () => new Date("2026-07-28T01:12:00.000Z"),
+      },
+    );
+    assert.equal(decisionResponse.status, 200);
+    const decisionBody = await decisionResponse.json() as {
+      decision: { decisionEvidenceSha256: string; publicationRequired: boolean };
+    };
+    assert.equal(decisionBody.decision.publicationRequired, true);
+
+    const publicationRequestBody = {
+      expectedDecisionEvidenceSha256:
+        decisionBody.decision.decisionEvidenceSha256,
+    };
+    const publisherDependencies = {
+      enabled: "true",
+      env,
+      sessionForRequest: async () => publisher,
+      now: () => new Date("2026-07-28T01:14:00.000Z"),
+    };
+    const publicationResponse = await handleLegalSourcePublicationRequest(
+      staffRequest(
+        `/api/platform/legal-sources/reviews/${fixture.reviewId}/publication`,
+        publicationRequestBody,
+      ),
+      fixture.reviewId,
+      publisherDependencies,
+    );
+    assert.equal(publicationResponse.status, 200);
+    const publicationBody = await publicationResponse.json() as {
+      publication: { changed: boolean; sectionCount: number };
+    };
+    assert.equal(publicationBody.publication.changed, true);
+    assert.ok(publicationBody.publication.sectionCount > 0);
+    const replayResponse = await handleLegalSourcePublicationRequest(
+      staffRequest(
+        `/api/platform/legal-sources/reviews/${fixture.reviewId}/publication`,
+        publicationRequestBody,
+      ),
+      fixture.reviewId,
+      {
+        ...publisherDependencies,
+        now: () => new Date("2026-07-28T01:15:00.000Z"),
+      },
+    );
+    assert.equal(replayResponse.status, 200);
+    assert.equal(
+      ((await replayResponse.json()) as { publication: { changed: boolean } })
+        .publication.changed,
+      false,
+    );
+  } finally {
+    sqlite.close();
   }
 });

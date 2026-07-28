@@ -13,6 +13,7 @@
     "ASYNC_RUNTIME_ENABLED": "false",
     "CRON_ENABLED": "false",
     "LEGAL_ADVICE_INGESTION_ENABLED": "false",
+    "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
     "JOB_SCHEMA_VERSION": "1",
     "EMAIL_FROM": "JURO <no-reply@juro.uz>"
@@ -125,6 +126,7 @@
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
+        "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>"
@@ -222,6 +224,7 @@
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
+        "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>"

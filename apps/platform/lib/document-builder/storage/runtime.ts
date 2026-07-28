@@ -1,9 +1,12 @@
 import { env } from "cloudflare:workers";
 
 export interface BuilderRuntimeEnv {
+  APP_ENV?: "development" | "staging" | "production";
   ASSETS?: Fetcher;
   DB?: D1Database;
   BUCKET?: R2Bucket;
+  LEGAL_ADVICE_INGESTION_ENABLED?: string;
+  LEGAL_SOURCE_STAFF_API_ENABLED?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   AI_PROVIDER?: string;

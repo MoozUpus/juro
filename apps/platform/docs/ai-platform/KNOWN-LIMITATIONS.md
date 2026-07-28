@@ -17,7 +17,7 @@ foundation checkpoint.
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain
   authorization, and provider-failure behavior have not been verified live;
-- local test totals (25 rendered route + 234 core + 67 Cloudflare = 326) are
+- local test totals (25 rendered route + 237 core + 67 Cloudflare = 329) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
@@ -29,9 +29,11 @@ foundation checkpoint.
 - Advice ingestion is deliberately disabled in every environment because this
   checkpoint did not establish sufficiently explicit broad-use authorization;
 - no discovery crawler, sitemap traversal, historical diff, replacement-version
-  activation, Vectorize write, lexical index, citation validator, protected
-  reviewer/publisher HTTP route/UI, legal editor, Cron, Queue consumer, DLQ, or alert is
-  active;
+  activation, Vectorize write, lexical index, citation validator, staff UI,
+  legal editor, Cron, Queue consumer, DLQ, or alert is active; the three local
+  reviewer/publisher HTTP routes are pinned off by
+  `LEGAL_SOURCE_STAFF_API_ENABLED=false` in every environment and have no
+  remote or browser evidence;
 - raw public-source HTML currently shares the existing private `BUCKET`
   binding under a content-addressed `legal-sources/raw/` prefix. A dedicated
   source bucket is not claimed and would require an inventoried Cloudflare

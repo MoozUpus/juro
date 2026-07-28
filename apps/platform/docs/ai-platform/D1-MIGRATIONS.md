@@ -563,11 +563,11 @@ or any further staging migration:
     flow only through protected staging with synthetic or explicitly approved
     public source targets; verify no `verified` or Vectorize record is created;
 22. apply and verify `0027` only after the staff tables are inventoried; keep
-    review entry points unreachable until a reviewed legal-reviewer bootstrap,
+    `LEGAL_SOURCE_STAFF_API_ENABLED=false` until a reviewed legal-reviewer bootstrap,
     fresh-MFA flow, immutable decision evidence, R2 tamper rejection, and
     non-publishing approval behavior pass protected staging tests;
-23. apply and verify `0028` only after `0027` passes; keep the publisher
-    unreachable until separate publish capability/fresh-MFA enforcement, R2
+23. apply and verify `0028` only after `0027` passes; keep the same staff API
+    flag false until separate publish capability/fresh-MFA enforcement, R2
     revalidation, one-winner publication, immutable reading rows, and exact
     replay pass protected staging tests; keep indexing and AI consumption off;
 24. retain the backup until the release window and restore test are complete.

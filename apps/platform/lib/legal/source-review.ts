@@ -56,7 +56,7 @@ type ReviewRow = {
 const identifierSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
 const sha256Schema = z.string().regex(/^[0-9a-f]{64}$/);
-const decisionInputSchema = z.object({
+export const legalSourceReviewDecisionInputSchema = z.object({
   reviewId: identifierSchema,
   decision: z.enum(["approve", "reject"]),
   notes: z.string().trim().min(10).max(2_000),
@@ -242,7 +242,7 @@ export type LegalSourceReviewDecisionResult = {
 
 async function terminalReplay(
   row: ReviewRow,
-  input: z.infer<typeof decisionInputSchema>,
+  input: z.infer<typeof legalSourceReviewDecisionInputSchema>,
   reviewerUserId: string,
 ): Promise<LegalSourceReviewDecisionResult | null> {
   const expectedStatus = input.decision === "approve" ? "approved" : "rejected";
@@ -304,7 +304,7 @@ export async function decideLegalSourceReview(
 ): Promise<LegalSourceReviewDecisionResult> {
   const now = options.now ?? new Date();
   const access = await reviewerAccess(env.DB, session, now);
-  const input = decisionInputSchema.parse(inputValue);
+  const input = legalSourceReviewDecisionInputSchema.parse(inputValue);
   const row = await loadReview(env.DB, input.reviewId);
   if (!row) {
     throw new LegalSourceReviewError("LEGAL_SOURCE_REVIEW_NOT_FOUND");

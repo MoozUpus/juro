@@ -975,8 +975,8 @@ body, so compatibility with current live Lex/Advice markup remains unproved.
 
 ## D-051 — legal review is an MFA-bound evidence decision, not publication
 
-Status: accepted and locally verified; HTTP/admin UI, publisher, and remote
-activation gates open
+Status: accepted and locally verified; staff route exists behind a false flag;
+admin UI, publisher, and remote activation gates open
 Date: 2026-07-28
 
 Migration `0027` and the internal legal-review service add a dedicated
@@ -1000,13 +1000,13 @@ sections, chunks, vectors, citations, or AI context. Rejection atomically
 marks the review and pending version rejected and rejects the source only when
 there is no verified version. A separate privileged publisher must reload the
 R2 snapshot, validate this decision evidence, create versioned reading data,
-and perform the verified-state transition. No remote migration, route, UI,
+and perform the verified-state transition. No remote migration, active route, UI,
 source publication, or production change is claimed.
 
 ## D-052 — publication is a separate fresh-MFA evidence boundary
 
-Status: accepted and locally verified; HTTP/admin UI, retrieval, and remote
-activation gates open
+Status: accepted and locally verified; staff route exists behind a false flag;
+admin UI, retrieval, and remote activation gates open
 Date: 2026-07-28
 
 Migration `0028` and the internal publisher service add a distinct
@@ -1033,5 +1033,35 @@ canonical publication-evidence hash on replay while D1 enforces the relational
 and JSON identity constraints. The slice intentionally publishes only the
 first verified version for a source: activation of a replacement historical or
 current version needs a later explicit version-switch model. It creates no
-Vectorize entry, lexical index, citation, AI context, HTTP route, admin UI, or
-remote resource, and makes no production change.
+Vectorize entry, lexical index, citation, AI context, remotely active HTTP
+route, admin UI, or remote resource, and makes no production change.
+
+## D-053 — privileged legal-source routes are capability-first and disabled by default
+
+Status: accepted and locally verified; remote activation and UI gates open
+Date: 2026-07-28
+
+The integration branch adds three narrow POST routes for review claim, review
+decision, and approved-source publication. They share a runtime-neutral HTTP
+boundary so service tests do not load Worker-only bindings. The boundary checks
+the exact `LEGAL_SOURCE_STAFF_API_ENABLED=true` flag before session resolution
+or D1/R2 access. All checked-in development, staging, and production values are
+`false`; generated Cloudflare types, configuration tests, and flattened-
+artifact validation enforce this state. Disabled responses are neutral RU/UZ
+`404` responses and cannot reveal whether a review exists.
+
+If separately enabled in a reviewed environment, each mutation must pass the
+canonical same-origin/CSRF contract, local-session resolution, active
+assignment, exact capability, active TOTP, and MFA freshness before bounded
+JSON parsing. Claim returns structured normalized blocks and evidence hashes
+but omits the duplicated full plain-text payload. Error responses are RU/UZ,
+no-store, and do not expose internals.
+
+Local D1/R2 tests prove disabled no-session behavior, authorization before a
+malformed body is parsed, and the exact claim/approve/publish/idempotent replay
+flow. The verified production dry-run shape is `8203.01 KiB` raw and
+`2049.67 KiB` gzip, a `+48.15 KiB` raw / `+8.45 KiB` gzip server-Worker change
+from the preceding publisher checkpoint; the client build remains at 1,921
+modules. This decision does not authorize a remote migration, reviewer bootstrap,
+Worker upload, route/DNS attachment, feature activation, staff UI, or production
+change.

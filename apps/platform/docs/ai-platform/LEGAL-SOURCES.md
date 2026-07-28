@@ -143,7 +143,8 @@ migration is claimed.
 - Advice acquisition approval or activation;
 - Advice scenario/version/link models;
 - RU/UZ historical version and effective-date diffing;
-- protected reviewer/publisher HTTP routes and editor UI;
+- staff reviewer/publisher UI, legal editor, and any reviewed remote activation
+  of the locally present HTTP routes;
 - replacement-version activation and current/historical version switching;
 - lexical search, multilingual embeddings, Vectorize indexing, metadata
   authorization, reranking, and retrieval evaluation;
@@ -189,9 +190,30 @@ concurrent or conflicting publication fails closed.
 
 This first publisher slice intentionally rejects a source that already has a
 verified version. A replacement-version activation model, historical/current
-version switching, retrieval, citations, Vectorize, HTTP entry points, and UI
+version switching, retrieval, citations, Vectorize, remote activation, and UI
 remain separate gates. Published reading rows have no vector ID or indexed-at
 marker and are not available to AI merely because publication succeeded.
+
+## Protected staff HTTP boundary
+
+The integration branch exposes three POST handlers in the built route table:
+
+- `/api/platform/legal-sources/reviews/:reviewId/claim`;
+- `/api/platform/legal-sources/reviews/:reviewId/decision`;
+- `/api/platform/legal-sources/reviews/:reviewId/publication`.
+
+Every handler checks the exact `LEGAL_SOURCE_STAFF_API_ENABLED=true` flag
+before resolving a session or touching D1/R2. The checked-in development,
+staging, and production values are all `false`, and the artifact validator and
+generated binding types enforce that state. A disabled request receives a
+neutral RU/UZ `404` and does not resolve a session.
+
+When dependency-injected in tests, the enabled boundary requires canonical
+same-origin and CSRF proof, then a local session, active staff assignment,
+active TOTP, and MFA no more than 15 minutes old before it parses bounded JSON.
+Claim responses return normalized blocks and evidence hashes but omit the
+duplicated full `plainText` value. This is locally verified route/service code,
+not a deployed or owner-approved staff feature.
 
 ## Local evidence
 
@@ -216,6 +238,9 @@ atomic rejection. Publisher tests cover separate capability/fresh-MFA
 enforcement, approved-review and R2 revalidation, exact reading-row creation,
 one-winner concurrency, idempotent replay, tamper and pre-existing-data
 rejection, immutable publication evidence, and immutable reading rows.
+HTTP-boundary tests additionally prove the disabled no-session path,
+authorization before malformed-body parsing, and the real
+claim/approve/publish/idempotent-replay D1/R2 flow.
 Source-trust tests exercise host/type/hash/timestamp failures and
 evidence-backed acceptance.
 
