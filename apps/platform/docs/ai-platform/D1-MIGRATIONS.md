@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
 Updated: 2026-07-28
-Latest source migration: `0026_panoramic_toad_men.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0026` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0026` have not been applied remotely.
+Latest source migration: `0027_closed_masked_marvel.sql`
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0027` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0027` have not been applied remotely.
 
 ## Migration policy
 
@@ -331,7 +331,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0026` with foreign keys enabled;
+- apply migrations `0000`–`0027` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -433,17 +433,25 @@ disabled Advice, R2/D1 pending-review persistence, replay idempotency, safe
 failure evidence, empty-content rejection, actor/environment conflict fencing,
 and `legal.sync` Queue execution.
 
+Migration 0027 tests additionally prove additive-only SQL, snapshot/journal/
+foreign-key agreement, preservation without fabricated backfill of legacy
+terminal reviews, coherent JSON/relational decision evidence, a restrictive
+reviewer foreign key, and immutable/undeletable terminal decisions. Service
+tests additionally cover dedicated-role and fresh-MFA denial, one-assignee
+claim, same-evidence replay, conflicting evidence rejection, R2 tamper
+rejection, approval without publication, and atomic source/version rejection.
+
 The full local migration sequence changes the SQLite table count from 79 to
-104 and reports zero foreign-key integrity errors. Migration `0025` adds six
+104, contains 142 foreign keys, and reports zero foreign-key integrity errors. Migration `0025` adds six
 tables and expands `legal_sources`; migrations `0022`–`0024` alter existing
 tables and add indexes/triggers rather than tables; migration `0026` adds one
 request table. This is compatibility evidence for the checked-in
-`0000`–`0026` sequence. Remote
+`0000`–`0027` sequence. Remote
 production and development each report 61 non-internal tables and ledger
 entries only through `0004`. Isolated staging reports those 97
 application/non-internal tables plus `d1_migrations`, the exact
 `0000`–`0021` ledger, 275 schema objects, `PRAGMA quick_check = ok`, and zero
-foreign-key violations. It does not contain `0022`–`0026`.
+foreign-key violations. It does not contain `0022`–`0027`.
 
 ## Staging bootstrap evidence and remaining procedure
 
@@ -462,7 +470,7 @@ and accepted the same statement with LF. Repository-root `.gitattributes` now
 pins `apps/platform/drizzle/*.sql text eol=lf`. No checked-in migration content
 was rewritten.
 
-This is staging schema-bootstrap evidence only; local migrations `0022`–`0026`
+This is staging schema-bootstrap evidence only; local migrations `0022`–`0027`
 remain pending. Portable SQL export/import,
 protected backup-object evidence, application/runtime binding, row-level
 business invariants, and RTO remain unverified. Before application enablement
@@ -516,6 +524,10 @@ or any further staging migration:
     ingestion disabled, then exercise the Lex request/outbox/fetch/R2/review
     flow only through protected staging with synthetic or explicitly approved
     public source targets; verify no `verified` or Vectorize record is created;
-22. retain the backup until the release window and restore test are complete.
+22. apply and verify `0027` only after the staff tables are inventoried; keep
+    review entry points unreachable until a reviewed legal-reviewer bootstrap,
+    fresh-MFA flow, immutable decision evidence, R2 tamper rejection, and
+    non-publishing approval behavior pass protected staging tests;
+23. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

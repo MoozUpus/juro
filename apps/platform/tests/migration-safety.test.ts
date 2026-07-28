@@ -40,6 +40,9 @@ const legalSourceLifecycleEntry = journal.entries.find(
 const legalSourceFetchEntry = journal.entries.find(
   ({ idx }) => idx === 26,
 );
+const legalSourceReviewEvidenceEntry = journal.entries.find(
+  ({ idx }) => idx === 27,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -88,6 +91,10 @@ assert.ok(
 assert.ok(
   legalSourceFetchEntry,
   "Drizzle journal must contain migration 0026",
+);
+assert.ok(
+  legalSourceReviewEvidenceEntry,
+  "Drizzle journal must contain migration 0027",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2700,7 +2707,180 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
     );
 
     assert.equal(tableDefinitions(db).size, 104);
-    assert.equal(foreignKeyCount(db), 141);
+    assert.equal(foreignKeyCount(db), 142);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0027 adds verifiable and immutable legal-review decision evidence", () => {
+  const sql = migrationSql(legalSourceReviewEvidenceEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 10);
+  for (const statement of migrationStatements) {
+    assert.match(
+      statement,
+      /^(?:ALTER TABLE|CREATE INDEX|CREATE TRIGGER)\b/i,
+      `unexpected legal review evidence statement: ${statement.slice(0, 100)}`,
+    );
+  }
+  assert.match(sql, /ADD `decision_evidence_json` text/);
+  assert.match(sql, /json_extract\(NEW\.`decision_evidence_json`, '\$\.reviewId'\) = NEW\.`id`/);
+  assert.match(sql, /legal review terminal evidence is immutable/);
+  assert.match(sql, /legal review terminal evidence cannot be deleted/);
+  assert.doesNotMatch(sql, /DROP TABLE|DELETE FROM|UPDATE `legal_sources` SET/i);
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0026_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0027_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(legalSourceReviewEvidenceEntry.idx, 27);
+  assert.equal(
+    legalSourceReviewEvidenceEntry.tag,
+    "0027_closed_masked_marvel",
+  );
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 78);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    140,
+  );
+});
+
+test("0027 preserves legacy decisions but requires coherent evidence for new ones", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 26)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-07-28T12:00:00.000Z";
+    const rawHash = "a".repeat(64);
+    const parsedHash = "b".repeat(64);
+    db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,locale,account_type,timezone,created_at,updated_at
+      ) VALUES ('reviewer-27','reviewer27@example.test','ru','individual',
+        'Asia/Tashkent',?,?)
+    `).run(now, now);
+    db.prepare(`
+      INSERT INTO legal_sources (
+        id,canonical_id,official_url,act_title,act_identifier,locale,
+        source_type,status,verification_state,content_sha256,fetched_at,
+        last_checked_at,created_at,updated_at
+      ) VALUES (
+        'source-27','-27','https://lex.uz/ru/docs/-27','Act 27','-27','ru',
+        'lex','pending_review','fetched',?,?,?,?,?
+      )
+    `).run(rawHash, now, now, now, now);
+    db.prepare(`
+      INSERT INTO legal_source_versions (
+        id,source_id,language,status,content_sha256,raw_object_key,
+        parsed_object_key,fetched_at,created_at,updated_at
+      ) VALUES (
+        'version-27','source-27','ru','pending_review',?,
+        'legal-sources/raw/lex/ru/aa/raw.html',
+        'legal-sources/parsed/lex/ru/aa/parsed.json',?,?,?
+      )
+    `).run(rawHash, now, now, now);
+    db.prepare(`
+      INSERT INTO legal_review_queue (
+        id,source_id,version_id,reason_code,confidence,status,
+        assigned_to_user_id,decision,decided_at,created_at,updated_at
+      ) VALUES (
+        'legacy-review-27','source-27','version-27','legacy','low','approved',
+        'reviewer-27','approve',?,?,?
+      )
+    `).run(now, now, now);
+
+    applyMigration(db, legalSourceReviewEvidenceEntry);
+    const legacy = db.prepare(`
+      SELECT decision_evidence_json,decision_evidence_sha256
+      FROM legal_review_queue WHERE id='legacy-review-27'
+    `).get() as Record<string, unknown>;
+    assert.deepEqual({ ...legacy }, {
+      decision_evidence_json: null,
+      decision_evidence_sha256: null,
+    });
+    assert.throws(
+      () => db.prepare(
+        "DELETE FROM legal_review_queue WHERE id='legacy-review-27'",
+      ).run(),
+      /legal review terminal evidence cannot be deleted/,
+    );
+
+    db.prepare(`
+      INSERT INTO legal_review_queue (
+        id,source_id,version_id,reason_code,confidence,status,
+        assigned_to_user_id,created_at,updated_at
+      ) VALUES (
+        'new-review-27','source-27','version-27','new-evidence','low',
+        'in_review','reviewer-27',?,?
+      )
+    `).run(now, now);
+    const notes = "Verified against the normalized official snapshot.";
+    const evidence = JSON.stringify({
+      schemaVersion: 1,
+      reviewId: "new-review-27",
+      sourceId: "source-27",
+      versionId: "version-27",
+      sourceKind: "lex",
+      locale: "ru",
+      canonicalId: "-27",
+      canonicalUrl: "https://lex.uz/ru/docs/-27",
+      rawContentSha256: rawHash,
+      parsedContentSha256: parsedHash,
+      parserProfile: "juro-legal-blocks-v1",
+      decision: "approve",
+      notes,
+      reviewerUserId: "reviewer-27",
+      reviewerSessionId: "session-27",
+      reviewerAssignmentIds: ["assignment-27"],
+      mfaVerifiedAt: now,
+      decidedAt: now,
+    });
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_review_queue
+        SET status='approved',decision='approve',decision_notes=?,
+          reviewed_parsed_sha256=?,decided_by_user_id='reviewer-27',
+          decision_evidence_json=?,decision_evidence_sha256=?,decided_at=?
+        WHERE id='new-review-27'
+      `).run(
+        notes,
+        parsedHash,
+        evidence.replace("new-review-27", "wrong-review-27"),
+        "c".repeat(64),
+        now,
+      ),
+      /legal review decision evidence invalid/,
+    );
+    db.prepare(`
+      UPDATE legal_review_queue
+      SET status='approved',decision='approve',decision_notes=?,
+        reviewed_parsed_sha256=?,decided_by_user_id='reviewer-27',
+        decision_evidence_json=?,decision_evidence_sha256=?,decided_at=?
+      WHERE id='new-review-27'
+    `).run(notes, parsedHash, evidence, "c".repeat(64), now);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE legal_review_queue SET confidence='high'
+        WHERE id='new-review-27'
+      `).run(),
+      /legal review terminal evidence is immutable/,
+    );
+    assert.equal(tableDefinitions(db).size, 104);
+    assert.equal(foreignKeyCount(db), 142);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

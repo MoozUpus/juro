@@ -21,9 +21,9 @@ staging or production evidence.
 The latest recorded successful local full suite contains:
 
 - 25 rendered-route/security tests;
-- 225 core/auth/document tests;
-- 63 Cloudflare/migration/job tests;
-- 313 tests total.
+- 229 core/auth/document tests;
+- 65 Cloudflare/migration/job tests;
+- 319 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. It does not substitute for remote migrations,
@@ -38,6 +38,7 @@ staging hostname.
 | Consumer trust gate | AI context, conversation sources, comparison analysis, global search, monitoring, and source counts require exact HTTPS Lex/Advice host, matching type, verified state/time, and lowercase SHA-256 | Retrieval quality, citation existence/version verification, Vectorize filters/reranking, source freshness policy |
 | Single-source acquisition contract | Additive migration `0026`; exact Lex/Advice route classifier; manual same-source redirects; robots allow/disallow gate; bounded non-empty streaming UTF-8 HTML fetch; private content-addressed R2 raw object; identifiers-only D1 outbox/`legal.sync` handler; fetched/pending-review state only; safe failure ledger, actor/environment conflict fence, and idempotent replay | Remote `0026`; successful live Lex robots/fetch/R2 evidence; Queue consumer/DLQ/Cron attachment; authenticated admin trigger |
 | Untrusted snapshot normalization | Exact `parse5@8.0.1`; deterministic semantic blocks from explicit primary content only; raw/parsed size, SHA-256, UTF-8, schema, and source-identity replay checks; private content-addressed parsed JSON; identifiers-only `legal.parse` handler; structure failures routed to review; no verified sections/chunks or AI/index use | Real Lex/Advice markup compatibility, successful live source evidence, remote R2/Queue execution, privileged review/publication, historical parsing, section/chunk creation, indexing/retrieval/citations |
+| Privileged legal-review evidence | Additive migration `0027`; dedicated legal-reviewer capability; active TOTP and fresh local MFA; single-assignee claim; exact raw/parsed hash confirmation; canonical evidence JSON plus SHA-256; coherent D1 guards; immutable/undeletable terminal decisions; approval does not publish; rejection atomically closes the untrusted version | Protected staff HTTP route/UI; separate publication service; legal editor; remote `0027`; staging reviewer bootstrap and browser evidence |
 | Advice ingestion policy | Request path is implemented but `LEGAL_ADVICE_INGESTION_ENABLED=false` is asserted in every environment, generated types, config tests, and artifact validation; disabled requests perform no network/D1/R2 action | Recorded legal/owner authorization, current terms/robots review, staging activation evidence |
 
 ## Deployment truth
@@ -45,7 +46,7 @@ staging hostname.
 - production was not changed;
 - `juro-production` and `juro-development` remain through migration `0004`;
 - `juro-staging` remains through migration `0021`;
-- source migrations `0022`–`0026` are local-only;
+- source migrations `0022`–`0027` are local-only;
 - no staging Worker, route, DNS, Turnstile binding, secret configuration, or
   deployment is verified;
 - live Turnstile and Resend delivery are unverified.

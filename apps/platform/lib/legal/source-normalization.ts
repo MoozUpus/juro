@@ -3,6 +3,7 @@ import {
   LegalSourceParserError,
   normalizeLegalSourceHtml,
   normalizedLegalSourceSnapshotSchema,
+  type NormalizedLegalSourceSnapshot,
 } from "./source-parser";
 import { classifyLegalSourceUrl } from "./source-fetch";
 
@@ -63,6 +64,10 @@ type VersionRow = {
 const identifierSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
 const metadataSchema = z.record(z.string(), z.unknown());
+const normalizationMetadataSchema = z.object({
+  contentSha256: z.string().regex(/^[0-9a-f]{64}$/),
+  blockCount: z.number().int().nonnegative(),
+}).passthrough();
 const MAX_RAW_BYTES = 2 * 1024 * 1024;
 const MAX_PARSED_BYTES = 4 * 1024 * 1024;
 const MAX_METADATA_BYTES = 64 * 1024;
@@ -129,7 +134,7 @@ async function requireStoredSnapshot(
     contentSha256: string;
     row: VersionRow;
   },
-): Promise<void> {
+): Promise<NormalizedLegalSourceSnapshot> {
   let object: R2ObjectBody | null;
   try {
     object = await bucket.get(key);
@@ -188,12 +193,74 @@ async function requireStoredSnapshot(
     ) {
       throw new TypeError("Normalized source identity does not match D1.");
     }
+    return snapshot;
   } catch {
     throw new LegalSourceNormalizationError(
       "LEGAL_SOURCE_NORMALIZED_CONTENT_REJECTED",
       false,
     );
   }
+}
+
+export type StoredNormalizedLegalSource = {
+  versionId: string;
+  sourceId: string;
+  sourceKind: "lex" | "advice";
+  locale: "ru" | "uz";
+  canonicalId: string;
+  canonicalUrl: string;
+  rawContentSha256: string;
+  parsedContentSha256: string;
+  snapshot: NormalizedLegalSourceSnapshot;
+};
+
+export async function loadStoredNormalizedLegalSource(
+  env: LegalSourceNormalizationEnv,
+  versionId: string,
+): Promise<StoredNormalizedLegalSource> {
+  identifierSchema.parse(versionId);
+  const row = await loadVersion(env.DB, versionId);
+  if (!row) {
+    throw new LegalSourceNormalizationError(
+      "LEGAL_SOURCE_VERSION_NOT_FOUND",
+      false,
+    );
+  }
+  if (!row.parsed_object_key || row.canonical_id === null) {
+    throw new LegalSourceNormalizationError(
+      "LEGAL_SOURCE_VERSION_STATE_REJECTED",
+      false,
+    );
+  }
+  const metadata = parseMetadata(row.metadata_json);
+  const normalization = normalizationMetadataSchema.safeParse(
+    metadata.normalization,
+  );
+  if (!normalization.success) {
+    throw new LegalSourceNormalizationError(
+      "LEGAL_SOURCE_NORMALIZATION_CONFLICT",
+      false,
+    );
+  }
+  const snapshot = await requireStoredSnapshot(
+    env.BUCKET,
+    row.parsed_object_key,
+    {
+      contentSha256: normalization.data.contentSha256,
+      row,
+    },
+  );
+  return {
+    versionId: row.id,
+    sourceId: row.source_id,
+    sourceKind: row.source_type,
+    locale: row.language,
+    canonicalId: row.canonical_id,
+    canonicalUrl: row.official_url,
+    rawContentSha256: row.content_sha256,
+    parsedContentSha256: normalization.data.contentSha256,
+    snapshot,
+  };
 }
 
 async function recordNormalizationReview(
@@ -236,10 +303,9 @@ export async function executeLegalSourceNormalization(
   }
   if (row.parsed_object_key) {
     const metadata = parseMetadata(row.metadata_json);
-    const normalization = z.object({
-      contentSha256: z.string().regex(/^[0-9a-f]{64}$/),
-      blockCount: z.number().int().nonnegative(),
-    }).passthrough().safeParse(metadata.normalization);
+    const normalization = normalizationMetadataSchema.safeParse(
+      metadata.normalization,
+    );
     if (!normalization.success) {
       throw new LegalSourceNormalizationError(
         "LEGAL_SOURCE_NORMALIZATION_CONFLICT",

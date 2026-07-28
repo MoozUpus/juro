@@ -1294,11 +1294,17 @@ export const legalReviewQueue = sqliteTable("legal_review_queue", {
   status: text("status").notNull().default("pending"),
   assignedToUserId: text("assigned_to_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
   decision: text("decision"),
+  decisionNotes: text("decision_notes"),
+  reviewedParsedSha256: text("reviewed_parsed_sha256"),
+  decidedByUserId: text("decided_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  decisionEvidenceJson: text("decision_evidence_json"),
+  decisionEvidenceSha256: text("decision_evidence_sha256"),
   decidedAt: text("decided_at"),
   ...timestamps,
 }, (table) => [
   index("legal_review_queue_status_idx").on(table.status, table.createdAt),
   index("legal_review_queue_source_idx").on(table.sourceId, table.versionId),
+  index("legal_review_queue_decider_idx").on(table.decidedByUserId, table.decidedAt),
   uniqueIndex("legal_review_queue_version_reason_uidx").on(table.versionId, table.reasonCode),
 ]);
 

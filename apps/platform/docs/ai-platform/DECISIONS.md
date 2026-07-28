@@ -972,3 +972,33 @@ source/version. R2 still precedes fenced D1 persistence, so a D1 failure may
 leave an unreferenced immutable parsed object but never a trusted record. A
 read-only live Lex probe failed closed at `robots.txt` before fetching the act
 body, so compatibility with current live Lex/Advice markup remains unproved.
+
+## D-051 — legal review is an MFA-bound evidence decision, not publication
+
+Status: accepted and locally verified; HTTP/admin UI, publisher, and remote
+activation gates open
+Date: 2026-07-28
+
+Migration `0027` and the internal legal-review service add a dedicated
+`legal_reviewer` decision boundary on top of the untrusted normalized source.
+Claim and decision require the existing `legal.sources.review` capability, an
+active local MFA session, active TOTP, and MFA verification no more than 15
+minutes old. Administrator and support roles do not inherit the capability.
+A review has one assignee; same-reviewer claim/decision replays are
+idempotent, while another reviewer or different evidence fails closed.
+
+The terminal row stores decision notes, the exact parsed SHA-256, reviewer,
+canonical JSON evidence, its SHA-256, and decision time. D1 guards require the
+JSON review/source/version/decision/hashes to match the relational row and
+make terminal identity/evidence immutable and undeletable. Legacy decisions
+are preserved without fabricated backfill and therefore do not acquire the
+new evidence contract retroactively.
+
+Approval deliberately returns `publicationRequired=true` while leaving the
+source version `pending_review` and the source merely `fetched`. It creates no
+sections, chunks, vectors, citations, or AI context. Rejection atomically
+marks the review and pending version rejected and rejects the source only when
+there is no verified version. A separate privileged publisher must reload the
+R2 snapshot, validate this decision evidence, create versioned reading data,
+and perform the verified-state transition. No remote migration, route, UI,
+source publication, or production change is claimed.

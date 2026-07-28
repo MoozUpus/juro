@@ -154,10 +154,34 @@ migration is claimed.
 Until those gates pass, JURO must not label an answer as verified against the
 current legislation database merely because migration `0025` exists.
 
+## Privileged review evidence boundary
+
+The local internal service can claim a `new_source_version` review only for a
+dedicated legal reviewer whose existing platform-staff assignment is active
+and whose local TOTP-backed MFA is at most 15 minutes old. It reloads the
+private normalized R2 object and rechecks size, JSON schema, source identity,
+raw SHA-256, and parsed SHA-256 before accepting a decision. The reviewer must
+submit the exact expected raw and parsed hashes plus substantive notes.
+
+Migration `0027` stores a canonical decision evidence JSON document and its
+SHA-256. The JSON contains identifiers and verification metadata, not the
+legal-source body. Database triggers cross-check it against the review,
+version, hashes, reviewer, and decision fields, and make terminal evidence
+immutable. Same-evidence replay by the same reviewer is safe; conflicting
+evidence, a second assignee, stale MFA, a changed R2 object, or a mismatched
+version fails closed.
+
+An approval is not a verified publication. It leaves the source version in
+`pending_review`, leaves the source in `fetched`, and creates no sections,
+chunks, vectors, citations, or AI context. Rejection closes the untrusted
+version atomically. A separate publisher with its own tests and protected
+entry point remains required before any source can pass the consumer trust
+gate.
+
 ## Local evidence
 
-The migration test applies `0000`–`0026` to an in-memory SQLite database,
-asserts 104 non-internal tables and 141 foreign keys, verifies zero foreign-key
+The migration test applies `0000`–`0027` to an in-memory SQLite database,
+asserts 104 non-internal tables and 142 foreign keys, verifies zero foreign-key
 violations, proves legacy sources remain draft, rejects evidence-free
 verification, protects verified hashes, rejects impossible sync/review states,
 and rejects unsafe request scope/lifecycle changes. Source-fetch/acquisition
@@ -170,6 +194,10 @@ consumer path. Parser/normalization tests cover deterministic semantic block
 extraction, chrome/script/hidden-content exclusion, no-body-fallback behavior,
 raw and parsed SHA mismatch rejection, unrecognized-structure review routing,
 absence of trusted sections/chunks, and the `legal.parse` consumer path.
+Legal-review tests cover dedicated-role/fresh-MFA enforcement, one-assignee
+claim, exact evidence hashes, idempotent replay, conflicting evidence and R2
+tamper rejection, immutable terminal records, non-publishing approval, and
+atomic rejection.
 Source-trust tests exercise host/type/hash/timestamp failures and
 evidence-backed acceptance.
 
