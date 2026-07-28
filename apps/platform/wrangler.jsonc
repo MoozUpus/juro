@@ -4,6 +4,7 @@
   "main": "./worker/index.ts",
   "compatibility_date": "2026-07-26",
   "compatibility_flags": ["nodejs_compat"],
+  "keep_vars": true,
   "assets": {
     "binding": "ASSETS"
   },
@@ -12,7 +13,8 @@
     "ASYNC_RUNTIME_ENABLED": "false",
     "CRON_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
-    "JOB_SCHEMA_VERSION": "1"
+    "JOB_SCHEMA_VERSION": "1",
+    "EMAIL_FROM": "JURO <no-reply@juro.uz>"
   },
   "d1_databases": [
     {
@@ -179,7 +181,8 @@
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
-        "JOB_SCHEMA_VERSION": "1"
+        "JOB_SCHEMA_VERSION": "1",
+        "EMAIL_FROM": "JURO <no-reply@juro.uz>"
       },
       "d1_databases": [
         {
@@ -334,7 +337,8 @@
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
-        "JOB_SCHEMA_VERSION": "1"
+        "JOB_SCHEMA_VERSION": "1",
+        "EMAIL_FROM": "JURO <no-reply@juro.uz>"
       },
       "d1_databases": [
         {
