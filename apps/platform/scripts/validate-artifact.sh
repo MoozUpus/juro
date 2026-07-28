@@ -24,6 +24,9 @@ wrangler="${SITES_PROJECT_ROOT}/dist/server/wrangler.json"
   exit 66
 }
 
-node \
-  --experimental-loader "${script_dir}/cloudflare-workers-loader.mjs" \
-  "${script_dir}/validate-cloudflare-artifact.mjs"
+(
+  cd "${SITES_PROJECT_ROOT}"
+  node \
+    --experimental-loader ./scripts/cloudflare-workers-loader.mjs \
+    ./scripts/validate-cloudflare-artifact.mjs
+)

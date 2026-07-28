@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, relative, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-const projectRoot = resolve(new URL("..", import.meta.url).pathname);
+const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const sourceConfigPath = resolve(projectRoot, "wrangler.jsonc");
 const artifactConfigPath = resolve(projectRoot, "dist/server/wrangler.json");
 const sourceHostingPath = resolve(projectRoot, ".openai/hosting.json");
