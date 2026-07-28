@@ -4,7 +4,7 @@ This log records material implementation decisions. Status values are `accepted`
 
 ## D-001 — implementation baseline
 
-Status: accepted
+Status: superseded by D-029
 Date: 2026-07-26
 
 Use the Sites source revision `86843ca` as the implementation baseline because it is materially ahead of GitHub `main`. Synchronize it into `feature/juro-ai-platform` before relying on GitHub CI or deployment.
@@ -16,7 +16,7 @@ Consequence: GitHub `main` must not be deployed over the current application.
 Status: accepted
 Date: 2026-07-26
 
-Do not modify production schema, resources, secrets, or deployment during phases 0–9. Production requires a separate explicit approval after staging gates.
+Do not modify production schema, data, traffic, domains, secrets, or deployment during phases 0–9. Production requires two separate explicit approvals after staging gates: one for the functional platform deployment and another for replacing the current UI with Cinematic Legal Intelligence.
 
 ## D-003 — migration strategy
 
@@ -118,8 +118,9 @@ current inert implementation. A live producer must not be wired until
 quarantine/DLQ consumers, alerts, redrive policy, ledger reconciliation, and
 per-kind producer/handler flags are implemented. Side-effecting handlers also
 require provider idempotency or immutable subject-version identifiers plus
-lease renewal/fencing; the current short lease is sufficient only for the
-read-only D1 probe.
+lease renewal/fencing. No current v2 handler executes work: source declares
+producers only, consumers are absent, and every valid v2 kind is terminally
+disabled.
 
 ## D-014 — OTP claim and request atomicity
 
@@ -463,3 +464,328 @@ evidence exist, `platform_staff_assignments` must remain empty and the
 management service must remain unreferenced by routes, UI, jobs, and Workers.
 Role-change evidence is also not a substitute for future immutable
 view/download/edit audit on explicitly granted customer resources.
+
+## D-029 — preserve Sites v20 and reconcile source history without rebasing
+
+Status: accepted
+Date: 2026-07-28
+
+The deployed `app.juro.uz` runtime baseline is Sites v20 source commit
+`40310786188eb545f224e906c2c9506c146a907c`, not the older `86843ca` snapshot
+and not GitHub `main`. The local `feature/juro-ai-platform` branch preserves
+that source lineage and includes current GitHub `main` through `a1c572e` via
+merge commit `702960e`. Existing feature history is not rebased or rewritten.
+
+Remote draft PR #3 remains at `926ca1a` until the local verified commits are
+intentionally pushed. Production stays pinned to Sites v20 until the separate
+production gates are approved.
+
+## D-030 — staging uses an isolated Worker and hostname, not the Sites project
+
+Status: accepted
+Date: 2026-07-28
+
+The current Sites project has no preview URL and every Sites deployment is a
+production deployment. It therefore cannot serve as staging. JURO staging
+will use a distinct Worker, D1/R2/Queue/Vectorize set, secrets, feature flags,
+test identities, analytics dimensions, email mode, and custom staging
+hostname. No Sites checkpoint or prototype deploy is treated as staging.
+
+Workers Domains currently reports `app.juro.uz` on legacy Worker `juro` while
+Sites reports and serves the same hostname through its provider Worker. Route
+ownership must be reconciled read-only before any production routing change.
+
+## D-031 — rotate the connector-exposed Sites bypass token
+
+Status: accepted
+Date: 2026-07-28
+
+A read-only Sites connector response unexpectedly exposed a bypass bearer
+token in raw tool telemetry. The value was not copied, used, persisted, or
+committed. It is nevertheless treated as exposed and must be rotated/revoked
+before production work. The raw connector operation must not be repeated, and
+the token must never be placed in chat, a ticket, documentation, screenshot,
+log, environment example, or Git history.
+
+## D-032 — 3D Jurobek remains disabled until the approved rigged source exists
+
+Status: accepted
+Date: 2026-07-28
+
+No GLB, FBX, USDZ, Blender, glTF, VRM, or other rigged Jurobek source exists in
+the reconciled checkouts or inspected delivery archives. Available assets are
+static raster renders only. The platform uses the existing static WebP poster
+as a fallback; text and voice remain usable without WebGL; avatar and
+voice-with-avatar flags stay off. JURO will not invent a new character,
+reconstruct a rig from raster art, fake microphone/speech state, or claim
+armature, skinning, lip-sync, animation, material, mesh, or shirt-lettering
+work without the owner-approved source package.
+
+## D-033 — reconcile approved Cloudflare names before provisioning
+
+Status: accepted
+Date: 2026-07-28
+
+The latest owner-approved R2, Queue, and Vectorize names/taxonomy supersede the
+older generic source naming for new resources. Existing production
+`juro-production` and `juro-private-documents` are preserved. Existing older
+development buckets and eight empty, unbound queues are inventory evidence,
+not permission to abandon data or create overlapping consumers. Phase 1 first
+records an exact old-to-target mapping and additive copy/cutover plan, then
+creates only missing isolated development/staging resources. Cleanup of an
+old empty resource is a separate reviewed operation.
+
+Stable R2 bindings point to `juro-development-files`, `juro-staging-files`,
+and preserved production `juro-private-documents`, with environment-specific
+`juro-{environment}-backups` and `juro-{environment}-quarantine` stores. Queue
+bindings become task-specific document-analysis, OCR, document-export, email,
+legal-source-sync, retention-cleanup, notifications, and conditional
+malware-scan queues using `{environment}-{purpose}` names. A distinct DLQ is a
+future activation requirement for each real consumer, not a current source
+declaration.
+`ai.request`, `backup.run`, and `platform.probe` receive no live Queue mapping.
+Vectorize bindings become `LEX_UZ_INDEX`, `ADVICE_UZ_INDEX`,
+`INTERNAL_LEGAL_MATERIALS_INDEX`, and `USER_DOCUMENTS_INDEX`; language-index
+or user-memory resources cannot be relabeled as those data classes.
+
+Implementation note (2026-07-28): contract v2 is applied and verified locally.
+Wrangler declares seven producers, `consumers: []`, no DLQ or trigger, and no
+malware producer. `MALWARE_SCAN_QUEUE` remains a code-only contract until a
+real fail-closed scanner exists. Legacy `ai.request`, `backup.run`,
+`platform.probe`, and `file.process` are blocked by schema, routing, and outbox
+tests. The later D-037 and D-038 record the only subsequent remote mutations:
+isolated non-production D1/R2 creation and inert Queue/DLQ/Vectorize
+provisioning, all without application data, Worker bindings, messages,
+vectors, or deployment.
+
+## D-034 — prove both portable D1 restore and Time Travel undo
+
+Status: accepted
+Date: 2026-07-28
+
+JURO does not use the legacy alpha `wrangler d1 backup` flow. Before a remote
+migration, staging must prove a portable SQL export/import into a separate
+disposable drill D1 and a bookmark-based Time Travel restore plus
+`previous_bookmark` undo on `juro-staging`. Maintenance/read-only mode, stopped
+queue traffic, exact database UUID checks, integrity/foreign-key/schema/row
+invariants, sanitized audit evidence, and measured recovery time are mandatory.
+Production names, IDs, bookmarks, and credentials cannot participate in the
+staging rehearsal.
+
+Implementation note (2026-07-28): the empty staging Time Travel half passed
+end-to-end. A synthetic marker disappeared after restoring the original
+bookmark, returned through the restore response's `previous_bookmark`, and was
+removed again by the final restore; the final EEUR query re-read a clean state.
+The portable half remains blocked: D1 export reached `complete`, but connector
+egress explicitly forbids the signed `r2.cloudflarestorage.com` download and
+the non-interactive Wrangler shell has no API token. No SQL bytes, protected R2
+object, isolated import, or RTO is claimed.
+
+## D-035 — use a reduced OpenAI embedding dimension that fits Vectorize
+
+Status: accepted as the staging candidate; legal retrieval quality gate open
+Date: 2026-07-28
+
+`text-embedding-3-large` is the current OpenAI candidate because OpenAI
+documents it as its most capable embedding model for English and non-English
+tasks. Its default output is 3,072 dimensions. OpenAI's current embeddings API
+supports a `dimensions` request parameter for the `text-embedding-3` family,
+while Cloudflare Vectorize supports at most 1,536 dimensions. JURO will
+therefore use the explicit server-side candidate contract
+`text-embedding-3-large`, `dimensions=1536`, `metric=cosine` for staging.
+
+This is a compatibility decision, not proof of Uzbek legal retrieval quality.
+Before ingestion or production use, a reproducible RU, UZ Latin, UZ Cyrillic,
+English, and cross-language evaluation must compare retrieval quality and
+cost, record the model/dimension/preprocessing version, and retain hybrid
+lexical retrieval, freshness/status filters, reranking, tenant authorization,
+and server-side citation verification. A dimension or model change requires a
+new physical index and complete re-embedding; an existing index is never
+silently reused with a different vector contract.
+
+Official references:
+
+- https://developers.openai.com/api/docs/models/text-embedding-3-large
+- https://developers.openai.com/api/docs/guides/embeddings
+- https://developers.openai.com/api/reference/resources/embeddings/methods/create
+- https://developers.cloudflare.com/vectorize/platform/limits/
+
+## D-036 — replace unscoped visual overrides with semantic platform tokens
+
+Status: accepted; implementation limited to the isolated staging prototype
+Date: 2026-07-28
+
+The current `globals.css` contains two unscoped `:root` token sets. The later
+JURO 2.0 landing block globally changes navy, gold, paper, shadow, and both font
+families and also changes `body`, so marketing choices leak into authentication
+and legal work surfaces. The migration will introduce stable semantic CSS
+variables with explicit shell/work-surface scopes as documented in
+`DESIGN-SYSTEM.md`. The existing production routes remain unchanged until the
+prototype is approved. No new font family or motion dependency is added merely
+to perform the token normalization.
+
+## D-037 — place new non-production durable resources in EEUR
+
+Status: accepted and provisioned for the empty Phase 1 foundation
+Date: 2026-07-28
+
+The isolated staging D1 was created in EEUR as `juro-staging`, database ID
+`bb716a96-b2fb-4823-90d6-6c228fed181a`. The approved development and staging
+primary, backup, and quarantine R2 targets were also created as empty private
+EEUR Standard buckets. They were re-read after creation. No object was copied,
+no binding or Worker was attached, and no production resource was changed.
+
+This placement reduces avoidable regional spread for the new empty resources,
+but it is not a claim of Uzbekistan data residency, legal compliance, backup,
+recoverability, quarantine, or malware scanning. Those claims remain gated by
+the documented data map and legal review, real storage/access flows, verified
+backup/restore drills, a fail-closed scanner, and staging evidence. Existing
+legacy development resources remain untouched pending an additive inventory
+and cutover decision.
+
+## D-038 — provision empty non-production Queues/DLQs and Vectorize indexes without activation
+
+Status: accepted and provisioned as an inert Phase 1 foundation
+Date: 2026-07-28
+
+Development and staging each receive seven task-specific primary Queues and
+seven distinct `{primary}-dlq` resources. All 28 resources were re-read with
+86,400-second retention and zero producers/consumers. The source still declares
+`consumers: []`; no Worker binding, handler, message, redrive, or malware queue
+is attached. Retry/backoff and DLQ delivery are deliberately deferred until a
+real side-effect-safe consumer is implemented, tested, alerted, and reconciled.
+
+The first provisioning request created `development-document-analysis`, then a
+Queue settings update returned Cloudflare error `10013`. Inventory identified
+that exact partial state; the remaining create operations resumed idempotently
+and no duplicate was created. The API default retention is recorded as fact,
+not treated as an approved delivery policy.
+
+Development and staging also each receive four empty Vectorize v2 indexes:
+`lex-uz`, `advice-uz`, `internal-legal-materials`, and `user-documents`, using
+1,536 dimensions and cosine distance. No vector or metadata index was inserted.
+Provisioning establishes only physical isolation; D-035's multilingual legal
+retrieval evaluation, hybrid search, tenant pre/post-authorization, freshness,
+reranking, and citation-verification gates remain unchanged. No production
+Queue, DLQ, Vectorize, binding, Worker, or deployment was created or changed.
+
+## D-039 — use a shell-neutral fail-closed launcher on Windows and POSIX
+
+Status: accepted and locally verified
+Date: 2026-07-28
+
+All package lifecycle commands route through the Node launcher. Offline tasks
+inherit an explicit environment allowlist; install-only network/auth variables
+are separately allowlisted. Dependency installation uses a project-keyed OS
+mutex, identity-checked stale-lock quarantine, bounded `npm pack` preflight
+with lockfile SRI verification, and process-tree cleanup on Windows/POSIX.
+`--validate-only` does not prove a clean network `npm ci`, which remains
+explicitly unverified.
+
+## D-040 — permit one reproducible bootstrap of the verified-empty staging D1
+
+Status: executed successfully; one-time verified-empty staging exception consumed
+Date: 2026-07-28
+
+D-034's portable SQL export/import gate remains mandatory for production and
+for every migration of a database that contains durable application or user
+data. It is not waived by this decision.
+
+The first bootstrap of `juro-staging`
+(`bb716a96-b2fb-4823-90d6-6c228fed181a`) was permitted without the unavailable
+portable SQL artifact only after an immediate preflight proved that the
+database still contained no application schema or migration ledger, captured
+the current Time Travel bookmark, and confirmed that production remained
+untouched. This narrow exception was justified because the staging database
+was newly created and empty, the Time Travel restore plus undo drill had
+already passed, and its entire target schema was reproducible from immutable
+Git migrations.
+
+The bootstrap must reproduce Wrangler 4.92.0 exactly: create the standard
+`d1_migrations` table, then submit one atomic D1 `/query` request per migration
+in sorted order `0000` through `0021`, with the corresponding ledger insert in
+the same request. It must inspect every returned sub-result, stop on the first
+failure, and verify migration order, schema invariants, foreign keys, and a
+post-migration bookmark. Combining migrations, writing the ledger separately,
+skipping `0000`, or treating this exception as a production precedent is
+prohibited.
+
+Execution evidence (2026-07-28): pre-bootstrap bookmark
+`00000016-00000000-000050b6-d17b2ef8af450f78e2ba993d4272fe26`
+advanced to post-bootstrap bookmark
+`00000016-00000036-000050b6-48eec1201b71eda52af14c1ba998f030`.
+The re-read ledger contains exactly 22 ordered entries `0000`–`0021`;
+`PRAGMA quick_check` returned `ok`, foreign-key violations were zero, and the
+manifest contained 98 tables including `d1_migrations`, 275 schema objects,
+and all seven migration-0011 control tables. This exception is closed and
+cannot authorize a future staging or production migration.
+
+## D-041 — preserve trigger statements with transactional D1 batch requests
+
+Status: executed successfully in staging; reproducible production-tooling gate open
+Date: 2026-07-28
+
+Three clean-room staging attempts proved that the Windows checkout reaches
+`0013_new_jubilee.sql` and is then rejected by remote D1 as
+`SQLITE_ERROR: incomplete input`. A restore-safe probe isolated the cause:
+D1 accepted the same compound `CREATE TRIGGER ... BEGIN ... END` statement
+with LF and rejected it with CRLF. The Git blob already contains LF, while the
+Windows working copy had converted it to CRLF. Each failed attempt restored
+the preflight Time Travel bookmark and a post-restore query proved that neither
+the migration ledger nor application schema remained.
+
+The staging bootstrap adapter must normalize only line endings to LF, may split
+each immutable migration only at Drizzle's explicit
+`--> statement-breakpoint` delimiters, and submit those complete statements
+plus the ledger insert in one D1 `batch` request. The repository also pins
+`apps/platform/drizzle/*.sql` to `eol=lf` through `.gitattributes` so a fresh
+Windows checkout cannot silently recreate the failure.
+Cloudflare documents D1 batch as a single SQL transaction: a failed statement
+aborts or rolls back the entire sequence. Compound trigger bodies are never
+split on their internal semicolons. The adapter still uses exactly one remote
+write request per migration, keeps the ledger insert in the same transaction,
+verifies the ledger prefix after every commit, and stops on any mismatch.
+
+No checked-in migration is rewritten by this workaround. Before production,
+the same adapter must exist as reviewed, reproducible source tooling with tests
+or the upstream Wrangler/raw-query path must be proven fixed; a one-off
+connector execution is not an acceptable production migration mechanism.
+
+Final staging evidence: the diagnostic established that remote D1 rejects the
+compound `CREATE TRIGGER` input with CRLF and accepts the same statement with
+LF. The successful bootstrap normalized only line endings, preserved complete
+trigger bodies, used one transactional batch per migration with its ledger
+insert, and produced the D-040 integrity/manifest result. Repository-root
+`.gitattributes` now pins `apps/platform/drizzle/*.sql text eol=lf`; this
+prevents recurrence in a fresh Windows checkout but does not replace the
+production migration-tooling gate.
+
+## D-042 — create the first staging Worker without any public exposure
+
+Status: accepted and locally verified; remote upload blocked on approved Wrangler authentication
+Date: 2026-07-28
+
+The staging environment explicitly sets `workers_dev: false`,
+`preview_urls: false`, and `routes: []`. Source tests and flattened-artifact
+validation require those values together with no schedules, no Queue
+consumers, `ASYNC_RUNTIME_ENABLED=false`, `CRON_ENABLED=false`, and no
+`ALLOW_PLATFORM_AUTH_HEADERS`. This closes the default Cloudflare exposure
+path before a first upload.
+
+The first Worker upload must use the pinned Wrangler `deploy` flow because a
+version upload cannot create a new Worker. It may occur only after local owner
+authentication through official Wrangler OAuth or an approved narrow token;
+credentials never enter chat, Git, documentation, screenshots, or logs. The
+upload creates an inactive Worker with no public traffic. Control-plane
+verification must then prove subdomain and previews disabled, no route/domain/
+schedule/consumer attachment, exact staging-only bindings, and unchanged
+production Worker/domain state.
+
+No staging hostname may be attached until Cloudflare Access is configured and
+an unauthenticated request is proven denied. The current connector cannot
+faithfully upload the multi-module Vinext bundle and static-assets JWT flow,
+and Sites cannot serve as staging because its deploy is production-facing.
+For the first version, rollback is the exposure kill switch: keep subdomain and
+previews disabled and detach only a staging hostname if one was later added;
+retain the Worker and data resources for evidence. D1 rollback remains a
+separate Time Travel/export and expand-contract process.

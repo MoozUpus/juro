@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-26  
-Status: implemented and verified locally; not applied or deployed remotely.
+Status: local identity/access foundations implemented and partially verified; provider-backed, full-HTTP, remote-D1, lifecycle, and staging gates remain open; nothing has been applied or deployed remotely.
 
 ## Implemented
 
@@ -110,9 +110,10 @@ Saved contacts and document/AI content remain separate protection slices.
 - explicit `legacy` mode retains the pre-existing SHA comparison for
   application rollback.
 
-Migration 0017 is not applied remotely and checked-in mode remains `legacy`,
-so no live invitation is encrypted or keyed by this source change. Workspace
-plaintext email and both legacy SHA columns remain during expansion. Active
+Migration 0017 is schema-applied only to isolated staging and checked-in mode
+remains `legacy`, so no live invitation is encrypted or keyed by this source
+change. Workspace plaintext email and both legacy SHA columns remain during
+expansion. Active
 legacy invitations must expire within their seven-day TTL or be revoked and
 reissued before a later contract step.
 
@@ -135,9 +136,10 @@ reissued before a later contract step.
 - insert/update triggers reject partial or malformed keyed groups, while all
   raw/SHA/salt/TTL/lifecycle fields remain for rollback.
 
-Migration 0018 is not applied remotely and checked-in mode remains `legacy`,
-so no live challenge uses these HMAC fields. Expiry remains ten minutes, but
-historical rows are not assumed deletable: MFA, policy, and deletion-request
+Migration 0018 is schema-applied only to isolated staging and checked-in mode
+remains `legacy`, so no live challenge uses these HMAC fields. Expiry remains
+ten minutes, but historical rows are not assumed deletable: MFA, policy, and
+deletion-request
 references require a reviewed dry-run retention/pseudonymization plan before
 raw email or legacy SHA fields can be cleared.
 
@@ -359,7 +361,7 @@ It has not been executed against a remote environment in this slice.
 Before applying the pending identity/access migrations or enabling OTP/MFA in
 staging:
 
-1. complete the approved Cloudflare inventory and independent D1 backup;
+1. re-read the completed approved Cloudflare inventory, then create, retrieve, and verify the independent D1 backup;
 2. restore the backup into an isolated database;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests, then apply
@@ -444,10 +446,12 @@ FROM platform_staff_role_events;
 ## Not complete
 
 - no live Resend delivery has been verified;
-- migrations 0011–0021 are not applied to staging or production;
+- migrations 0011–0021 are schema-applied to isolated staging but not
+  production; no identity runtime, backfill, provider, or full-HTTP behavior is
+  proven by that bootstrap;
 - TOTP and backup codes are implemented and verified locally, but no staging
-  key ring, D1 migration, real-device authenticator flow, or remote D1
-concurrency test has been completed;
+  key ring, runtime activation, real-device authenticator flow, or remote D1
+  concurrency test has been completed;
 - trusted-device bypass and administrator-assisted recovery are not
   implemented by this slice;
 - operator identity placeholders, final RU/UZ policy text, policy effective

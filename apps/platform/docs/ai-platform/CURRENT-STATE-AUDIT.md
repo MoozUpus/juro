@@ -1,8 +1,8 @@
 # JURO platform — current-state audit
 
-Audit date: 2026-07-26  
-Scope: `app.juro.uz` and the `apps/platform` lineage in `MoozUpus/juro`  
-Mode: read-only production inspection; no production data, schema, bindings, secrets, or deployments were changed.
+Audit date: 2026-07-28
+Scope: `app.juro.uz`, `admin.juro.uz`, the Sites project, Cloudflare account resources, and the `apps/platform` lineage in `MoozUpus/juro`
+Mode: read-only production inspection, scoped non-production control-plane provisioning, and local branch verification; no production data, schema, bindings, secrets, DNS, resources, traffic, or deployments were changed.
 
 ## Executive summary
 
@@ -12,7 +12,7 @@ JURO currently has a working Cloudflare-hosted MVP with:
 - private R2-backed document storage;
 - a substantial document builder with drafts, templates, collaboration, invitations, comments, proposals, approvals, shares, signed-file flows, and exports;
 - basic workspaces, cases, action plans, consultations, billing configuration, privacy requests, document review, deterministic document comparison, and monitoring preferences;
-- RU/UZ platform content and canonical document-builder routes.
+- RU/UZ application-shell content and canonical document-builder routes; the builder module itself is still Russian on its UZ URL.
 
 The current implementation is not yet the target AI LegalTech platform described in the owner specification. Important screens are route shells, AI and document review are synchronous and incomplete, the legal-source ingestion system does not exist, and several identity, tenant, file-security, and collaboration controls fail the staging gate.
 
@@ -24,12 +24,13 @@ There are two materially different source states:
 
 | Source | Verified revision | Finding |
 |---|---:|---|
-| Sites checkout for `app.juro.uz` | `86843ca9ff0be33a97c8a6b22005d0d47e25ff53` | Most complete known production source; migrations `0000`–`0010`; used for this audit |
-| GitHub `MoozUpus/juro` `main` | `eb5a5ca82d0059e7be04e34e9adcce2f7e3fb8ca` | Older platform snapshot; migrations only through `0004`; must not be deployed over the Sites source |
+| Deployed Sites application for `app.juro.uz` | `40310786188eb545f224e906c2c9506c146a907c` (Sites v20) | Current public application source; deployment `appgdep_6a688f65590c81918af6b6ac14093d35` |
+| GitHub `MoozUpus/juro` `main` | `a1c572e9c255fbb83ea481c2cdcd4f69ac2c3302` | Newer than the original Phase 0 GitHub snapshot but still behind the deployed Sites/product work |
+| GitHub draft PR #3, `feature/juro-ai-platform` | remote head `926ca1a`; local verified base `1d3d23d` before this documentation update | Remote PR is open/draft and currently `DIRTY`; the local branch reconciles Sites, migrations through `0021`, security foundations, and GitHub `main` without rewriting shared history, but is eight commits ahead before these audit edits |
 
-The comparison found 116 files present only in the Sites source, 50 materially changed files, one GitHub-only file, and 179 identical files. The verified Sites source and Phase 0 audit were synchronized into `feature/juro-ai-platform` in commit `c454d779e1ec91c6a1a1ad270c9d1b7b02afabb7`; draft PR #3 is now the reviewed integration branch.
+The original comparison found 116 files present only in the Sites source, 50 materially changed files, one GitHub-only file, and 179 identical files. The verified Sites source and Phase 0 audit were synchronized into the local `feature/juro-ai-platform` lineage in commit `c454d779e1ec91c6a1a1ad270c9d1b7b02afabb7`. On 2026-07-28 the five later `main` commits through `a1c572e` were merged locally in `702960e` without rebasing or discarding the existing work. Draft PR #3 points to the same feature branch name but does not yet contain the eight local commits or the current uncommitted audit edits.
 
-GitHub `main` remains behind until that PR is reviewed and merged, so it is still not a safe deployment source. Production remains pinned to the verified Sites revision and has not been changed.
+GitHub `main` remains behind until PR #3 is reviewed and merged, so it is still not a safe deployment source. Production remains pinned to Sites v20 and has not been changed.
 
 ## Runtime and dependency baseline
 
@@ -58,53 +59,60 @@ No dependency downgrade is proposed.
 | `/uz/auth/login` | `404`; required target route is absent |
 | `status.juro.uz` | `502`; no working public status page |
 | security headers | CSP, HSTS, no-store, and noindex behavior present |
+| authenticated `/ru/individual/document-builder` in Chrome | rendered with one `h1`, no console warning/error, no broken images, and no horizontal overflow at 320, 360, 390, 768, 1024, 1280, or 1440 px |
+| authenticated `/uz/individual/document-builder` in Chrome | shell and `lang="uz"` are localized, but builder title, `h1`, descriptive text, cards, and categories remain Russian |
+| builder landmarks | two nested `<main>` elements; existing accessibility defect |
 
 The working document-builder route and legacy redirects are protected regression requirements.
 
-## Cloudflare state
+## Cloudflare and Sites state
 
-Verified through the Sites project:
+The authenticated read-only inventory found two active production control planes:
 
-- project: `juro-app`;
-- project ID: `appgprj_6a5f404b623081919cbfa1e3c85d412a`;
-- production URL: `https://app.juro.uz`;
-- `.openai/hosting.json` binds D1 as `DB` and R2 as `BUCKET`;
-- the running bootstrap endpoint confirms both bindings are available.
+- Sites project `appgprj_6a5f404b623081919cbfa1e3c85d412a` serves `app.juro.uz` from v20/commit `4031078`; v19 is the known Sites rollback version;
+- Cloudflare Worker `juro` serves the separate legacy asset set on `admin.juro.uz` and its workers.dev hostname; active Worker version `91774ed4-72e9-47bb-b93a-a4208d490b24`, deployment `54aee3c6-39eb-4a16-ae59-c74418ae599f`;
+- the Workers Domains API still associates both `app.juro.uz` and `admin.juro.uz` with `juro`, while Sites reports `app.juro.uz` on its provider Worker. This routing/control-plane ambiguity blocks staging or production cutover changes until reconciled;
+- every Sites deployment is production and the project has no preview URL, so it is not an acceptable staging target.
 
-Not independently verified:
+Verified durable resources:
 
-- production D1 control-plane name or ID;
-- production R2 control-plane bucket name;
-- actual production D1 schema and migration ledger;
-- dev/staging D1, R2, Queues, Vectorize, Analytics Engine, AI Gateway, or Cron resources;
-- Cloudflare secret inventory.
+- D1 `juro-production` — `4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`, 61 control-plane-reported tables;
+- D1 `juro-development` — `d07670cf-f7bf-460c-a668-101671d4c330`, 61 control-plane-reported tables;
+- D1 `juro-staging` — `bb716a96-b2fb-4823-90d6-6c228fed181a`, EEUR, bootstrapped through the exact 22-entry `0000`–`0021` migration ledger under the one-time verified-empty D-040 exception;
+- private R2 `juro-private-documents`, legacy development stores, and six new empty private EEUR Standard development/staging target buckets; no object was copied and no binding was cut over;
+- eight legacy development-only queues remain unbound; 28 new development/staging v2 primary + DLQ queues exist with 86,400-second retention and zero producers/consumers;
+- eight empty development/staging Vectorize v2 indexes exist at 1,536 dimensions/cosine;
+- no staging Worker/DNS, environment binding, Queue consumer/producer attachment, Cron trigger, AI Gateway, or Workers observability destination; production Queue/Vectorize and backup/quarantine resources remain absent.
 
-Wrangler is not authenticated in this environment. Generated build configuration contains local placeholder resource names and IDs and is not evidence of production resource identity. No claim is made that the requested staging resources exist.
+The production Worker currently binds only Assets, Images, production D1/R2, `EMAIL_FROM`, and secret `RESEND_API_KEY`. The Sites runtime inventory contains `APP_URL`, `EMAIL_FROM`, `PUBLIC_SITE_URL`, and secret `RESEND_API_KEY`. Required OpenAI, Anthropic, encryption/session, OTP pepper, Turnstile, TOTP, signed-URL, and Cron secrets are absent by name from the inspected production surfaces.
 
-The Phase 1 source now exports `fetch`, `queue`, and `scheduled` and declares environment-specific Queue, Vectorize, Images, Assets, Analytics Engine, D1, and R2 bindings. These declarations and flattened development/staging/production artifacts pass local validation only. `ASYNC_RUNTIME_ENABLED=false`, `CRON_ENABLED=false`, and no Cron trigger is attached. No remote resource existence, identity, permission, or delivery behavior has been verified, and live Queue consumers remain blocked.
+The local Phase 1 source exports `fetch`, `queue`, and `scheduled` and uses the exact v2 R2/Vectorize names plus seven producer-only Queue bindings. `consumers` is empty, malware is unattached, no job handler executes work, legacy job kinds are blocked, and there is no trigger. The development/staging/production artifact matrix passes locally with `ASYNC_RUNTIME_ENABLED=false` and `CRON_ENABLED=false`. Control-plane inventory separately proves that the empty non-production resources exist; neither source nor inventory proves that a Worker attachment, consumer, retry/DLQ path, legal ingestion, or runtime activation is safe.
+
+The Sites read-only connector unexpectedly returned a bypass bearer token in raw tool output. Its value was not quoted, stored, reused, or committed. It must be rotated/revoked through the Sites control plane before production work.
 
 ## Data and migrations
 
-- Drizzle schema currently describes 60 application tables.
-- Local application of migrations `0000`–`0011` to an empty SQLite database succeeded.
-- Migration `0011` is additive and introduces seven durable job/operation tables.
-- The resulting local database had 86 tables and zero foreign-key violations.
+- Drizzle schema currently describes 71 application tables.
+- Local application of migrations `0000`–`0021` to an empty in-memory SQLite database succeeded.
+- The resulting local database had 97 non-internal tables and zero foreign-key violations.
+- The remote production and development D1 control plane reports 61 tables and migration ledgers `0000`–`0004`; migrations `0005`–`0021` are not applied to either database.
+- The isolated staging D1 now reports the exact ordered ledger `0000`–`0021`, `PRAGMA quick_check = ok`, zero foreign-key violations, 98 tables including `d1_migrations`, and 275 schema objects. The seven migration-0011 control tables are present.
 - No destructive `DROP` was found in the existing migrations.
 - This local result does not prove compatibility with the actual production schema.
 - Migration `0004` copies sensitive operational tables into `__backup_*` tables in the same D1. These are not independent backups and have no tested restore procedure.
-- `migrations_dir` is committed in the environment-aware `wrangler.jsonc`; remote application remains prohibited until backup/restore and inventory gates pass.
+- `migrations_dir` is committed in the environment-aware `wrangler.jsonc`; any further remote migration and every production migration remain prohibited until the normal portable backup/restore and inventory gates pass.
 
-No production snapshot or migration was performed because the control plane is not authenticated and an independent backup could not be verified.
+No production snapshot or migration was performed. On the initially empty EEUR staging database, the Time Travel restore/undo drill passed and the D1 export job reached `complete`; however the signed SQL artifact could not be retrieved, `juro-staging-backups` remains empty, and no SQL bytes, SHA-256, protected backup object, isolated import database, or RTO evidence exists. D-040 permitted exactly one reproducible bootstrap of that verified-empty staging database: pre-bookmark `00000016-00000000-000050b6-d17b2ef8af450f78e2ba993d4272fe26` advanced to post-bookmark `00000016-00000036-000050b6-48eec1201b71eda52af14c1ba998f030`; the exception is now consumed and is not a production or populated-database precedent.
 
 ## Existing feature truth table
 
 | Area | Status | Evidence / limitation |
 |---|---|---|
-| Email OTP | Partial | Resend adapter, 6 digits, expiry, cooldown, hashes; rate, Turnstile, atomicity, and session rules incomplete |
-| Sessions | Partial | hashed tokens and secure cookies; no rotation, device model, 24h mode, single-device revoke, or security-event revocation |
+| Email OTP | Local hardening, not staged | atomic request/verification claims, strict inputs, idempotent provider request, and race tests exist; Turnstile, independent target limits, live Resend, and remote D1 runtime/concurrency evidence remain absent |
+| Sessions | Local hardening, not staged | device-aware sessions, idle/absolute expiry, one/other/all revoke, and chained security events exist; rotation/fixation, 24h mode, region alerts, and remote evidence remain absent |
 | Onboarding | Partial | profile flow exists; routes, account types, consent versioning, and target redirect differ |
 | Workspaces | Partial | D1 membership/invitations exist; business URL does not include workspace ID and tenant gaps remain |
-| Document builder | Substantial | connected D1/R2 implementation; critical invitation and workspace-isolation issues require fixes |
+| Document builder | Substantial | connected D1/R2 implementation; invitation pre-accept denial and active-workspace isolation are fixed locally and regression-tested, but not staged |
 | Cases / plans | Partial | D1 records exist; object routes render a shared/general client rather than a complete case workspace |
 | AI lawyer | Prototype | synchronous OpenAI intake; no streaming, structured Zod contract, legal retrieval, fallback, memory, or usage ledger |
 | Document analysis | Prototype | synchronous OpenAI request with a 10 MB form upload; no Claude, scan, OCR, queue, or rich result schema |
@@ -118,38 +126,45 @@ No production snapshot or migration was performed because the control plane is n
 
 ## Configuration and documentation drift
 
-- The Sites production environment inventory returned no configured environment entries.
-- Source code references `APP_URL`, `EMAIL_FROM`, `PUBLIC_SITE_URL`, and `RESEND_API_KEY`; source references are not proof that production values are configured.
-- Required OpenAI, Anthropic, session/encryption, OTP pepper, Cron, Turnstile, TOTP, signed-URL, and model variables are not present in the verified Sites environment inventory.
+- The Sites production inventory returned only `APP_URL`, `EMAIL_FROM`, `PUBLIC_SITE_URL`, and secret `RESEND_API_KEY` by name.
+- Required OpenAI, Anthropic, session/encryption, OTP pepper, Cron, Turnstile, TOTP, signed-URL, and model variables are not present in the inspected Sites or Worker environment inventory.
+- The deployed Sites checkout does not contain the permanent `wrangler.jsonc`; the draft PR now contains and validates it, but that source configuration is not deployed.
 - `docs/production-runbook.md` claims environment setup that could not be verified.
 - App policy copy still contains visible `{OPERATOR_LEGAL_NAME}`, `{OPERATOR_EMAIL}`, and `{OPERATOR_ADDRESS}` placeholders.
-- The repository README describes starter/prototype behavior and is not an accurate operational guide.
+- The repository and platform READMEs were stale (Linux-only starter claims and no `wrangler.jsonc`); the local branch now documents the shell-neutral platform launcher and real Cloudflare contract, but that correction is not yet pushed or deployed.
 
 ## Baseline verification
 
-Executed against revision `86843ca`:
+Executed on Windows against the reconciled branch at `1d3d23d` plus the generated build output:
 
 ```text
-npm run type-check
-  PASS
-
-npm run lint
-  PASS
-
-npm audit --omit=dev --audit-level=high
-  0 vulnerabilities
-
-npm test
+npm run cf:types:check  PASS
+npm run type-check      PASS
+npm run lint            PASS
+npm run install:ci -- --validate-only
+  PASS; project lock/toolchain verified; npm ci and network were not invoked
+npm test                PASS
   production build and artifact validation: PASS
-  rendered route/security tests: 16 PASS
-  unit/integration tests: 91 PASS
-  total: 107 PASS
+  rendered route/security tests: 23 PASS
+  core/auth/document tests: 184 PASS
+  Cloudflare/migration/job tests: 53 PASS
+  total: 260 PASS
+npm run validate:cloudflare:matrix
+  development/staging/production build + artifact + Wrangler dry-run: PASS
+npm audit --offline --omit=dev --audit-level=high
+  0 vulnerabilities in the locally cached advisory set
+strict high-confidence secret scan
+  tracked source: 0; built bundle: 0; git history: 0
 ```
 
-A targeted source/client scan found no provider key values or private keys. The existing suite is a baseline, not evidence that the target Definition of Done is met.
+After the shell-neutral launcher refactor, `node --check` passed for both launcher files, `npm run install:ci -- --validate-only` passed without running `npm ci`, `npm run test:cloudflare` passed 52/52, and `npm test` passed 259/259. The clean network-install path remains unverified because actual `npm ci` was deliberately not run.
+
+The online npm audit was not run because the execution policy rejected sending dependency metadata to the npm registry; the offline result is not presented as equivalent to a fresh registry audit. The existing suite is a baseline, not evidence that the target Definition of Done is met.
 
 ## Phase 0 gate
 
-The Phase 0 audit, threat model, design audit, reproducible baseline, and source reconciliation are complete in draft PR #3. External control-plane prerequisites remain open: authenticated Cloudflare inventory and a verified independent backup/restore rehearsal are mandatory before any remote migration or staging resource claim.
+Source reconciliation, control-plane inventory, threat/model audits, and the reproducible local baseline are complete locally; the current documentation edits are not yet committed or pushed to draft PR #3. The initially empty staging Time Travel restore/undo drill passed and returned clean, and the one-time D-040 staging bootstrap subsequently applied the exact `0000`–`0021` ledger with passing integrity checks. The Browser runtime was recovered with a session-local temporary `{ "type": "commonjs" }` package scope; neither JURO nor the user-home package was changed. Authenticated Chrome evidence now covers the canonical builder, RU/UZ route behavior, console, broken images, landmarks, and horizontal overflow at 320, 360, 390, 768, 1024, 1280, and 1440 px. A PII-free mobile screenshot is stored outside the repository in the task visualization workspace.
 
-The disabled, source-only Phase 1 foundation now passes 135 local tests (17 rendered/security, 91 existing unit/integration, and 27 Cloudflare/migration/runtime), type-check, lint, generated-type freshness, three-environment build/dry-run validation, production dependency audit, artifact validation, and secret-pattern scanning. This does not close the Phase 1 staging gate. Live consumers are blocked until quarantine/DLQ consumer, alert, redrive, ledger-reconciliation, per-kind flag, and side-effect fencing policies are implemented. The critical builder isolation defects and OTP race remain Phase 2 implementation blockers.
+The complete Phase 0 gate is still open because portable SQL export/import and protected-backup evidence, a production routing decision, and the remaining browser/accessibility matrix (200% zoom, keyboard/focus, reduced motion, axe, Lighthouse, real iOS/Android behavior, and broader critical-route screenshots) are not yet verified. The Chrome client blocked the direct legacy `document-builder-test` navigation, so the browser attempt is not counted as redirect evidence; the existing HTTP/source regression evidence remains the recorded basis for that `308` contract.
+
+The disabled Phase 1 source foundation passes the current local gates. The isolated staging D1 is schema-bootstrapped through `0021`; empty dev/staging R2 targets, 28 unbound primary/DLQ queues, and eight empty Vectorize indexes also exist, but no staging Worker, route, DNS, runtime binding, secret, or deployment exists. No consumer is declared or attached. The staging source and flattened artifact now explicitly set `workers_dev: false`, `preview_urls: false`, and `routes: []`; validation also rejects `ALLOW_PLATFORM_AUTH_HEADERS`, consumers, and schedules. This permits only an inactive first Worker upload after official local Wrangler authentication. A public staging hostname remains prohibited until Cloudflare Access is configured and unauthenticated denial is proved. Activation remains blocked until portable backup/restore evidence, real handlers, consumer/DLQ policy, quarantine scanning, alerts, redrive, ledger reconciliation, per-kind flags, provider idempotency, and side-effect fencing are implemented. Production remains unchanged.

@@ -1,16 +1,17 @@
 # JURO data-model audit
 
-Audit date: 2026-07-26  
-Baseline revision: `86843ca`
+Audit date: 2026-07-28
+Production Sites revision: `4031078`
+Integration branch baseline: `1d3d23d` before this documentation update
 
 ## Verified baseline
 
-- Drizzle schema: 53 application tables.
-- Migration files: `0000`–`0010`.
+- Drizzle schema: 71 application tables.
+- Migration files: `0000`–`0021`.
 - All migrations apply successfully to a new local SQLite database.
-- Local migrated result: 79 tables; zero foreign-key violations.
+- Local migrated result: 97 non-internal tables; zero foreign-key violations.
 - No destructive `DROP` statement was found.
-- The actual production D1 schema and migration ledger were not available through an authenticated Cloudflare control plane and therefore were not inferred from local files.
+- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0021` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) was bootstrapped from verified-empty state through the exact 22-entry `0000`–`0021` ledger and now reports 98 tables including `d1_migrations`, 275 schema objects, `PRAGMA quick_check = ok`, and zero foreign-key violations. No production/development data or schema was mutated.
 
 ## Existing migration outline
 
@@ -27,6 +28,17 @@ Baseline revision: `86843ca`
 | `0008` | document analyses and risks |
 | `0009` | comparisons, changes, SHA-256 fields |
 | `0010` | legislation updates and monitoring preferences |
+| `0011` | idempotency, outbox/jobs, scheduled locks/runs, backup and cleanup evidence |
+| `0012` | active-workspace links plus OTP and tenant lookup indexes |
+| `0013` | devices, session assurance/idle state, hash-chained security events |
+| `0014` | encrypted TOTP credentials, backup-code hashes, pre-auth and factor claims |
+| `0015` | immutable policy evidence and verified account-deletion requests |
+| `0016` | additive protected canonical email/phone identity fields and lookup indexes |
+| `0017` | protected workspace/document invitation identity evidence |
+| `0018` | keyed short-lived OTP/deletion challenge evidence |
+| `0019` | dual-address email-change challenge and rotation evidence |
+| `0020` | expiring, non-inheriting platform staff assignments |
+| `0021` | immutable per-actor platform staff role-event chain |
 
 ## Domain coverage
 
@@ -60,14 +72,14 @@ Migration `0004` creates 26 persistent `__backup_*` tables inside the same D1 an
 
 They must not be treated as the pre-migration backup required for production. Removal, if approved later, must use an explicit inventory, export, retention decision, and separate contract migration.
 
-### Append-only evidence is not durable
+### Append-only evidence is only partially durable
 
-Required evidence domains are not tamper-evident:
+The migrations now provide tamper-evident chains for user security events and platform staff role changes, and immutable database guards for policy evidence. Their schema is applied only to isolated staging, not production/development; no runtime flow or periodic protected export is proven, and they do not cover all required domains. The following evidence remains incomplete or not periodically exported to protected R2:
 
 - consent and acceptance;
 - privileged access;
 - lawyer grant/revoke;
-- OTP events;
+- OTP lifecycle events beyond the current security-event subset;
 - AI cost;
 - confirmations and signatures;
 - permission changes;
@@ -75,7 +87,7 @@ Required evidence domains are not tamper-evident:
 - moderation;
 - critical security events.
 
-There is no hash chain, equivalent tamper evidence, or periodic protected R2 export. Several audit/consent relations use cascading deletes, which can erase evidence with a user, workspace, or document.
+There is no general access/audit chain or periodic protected R2 export. Several older audit/consent relations still use cascading deletes, which can erase evidence with a user, workspace, or document.
 
 ### Soft deletion is incomplete
 
@@ -84,23 +96,24 @@ There is no hash chain, equivalent tamper evidence, or periodic protected R2 exp
 - messages, cases, and documents do not implement the requested `deletedAt`, `deletedBy`, `deletionReason`, and `purgeAfter` lifecycle;
 - scheduled hard purge and restore behavior do not exist.
 
-### Encryption is absent
+### Encryption rollout is incomplete and disabled
 
-Current sensitive fields and content are generally plaintext in D1:
+Current production-sensitive fields and content remain generally plaintext in D1:
 
 - email and phone;
 - PINFL/passport/address fields;
 - document and AI text;
 - structured analysis output.
 
-No workspace data-key model, AES-GCM envelope encryption, protected lookup hashes, or key-rotation metadata exists. OTP has a per-record salt but no server-side pepper. A standalone signed-share code is stored both as plaintext and as a hash.
+The integration branch adds versioned AES-GCM/HMAC primitives and additive identity/invitation/challenge fields, but all checked-in environments remain `IDENTITY_PROTECTION_MODE=legacy`; no key ring is configured remotely and no row has been backfilled under this work. No workspace data-key model or document/AI envelope encryption exists. A standalone signed-share code is still stored both as plaintext and as a hash.
 
-Local expand status (not remote evidence): migrations 0016–0019 now define
-disabled, versioned AES/HMAC boundaries for canonical profile and invitation
+Expand-schema status: migrations 0016–0019 now define disabled, versioned
+AES/HMAC boundaries for canonical profile and invitation
 identity plus equality-only HMAC evidence for OTP/deletion challenges and a
 dedicated dual-address email-change record. All checked-in environments remain
-`legacy`; plaintext and legacy SHA fields are retained, migration 0019 is not
-remote, and document/AI/contact/workspace-key encryption is still absent.
+`legacy`; plaintext and legacy SHA fields are retained. The schema is present in
+staging, but no key ring, backfill, runtime activation, or remote behavior test
+exists, and document/AI/contact/workspace-key encryption is still absent.
 
 ## Duplicate or overlapping concepts
 
@@ -116,7 +129,7 @@ No table will be dropped during an expand step.
 
 ## Proposed additive migration sequence
 
-The exact SQL will be generated only after staging D1 inventory and backup verification.
+Migrations `0005`–`0021` already contain checked-in SQL, were verified locally, and are schema-bootstrapped in isolated staging. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and the normal portable backup/restore gate is satisfied.
 
 1. **Identity security**
    - devices, security events, TOTP credentials, backup-code hashes;
@@ -156,10 +169,10 @@ add → dual read/write if needed → backfill → verify → switch → remove 
 
 ## Backup and migration gate
 
-Before any remote migration:
+Before any further remote migration or any migration of a populated database; D-040's one-time verified-empty staging exception is consumed and cannot be reused:
 
-1. authenticate Wrangler outside chat;
-2. inspect the actual database and applied migration ledger;
+1. use the authenticated Cloudflare control plane only for read-only identity/preflight checks until backup authority is established;
+2. inspect the actual applied migration ledger and remote preflight counts;
 3. create a protected external D1 export/snapshot;
 4. record schema version and application commit;
 5. verify the export is readable;
@@ -168,3 +181,5 @@ Before any remote migration:
 8. apply to staging;
 9. validate data invariants and the document-builder regression;
 10. keep production unchanged until explicit approval.
+
+Remote `juro-staging` now exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0021` ledger, passing quick/FK checks, 98 tables including the ledger, and 275 schema objects. This is schema-bootstrap evidence only. Portable SQL export/import into a separate drill database remains unverified, no protected backup object exists, and production/development remain unchanged.

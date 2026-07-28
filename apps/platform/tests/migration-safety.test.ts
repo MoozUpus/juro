@@ -86,6 +86,25 @@ function tableDefinitions(db: DatabaseSync): Map<string, string> {
   return new Map(rows.map(({ name, sql }) => [name, sql]));
 }
 
+test("remote D1 migrations retain LF line endings on every checkout", () => {
+  const attributes = readFileSync(
+    new URL("../../../.gitattributes", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(
+    attributes,
+    /^apps\/platform\/drizzle\/\*\.sql text eol=lf$/m,
+  );
+  for (const entry of journal.entries) {
+    assert.doesNotMatch(
+      migrationSql(entry),
+      /\r/,
+      `${entry.tag}.sql contains CRLF/CR that remote D1 rejects in compound triggers`,
+    );
+  }
+});
+
 const expectedTables = [
   "backup_runs",
   "cleanup_runs",

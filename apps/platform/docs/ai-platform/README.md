@@ -1,0 +1,47 @@
+# JURO AI platform documentation
+
+Updated: 2026-07-28
+
+This directory is the evidence-backed engineering record for the staged JURO AI platform program. Documentation distinguishes four states explicitly:
+
+- **deployed production** — observed on Sites v20 or legacy Worker `juro`;
+- **local integration branch** — implemented and tested locally, not remote evidence;
+- **staging verified** — reserved for operations actually exercised against isolated staging;
+- **target/deferred** — design or architecture contract, not an implementation claim.
+
+No document in this directory authorizes or implies a production schema, traffic, resource, secret, or UI change.
+
+## Phase 0 evidence
+
+- `CURRENT-STATE-AUDIT.md` — source lineage, runtime truth, remote inventory, and local baseline.
+- `ROUTE-INVENTORY.md` — deployed/local route separation and migration rules.
+- `DATA-MODEL-AUDIT.md` — schema/migration/domain coverage and defects.
+- `SECURITY-AUDIT.md` — deployed findings, local remediations, and staging gates.
+- `DESIGN-AUDIT.md` — source-based UX/design/motion/accessibility audit and Before/After/Why evidence.
+- `IMPLEMENTATION-PLAN.md` — ordered Phase 0–10 execution and release gates.
+- `THREAT-MODEL.md` — protected assets, trust boundaries, threats, invariants, and test strategy.
+- `DECISIONS.md` — material architecture/security/operations decisions.
+
+## Cloudflare and operations
+
+- `CLOUDFLARE-RESOURCES.md` — verified production inventory, scoped non-production provisioning, and source/target configuration.
+- `D1-MIGRATIONS.md` — checked-in migrations, verified staging bootstrap manifest, and remote application state.
+- `R2-STORAGE.md` — private storage inventory, target names, object policy, and additive cutover.
+- `BACKUP-RESTORE.md` — backup evidence contract, passed empty-staging Time Travel/one-time bootstrap evidence, and still-missing portable export/import, protected-object, isolated-restore, and RTO evidence.
+- `SECRETS.md` — server-only secret names/contracts and presence-by-name inventory, never values.
+
+## Identity foundation
+
+- `PHASE-2-IDENTITY-ACCESS.md` — local identity/access security implementation evidence and remaining remote gates.
+
+## Cinematic Legal Intelligence
+
+- `VISUAL-DIRECTION.md` — approved product direction and source-audit constraints.
+- `CINEMATIC-LEGAL-INTELLIGENCE.md` — shell/work-surface/token/motion/evidence contract.
+- `DESIGN-SYSTEM.md` — concrete semantic tokens, typography, component behavior, motion, accessibility, and migration order.
+- `PROTOTYPE-ROUTE.md` — staging-only route and verification boundary.
+- `JUROBEK-3D.md` — asset hash/inventory, missing rig blocker, and static fallback.
+
+## Documentation lifecycle
+
+The remaining owner-required documents are created or expanded only alongside the corresponding implemented vertical slice, so they describe actual contracts and evidence rather than speculative completion. Every staging claim must include a resource identity, command/test result, HTTP smoke, durable-record/object evidence where applicable, and known limitations. Production requires two separate future approvals: functional platform deployment and Cinematic UI replacement.

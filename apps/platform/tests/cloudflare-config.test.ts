@@ -3,6 +3,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  ATTACHED_PLATFORM_QUEUE_BINDINGS,
   PLATFORM_QUEUE_BINDINGS,
 } from "../worker/platform-jobs";
 import {
@@ -17,6 +18,9 @@ type NamedBinding = {
 
 type EnvironmentConfig = {
   name: string;
+  workers_dev?: boolean;
+  preview_urls?: boolean;
+  routes?: unknown[];
   assets: NamedBinding;
   vars: Record<string, string>;
   d1_databases: NamedBinding[];
@@ -48,6 +52,23 @@ const source = JSON.parse(
 ) as WranglerConfig;
 
 const environments = ["development", "staging", "production"] as const;
+
+const queueContract = [
+  ["DOCUMENT_ANALYSIS_QUEUE", "document-analysis"],
+  ["OCR_PROCESSING_QUEUE", "ocr-processing"],
+  ["DOCUMENT_EXPORT_QUEUE", "document-export"],
+  ["EMAIL_NOTIFICATIONS_QUEUE", "email-notifications"],
+  ["LEGAL_SOURCES_SYNC_QUEUE", "legal-sources-sync"],
+  ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
+  ["NOTIFICATIONS_QUEUE", "notifications"],
+] as const;
+
+const vectorContract = [
+  ["LEX_UZ_INDEX", "lex-uz"],
+  ["ADVICE_UZ_INDEX", "advice-uz"],
+  ["INTERNAL_LEGAL_MATERIALS_INDEX", "internal-legal-materials"],
+  ["USER_DOCUMENTS_INDEX", "user-documents"],
+] as const;
 
 function selectedEnvironment(
   environment: (typeof environments)[number],
@@ -83,44 +104,51 @@ test("declares isolated, disabled-by-default Cloudflare environments", () => {
     );
     assert.equal(config.d1_databases[0]?.migrations_dir, "./drizzle");
     assert.deepEqual(
-      config.r2_buckets.map(({ binding }) => binding),
-      ["BUCKET", "BACKUP_BUCKET", "QUARANTINE_BUCKET"],
+      config.r2_buckets,
+      [
+        {
+          binding: "BUCKET",
+          bucket_name: environment === "production"
+            ? "juro-private-documents"
+            : `juro-${environment}-files`,
+        },
+        {
+          binding: "BACKUP_BUCKET",
+          bucket_name: `juro-${environment}-backups`,
+        },
+        {
+          binding: "QUARANTINE_BUCKET",
+          bucket_name: `juro-${environment}-quarantine`,
+        },
+      ],
+    );
+    assert.deepEqual(
+      config.queues.producers,
+      queueContract.map(([binding, name]) => ({
+        binding,
+        queue: `${environment}-${name}`,
+      })),
     );
     assert.deepEqual(
       config.queues.producers.map(({ binding }) => binding),
-      [...PLATFORM_QUEUE_BINDINGS],
+      [...ATTACHED_PLATFORM_QUEUE_BINDINGS],
     );
-    assert.equal(config.queues.producers.length, 8);
-    assert.equal(config.queues.consumers.length, 8);
     assert.deepEqual(
-      new Set(config.queues.consumers.map(({ queue }) => queue)),
-      new Set(config.queues.producers.map(({ queue }) => queue)),
-    );
-    assertUnique(
-      config.queues.consumers.map(({ dead_letter_queue }) =>
-        dead_letter_queue
+      [...PLATFORM_QUEUE_BINDINGS].filter((binding) =>
+        !ATTACHED_PLATFORM_QUEUE_BINDINGS.includes(
+          binding as (typeof ATTACHED_PLATFORM_QUEUE_BINDINGS)[number],
+        )
       ),
-      `${environment} DLQs`,
+      ["MALWARE_SCAN_QUEUE"],
     );
-    for (const consumer of config.queues.consumers) {
-      assert.ok(consumer.max_retries > 0);
-      assert.ok(consumer.dead_letter_queue);
-      if (
-        /-(?:ai|file|document)-jobs-/.test(consumer.queue) ||
-        /-legal-sync-/.test(consumer.queue)
-      ) {
-        assert.equal(consumer.max_batch_size, 1);
-      }
-    }
+    assert.deepEqual(config.queues.consumers, []);
 
     assert.deepEqual(
-      config.vectorize.map(({ binding }) => binding),
-      [
-        "LEGAL_RU_INDEX",
-        "LEGAL_UZ_INDEX",
-        "INTERNAL_LEGAL_INDEX",
-        "USER_MEMORY_INDEX",
-      ],
+      config.vectorize,
+      vectorContract.map(([binding, name]) => ({
+        binding,
+        index_name: `${environment}-${name}`,
+      })),
     );
     assert.deepEqual(
       config.analytics_engine_datasets.map(({ binding }) => binding),
@@ -168,13 +196,57 @@ test("declares isolated, disabled-by-default Cloudflare environments", () => {
       );
     }
   }
+
+  assert.equal(source.env.staging.workers_dev, false);
+  assert.equal(source.env.staging.preview_urls, false);
+  assert.deepEqual(source.env.staging.routes, []);
+  assert.equal(
+    Object.hasOwn(source.env.staging.vars, "ALLOW_PLATFORM_AUTH_HEADERS"),
+    false,
+  );
 });
 
-test("keeps resource identifiers and secrets out of source configuration", () => {
+test("pins only verified non-production D1 identifiers and excludes secrets", () => {
   const serialized = JSON.stringify(source);
-  assert.doesNotMatch(serialized, /"database_id"\s*:/i);
+  assert.equal(
+    source.d1_databases[0]?.database_id,
+    "d07670cf-f7bf-460c-a668-101671d4c330",
+  );
+  assert.equal(
+    source.env.staging.d1_databases[0]?.database_id,
+    "bb716a96-b2fb-4823-90d6-6c228fed181a",
+  );
+  assert.equal(source.env.production.d1_databases[0]?.database_id, undefined);
+  assert.doesNotMatch(
+    serialized,
+    /4cce509b-0e02-4ca9-a3ba-a5ce1327aeda/i,
+    "the production D1 identifier remains outside source configuration",
+  );
   assert.doesNotMatch(serialized, /"account_id"\s*:/i);
   assert.doesNotMatch(serialized, /"(?:api_key|secret|token)"\s*:/i);
+});
+
+test("does not attach legacy or premature queue contracts", () => {
+  const serialized = JSON.stringify(source);
+  for (const legacyBinding of [
+    "AI_JOBS_QUEUE",
+    "FILE_JOBS_QUEUE",
+    "DOCUMENT_JOBS_QUEUE",
+    "LEGAL_SYNC_QUEUE",
+    "EMAIL_JOBS_QUEUE",
+    "NOTIFICATION_JOBS_QUEUE",
+    "CLEANUP_JOBS_QUEUE",
+    "BACKUP_JOBS_QUEUE",
+  ]) {
+    assert.doesNotMatch(serialized, new RegExp(`"${legacyBinding}"`));
+  }
+  assert.doesNotMatch(
+    serialized,
+    /juro-(?:ai|file|document|legal|email|notification|cleanup|backup)-jobs-/,
+  );
+  assert.doesNotMatch(serialized, /"MALWARE_SCAN_QUEUE"/);
+  assert.doesNotMatch(serialized, /-malware-scan"/);
+  assert.doesNotMatch(serialized, /"consumers":\[(?!\])/);
 });
 
 test("normalizes Sites primary bindings without losing add-ons", () => {

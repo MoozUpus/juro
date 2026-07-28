@@ -1,7 +1,15 @@
 # JURO server-only secrets
 
-Updated: 2026-07-26  
-Status: names and contracts only; no secret values are stored here.
+Updated: 2026-07-28
+Status: names, contracts, and read-only presence inventory only; no secret value is stored here, in Git, or in the client bundle.
+
+## Verified remote presence by name
+
+The production Sites runtime exposes variables `APP_URL`, `EMAIL_FROM`, and `PUBLIC_SITE_URL`, plus a secret binding named `RESEND_API_KEY`. The inspected legacy production Worker also exposes `EMAIL_FROM` and only `RESEND_API_KEY` among the required secret bindings.
+
+No inspected production surface exposed the following required names: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `OTP_HASH_SECRET`, `CRON_SECRET`, `TURNSTILE_SECRET_KEY`, `TOTP_ENCRYPTION_KEY`, or `SIGNED_URL_SECRET`.
+
+Only names were inventoried. A Sites connector operation unexpectedly returned a bypass bearer token in raw connector telemetry. The value was not copied, used, persisted, or committed and is intentionally absent from this document. It must be rotated/revoked before production work.
 
 ## Identity key ring
 
@@ -73,13 +81,26 @@ principal.
 ## Other server-only values
 
 - `RESEND_API_KEY`
-- `AI_PROVIDER_API_KEY` / `OPENAI_API_KEY`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `SESSION_SECRET`
+- `ENCRYPTION_KEY`
+- `OTP_HASH_SECRET`
+- `CRON_SECRET`
+- `TURNSTILE_SECRET_KEY`
+- `TOTP_ENCRYPTION_KEY`
+- `SIGNED_URL_SECRET`
+- `IDENTITY_KEYRING`
 - `LEGISLATION_FEED_API_KEY`
 - `PAYMENT_API_KEY`
 - `PAYMENT_WEBHOOK_SECRET`
 
+The last three provider/integration values are optional until the corresponding integration is actually selected. `AI_PROVIDER_API_KEY` is a legacy generic name and must not replace the explicit OpenAI/Anthropic bindings in a new environment.
+
 Provider secrets must remain separate per environment and may not use
 `NEXT_PUBLIC_*`.
+
+Model names, feature flags, URLs, and email sender identities are server-side variables/configuration, not secrets. They still require environment isolation and must not contain credentials.
 
 `RESEND_API_KEY` and `EMAIL_FROM` gate both login/deletion delivery and the
 protected email-change UI. Email change uses one provider batch request with a

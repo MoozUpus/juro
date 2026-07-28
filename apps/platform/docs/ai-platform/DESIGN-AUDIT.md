@@ -1,23 +1,53 @@
 # JURO platform design audit
 
-Audit date: 2026-07-26  
-Baseline revision: `86843ca`  
-Method: static code and design-system review. Browser, Lighthouse, axe, real-device, and viewport passes have not yet been run and are not claimed.
+Audit date: 2026-07-28
+Production Sites revision: `4031078`
+Integration branch baseline: `1d3d23d` before this documentation update
+Method: static code/design-system review, two independent source-based design-contract reviews, and a bounded authenticated Chrome pass of the canonical document-builder. Lighthouse, axe, real-device, 200% zoom, reduced-motion, and full-route passes have not been completed and are not claimed.
+
+The Browser runtime initially failed because its temporary CommonJS files inherited ESM semantics from a user-home `package.json`. A session-local temporary `{ "type": "commonjs" }` package scope restored the bundled Browser runtime without modifying JURO or the user-home package. The recovered runtime selected the user's Chrome connection and produced the bounded evidence below. Desktop screenshot capture timed out twice and is not claimed; the successful mobile screenshot contains no personal document data.
+
+## Browser evidence
+
+| Check | Result |
+|---|---|
+| `/ru/individual/main`, desktop | one `h1`, skip link and target present, no horizontal overflow, no console warning/error |
+| `/ru/individual/document-builder`, desktop | canonical route and title rendered; no console warning/error |
+| builder width matrix | zero horizontal overflow at 320, 360, 390, 768, 1024, 1280, and 1440 px |
+| mobile navigation | fixed bottom navigation present through 768 px and absent at 1024 px+ |
+| `/uz/individual/document-builder` | shell labels and document `lang` are Uzbek, but the builder work surface remains Russian |
+| semantic landmarks | builder renders a `<main>` inside the shell `<main>`; must be corrected in the prototype/production migration |
+| screenshots | PII-free 390×844 UZ builder screenshot captured; desktop capture timed out and remains open |
+
+The pass confirms responsive containment, not full accessibility or visual approval. It does not cover touch target geometry, focus behavior, 200% zoom, reduced motion, screen readers, or mobile browser keyboards.
 
 ## Design posture
 
 JURO is a regulated LegalTech workspace, not a marketing experience.
 
-Applied context:
+Approved direction: **Cinematic Legal Intelligence**. The application uses a controlled navy/gold cinematic shell around high-readability light legal work surfaces. It must not become a marketing landing page or Awwwards demo.
 
-- mode: `Operate`;
-- design variance: `4/10`;
-- motion intensity: `3/10`;
-- visual density: `7/10`;
-- admin target: lower variance/motion and higher density;
-- preserve the document builder and existing navy/gold/paper brand.
+Applied context by surface:
 
-The Impeccable, Emil design-engineering, animation-review, Apple interaction, minimalist, high-end, and anti-slop guidance was used as an audit framework. Landing-page/Awwwards patterns are intentionally excluded from the application workspace.
+- dashboard/AI entry: variance `6/10`, motion `5/10`, density `5/10`;
+- AI chat/voice: variance `5/10`, motion `4/10`, density `6/10`;
+- documents/analysis/builder/cases/calendar: variance `3/10`, motion `2/10`, density `8/10`;
+- onboarding/empty states: variance `6/10`, motion `5/10`, density `5/10`;
+- admin: variance `2/10`, motion `1/10`, density `9/10`;
+- preserve the working document builder and existing navy/gold/paper brand.
+
+The official upstream Impeccable (Apache-2.0), Emil Kowalski skills (MIT), and Taste Skill (MIT) instructions were reviewed without running install scripts or adding runtime code. Current upstream Impeccable v4.0.3 has no `normalize` command; its relevant responsibilities are split between `extract` and `polish`. Current Emil uses `find-animation-opportunities`, not `find-purposeful-animation`. These names are recorded rather than imitated. Taste guidance is applied as an anti-slop/critique layer because its own frontend skill says it is not a dashboard workflow. Landing-page/Awwwards patterns remain excluded from legal work surfaces.
+
+## Core Before / After / Why direction
+
+| Before | After target | Why |
+|---|---|---|
+| two unscoped `:root` sets plus a global JURO 2.0 `body` override leak marketing navy/gold/paper/font values into every route | one prototype-scoped semantic token system around `#062844`, `#BE974F`, and `#F8F6F2`, with separate shell/work-surface, text, border, focus, risk, and status roles | stop cascade-dependent visual drift, preserve the brand, and meet contrast/state clarity without changing production before approval |
+| marketing-like shell and repeated route-module chrome | stable cinematic application shell with compact entry zone and light reading/work canvases | maintain visual continuity without competing with legal work |
+| dashboard AI prompt placed in a query string | protected server-side draft/POST transition into the same case/chat context | keep sensitive legal text out of URLs, history, referrers, and routine logs |
+| simulated/ephemeral AI and `202` completion states | durable processing states, job progress, normalized result, retry, and accessible announcements | prevent false success and preserve user agency |
+| small controls and 7–11 px metadata declarations | readable type floor, 44×44 targets, 200% zoom-safe layouts | WCAG 2.2 AA and mobile usability |
+| static Jurobek raster used as if an avatar foundation existed | use the approved rigged 3D asset only after it is supplied and audited; retain a static fallback meanwhile | avoid inventing identity, rigging, microphone, or voice behavior |
 
 ## Scorecard
 
@@ -45,7 +75,7 @@ Required behavior:
 
 ### Unverified sources marked verified
 
-`ComparisonResultClient` accepts any HTTPS URL and labels every source “Проверен”. `GlobalSearch` has the same HTTPS-only concept of a safe official URL.
+In deployed Sites v20, `ComparisonResultClient` accepts any HTTPS URL and labels every source “Проверен”; `GlobalSearch` has the same HTTPS-only concept of a safe official URL. The integration branch locally replaces that promotion path with one server-owned exact-host allowlist for LexUZ/AdviceUZ, but it is not staged and still lacks source ID/version/status/freshness verification.
 
 Required behavior:
 
@@ -252,6 +282,12 @@ Required:
 - skeleton/content-size stability;
 - no heavy motion library in common routes.
 
+## Jurobek / 3D evidence
+
+No GLB, FBX, USDZ, glTF, Blender, DAE, OBJ, VRM, or other rigged Jurobek source is present in the reconciled repository, synced workspaces, inspected Sites checkout, or either local delivery archive. Twenty-two raster copies reduce to six unique byte sequences and four visual poses: neutral, wave, point, and approve. The canonical platform static fallback is `public/jurobek-avatar.webp`, 1024×1792, 60,670 bytes, SHA-256 `9f42f50c39b71abb8a1792ab67780b08b010b28439437d4789d55aa72a83c8df`.
+
+Therefore armature, skinning, bone weights, materials, animation clips, facial details, lip sync, mesh statistics, and the requested shirt-lettering correction cannot be truthfully implemented or verified. The cinematic prototype must keep the static fallback, textual/ARIA state labels, and the avatar/voice-with-avatar enhancement disabled until the owner-approved source asset is supplied through an appropriate file channel. Text and voice must remain usable without WebGL.
+
 ## Positive foundations
 
 - professional navy/gold/paper visual direction;
@@ -262,13 +298,13 @@ Required:
 - long comparison lists use virtualization;
 - several form errors and processing states already use alert/live semantics;
 - provider-off behavior is generally honest;
-- Jurobek is static and uses a compact WebP asset.
+- the current Jurobek fallback is static and avoids a fake microphone/voice state.
 
 ## Required verification pass
 
 Before the staging design gate:
 
-1. browser checks at 320, 360, 390, 768, 1024, 1280, and 1440+;
+1. extend the completed builder width checks at 320, 360, 390, 768, 1024, 1280, and 1440+ to dashboard, chat, analysis, cases, and builder detail routes;
 2. zoom 200%;
 3. keyboard-only and screen-reader smoke;
 4. reduced motion;
@@ -280,4 +316,5 @@ Before the staging design gate:
 10. complete canonical builder regression;
 11. axe and Lighthouse;
 12. measured bundle and Core Web Vitals.
+13. rerun visual Impeccable/Taste passes on the staged prototype; the two source-contract reviews now have no High/P1/P2 findings, but that is not a visual score.
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  ATTACHED_PLATFORM_QUEUE_BINDINGS,
   JOB_KINDS,
   PLATFORM_QUEUE_BINDINGS,
   QUEUE_BINDING_BY_KIND,
@@ -25,6 +26,10 @@ const outboxRowSchema = z.object({
 }).strict();
 
 type OutboxRow = z.infer<typeof outboxRowSchema>;
+
+const attachedQueueBindings = new Set<string>(
+  ATTACHED_PLATFORM_QUEUE_BINDINGS,
+);
 
 type DispatchSummary = {
   claimed: number;
@@ -114,7 +119,11 @@ function queueBinding(
   env: PlatformJobEnv,
   binding: PlatformQueueBinding,
 ): Queue<JobEnvelope> {
-  return env[binding] as Queue<JobEnvelope>;
+  const queue = env[binding];
+  if (!queue) {
+    throw new TypeError("Queue binding is not attached.");
+  }
+  return queue;
 }
 
 async function markOutboxRejected(
@@ -239,7 +248,8 @@ export async function dispatchOutbox(
     });
     if (
       !envelope.success ||
-      QUEUE_BINDING_BY_KIND[row.job_type] !== row.queue_binding
+      QUEUE_BINDING_BY_KIND[row.job_type] !== row.queue_binding ||
+      !attachedQueueBindings.has(row.queue_binding)
     ) {
       if (await markOutboxRejected(env, row, now)) {
         summary.rejected += 1;

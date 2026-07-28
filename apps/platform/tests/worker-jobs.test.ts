@@ -3,7 +3,10 @@ import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
+  ATTACHED_PLATFORM_QUEUE_BINDINGS,
   JOB_KINDS,
+  LEGACY_JOB_KINDS,
+  QUEUE_BINDING_BY_KIND,
   expectedQueueName,
   handleQueue,
   handleScheduled,
@@ -44,6 +47,17 @@ class SqliteD1Statement {
     success: true;
     meta: { changes: number };
   }> {
+    if (
+      this.owner.stealJobLeaseOnReject &&
+      /SET status = 'rejected'/i.test(this.sql)
+    ) {
+      this.owner.database.prepare(`
+        UPDATE job_runs
+        SET lease_owner = 'newer-worker',
+            lease_expires_at = '2999-01-01T00:00:00.000Z'
+        WHERE status = 'running'
+      `).run();
+    }
     const statement = this.owner.database.prepare(this.sql);
     let results: T[] = [];
     let changes = 0;
@@ -64,23 +78,6 @@ class SqliteD1Statement {
   }
 
   async first<T = Record<string, unknown>>(): Promise<T | null> {
-    if (
-      this.owner.failProbe &&
-      /^\s*SELECT 1 AS ok\s*$/i.test(this.sql)
-    ) {
-      throw new Error("synthetic probe failure");
-    }
-    if (
-      this.owner.stealJobLeaseOnProbe &&
-      /^\s*SELECT 1 AS ok\s*$/i.test(this.sql)
-    ) {
-      this.owner.database.prepare(`
-        UPDATE job_runs
-        SET lease_owner = 'newer-worker',
-            lease_expires_at = '2999-01-01T00:00:00.000Z'
-        WHERE status = 'running'
-      `).run();
-    }
     return (this.owner.database.prepare(this.sql).get(
       ...this.sqliteValues(),
     ) as T | undefined) ?? null;
@@ -89,8 +86,7 @@ class SqliteD1Statement {
 
 class SqliteD1 {
   prepareCalls = 0;
-  failProbe = false;
-  stealJobLeaseOnProbe = false;
+  stealJobLeaseOnReject = false;
 
   constructor(readonly database: DatabaseSync) {}
 
@@ -150,6 +146,12 @@ function createDatabase(): {
       locale text DEFAULT 'ru' NOT NULL,
       created_at text NOT NULL,
       updated_at text NOT NULL
+    );
+    INSERT INTO workspaces (
+      id, type, name, locale, created_at, updated_at
+    ) VALUES (
+      'ws_test', 'individual', 'Synthetic workspace', 'ru',
+      '2026-07-26T00:00:00.000Z', '2026-07-26T00:00:00.000Z'
     );
   `);
   for (
@@ -216,14 +218,13 @@ function createEnv(
         metrics.push(value);
       },
     },
-    AI_JOBS_QUEUE: queue("AI_JOBS_QUEUE"),
-    FILE_JOBS_QUEUE: queue("FILE_JOBS_QUEUE"),
-    DOCUMENT_JOBS_QUEUE: queue("DOCUMENT_JOBS_QUEUE"),
-    LEGAL_SYNC_QUEUE: queue("LEGAL_SYNC_QUEUE"),
-    EMAIL_JOBS_QUEUE: queue("EMAIL_JOBS_QUEUE"),
-    NOTIFICATION_JOBS_QUEUE: queue("NOTIFICATION_JOBS_QUEUE"),
-    CLEANUP_JOBS_QUEUE: queue("CLEANUP_JOBS_QUEUE"),
-    BACKUP_JOBS_QUEUE: queue("BACKUP_JOBS_QUEUE"),
+    DOCUMENT_ANALYSIS_QUEUE: queue("DOCUMENT_ANALYSIS_QUEUE"),
+    OCR_PROCESSING_QUEUE: queue("OCR_PROCESSING_QUEUE"),
+    DOCUMENT_EXPORT_QUEUE: queue("DOCUMENT_EXPORT_QUEUE"),
+    EMAIL_NOTIFICATIONS_QUEUE: queue("EMAIL_NOTIFICATIONS_QUEUE"),
+    LEGAL_SOURCES_SYNC_QUEUE: queue("LEGAL_SOURCES_SYNC_QUEUE"),
+    DATA_RETENTION_CLEANUP_QUEUE: queue("DATA_RETENTION_CLEANUP_QUEUE"),
+    NOTIFICATIONS_QUEUE: queue("NOTIFICATIONS_QUEUE"),
   } as unknown as PlatformJobEnv;
   return { env, metrics, sends };
 }
@@ -290,15 +291,16 @@ function mockBatch(
 }
 
 function envelope(
-  kind: JobKind = "platform.probe",
+  kind: JobKind = "cleanup.run",
   overrides: Partial<JobEnvelope> = {},
 ): JobEnvelope {
   const tenantKind = new Set<JobKind>([
-    "ai.request",
-    "file.process",
     "document.analyze",
+    "ocr.process",
+    "document.export",
     "email.send",
     "notification.dispatch",
+    "malware.scan",
   ]).has(kind);
   return {
     schemaVersion: 1,
@@ -326,6 +328,49 @@ async function runBatch(
 test("accepts supported identifiers-only envelopes", () => {
   for (const kind of JOB_KINDS) {
     assert.equal(jobEnvelopeSchema.safeParse(envelope(kind)).success, true);
+  }
+});
+
+test("routes only v2 task kinds and compatibility-blocks legacy kinds", () => {
+  assert.deepEqual(
+    JOB_KINDS.map((kind) => [
+      kind,
+      QUEUE_BINDING_BY_KIND[kind],
+      expectedQueueName(kind, "staging"),
+    ]),
+    [
+      ["document.analyze", "DOCUMENT_ANALYSIS_QUEUE", "staging-document-analysis"],
+      ["ocr.process", "OCR_PROCESSING_QUEUE", "staging-ocr-processing"],
+      ["document.export", "DOCUMENT_EXPORT_QUEUE", "staging-document-export"],
+      ["email.send", "EMAIL_NOTIFICATIONS_QUEUE", "staging-email-notifications"],
+      ["legal.sync", "LEGAL_SOURCES_SYNC_QUEUE", "staging-legal-sources-sync"],
+      ["cleanup.run", "DATA_RETENTION_CLEANUP_QUEUE", "staging-data-retention-cleanup"],
+      ["notification.dispatch", "NOTIFICATIONS_QUEUE", "staging-notifications"],
+      ["malware.scan", "MALWARE_SCAN_QUEUE", "staging-malware-scan"],
+    ],
+  );
+  assert.equal(
+    ATTACHED_PLATFORM_QUEUE_BINDINGS.includes("MALWARE_SCAN_QUEUE" as never),
+    false,
+  );
+
+  for (const legacyKind of LEGACY_JOB_KINDS) {
+    assert.equal(
+      jobEnvelopeSchema.safeParse({
+        ...envelope(),
+        kind: legacyKind,
+      }).success,
+      false,
+    );
+    assert.equal(Object.hasOwn(QUEUE_BINDING_BY_KIND, legacyKind), false);
+    assert.throws(
+      () =>
+        (expectedQueueName as unknown as (
+          kind: string,
+          environment: "development",
+        ) => string)(legacyKind, "development"),
+      /Unsupported job kind/,
+    );
   }
 });
 
@@ -367,7 +412,7 @@ test("disabled or incompatible runtimes retry the batch without D1 access", asyn
       const item = mockMessage(envelope(), `message_${options.asyncEnabled ?? "schema"}`);
       const { retryAll } = await runBatch(
         env,
-        expectedQueueName("platform.probe", "development"),
+        expectedQueueName("cleanup.run", "development"),
         [item.message],
       );
       assert.deepEqual(retryAll, [{ delaySeconds: 300 }]);
@@ -386,7 +431,7 @@ test("invalid messages are acknowledged without persistence or telemetry", async
     const item = mockMessage({ version: 0, content: "unsafe" }, "invalid");
     await runBatch(
       env,
-      expectedQueueName("platform.probe", "development"),
+      expectedQueueName("cleanup.run", "development"),
       [item.message],
     );
     assert.equal(item.state.acknowledgements, 1);
@@ -398,7 +443,7 @@ test("invalid messages are acknowledged without persistence or telemetry", async
   }
 });
 
-test("probe jobs complete exactly once and completed redelivery is deduplicated", async () => {
+test("unimplemented v2 handlers reject exactly once and redelivery is deduplicated", async () => {
   const { sqlite, d1 } = createDatabase();
   try {
     const { env, metrics } = createEnv(d1);
@@ -421,9 +466,9 @@ test("probe jobs complete exactly once and completed redelivery is deduplicated"
       lease_owner: string | null;
       error_code: string | null;
     };
-    assert.equal(row.status, "completed");
+    assert.equal(row.status, "rejected");
     assert.equal(row.lease_owner, null);
-    assert.equal(row.error_code, null);
+    assert.equal(row.error_code, "JOB_HANDLER_NOT_ENABLED");
     assert.equal(metrics.length, 1);
 
     const duplicate = mockMessage(body, "probe_message_2", 2);
@@ -460,7 +505,7 @@ test("idempotency hash conflicts are acknowledged without overwriting the origin
       [first.message],
     );
 
-    const conflictBody = envelope("platform.probe", {
+    const conflictBody = envelope("cleanup.run", {
       jobId: "job_conflict_second",
       idempotencyKey: original.idempotencyKey,
       subjectId: "subject_conflict_second",
@@ -500,7 +545,7 @@ test("a reused job id with a different idempotency key is a terminal conflict", 
       [first.message],
     );
 
-    const conflicting = envelope("platform.probe", {
+    const conflicting = envelope("cleanup.run", {
       jobId: original.jobId,
       idempotencyKey: "idem_same_job_different_key",
       correlationId: "corr_same_job_different_key",
@@ -575,7 +620,7 @@ test("active leases retry and expired leases are reclaimed", async () => {
           SELECT status FROM job_runs WHERE idempotency_key = ?
         `).get(body.idempotencyKey) as { status: string }
       ).status,
-      "completed",
+      "rejected",
     );
   } finally {
     sqlite.close();
@@ -586,8 +631,8 @@ test("a stale lease owner cannot complete or fail a newer claim", async () => {
   const { sqlite, d1 } = createDatabase();
   try {
     const { env } = createEnv(d1);
-    d1.stealJobLeaseOnProbe = true;
-    const body = envelope("platform.probe", {
+    d1.stealJobLeaseOnReject = true;
+    const body = envelope("cleanup.run", {
       jobId: "job_stale_worker",
       idempotencyKey: "idem_stale_worker",
       subjectId: "subject_stale_worker",
@@ -626,7 +671,7 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
     const mismatch = mockMessage(mismatchedBody, "mismatch");
     await runBatch(
       env,
-      "juro-backup-jobs-development",
+      expectedQueueName("document.export", "development"),
       [mismatch.message],
     );
     assert.equal(mismatch.state.acknowledgements, 1);
@@ -639,7 +684,7 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
       "JOB_QUEUE_MISMATCH",
     );
 
-    const disabledBody = envelope("backup.run");
+    const disabledBody = envelope("document.analyze");
     const disabled = mockMessage(disabledBody, "disabled_handler");
     await runBatch(
       env,
@@ -660,11 +705,10 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
   }
 });
 
-test("transient probe failures retry only that message and preserve batch isolation", async () => {
+test("invalid and disabled messages remain isolated within a batch", async () => {
   const { sqlite, d1 } = createDatabase();
   try {
     const { env } = createEnv(d1);
-    d1.failProbe = true;
     const failingBody = envelope();
     const invalid = mockMessage({ unsafe: true }, "mixed_invalid");
     const failing = mockMessage(failingBody, "mixed_failing", 2);
@@ -675,8 +719,8 @@ test("transient probe failures retry only that message and preserve batch isolat
     );
     assert.equal(invalid.state.acknowledgements, 1);
     assert.deepEqual(invalid.state.retries, []);
-    assert.equal(failing.state.acknowledgements, 0);
-    assert.deepEqual(failing.state.retries, [{ delaySeconds: 30 }]);
+    assert.equal(failing.state.acknowledgements, 1);
+    assert.deepEqual(failing.state.retries, []);
     const row = sqlite.prepare(`
       SELECT status, error_code, next_attempt_at
       FROM job_runs
@@ -684,17 +728,17 @@ test("transient probe failures retry only that message and preserve batch isolat
     `).get(failingBody.idempotencyKey) as {
       status: string;
       error_code: string;
-      next_attempt_at: string;
+      next_attempt_at: string | null;
     };
-    assert.equal(row.status, "retrying");
-    assert.equal(row.error_code, "JOB_TRANSIENT_FAILURE");
-    assert.ok(row.next_attempt_at);
+    assert.equal(row.status, "rejected");
+    assert.equal(row.error_code, "JOB_HANDLER_NOT_ENABLED");
+    assert.equal(row.next_attempt_at, null);
   } finally {
     sqlite.close();
   }
 });
 
-test("telemetry failures never roll back a durable completion", async () => {
+test("telemetry failures never roll back a durable rejection", async () => {
   const { sqlite, d1 } = createDatabase();
   try {
     const { env } = createEnv(d1, { analyticsThrows: true });
@@ -713,7 +757,7 @@ test("telemetry failures never roll back a durable completion", async () => {
           SELECT status FROM job_runs WHERE idempotency_key = ?
         `).get(body.idempotencyKey) as { status: string }
       ).status,
-      "completed",
+      "rejected",
     );
   } finally {
     sqlite.close();
@@ -736,7 +780,7 @@ test("structured logs never contain rejected message content", async () => {
     }, "secret_log_test");
     await runBatch(
       env,
-      expectedQueueName("platform.probe", "development"),
+      expectedQueueName("cleanup.run", "development"),
       [item.message],
     );
     assert.equal(item.state.acknowledgements, 1);
@@ -781,7 +825,7 @@ function insertOutbox(
   overrides: Partial<{
     id: string;
     queueBinding: string;
-    kind: JobKind;
+    kind: string;
     idempotencyKey: string;
     subjectId: string;
     workspaceId: string | null;
@@ -793,8 +837,8 @@ function insertOutbox(
 ): void {
   const input = {
     id: "outbox_probe",
-    queueBinding: "CLEANUP_JOBS_QUEUE",
-    kind: "platform.probe" as JobKind,
+    queueBinding: "DATA_RETENTION_CLEANUP_QUEUE",
+    kind: "cleanup.run",
     idempotencyKey: "outbox_idem_probe",
     subjectId: "outbox_subject_probe",
     workspaceId: null,
@@ -842,7 +886,7 @@ test("outbox dispatch is leased, identifiers-only, and fenced on success", async
       retrying: 0,
     });
     assert.equal(sends.length, 1);
-    assert.equal(sends[0]?.binding, "CLEANUP_JOBS_QUEUE");
+    assert.equal(sends[0]?.binding, "DATA_RETENTION_CLEANUP_QUEUE");
     assert.deepEqual(
       Object.keys(sends[0]?.body as Record<string, unknown>).sort(),
       [
@@ -868,6 +912,68 @@ test("outbox dispatch is leased, identifiers-only, and fenced on success", async
     assert.equal(row.status, "dispatched");
     assert.equal(row.lease_owner, null);
     assert.ok(row.dispatched_at);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("outbox compatibility-blocks legacy job kinds without publishing", async () => {
+  for (const legacyKind of LEGACY_JOB_KINDS) {
+    const { sqlite, d1 } = createDatabase();
+    try {
+      insertOutbox(sqlite, {
+        id: `outbox_legacy_${legacyKind.replaceAll(".", "_")}`,
+        kind: legacyKind,
+        idempotencyKey: `outbox_idem_${legacyKind.replaceAll(".", "_")}`,
+      });
+      const { env, sends } = createEnv(d1);
+      assert.deepEqual(await dispatchOutbox(env), {
+        claimed: 0,
+        dispatched: 0,
+        rejected: 0,
+        retrying: 0,
+      });
+      assert.equal(sends.length, 0);
+      assert.equal(
+        (
+          sqlite.prepare(`
+            SELECT status FROM job_outbox WHERE job_type = ?
+          `).get(legacyKind) as { status: string }
+        ).status,
+        "rejected",
+      );
+    } finally {
+      sqlite.close();
+    }
+  }
+});
+
+test("malware scan remains an explicit but unattached contract", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    insertOutbox(sqlite, {
+      id: "outbox_malware_unattached",
+      queueBinding: "MALWARE_SCAN_QUEUE",
+      kind: "malware.scan",
+      idempotencyKey: "outbox_idem_malware_unattached",
+      workspaceId: "ws_test",
+    });
+    const { env, sends } = createEnv(d1);
+    assert.deepEqual(await dispatchOutbox(env), {
+      claimed: 1,
+      dispatched: 0,
+      rejected: 1,
+      retrying: 0,
+    });
+    assert.equal(sends.length, 0);
+    assert.equal(
+      (
+        sqlite.prepare(`
+          SELECT status FROM job_outbox WHERE id = 'outbox_malware_unattached'
+        `).get() as { status: string }
+      ).status,
+      "rejected",
+    );
   } finally {
     sqlite.close();
   }
@@ -909,7 +1015,7 @@ test("outbox rejects queue-kind mismatches and retries send failures", async () 
   try {
     insertOutbox(sqlite, {
       id: "outbox_mismatch",
-      kind: "backup.run",
+      kind: "document.export",
       idempotencyKey: "outbox_idem_mismatch",
     });
     const { env } = createEnv(d1);
@@ -933,7 +1039,7 @@ test("outbox rejects queue-kind mismatches and retries send failures", async () 
       idempotencyKey: "outbox_idem_retry",
     });
     const failing = createEnv(d1, {
-      failingQueueBindings: ["CLEANUP_JOBS_QUEUE"],
+      failingQueueBindings: ["DATA_RETENTION_CLEANUP_QUEUE"],
     });
     assert.deepEqual(await dispatchOutbox(failing.env), {
       claimed: 1,

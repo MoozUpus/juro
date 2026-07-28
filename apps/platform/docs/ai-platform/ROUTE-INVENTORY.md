@@ -1,9 +1,12 @@
 # JURO route inventory
 
-Audit date: 2026-07-26  
-Baseline revision: `86843ca`
+Audit date: 2026-07-28
+Production Sites revision: `4031078` (v20)
+Integration branch baseline: `1d3d23d` before this documentation update
 
 This inventory distinguishes actual routes from target routes. An entry marked `missing` is not represented as working.
+
+Production routing is split: `app.juro.uz` serves Sites v20, while `admin.juro.uz` and the `juro` workers.dev hostname serve a separate legacy Worker asset set. The Workers Domains and Sites control planes both report ownership information for `app.juro.uz`; no route migration or DNS change is safe until that ambiguity is reconciled. `staging.app.juro.uz`, `staging.juro.uz`, and `status.juro.uz` currently have no DNS records.
 
 ## Authentication and entry routes
 
@@ -70,8 +73,8 @@ Internal `app/_document-builder/**` paths are implementation modules and are not
 
 | Current route | Current purpose | Target treatment |
 |---|---|---|
-| `/invite/:token` | workspace invitation | retain; add atomic acceptance and localized result UI |
-| `/document-builder/invitations/:token` | document collaboration invitation | retain; deny document access before acceptance |
+| `/invite/:token` | workspace invitation | retain; local conditional acceptance exists, but requires full HTTP/remote-D1 staging proof and localized result UI |
+| `/document-builder/invitations/:token` | document collaboration invitation | retain; pre-accept denial and atomic one-winner/replay handling are fixed locally, not staged |
 | `/document-builder/share/:token` | public document share | retain with tighter audit and expiration policy |
 | `/document-builder/signed-share/:token` | signed-file share | retain; replace weak access-code design |
 | `/legal/:slug?lang=ru\|uz` | app policy pages | migrate or alias to localized canonical legal URLs |
@@ -104,6 +107,8 @@ Existing handlers cover:
 ```
 
 `document-builder-test/**` currently redirects to `document-builder/**`. The word `test` must not return to a canonical URL, but the redirect must remain for inbound links.
+
+Authenticated Chrome verification on 2026-07-28 confirmed that `/ru/individual/document-builder` renders and that `/uz/individual/document-builder` preserves the localized route and Uzbek shell. The builder module inside the UZ route remains Russian and is an implementation/i18n defect, not a route failure. A direct Chrome check of `/ru/individual/document-builder-test` was blocked by the client before response inspection, so it does not replace the existing HTTP/source evidence for the `308` redirect.
 
 ## Target route gaps
 
@@ -187,9 +192,28 @@ customer-content grant invokes the internal mutation service.
 ### Help and status
 
 - localized article routes `/:locale/help/:articleSlug` are absent;
-- `status.juro.uz` returned `502` during audit.
+- `status.juro.uz` has no DNS record and no verified status application.
+
+### Cinematic prototype
+
+The production build route inventory contains no protected staging-only cinematic platform route. An adjacent Sites source checkout previously contained a public in-memory prototype, but that is not an acceptable staging surface: Sites deployments are production, the prototype was demo-only, and it did not use isolated staging data. The target `/:locale/...` prototype must be introduced behind a staging-only deployment or server-side feature flag and must never be inferred from a local static component.
 
 ## API inventory
+
+The inventory below describes the reconciled local integration branch, not a claim that every route exists in deployed Sites v20. The deployed Sites source supplies the original OTP/logout/onboarding, platform MVP, and document-builder APIs. The following security routes or semantics are integration-branch-only and remain unstaged:
+
+| Integration-branch addition | Deployed Sites v20 state |
+|---|---|
+| `POST /api/auth/verify-mfa` | absent |
+| session/device listing and revoke APIs | absent |
+| email-change APIs | absent |
+| TOTP setup/confirm/backup-code APIs | absent |
+| verified deletion-challenge semantics on the existing deletion route | prior weaker behavior remains deployed |
+| document invitation pre-accept denial and atomic one-winner consume | insecure deployed behavior remains until approved release |
+| active-workspace builder isolation | cross-workspace deployed behavior remains until approved release |
+| platform staff assignment/role-event foundations | local service/schema only; no route exists and no role is bootstrapped |
+
+This separation is mandatory when reading the route blocks: source presence is not staging or production evidence.
 
 ### Authentication
 
@@ -277,3 +301,4 @@ GET /api/document-builder/standalone-signed-shares/:token/file
 5. Return neutral not-found behavior when tenant access is absent.
 6. Add route and security tests for every redirect.
 7. Re-run `/ru/individual/document-builder` regression after every routing change.
+8. Keep the staging prototype `noindex`, inaccessible from production navigation, and backed only by isolated staging resources.

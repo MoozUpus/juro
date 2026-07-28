@@ -20,133 +20,73 @@
     {
       "binding": "DB",
       "database_name": "juro-development",
+      "database_id": "d07670cf-f7bf-460c-a668-101671d4c330",
       "migrations_dir": "./drizzle"
     }
   ],
   "r2_buckets": [
     {
       "binding": "BUCKET",
-      "bucket_name": "juro-private-documents-development"
+      "bucket_name": "juro-development-files"
     },
     {
       "binding": "BACKUP_BUCKET",
-      "bucket_name": "juro-private-backups-development"
+      "bucket_name": "juro-development-backups"
     },
     {
       "binding": "QUARANTINE_BUCKET",
-      "bucket_name": "juro-quarantine-development"
+      "bucket_name": "juro-development-quarantine"
     }
   ],
   "queues": {
     "producers": [
       {
-        "binding": "AI_JOBS_QUEUE",
-        "queue": "juro-ai-jobs-development"
+        "binding": "DOCUMENT_ANALYSIS_QUEUE",
+        "queue": "development-document-analysis"
       },
       {
-        "binding": "FILE_JOBS_QUEUE",
-        "queue": "juro-file-jobs-development"
+        "binding": "OCR_PROCESSING_QUEUE",
+        "queue": "development-ocr-processing"
       },
       {
-        "binding": "DOCUMENT_JOBS_QUEUE",
-        "queue": "juro-document-jobs-development"
+        "binding": "DOCUMENT_EXPORT_QUEUE",
+        "queue": "development-document-export"
       },
       {
-        "binding": "LEGAL_SYNC_QUEUE",
-        "queue": "juro-legal-sync-development"
+        "binding": "EMAIL_NOTIFICATIONS_QUEUE",
+        "queue": "development-email-notifications"
       },
       {
-        "binding": "EMAIL_JOBS_QUEUE",
-        "queue": "juro-email-jobs-development"
+        "binding": "LEGAL_SOURCES_SYNC_QUEUE",
+        "queue": "development-legal-sources-sync"
       },
       {
-        "binding": "NOTIFICATION_JOBS_QUEUE",
-        "queue": "juro-notification-jobs-development"
+        "binding": "DATA_RETENTION_CLEANUP_QUEUE",
+        "queue": "development-data-retention-cleanup"
       },
       {
-        "binding": "CLEANUP_JOBS_QUEUE",
-        "queue": "juro-cleanup-jobs-development"
-      },
-      {
-        "binding": "BACKUP_JOBS_QUEUE",
-        "queue": "juro-backup-jobs-development"
+        "binding": "NOTIFICATIONS_QUEUE",
+        "queue": "development-notifications"
       }
     ],
-    "consumers": [
-      {
-        "queue": "juro-ai-jobs-development",
-        "max_batch_size": 1,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-ai-jobs-dlq-development"
-      },
-      {
-        "queue": "juro-file-jobs-development",
-        "max_batch_size": 1,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-file-jobs-dlq-development"
-      },
-      {
-        "queue": "juro-document-jobs-development",
-        "max_batch_size": 1,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-document-jobs-dlq-development"
-      },
-      {
-        "queue": "juro-legal-sync-development",
-        "max_batch_size": 1,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-legal-sync-dlq-development"
-      },
-      {
-        "queue": "juro-email-jobs-development",
-        "max_batch_size": 10,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-email-jobs-dlq-development"
-      },
-      {
-        "queue": "juro-notification-jobs-development",
-        "max_batch_size": 20,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-notification-jobs-dlq-development"
-      },
-      {
-        "queue": "juro-cleanup-jobs-development",
-        "max_batch_size": 1,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-cleanup-jobs-dlq-development"
-      },
-      {
-        "queue": "juro-backup-jobs-development",
-        "max_batch_size": 1,
-        "max_batch_timeout": 5,
-        "max_retries": 5,
-        "dead_letter_queue": "juro-backup-jobs-dlq-development"
-      }
-    ]
+    "consumers": []
   },
   "vectorize": [
     {
-      "binding": "LEGAL_RU_INDEX",
-      "index_name": "juro-legal-ru-development"
+      "binding": "LEX_UZ_INDEX",
+      "index_name": "development-lex-uz"
     },
     {
-      "binding": "LEGAL_UZ_INDEX",
-      "index_name": "juro-legal-uz-development"
+      "binding": "ADVICE_UZ_INDEX",
+      "index_name": "development-advice-uz"
     },
     {
-      "binding": "INTERNAL_LEGAL_INDEX",
-      "index_name": "juro-internal-legal-development"
+      "binding": "INTERNAL_LEGAL_MATERIALS_INDEX",
+      "index_name": "development-internal-legal-materials"
     },
     {
-      "binding": "USER_MEMORY_INDEX",
-      "index_name": "juro-user-memory-development"
+      "binding": "USER_DOCUMENTS_INDEX",
+      "index_name": "development-user-documents"
     }
   ],
   "analytics_engine_datasets": [
@@ -173,6 +113,9 @@
   "env": {
     "staging": {
       "name": "juro-platform-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [],
       "assets": {
         "binding": "ASSETS"
       },
@@ -188,133 +131,73 @@
         {
           "binding": "DB",
           "database_name": "juro-staging",
+          "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a",
           "migrations_dir": "./drizzle"
         }
       ],
       "r2_buckets": [
         {
           "binding": "BUCKET",
-          "bucket_name": "juro-private-documents-staging"
+          "bucket_name": "juro-staging-files"
         },
         {
           "binding": "BACKUP_BUCKET",
-          "bucket_name": "juro-private-backups-staging"
+          "bucket_name": "juro-staging-backups"
         },
         {
           "binding": "QUARANTINE_BUCKET",
-          "bucket_name": "juro-quarantine-staging"
+          "bucket_name": "juro-staging-quarantine"
         }
       ],
       "queues": {
         "producers": [
           {
-            "binding": "AI_JOBS_QUEUE",
-            "queue": "juro-ai-jobs-staging"
+            "binding": "DOCUMENT_ANALYSIS_QUEUE",
+            "queue": "staging-document-analysis"
           },
           {
-            "binding": "FILE_JOBS_QUEUE",
-            "queue": "juro-file-jobs-staging"
+            "binding": "OCR_PROCESSING_QUEUE",
+            "queue": "staging-ocr-processing"
           },
           {
-            "binding": "DOCUMENT_JOBS_QUEUE",
-            "queue": "juro-document-jobs-staging"
+            "binding": "DOCUMENT_EXPORT_QUEUE",
+            "queue": "staging-document-export"
           },
           {
-            "binding": "LEGAL_SYNC_QUEUE",
-            "queue": "juro-legal-sync-staging"
+            "binding": "EMAIL_NOTIFICATIONS_QUEUE",
+            "queue": "staging-email-notifications"
           },
           {
-            "binding": "EMAIL_JOBS_QUEUE",
-            "queue": "juro-email-jobs-staging"
+            "binding": "LEGAL_SOURCES_SYNC_QUEUE",
+            "queue": "staging-legal-sources-sync"
           },
           {
-            "binding": "NOTIFICATION_JOBS_QUEUE",
-            "queue": "juro-notification-jobs-staging"
+            "binding": "DATA_RETENTION_CLEANUP_QUEUE",
+            "queue": "staging-data-retention-cleanup"
           },
           {
-            "binding": "CLEANUP_JOBS_QUEUE",
-            "queue": "juro-cleanup-jobs-staging"
-          },
-          {
-            "binding": "BACKUP_JOBS_QUEUE",
-            "queue": "juro-backup-jobs-staging"
+            "binding": "NOTIFICATIONS_QUEUE",
+            "queue": "staging-notifications"
           }
         ],
-        "consumers": [
-          {
-            "queue": "juro-ai-jobs-staging",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-ai-jobs-dlq-staging"
-          },
-          {
-            "queue": "juro-file-jobs-staging",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-file-jobs-dlq-staging"
-          },
-          {
-            "queue": "juro-document-jobs-staging",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-document-jobs-dlq-staging"
-          },
-          {
-            "queue": "juro-legal-sync-staging",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-legal-sync-dlq-staging"
-          },
-          {
-            "queue": "juro-email-jobs-staging",
-            "max_batch_size": 10,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-email-jobs-dlq-staging"
-          },
-          {
-            "queue": "juro-notification-jobs-staging",
-            "max_batch_size": 20,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-notification-jobs-dlq-staging"
-          },
-          {
-            "queue": "juro-cleanup-jobs-staging",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-cleanup-jobs-dlq-staging"
-          },
-          {
-            "queue": "juro-backup-jobs-staging",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-backup-jobs-dlq-staging"
-          }
-        ]
+        "consumers": []
       },
       "vectorize": [
         {
-          "binding": "LEGAL_RU_INDEX",
-          "index_name": "juro-legal-ru-staging"
+          "binding": "LEX_UZ_INDEX",
+          "index_name": "staging-lex-uz"
         },
         {
-          "binding": "LEGAL_UZ_INDEX",
-          "index_name": "juro-legal-uz-staging"
+          "binding": "ADVICE_UZ_INDEX",
+          "index_name": "staging-advice-uz"
         },
         {
-          "binding": "INTERNAL_LEGAL_INDEX",
-          "index_name": "juro-internal-legal-staging"
+          "binding": "INTERNAL_LEGAL_MATERIALS_INDEX",
+          "index_name": "staging-internal-legal-materials"
         },
         {
-          "binding": "USER_MEMORY_INDEX",
-          "index_name": "juro-user-memory-staging"
+          "binding": "USER_DOCUMENTS_INDEX",
+          "index_name": "staging-user-documents"
         }
       ],
       "analytics_engine_datasets": [
@@ -354,123 +237,62 @@
         },
         {
           "binding": "BACKUP_BUCKET",
-          "bucket_name": "juro-private-backups"
+          "bucket_name": "juro-production-backups"
         },
         {
           "binding": "QUARANTINE_BUCKET",
-          "bucket_name": "juro-quarantine"
+          "bucket_name": "juro-production-quarantine"
         }
       ],
       "queues": {
         "producers": [
           {
-            "binding": "AI_JOBS_QUEUE",
-            "queue": "juro-ai-jobs-production"
+            "binding": "DOCUMENT_ANALYSIS_QUEUE",
+            "queue": "production-document-analysis"
           },
           {
-            "binding": "FILE_JOBS_QUEUE",
-            "queue": "juro-file-jobs-production"
+            "binding": "OCR_PROCESSING_QUEUE",
+            "queue": "production-ocr-processing"
           },
           {
-            "binding": "DOCUMENT_JOBS_QUEUE",
-            "queue": "juro-document-jobs-production"
+            "binding": "DOCUMENT_EXPORT_QUEUE",
+            "queue": "production-document-export"
           },
           {
-            "binding": "LEGAL_SYNC_QUEUE",
-            "queue": "juro-legal-sync-production"
+            "binding": "EMAIL_NOTIFICATIONS_QUEUE",
+            "queue": "production-email-notifications"
           },
           {
-            "binding": "EMAIL_JOBS_QUEUE",
-            "queue": "juro-email-jobs-production"
+            "binding": "LEGAL_SOURCES_SYNC_QUEUE",
+            "queue": "production-legal-sources-sync"
           },
           {
-            "binding": "NOTIFICATION_JOBS_QUEUE",
-            "queue": "juro-notification-jobs-production"
+            "binding": "DATA_RETENTION_CLEANUP_QUEUE",
+            "queue": "production-data-retention-cleanup"
           },
           {
-            "binding": "CLEANUP_JOBS_QUEUE",
-            "queue": "juro-cleanup-jobs-production"
-          },
-          {
-            "binding": "BACKUP_JOBS_QUEUE",
-            "queue": "juro-backup-jobs-production"
+            "binding": "NOTIFICATIONS_QUEUE",
+            "queue": "production-notifications"
           }
         ],
-        "consumers": [
-          {
-            "queue": "juro-ai-jobs-production",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-ai-jobs-dlq-production"
-          },
-          {
-            "queue": "juro-file-jobs-production",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-file-jobs-dlq-production"
-          },
-          {
-            "queue": "juro-document-jobs-production",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-document-jobs-dlq-production"
-          },
-          {
-            "queue": "juro-legal-sync-production",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-legal-sync-dlq-production"
-          },
-          {
-            "queue": "juro-email-jobs-production",
-            "max_batch_size": 10,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-email-jobs-dlq-production"
-          },
-          {
-            "queue": "juro-notification-jobs-production",
-            "max_batch_size": 20,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-notification-jobs-dlq-production"
-          },
-          {
-            "queue": "juro-cleanup-jobs-production",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-cleanup-jobs-dlq-production"
-          },
-          {
-            "queue": "juro-backup-jobs-production",
-            "max_batch_size": 1,
-            "max_batch_timeout": 5,
-            "max_retries": 5,
-            "dead_letter_queue": "juro-backup-jobs-dlq-production"
-          }
-        ]
+        "consumers": []
       },
       "vectorize": [
         {
-          "binding": "LEGAL_RU_INDEX",
-          "index_name": "juro-legal-ru-production"
+          "binding": "LEX_UZ_INDEX",
+          "index_name": "production-lex-uz"
         },
         {
-          "binding": "LEGAL_UZ_INDEX",
-          "index_name": "juro-legal-uz-production"
+          "binding": "ADVICE_UZ_INDEX",
+          "index_name": "production-advice-uz"
         },
         {
-          "binding": "INTERNAL_LEGAL_INDEX",
-          "index_name": "juro-internal-legal-production"
+          "binding": "INTERNAL_LEGAL_MATERIALS_INDEX",
+          "index_name": "production-internal-legal-materials"
         },
         {
-          "binding": "USER_MEMORY_INDEX",
-          "index_name": "juro-user-memory-production"
+          "binding": "USER_DOCUMENTS_INDEX",
+          "index_name": "production-user-documents"
         }
       ],
       "analytics_engine_datasets": [

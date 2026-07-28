@@ -1,14 +1,20 @@
 import { z } from "zod";
 
 export const JOB_KINDS = [
+  "document.analyze",
+  "ocr.process",
+  "document.export",
+  "email.send",
+  "legal.sync",
+  "cleanup.run",
+  "notification.dispatch",
+  "malware.scan",
+] as const;
+
+export const LEGACY_JOB_KINDS = [
   "platform.probe",
   "ai.request",
   "file.process",
-  "document.analyze",
-  "legal.sync",
-  "email.send",
-  "notification.dispatch",
-  "cleanup.run",
   "backup.run",
 ] as const;
 
@@ -27,11 +33,12 @@ const identifierSchema = z
  * cross the queue boundary.
  */
 const tenantJobKinds = new Set<JobKind>([
-  "ai.request",
-  "file.process",
   "document.analyze",
+  "ocr.process",
+  "document.export",
   "email.send",
   "notification.dispatch",
+  "malware.scan",
 ]);
 
 export const jobEnvelopeSchema = z.object({
@@ -54,14 +61,6 @@ export const jobEnvelopeSchema = z.object({
 });
 
 export type JobEnvelope = z.infer<typeof jobEnvelopeSchema>;
-
-export type PlatformJobEnv = Omit<
-  Env,
-  "ASYNC_RUNTIME_ENABLED" | "CRON_ENABLED"
-> & {
-  ASYNC_RUNTIME_ENABLED: string;
-  CRON_ENABLED: string;
-};
 
 type JobErrorCode =
   | "ASYNC_RUNTIME_DISABLED"
@@ -89,48 +88,78 @@ class SafeJobError extends Error {
 }
 
 const queueStemByKind: Record<JobKind, string> = {
-  "platform.probe": "cleanup-jobs",
-  "ai.request": "ai-jobs",
-  "file.process": "file-jobs",
-  "document.analyze": "document-jobs",
-  "legal.sync": "legal-sync",
-  "email.send": "email-jobs",
-  "notification.dispatch": "notification-jobs",
-  "cleanup.run": "cleanup-jobs",
-  "backup.run": "backup-jobs",
+  "document.analyze": "document-analysis",
+  "ocr.process": "ocr-processing",
+  "document.export": "document-export",
+  "email.send": "email-notifications",
+  "legal.sync": "legal-sources-sync",
+  "cleanup.run": "data-retention-cleanup",
+  "notification.dispatch": "notifications",
+  "malware.scan": "malware-scan",
 };
 
 export const QUEUE_BINDING_BY_KIND = {
-  "platform.probe": "CLEANUP_JOBS_QUEUE",
-  "ai.request": "AI_JOBS_QUEUE",
-  "file.process": "FILE_JOBS_QUEUE",
-  "document.analyze": "DOCUMENT_JOBS_QUEUE",
-  "legal.sync": "LEGAL_SYNC_QUEUE",
-  "email.send": "EMAIL_JOBS_QUEUE",
-  "notification.dispatch": "NOTIFICATION_JOBS_QUEUE",
-  "cleanup.run": "CLEANUP_JOBS_QUEUE",
-  "backup.run": "BACKUP_JOBS_QUEUE",
+  "document.analyze": "DOCUMENT_ANALYSIS_QUEUE",
+  "ocr.process": "OCR_PROCESSING_QUEUE",
+  "document.export": "DOCUMENT_EXPORT_QUEUE",
+  "email.send": "EMAIL_NOTIFICATIONS_QUEUE",
+  "legal.sync": "LEGAL_SOURCES_SYNC_QUEUE",
+  "cleanup.run": "DATA_RETENTION_CLEANUP_QUEUE",
+  "notification.dispatch": "NOTIFICATIONS_QUEUE",
+  "malware.scan": "MALWARE_SCAN_QUEUE",
 } as const satisfies Record<JobKind, string>;
 
 export const PLATFORM_QUEUE_BINDINGS = [
-  "AI_JOBS_QUEUE",
-  "FILE_JOBS_QUEUE",
-  "DOCUMENT_JOBS_QUEUE",
-  "LEGAL_SYNC_QUEUE",
-  "EMAIL_JOBS_QUEUE",
-  "NOTIFICATION_JOBS_QUEUE",
-  "CLEANUP_JOBS_QUEUE",
-  "BACKUP_JOBS_QUEUE",
+  "DOCUMENT_ANALYSIS_QUEUE",
+  "OCR_PROCESSING_QUEUE",
+  "DOCUMENT_EXPORT_QUEUE",
+  "EMAIL_NOTIFICATIONS_QUEUE",
+  "LEGAL_SOURCES_SYNC_QUEUE",
+  "DATA_RETENTION_CLEANUP_QUEUE",
+  "NOTIFICATIONS_QUEUE",
+  "MALWARE_SCAN_QUEUE",
+] as const;
+
+/**
+ * Malware scanning stays in the source contract but is deliberately not bound
+ * until a real scanner and fail-closed consumer have passed staging review.
+ */
+export const ATTACHED_PLATFORM_QUEUE_BINDINGS = [
+  "DOCUMENT_ANALYSIS_QUEUE",
+  "OCR_PROCESSING_QUEUE",
+  "DOCUMENT_EXPORT_QUEUE",
+  "EMAIL_NOTIFICATIONS_QUEUE",
+  "LEGAL_SOURCES_SYNC_QUEUE",
+  "DATA_RETENTION_CLEANUP_QUEUE",
+  "NOTIFICATIONS_QUEUE",
 ] as const;
 
 export type PlatformQueueBinding =
   (typeof QUEUE_BINDING_BY_KIND)[JobKind];
 
+type QueueBindingEnv = {
+  [Binding in PlatformQueueBinding]?: Queue<JobEnvelope>;
+};
+
+export type PlatformJobEnv = Omit<
+  Env,
+  | "ASYNC_RUNTIME_ENABLED"
+  | "CRON_ENABLED"
+  | PlatformQueueBinding
+> & QueueBindingEnv & {
+  ASYNC_RUNTIME_ENABLED: string;
+  CRON_ENABLED: string;
+};
+
 export function expectedQueueName(
   kind: JobKind,
   environment: PlatformJobEnv["APP_ENV"],
 ): string {
-  return `juro-${queueStemByKind[kind]}-${environment}`;
+  const stem = queueStemByKind[kind];
+  if (!stem) {
+    throw new TypeError("Unsupported job kind.");
+  }
+  return `${environment}-${stem}`;
 }
 
 function operationalError(error: unknown): OperationalError {
@@ -431,14 +460,7 @@ async function executeJob(
   if (queueName !== expectedQueueName(envelope.kind, env.APP_ENV)) {
     throw new SafeJobError("JOB_QUEUE_MISMATCH", false);
   }
-  if (envelope.kind !== "platform.probe") {
-    throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
-  }
-
-  const probe = await env.DB.prepare("SELECT 1 AS ok").first<{ ok: number }>();
-  if (probe?.ok !== 1) {
-    throw new SafeJobError("JOB_TRANSIENT_FAILURE", true);
-  }
+  throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
 }
 
 async function processMessage(

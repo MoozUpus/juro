@@ -37,6 +37,8 @@ assert.equal(
 assert.equal(artifact.name, selected.name);
 assert.equal(artifact.vars?.APP_ENV, requestedEnvironment);
 assert.deepEqual(artifact.vars, selected.vars);
+assert.equal(artifact.vars?.ASYNC_RUNTIME_ENABLED, "false");
+assert.equal(artifact.vars?.CRON_ENABLED, "false");
 assert.equal(
   artifact.vars?.IDENTITY_PROTECTION_MODE,
   "legacy",
@@ -52,7 +54,56 @@ assert.deepEqual(artifact.compatibility_flags, source.compatibility_flags);
 assert.equal(artifact.assets?.binding, "ASSETS");
 assert.equal(artifact.assets?.directory, "../client");
 
+if (requestedEnvironment === "staging") {
+  assert.equal(
+    selected.workers_dev,
+    false,
+    "staging source config must disable workers.dev exposure",
+  );
+  assert.equal(
+    selected.preview_urls,
+    false,
+    "staging source config must disable version preview URLs",
+  );
+  assert.deepEqual(
+    selected.routes,
+    [],
+    "staging source config must not attach a route before Access is proven",
+  );
+  assert.equal(
+    artifact.workers_dev,
+    false,
+    "staging artifact must disable workers.dev exposure",
+  );
+  assert.equal(
+    artifact.preview_urls,
+    false,
+    "staging artifact must disable version preview URLs",
+  );
+  assert.deepEqual(
+    artifact.routes,
+    [],
+    "staging artifact must remain unattached until Access is proven",
+  );
+}
+
 const usesProductionSitesBindings = requestedEnvironment === "production";
+assert.deepEqual(selected.r2_buckets, [
+  {
+    binding: "BUCKET",
+    bucket_name: usesProductionSitesBindings
+      ? "juro-private-documents"
+      : `juro-${requestedEnvironment}-files`,
+  },
+  {
+    binding: "BACKUP_BUCKET",
+    bucket_name: `juro-${requestedEnvironment}-backups`,
+  },
+  {
+    binding: "QUARANTINE_BUCKET",
+    bucket_name: `juro-${requestedEnvironment}-quarantine`,
+  },
+]);
 assert.equal(artifact.d1_databases?.length, 1);
 assert.deepEqual(
   artifact.d1_databases[0],
@@ -90,6 +141,63 @@ assert.deepEqual(
   artifact.observability,
   selected.observability ?? source.observability,
 );
+
+const queueContract = [
+  ["DOCUMENT_ANALYSIS_QUEUE", "document-analysis"],
+  ["OCR_PROCESSING_QUEUE", "ocr-processing"],
+  ["DOCUMENT_EXPORT_QUEUE", "document-export"],
+  ["EMAIL_NOTIFICATIONS_QUEUE", "email-notifications"],
+  ["LEGAL_SOURCES_SYNC_QUEUE", "legal-sources-sync"],
+  ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
+  ["NOTIFICATIONS_QUEUE", "notifications"],
+];
+assert.deepEqual(
+  artifact.queues?.producers,
+  queueContract.map(([binding, suffix]) => ({
+    binding,
+    queue: `${requestedEnvironment}-${suffix}`,
+  })),
+);
+assert.deepEqual(
+  artifact.queues?.consumers,
+  [],
+  "Queue consumers must remain unattached until handlers are implemented",
+);
+assert.equal(
+  artifact.queues?.producers.some(({ binding }) =>
+    binding === "MALWARE_SCAN_QUEUE"
+  ),
+  false,
+  "Malware queue cannot be attached before a real scanner exists",
+);
+
+const vectorContract = [
+  ["LEX_UZ_INDEX", "lex-uz"],
+  ["ADVICE_UZ_INDEX", "advice-uz"],
+  ["INTERNAL_LEGAL_MATERIALS_INDEX", "internal-legal-materials"],
+  ["USER_DOCUMENTS_INDEX", "user-documents"],
+];
+assert.deepEqual(
+  artifact.vectorize,
+  vectorContract.map(([binding, suffix]) => ({
+    binding,
+    index_name: `${requestedEnvironment}-${suffix}`,
+  })),
+);
+
+const serializedArtifact = JSON.stringify(artifact);
+for (const legacyBinding of [
+  "AI_JOBS_QUEUE",
+  "FILE_JOBS_QUEUE",
+  "DOCUMENT_JOBS_QUEUE",
+  "LEGAL_SYNC_QUEUE",
+  "EMAIL_JOBS_QUEUE",
+  "NOTIFICATION_JOBS_QUEUE",
+  "CLEANUP_JOBS_QUEUE",
+  "BACKUP_JOBS_QUEUE",
+]) {
+  assert.doesNotMatch(serializedArtifact, new RegExp(`"${legacyBinding}"`));
+}
 
 const bindingNames = [
   ...artifact.d1_databases,

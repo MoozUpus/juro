@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
-Updated: 2026-07-26  
+Updated: 2026-07-28
 Latest source migration: `0021_supreme_albert_cleary.sql`
-Remote application status: not applied.
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0021` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks.
 
 ## Migration policy
 
@@ -16,6 +16,8 @@ JURO uses additive expand-contract migrations. A remote migration requires:
 6. a documented application/config rollback.
 
 Do not infer remote migration state from source files or a local Wrangler database.
+
+D-040 allowed one bootstrap of a freshly created, immediately re-verified empty staging database without a retrievable portable export. That exception is now consumed. It does not weaken the normal policy above for any further staging mutation, any populated database, or production.
 
 ## Migration 0011
 
@@ -320,20 +322,42 @@ insertion fails.
 
 The full local migration sequence changes the SQLite table count from 79 to
 97 and reports zero foreign-key integrity errors. This is compatibility
-evidence for the checked-in migration sequence, not
-evidence about the live production schema.
+evidence for the checked-in migration sequence. Remote production and
+development each report 61 non-internal tables and ledger entries only through
+`0004`. Isolated staging now reports those 97 application/non-internal tables
+plus `d1_migrations`, the exact `0000`–`0021` ledger, 275 schema objects,
+`PRAGMA quick_check = ok`, and zero foreign-key violations.
 
-## Staging procedure
+## Staging bootstrap evidence and remaining procedure
 
-After remote inventory and backup/restore gates:
+The one-time D-040 verified-empty bootstrap is complete. It captured pre-bookmark
+`00000016-00000000-000050b6-d17b2ef8af450f78e2ba993d4272fe26`
+and post-bookmark
+`00000016-00000036-000050b6-48eec1201b71eda52af14c1ba998f030`,
+applied exactly 22 ordered migrations `0000`–`0021`, and verified all seven
+migration-0011 control tables: `idempotency_keys`, `job_outbox`, `job_runs`,
+`scheduled_locks`, `scheduled_runs`, `backup_runs`, and `cleanup_runs`.
 
-1. record the staging D1 database ID and current migration ledger;
-2. create and verify an external backup;
-3. record its bookmark/checksum/manifest without storing secret values;
+The bootstrap adapter normalized only line endings to LF and split migrations
+only at Drizzle's explicit `--> statement-breakpoint` markers. The diagnostic
+proved that remote D1 rejected the compound `CREATE TRIGGER` input with CRLF
+and accepted the same statement with LF. Repository-root `.gitattributes` now
+pins `apps/platform/drizzle/*.sql text eol=lf`. No checked-in migration content
+was rewritten.
+
+This is staging schema-bootstrap evidence only. Portable SQL export/import,
+protected backup-object evidence, application/runtime binding, row-level
+business invariants, and RTO remain unverified. Before application enablement
+or any further staging migration:
+
+1. retrieve and verify a portable external backup;
+2. import it into a separate isolated drill database and verify restore;
+3. record the current staging bookmark, checksum, manifest, and exact ledger
+   without storing secret values;
 4. verify that no user has multiple `requested`/`reviewing` deletion rows,
    because 0015 intentionally installs a partial unique index;
-5. apply only pending migrations, including 0011–0021 if absent;
-6. verify table/index/trigger presence and foreign keys;
+5. prove there is no unexpected pending, duplicate, or reordered migration;
+6. reverify table/index/trigger presence, `quick_check`, and foreign keys;
 7. run existing route/security tests and isolated document-builder/comparison smoke flows;
 8. verify outbox/job lease behavior and Queue/DLQ delivery;
 9. run both null-workspace audits and stop if either is non-zero;
