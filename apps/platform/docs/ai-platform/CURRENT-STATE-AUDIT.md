@@ -146,9 +146,9 @@ npm run install:ci -- --validate-only
 npm test                PASS
   bounded development build and artifact validation: PASS
   rendered route/security tests: 25 PASS
-  core/auth/document tests: 216 PASS
+  core/auth/document tests: 225 PASS
   Cloudflare/migration/job tests: 63 PASS
-  total: 304 PASS
+  total: 313 PASS
 npm run build:staging   PASS
   staging artifact validation: PASS
 npm run validate:cloudflare:matrix
@@ -159,7 +159,7 @@ strict high-confidence secret scan
   tracked source: 0; built bundle: 0; git history: 0
 ```
 
-The latest recorded successful local full suite is the 304-test run above: 25 rendered-route, 216 core, and 63 Cloudflare tests. It includes local coverage for migrations `0022`–`0026`, workspace-invitation one-winner/rollback behavior, independent OTP rate limits, the verification lock, Turnstile contract behavior, 24-hour/30-day session persistence, structured onboarding, canonical localized auth routes, persona-preserving workspace switches, and the fail-closed legal-source lifecycle and acquisition contract. This is not staging or live-provider evidence. The clean network-install path remains unverified because actual `npm ci` was deliberately not run.
+The latest recorded successful local full suite is the 313-test run above: 25 rendered-route, 225 core, and 63 Cloudflare tests. It includes local coverage for migrations `0022`–`0026`, workspace-invitation one-winner/rollback behavior, independent OTP rate limits, the verification lock, Turnstile contract behavior, 24-hour/30-day session persistence, structured onboarding, canonical localized auth routes, persona-preserving workspace switches, and the fail-closed legal-source lifecycle, acquisition, and untrusted normalization contracts. This is not staging or live-provider evidence. The clean network-install path remains unverified because actual `npm ci` was deliberately not run.
 
 The online npm audit was not run because the execution policy rejected sending dependency metadata to the npm registry; the offline result is not presented as equivalent to a fresh registry audit. The existing suite is a baseline, not evidence that the target Definition of Done is met.
 

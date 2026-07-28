@@ -147,7 +147,7 @@ The approved primary Queue contract is:
 | `OCR_PROCESSING_QUEUE` | `ocr.process` | `{environment}-ocr-processing` |
 | `DOCUMENT_EXPORT_QUEUE` | `document.export` | `{environment}-document-export` |
 | `EMAIL_NOTIFICATIONS_QUEUE` | `email.send` | `{environment}-email-notifications` |
-| `LEGAL_SOURCES_SYNC_QUEUE` | `legal.sync` | `{environment}-legal-sources-sync` |
+| `LEGAL_SOURCES_SYNC_QUEUE` | `legal.sync`, `legal.parse` | `{environment}-legal-sources-sync` |
 | `DATA_RETENTION_CLEANUP_QUEUE` | `cleanup.run` | `{environment}-data-retention-cleanup` |
 | `NOTIFICATIONS_QUEUE` | `notification.dispatch` | `{environment}-notifications` |
 | `MALWARE_SCAN_QUEUE` | `malware.scan` | `{environment}-malware-scan`, declared/attached only after a real scanner adapter exists |
@@ -190,7 +190,7 @@ JOB_SCHEMA_VERSION=1
 
 No `triggers` property is present in source configuration. Generated Wrangler artifacts may normalize this to `triggers: {}`; any non-empty trigger is rejected by artifact validation.
 
-The Worker exports `fetch`, `queue`, and `scheduled`. Queue bodies accept strict identifiers-only v2 envelopes. Only `legal.sync` has a local request/fetch/R2/pending-review implementation, but it remains unreachable remotely because global async execution is false and no consumer is attached; Advice is separately disabled. Every other valid v2 kind is recorded as terminal `JOB_HANDLER_NOT_ENABLED` and acknowledged without simulating success. Legacy `ai.request`, `backup.run`, `platform.probe`, and `file.process` are rejected by schema/routing/outbox compatibility checks. The scheduled handler is inert and calls `noRetry()` because no reviewed schedule is attached.
+The Worker exports `fetch`, `queue`, and `scheduled`. Queue bodies accept strict identifiers-only v2 envelopes. `legal.sync` has a local request/fetch/R2/pending-review implementation and `legal.parse` has a local raw-evidence verification/private normalized-snapshot implementation; both remain unreachable remotely because global async execution is false and no consumer is attached. Advice is separately disabled. Every other valid v2 kind is recorded as terminal `JOB_HANDLER_NOT_ENABLED` and acknowledged without simulating success. Legacy `ai.request`, `backup.run`, `platform.probe`, and `file.process` are rejected by schema/routing/outbox compatibility checks. The scheduled handler is inert and calls `noRetry()` because no reviewed schedule is attached.
 
 A runtime flag does not pause Cloudflare Queue delivery. Source therefore declares seven producer bindings only, `consumers: []`, no DLQ, no trigger, and no malware binding. The current source-only boundary acknowledges malformed envelopes and terminally rejects not-yet-enabled v2 kinds. These are deliberate fail-closed local semantics, not a production-ready delivery policy. A live consumer can be declared only together with its exact resource inventory, handler, DLQ terminal path, alert, redrive/reconciliation policy, and per-kind enablement.
 

@@ -88,8 +88,8 @@ Local checkpoint only; none of these statements is a staging or production claim
 - canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
   root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
   and selecting a workspace no longer rewrites the stored persona;
-- the latest recorded successful local full suite is 304 tests: 25 rendered
-  route, 216 core, and 63 Cloudflare tests.
+- the latest recorded successful local full suite is 313 tests: 25 rendered
+  route, 225 core, and 63 Cloudflare tests.
 
 Vertical slices:
 
@@ -134,9 +134,15 @@ Local checkpoint:
   identifiers-only outbox/`legal.sync` execution, exact URL/redirect/robots/
   timeout/byte/type/encoding gates, a private content-addressed R2 raw object,
   safe failure evidence, and only `fetched`/`pending_review` D1 state;
+- each pending version receives an identifiers-only `legal.parse` job; the
+  local deterministic parser verifies raw evidence, extracts bounded semantic
+  blocks only from explicit primary content, stores a private content-addressed
+  normalized JSON snapshot, verifies it again on replay, and cannot promote or
+  populate trusted sections/chunks;
 - global async execution is still false, no Queue consumer is attached, and
-  Advice has a separate false policy gate. Live fetching, parsing, legal
-  review authorization, indexing, hybrid retrieval, citation validation,
+  Advice has a separate false policy gate. Successful live fetching,
+  real-markup compatibility, legal review authorization, trusted section/chunk
+  publication, indexing, hybrid retrieval, citation validation,
   scheduling, and editor UI remain unimplemented or disabled.
 
 Build:

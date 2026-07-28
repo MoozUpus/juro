@@ -917,7 +917,7 @@ wrong media/encoding, excessive bytes, body stall, downgrade, or off-source
 redirect fails closed; an empty HTML body is also rejected. Request/outbox
 idempotency is bound to the actor and environment so a conflicting replay
 cannot enqueue an orphan job. Raw HTML is untrusted and is not parsed,
-indexed, or sent to an AI model by this slice.
+indexed, or sent to an AI model by the acquisition slice itself.
 
 Lex single-act acquisition is code-enabled based on the narrow official-act
 reuse boundary described at <https://lex.uz/uz/axborot>, still subject to live
@@ -928,8 +928,47 @@ explicit broad ingestion authorization for this decision. Enabling Advice is
 a separate reviewed owner/legal/config/staging action.
 
 All environments still set `ASYNC_RUNTIME_ENABLED=false`, have no Queue
-consumer, and have no Cron trigger. No live official-site request, remote R2
-object, remote `0026`, reviewer approval, source parsing, Vectorize write, or
-production change is claimed. R2 precedes idempotent D1 persistence because
-the services cannot share a transaction; a failure may leave a harmless
+consumer, and have no Cron trigger. No successful live official-page fetch,
+remote R2 object, remote `0026`, reviewer approval, trusted source publication,
+Vectorize write, or production change is claimed. R2 precedes idempotent D1
+persistence because the services cannot share a transaction; a failure may leave a harmless
 unreferenced content-addressed object, never a verified source.
+
+## D-050 — source normalization is deterministic and remains pre-verification
+
+Status: accepted and locally verified; live-markup, review/publication, and
+remote activation gates open
+Date: 2026-07-28
+
+Pending-review source versions receive an identifiers-only `legal.parse` job
+on the existing legal-source Queue contract. Normalization uses exact
+`parse5@8.0.1` and its transitive `entities@8.0.0` dependency. Both are
+server-side parser dependencies (MIT and BSD-2-Clause respectively), declare no
+install lifecycle hook, and are not client UI dependencies. The choice provides the
+same deterministic WHATWG HTML tree in Node tests and the Worker bundle;
+Worker-native `HTMLRewriter` was not used because it would make the core
+normalization path unavailable to the existing deterministic Node/SQLite
+contract tests.
+
+The verified three-environment dry-run reports a production Worker upload of
+`8154.86 KiB` (`2041.22 KiB` gzip), versus the preceding checkpoint's
+`7896.29 KiB` (`1980.75 KiB` gzip): `+258.57 KiB` raw / `+60.47 KiB` gzip.
+The client build still transforms 1,921 client modules and the final client
+artifact contains zero parser/profile markers, so this is a server/Worker cost
+rather than a new browser dependency. It is accepted for this isolated
+normalization boundary and remains subject to the Worker bundle budget during
+later integration.
+
+The parser accepts only explicit `main`, `article`, or `[role=main]` content,
+never the whole body, excludes page chrome/scripts/hidden content, and emits a
+bounded strict semantic-block schema. Raw bytes must match the acquisition
+SHA before parsing. Parsed JSON is private and content-addressed; replay
+revalidates object size, SHA, schema, canonical source identity, and raw-source
+hash. Structural failure creates an idempotent low-confidence review item.
+
+This stage is deliberately not legal verification. It cannot write verified
+sections/chunks, embeddings, citations, or AI context and cannot promote a
+source/version. R2 still precedes fenced D1 persistence, so a D1 failure may
+leave an unreferenced immutable parsed object but never a trusted record. A
+read-only live Lex probe failed closed at `robots.txt` before fetching the act
+body, so compatibility with current live Lex/Advice markup remains unproved.

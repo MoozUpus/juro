@@ -3,6 +3,10 @@ import {
   LegalSourceAcquisitionError,
   executeLegalSourceFetchRequest,
 } from "../lib/legal/source-acquisition";
+import {
+  LegalSourceNormalizationError,
+  executeLegalSourceNormalization,
+} from "../lib/legal/source-normalization";
 
 export const JOB_KINDS = [
   "document.analyze",
@@ -10,6 +14,7 @@ export const JOB_KINDS = [
   "document.export",
   "email.send",
   "legal.sync",
+  "legal.parse",
   "cleanup.run",
   "notification.dispatch",
   "malware.scan",
@@ -75,7 +80,8 @@ type JobErrorCode =
   | "JOB_SCHEMA_VERSION_MISMATCH"
   | "JOB_TRANSIENT_FAILURE"
   | "JOB_VALIDATION_FAILED"
-  | "LEGAL_SOURCE_SYNC_FAILED";
+  | "LEGAL_SOURCE_SYNC_FAILED"
+  | "LEGAL_SOURCE_PARSE_FAILED";
 
 type OperationalError = {
   code: JobErrorCode;
@@ -98,6 +104,7 @@ const queueStemByKind: Record<JobKind, string> = {
   "document.export": "document-export",
   "email.send": "email-notifications",
   "legal.sync": "legal-sources-sync",
+  "legal.parse": "legal-sources-sync",
   "cleanup.run": "data-retention-cleanup",
   "notification.dispatch": "notifications",
   "malware.scan": "malware-scan",
@@ -109,6 +116,7 @@ export const QUEUE_BINDING_BY_KIND = {
   "document.export": "DOCUMENT_EXPORT_QUEUE",
   "email.send": "EMAIL_NOTIFICATIONS_QUEUE",
   "legal.sync": "LEGAL_SOURCES_SYNC_QUEUE",
+  "legal.parse": "LEGAL_SOURCES_SYNC_QUEUE",
   "cleanup.run": "DATA_RETENTION_CLEANUP_QUEUE",
   "notification.dispatch": "NOTIFICATIONS_QUEUE",
   "malware.scan": "MALWARE_SCAN_QUEUE",
@@ -474,6 +482,20 @@ async function executeJob(
       if (error instanceof LegalSourceAcquisitionError) {
         throw new SafeJobError(
           "LEGAL_SOURCE_SYNC_FAILED",
+          error.retryable,
+        );
+      }
+      throw error;
+    }
+  }
+  if (envelope.kind === "legal.parse") {
+    try {
+      await executeLegalSourceNormalization(env, envelope.subjectId);
+      return;
+    } catch (error) {
+      if (error instanceof LegalSourceNormalizationError) {
+        throw new SafeJobError(
+          "LEGAL_SOURCE_PARSE_FAILED",
           error.retryable,
         );
       }

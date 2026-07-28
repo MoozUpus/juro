@@ -451,7 +451,7 @@ async function persistFetchedSource(
   const changed = Number(versionWrite.meta.changes ?? 0) === 1;
 
   const storedVersion = await env.DB.prepare(`
-    SELECT id, status
+    SELECT id, status, parsed_object_key
     FROM legal_source_versions
     WHERE source_id = ? AND language = ? AND content_sha256 = ?
     LIMIT 1
@@ -459,7 +459,7 @@ async function persistFetchedSource(
     storedSource.id,
     input.fetched.locale,
     input.fetched.contentSha256,
-  ).first<{ id: string; status: string }>();
+  ).first<{ id: string; status: string; parsed_object_key: string | null }>();
   if (!storedVersion) {
     throw new LegalSourceAcquisitionError(
       "LEGAL_SOURCE_PERSISTENCE_FAILED",
@@ -491,6 +491,37 @@ async function persistFetchedSource(
       input.now,
     ));
   }
+  if (
+    storedVersion.status === "pending_review"
+    && storedVersion.parsed_object_key === null
+  ) {
+    const parseStableHash = await sha256Text(
+      `${storedVersion.id}\nlegal.parse\njuro-legal-blocks-v1`,
+    );
+    finalStatements.push(env.DB.prepare(`
+      INSERT INTO job_outbox (
+        id, queue_binding, job_type, schema_version, idempotency_key,
+        subject_id, workspace_id, correlation_id, enqueued_at,
+        available_at, status, dispatch_attempts, lease_owner,
+        lease_expires_at, next_attempt_at, dispatched_at, error_code,
+        created_at, updated_at
+      ) VALUES (
+        ?, 'LEGAL_SOURCES_SYNC_QUEUE', 'legal.parse', 1, ?,
+        ?, NULL, ?, ?, ?, 'pending', 0, NULL, NULL, NULL, NULL, NULL, ?, ?
+      )
+      ON CONFLICT(idempotency_key) DO NOTHING
+    `).bind(
+      `lsparsejob_${parseStableHash.slice(0, 32)}`,
+      `legal_parse_${parseStableHash.slice(0, 40)}`,
+      storedVersion.id,
+      `lsparsecorr_${parseStableHash.slice(0, 32)}`,
+      input.now,
+      input.now,
+      input.now,
+      input.now,
+    ));
+  }
+  const requestResultIndex = finalStatements.length;
   finalStatements.push(
     env.DB.prepare(`
       UPDATE legal_source_fetch_requests
@@ -529,7 +560,6 @@ async function persistFetchedSource(
     ),
   );
   const finalResults = await env.DB.batch(finalStatements);
-  const requestResultIndex = storedVersion.status === "pending_review" ? 1 : 0;
   if (
     Number(finalResults[requestResultIndex]?.meta.changes ?? 0) !== 1
     || Number(finalResults[requestResultIndex + 1]?.meta.changes ?? 0) !== 1

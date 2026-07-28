@@ -42,6 +42,19 @@ New application object keys are immutable, server-generated, and contain no emai
 
 Original filenames may be stored only in protected/encrypted application metadata where needed for the user interface; they are not embedded in R2 keys or logs.
 
+The local legal-source pipeline uses the same private environment `BUCKET`
+binding with server-generated content-addressed prefixes:
+
+- `legal-sources/raw/{kind}/{locale}/{sha-prefix}/{sha}.html` for exact fetched
+  evidence;
+- `legal-sources/parsed/{kind}/{locale}/{raw-sha-prefix}/{raw-sha}/parse5-v1-{parsed-sha}.json`
+  for deterministic, still-untrusted normalized snapshots.
+
+Both layers verify bounded size and SHA-256 before replay. Neither prefix is a
+public source bucket or trusted legal index. R2 persistence may precede D1 and
+leave an unreferenced immutable object after a D1 failure; such an orphan is
+never a verified source and requires later manifest-based cleanup.
+
 ## Development cutover
 
 The legacy development primary may contain objects. Before changing `BUCKET`:

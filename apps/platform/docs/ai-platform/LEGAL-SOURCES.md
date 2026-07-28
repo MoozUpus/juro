@@ -2,7 +2,8 @@
 
 Updated: 2026-07-28
 Scope: local integration branch only. This document is not evidence of a
-working crawler, synchronized legislation database, or staging deployment.
+working crawler, synchronized legislation database, verified legal corpus, or
+staging deployment.
 
 ## Implemented local boundary
 
@@ -85,6 +86,28 @@ outbox and `legal.sync` Queue consumer. It implements all of the following:
   codes without source body logging, and retryable/non-retryable failure
   evidence.
 
+Each newly persisted pending-review version also receives one identifiers-only
+`legal.parse` outbox job on the same legal-source Queue contract. The local
+normalization consumer:
+
+- re-reads the private raw R2 object and verifies its size, UTF-8 encoding, and
+  exact acquisition SHA-256 before parsing;
+- uses exact `parse5@8.0.1` with the deterministic
+  `juro-legal-blocks-v1` profile and accepts only an explicit `main`, `article`,
+  or `[role=main]` content surface—never the entire body;
+- excludes navigation, forms, scripts, hidden content, and other page chrome,
+  and emits bounded semantic headings, paragraphs, list items, quotations,
+  definitions, table cells, and preformatted blocks;
+- stores deterministic normalized JSON under a private content-addressed
+  `legal-sources/parsed/` key and records only its key/hash/count metadata on
+  the pending version;
+- verifies the parsed object size, SHA-256, strict schema, source identity, and
+  raw-source hash on replay;
+- creates an idempotent `normalization_failed` review item when the official
+  page has no recognized primary structure or sufficient content;
+- never creates verified sections/chunks, embeddings, citations, or an AI
+  context and never changes a source/version to `verified`.
+
 Every checked-in environment still has `ASYNC_RUNTIME_ENABLED=false`, no
 Queue consumer attachment, and no Cron trigger. Therefore the connected
 handler is locally executable/tested code but is not active remotely.
@@ -107,15 +130,18 @@ or D1/R2 activity. Enabling it requires recorded owner/legal approval, a fresh
 terms/robots review, staging evidence, and a separate reviewed config change.
 
 No Queue consumer, Cron trigger, retry/redrive/DLQ attachment, alert, discovery
-crawler, or authenticated manual/admin route is attached. No live Lex or
-Advice fetch, remote R2 object, or remote migration is claimed.
+crawler, or authenticated manual/admin route is attached. A read-only local
+Lex probe reached the fail-closed `robots.txt` gate and returned
+`LEGAL_SOURCE_ROBOTS_UNAVAILABLE`; it did not request the act body or write R2
+or D1. No successful live Lex/Advice acquisition, remote R2 object, or remote
+migration is claimed.
 
 ## Deliberately unimplemented
 
 - bulk discovery, sitemap traversal, or scheduled crawling;
 - remote robots-aware Lex acquisition evidence;
 - Advice acquisition approval or activation;
-- content parsing and normalized raw/parsed snapshot separation;
+- verified section/chunk publication from normalized snapshots;
 - Advice scenario/version/link models;
 - RU/UZ historical version and effective-date diffing;
 - privileged reviewer assignment, decision service, and editor UI;
@@ -140,10 +166,13 @@ cross-document rejection, byte/type/encoding/timeout bounds, policy-disabled
 Advice, empty-content rejection, identifiers-only outbox creation, actor/
 environment conflict fencing, private content-addressed storage, pending-
 review persistence, replay idempotency, safe failures, and the `legal.sync`
-consumer path. Source-trust tests exercise host/type/hash/
-timestamp failures and evidence-backed acceptance.
+consumer path. Parser/normalization tests cover deterministic semantic block
+extraction, chrome/script/hidden-content exclusion, no-body-fallback behavior,
+raw and parsed SHA mismatch rejection, unrecognized-structure review routing,
+absence of trusted sections/chunks, and the `legal.parse` consumer path.
+Source-trust tests exercise host/type/hash/timestamp failures and
+evidence-backed acceptance.
 
 Remote staging remains at `0000`–`0021`. No remote database, Worker, Queue,
 Vectorize index content, R2 object, route, DNS record, secret, or production
-resource was changed by this local checkpoint. The official sites were
-inspected read-only; the application fetcher was not executed against them.
+resource was changed by this local checkpoint.

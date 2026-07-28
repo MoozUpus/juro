@@ -17,19 +17,20 @@ foundation checkpoint.
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain
   authorization, and provider-failure behavior have not been verified live;
-- local test totals (25 rendered route + 216 core + 63 Cloudflare = 304) are
+- local test totals (25 rendered route + 225 core + 63 Cloudflare = 313) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
 
 - the Lex fetch contract is locally tested with synthetic upstream responses;
-  it has not fetched a live Lex page from a Worker, stored a remote R2 object,
-  or passed staging network/robots/latency checks;
+  a read-only local live probe failed closed at `robots.txt` with
+  `LEGAL_SOURCE_ROBOTS_UNAVAILABLE` before the act body, R2, or D1; no Worker
+  has fetched a live Lex page or passed staging network/robots/latency checks;
 - Advice ingestion is deliberately disabled in every environment because this
   checkpoint did not establish sufficiently explicit broad-use authorization;
-- no discovery crawler, sitemap traversal, parser, historical diff, section/
-  chunk creation, Vectorize write, lexical index, citation validator, reviewer
-  authorization route, legal editor, Cron, Queue consumer, DLQ, or alert is
+- no discovery crawler, sitemap traversal, historical diff, verified section/
+  chunk publication, Vectorize write, lexical index, citation validator,
+  reviewer authorization route, legal editor, Cron, Queue consumer, DLQ, or alert is
   active;
 - raw public-source HTML currently shares the existing private `BUCKET`
   binding under a content-addressed `legal-sources/raw/` prefix. A dedicated
@@ -37,8 +38,9 @@ foundation checkpoint.
   resource plus binding/deployment review;
 - the fetcher intentionally rejects any positive `Crawl-delay` directive
   until durable host-rate scheduling exists; it does not sleep inside a Worker;
-- stored HTML is untrusted data and is neither parsed nor sent to an AI model
-  in this checkpoint.
+- stored HTML remains untrusted. A deterministic bounded parser now creates a
+  separate private normalized JSON snapshot, but the snapshot is not trusted,
+  indexed, published as sections/chunks, or sent to an AI model.
 
 ## Identity and session gaps
 
@@ -83,9 +85,9 @@ foundation checkpoint.
   legal-source schema, fetch request, R2 evidence object, or source record was
   created;
 - one exact-page fetch adapter, robots/rate-policy enforcement, and private
-  content-addressed R2 write contract are implemented locally, but no bulk
-  discovery crawler, parser, Advice scenario model, historical diff,
-  privileged review UI, Vectorize indexing, lexical retrieval, reranking, or
+  content-addressed R2 write and pre-verification normalization contracts are
+  implemented locally, but no bulk discovery crawler, Advice scenario model,
+  historical diff, privileged review UI, Vectorize indexing, lexical retrieval, reranking, or
   citation validator is implemented;
 - no Cron or Queue consumer is attached, and a passing one-active-sync lock
   test is not evidence that synchronization runs;

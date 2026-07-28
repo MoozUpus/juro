@@ -21,9 +21,9 @@ staging or production evidence.
 The latest recorded successful local full suite contains:
 
 - 25 rendered-route/security tests;
-- 216 core/auth/document tests;
+- 225 core/auth/document tests;
 - 63 Cloudflare/migration/job tests;
-- 304 tests total.
+- 313 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. It does not substitute for remote migrations,
@@ -36,7 +36,8 @@ staging hostname.
 |---|---|---|
 | Source lifecycle | Additive migration `0025`; source versions/sections/chunks, sync runs/errors, review queue; legacy rows default to `draft`; exact evidence required for verified records; verified evidence immutable; one active sync per lock key | Remote migration; fetch/parse/snapshot pipeline; privileged legal-review service and UI; historical diff |
 | Consumer trust gate | AI context, conversation sources, comparison analysis, global search, monitoring, and source counts require exact HTTPS Lex/Advice host, matching type, verified state/time, and lowercase SHA-256 | Retrieval quality, citation existence/version verification, Vectorize filters/reranking, source freshness policy |
-| Single-source acquisition contract | Additive migration `0026`; exact Lex/Advice route classifier; manual same-source redirects; robots allow/disallow gate; bounded non-empty streaming UTF-8 HTML fetch; private content-addressed R2 raw object; identifiers-only D1 outbox/`legal.sync` handler; fetched/pending-review state only; safe failure ledger, actor/environment conflict fence, and idempotent replay | Remote `0026`; live Lex robots/fetch/R2 evidence; any parser/index/retrieval/citation use; Queue consumer/DLQ/Cron attachment; authenticated admin trigger |
+| Single-source acquisition contract | Additive migration `0026`; exact Lex/Advice route classifier; manual same-source redirects; robots allow/disallow gate; bounded non-empty streaming UTF-8 HTML fetch; private content-addressed R2 raw object; identifiers-only D1 outbox/`legal.sync` handler; fetched/pending-review state only; safe failure ledger, actor/environment conflict fence, and idempotent replay | Remote `0026`; successful live Lex robots/fetch/R2 evidence; Queue consumer/DLQ/Cron attachment; authenticated admin trigger |
+| Untrusted snapshot normalization | Exact `parse5@8.0.1`; deterministic semantic blocks from explicit primary content only; raw/parsed size, SHA-256, UTF-8, schema, and source-identity replay checks; private content-addressed parsed JSON; identifiers-only `legal.parse` handler; structure failures routed to review; no verified sections/chunks or AI/index use | Real Lex/Advice markup compatibility, successful live source evidence, remote R2/Queue execution, privileged review/publication, historical parsing, section/chunk creation, indexing/retrieval/citations |
 | Advice ingestion policy | Request path is implemented but `LEGAL_ADVICE_INGESTION_ENABLED=false` is asserted in every environment, generated types, config tests, and artifact validation; disabled requests perform no network/D1/R2 action | Recorded legal/owner authorization, current terms/robots review, staging activation evidence |
 
 ## Deployment truth
