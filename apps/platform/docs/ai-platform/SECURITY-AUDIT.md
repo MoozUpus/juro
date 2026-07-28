@@ -10,7 +10,7 @@ Method: source review, production HTTP smoke checks, current test suite, targete
 | Scope | Current state | Release consequence |
 |---|---|---|
 | Deployed Sites v20 | four original critical findings remain unproven in production | production remains frozen |
-| Integration branch | SEC-001 and SEC-002 have local fixes; SEC-003 has atomic verification plus the local `0023` lock; SEC-005 has local independent rate controls and Turnstile integration; structured onboarding is additive in `0024`; source migrations `0022`–`0024` are not in staging and SEC-004 remains open | no upload/AI staging enablement; identity changes still require remote migrations, live-provider, runtime, and full-HTTP staging evidence |
+| Integration branch | SEC-001 and SEC-002 have local fixes; SEC-003 has atomic verification plus the local `0023` lock; SEC-005 has local independent rate controls and Turnstile integration; structured onboarding is additive in `0024`; migration `0025` adds a local fail-closed legal-source evidence lifecycle; source migrations `0022`–`0025` are not in staging and SEC-004 remains open | no upload/AI staging enablement; identity and legal-source changes still require remote migrations, live-provider, runtime, and full-HTTP staging evidence |
 | High/medium findings | several local identity/security foundations exist, but broad file, deletion, CSP, alerting, and privileged-access controls remain open | affected features remain disabled or unavailable |
 
 ## Critical findings
@@ -210,8 +210,10 @@ Local integration-branch evidence only:
 - migration/application 0023 records an immutable 15-minute lock only after attempt exhaustion; local tests cover the fifth-failure lock and refusal of a replacement challenge during the lock;
 - OTP atomic-claim concurrency, independent `5/email/hour` and `20/IP/hour` gates, missing-IP isolation, Turnstile response/action/hostname/failure handling, 24-hour/30-day session persistence, device/session revoke, invitation pre-accept denial/replay/one-winner, and active-workspace builder isolation tests pass locally;
 - AI, comparison, monitoring, citation retrieval, and global search apply one
-  server-owned exact-host allowlist for `lex.uz` and `advice.uz`; a database
-  `verified` flag can no longer promote an arbitrary HTTPS URL.
+  server-owned exact-host allowlist for `lex.uz` and `advice.uz`. They now also
+  require a matching source type, explicit verification state, UTC verification
+  timestamp, and lowercase SHA-256 evidence; legacy `status='verified'` alone
+  cannot promote a source. No source fetcher or verification UI exists yet.
 
 ## Control-plane security finding
 

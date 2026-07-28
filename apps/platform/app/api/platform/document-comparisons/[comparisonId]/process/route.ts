@@ -134,8 +134,12 @@ export const POST = withApiErrors(async function POST(
       await updateStage(db, comparisonId, workspace.id, "legal_analysis");
       const sourceRows = await db.prepare(
         `SELECT id,act_title AS actTitle,act_identifier AS actIdentifier,official_url AS officialUrl,
-          revision_date AS revisionDate,last_checked_at AS lastCheckedAt,locale,status
-         FROM legal_sources WHERE status='verified' ORDER BY last_checked_at DESC LIMIT 80`,
+          revision_date AS revisionDate,last_checked_at AS lastCheckedAt,locale,
+          source_type AS sourceType,status,verification_state AS verificationState,
+          verified_at AS verifiedAt,content_sha256 AS contentSha256
+         FROM legal_sources WHERE status='verified' AND verification_state='verified'
+           AND verified_at IS NOT NULL AND content_sha256 IS NOT NULL
+         ORDER BY last_checked_at DESC LIMIT 80`,
       ).all();
       try {
         const enriched = await enrichComparisonChanges({

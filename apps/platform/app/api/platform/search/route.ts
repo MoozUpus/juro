@@ -58,8 +58,11 @@ export const GET = withApiErrors(async function GET(request: Request) {
     ).bind(locale, like),
     db.prepare(
       `SELECT id,act_title AS title,coalesce(act_identifier,'') AS subtitle,
-        last_checked_at AS updatedAt,official_url AS officialUrl
-       FROM legal_sources WHERE status='verified' AND locale=?
+        last_checked_at AS updatedAt,official_url AS officialUrl,
+        source_type AS sourceType,status,verification_state AS verificationState,
+        verified_at AS verifiedAt,content_sha256 AS contentSha256
+       FROM legal_sources WHERE status='verified' AND verification_state='verified'
+         AND verified_at IS NOT NULL AND content_sha256 IS NOT NULL AND locale=?
          AND (act_title LIKE ? ESCAPE '\\' OR act_identifier LIKE ? ESCAPE '\\')
        ORDER BY last_checked_at DESC LIMIT 6`,
     ).bind(locale, like, like),
@@ -81,7 +84,11 @@ export const GET = withApiErrors(async function GET(request: Request) {
             officialUrl: String(
               (item as Record<string, unknown>).officialUrl || "",
             ),
-            status: "verified",
+            status: String((item as Record<string, unknown>).status || ""),
+            sourceType: String((item as Record<string, unknown>).sourceType || ""),
+            verificationState: String((item as Record<string, unknown>).verificationState || ""),
+            verifiedAt: String((item as Record<string, unknown>).verifiedAt || ""),
+            contentSha256: String((item as Record<string, unknown>).contentSha256 || ""),
           })),
         ),
       ),

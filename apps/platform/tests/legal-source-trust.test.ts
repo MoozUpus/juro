@@ -6,6 +6,15 @@ import {
   trustedLegalSourceKind,
 } from "../lib/legal/source-trust";
 
+const VERIFIED_AT = "2026-07-28T12:00:00.000Z";
+const CONTENT_SHA256 = "a".repeat(64);
+const verifiedEvidence = {
+  status: "verified",
+  verificationState: "verified",
+  verifiedAt: VERIFIED_AT,
+  contentSha256: CONTENT_SHA256,
+};
+
 test("only exact official Lex and Advice HTTPS hosts are trusted", () => {
   assert.equal(trustedLegalSourceKind("https://lex.uz/docs/123"), "lex");
   assert.equal(trustedLegalSourceKind("https://www.lex.uz/acts/123"), "lex");
@@ -22,24 +31,41 @@ test("only exact official Lex and Advice HTTPS hosts are trusted", () => {
 test("database verified status cannot promote an untrusted URL", () => {
   assert.equal(isTrustedVerifiedLegalSource({
     officialUrl: "https://example.com/law",
-    status: "verified",
+    sourceType: "lex",
+    ...verifiedEvidence,
   }), false);
   assert.equal(isTrustedVerifiedLegalSource({
     officialUrl: "https://lex.uz/docs/123",
+    sourceType: "lex",
     status: "pending",
   }), false);
   assert.equal(isTrustedVerifiedLegalSource({
     officialUrl: "https://lex.uz/docs/123",
-    status: "verified",
+    sourceType: "lex",
+    ...verifiedEvidence,
   }), true);
+  assert.equal(isTrustedVerifiedLegalSource({
+    officialUrl: "https://lex.uz/docs/123",
+    sourceType: "advice",
+    ...verifiedEvidence,
+  }), false);
+  assert.equal(isTrustedVerifiedLegalSource({
+    officialUrl: "https://lex.uz/docs/123",
+    sourceType: "lex",
+    status: "verified",
+    verificationState: "verified",
+    verifiedAt: VERIFIED_AT,
+    contentSha256: null,
+  }), false);
 });
 
 test("trusted-source filtering preserves only allowlisted verified records", () => {
   const sources = filterTrustedVerifiedLegalSources([
-    { id: "lex", officialUrl: "https://lex.uz/docs/1", status: "verified" },
-    { id: "advice", officialUrl: "https://advice.uz/ru/1", status: "verified" },
-    { id: "fake", officialUrl: "https://laws.example/1", status: "verified" },
-    { id: "draft", officialUrl: "https://lex.uz/docs/2", status: "pending" },
+    { id: "lex", officialUrl: "https://lex.uz/docs/1", sourceType: "lex", ...verifiedEvidence },
+    { id: "advice", officialUrl: "https://advice.uz/ru/1", sourceType: "advice", ...verifiedEvidence },
+    { id: "fake", officialUrl: "https://laws.example/1", sourceType: "lex", ...verifiedEvidence },
+    { id: "legacy", officialUrl: "https://lex.uz/docs/legacy", sourceType: "lex", status: "verified" },
+    { id: "draft", officialUrl: "https://lex.uz/docs/2", sourceType: "lex", status: "pending" },
   ]);
   assert.deepEqual(sources.map(({ id }) => id), ["lex", "advice"]);
 });

@@ -12,6 +12,9 @@ export type LegalSourceContext = {
   publishedAt: string | null;
   sourceType: string;
   status: string;
+  verificationState: string;
+  verifiedAt: string;
+  contentSha256: string;
 };
 
 export type LegalIntakeResult = {

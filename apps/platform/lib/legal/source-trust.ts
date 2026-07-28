@@ -10,7 +10,14 @@ export type TrustedLegalSourceKind = "lex" | "advice";
 export type LegalSourceIdentity = {
   officialUrl: string;
   status?: string | null;
+  sourceType?: string | null;
+  verificationState?: string | null;
+  verifiedAt?: string | null;
+  contentSha256?: string | null;
 };
+
+const SHA256_HEX = /^[0-9a-f]{64}$/;
+const ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 
 export function trustedLegalSourceKind(
   value: string,
@@ -35,8 +42,15 @@ export function trustedLegalSourceKind(
 export function isTrustedVerifiedLegalSource(
   source: LegalSourceIdentity,
 ): boolean {
+  const kind = trustedLegalSourceKind(source.officialUrl);
   return source.status === "verified"
-    && trustedLegalSourceKind(source.officialUrl) !== null;
+    && source.verificationState === "verified"
+    && kind !== null
+    && source.sourceType === kind
+    && typeof source.verifiedAt === "string"
+    && ISO_UTC.test(source.verifiedAt)
+    && typeof source.contentSha256 === "string"
+    && SHA256_HEX.test(source.contentSha256);
 }
 
 export function filterTrustedVerifiedLegalSources<

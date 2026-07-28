@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
 Updated: 2026-07-28
-Latest source migration: `0024_parched_catseye.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0024` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0024` have not been applied remotely.
+Latest source migration: `0025_clean_harpoon.sql`
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0025` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) is bootstrapped through the exact 22-entry `0000`–`0021` ledger and passed the recorded schema-integrity checks. Source migrations `0022`–`0025` have not been applied remotely.
 
 ## Migration policy
 
@@ -290,6 +290,21 @@ does not backfill an asserted name, change an existing `account_type`, or
 claim that legacy phone numbers were verified. Existing profiles remain
 compatible with all new fields unset.
 
+## Migration 0025
+
+`0025_clean_harpoon.sql` is an additive legal-source lifecycle expansion. It
+adds source versions, sections, chunks, synchronization runs/errors, and a
+legal-review queue. Existing `legal_sources` rows receive a fail-closed
+`verification_state='draft'`; no legacy verified state, reviewer, timestamp,
+or content digest is invented.
+
+Database triggers enforce bounded lifecycle vocabularies, explicit
+reviewer/time/lowercase-SHA-256 evidence for verified sources and versions,
+immutability of that evidence while verified, terminal sync completion
+evidence, nonnegative counters, and complete legal-review decisions. A
+partial unique index permits only one running source synchronization for a
+given lock key.
+
 ## Local migration evidence
 
 The SQLite-backed migration tests:
@@ -297,7 +312,7 @@ The SQLite-backed migration tests:
 - derive migration 0011 from the Drizzle journal instead of relying on its generated adjective name;
 - require every 0011 statement to be `CREATE TABLE`, `CREATE INDEX`, or `CREATE UNIQUE INDEX`;
 - verify the journal and `0011_snapshot.json`;
-- apply migrations `0000`–`0024` with foreign keys enabled;
+- apply migrations `0000`–`0025` with foreign keys enabled;
 - report zero `PRAGMA foreign_key_check` rows;
 - apply `0000`–`0010`, insert a sentinel workspace, apply 0011, and prove the sentinel and every prior table definition remain unchanged;
 - confirm that exactly seven tables are added.
@@ -384,15 +399,22 @@ verification evidence. Onboarding service tests cover strict bounded input,
 exact current policy digests, deterministic one-personal-workspace creation,
 concurrent completion, and preservation of existing business workspaces.
 
+Migration 0025 tests additionally prove additive-only SQL, snapshot/journal
+agreement, fail-closed legacy-row behavior, exact verification evidence,
+verified-evidence immutability, sync/review state guards, a one-active-sync
+lock, 103 resulting non-internal tables, 138 foreign keys, and zero
+foreign-key violations.
+
 The full local migration sequence changes the SQLite table count from 79 to
-97 and reports zero foreign-key integrity errors; migrations `0022`–`0024`
-alter existing tables and add indexes/triggers rather than tables. This is
-compatibility evidence for the checked-in `0000`–`0024` sequence. Remote
+103 and reports zero foreign-key integrity errors. Migration `0025` adds six
+tables and expands `legal_sources`; migrations `0022`–`0024` alter existing
+tables and add indexes/triggers rather than tables. This is compatibility
+evidence for the checked-in `0000`–`0025` sequence. Remote
 production and development each report 61 non-internal tables and ledger
 entries only through `0004`. Isolated staging reports those 97
 application/non-internal tables plus `d1_migrations`, the exact
 `0000`–`0021` ledger, 275 schema objects, `PRAGMA quick_check = ok`, and zero
-foreign-key violations. It does not contain `0022`, `0023`, or `0024`.
+foreign-key violations. It does not contain `0022`–`0025`.
 
 ## Staging bootstrap evidence and remaining procedure
 
@@ -411,8 +433,8 @@ and accepted the same statement with LF. Repository-root `.gitattributes` now
 pins `apps/platform/drizzle/*.sql text eol=lf`. No checked-in migration content
 was rewritten.
 
-This is staging schema-bootstrap evidence only; local migrations `0022`,
-`0023`, and `0024` remain pending. Portable SQL export/import,
+This is staging schema-bootstrap evidence only; local migrations `0022`–`0025`
+remain pending. Portable SQL export/import,
 protected backup-object evidence, application/runtime binding, row-level
 business invariants, and RTO remain unverified. Before application enablement
 or any further staging migration:
@@ -458,6 +480,9 @@ or any further staging migration:
 19. apply and verify `0024`, then repeat structured profile completion,
     exact policy-digest validation, personal-workspace idempotency and
     concurrent onboarding through the full staging HTTP boundary;
-20. retain the backup until the release window and restore test are complete.
+20. apply and verify `0025`, prove legacy sources remain untrusted, verify the
+    one-active-sync lock and evidence guards, and keep ingestion/retrieval
+    disabled until their separate service gates pass;
+21. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.

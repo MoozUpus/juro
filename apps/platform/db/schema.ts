@@ -1146,6 +1146,7 @@ export const confirmedFacts = sqliteTable("confirmed_facts", {
 
 export const legalSources = sqliteTable("legal_sources", {
   id: text("id").primaryKey(),
+  canonicalId: text("canonical_id"),
   officialUrl: text("official_url").notNull(),
   actTitle: text("act_title").notNull(),
   actIdentifier: text("act_identifier"),
@@ -1154,9 +1155,127 @@ export const legalSources = sqliteTable("legal_sources", {
   locale: text("locale").notNull(),
   sourceType: text("source_type").notNull(),
   status: text("status").notNull().default("verified"),
+  verificationState: text("verification_state").notNull().default("draft"),
+  contentSha256: text("content_sha256"),
+  fetchedAt: text("fetched_at"),
+  verifiedAt: text("verified_at"),
+  verifiedByUserId: text("verified_by_user_id"),
+  verificationNotes: text("verification_notes"),
+  effectiveAt: text("effective_at"),
+  expiresAt: text("expires_at"),
   lastCheckedAt: text("last_checked_at").notNull(),
   ...timestamps,
-}, (table) => [uniqueIndex("legal_sources_url_locale_uidx").on(table.officialUrl, table.locale)]);
+}, (table) => [
+  uniqueIndex("legal_sources_url_locale_uidx").on(table.officialUrl, table.locale),
+  uniqueIndex("legal_sources_canonical_locale_uidx").on(table.canonicalId, table.locale),
+  index("legal_sources_verification_idx").on(table.verificationState, table.locale, table.lastCheckedAt),
+]);
+
+export const legalSourceVersions = sqliteTable("legal_source_versions", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  externalVersionId: text("external_version_id"),
+  language: text("language").notNull(),
+  status: text("status").notNull().default("pending_review"),
+  contentSha256: text("content_sha256").notNull(),
+  rawObjectKey: text("raw_object_key").notNull(),
+  parsedObjectKey: text("parsed_object_key"),
+  publishedAt: text("published_at"),
+  effectiveAt: text("effective_at"),
+  expiresAt: text("expires_at"),
+  fetchedAt: text("fetched_at").notNull(),
+  verifiedAt: text("verified_at"),
+  verifiedByUserId: text("verified_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  metadataJson: text("metadata_json").notNull().default("{}"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("legal_source_versions_hash_uidx").on(table.sourceId, table.language, table.contentSha256),
+  index("legal_source_versions_status_idx").on(table.sourceId, table.status, table.effectiveAt),
+]);
+
+export const legalSourceSections = sqliteTable("legal_source_sections", {
+  id: text("id").primaryKey(),
+  versionId: text("version_id").notNull().references(() => legalSourceVersions.id, { onDelete: "cascade" }),
+  canonicalRef: text("canonical_ref"),
+  article: text("article"),
+  part: text("part"),
+  clause: text("clause"),
+  heading: text("heading"),
+  bodyText: text("body_text").notNull(),
+  sequence: integer("sequence").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("legal_source_sections_ref_uidx").on(table.versionId, table.canonicalRef),
+  index("legal_source_sections_order_idx").on(table.versionId, table.sequence),
+]);
+
+export const legalSourceChunks = sqliteTable("legal_source_chunks", {
+  id: text("id").primaryKey(),
+  versionId: text("version_id").notNull().references(() => legalSourceVersions.id, { onDelete: "cascade" }),
+  sectionId: text("section_id").references(() => legalSourceSections.id, { onDelete: "cascade" }),
+  chunkIndex: integer("chunk_index").notNull(),
+  language: text("language").notNull(),
+  contentText: text("content_text").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  vectorId: text("vector_id"),
+  metadataJson: text("metadata_json").notNull().default("{}"),
+  indexedAt: text("indexed_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("legal_source_chunks_order_uidx").on(table.versionId, table.chunkIndex),
+  uniqueIndex("legal_source_chunks_vector_uidx").on(table.vectorId),
+  index("legal_source_chunks_section_idx").on(table.sectionId, table.chunkIndex),
+]);
+
+export const sourceSyncRuns = sqliteTable("source_sync_runs", {
+  id: text("id").primaryKey(),
+  environment: text("environment").notNull(),
+  sourceKind: text("source_kind").notNull(),
+  runType: text("run_type").notNull(),
+  status: text("status").notNull().default("running"),
+  lockKey: text("lock_key").notNull(),
+  discoveredCount: integer("discovered_count").notNull().default(0),
+  fetchedCount: integer("fetched_count").notNull().default(0),
+  changedCount: integer("changed_count").notNull().default(0),
+  verifiedCount: integer("verified_count").notNull().default(0),
+  errorCount: integer("error_count").notNull().default(0),
+  startedAt: text("started_at").notNull(),
+  finishedAt: text("finished_at"),
+  errorSummary: text("error_summary"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("source_sync_runs_status_idx").on(table.sourceKind, table.status, table.startedAt),
+  uniqueIndex("source_sync_runs_lock_uidx").on(table.lockKey, table.startedAt),
+]);
+
+export const sourceSyncErrors = sqliteTable("source_sync_errors", {
+  id: text("id").primaryKey(),
+  runId: text("run_id").notNull().references(() => sourceSyncRuns.id, { onDelete: "cascade" }),
+  sourceUrl: text("source_url"),
+  externalId: text("external_id"),
+  errorCode: text("error_code").notNull(),
+  retryable: integer("retryable", { mode: "boolean" }).notNull().default(false),
+  safeSummary: text("safe_summary").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+}, (table) => [index("source_sync_errors_run_idx").on(table.runId, table.occurredAt)]);
+
+export const legalReviewQueue = sqliteTable("legal_review_queue", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  versionId: text("version_id").references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  reasonCode: text("reason_code").notNull(),
+  confidence: text("confidence").notNull(),
+  status: text("status").notNull().default("pending"),
+  assignedToUserId: text("assigned_to_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  decision: text("decision"),
+  decidedAt: text("decided_at"),
+  ...timestamps,
+}, (table) => [
+  index("legal_review_queue_status_idx").on(table.status, table.createdAt),
+  index("legal_review_queue_source_idx").on(table.sourceId, table.versionId),
+]);
 
 export const conversationSources = sqliteTable("conversation_sources", {
   id: text("id").primaryKey(),

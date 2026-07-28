@@ -13,6 +13,9 @@ export type VerifiedLegalSource = {
   locale: string;
   sourceType: string;
   status: string;
+  verificationState: string;
+  verifiedAt: string;
+  contentSha256: string;
   lastCheckedAt: string;
 };
 
@@ -134,8 +137,10 @@ export async function verifiedSourcesForChanges(
   const rows = await db.prepare(
     `SELECT id,official_url AS officialUrl,act_title AS actTitle,act_identifier AS actIdentifier,
       published_at AS publishedAt,revision_date AS revisionDate,locale,source_type AS sourceType,
-      status,last_checked_at AS lastCheckedAt
-     FROM legal_sources WHERE status='verified' AND id IN (${placeholders})`,
+      status,verification_state AS verificationState,verified_at AS verifiedAt,
+      content_sha256 AS contentSha256,last_checked_at AS lastCheckedAt
+     FROM legal_sources WHERE status='verified' AND verification_state='verified'
+       AND verified_at IS NOT NULL AND content_sha256 IS NOT NULL AND id IN (${placeholders})`,
   ).bind(...ids).all();
   return filterTrustedVerifiedLegalSources(
     rows.results as unknown as VerifiedLegalSource[],

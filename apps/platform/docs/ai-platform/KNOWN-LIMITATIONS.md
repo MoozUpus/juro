@@ -1,12 +1,12 @@
 # JURO known limitations checkpoint
 
 Updated: 2026-07-28
-Scope: current integration branch after the local Phase 2 identity/workspace
-checkpoint.
+Scope: current integration branch after the first local Phase 3 legal-source
+foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0024` have not been applied to `juro-staging`; the
+- migrations `0022`–`0025` have not been applied to `juro-staging`; the
   staging ledger remains exactly `0000`–`0021`;
 - a portable D1 export/import rehearsal and protected backup object remain
   unverified, so the consumed verified-empty bootstrap exception cannot be
@@ -17,7 +17,7 @@ checkpoint.
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain
   authorization, and provider-failure behavior have not been verified live;
-- local test totals (25 rendered route + 204 core + 59 Cloudflare = 288) are
+- local test totals (25 rendered route + 204 core + 61 Cloudflare = 290) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Identity and session gaps
@@ -56,3 +56,17 @@ checkpoint.
   operator bootstrap or customer-resource access grant;
 - no production behavior or UI was replaced, and no production migration or
   deployment is authorized by this checkpoint.
+
+## Legal knowledge gaps
+
+- migration `0025` and the trust filter are local-only; no remote legal-source
+  schema or source record was created;
+- no crawler/fetch adapter, robots/rate-policy enforcement, raw R2 snapshot,
+  parser, Advice scenario model, historical diff, privileged review UI,
+  Vectorize indexing, lexical retrieval, reranking, or citation validator is
+  implemented;
+- no Cron or Queue consumer is attached, and a passing one-active-sync lock
+  test is not evidence that synchronization runs;
+- source freshness and language-priority rules still need legally approved
+  configuration. Consequently no AI legal answer may be described as
+  legislation-verified by this checkpoint.

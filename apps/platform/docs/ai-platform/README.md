@@ -34,6 +34,12 @@ No document in this directory authorizes or implies a production schema, traffic
 
 - `PHASE-2-IDENTITY-ACCESS.md` — local identity/access security implementation evidence and remaining remote gates.
 
+## Legal knowledge foundation
+
+- `LEGAL-SOURCES.md` — local fail-closed source/version/review lifecycle,
+  trust boundary, evidence requirements, and unimplemented ingestion/retrieval
+  gates.
+
 ## Cinematic Legal Intelligence
 
 - `VISUAL-DIRECTION.md` — approved product direction and source-audit constraints.

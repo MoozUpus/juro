@@ -6,12 +6,12 @@ Integration branch baseline: `1d3d23d` before this documentation update
 
 ## Verified baseline
 
-- Drizzle schema: 71 application tables.
-- Migration files: `0000`–`0024`.
+- Drizzle schema: 77 application tables.
+- Migration files: `0000`–`0025`.
 - All migrations apply successfully to a new local SQLite database.
-- Local migrated result: 97 non-internal tables; zero foreign-key violations.
+- Local migrated result: 103 non-internal tables; zero foreign-key violations.
 - No destructive `DROP` statement was found.
-- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0024` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) was bootstrapped from verified-empty state through the exact 22-entry `0000`–`0021` ledger and now reports 98 tables including `d1_migrations`, 275 schema objects, `PRAGMA quick_check = ok`, and zero foreign-key violations. Migrations `0022`–`0024` have not been applied remotely. No production/development data or schema was mutated.
+- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0025` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) was bootstrapped from verified-empty state through the exact 22-entry `0000`–`0021` ledger and now reports 98 tables including `d1_migrations`, 275 schema objects, `PRAGMA quick_check = ok`, and zero foreign-key violations. Migrations `0022`–`0025` have not been applied remotely. No production/development data or schema was mutated.
 
 ## Existing migration outline
 
@@ -55,7 +55,7 @@ Integration branch baseline: `1d3d23d` before this documentation update
 | Analysis | analyses, risks, comparisons, changes | documents, parties, clauses, missing clauses, obligations, deadlines, source links, revisions, exports |
 | Builder | broad draft/document/collaboration model | immutable content versions, confirmation/signature evidence, export records |
 | Lawyers | requests, slots, bookings | profiles, specialties, approvals, availability, assignments, conflict checks, grants, offers, messages, calls, reviews |
-| Legal knowledge | legal sources and legislation updates | source documents/versions/sections/chunks, Advice scenarios, links, sync runs/errors, review queue, internal materials, bookmarks |
+| Legal knowledge | legal sources and legislation updates; local migration `0025` adds source versions, sections, chunks, sync runs/errors, and a review queue | Advice scenario/version/link records, internal materials, bookmarks, actual fetch/parse/index jobs, and remote activation |
 | Operations | notifications, audit fragments, deletion requests | email jobs, support, incidents, feature flags, runtime settings, backup/cleanup runs |
 
 Existing analogous tables will be extended or reused. New tables must not duplicate an existing domain solely to match a requested name.
@@ -131,7 +131,7 @@ No table will be dropped during an expand step.
 
 ## Proposed additive migration sequence
 
-Migrations `0005`–`0024` contain checked-in SQL and were verified locally. Isolated staging is schema-bootstrapped only through `0021`; applying `0022`–`0024` requires the normal portable backup/restore gate and a fresh remote preflight. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and that gate is satisfied.
+Migrations `0005`–`0025` contain checked-in SQL and were verified locally. Isolated staging is schema-bootstrapped only through `0021`; applying `0022`–`0025` requires the normal portable backup/restore gate and a fresh remote preflight. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and that gate is satisfied.
 
 1. **Identity security**
    - devices, security events, TOTP credentials, backup-code hashes;

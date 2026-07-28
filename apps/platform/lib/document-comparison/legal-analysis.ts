@@ -15,7 +15,11 @@ export type ComparisonLegalSource = {
   revisionDate: string | null;
   lastCheckedAt: string;
   locale: string;
+  sourceType: string;
   status: string;
+  verificationState: string;
+  verifiedAt: string;
+  contentSha256: string;
 };
 
 type LegalAssessment = {

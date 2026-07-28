@@ -1,7 +1,10 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
-import { isTrustedVerifiedLegalSource } from "../../../../lib/legal/source-trust";
+import {
+  filterTrustedVerifiedLegalSources,
+  isTrustedVerifiedLegalSource,
+} from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const topics = new Set([
@@ -48,13 +51,21 @@ export const GET = withApiErrors(async function GET(request: Request) {
         u.adopted_at AS adoptedAt,u.effective_at AS effectiveAt,u.published_at AS publishedAt,
         s.act_title AS sourceTitle,s.act_identifier AS sourceIdentifier,
         s.official_url AS officialUrl,s.revision_date AS sourceRevisionDate,
-        s.last_checked_at AS sourceLastCheckedAt,s.status AS sourceStatus
+        s.last_checked_at AS sourceLastCheckedAt,s.status AS sourceStatus,
+        s.source_type AS sourceType,s.verification_state AS verificationState,
+        s.verified_at AS sourceVerifiedAt,s.content_sha256 AS sourceContentSha256
        FROM legislation_updates u JOIN legal_sources s ON s.id=u.source_id
-       WHERE u.status='published_verified' AND u.verified_at IS NOT NULL AND s.status='verified'
+       WHERE u.status='published_verified' AND u.verified_at IS NOT NULL
+         AND s.status='verified' AND s.verification_state='verified'
+         AND s.verified_at IS NOT NULL AND s.content_sha256 IS NOT NULL
        ORDER BY u.published_at DESC LIMIT 50`,
     ),
     db.prepare(
-      "SELECT max(last_checked_at) AS lastCheckedAt,count(*) AS sourceCount FROM legal_sources WHERE status='verified'",
+      `SELECT official_url AS officialUrl,status,source_type AS sourceType,
+        verification_state AS verificationState,verified_at AS verifiedAt,
+        content_sha256 AS contentSha256,last_checked_at AS lastCheckedAt
+       FROM legal_sources WHERE status='verified' AND verification_state='verified'
+         AND verified_at IS NOT NULL AND content_sha256 IS NOT NULL`,
     ),
   ]);
   const rawPreference = preference.results[0] as Record<string, unknown> | undefined;
@@ -67,6 +78,27 @@ export const GET = withApiErrors(async function GET(request: Request) {
   } : null;
   const selectedTopics = new Set(parsedPreference?.topics ?? []);
   const selectedAudience = String(parsedPreference?.audience || "");
+  const trustedSourceStatusRows = filterTrustedVerifiedLegalSources(
+    sourceCheck.results.map((raw) => {
+      const item = raw as Record<string, unknown>;
+      return {
+        ...item,
+        officialUrl: String(item.officialUrl || ""),
+        status: String(item.status || ""),
+        sourceType: String(item.sourceType || ""),
+        verificationState: String(item.verificationState || ""),
+        verifiedAt: String(item.verifiedAt || ""),
+        contentSha256: String(item.contentSha256 || ""),
+        lastCheckedAt: String(item.lastCheckedAt || ""),
+      };
+    }),
+  );
+  const lastCheckedAt = trustedSourceStatusRows.reduce<string | null>(
+    (latest, source) => !latest || source.lastCheckedAt > latest
+      ? source.lastCheckedAt
+      : latest,
+    null,
+  );
   const env = runtimeEnv();
   return response({
     preference: parsedPreference,
@@ -77,6 +109,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
           ...item,
           officialUrl: String(item.officialUrl || ""),
           sourceStatus: String(item.sourceStatus || ""),
+          sourceType: String(item.sourceType || ""),
+          verificationState: String(item.verificationState || ""),
+          sourceVerifiedAt: String(item.sourceVerifiedAt || ""),
+          sourceContentSha256: String(item.sourceContentSha256 || ""),
           title: locale === "uz" ? (item.titleUz || item.titleOriginal) : (item.titleRu || item.titleOriginal),
           summary: locale === "uz" ? item.summaryUz : item.summaryRu,
           changeSummary: locale === "uz" ? item.changeSummaryUz : item.changeSummaryRu,
@@ -90,6 +126,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
           const hasSafeSource = isTrustedVerifiedLegalSource({
             officialUrl: String(item.officialUrl),
             status: String(item.sourceStatus || ""),
+            sourceType: String(item.sourceType || ""),
+            verificationState: String(item.verificationState || ""),
+            verifiedAt: String(item.sourceVerifiedAt || ""),
+            contentSha256: String(item.sourceContentSha256 || ""),
           });
           const matchesTopic = !selectedTopics.size || item.topics.some((topic: string) => selectedTopics.has(topic));
           const matchesAudience = !selectedAudience || item.affectedAudiences.length === 0
@@ -103,8 +143,8 @@ export const GET = withApiErrors(async function GET(request: Request) {
       integration: env.LEGISLATION_FEED_PROVIDER ? "adapter_pending" : "not_configured",
       automaticPublication: false,
       emailConfigured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
-      lastCheckedAt: (sourceCheck.results[0] as Record<string, unknown> | undefined)?.lastCheckedAt || null,
-      verifiedSourceCount: Number((sourceCheck.results[0] as Record<string, unknown> | undefined)?.sourceCount || 0),
+      lastCheckedAt,
+      verifiedSourceCount: trustedSourceStatusRows.length,
     },
   });
 });

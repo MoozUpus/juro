@@ -22,20 +22,27 @@ The latest recorded successful local full suite contains:
 
 - 25 rendered-route/security tests;
 - 204 core/auth/document tests;
-- 59 Cloudflare/migration/job tests;
-- 288 tests total.
+- 61 Cloudflare/migration/job tests;
+- 290 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. It does not substitute for remote migrations,
 live provider calls, a deployed staging Worker, or browser E2E on a protected
 staging hostname.
 
+## Phase 3 legal-source foundation
+
+| Slice | Locally implemented and tested | Not yet proved |
+|---|---|---|
+| Source lifecycle | Additive migration `0025`; source versions/sections/chunks, sync runs/errors, review queue; legacy rows default to `draft`; exact evidence required for verified records; verified evidence immutable; one active sync per lock key | Remote migration; fetch/parse/snapshot pipeline; privileged legal-review service and UI; historical diff |
+| Consumer trust gate | AI context, conversation sources, comparison analysis, global search, monitoring, and source counts require exact HTTPS Lex/Advice host, matching type, verified state/time, and lowercase SHA-256 | Retrieval quality, citation existence/version verification, Vectorize filters/reranking, source freshness policy |
+
 ## Deployment truth
 
 - production was not changed;
 - `juro-production` and `juro-development` remain through migration `0004`;
 - `juro-staging` remains through migration `0021`;
-- source migrations `0022`–`0024` are local-only;
+- source migrations `0022`–`0025` are local-only;
 - no staging Worker, route, DNS, Turnstile binding, secret configuration, or
   deployment is verified;
 - live Turnstile and Resend delivery are unverified.

@@ -40,9 +40,13 @@ export const GET = withApiErrors(async function GET(request: Request) {
           `SELECT s.id,s.official_url AS officialUrl,s.act_title AS actTitle,
             s.act_identifier AS actIdentifier,s.published_at AS publishedAt,
             s.revision_date AS revisionDate,s.last_checked_at AS lastCheckedAt,
-            s.locale,s.source_type AS sourceType,s.status
+            s.locale,s.source_type AS sourceType,s.status,
+            s.verification_state AS verificationState,s.verified_at AS verifiedAt,
+            s.content_sha256 AS contentSha256
            FROM conversation_sources cs JOIN legal_sources s ON s.id=cs.source_id
-           WHERE cs.conversation_id=? AND s.status='verified'`,
+           WHERE cs.conversation_id=? AND s.status='verified'
+             AND s.verification_state='verified' AND s.verified_at IS NOT NULL
+             AND s.content_sha256 IS NOT NULL`,
         ).bind(selectedId),
       ]);
       selected = {
@@ -103,8 +107,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const sourceRows = await db.prepare(
     `SELECT id,official_url AS officialUrl,act_title AS actTitle,act_identifier AS actIdentifier,
       published_at AS publishedAt,revision_date AS revisionDate,last_checked_at AS lastCheckedAt,
-      locale,source_type AS sourceType,status
-     FROM legal_sources WHERE status='verified' AND locale=? ORDER BY last_checked_at DESC LIMIT 16`,
+      locale,source_type AS sourceType,status,verification_state AS verificationState,
+      verified_at AS verifiedAt,content_sha256 AS contentSha256
+     FROM legal_sources WHERE status='verified' AND verification_state='verified'
+       AND verified_at IS NOT NULL AND content_sha256 IS NOT NULL AND locale=?
+     ORDER BY last_checked_at DESC LIMIT 16`,
   ).bind(locale).all();
   const sources = filterTrustedVerifiedLegalSources(
     sourceRows.results as unknown as LegalSourceContext[],

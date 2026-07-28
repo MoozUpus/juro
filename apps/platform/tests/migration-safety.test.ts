@@ -34,6 +34,9 @@ const otpVerificationLockEntry = journal.entries.find(
 const onboardingProfileEntry = journal.entries.find(
   ({ idx }) => idx === 24,
 );
+const legalSourceLifecycleEntry = journal.entries.find(
+  ({ idx }) => idx === 25,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -74,6 +77,10 @@ assert.ok(
 assert.ok(
   otpVerificationLockEntry,
   "Drizzle journal must contain migration 0023",
+);
+assert.ok(
+  legalSourceLifecycleEntry,
+  "Drizzle journal must contain migration 0025",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -1699,7 +1706,9 @@ test("0021 rejects mismatched role-event evidence and makes accepted events immu
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for (const entry of journal.entries) applyMigration(db, entry);
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 21)) {
+      applyMigration(db, entry);
+    }
     const actorMfaAt = "2026-07-26T12:28:00.000Z";
     const createdAt = "2026-07-26T12:30:00.000Z";
     const expiresAt = "2026-07-27T12:30:00.000Z";
@@ -2115,7 +2124,9 @@ test("0023 requires exhausted attempts and keeps a verification lock immutable",
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
-    for (const entry of journal.entries) applyMigration(db, entry);
+    for (const entry of journal.entries.filter(({ idx }) => idx <= 23)) {
+      applyMigration(db, entry);
+    }
     const createdAt = "2026-07-28T12:00:00.000Z";
     const expiresAt = "2026-07-28T12:10:00.000Z";
     const lockedUntil = "2026-07-28T12:15:00.000Z";
@@ -2306,6 +2317,184 @@ test("0024 preserves existing profiles with phone verification unset", () => {
     });
     assert.equal(tableDefinitions(db).size, 97);
     assert.equal(foreignKeyCount(db), 129);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0025 adds an additive fail-closed legal-source lifecycle", () => {
+  const sql = migrationSql(legalSourceLifecycleEntry);
+  const migrationStatements = statements(sql);
+  assert.ok(migrationStatements.length >= 30);
+  for (const statement of migrationStatements) {
+    assert.match(
+      statement,
+      /^(?:CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)|ALTER TABLE `legal_sources` ADD)\b/i,
+      `unexpected legal-source lifecycle statement: ${statement.slice(0, 100)}`,
+    );
+  }
+  for (const table of [
+    "legal_source_versions",
+    "legal_source_sections",
+    "legal_source_chunks",
+    "source_sync_runs",
+    "source_sync_errors",
+    "legal_review_queue",
+  ]) {
+    assert.match(sql, new RegExp("CREATE TABLE `" + table + "`"));
+  }
+  for (const column of [
+    "verification_state",
+    "content_sha256",
+    "fetched_at",
+    "verified_at",
+    "verified_by_user_id",
+  ]) {
+    assert.match(
+      sql,
+      new RegExp("ALTER TABLE `legal_sources` ADD `" + column + "`"),
+    );
+  }
+  assert.doesNotMatch(sql, /DROP TABLE|DELETE FROM|UPDATE `legal_sources` SET/i);
+  assert.match(sql, /verified legal source requires exact evidence/);
+  assert.match(sql, /verified legal source evidence is immutable/);
+  assert.match(
+    sql,
+    /FOREIGN KEY \(`verified_by_user_id`\) REFERENCES `user_profiles`\(`id`\) ON UPDATE no action ON DELETE restrict/,
+  );
+  assert.match(
+    sql,
+    /CREATE UNIQUE INDEX `source_sync_runs_active_lock_uidx` ON `source_sync_runs` \(`lock_key`\) WHERE `status` = 'running'/,
+  );
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0024_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0025_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(legalSourceLifecycleEntry.idx, 25);
+  assert.equal(legalSourceLifecycleEntry.tag, "0025_clean_harpoon");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 77);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    136,
+  );
+});
+
+test("0025 keeps legacy sources untrusted and enforces verification evidence", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-28T12:00:00.000Z";
+    const hash = "a".repeat(64);
+    db.prepare(
+      `INSERT INTO user_profiles (id,email,account_type,created_at,updated_at)
+       VALUES (?,?,?,?,?)`,
+    ).run("legal-reviewer", "reviewer@example.test", "lawyer", now, now);
+    db.prepare(
+      `INSERT INTO legal_sources
+       (id,official_url,act_title,locale,source_type,status,last_checked_at,created_at,updated_at)
+       VALUES (?,?,?,?,?,'verified',?,?,?)`,
+    ).run(
+      "legacy-lex",
+      "https://lex.uz/docs/legacy",
+      "Legacy source",
+      "ru",
+      "lex",
+      now,
+      now,
+      now,
+    );
+    const legacy = db.prepare(
+      "SELECT status,verification_state AS verificationState,verified_at AS verifiedAt FROM legal_sources WHERE id='legacy-lex'",
+    ).get() as Record<string, unknown>;
+    assert.deepEqual({ ...legacy }, {
+      status: "verified",
+      verificationState: "draft",
+      verifiedAt: null,
+    });
+    assert.throws(
+      () => db.prepare(
+        "UPDATE legal_sources SET verification_state='verified' WHERE id='legacy-lex'",
+      ).run(),
+      /verified legal source requires exact evidence/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `UPDATE legal_sources
+         SET status='verified',verification_state='verified',content_sha256=?,
+           verified_at=?,verified_by_user_id='missing-reviewer',fetched_at=?
+         WHERE id='legacy-lex'`,
+      ).run(hash, now, now),
+      /verified legal source requires exact evidence/,
+    );
+    db.prepare(
+      `UPDATE legal_sources
+       SET status='verified',verification_state='verified',content_sha256=?,
+         verified_at=?,verified_by_user_id=?,fetched_at=?
+       WHERE id='legacy-lex'`,
+    ).run(hash, now, "legal-reviewer", now);
+    assert.throws(
+      () => db.prepare(
+        "UPDATE legal_sources SET content_sha256=? WHERE id='legacy-lex'",
+      ).run("b".repeat(64)),
+      /verified legal source evidence is immutable/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `INSERT INTO legal_source_versions
+         (id,source_id,language,status,content_sha256,raw_object_key,fetched_at,created_at,updated_at)
+         VALUES ('invalid-version','legacy-lex','ru','verified',?,'legal-sources/invalid',?,?,?)`,
+      ).run(hash, now, now, now),
+      /verified legal source version requires evidence/,
+    );
+    db.prepare(
+      `INSERT INTO legal_source_versions
+       (id,source_id,language,status,content_sha256,raw_object_key,fetched_at,created_at,updated_at)
+       VALUES ('pending-version','legacy-lex','ru','pending_review',?,'legal-sources/lex/aa/raw',?,?,?)`,
+    ).run(hash, now, now, now);
+    assert.throws(
+      () => db.prepare(
+        `INSERT INTO source_sync_runs
+         (id,environment,source_kind,run_type,status,lock_key,started_at,created_at,updated_at)
+         VALUES ('bad-run','staging','lex','incremental','success','lex:staging',?,?,?)`,
+      ).run(now, now, now),
+      /source sync completion evidence invalid/,
+    );
+    db.prepare(
+      `INSERT INTO source_sync_runs
+       (id,environment,source_kind,run_type,status,lock_key,started_at,created_at,updated_at)
+       VALUES ('running-lex','staging','lex','incremental','running','lex:staging',?,?,?)`,
+    ).run(now, now, now);
+    assert.throws(
+      () => db.prepare(
+        `INSERT INTO source_sync_runs
+         (id,environment,source_kind,run_type,status,lock_key,started_at,created_at,updated_at)
+         VALUES ('duplicate-running-lex','staging','lex','incremental','running','lex:staging',?,?,?)`,
+      ).run("2026-07-28T12:01:00.000Z", now, now),
+      /UNIQUE constraint failed: source_sync_runs\.lock_key/,
+    );
+    assert.throws(
+      () => db.prepare(
+        `INSERT INTO legal_review_queue
+         (id,source_id,version_id,reason_code,confidence,status,created_at,updated_at)
+         VALUES ('bad-review','legacy-lex','pending-version','new_version','high','approved',?,?)`,
+      ).run(now, now),
+      /legal review decision evidence required/,
+    );
+    assert.equal(tableDefinitions(db).size, 103);
+    assert.equal(foreignKeyCount(db), 138);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

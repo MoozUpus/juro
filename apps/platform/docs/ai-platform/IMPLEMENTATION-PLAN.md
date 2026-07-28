@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-28
-Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint now includes source migrations `0022`–`0024`, atomic workspace-invitation claiming, independent OTP rate limits, a 15-minute verification lock, Turnstile source/client integration, 24-hour/30-day session persistence, structured onboarding, canonical localized auth/onboarding routes, and persona-preserving workspace selection. Portable backup/import, remote migrations `0022`–`0024`, live Turnstile/Resend, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded authenticated browser baseline, empty-staging Time Travel restore/undo, the one-time verified-empty staging D1 schema bootstrap through `0021`, and an inactive-first staging Worker exposure gate are verified. A local Phase 2 checkpoint includes source migrations `0022`–`0024` and the identity/workspace controls below. The first local Phase 3 slice adds migration `0025`, fail-closed source/version/review evidence, a one-active-sync lock, and trust filtering for current AI/search/monitoring/comparison consumers. No crawler, parser, Vectorize retrieval, citation validator, Cron, editor, or remote legal-source activation is claimed. Portable backup/import, remote migrations `0022`–`0025`, live providers, full browser/a11y/performance, explicit owner approval for Wrangler authentication, Worker upload/DNS, runtime bindings, consumers, secrets, and protected-hostname gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -88,8 +88,8 @@ Local checkpoint only; none of these statements is a staging or production claim
 - canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
   root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
   and selecting a workspace no longer rewrites the stored persona;
-- the latest recorded successful local full suite is 288 tests: 25 rendered
-  route, 204 core, and 59 Cloudflare tests.
+- the latest recorded successful local full suite is 290 tests: 25 rendered
+  route, 204 core, and 61 Cloudflare tests.
 
 Vertical slices:
 
@@ -109,7 +109,7 @@ The two existing document-builder isolation defects are fixed in this phase befo
 
 Gate:
 
-- local auth/race tests pass; remote migrations `0022`–`0024`, live
+- local auth/race tests pass; remote migrations `0022`–`0025`, live
   Turnstile/Resend, and protected staging full-HTTP E2E remain required;
 - cross-account/workspace leaks: zero;
 - privileged access requires 2FA;
@@ -118,6 +118,21 @@ Gate:
 - builder regression remains green.
 
 ## Phase 3 — legal knowledge
+
+Local checkpoint:
+
+- migration `0025` additively introduces source versions, sections, chunks,
+  sync runs/errors, and a review queue;
+- existing source rows receive `verification_state='draft'`, so a legacy
+  `status='verified'` value is not trusted automatically;
+- verified source/version rows require explicit reviewer/time/SHA-256
+  evidence and keep that evidence immutable while verified;
+- only one `running` sync may hold a given lock key;
+- current AI, comparison, search, and monitoring reads require exact official
+  HTTPS host, matching Lex/Advice type, verified state/time, and SHA-256;
+- this is schema and consumer hardening only. Fetching, parsing, legal review,
+  indexing, hybrid retrieval, citation validation, scheduling, and editor UI
+  remain unimplemented and disabled.
 
 Build:
 
@@ -247,7 +262,7 @@ Then stop and request two separate explicit approvals: first for production depl
 ## Current blockers that do not stop local implementation
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
-2. Production D1 cannot be migrated before a verified external backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0021`; source migrations `0022`–`0024` are local-only.
+2. Production D1 cannot be migrated before a verified external backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0021`; source migrations `0022`–`0025` are local-only.
 3. Provider and security secrets are absent by name except `RESEND_API_KEY`; `TURNSTILE_SECRET_KEY` and the environment-specific public `TURNSTILE_SITE_KEY` are not configured on the inspected surfaces. Required values must be entered directly in the Cloudflare/provider controls, never in chat. Real Turnstile and Resend delivery are unverified.
 4. Operator legal identity placeholders require owner-supplied approved legal details.
 5. Final RU/UZ policies and the legal-language priority rule require legal approval.

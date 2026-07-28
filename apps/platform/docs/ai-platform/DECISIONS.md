@@ -878,3 +878,25 @@ individual, entrepreneur, or lawyer. A business workspace is created or
 joined after identity onboarding. The current product module still uses
 `/main`; changing it to `/dashboard` is explicitly deferred to the route
 migration instead of silently breaking existing links.
+
+## D-048 — legal-source trust requires immutable verification evidence
+
+Status: accepted and locally verified; ingestion and remote activation gates open
+Date: 2026-07-28
+
+Migration `0025` is an additive, fail-closed expansion. Existing and newly
+inserted source rows default to `verification_state='draft'`; the pre-existing
+generic `status='verified'` value is insufficient. A source becomes eligible
+for current application consumers only when its exact official HTTPS host and
+declared source type agree and it has an explicit verified state, UTC
+verification time, reviewer identifier, and lowercase SHA-256 evidence.
+Verified evidence cannot be silently rewritten while the record remains
+verified. Source versions use the same evidence principle, and a partial
+unique index permits only one running sync for a lock key.
+
+This decision does not approve or claim a crawler, a legal-reviewer privilege
+workflow, source accuracy, historical applicability, Vectorize indexing,
+hybrid retrieval, citation existence/version validation, Cron execution, or
+remote migration. Those are separate Phase 3 gates. Until they pass, the
+absence of trusted sources must remain an honest empty/unavailable state and
+must never be replaced with fabricated legal citations.
