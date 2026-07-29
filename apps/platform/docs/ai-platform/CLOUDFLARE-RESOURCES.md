@@ -1,7 +1,7 @@
 # JURO Cloudflare resources
 
 Updated: 2026-07-29
-Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0028`; portable exports, private R2 retrieval, and isolated local restore checks are recorded. Inactive Worker `juro-platform-staging` is deployed from pushed commit `29a3d9a`: subdomain/previews are disabled, routes/schedules/consumers/secrets are empty, all runtime flags are false, and no public staging URL exists. Staging resource bindings and seven Queue producer bindings are attached. A 2026-07-29 recheck after the owner reported entering staging secrets still returned zero secret bindings from both Wrangler and the Worker settings API; no newer Worker version was present. Cloudflare Access also returned `access.api.error.not_enabled`. Production resources, traffic, Sites v20, and the legacy Worker were not changed.
+Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0028`; portable exports, private R2 retrieval, and isolated local restore checks are recorded. Worker `juro-platform-staging` is deployed from pushed commit `5ce68d4` behind owner-only Cloudflare Access at `staging.app.juro.uz`; workers.dev and previews remain disabled, all activation flags remain false, and no Queue consumer or schedule is attached. Exact staging resource bindings, the public Turnstile site key, and three server-only secret binding names are present. Production resources, traffic, Sites v20, and the legacy Worker were not changed.
 
 ## Verified control-plane identity
 
@@ -39,8 +39,8 @@ Existing private JURO buckets:
 - `juro-private-backups-development` — existing development backup namespace;
 - `juro-quarantine-development` — existing development quarantine namespace;
 - `juro-development-files`, `juro-development-backups`, and `juro-development-quarantine` — newly created empty EEUR Standard targets; private and not bound;
-- `juro-staging-files` and `juro-staging-quarantine` — empty EEUR Standard targets; private and not bound;
-- `juro-staging-backups` — private EEUR Standard target containing the three verified D1 migration checkpoint exports documented in `BACKUP-RESTORE.md`; not publicly exposed or bound to a Worker.
+- `juro-staging-files` and `juro-staging-quarantine` — private EEUR Standard targets bound only to `juro-platform-staging`; no public bucket access or active processing consumer is configured;
+- `juro-staging-backups` — private EEUR Standard target containing the three verified D1 migration checkpoint exports documented in `BACKUP-RESTORE.md`; bound only to protected staging and not publicly exposed.
 
 The account also contains `site-creator-r2`, a Sites-managed/non-JURO-primary resource. It must not be repurposed as a JURO file, backup, or quarantine bucket.
 
@@ -51,7 +51,7 @@ The owner-approved target names differ from the older source/runtime names:
 | Purpose | Approved target | Existing legacy name | Phase 1 rule |
 |---|---|---|---|
 | Dev primary files | `juro-development-files` | `juro-private-documents-development` | empty target exists; do not abandon or duplicate data; inventory objects, choose an additive copy/cutover plan, then update binding |
-| Staging primary files | `juro-staging-files` | absent | empty isolated target exists; keep unbound until the staging Worker gate |
+| Staging primary files | `juro-staging-files` | absent | isolated target is bound only to the protected staging Worker; upload/scanning remains feature-gated |
 | Production primary files | `juro-private-documents` | same | preserve; no replacement |
 | Backups | `juro-{environment}-backups` | dev uses `juro-private-backups-development` | staging contains three checksum-verified D1 checkpoint exports with local restore evidence; development remains empty and production remains absent |
 | Quarantine | `juro-{environment}-quarantine` | dev uses `juro-quarantine-development` | empty dev/staging targets exist; they are not scanners and remain unbound until a real fail-closed workflow; production remains absent |
@@ -79,7 +79,7 @@ The task-specific development/staging v2 queues and distinct DLQ resources now e
 | Staging | data retention cleanup | `626ed10539354be1a1476fdd34a78993` | `2f7f59b8a2374616a210ed9dc8074caf` |
 | Staging | notifications | `d438df684a584891ac46a706bd8dc708` | `7ccbd9d4b02c41309af92a6692624a4d` |
 
-Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The inactive staging Worker attaches seven producer bindings; all execution flags are false and there is no consumer, DLQ attachment, schedule, or malware producer. The first API attempt created `development-document-analysis` and then rejected an unsupported settings mutation with generic error `10013`; inventory proved the single partial creation, after which provisioning resumed idempotently without duplicates. The API-supported creation default remains 86,400 seconds; retry, backoff, delivery, and DLQ policies are not claimed until a real consumer is implemented and reviewed. Remote legacy development queues remain unchanged; any later cleanup is a separate reviewed operation.
+Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The protected staging Worker attaches seven producer bindings; all execution flags are false and there is no consumer, DLQ attachment, schedule, or malware producer. The first API attempt created `development-document-analysis` and then rejected an unsupported settings mutation with generic error `10013`; inventory proved the single partial creation, after which provisioning resumed idempotently without duplicates. The API-supported creation default remains 86,400 seconds; retry, backoff, delivery, and DLQ policies are not claimed until a real consumer is implemented and reviewed. Remote legacy development queues remain unchanged; any later cleanup is a separate reviewed operation.
 
 ### Vectorize, scheduling, observability, and DNS
 
@@ -88,18 +88,16 @@ Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The inact
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
 - Staging primary queues have one producer binding from `juro-platform-staging`; all DLQs, development queues, and every Queue consumer remain unattached.
-- Staging Worker exists as inactive deployment `e09462ba-b8e6-40fe-abd6-83893652abb9`, version `14d89ac0-19f5-4c0d-89f5-7db97a50bb44`. Script subdomain and previews are disabled; routes, schedules, and secrets are empty.
-- `staging.app.juro.uz`, `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz`: no DNS records. The exact `staging.app.juro.uz` lookup was repeated on 2026-07-29 and remained empty.
+- Staging Worker serves deployment `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`, version `7423ffc2-f307-43df-87e0-60d609e47fa1`, at 100%. Script subdomain and previews remain disabled; schedules and consumers remain absent.
+- `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
-- Cloudflare Access is not enabled for the account. The Access applications
-  endpoint fails with `access.api.error.not_enabled`; no staging Access
-  application or allow policy exists.
+- Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
 
 The source declares the approved Vectorize bindings and exact names (`{environment}-lex-uz`, `{environment}-advice-uz`, `{environment}-internal-legal-materials`, and `{environment}-user-documents`). The empty remote indexes now match that shape. Model/dimensions are documented below; indexed metadata, legal evaluation, tenant checks, ingestion, and query authorization remain gated.
 
 ### Runtime bindings and secrets
 
-The production Worker exposes Assets, Images, D1, R2, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. Sites runtime revision 2 exposes `APP_URL`, `PUBLIC_SITE_URL`, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. The public Sites project is active at `app.juro.uz`, has no preview URL, and remains on saved version 20/source commit `40310786188eb545f224e906c2c9506c146a907c`. No production OpenAI, Anthropic, encryption, OTP-HMAC, Cron, Turnstile, TOTP-encryption, or signed-URL secret binding was verified. Wrangler `secret list --name juro-platform-staging`, `secret list --env staging`, and an independent settings API read all returned zero staging secret bindings after the reported secret-entry action. No local `.env`/`.dev.vars`, process environment value, or account Secrets Store was present. Values were never read or requested.
+The production Worker exposes Assets, Images, D1, R2, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. Sites runtime revision 2 exposes `APP_URL`, `PUBLIC_SITE_URL`, `EMAIL_FROM`, and a secret binding named `RESEND_API_KEY`. The public Sites project is active at `app.juro.uz`, has no preview URL, and remains on saved version 20/source commit `40310786188eb545f224e906c2c9506c146a907c`. No production OpenAI, Anthropic, encryption, OTP-HMAC, Cron, Turnstile, TOTP-encryption, or signed-URL secret binding was verified. The staging Worker settings API returns secret binding names `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`, plus the public plain-text `TURNSTILE_SITE_KEY` binding. Values were never read or requested. No local `.env`/`.dev.vars` or secret value was added to source, generated artifacts, logs, or documentation.
 
 Only secret names were inventoried. A read-only Sites connector response unexpectedly exposed a bypass bearer token in connector telemetry. The value was not copied, used, stored, logged into the repository, or committed. It must be rotated/revoked before production work, and the raw connector operation must not be repeated.
 
@@ -251,11 +249,11 @@ Completed inactive-deploy gates and remaining public-staging gates:
 8. require globally namespaced server-generated idempotency keys until a tenant-scoped composite key migration exists;
 9. prove the Sites production build command selects `CLOUDFLARE_ENV=production`;
 10. require zero null-workspace document and file rows after migration 0012;
-11. completed: built and validated the inactive staging artifact with `workers_dev: false`, `preview_urls: false`, `routes: []`, no schedules/consumers, async/cron disabled, and no platform-header bypass;
+11. completed: built and validated the staging artifact with `workers_dev: false`, `preview_urls: false`, no schedules/consumers, async/cron disabled, and no platform-header bypass;
 12. completed: used owner-approved local Wrangler OAuth to deploy pushed, CI-green commit `29a3d9a` while the Worker had no public route;
-13. completed: re-read the control plane and proved subdomain/previews disabled, no route/domain/schedule/consumer/secret attachment, exact staging-only bindings, and unchanged Sites v20 plus legacy Worker deployment;
-14. provision a distinct staging hostname only after Cloudflare Access is configured and unauthenticated access is proven denied, because Sites has no preview surface;
-15. enter missing secret values only through an approved Cloudflare secret flow; never in chat, Git, docs, screenshots, or logs;
+13. completed: re-read the control plane and proved subdomain/previews disabled, no schedule/consumer attachment, exact staging-only bindings, and unchanged Sites v20 plus legacy Worker deployment;
+14. completed: configured owner-only Access, proved unauthenticated denial, and only then attached `staging.app.juro.uz`;
+15. completed for the current Phase 2 slice: required values were entered through Cloudflare and only binding names were inventoried; future secrets must follow the same rule and never enter chat, Git, docs, screenshots, or logs;
 16. keep production data, traffic, domains, and deployments unchanged.
 
 No secret value belongs in `wrangler.jsonc`, Git, logs, or this document.

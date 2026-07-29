@@ -9,9 +9,9 @@ staging or production evidence.
 | Slice | Locally implemented and tested | Not yet proved |
 |---|---|---|
 | Workspace invitation acceptance | Strict bounded RU/UZ input; exact token/identity binding; staging migration `0022` unique immutable claim; one D1 batch for claim, membership, default-workspace, and audit; one winner under concurrency; existing owner role preserved; rollback on audit failure | Protected staging HTTP/concurrency flow; broader append-only workspace audit; business route containing `workspaceId` |
-| OTP request limits | Separate `5/email/hour` and `20/IP/hour` gates; retained lookup-key versions share buckets; invalidated provider failures count toward email limits; missing connecting IP does not merge unrelated users; 60-second resend cooldown retained | Remote D1 behavior; live traffic/rate behavior; enumeration parity through protected staging |
+| OTP request limits | Separate `5/email/hour` and `20/IP/hour` gates; retained lookup-key versions share buckets; invalidated provider failures count toward email limits; missing connecting IP does not merge unrelated users; 60-second resend cooldown retained; aggregate staging D1 reports three provider-accepted challenges | Live traffic/rate behavior, provider failure, and enumeration parity through protected staging |
 | OTP verification lock | Staging migration `0023` adds immutable `verification_locked_until`; fifth wrong attempt applies a 15-minute lock; replacement challenge is denied while locked | Full-HTTP remote concurrency and lock timing |
-| Turnstile | Server Siteverify integration with action `auth_otp`, exact hostname, optional remote IP, eight-second timeout, schema validation, and fail-closed invalid/unavailable handling; client widget integrated into auth flow | Real site/secret bindings, hostname configuration, provider response, browser widget, and Resend mailbox flow in staging |
+| Turnstile | Server Siteverify integration with action `auth_otp`, exact hostname, optional remote IP, eight-second timeout, schema validation, and fail-closed invalid/unavailable handling; client widget integrated into auth flow; exact staging site/secret binding names are present | Current-version browser widget trace, provider response correlation, and Resend mailbox/failure flow in staging |
 | Session persistence | 24-hour default and 30-day explicit remember-me absolute lifetimes; aligned cookie `Max-Age` and D1 expiry; same choice after OTP or MFA; strict boolean inputs with false default; existing seven-day idle cap | Remote cookie/session behavior; rotation, fixation/replay detection, region signals, and security email |
 | Structured onboarding | Canonical `/:locale/onboarding`; strict 4 KiB Zod input; required separate names, normalized phone with explicit unverified evidence, personal persona, primary goal, and exact current policy digests; deterministic personal workspace creation; staging migration `0024` applied | Protected staging browser flow; final policy approval; phone verification |
 | Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; workspace switches preserve the stored persona; `dashboard` is canonical and localized `main` uses a tested 308 redirect; legacy builder redirects preserve supported personas | Staging HTTP/browser evidence; business `workspaceId` route |
@@ -57,7 +57,13 @@ calls or the remaining full browser/accessibility/mobile matrix.
   `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; values were never read;
 - Access denies anonymous application access and the authenticated canonical
   builder route passed RU/UZ browser smoke tests;
-- live Turnstile and Resend delivery are still unverified.
+- aggregate remote D1 reports three provider-accepted and consumed OTP
+  challenges without exposing identities or codes. This is not yet a captured
+  current-version Turnstile/mailbox trace and does not close negative-provider
+  or timing-parity gates;
+- staging remains intentionally in `legacy` identity mode: zero of three OTP
+  challenges has keyed evidence and zero of one profile has encrypted identity
+  fields. Dual-write activation and backfill remain gated.
 
 ## Canonical builder integration checkpoint
 

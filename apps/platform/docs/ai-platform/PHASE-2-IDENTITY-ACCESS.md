@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-29
-Status: local identity/access foundations are implemented and partially verified. Isolated staging contains schema migrations through `0028`, including identity migrations `0022`–`0024`. An inactive staging Worker is deployed without route/secrets; live providers, full-HTTP remote-D1 behavior, and lifecycle gates remain unverified. Production was not changed.
+Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains all 29 migrations through `0028`; the current Worker has its staging-only D1/R2/Queue/Vectorize/Analytics bindings, public Turnstile site key, and server-only secret bindings. Aggregate D1 evidence shows three provider-accepted OTP challenges that were consumed successfully, but the current localized auth UI, mailbox delivery, full remote concurrency matrix, and lifecycle gates still require correlated browser/HTTP evidence. Production was not changed.
 
 ## Implemented
 
@@ -401,11 +401,11 @@ handling, 24-hour/30-day session persistence, structured onboarding,
 persona-preserving workspace selection, canonical localized auth routes, and the full existing builder/
 comparison/rendered Worker regression suite.
 
-The latest recorded local full suite passes 336/336 checks: 27 rendered
-Worker/security checks, 241 core/document/auth checks, and 68 Cloudflare
+The latest recorded local full suite passes 338/338 checks: 27 rendered
+Worker/security checks, 243 core/document/auth checks, and 68 Cloudflare
 configuration/migration/job checks. The full local migration sequence contains
-105 non-internal tables and zero foreign-key integrity errors. Local evidence
-is not staging or production runtime evidence.
+108 total tables (107 non-internal) in remote staging and zero pending migrations. Local
+evidence is not staging or production runtime evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
 
@@ -413,7 +413,18 @@ is not staging or production runtime evidence.
 invite → pre-accept read denied → accept → collaborator read
 ```
 
-It has not been executed against a remote environment in this slice.
+The local suite is complemented by the read-only staging evidence recorded below; destructive or concurrency tests have not been executed against remote staging.
+
+### Read-only protected-staging evidence — 2026-07-29
+
+- `wrangler d1 migrations list juro-staging --env staging --remote` reports no pending migrations;
+- D1 reports 108 total tables (107 non-internal) and 29 migration-ledger rows;
+- aggregate-only queries, without reading email addresses, codes, names, or content, report three OTP challenges accepted by the provider path and three consumed challenges;
+- the same aggregate check reports one profile, zero keyed OTP challenges, and zero profiles with protected identity fields;
+- the Worker settings API returns the public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` binding names; secret values were not read;
+- the external Access boundary still returns a `302` with `no-store` before application content for an unauthenticated request.
+
+The OTP aggregates prove persisted staging state and successful challenge consumption. They do not, by themselves, prove current-version browser widget behavior, recipient mailbox delivery, response timing parity, or the full resend/lock/concurrency matrix. `IDENTITY_PROTECTION_MODE=legacy` remains deliberate during expand/backfill; encryption must not be claimed until the guarded dual-write activation and verified backfill gate pass.
 
 ## Required staging evidence
 
@@ -576,9 +587,9 @@ provider, concurrency, or future-data evidence.
 - cleanup scheduling for expired pending credentials and consumed/invalidated
   MFA/deletion challenges remains inactive until the reviewed cleanup
   queue/Cron lifecycle is enabled;
-- inactive staging Worker and staging-only resource bindings are verified;
-  route, DNS, Turnstile binding, secret configuration, and protected HTTP
-  deployment remain absent;
+- the protected staging Worker, custom domain, resource bindings, Turnstile
+  site/secret bindings, and anonymous Access denial are verified; the current
+  authenticated auth/provider trace and wider browser matrix remain open;
 - remote D1 race tests and authenticated full HTTP MFA/invitation/workspace
   E2E remain release gates;
 - production remains frozen pending the later explicit owner confirmation.

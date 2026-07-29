@@ -1287,3 +1287,24 @@ jobs, and deployment to `juro-platform-staging`. Deployment
 re-reads returned 200 and anonymous application access remains denied.
 Authenticated browser verification must still be performed against this exact
 version before the localized screens are marked fully verified.
+
+## D-063 — treat aggregate OTP state as provider-path evidence, not mailbox proof
+
+Status: accepted and verified for protected staging only
+Date: 2026-07-29
+
+After the owner saved staging bindings, the Worker settings API returned the
+public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`,
+`RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` names. Values were neither read
+nor exported. Remote D1 reported 29 applied migrations, three non-invalidated
+OTP challenges, and three consumed challenges. Only aggregate counts were read;
+no identity, code, salt, token, or message content was inspected.
+
+This evidence proves that persisted staging challenges reached provider-
+accepted state and were consumed. It does not substitute for a correlated
+current-version browser capture, recipient mailbox evidence, negative provider
+tests, or timing-parity tests. Staging remains in expand-safe
+`IDENTITY_PROTECTION_MODE=legacy`: zero retained challenges have keyed
+evidence and zero profiles have protected identity fields. Dual-write
+activation requires its own backfill, verification, rollback, and deployment
+checkpoint. Production remains unchanged.

@@ -9,18 +9,19 @@ foundation checkpoint.
 - migrations `0022`–`0028` are applied to `juro-staging`; the post-migration
   portable export/private-R2/local restore and disposable remote-D1 import
   checks pass. Operational RTO/RPO under representative load remains unverified;
-- inactive staging Worker and exact staging bindings are verified; route, DNS,
-  consumer, schedule, public staging URL, and authenticated HTTP behavior
-  remain absent. The reported staging secret entry is not reflected on the
-  Worker: two Wrangler selectors and the Worker settings API return zero
-  secret bindings;
-- Cloudflare Access is not enabled for the account, so an owner-only staging
-  policy cannot yet be created or proven deny-by-default;
-- `TURNSTILE_SECRET_KEY` and public `TURNSTILE_SITE_KEY` are absent from the
-  inspected remote surfaces; no live Siteverify or client-widget flow exists;
-- Resend API code exists, but real OTP mailbox delivery, sender/domain
-  authorization, and provider-failure behavior have not been verified live;
-- local test totals (27 rendered route + 241 core + 68 Cloudflare = 336) are
+- the protected staging Worker, custom domain, exact resource bindings, public
+  Turnstile site key, and three server-only secret binding names are verified;
+  Queue consumers, schedules, async feature activation, and staff APIs remain
+  deliberately disabled;
+- Cloudflare Access is enabled with a staging-only owner policy and anonymous
+  requests are denied before application content with a no-store redirect;
+- aggregate D1 evidence shows three provider-accepted and consumed OTP
+  challenges, but it is not correlated with a captured current-version
+  browser run, recipient mailbox evidence, or the provider-failure matrix;
+- `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
+  all three retained OTP challenges have zero protected/keyed evidence. The
+  guarded dual-write/backfill/verification gate remains a release blocker;
+- local test totals (27 rendered route + 243 core + 68 Cloudflare = 338) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
@@ -129,8 +130,9 @@ foundation checkpoint.
   The 320/360/390/768/1024 responsive matrix, 200% zoom, reduced motion,
   forced colors, screen reader, and real touch-device verification remain
   open.
-- Live OTP/Resend and Turnstile provider operations remain unverified even
-  though the staging secret bindings now exist.
+- A provider-accepted and consumed OTP state exists in staging, but the current
+  auth UI/Turnstile/mailbox flow and negative-provider cases remain unverified
+  as one correlated browser trace.
 
 ## Remaining builder language gaps
 

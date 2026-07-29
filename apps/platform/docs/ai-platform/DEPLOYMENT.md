@@ -1,7 +1,7 @@
 # JURO deployment boundary
 
 Updated: 2026-07-29
-Status: inactive staging Worker foundation deployed; production deployment is not authorized.
+Status: owner-only protected staging is active; production deployment is not authorized.
 
 ## Production surfaces that must remain unchanged
 
@@ -25,7 +25,7 @@ bindings are `juro-staging`, `juro-staging-files`,
 Queue producers and four staging Vectorize indexes documented in
 `CLOUDFLARE-RESOURCES.md`.
 
-The first deployment is deliberately unreachable:
+The initial deployment was deliberately unreachable, and the current deployment preserves these execution safeguards:
 
 - `workers_dev: false`;
 - `preview_urls: false`;
@@ -34,16 +34,13 @@ The first deployment is deliberately unreachable:
 - no Queue consumer;
 - async runtime, legal ingestion, staff API, and Cron flags are false.
 
-This deploy created Worker `juro-platform-staging`, version
-`14d89ac0-19f5-4c0d-89f5-7db97a50bb44`, deployment
-`e09462ba-b8e6-40fe-abd6-83893652abb9`, from pushed/CI-green source commit
-`29a3d9a`. It attached staging-only bindings and seven Queue producers. A
-post-deploy API read proved an empty secret list, no routes, schedules, or
-consumers, and disabled Workers.dev subdomain/previews. It is not a public
-staging release and cannot support HTTP smoke tests. A later
-staging hostname requires a separately verified access boundary, runtime
-secrets entered directly in Cloudflare, and proof that unauthenticated access
-is denied.
+The current deployment is `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`
+serving version `7423ffc2-f307-43df-87e0-60d609e47fa1` from pushed code
+commit `5ce68d4`. It attaches staging-only bindings and seven Queue producers.
+Workers.dev and previews are disabled; Queue consumers, schedules, async
+runtime, legal ingestion, and staff APIs remain disabled. The custom domain was
+attached only after the owner-only Access application existed and anonymous
+denial had been proven.
 
 ## Required sequence
 
