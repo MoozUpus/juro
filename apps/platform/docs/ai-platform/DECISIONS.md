@@ -1249,3 +1249,21 @@ The application is hidden from the App Launcher, auto-redirects to the sole Clou
 Only after that verification, the new custom domain `staging.app.juro.uz` was attached to the staging Worker `juro-platform-staging` using custom-domain ID `83fa11970645f783cf0b7cfa6c8b914f2753325e`. An anonymous HTTPS request was redirected to the Cloudflare Access login endpoint rather than receiving application content, proving deny-before-auth.
 
 No production Worker, Sites deployment, production policy, route, or resource was changed. The next gate is an owner login through Access, followed by staging application smoke tests. The previous UI and production traffic remain recoverable and untouched.
+
+## D-061 — make the localized builder path contract single-source before wider UI work
+
+Status: accepted, implemented, and protected-staging verified
+Date: 2026-07-29
+
+Builder navigation now derives from one `builder-paths` contract keyed by
+locale and account type. Internal client links no longer return users to the
+unlocalized compatibility surface, while existing legacy redirects remain for
+saved inbound URLs. The application shell owns the sole `main` landmark and
+synchronizes `html[lang]` after client route transitions.
+
+The change passed type-check, lint, 337 tests, staging build/artifact checks,
+Cloudflare matrix validation, Wrangler dry-run, bounded tracked-file secret
+signature scan, a 100% staging deployment, control-plane re-read, anonymous
+Access denial, and authenticated RU/UZ browser traversal without console
+entries or horizontal overflow. The UZ document-management screen remains a
+separate known localization defect. Production was not changed.

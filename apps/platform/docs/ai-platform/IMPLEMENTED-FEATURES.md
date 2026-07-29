@@ -21,14 +21,14 @@ staging or production evidence.
 The latest recorded successful local full suite contains:
 
 - 27 rendered-route/security tests;
-- 241 core/auth/document tests;
+- 242 core/auth/document tests;
 - 68 Cloudflare/migration/job tests, including the remote-D1 trigger syntax regression;
-- 336 tests total.
+- 337 tests total.
 
 This evidence includes local migration/schema contracts and service-level
-concurrency/rollback paths. It does not substitute for remote migrations,
-live provider calls, a deployed staging Worker, or browser E2E on a protected
-staging hostname.
+concurrency/rollback paths. The canonical document-builder flow now also has
+protected staging browser evidence. It does not substitute for live provider
+calls or the remaining full browser/accessibility/mobile matrix.
 
 ## Phase 3 legal-source foundation
 
@@ -51,7 +51,19 @@ staging hostname.
 - `juro-production` and `juro-development` were not changed;
 - `LEGAL_SOURCE_STAFF_API_ENABLED=false` is pinned in development, staging,
   and production source/artifacts;
-- inactive staging Worker version `14d89ac0-19f5-4c0d-89f5-7db97a50bb44`
-  is verified with staging-only bindings, no routes/schedules/consumers/secrets,
-  and all execution feature flags false;
-- live Turnstile and Resend delivery are unverified.
+- protected staging deployment `bb9b8ab8-528f-4c30-93bf-be5276088dd9`
+  serves Worker version `16b79e54-a326-4bd4-bda9-3f9605b52c06` at 100%;
+- the control plane exposes only the secret names `IDENTITY_KEYRING`,
+  `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; values were never read;
+- Access denies anonymous application access and the authenticated canonical
+  builder route passed RU/UZ browser smoke tests;
+- live Turnstile and Resend delivery are still unverified.
+
+## Canonical builder integration checkpoint
+
+The builder surface now uses one tested path helper for locale/account-aware
+library, category, template, documents, contacts, and notifications links.
+Nested page-level `main` landmarks were replaced with neutral containers so
+the application shell remains the sole main landmark. The builder header and
+library route update RU/UZ content after client navigation, and the shell keeps
+`html[lang]` synchronized with the active locale.

@@ -75,6 +75,9 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
     setCollapsed(localStorage.getItem("juro-sidebar-collapsed") === "1");
   }, []);
   useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+  useEffect(() => {
     if (!open) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -103,6 +106,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   }, [open]);
   const switchLanguage = () => {
     const next = locale === "ru" ? "uz" : "ru";
+    document.documentElement.lang = next;
     document.cookie = `juro_locale=${next}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`;
     router.push(pathname.replace(`/${locale}/`, `/${next}/`));
   };

@@ -56,17 +56,17 @@ is denied.
    consumer.
 5. **Completed:** re-read the Worker deployment, bindings, flags, routes, domains, schedules,
    Queue attachments, and secret names; prove production resources unchanged.
-6. **Blocked and re-verified:** enter the required values as Worker secret
-   bindings on the exact service `juro-platform-staging`. The current
-   settings API and both Wrangler selectors return an empty list. Secret
-   values never enter chat, Git, documentation, logs, or screenshots.
-7. **Blocked:** enable Cloudflare Access for the account, then configure an
-   owner-only application/policy for `staging.app.juro.uz`. The current API
-   returns `access.api.error.not_enabled`.
-8. Configure the staging hostname only after access-control and
-   unauthenticated-denial tests pass.
-9. Run authenticated staging HTTP, browser, accessibility, security, and
-   provider smoke tests.
+6. **Completed:** the owner entered Worker secrets directly on
+   `juro-platform-staging`; API re-read exposes names only:
+   `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`.
+7. **Completed:** Cloudflare Access protects `staging.app.juro.uz` with one
+   owner-only allow policy and an eight-hour session.
+8. **Completed:** the staging custom domain was attached only after Access was
+   configured; an anonymous request receives an Access 302 with `no-store`.
+9. **Partially completed:** authenticated browser smoke now covers the
+   canonical RU/UZ document-builder flow, route transitions, landmarks,
+   overflow, console, and locale state. Broader accessibility, mobile,
+   provider, and end-to-end product smoke tests remain open.
 10. Keep feature flags false for every incomplete or unverified integration.
 
 The standalone `validate:artifact` task defaults to the development profile.
@@ -86,3 +86,12 @@ verified portable export under `BACKUP-RESTORE.md`.
 Production rollback is intentionally not described as executable permission.
 It requires a separately approved change set, backup, migration rehearsal,
 Sites/Worker ownership resolution, and explicit production confirmation.
+
+## Protected builder checkpoint — 2026-07-29
+
+The current staging deployment is `bb9b8ab8-528f-4c30-93bf-be5276088dd9`
+with Worker version `16b79e54-a326-4bd4-bda9-3f9605b52c06` at 100% of
+`juro-platform-staging` traffic. The verified change preserves locale and
+account context for builder/library/documents/contacts/notifications links,
+removes the nested main landmark, and synchronizes the document language after
+client-side RU/UZ transitions. Production was not deployed or changed.

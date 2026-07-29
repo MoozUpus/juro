@@ -7,6 +7,26 @@ import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
 import { isAccountType, isLocale, isPlatformModule, platformPath } from "../lib/platform/routing";
+import { builderNavigationPaths } from "../lib/platform/builder-paths";
+
+test("builder navigation preserves canonical locale and account context", () => {
+  const ru = builderNavigationPaths("/ru/individual/document-builder/debt?caseId=case-1");
+  assert.equal(ru.locale, "ru");
+  assert.equal(ru.builder, "/ru/individual/document-builder");
+  assert.equal(ru.documents, "/ru/individual/documents");
+  assert.equal(ru.template("debt", "0602001"), "/ru/individual/document-builder/debt/0602001");
+  assert.equal(ru.document("doc / 1"), "/ru/individual/documents/doc%20%2F%201");
+  assert.equal(ru.switchLocale("uz"), "/uz/individual/document-builder/debt");
+
+  const uz = builderNavigationPaths("/uz/business/document-builder/");
+  assert.equal(uz.contacts, "/uz/business/contacts");
+  assert.equal(uz.notifications, "/uz/business/notifications");
+
+  const legacy = builderNavigationPaths("/document-builder/library");
+  assert.equal(legacy.locale, null);
+  assert.equal(legacy.library, "/document-builder/library");
+  assert.equal(legacy.document("doc-1"), "/document-builder/documents/doc-1");
+});
 
 test("OTP values are six decimal digits and email normalization is stable", () => {
   for (let index=0; index<200; index++) assert.match(randomOtp(), /^\d{6}$/);

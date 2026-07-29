@@ -76,8 +76,8 @@ foundation checkpoint.
 
 - canonical localized root/auth/onboarding routing, Uzbek-default behavior,
   structured personal-profile completion, persona-preserving workspace
-  selection, and the tested `/main` to `/dashboard` migration are
-  implemented locally but remain unstaged; business `workspaceId` routes, policy approval,
+  selection, and the tested `/main` to `/dashboard` migration are staged
+  behind owner-only Access; business `workspaceId` routes, policy approval,
   deletion purge/recovery, and externally reachable staff administration are
   not complete;
 - the local staff-role foundation remains deliberately unreachable and has no
@@ -110,9 +110,23 @@ foundation checkpoint.
 
 - `LEGAL_SOURCE_STAFF_API_ENABLED` remains false in every checked-in
   environment, so neither the page nor its API is remotely reachable;
-- no reviewer account/assignment bootstrap, Cloudflare Access policy,
-  protected staging Worker route, or protected staging browser session exists;
+- the staging Worker has an owner-only Access boundary, but no reviewer
+  account/assignment bootstrap or enabled staff feature route exists;
 - local service and HTTP tests do not replace keyboard, screen-reader, 200%
   zoom, forced-colors, touch, or real-device review of the staff surface;
 - review withdrawal, reassignment, supervisor override, replacement-version
   activation, and published-source supersession are not yet implemented.
+
+## Builder and browser gaps — 2026-07-29
+
+- The canonical RU/UZ builder library, category, generic template and route
+  transitions are verified in protected staging.
+- `/uz/individual/documents` still renders predominantly Russian management
+  copy. Its route and `html[lang]` are correct, but the screen is not yet a
+  complete Uzbek localization and must not be reported as such.
+- The attached authenticated Chrome surface was fixed at a desktop viewport.
+  The 320/360/390/768/1024 responsive matrix, 200% zoom, reduced motion,
+  forced colors, screen reader, and real touch-device verification remain
+  open.
+- Live OTP/Resend and Turnstile provider operations remain unverified even
+  though the staging secret bindings now exist.

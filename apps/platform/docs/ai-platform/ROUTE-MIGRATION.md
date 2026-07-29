@@ -11,7 +11,7 @@ Status: integration-branch evidence only; production routes are unchanged.
 | `/:locale/:accountType/dashboard` | same | canonical source route | — | shell navigation, OTP/MFA, onboarding, workspace selection | dashboard module classifier and full suite pass |
 | `/document-builder-test/**` | `/document-builder/**` | retain permanent redirect | 308 | old inbound links | existing rendered regression passes |
 | `/document-builder/**` | `/:locale/:accountType/document-builder/**` | retain compatibility redirect | 307/308 by existing handler | public links and saved bookmarks | existing route/security tests pass |
-| `/ru/individual/document-builder` | same | preserve canonical builder route | — | required production contract | present in staging build route manifest; remote regression awaits protected hostname |
+| `/ru/individual/document-builder` | same | preserve canonical builder route | — | required production contract | protected staging browser regression passed for RU/UZ library, category, template and documents navigation; production unchanged |
 
 ## Invariants
 
@@ -24,3 +24,14 @@ Status: integration-branch evidence only; production routes are unchanged.
    membership enforcement; the current intermediate business route is not
    represented as that final contract.
 5. Production deployment is separately gated.
+
+## Protected staging evidence — 2026-07-29
+
+- Builder links now derive from `/:locale/:accountType`; legacy unlocalized
+  paths remain only as inbound compatibility redirects.
+- Browser traversal passed for RU library → UZ library → UZ category → UZ
+  generic template → UZ documents, with one `main`, no horizontal overflow,
+  no client link beginning with legacy `/document-builder`, and no console
+  entries.
+- The UZ documents route is canonical, but its existing document-management
+  copy is still predominantly Russian; this is tracked as an open i18n defect.
