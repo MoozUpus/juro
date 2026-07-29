@@ -8,7 +8,7 @@ import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
 import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, workspaceForAccountRoute } from "../lib/platform/routing";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
-import { localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
+import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 
 test("builder navigation preserves canonical locale and account context", () => {
   const ru = builderNavigationPaths("/ru/individual/document-builder/debt?caseId=case-1");
@@ -66,6 +66,8 @@ test("builder workspaces expose complete RU and UZ navigation copy", () => {
   assert.equal(localizedDocumentStatus("Черновик", "uz"), "Qoralama");
   assert.equal(localizedDocumentStatus("custom", "uz"), "custom");
   assert.equal(localizedDocumentStatus("Черновик", "ru"), "Черновик");
+  assert.equal(documentBuilderMetadataCopy("ru").title, "Создать документ");
+  assert.equal(documentBuilderMetadataCopy("uz").title, "Hujjat yaratish");
 });
 
 test("OTP values are six decimal digits and email normalization is stable", () => {

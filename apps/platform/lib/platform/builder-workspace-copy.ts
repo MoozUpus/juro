@@ -47,6 +47,18 @@ export function workspaceCopy(locale: PlatformLocale | null) {
   return builderWorkspaceCopy[locale === "uz" ? "uz" : "ru"];
 }
 
+export function documentBuilderMetadataCopy(locale: PlatformLocale | null) {
+  return locale === "uz"
+    ? {
+        title: "Hujjat yaratish",
+        description: "JURO yuridik hujjatlar kutubxonasi va interaktiv konstruktori.",
+      }
+    : {
+        title: "Создать документ",
+        description: "Библиотека и интерактивный конструктор юридических документов JURO.",
+      };
+}
+
 export function localizedDocumentStatus(status: string, locale: PlatformLocale | null): string {
   if (locale !== "uz") return status;
   const labels = builderWorkspaceCopy.uz.documents.statuses;
