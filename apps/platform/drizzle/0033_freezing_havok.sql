@@ -192,7 +192,8 @@ WHEN NEW.lifecycle_status<>'active'
 BEGIN
   SELECT RAISE(ABORT,'USER_PROFILE_LIFECYCLE_INVALID');
 END;
---> statement-breakpointCREATE TRIGGER user_profiles_lifecycle_update_guard
+--> statement-breakpoint
+CREATE TRIGGER user_profiles_lifecycle_update_guard
 BEFORE UPDATE ON user_profiles
 FOR EACH ROW
 WHEN OLD.lifecycle_status='deleted'
