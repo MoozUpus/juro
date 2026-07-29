@@ -9,5 +9,5 @@ export default async function Root() {
   if (!user) redirect("/uz/auth/login");
   const profile = await workspaceProfile(user.email);
   if (!profile?.onboardingCompleted) redirect("/uz/onboarding");
-  redirect(`/${profile.locale}/${profile.accountType}/main`);
+  redirect(`/${profile.locale}/${profile.accountType}/dashboard`);
 }

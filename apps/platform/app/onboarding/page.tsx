@@ -42,7 +42,7 @@ export async function OnboardingScreen({ locale: requestedLocale }: {
     )
     ? profile?.accountType as AccountPersona
     : "individual";
-  if (profile?.completedAt) redirect(`/${locale}/${accountPersona}/main`);
+  if (profile?.completedAt) redirect(`/${locale}/${accountPersona}/dashboard`);
   return (
     <OnboardingForm
       initialLocale={locale}

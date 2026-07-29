@@ -148,5 +148,5 @@ export function workspaceInvitationRedirect(
   workspaceType: string,
 ): string {
   const accountType = workspaceType === "business" ? "business" : "individual";
-  return `/${locale}/${accountType}/main`;
+  return `/${locale}/${accountType}/dashboard`;
 }

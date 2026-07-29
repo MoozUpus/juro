@@ -206,7 +206,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   const redirectTo = purpose === "register" || !user.onboardingCompletedAt
     ? `/${locale}/onboarding`
-    : `/${locale}/${accountType}/main`;
+    : `/${locale}/${accountType}/dashboard`;
   if (await hasActiveMfa(db, user.id)) {
     try {
       const challenge = await createLoginMfaChallenge(

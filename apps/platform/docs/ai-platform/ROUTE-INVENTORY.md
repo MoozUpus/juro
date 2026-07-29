@@ -12,13 +12,13 @@ Production routing is split: `app.juro.uz` serves Sites v20, while `admin.juro.u
 
 | Current URL | Target URL | Action | Code | Reason / test result |
 |---|---|---|---:|---|
-| `/` | `/uz/auth/login`, `/uz/onboarding`, or localized persona `/main` | implemented locally; production unchanged | 307 | Local guest/default-onboarding behavior is Uzbek; completed profiles retain saved locale/persona; `/dashboard` rename remains pending |
+| `/` | `/uz/auth/login`, `/uz/onboarding`, or localized persona `/dashboard` | implemented locally; production unchanged | 307 | Local guest/default-onboarding behavior is Uzbek; completed profiles retain saved locale/persona |
 | `/login` | `/:locale/auth/login` | retain as compatibility surface | — | Canonical RU/UZ auth pages now exist locally; unlocalized page remains for inbound links |
 | `/register` | `/:locale/auth/register` | retain as compatibility surface | — | Canonical RU/UZ registration pages now exist locally |
 | `/:locale/login` | `/:locale/auth/login` | implemented locally | 308 | Preserves a safe `returnTo` |
 | `/:locale/register` | `/:locale/auth/register` | implemented locally | 308 | Preserves safe `accountType` and `returnTo` |
 | `/onboarding` | `/:locale/onboarding` | localized route implemented locally; compatibility page retained | — | Canonical route uses URL locale and protected onboarding state |
-| `/main` | `/:locale/:accountType/dashboard` | pending route migration | 308 | Local compatibility entry now routes by saved locale/persona but canonical modules still use `/main` |
+| `/main` | `/:locale/:accountType/dashboard` | compatibility entry retained locally; production unchanged | 307/308 | Unlocalized entry resolves saved locale/persona; localized `/:locale/:accountType/main` uses a tested method-preserving 308 redirect |
 
 Production still defaults through its older unlocalized flow. The local integration branch now defaults unauthenticated root and incomplete onboarding to Uzbek; completed profiles retain their saved locale.
 
@@ -28,7 +28,7 @@ The dynamic platform router currently permits:
 
 - locales: `ru`, `uz`;
 - account types: `individual`, `entrepreneur`, `lawyer`, `business`;
-- modules: `main`, `ai-chat`, `cases`, `document-review`, `monitoring`, `action-plan`, `consultations`, `history`, `archive`, `team`, `billing`, `security`, `help`, `profile`, `settings`.
+- modules: `dashboard`, `ai-chat`, `cases`, `document-review`, `monitoring`, `action-plan`, `consultations`, `history`, `archive`, `team`, `billing`, `security`, `help`, `profile`, `settings`.
 
 Current route shells:
 
@@ -84,6 +84,8 @@ Internal `app/_document-builder/**` paths are implementation modules and are not
 Existing handlers cover:
 
 ```text
+/main
+/:locale/:accountType/main
 /dashboard
 /ai-lawyer
 /action-plans
@@ -114,21 +116,28 @@ Authenticated Chrome verification on 2026-07-28 confirmed that `/ru/individual/d
 
 ### Profiles and workspaces
 
-- `entrepreneur` and `lawyer` account types are absent.
+- `entrepreneur` and `lawyer` personal personas are supported locally.
 - Business URLs do not contain `workspaceId`.
 - Target: `/:locale/business/:workspaceId/...`.
 
 ### Dashboard and AI lawyer
 
-Missing:
+Implemented locally:
 
 ```text
 /:locale/:accountType/dashboard
+```
+
+Still missing:
+
+```text
 /:locale/:accountType/ai-lawyer/new
 /:locale/:accountType/ai-lawyer/chat/:chatId
 ```
 
-Current `main` and `ai-chat` modules require a migration and compatibility redirects.
+The `main` module migration is complete in source with a localized 308
+compatibility redirect and rendered-Worker coverage. The `ai-chat` module
+still requires migration and compatibility redirects.
 
 ### Cases
 

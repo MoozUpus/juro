@@ -56,14 +56,18 @@ is denied.
    consumer.
 5. **Completed:** re-read the Worker deployment, bindings, flags, routes, domains, schedules,
    Queue attachments, and secret names; prove production resources unchanged.
-6. Enter missing secret values directly through Cloudflare's approved secret
-   UI/CLI flow. Secret values never enter chat, Git, documentation, logs, or
-   screenshots.
-7. Configure a protected staging hostname only after access-control and
+6. **Blocked and re-verified:** enter the required values as Worker secret
+   bindings on the exact service `juro-platform-staging`. The current
+   settings API and both Wrangler selectors return an empty list. Secret
+   values never enter chat, Git, documentation, logs, or screenshots.
+7. **Blocked:** enable Cloudflare Access for the account, then configure an
+   owner-only application/policy for `staging.app.juro.uz`. The current API
+   returns `access.api.error.not_enabled`.
+8. Configure the staging hostname only after access-control and
    unauthenticated-denial tests pass.
-8. Run authenticated staging HTTP, browser, accessibility, security, and
+9. Run authenticated staging HTTP, browser, accessibility, security, and
    provider smoke tests.
-9. Keep feature flags false for every incomplete or unverified integration.
+10. Keep feature flags false for every incomplete or unverified integration.
 
 The standalone `validate:artifact` task defaults to the development profile.
 Running it immediately after a staging build without an explicit

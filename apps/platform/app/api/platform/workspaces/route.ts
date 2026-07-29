@@ -73,6 +73,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
   return response({
     ok: true,
     activeWorkspaceId: target.id,
-    redirectTo: `/${locale}/${accountType}/main`,
+    redirectTo: `/${locale}/${accountType}/dashboard`,
   }, 200, accountType);
 });

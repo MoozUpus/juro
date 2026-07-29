@@ -6,17 +6,21 @@ foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0028` are applied to `juro-staging` and the post-migration
-  portable export/private-R2/local-restore checks pass; a disposable remote-D1
-  import drill and measured recovery time remain unverified;
+- migrations `0022`–`0028` are applied to `juro-staging`; the post-migration
+  portable export/private-R2/local restore and disposable remote-D1 import
+  checks pass. Operational RTO/RPO under representative load remains unverified;
 - inactive staging Worker and exact staging bindings are verified; route, DNS,
-  runtime secret/configuration set, consumer, schedule, public staging URL, and
-  authenticated HTTP behavior remain absent or unverified;
+  consumer, schedule, public staging URL, and authenticated HTTP behavior
+  remain absent. The reported staging secret entry is not reflected on the
+  Worker: two Wrangler selectors and the Worker settings API return zero
+  secret bindings;
+- Cloudflare Access is not enabled for the account, so an owner-only staging
+  policy cannot yet be created or proven deny-by-default;
 - `TURNSTILE_SECRET_KEY` and public `TURNSTILE_SITE_KEY` are absent from the
   inspected remote surfaces; no live Siteverify or client-widget flow exists;
 - Resend API code exists, but real OTP mailbox delivery, sender/domain
   authorization, and provider-failure behavior have not been verified live;
-- local test totals (25 rendered route + 237 core + 68 Cloudflare = 330) are
+- local test totals (27 rendered route + 241 core + 68 Cloudflare = 336) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
@@ -63,7 +67,7 @@ foundation checkpoint.
 - the one-winner acceptance claim schema from `0022` is active in staging, but
   the full route and remote concurrency behavior remain untested over HTTP;
 - `workspace_audit_events` is not a general append-only/tamper-evident ledger;
-- acceptance redirects to `/:locale/:accountType/main`; the target business
+- acceptance redirects to `/:locale/:accountType/dashboard`; the target business
   URL still lacks the required `workspaceId` segment;
 - the owner/member model and invitation flow do not prove tenant isolation for
   every object domain.
@@ -71,9 +75,9 @@ foundation checkpoint.
 ## Broader Phase 2 gaps
 
 - canonical localized root/auth/onboarding routing, Uzbek-default behavior,
-  structured personal-profile completion, and persona-preserving workspace
-  selection are implemented locally but remain unstaged; the `/main` to
-  `/dashboard` migration, business `workspaceId` routes, policy approval,
+  structured personal-profile completion, persona-preserving workspace
+  selection, and the tested `/main` to `/dashboard` migration are
+  implemented locally but remain unstaged; business `workspaceId` routes, policy approval,
   deletion purge/recovery, and externally reachable staff administration are
   not complete;
 - the local staff-role foundation remains deliberately unreachable and has no

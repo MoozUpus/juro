@@ -1,7 +1,7 @@
 # JURO R2 storage
 
-Updated: 2026-07-28
-Status: remote inventory verified. Phase 1 created and re-read six approved empty private EEUR Standard development/staging target buckets. No object was created, copied, deleted, exposed, or rebound; production storage was unchanged.
+Updated: 2026-07-29
+Status: remote inventory verified. Six approved private EEUR Standard development/staging target buckets exist. `juro-staging-backups` contains three verified staging D1 checkpoint exports; all other target buckets remain without verified application content. Production storage was unchanged.
 
 ## Verified remote state
 
@@ -11,8 +11,8 @@ Status: remote inventory verified. Phase 1 created and re-read six approved empt
 | Development primary legacy | `juro-private-documents-development` | exists; private |
 | Development backup legacy | `juro-private-backups-development` | exists; private |
 | Development quarantine legacy | `juro-quarantine-development` | exists; private |
-| Development targets | `juro-development-files`, `juro-development-backups`, `juro-development-quarantine` | exist; empty; private; EEUR Standard; unbound |
-| Staging targets | `juro-staging-files`, `juro-staging-backups`, `juro-staging-quarantine` | exist; empty; private; EEUR Standard; unbound |
+| Development targets | `juro-development-files`, `juro-development-backups`, `juro-development-quarantine` | exist; no verified application objects; private; EEUR Standard |
+| Staging targets | `juro-staging-files`, `juro-staging-backups`, `juro-staging-quarantine` | exist; private; EEUR Standard; backups contains three verified D1 SQL checkpoints, while files/quarantine have no verified application objects |
 | Production backup/quarantine | — | absent |
 
 `site-creator-r2` is a Sites-managed/non-JURO-primary resource and is not repurposed for document, backup, or quarantine storage.
@@ -25,7 +25,7 @@ Status: remote inventory verified. Phase 1 created and re-read six approved empt
 | Staging | `juro-staging-files` | `juro-staging-backups` | `juro-staging-quarantine` |
 | Production | `juro-private-documents` | `juro-production-backups` | `juro-production-quarantine` |
 
-Every bucket in the verified remote inventory is private and has no public development URL or custom domain. `juro-production-backups` and `juro-production-quarantine` are approved target names only and do not currently exist. Creation of an empty bucket is not proof of backup, restore, quarantine, or malware scanning. Application access uses an authorized backend proxy or narrowly scoped short-lived signed URL after session, tenant, object, method, disposition, and audit checks.
+Every bucket in the verified remote inventory is private and has no public development URL or custom domain. `juro-production-backups` and `juro-production-quarantine` are approved target names only and do not currently exist. The three staging SQL objects prove only the recorded D1 backup/restore checks; bucket existence alone is not proof of user-file backup, quarantine, or malware scanning. Application access uses an authorized backend proxy or narrowly scoped short-lived signed URL after session, tenant, object, method, disposition, and audit checks.
 
 ## Object model
 

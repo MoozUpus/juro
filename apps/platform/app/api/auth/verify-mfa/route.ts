@@ -73,7 +73,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       ? result.accountType
       : "individual";
     const redirectTo = result.onboardingCompletedAt
-      ? `/${userLocale}/${accountType}/main`
+      ? `/${userLocale}/${accountType}/dashboard`
       : `/${userLocale}/onboarding`;
     return jsonNoStore({ ok: true, redirectTo }, 200, [
       clearMfaChallengeCookie(),

@@ -11,7 +11,7 @@ Integration branch baseline: `1d3d23d` before this documentation update
 - All migrations apply successfully to a new local SQLite database.
 - Local migrated result: 105 non-internal tables, 146 foreign keys; zero foreign-key violations.
 - No destructive `DROP` statement was found.
-- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0028` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Its post-migration export/private-R2 round trip restores locally with integrity `ok` and zero foreign-key violations. No production/development data or schema was mutated.
+- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0028` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Its post-migration export/private-R2 round trip restores locally with integrity `ok` and zero foreign-key violations, and a disposable remote EEUR D1 reproduced the same ledger/table/trigger/FK state before deletion. No production/development data or schema was mutated.
 
 ## Existing migration outline
 
@@ -184,4 +184,4 @@ Before any further remote migration or any migration of a populated database; D-
 9. validate data invariants and the document-builder regression;
 10. keep production unchanged until explicit approval.
 
-Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Three protected portable checkpoints round-trip through private R2 and restore locally with integrity/FK checks. Runtime behavior and a disposable remote-D1 import drill remain unverified; production/development remain unchanged.
+Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Three protected portable checkpoints round-trip through private R2 and restore locally with integrity/FK checks. The post-`0028` artifact also reproduced the same ledger/table/trigger inventory and zero foreign-key errors in a disposable remote EEUR D1, which was deleted after verification. Runtime behavior and operational RTO remain unverified; production/development remain unchanged.

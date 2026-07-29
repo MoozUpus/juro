@@ -68,7 +68,7 @@ export function InviteAcceptClient({
         return;
       }
       setState("accepted");
-      router.replace(body.redirectTo || `/${locale}/individual/main`);
+      router.replace(body.redirectTo || `/${locale}/individual/dashboard`);
     } catch {
       setError(text.networkError);
       setState("error");

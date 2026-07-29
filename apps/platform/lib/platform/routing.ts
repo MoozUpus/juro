@@ -3,7 +3,7 @@ export type PersonalAccountType = "individual" | "entrepreneur" | "lawyer";
 export type AccountType = PersonalAccountType | "business";
 
 export const PLATFORM_MODULES = [
-  "main",
+  "dashboard",
   "ai-chat",
   "cases",
   "document-review",

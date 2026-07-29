@@ -150,7 +150,7 @@ test("permanently redirects legacy test routes and preserves safe context", asyn
 test("canonical product entry routes preserve language and account type", async () => {
   const worker = await createWorker();
   const routes = new Map([
-    ["/dashboard?lang=uz&accountType=business", "/uz/business/main"],
+    ["/dashboard?lang=uz&accountType=business", "/uz/business/dashboard"],
     ["/ai-lawyer?lang=ru", "/ru/individual/ai-chat"],
     ["/action-plans?lang=uz", "/uz/individual/action-plan"],
     ["/subscriptions?accountType=business", "/ru/business/billing"],
@@ -200,6 +200,18 @@ test("rejects unauthenticated document writes and disables caching", async () =>
   }), runtime, context);
   assert.equal(response.status, 401);
   assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+});
+
+test("permanently redirects localized legacy main routes to dashboard", async () => {
+  const worker = await createWorker();
+  for (const [source, target] of [
+    ["/ru/individual/main", "/ru/individual/dashboard"],
+    ["/uz/business/main", "/uz/business/dashboard"],
+  ]) {
+    const response = await worker.fetch(new Request(`http://localhost${source}`, { redirect: "manual" }), runtime, context);
+    assert.equal(response.status, 308, source);
+    assert.equal(new URL(response.headers.get("location") ?? "", "http://localhost").pathname, target, source);
+  }
 });
 
 test("protected writes require a canonical same-origin browser context", async () => {

@@ -469,9 +469,9 @@ test("staff role lifecycle is internal, fresh-MFA-gated, and atomically audited"
 test("canonical platform route classifier is stable", () => {
   assert.ok(isLocale("ru"));assert.ok(isLocale("uz"));assert.ok(!isLocale("en"));
   assert.ok(isAccountType("individual"));assert.ok(isAccountType("entrepreneur"));assert.ok(isAccountType("lawyer"));assert.ok(isAccountType("business"));assert.ok(!isAccountType("admin"));
-  assert.ok(isPlatformModule("action-plan"));assert.ok(!isPlatformModule("document-builder-test"));
+  assert.ok(isPlatformModule("dashboard"));assert.ok(isPlatformModule("action-plan"));assert.ok(!isPlatformModule("main"));assert.ok(!isPlatformModule("document-builder-test"));
   assert.equal(platformPath("uz","business","document-builder"),"/uz/business/document-builder");
-  assert.equal(platformPath("ru","lawyer","main"),"/ru/lawyer/main");
+  assert.equal(platformPath("ru","lawyer","dashboard"),"/ru/lawyer/dashboard");
 });
 
 test("legacy builder routing preserves every supported profile persona", async () => {

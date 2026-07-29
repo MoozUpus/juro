@@ -118,7 +118,7 @@ function deterministicPersonalWorkspaceId(userId: string): string {
  * individual route until the separate account-route migration is completed.
  */
 export function onboardingRedirect(locale: "ru" | "uz"): string {
-  return `/${locale}/individual/main`;
+  return `/${locale}/individual/dashboard`;
 }
 
 async function hasCurrentRegistrationPolicyEvidence(

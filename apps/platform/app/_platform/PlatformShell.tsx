@@ -45,7 +45,7 @@ type Props = {
 };
 
 const nav = [
-  ["main", Home, "Главная", "Bosh sahifa"], ["ai-chat", Bot, "AI-юрист", "AI-yurist"],
+  ["dashboard", Home, "Главная", "Bosh sahifa"], ["ai-chat", Bot, "AI-юрист", "AI-yurist"],
   ["cases", BriefcaseBusiness, "Мои дела", "Mening ishlarim"], ["documents", Files, "Документы", "Hujjatlar"],
   ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"], ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"],
   ["monitoring", Scale, "Мониторинг", "Monitoring"],
@@ -173,7 +173,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
     <div className="platform-main"><header className="platform-topbar"><button ref={openButtonRef} className="platform-menu" onClick={()=>setOpen(true)} aria-label={locale === "ru" ? "Открыть меню" : "Menyuni ochish"} aria-expanded={open} aria-controls="platform-navigation"><Menu/></button><div><small>{locale === "ru" ? "JURO · защищённое пространство" : "JURO · himoyalangan makon"}</small><strong>{userName}</strong></div><div><GlobalSearch locale={locale} accountType={accountType}/><button onClick={switchLanguage} aria-label={locale === "ru" ? "Переключить на узбекский" : "Rus tiliga o‘tish"}><Languages/>{locale.toUpperCase()}</button><Link href={`${base}/profile`} aria-label={locale === "ru" ? "Профиль" : "Profil"}><UserRound/></Link><LogoutButton locale={locale} label={locale === "ru" ? "Выйти" : "Chiqish"}/></div></header><main className="platform-content" id="main-content">{children}</main>
       <nav className="platform-mobile-nav" aria-label={locale === "ru" ? "Мобильная навигация" : "Mobil navigatsiya"}>
         {[
-          ["main", Home, locale === "ru" ? "Главная" : "Bosh sahifa"],
+          ["dashboard", Home, locale === "ru" ? "Главная" : "Bosh sahifa"],
           ["ai-chat", Bot, locale === "ru" ? "AI-юрист" : "AI-yurist"],
           ["cases", BriefcaseBusiness, locale === "ru" ? "Дела" : "Ishlar"],
           ["documents", Files, locale === "ru" ? "Документы" : "Hujjatlar"],

@@ -1,6 +1,6 @@
 # JURO D1 migrations
 
-Updated: 2026-07-28
+Updated: 2026-07-29
 Latest source migration: `0028_orange_nightmare.sql`
 Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0028` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger. Its post-migration export restores with `integrity_check = ok`, zero foreign-key violations, 107 non-internal tables, and 58 triggers. No production migration was run.
 
@@ -41,6 +41,14 @@ successfully. Wrangler reports no pending staging migrations. A third export
 of the `0000`–`0028` state passed the same restore, integrity, foreign-key,
 table, trigger, and ledger checks. The exact artifact hashes and protected
 object references are recorded in `BACKUP-RESTORE.md`.
+
+The exact post-`0028` artifact was also imported on 2026-07-29 into a separate
+remote EEUR D1. Source and restore agreed on the 29-entry migration ledger,
+107 non-internal tables, 58 triggers, the final five migration rows, and zero
+foreign-key violations. Wrangler processed 396 import queries with 667 rows
+written. The disposable database was reidentified by exact name/UUID and
+deleted after evidence capture. This verifies logical remote import for the
+staging artifact, not production compatibility or an operational RTO.
 
 Remote D1 rejects `PRAGMA integrity_check` through the service authorization
 boundary. The integrity claim above comes from the exact exported bytes after
@@ -535,14 +543,15 @@ and accepted the same statement with LF. Repository-root `.gitattributes` now
 pins `apps/platform/drizzle/*.sql text eol=lf`. No checked-in migration content
 was rewritten.
 
-The later staging migration record and artifact hashes are documented near the
-top of this file and in `BACKUP-RESTORE.md`. Application/runtime binding,
-remote disposable-D1 import timing, row-level business invariants, and RTO
-remain unverified. Before application enablement or any further staging
+The later staging migration record, artifact hashes, and disposable remote-D1
+import are documented near the top of this file and in `BACKUP-RESTORE.md`.
+Application/runtime behavior, mutating row-level business invariants, and an
+operational RTO remain unverified. Before application enablement or any further staging
 migration:
 
 1. create and verify a new portable external checkpoint for that migration;
-2. complete a disposable remote-D1 import drill before claiming operational RTO;
+2. repeat a disposable remote-D1 import drill for the new checkpoint and do
+   not infer operational RTO from the 2026-07-29 logical-import result;
 3. record the current staging bookmark, checksum, manifest, and exact ledger
    without storing secret values;
 4. verify that no user has multiple `requested`/`reviewing` deletion rows,

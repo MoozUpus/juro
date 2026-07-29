@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
 export default async function WorkspaceLayout({ children, params }: { children: React.ReactNode; params: Promise<{ locale: string; accountType: string }> }) {
   const { locale, accountType } = await params;
   if (!isLocale(locale) || !isAccountType(accountType)) notFound();
-  const user = await requireChatGPTUser(`/${locale}/${accountType}/main`);
+  const user = await requireChatGPTUser(`/${locale}/${accountType}/dashboard`);
   const userProfile = await getOrCreateUserProfile(user);
   let profile = await workspaceProfile(user.email);
   if (!profile) {
@@ -48,7 +48,7 @@ export default async function WorkspaceLayout({ children, params }: { children: 
       : profile?.accountType === "business"
         ? "individual"
         : (profile?.accountType ?? "individual");
-    redirect(`/${profile?.locale ?? locale}/${destination}/main`);
+    redirect(`/${profile?.locale ?? locale}/${destination}/dashboard`);
   }
   if (
     activeWorkspace.type === "individual"
@@ -56,7 +56,7 @@ export default async function WorkspaceLayout({ children, params }: { children: 
     && profile.accountType !== "business"
     && profile.accountType !== accountType
   ) {
-    redirect(`/${profile.locale}/${profile.accountType}/main`);
+    redirect(`/${profile.locale}/${profile.accountType}/dashboard`);
   }
   const availableWorkspaces = await workspacesForUser(userProfile.id);
   return <PlatformShell

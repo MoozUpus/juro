@@ -1,7 +1,7 @@
 # JURO backup and restore boundary
 
-Updated: 2026-07-28
-Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, and isolated local SQL restore checks are verified through migration `0028`. A disposable remote-D1 import drill, scheduled backup automation, production protection, and an operational RTO remain unverified.
+Updated: 2026-07-29
+Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and a disposable remote-D1 import drill are verified through migration `0028`. Scheduled backup automation, production protection, and an operational RTO remain unverified.
 
 ## What is not a backup
 
@@ -109,12 +109,23 @@ downloaded again, and compared byte-for-byte:
 | after `0022`–`0024`, before retry | `d1/juro-staging/20260728T231145Z/pre-0025-0028.sql` | 101,926 | `27180d625c96f13b370cfedc05d2c290531a9b9106b7ef063cd95f643434474e` | 25 migrations; 99 non-internal tables; integrity `ok`; zero FK errors |
 | after `0028` | `d1/juro-staging/20260728T231347Z/post-0028.sql` | 137,345 | `20e9d14e5eb279160eeebb59cd839882f3ff70afb758924a15bcd735965b981c` | 29 migrations; 107 non-internal tables; 58 triggers; integrity `ok`; zero FK errors |
 
-The first checkpoint restored 325 SQL commands. Each restore used the exact
-downloaded bytes in a separate local SQLite database; no application data or
+The first checkpoint restored 325 SQL commands. Each local restore used the
+exact downloaded bytes in a separate SQLite database; no application data or
 signed export URL was printed or committed. The R2 objects are private and
-contain staging schema/data only. This proves portable bytes, protected-object
-retrieval, and local logical recoverability; it does not prove Cloudflare-side
-remote import time or production RTO.
+contain staging schema/data only.
+
+On 2026-07-29 the exact `post-0028.sql` object was downloaded again and its
+137,345-byte size and SHA-256 were reverified before import into disposable
+EEUR D1 `juro-staging-restore-drill-20260729`
+(`0c3f0d3c-b752-4aff-83b9-17621a5ef92e`). Wrangler processed 396 queries,
+reported 515 rows read, 667 rows written, a 33.63 ms D1 SQL duration, and final
+bookmark `00000000-0000002e-000050b7-46635df5f2714068c57af19c5a56f025`.
+Identical read-only queries against source and restored D1 returned 29
+migrations, 108 total/107 non-internal tables, 58 triggers, matching final five
+migration rows, and zero `foreign_key_check` results. The disposable name/ID
+was revalidated, the database was deleted, and the local temporary copy was
+removed. This proves the remote logical import path for this staging artifact;
+it is not a production RTO or an incident/load recovery measurement.
 
 The earlier Time Travel drill remains valid and separate. A pre-migration
 bookmark at `2026-07-28T23:00:35Z` was also recorded as
@@ -124,7 +135,7 @@ post-migration checks passed.
 
 Still not verified:
 
-- a disposable remote-D1 import of the portable artifact and timed recovery;
+- an operational RTO/RPO under representative incident conditions and load;
 - production/development export, backup, restore, or bookmark state;
 - R2 user-file backup and object-level recovery;
 - scheduled backup execution, retention cleanup, failure alert, and RTO;

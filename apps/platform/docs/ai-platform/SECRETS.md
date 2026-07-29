@@ -1,7 +1,7 @@
 # JURO server-only secrets
 
 Updated: 2026-07-28
-Status: names, contracts, and read-only presence inventory only; no secret value is stored here, in Git, or in the client bundle.
+Status: names, contracts, and read-only presence inventory only; no secret value is stored here, in Git, or in the client bundle. On 2026-07-29, after the owner reported entering staging values, Wrangler and the Worker settings API still returned zero secret bindings for the exact `juro-platform-staging` service.
 
 ## Verified remote presence by name
 
@@ -10,6 +10,14 @@ The production Sites runtime exposes variables `APP_URL`, `EMAIL_FROM`, and `PUB
 No inspected production surface exposed the following required names: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `SESSION_SECRET`, `ENCRYPTION_KEY`, `OTP_HASH_SECRET`, `CRON_SECRET`, `TURNSTILE_SECRET_KEY`, `TOTP_ENCRYPTION_KEY`, or `SIGNED_URL_SECRET`. The public environment variable `TURNSTILE_SITE_KEY` was also absent from the inspected surfaces.
 
 Only names were inventoried. A Sites connector operation unexpectedly returned a bypass bearer token in raw connector telemetry. The value was not copied, used, persisted, or committed and is intentionally absent from this document. It must be rotated/revoked before production work.
+
+The staging recheck used both `--name juro-platform-staging` and
+`--env staging`; each returned `[]`. The Worker version timestamp also
+predates the reported entry action. The production Worker still has its
+pre-existing `RESEND_API_KEY`; no evidence indicates that new staging values
+were attached there. No account Secrets Store or local secret file was found.
+This is a binding-location blocker, not evidence that a provider credential is
+invalid.
 
 ## Identity key ring
 

@@ -1160,3 +1160,79 @@ no preview URL; legacy Worker `juro` remained on version
 `91774ed4-72e9-47bb-b93a-a4208d490b24` and deployment
 `54aee3c6-39eb-4a16-ae59-c74418ae599f`. No production deployment, migration,
 route, domain, or resource mutation was authorized or performed.
+
+## D-057 — use `dashboard` as the canonical local module and preserve `main` as a redirect
+
+Status: accepted and locally verified; production unchanged
+Date: 2026-07-29
+
+The target architecture names the primary workspace route
+`/:locale/:accountType/dashboard`. The integration branch now uses
+`dashboard` in the module classifier, desktop/mobile navigation, root and
+workspace entry, OTP/MFA completion, onboarding completion, workspace
+selection, and invitation completion. `main` is no longer an accepted
+platform module.
+
+Existing inbound `/:locale/:accountType/main` URLs are preserved through a
+method-preserving 308 handler. The unlocalized `/main` compatibility page
+continues to resolve the authenticated user's saved locale/persona and then
+enters `dashboard`. Rendered-Worker tests cover RU individual and UZ business
+legacy redirects; the complete type-check, lint, test, staging build,
+staging-artifact, generated binding, and three-environment configuration
+checks pass. The required document-builder route remains present in the route
+manifest.
+
+This is an additive source migration. It does not claim the final business
+`/:locale/business/:workspaceId/...` contract, change production routes, or
+authorize a staging/production deployment.
+
+## D-058 — do not attach staging traffic until secrets and Access exist on the exact boundary
+
+Status: blocked by verified external configuration
+Date: 2026-07-29
+
+After the owner reported entering staging secrets, the authenticated Wrangler
+session was rechecked against the exact `juro-platform-staging` service.
+`wrangler secret list --name juro-platform-staging`,
+`wrangler secret list --env staging`, and the Worker settings API all
+returned zero secret bindings. The Worker version and modification timestamp
+also remained unchanged. No local secret file/process value or account
+Secrets Store was present. Secret values were neither read nor requested.
+
+The proposed hostname `staging.app.juro.uz` remains absent from DNS. A
+read-only Access application query failed with
+`access.api.error.not_enabled`, proving that the account has no enabled
+Cloudflare Access control plane for an owner-only policy.
+
+The staging Worker therefore remains intentionally unreachable: no custom
+domain, route, Workers.dev/preview URL, schedule, consumer, or feature
+activation may be added. The next external actions are to attach the required
+bindings to the exact staging Worker and enable Access; only then may an
+owner-only policy be created and unauthenticated denial proven before DNS or a
+Worker domain is attached. Production and Sites remain unchanged.
+
+## D-059 — accept the post-0028 staging backup as remotely importable, not as an operational RTO
+
+Status: accepted and verified for isolated staging only
+Date: 2026-07-29
+
+The exact private-R2 `post-0028.sql` object was downloaded, rehashed to
+`20e9d14e5eb279160eeebb59cd839882f3ff70afb758924a15bcd735965b981c`,
+and imported into disposable EEUR D1 `juro-staging-restore-drill-20260729`
+(`0c3f0d3c-b752-4aff-83b9-17621a5ef92e`). Wrangler processed 396 queries and
+reported 667 rows written. Identical source/restore queries returned 29
+migrations, 107 non-internal tables, 58 triggers, matching final migration
+rows, and zero foreign-key violations.
+
+After exact name/UUID revalidation, only the disposable database was deleted;
+the local temporary copy was also removed. `juro-staging`, development,
+production, Sites, DNS, Workers, routes, and secrets were not mutated by the
+drill. The measured 33.63 ms D1 SQL duration is import telemetry, not an
+incident RTO. Every future migration needs a new checkpoint and restore drill,
+and production recovery remains separately blocked.
+
+The Phase 2 read-only preflight was then run against exact `juro-staging` with
+zero writes. Null-workspace document/file counts were zero; duplicate active
+deletion, collaborator, acceptance, encrypted-profile-key, and staff-role
+queries returned empty sets. This permits continued empty-state compatibility
+work but does not activate identity runtime or prove HTTP/provider behavior.

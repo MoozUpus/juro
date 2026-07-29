@@ -347,7 +347,7 @@ test("RU onboarding stores split names and normalized phone without broad consen
       ok: true,
       accountPersona: "lawyer",
       workspaceId: "ws_personal_onboardinguser",
-      redirectTo: "/ru/individual/main",
+      redirectTo: "/ru/individual/dashboard",
     });
     const profile = sqlite.prepare(
       `SELECT
@@ -427,7 +427,7 @@ test("UZ onboarding reuses the existing personal workspace", async () => {
       ok: true,
       accountPersona: "entrepreneur",
       workspaceId: "individual-workspace",
-      redirectTo: "/uz/individual/main",
+      redirectTo: "/uz/individual/dashboard",
     });
     const profile = sqlite.prepare(
       `SELECT phone,middle_name AS middleName,locale,
@@ -536,6 +536,6 @@ test("onboarding UI exposes complete RU/UZ profile and goal contracts", async ()
   assert.doesNotMatch(client, /acceptPolicies|onboarding-consent/);
   assert.match(route, /handleOnboardingRequest/);
   assert.match(route, /assertSafeWrite\(request\)/);
-  assert.equal(onboardingRedirect("ru"), "/ru/individual/main");
-  assert.equal(onboardingRedirect("uz"), "/uz/individual/main");
+  assert.equal(onboardingRedirect("ru"), "/ru/individual/dashboard");
+  assert.equal(onboardingRedirect("uz"), "/uz/individual/dashboard");
 });

@@ -53,9 +53,10 @@ sessions; a later failure requires a fresh code.
 - local tests cover one-winner concurrency, replay, stale identity evidence,
   owner-role preservation, and full rollback when audit insertion fails.
 
-The redirect still uses `/:locale/:accountType/main` rather than the target
-business route containing `workspaceId`. The immutable acceptance claim does
-not make `workspace_audit_events` a general append-only hash chain.
+The redirect now uses canonical `/:locale/:accountType/dashboard`; the target
+business route still lacks its required `workspaceId` segment. The immutable
+acceptance claim does not make `workspace_audit_events` a general append-only
+hash chain.
 
 ### Files
 
@@ -107,9 +108,10 @@ not make `workspace_audit_events` a general append-only hash chain.
   selecting a business workspace changes the active workspace route but no
   longer rewrites the user's persistent personal persona.
 
-The current canonical platform module remains `/main`; migration to the target
-`/dashboard` path and business routes containing `workspaceId` are separate
-route-migration work and are not claimed by this checkpoint.
+The current canonical platform module is now `/dashboard`; localized legacy
+`/main` routes receive a tested method-preserving 308 redirect. Business
+routes containing `workspaceId` remain separate route-migration work and are
+not claimed by this checkpoint.
 
 ### Identity cryptography foundation
 
@@ -399,11 +401,11 @@ handling, 24-hour/30-day session persistence, structured onboarding,
 persona-preserving workspace selection, canonical localized auth routes, and the full existing builder/
 comparison/rendered Worker regression suite.
 
-The latest recorded local full suite passes 288/288 checks: 25 rendered
-Worker/security checks, 204 core/document/auth checks, and 59 Cloudflare
-configuration/migration/job checks. The generated migration schema contains
-97 tables with zero foreign-key integrity errors. Local evidence is not
-staging or production evidence.
+The latest recorded local full suite passes 336/336 checks: 27 rendered
+Worker/security checks, 241 core/document/auth checks, and 68 Cloudflare
+configuration/migration/job checks. The full local migration sequence contains
+105 non-internal tables and zero foreign-key integrity errors. Local evidence
+is not staging or production runtime evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
 
@@ -418,7 +420,8 @@ It has not been executed against a remote environment in this slice.
 Before enabling OTP/MFA in staging:
 
 1. retain and re-read the completed Cloudflare inventory and the three verified portable staging checkpoints;
-2. complete the remaining disposable remote-D1 import drill before claiming operational RTO;
+2. repeat the disposable remote-D1 import drill for any new checkpoint; the
+   verified 2026-07-29 logical import does not establish operational RTO;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests and confirm
    the exact `0000`–`0028` ledger while keeping identity mode `legacy`;
@@ -506,6 +509,19 @@ FROM platform_staff_assignments;
 SELECT count(*) AS platform_staff_role_events
 FROM platform_staff_role_events;
 ```
+
+### Read-only staging preflight — 2026-07-29
+
+All nine query groups above were executed against exact D1 `juro-staging`
+(`bb716a96-b2fb-4823-90d6-6c228fed181a`) in EEUR before any identity runtime
+activation. Wrangler reported `changes: 0` and `rows_written: 0` throughout.
+The collaborator distribution, duplicate active deletion requests, acceptance
+methods, encrypted-profile key groups, and both staff tables returned empty
+sets; null-workspace documents and files were both `0`; `user_profiles` was
+empty, with `legacy_email = NULL` and `legacy_phone = NULL` aggregate results.
+No row contents, identifiers, addresses, or secret-derived values were logged.
+This is an empty-state compatibility preflight, not authenticated HTTP,
+provider, concurrency, or future-data evidence.
 
 ## Not complete
 

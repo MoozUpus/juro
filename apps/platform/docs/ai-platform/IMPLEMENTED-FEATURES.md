@@ -14,16 +14,16 @@ staging or production evidence.
 | Turnstile | Server Siteverify integration with action `auth_otp`, exact hostname, optional remote IP, eight-second timeout, schema validation, and fail-closed invalid/unavailable handling; client widget integrated into auth flow | Real site/secret bindings, hostname configuration, provider response, browser widget, and Resend mailbox flow in staging |
 | Session persistence | 24-hour default and 30-day explicit remember-me absolute lifetimes; aligned cookie `Max-Age` and D1 expiry; same choice after OTP or MFA; strict boolean inputs with false default; existing seven-day idle cap | Remote cookie/session behavior; rotation, fixation/replay detection, region signals, and security email |
 | Structured onboarding | Canonical `/:locale/onboarding`; strict 4 KiB Zod input; required separate names, normalized phone with explicit unverified evidence, personal persona, primary goal, and exact current policy digests; deterministic personal workspace creation; staging migration `0024` applied | Protected staging browser flow; final policy approval; phone verification |
-| Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; workspace switches preserve the stored persona; legacy builder redirects preserve supported personas | Staging HTTP/browser evidence; business `workspaceId` route; planned `/main` to `/dashboard` migration |
+| Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; workspace switches preserve the stored persona; `dashboard` is canonical and localized `main` uses a tested 308 redirect; legacy builder redirects preserve supported personas | Staging HTTP/browser evidence; business `workspaceId` route |
 
 ## Evidence checkpoint
 
 The latest recorded successful local full suite contains:
 
-- 26 rendered-route/security tests;
+- 27 rendered-route/security tests;
 - 241 core/auth/document tests;
 - 68 Cloudflare/migration/job tests, including the remote-D1 trigger syntax regression;
-- 334 tests total.
+- 336 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. It does not substitute for remote migrations,

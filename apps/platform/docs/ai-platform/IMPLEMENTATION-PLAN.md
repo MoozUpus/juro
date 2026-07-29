@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-29
-Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded browser baseline, empty-staging Time Travel drill, and the inactive staging Worker gate are verified. Owner-approved Wrangler OAuth created three portable/private-R2/local-restore checkpoints, applied staging migrations through `0028`, and deployed inactive Worker `juro-platform-staging` from pushed/CI-green commit `29a3d9a`. Phase 2 identity/workspace and Phase 3 legal-source schema are present in isolated staging, while subdomain/previews, routes, schedules, consumers, secrets, and all related runtime execution remain absent or disabled. Advice and global async runtime remain disabled. No bulk crawler, replacement-version activation, Vectorize retrieval, citation validator, Cron, externally reachable editor, or legal-source activation is claimed. Live providers, full browser/a11y/performance, DNS, runtime secrets, protected-hostname gates, and a disposable remote-D1 import drill remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded browser baseline, empty-staging Time Travel drill, and the inactive staging Worker gate are verified. Owner-approved Wrangler OAuth created three portable/private-R2/local-restore checkpoints, completed a disposable remote-D1 logical import drill, applied staging migrations through `0028`, and deployed inactive Worker `juro-platform-staging` from pushed/CI-green commit `29a3d9a`. Phase 2 identity/workspace and Phase 3 legal-source schema are present in isolated staging, while subdomain/previews, routes, schedules, consumers, secrets, and all related runtime execution remain absent or disabled. A post-entry recheck still found zero staging Worker secret bindings, and Cloudflare Access is not enabled. Advice and global async runtime remain disabled. No bulk crawler, replacement-version activation, Vectorize retrieval, citation validator, Cron, externally reachable editor, or legal-source activation is claimed. Live providers, operational RTO, full browser/a11y/performance, DNS, runtime secrets, and protected-hostname gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -88,8 +88,11 @@ Local checkpoint only; none of these statements is a staging or production claim
 - canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
   root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
   and selecting a workspace no longer rewrites the stored persona;
-- the latest recorded successful local full suite is 330 tests: 25 rendered
-  route, 237 core, and 68 Cloudflare tests.
+- `/:locale/:accountType/dashboard` is now the local canonical dashboard
+  route; shell/auth/onboarding/workspace/invitation transitions use it, while
+  `/:locale/:accountType/main` is a tested 308 compatibility redirect;
+- the latest recorded successful local full suite is 336 tests: 27 rendered
+  route, 241 core, and 68 Cloudflare tests.
 
 Vertical slices:
 
@@ -287,13 +290,14 @@ Then stop and request two separate explicit approvals: first for production depl
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
 2. Production D1 cannot be migrated before production-specific backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0028` with portable/private-R2/local-restore evidence but no remote disposable-D1 import timing.
-3. Provider and security secrets are absent by name except `RESEND_API_KEY`; `TURNSTILE_SECRET_KEY` and the environment-specific public `TURNSTILE_SITE_KEY` are not configured on the inspected surfaces. Required values must be entered directly in the Cloudflare/provider controls, never in chat. Real Turnstile and Resend delivery are unverified.
-4. Operator legal identity placeholders require owner-supplied approved legal details.
-5. Final RU/UZ policies and the legal-language priority rule require legal approval.
-6. Malware scanner and audio/video providers require selection only after adapter and privacy/cost evaluation.
-7. Live Queue consumers require quarantine/DLQ consumption, alerts, redrive, durable ledger reconciliation, and per-kind producer/handler flags.
-8. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing. Consumers remain absent and the global runtime is disabled. Only `legal.sync` has a local handler; every other valid v2 job fails closed as `JOB_HANDLER_NOT_ENABLED`.
-9. The Sites deployment pipeline must prove it selects the explicit production build; ordinary `npm run build` intentionally produces development.
-10. The Browser bootstrap was recovered through a session-local CommonJS package scope without modifying JURO or the user-home package. Bounded builder viewport evidence exists; keyboard/focus, zoom, reduced-motion, axe, Lighthouse, real-device, and broader critical-route validation remain open.
-11. No approved rigged 3D Jurobek asset is present; avatar/voice-with-avatar remains disabled and a static fallback is mandatory.
-12. Rotate/revoke the Sites bypass token unexpectedly exposed in read-only connector telemetry before production work.
+3. Provider and security secrets are absent by name except the pre-existing production `RESEND_API_KEY`. After the owner reported entering staging values, the exact staging Worker still returned zero secret bindings through two Wrangler selectors and the settings API. `TURNSTILE_SECRET_KEY` and environment-specific public `TURNSTILE_SITE_KEY` therefore remain unconfigured on staging. Values must be attached directly to `juro-platform-staging`, never sent in chat. Real Turnstile and Resend delivery are unverified.
+4. Cloudflare Access is not enabled for the account (`access.api.error.not_enabled`), so the owner-only staging hostname boundary cannot be created or tested yet.
+5. Operator legal identity placeholders require owner-supplied approved legal details.
+6. Final RU/UZ policies and the legal-language priority rule require legal approval.
+7. Malware scanner and audio/video providers require selection only after adapter and privacy/cost evaluation.
+8. Live Queue consumers require quarantine/DLQ consumption, alerts, redrive, durable ledger reconciliation, and per-kind producer/handler flags.
+9. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing. Consumers remain absent and the global runtime is disabled. Only `legal.sync` has a local handler; every other valid v2 job fails closed as `JOB_HANDLER_NOT_ENABLED`.
+10. The Sites deployment pipeline must prove it selects the explicit production build; ordinary `npm run build` intentionally produces development.
+11. The Browser bootstrap was recovered through a session-local CommonJS package scope without modifying JURO or the user-home package. Bounded builder viewport evidence exists; keyboard/focus, zoom, reduced-motion, axe, Lighthouse, real-device, and broader critical-route validation remain open.
+12. No approved rigged 3D Jurobek asset is present; avatar/voice-with-avatar remains disabled and a static fallback is mandatory.
+13. Rotate/revoke the Sites bypass token unexpectedly exposed in read-only connector telemetry before production work.
