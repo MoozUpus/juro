@@ -12,7 +12,12 @@ import {
 import {
   identityKeyring,
   mfaErrorResponse,
+  optionalIdentityKeyring,
 } from "../../../../lib/auth/mfa-http";
+import {
+  authRequestSecurityContext,
+  prepareAuthRequestSecurityEvidence,
+} from "../../../../lib/auth/request-security-evidence";
 import {
   createLoginMfaChallenge,
   hasActiveMfa,
@@ -234,6 +239,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const session = await createPrimarySessionIfMfaDisabled(db, {
     userId: user.id,
     userAgent: request.headers.get("user-agent"),
+    securityEvidence: await prepareAuthRequestSecurityEvidence(
+      optionalIdentityKeyring(),
+      user.id,
+      authRequestSecurityContext(request),
+    ),
     rememberMe: body.rememberMe,
     now: new Date(now),
   });

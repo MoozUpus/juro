@@ -385,6 +385,33 @@ test("email OTP defers primary-session issuance while MFA is active", async () =
   );
 });
 
+test("successful OTP and MFA routes record bounded request evidence", async () => {
+  const [verifyOtp, verifyMfa, evidence] = await Promise.all([
+    readFile(
+      new URL("../app/api/auth/verify-otp/route.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/api/auth/verify-mfa/route.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../lib/auth/request-security-evidence.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(verifyOtp, /prepareAuthRequestSecurityEvidence/);
+  assert.match(verifyOtp, /authRequestSecurityContext\(request\)/);
+  assert.match(verifyOtp, /optionalIdentityKeyring/);
+  assert.match(verifyMfa, /securityContext: authRequestSecurityContext\(request\)/);
+  assert.match(evidence, /identityLookupHmac/);
+  assert.match(evidence, /MAX_IP_CHARACTERS = 64/);
+  assert.match(evidence, /MAX_USER_AGENT_CHARACTERS = 512/);
+  assert.match(evidence, /\{ cf\?: IncomingRequestCf \}/);
+  assert.match(evidence, /countryCode/);
+  assert.match(evidence, /regionCode/);
+  assert.doesNotMatch(evidence, /city|postalCode|latitude|longitude/);
+});
 test("MFA HTTP helpers fail closed and accept only a local session", async () => {
   const source = await readFile(
     new URL("../lib/auth/mfa-http.ts", import.meta.url),

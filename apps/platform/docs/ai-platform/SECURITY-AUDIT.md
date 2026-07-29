@@ -299,3 +299,21 @@ Staging infrastructure may be provisioned in isolation, but upload/AI/collaborat
 - verified secrets and no client/log leakage;
 - restore rehearsal;
 - documented residual-risk review.
+
+## Session request evidence control — 2026-07-29 local checkpoint
+
+A successful direct or MFA login can now append privacy-minimized request
+signals to the existing tamper-evident security chain. Raw IP and raw
+User-Agent exist only in request memory long enough to produce versioned,
+user-bound, purpose-separated HMACs. Stored location is limited to sanitized
+country and region codes supplied by the Cloudflare request object. No location
+header from the browser is trusted, and city/postal/coordinate fields are not
+accepted.
+
+Positive tests cover oversized input rejection, code normalization, keyed digest
+shape, raw-value absence in the stored event, both login branches, and chain
+verification. Residual risk remains: this is not device continuity, region can
+change legitimately, and no alert is sent from this signal yet. A stable opaque
+device cookie, revocation semantics, novelty policy, durable notification
+outbox, and false-positive controls require a separate reviewed schema slice.
+The local change has not been exercised over protected staging HTTP.

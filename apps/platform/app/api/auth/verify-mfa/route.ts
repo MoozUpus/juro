@@ -15,6 +15,7 @@ import {
   clearMfaChallengeCookie,
   sessionCookie,
 } from "../../../../lib/auth/session";
+import { authRequestSecurityContext } from "../../../../lib/auth/request-security-evidence";
 import { mfaChallengeTokenFromCookie } from "../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
@@ -65,6 +66,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
         token,
         code,
         userAgent: request.headers.get("user-agent"),
+        securityContext: authRequestSecurityContext(request),
         rememberMe,
       },
     );

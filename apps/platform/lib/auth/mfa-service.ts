@@ -17,6 +17,11 @@ import {
 } from "./identity-protection";
 import { batchWithSecurityEvent } from "./security-events";
 import {
+  prepareAuthRequestSecurityEvidence,
+  requestSecurityEventMetadata,
+  type AuthRequestSecurityContext,
+} from "./request-security-evidence";
+import {
   guardedSessionInsertStatements,
   prepareLocalSessionCreation,
   type CreatedSession,
@@ -1084,6 +1089,7 @@ export async function verifyLoginMfa(
     token: string;
     code: string;
     userAgent: string | null;
+    securityContext?: AuthRequestSecurityContext;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -1152,6 +1158,13 @@ export async function verifyLoginMfa(
     rememberMe: input.rememberMe,
     now,
   });
+  const securityEvidence = input.securityContext
+    ? await prepareAuthRequestSecurityEvidence(
+        keyring,
+        challenge.userId,
+        input.securityContext,
+      )
+    : null;
   const factorGuard = factorConsumedGuard(
     challenge,
     factor,
@@ -1230,10 +1243,13 @@ export async function verifyLoginMfa(
         eventType: "session.created",
         authSource: "local_session",
         assuranceLevel: "mfa",
+        ipHash: securityEvidence?.ipHash ?? null,
+        userAgentHash: securityEvidence?.userAgentHash ?? null,
         metadata: {
           authMethod: prepared.authMethod,
           deviceName: prepared.displayName,
           challengeId: challenge.challengeId,
+          ...requestSecurityEventMetadata(securityEvidence),
         },
         createdAt: timestamp,
       },

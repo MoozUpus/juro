@@ -156,3 +156,14 @@ foundation checkpoint.
 - The specialized receipt builder still needs a separate UZ Latin interface
   pass; its Uzbek Cyrillic document-output option is not a substitute for UZ
   Latin application UI.
+
+## Login device and region limitation — 2026-07-29
+
+The local branch can retain privacy-safe HMAC evidence and coarse country/region
+for a successful session, but it does not yet identify a new device. A
+User-Agent hash is not stable device identity and must not trigger a
+"new device" claim by itself. There is no durable device cookie, novelty model,
+new-region policy, or security email for this signal yet. If the identity
+keyring is absent, evidence is intentionally omitted; no raw or unkeyed fallback
+is stored. Protected staging HTTP evidence is pending, and the deployed Worker
+does not contain this local slice.

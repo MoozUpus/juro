@@ -1470,3 +1470,24 @@ canonical builder smoke, and document-comparison smoke pass.
 
 This slice has not been pushed, deployed, or exercised over protected staging
 HTTP. Production is unchanged.
+## D-070 — retain only keyed request evidence and coarse login region
+
+Status: accepted and locally verified; protected staging deployment pending
+Date: 2026-07-29
+
+Successful primary and MFA session creation now derives security evidence from
+the Cloudflare request boundary without persisting raw network or browser
+identifiers. A versioned identity-keyring HMAC domain-separates the connecting
+IP and bounded User-Agent by user. The append-only `session.created` event keeps
+only those keyed digests, the key version, and sanitized country/region codes
+from `request.cf`. City, postal code, coordinates, raw IP, and full User-Agent
+are not stored in event metadata. Missing key material omits the optional
+evidence rather than falling back to an unkeyed fingerprint.
+
+The signal is deliberately not described as a new device: User-Agent and
+approximate region do not establish durable browser identity. Tests cover
+bounds, normalization, key separation, direct OTP and MFA success paths, raw
+value absence, and hash-chain integrity. The full local suite passes 355 tests;
+type-check, lint, the three-environment Cloudflare dry-run matrix, final staging
+build/artifact validation, canonical builder smoke, and comparison smoke pass.
+No migration or dependency is added. Production is unchanged.

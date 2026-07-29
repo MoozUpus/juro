@@ -307,3 +307,22 @@ Then stop and request two separate explicit approvals: first for production depl
 11. The Browser bootstrap was recovered through a session-local CommonJS package scope without modifying JURO or the user-home package. Bounded builder viewport evidence exists; keyboard/focus, zoom, reduced-motion, axe, Lighthouse, real-device, and broader critical-route validation remain open.
 12. No approved rigged 3D Jurobek asset is present; avatar/voice-with-avatar remains disabled and a static fallback is mandatory.
 13. Rotate/revoke the Sites bypass token unexpectedly exposed in read-only connector telemetry before production work.
+
+## Phase 2 checkpoint — privacy-safe login evidence
+
+The local branch now records only keyed IP/UA evidence and coarse Cloudflare
+country/region on successful primary and MFA session creation. The 355-test
+suite and all local build/artifact/smoke gates pass. This closes the storage
+primitive needed for later login-risk policy, but not new-device detection.
+
+Next identity slices remain ordered as follows:
+
+1. add an opaque, server-issued device-continuity cookie and versioned D1 lookup
+   evidence without making the cookie an authentication factor;
+2. define revoke/re-enrol and concurrent-login semantics with additive migration
+   and rollback tests;
+3. calculate new-device/new-region novelty only from durable evidence;
+4. create a generic encrypted security-notification outbox with one-winner
+   idempotency and RU/UZ copy;
+5. prove protected staging HTTP and real provider delivery before enabling
+   alerts.

@@ -11,6 +11,10 @@ import { revokeReplayedSessionToken } from "./session-rotation";
 import {
   batchWithSecurityEvent,
 } from "./security-events";
+import {
+  requestSecurityEventMetadata,
+  type AuthRequestSecurityEvidence,
+} from "./request-security-evidence";
 import { sessionTtlSeconds } from "./session-persistence";
 
 const IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
@@ -235,6 +239,7 @@ export async function createEmailOtpSession(
   input: {
     userId: string;
     userAgent: string | null;
+    securityEvidence?: AuthRequestSecurityEvidence | null;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -253,10 +258,12 @@ export async function createEmailOtpSession(
       eventType: "session.created",
       authSource: "local_session",
       assuranceLevel: "primary",
-      userAgentHash: null,
+      ipHash: input.securityEvidence?.ipHash ?? null,
+      userAgentHash: input.securityEvidence?.userAgentHash ?? null,
       metadata: {
         authMethod: "email_otp",
         deviceName: prepared.displayName,
+        ...requestSecurityEventMetadata(input.securityEvidence),
       },
       createdAt: prepared.createdAt,
     },
@@ -271,6 +278,7 @@ export async function createPrimarySessionIfMfaDisabled(
   input: {
     userId: string;
     userAgent: string | null;
+    securityEvidence?: AuthRequestSecurityEvidence | null;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -298,9 +306,12 @@ export async function createPrimarySessionIfMfaDisabled(
       eventType: "session.created",
       authSource: "local_session",
       assuranceLevel: "primary",
+      ipHash: input.securityEvidence?.ipHash ?? null,
+      userAgentHash: input.securityEvidence?.userAgentHash ?? null,
       metadata: {
         authMethod: "email_otp",
         deviceName: prepared.displayName,
+        ...requestSecurityEventMetadata(input.securityEvidence),
       },
       createdAt: prepared.createdAt,
     },

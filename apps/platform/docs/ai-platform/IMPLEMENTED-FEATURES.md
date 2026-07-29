@@ -86,3 +86,20 @@ buttons instead of pointer-only article clicks. Local type-check, lint, full
 tests, staging build, dry-run, CI, staging deployment, control-plane re-read,
 and anonymous Access denial pass. Authenticated remote browser verification is
 still required before the localized workspace UI is marked fully verified.
+
+## Privacy-safe session request evidence — local checkpoint
+
+- successful email-OTP and MFA session events can record a user-bound,
+  domain-separated HMAC of the bounded connecting IP and User-Agent;
+- metadata retains only key version plus sanitized Cloudflare country and region
+  codes; it excludes city, postal code, coordinates, raw IP, and full UA;
+- missing `IDENTITY_KEYRING` omits the optional evidence instead of creating an
+  unkeyed stable fingerprint;
+- tests prove the direct and MFA paths, no raw-value persistence, and security
+  hash-chain validity;
+- this is risk evidence, not durable device recognition and not a new-device
+  notification claim.
+
+Local evidence: 355/355 tests, type-check, lint, Cloudflare matrix, final staging
+build/artifact, document-builder smoke, and comparison smoke pass. The slice is
+not pushed or deployed; production remains unchanged.

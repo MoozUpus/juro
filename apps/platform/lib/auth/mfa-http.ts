@@ -52,6 +52,12 @@ export function identityKeyring(): IdentityKeyring {
   }
 }
 
+export function optionalIdentityKeyring(): IdentityKeyring | null {
+  const raw = runtimeEnv().IDENTITY_KEYRING?.trim();
+  if (!raw) return null;
+  return parseIdentityKeyring(raw);
+}
+
 export async function localSessionForRequest(
   request: Request,
   options: {

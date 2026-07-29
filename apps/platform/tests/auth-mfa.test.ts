@@ -527,6 +527,12 @@ test("MFA login issues exactly one session and fences replay", async () => {
         token: challenge.token,
         code,
         userAgent: "Browser/3.0",
+        securityContext: {
+          connectingIp: "203.0.113.21",
+          userAgent: "Browser/3.0 private-build",
+          countryCode: "UZ",
+          regionCode: "TK",
+        },
         rememberMe: true,
         now,
       }),
@@ -534,6 +540,12 @@ test("MFA login issues exactly one session and fences replay", async () => {
         token: challenge.token,
         code,
         userAgent: "Browser/3.0",
+        securityContext: {
+          connectingIp: "203.0.113.21",
+          userAgent: "Browser/3.0 private-build",
+          countryCode: "UZ",
+          regionCode: "TK",
+        },
         rememberMe: true,
         now,
       }),
@@ -553,6 +565,35 @@ test("MFA login issues exactly one session and fences replay", async () => {
         ORDER BY created_at DESC LIMIT 1
       `).get() as { expiresAt: string }
     ).expiresAt, "2026-08-25T12:03:30.000Z");
+    const loginEvent = sqlite.prepare(`
+      SELECT ip_hash AS ipHash,user_agent_hash AS userAgentHash,
+        metadata_json AS metadataJson
+      FROM security_events
+      WHERE event_type='session.created' AND assurance_level='mfa'
+      ORDER BY created_at DESC LIMIT 1
+    `).get() as {
+      ipHash: string;
+      userAgentHash: string;
+      metadataJson: string;
+    };
+    assert.match(loginEvent.ipHash, /^[A-Za-z0-9_-]{43}$/);
+    assert.match(loginEvent.userAgentHash, /^[A-Za-z0-9_-]{43}$/);
+    const loginMetadata = JSON.parse(loginEvent.metadataJson) as {
+      authMethod: string;
+      deviceName: string;
+      requestEvidence: Record<string, string>;
+    };
+    assert.equal(loginMetadata.authMethod, "email_otp+totp");
+    assert.equal(loginMetadata.deviceName, "Browser · Unknown device");
+    assert.deepEqual(loginMetadata.requestEvidence, {
+      keyVersion: "v1",
+      countryCode: "UZ",
+      regionCode: "TK",
+    });
+    assert.doesNotMatch(
+      JSON.stringify(loginEvent),
+      /203\.0\.113\.21|Browser\/3\.0 private-build/,
+    );
   } finally {
     sqlite.close();
   }

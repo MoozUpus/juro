@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { parseIdentityKeyring } from "../lib/auth/keyring";
+import {
+  authRequestSecurityContext,
+  prepareAuthRequestSecurityEvidence,
+} from "../lib/auth/request-security-evidence";
 import {
   batchWithSecurityEvent,
   verifySecurityEventChain,
@@ -19,6 +24,29 @@ import {
   sessionCookie,
   sessionCookieUntil,
 } from "../lib/auth/session-persistence";
+
+
+function encodedKey(seed: number): string {
+  const bytes = Uint8Array.from(
+    { length: 32 },
+    (_, index) => (seed + index) % 256,
+  );
+  let raw = "";
+  for (const byte of bytes) raw += String.fromCharCode(byte);
+  return btoa(raw)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replaceAll("=", "");
+}
+
+function securityEvidenceKeyring() {
+  return parseIdentityKeyring(JSON.stringify({
+    active: "v1",
+    versions: {
+      v1: { aead: encodedKey(1), hmac: encodedKey(65) },
+    },
+  }));
+}
 
 type SqliteBinding = null | number | bigint | string;
 
@@ -364,6 +392,103 @@ test("device display names are deterministic and avoid raw user-agent output", (
     deviceDisplayName("custom-client/1.0"),
     /custom-client/,
   );
+});
+
+test("session request evidence stores only keyed hashes and coarse location", async () => {
+  const request = new Request("https://app.juro.uz/api/auth/verify-otp", {
+    headers: {
+      "cf-connecting-ip": "203.0.113.18",
+      "user-agent": "Browser/9.0 private-build",
+    },
+  });
+  Object.defineProperty(request, "cf", {
+    value: { country: "uz", regionCode: "tk" },
+  });
+  const context = authRequestSecurityContext(request);
+  assert.deepEqual(context, {
+    connectingIp: "203.0.113.18",
+    userAgent: "Browser/9.0 private-build",
+    countryCode: "UZ",
+    regionCode: "TK",
+  });
+  const evidence = await prepareAuthRequestSecurityEvidence(
+    securityEvidenceKeyring(),
+    "user-evidence",
+    context,
+  );
+  assert.ok(evidence);
+  assert.match(evidence.ipHash ?? "", /^[A-Za-z0-9_-]{43}$/);
+  assert.match(evidence.userAgentHash ?? "", /^[A-Za-z0-9_-]{43}$/);
+  assert.notEqual(evidence.ipHash, context.connectingIp);
+  assert.notEqual(evidence.userAgentHash, context.userAgent);
+  assert.equal(await prepareAuthRequestSecurityEvidence(
+    null,
+    "user-evidence",
+    context,
+  ), null);
+  assert.deepEqual(await prepareAuthRequestSecurityEvidence(
+    securityEvidenceKeyring(),
+    "user-evidence",
+    {
+      connectingIp: "x".repeat(65),
+      userAgent: "x".repeat(513),
+      countryCode: "not-a-country",
+      regionCode: "region code",
+    },
+  ), {
+    ipHash: null,
+    userAgentHash: null,
+    keyVersion: "v1",
+    countryCode: null,
+    regionCode: null,
+  });
+
+  const invalid = new Request("https://app.juro.uz/", {
+    headers: {
+      "cf-connecting-ip": "x".repeat(65),
+      "user-agent": "x".repeat(513),
+    },
+  });
+  Object.defineProperty(invalid, "cf", {
+    value: { country: "not-a-country", regionCode: "region code" },
+  });
+  assert.deepEqual(authRequestSecurityContext(invalid), {
+    connectingIp: null,
+    userAgent: null,
+    countryCode: null,
+    regionCode: null,
+  });
+
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    insertUser(sqlite, "user-evidence", "evidence@example.test", "Evidence User");
+    const created = await createEmailOtpSession(d1, {
+      userId: "user-evidence",
+      userAgent: context.userAgent,
+      securityEvidence: evidence,
+      now: new Date("2026-07-26T09:00:00.000Z"),
+    });
+    const [event] = securityEventsFor(sqlite, "user-evidence");
+    assert.equal(event.sessionId, created.sessionId);
+    assert.equal(event.ipHash, evidence.ipHash);
+    assert.equal(event.userAgentHash, evidence.userAgentHash);
+    assert.deepEqual(event.metadata, {
+      authMethod: "email_otp",
+      deviceName: "Browser · Unknown device",
+      requestEvidence: {
+        keyVersion: "v1",
+        countryCode: "UZ",
+        regionCode: "TK",
+      },
+    });
+    assert.doesNotMatch(
+      JSON.stringify(event),
+      /203\.0\.113\.18|Browser\/9\.0 private-build/,
+    );
+    assert.equal(await verifySecurityEventChain([event]), true);
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("email OTP session creation atomically stores device, primary assurance, and audit event", async () => {
