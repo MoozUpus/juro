@@ -377,6 +377,9 @@ test("MFA management routes require protected writes and local reauthentication"
   assert.match(routes[2], /recent: true/);
   assert.match(routes[2], /confirmTotpEnrollmentInputSchema/);
   assert.match(routes[3], /manageMfaInputSchema/);
+  assert.match(routes[0], /sessionTokenFromCookie/);
+  assert.match(routes[0], /sessionCookieUntil/);
+  assert.match(routes[0], /currentToken/);
 });
 
 test("MFA factor claims bind replay fences to the exact operation and credential", async () => {

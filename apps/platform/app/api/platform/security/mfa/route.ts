@@ -13,6 +13,8 @@ import {
   MfaError,
   mfaStatus,
 } from "../../../../../lib/auth/mfa-service";
+import { sessionCookieUntil } from "../../../../../lib/auth/session-persistence";
+import { sessionTokenFromCookie } from "../../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -73,12 +75,19 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
   const { locale, code } = parsed.data;
   try {
     const session = await localSessionForRequest(request);
-    await disableMfa(requireD1(), identityKeyring(), {
+    const currentToken = sessionTokenFromCookie(request.headers.get("cookie"));
+    if (!currentToken) throw new MfaError("LOCAL_SESSION_REQUIRED");
+    const result = await disableMfa(requireD1(), identityKeyring(), {
       userId: session.userId,
       sessionId: session.sessionId,
+      currentToken,
       code,
     });
-    return jsonNoStore({ ok: true });
+    return jsonNoStore(
+      { ok: true },
+      200,
+      [sessionCookieUntil(result.session.token, result.session.expiresAt)],
+    );
   } catch (error) {
     const response = mfaErrorResponse(error, locale);
     if (response) return response;

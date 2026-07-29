@@ -402,8 +402,8 @@ handling, 24-hour/30-day session persistence, structured onboarding,
 persona-preserving workspace selection, canonical localized auth routes, and the full existing builder/
 comparison/rendered Worker regression suite.
 
-The latest recorded local full suite passes 342/342 checks: 27 rendered
-Worker/security checks, 245 core/document/auth checks, and 70 Cloudflare
+The latest recorded local full suite passes 343/343 checks: 27 rendered
+Worker/security checks, 246 core/document/auth checks, and 70 Cloudflare
 configuration/migration/job checks. Remote staging now contains 110 total
 SQLite tables (109 non-internal), 58 triggers, the exact 30-entry ledger through
 `0029`, and zero pending migrations or foreign-key violations. Local service
@@ -421,7 +421,7 @@ The local suite is complemented by the read-only staging evidence recorded below
 ### Read-only protected-staging evidence — 2026-07-29
 
 - `wrangler d1 migrations list juro-staging --env staging --remote` reports no pending migrations;
-- D1 reports 108 total tables (107 non-internal) and 29 migration-ledger rows;
+- D1 reports 110 total SQLite tables (109 non-internal) and 30 migration-ledger rows;
 - aggregate-only queries, without reading email addresses, codes, names, or content, report three OTP challenges accepted by the provider path and three consumed challenges;
 - the same aggregate check reports one profile, zero keyed OTP challenges, and zero profiles with protected identity fields;
 - the Worker settings API returns the public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` binding names; secret values were not read;
@@ -433,12 +433,12 @@ The OTP aggregates prove persisted staging state and successful challenge consum
 
 Before enabling OTP/MFA in staging:
 
-1. retain and re-read the completed Cloudflare inventory and the three verified portable staging checkpoints;
+1. retain and re-read the completed Cloudflare inventory and ten verified private-R2 backup/restore artifacts;
 2. repeat the disposable remote-D1 import drill for any new checkpoint; the
    verified 2026-07-29 logical import does not establish operational RTO;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests and confirm
-   the exact `0000`–`0028` ledger while keeping identity mode `legacy`;
+   the exact `0000`–`0029` ledger while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend
@@ -582,12 +582,13 @@ provider, concurrency, or future-data evidence.
   but live staging behavior and product impact behind shared NATs remain
   unverified;
 - session persistence now has locally verified 24-hour standard and 30-day
-  remember-me paths. MFA elevation also rotates the exact current token, retains
-  its absolute expiry, and revokes the affected session/device after one stale-
-  token replay. Migration `0029`, migration-specific backup/restore, and Worker
-  deployment now pass in staging; protected-staging HTTP/cookie evidence,
-  additional rotation triggers, regional signals, and security email remain
-  open;
+  remember-me paths. MFA elevation and MFA disable each rotate the exact current
+  token without extending absolute expiry; stale-token replay revokes the
+  affected session/device, and concurrent disable has one guarded winner.
+  Migration `0029`, migration-specific backup/restore, and the elevation Worker
+  deployment pass in staging. The new MFA-disable code still requires exact-SHA
+  CI/deployment and protected HTTP/cookie proof; periodic/email-change rotation,
+  regional signals, and security email remain open;
 - workspace invitation migration 0022 and OTP-lock migration 0023 are applied
   to staging; their local one-winner/rollback/15-minute-lock tests are not
   full-HTTP remote behavior evidence;

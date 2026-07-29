@@ -1456,10 +1456,11 @@ export async function disableMfa(
   input: {
     userId: string;
     sessionId: string;
+    currentToken: string;
     code: string;
     now?: Date;
   },
-): Promise<void> {
+): Promise<{ session: { token: string; expiresAt: string } }> {
   const now = input.now ?? new Date();
   const timestamp = nowIso(now);
   const { credential, factor } = await managementFactor(
@@ -1467,6 +1468,16 @@ export async function disableMfa(
     keyring,
     { userId: input.userId, code: input.code, now },
   );
+  const rotation = await prepareSessionTokenRotation(db, {
+    userId: input.userId,
+    sessionId: input.sessionId,
+    currentToken: input.currentToken,
+    reason: "mfa_disabled",
+    now,
+  });
+  if (!rotation || rotation.assuranceLevel !== "mfa") {
+    throw new MfaError("MFA_STATE_CONFLICT");
+  }
   const operationId = crypto.randomUUID();
   const claimId = crypto.randomUUID();
   const factorGuard = factorConsumedGuard(
@@ -1489,6 +1500,25 @@ export async function disableMfa(
       operationId,
     ],
   } satisfies SessionInsertGuard;
+  const completedGuard = {
+    selectSql: `SELECT 1
+      FROM auth_totp_credentials t
+      JOIN auth_mfa_factor_claims c ON c.credential_id=t.id
+      JOIN auth_sessions s ON s.id=? AND s.user_id=t.user_id
+      WHERE t.id=? AND t.user_id=? AND t.status='disabled'
+        AND c.id=? AND c.operation_id=?
+        AND s.token_hash=? AND s.revoked_at IS NULL
+        AND s.auth_method='email_otp' AND s.assurance_level='primary'
+        AND s.mfa_verified_at IS NULL`,
+    bindings: [
+      input.sessionId,
+      credential.id,
+      input.userId,
+      claimId,
+      operationId,
+      rotation.tokenHash,
+    ],
+  } satisfies SessionInsertGuard;
   const statements = [
     factorClaimStatement(db, {
       claimId,
@@ -1500,7 +1530,8 @@ export async function disableMfa(
         WHERE id=? AND user_id=? AND status='active'
           AND EXISTS (
             SELECT 1 FROM auth_sessions
-            WHERE id=? AND user_id=? AND revoked_at IS NULL
+            WHERE id=? AND user_id=? AND token_hash=?
+              AND assurance_level='mfa' AND revoked_at IS NULL
               AND expires_at>? AND coalesce(idle_expires_at,expires_at)>?
           )`,
       sourceGuardBindings: [
@@ -1508,6 +1539,7 @@ export async function disableMfa(
         input.userId,
         input.sessionId,
         input.userId,
+        rotation.previousTokenHash,
         timestamp,
         timestamp,
       ],
@@ -1553,15 +1585,18 @@ export async function disableMfa(
       input.sessionId,
       ...disabledByOperationGuard.bindings,
     ),
+    rotation.historyStatement,
+    rotation.rotationStatement,
     db.prepare(
       `UPDATE auth_sessions
        SET auth_method='email_otp',assurance_level='primary',
            mfa_verified_at=NULL
-       WHERE id=? AND user_id=? AND revoked_at IS NULL
+       WHERE id=? AND user_id=? AND token_hash=? AND revoked_at IS NULL
          AND EXISTS (${disabledByOperationGuard.selectSql})`,
     ).bind(
       input.sessionId,
       input.userId,
+      rotation.tokenHash,
       ...disabledByOperationGuard.bindings,
     ),
   ];
@@ -1572,15 +1607,20 @@ export async function disableMfa(
       {
         userId: input.userId,
         sessionId: input.sessionId,
+        deviceId: rotation.deviceId,
         eventType: "mfa.disabled",
         severity: "warning",
         authSource: "local_session",
         assuranceLevel: "mfa",
-        metadata: { credentialId: credential.id },
+        metadata: {
+          credentialId: credential.id,
+          sessionTokenRotated: true,
+          tokenHistoryId: rotation.historyId,
+        },
         createdAt: timestamp,
       },
       () => statements,
-      disabledByOperationGuard,
+      completedGuard,
     );
   } catch (error) {
     if (isFactorClaimConflict(error)) {
@@ -1593,7 +1633,13 @@ export async function disableMfa(
     || Number(results[1]?.meta?.changes ?? 0) !== 1
     || Number(results[3]?.meta?.changes ?? 0) !== 1
     || Number(results[5]?.meta?.changes ?? 0) !== 1
+    || Number(results[6]?.meta?.changes ?? 0) !== 1
+    || Number(results[7]?.meta?.changes ?? 0) !== 1
+    || Number(results[8]?.meta?.changes ?? 0) !== 1
   ) {
     throw new MfaError("MFA_STATE_CONFLICT");
   }
+  return {
+    session: { token: rotation.token, expiresAt: rotation.expiresAt },
+  };
 }

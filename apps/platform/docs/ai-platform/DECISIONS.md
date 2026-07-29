@@ -1355,3 +1355,26 @@ b4a497ce-9a47-4ea9-be75-b0f48e46c7cd at 100%. The exact current-version
 HTTP/cookie/replay flow remains unverified because the available browser
 control runtime failed before an authenticated Access session could be used;
 Access was not bypassed. Production is unchanged.
+
+## D-066 — rotate the local session token when MFA is disabled
+
+Status: accepted and locally verified; staging deployment pending
+Date: 2026-07-29
+
+Disabling MFA is an assurance downgrade and must not leave the bearer token
+that authenticated the higher-assurance session reusable. The disable service
+now verifies the management factor, binds its claim to the exact active MFA
+session-token digest, disables the credential, revokes other sessions, retires
+the digest with reason `mfa_disabled`, rotates the current session to a newly
+generated token, downgrades it to primary assurance, and appends the security
+event in one guarded D1 batch. The HTTP route returns a replacement HttpOnly,
+Secure, SameSite cookie whose lifetime is capped by the original absolute
+expiry.
+
+Service tests prove the new token works, the retired token triggers the shared
+one-claim replay boundary and revokes the downgraded session/device, and two
+concurrent disable attempts leave exactly one primary session without partial
+MFA state. The full local suite passes 343 checks; type-check, lint, staging
+build/artifact validation, canonical builder smoke, and comparison smoke pass.
+No migration or dependency is added. Protected-staging deployment and exact
+HTTP/cookie evidence remain open; production is unchanged.

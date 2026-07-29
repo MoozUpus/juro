@@ -112,10 +112,12 @@ absolute lifetime, cookie/persisted-expiry alignment, a seven-day idle cap,
 current/single/other/all revocation, and an append-only security-event chain.
 The same lifetime choice flows through both direct OTP and MFA completion.
 Protected email change also revokes every other local session/device while
-preserving the verified current session. Session-token rotation/fixation and
-replay detection, regional signals, new-device/security alert mail, remote
-runtime evidence, and staging replay tests remain absent; SEC-006 is therefore
-not closed.
+preserving the verified current session. MFA elevation is deployed to staging;
+MFA disable now locally rotates the current token, returns a replacement cookie,
+and shares the one-claim replay revocation boundary. Exact current-version
+protected HTTP/cookie/replay evidence, periodic/email-change rotation, regional
+signals, new-device/security alert mail, and staging replay tests remain absent;
+SEC-006 is therefore not closed.
 
 ### SEC-007 — weak standalone share secret
 

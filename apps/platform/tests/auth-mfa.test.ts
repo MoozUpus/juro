@@ -230,7 +230,11 @@ async function enrolledFixture() {
     code,
     now: confirmationAt,
   });
-  return { ...value, backupCodes: confirmed.backupCodes };
+  return {
+    ...value,
+    backupCodes: confirmed.backupCodes,
+    activeSession: confirmed.session,
+  };
 }
 
 test("concurrent enrollment confirmation has one exact-claim winner", async () => {
@@ -652,9 +656,88 @@ test("backup codes are single-use and challenge attempts lock at five", async ()
   }
 });
 
+test("MFA disable rotates the token and replay revokes the downgraded session", async () => {
+  const value = await enrolledFixture();
+  const { sqlite, d1, first, enrollment, activeSession } = value;
+  try {
+    const disableAt = new Date("2026-07-26T12:08:30.000Z");
+    const result = await disableMfa(d1, keyring(), {
+      userId: "user-mfa",
+      sessionId: first.sessionId,
+      currentToken: activeSession.token,
+      code: (await totpCode(enrollment.secret, disableAt)).code,
+      now: disableAt,
+    });
+    assert.notEqual(result.session.token, activeSession.token);
+    assert.equal(result.session.expiresAt, activeSession.expiresAt);
+
+    const history = sqlite.prepare(`
+      SELECT id,token_hash AS tokenHash,rotation_reason AS rotationReason
+      FROM auth_session_token_history
+      WHERE session_id=? AND rotation_reason='mfa_disabled'
+    `).get(first.sessionId) as {
+      id: string;
+      tokenHash: string;
+      rotationReason: string;
+    };
+    assert.equal(history.tokenHash, await sha256(activeSession.token));
+    assert.equal(history.rotationReason, "mfa_disabled");
+    const disabledEvent = sqlite.prepare(`
+      SELECT metadata_json AS metadataJson FROM security_events
+      WHERE event_type='mfa.disabled' AND session_id=?
+    `).get(first.sessionId) as { metadataJson: string };
+    assert.deepEqual(JSON.parse(disabledEvent.metadataJson), {
+      credentialId: enrollment.credentialId,
+      sessionTokenRotated: true,
+      tokenHistoryId: history.id,
+    });
+    assert.equal((
+      sqlite.prepare("SELECT token_hash AS tokenHash FROM auth_sessions WHERE id=?")
+        .get(first.sessionId) as { tokenHash: string }
+    ).tokenHash, await sha256(result.session.token));
+
+    const current = await localSessionFromCookie(
+      d1,
+      `juro_session=${result.session.token}`,
+      { now: new Date("2026-07-26T12:09:00.000Z"), touch: false },
+    );
+    assert.equal(current?.assuranceLevel, "primary");
+    assert.equal(current?.authMethod, "email_otp");
+    assert.equal((await mfaStatus(d1, "user-mfa")).enabled, false);
+
+    assert.equal(await localSessionFromCookie(
+      d1,
+      `juro_session=${activeSession.token}`,
+      { now: new Date("2026-07-26T12:09:30.000Z"), touch: false },
+    ), null);
+    const revoked = sqlite.prepare(`
+      SELECT s.revoked_at AS sessionRevokedAt,d.revoked_at AS deviceRevokedAt
+      FROM auth_sessions s JOIN auth_devices d ON d.id=s.device_id
+      WHERE s.id=?
+    `).get(first.sessionId) as {
+      sessionRevokedAt: string | null;
+      deviceRevokedAt: string | null;
+    };
+    assert.equal(revoked.sessionRevokedAt, "2026-07-26T12:09:30.000Z");
+    assert.equal(revoked.deviceRevokedAt, "2026-07-26T12:09:30.000Z");
+    assert.equal((
+      sqlite.prepare("SELECT count(*) AS total FROM auth_session_token_replays")
+        .get() as { total: number }
+    ).total, 1);
+    assert.equal((
+      sqlite.prepare(`
+        SELECT count(*) AS total FROM security_events
+        WHERE event_type='session.token_replayed'
+      `).get() as { total: number }
+    ).total, 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("losing a concurrent disable cannot revoke the winning session", async () => {
   const value = await enrolledFixture();
-  const { sqlite, d1, first, enrollment } = value;
+  const { sqlite, d1, first, enrollment, activeSession } = value;
   try {
     const emailHash = await insertConsumedOtp(
       sqlite,
@@ -682,12 +765,14 @@ test("losing a concurrent disable cannot revoke the winning session", async () =
       disableMfa(synchronized, keyring(), {
         userId: "user-mfa",
         sessionId: first.sessionId,
+        currentToken: activeSession.token,
         code: disableCode,
         now: disableAt,
       }),
       disableMfa(synchronized, keyring(), {
         userId: "user-mfa",
         sessionId: secondLogin.session.sessionId,
+        currentToken: secondLogin.session.token,
         code: disableCode,
         now: disableAt,
       }),

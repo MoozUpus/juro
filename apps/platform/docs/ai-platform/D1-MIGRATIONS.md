@@ -565,12 +565,13 @@ without altering or deleting existing rows:
   session/user/expiry lookups.
 
 The migration contains exactly nine additive `CREATE` statements and no
-`ALTER`, `DROP`, `UPDATE`, or `DELETE`. Runtime tests prove MFA elevation
-rotates the current token without extending absolute expiry, binds the
-enrollment claim to the exact pre-rotation digest, rolls back on an
-intervening token change, and records only one critical replay event before
-revoking the affected session and device. Raw session tokens are never
-persisted. The full local `0000`–`0029` sequence has 107 application tables,
+`ALTER`, `DROP`, `UPDATE`, or `DELETE`. Runtime tests prove both MFA elevation
+and MFA disable rotate the current token without extending absolute expiry.
+Enrollment binds to the exact pre-rotation digest and rolls back on an
+intervening token change; concurrent disable has one guarded winner. A retired
+token records only one critical replay event before revoking the affected
+session and device. Raw session tokens are never persisted. The full local
+`0000`–`0029` sequence has 107 application tables,
 151 foreign keys, and zero foreign-key violations. Migration `0029` is now
 schema-applied to isolated staging; protected-staging HTTP/cookie/replay
 behavior remains a separate open gate.
