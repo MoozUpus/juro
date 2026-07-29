@@ -15,6 +15,11 @@ import {
   LegalSourceNormalizationError,
   executeLegalSourceNormalization,
 } from "../lib/legal/source-normalization";
+import {
+  isStagingDeletionProbe,
+  prepareStagingDeletionProbe,
+  StagingDeletionProbeError,
+} from "./staging-account-deletion-probe";
 
 export const JOB_KINDS = [
   "document.analyze",
@@ -101,6 +106,8 @@ type JobErrorCode =
   | "LEGAL_SOURCE_SYNC_FAILED"
   | "LEGAL_SOURCE_PARSE_FAILED"
   | "PRIVILEGED_ACCOUNT_REVIEW_REQUIRED"
+  | "STAGING_SYNTHETIC_PROBE_DISABLED"
+  | "STAGING_SYNTHETIC_PROBE_FAILED"
   | "WORKSPACE_OWNERSHIP_TRANSFER_REQUIRED";
 
 type OperationalError = {
@@ -187,6 +194,7 @@ export type PlatformJobEnv = Omit<
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   IDENTITY_KEYRING?: string;
+  STAGING_SYNTHETIC_PROBES_ENABLED?: string;
 };
 
 export function expectedQueueName(
@@ -539,9 +547,15 @@ async function executeJob(
   }
   if (envelope.kind === "cleanup.run") {
     try {
+      if (isStagingDeletionProbe(envelope.subjectId)) {
+        await prepareStagingDeletionProbe(env, envelope.subjectId);
+      }
       await executeAccountDeletionPurge(env, envelope.subjectId);
       return;
     } catch (error) {
+      if (error instanceof StagingDeletionProbeError) {
+        throw new SafeJobError(error.code, false);
+      }
       if (error instanceof AccountDeletionPurgeError) {
         throw new SafeJobError(error.code, error.retryable);
       }

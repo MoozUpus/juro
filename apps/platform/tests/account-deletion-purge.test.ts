@@ -19,6 +19,11 @@ import {
   handleQueue,
   type PlatformJobEnv,
 } from "../worker/platform-jobs";
+import {
+  prepareStagingDeletionProbe,
+  stagingDeletionProbeObjectKey,
+  StagingDeletionProbeError,
+} from "../worker/staging-account-deletion-probe";
 import { batchBarrier, sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const USER_ID = "purge-user";
@@ -52,6 +57,10 @@ class FakeR2Bucket {
   readonly objects = new Set<string>();
   readonly deleted: string[] = [];
   failDelete = false;
+
+  async put(key: string): Promise<void> {
+    this.objects.add(key);
+  }
 
   async delete(keys: string | string[]): Promise<void> {
     if (this.failDelete) throw new Error("synthetic R2 failure");
@@ -434,6 +443,105 @@ test("cleanup queue executes the real purge and completes durable job evidence",
         "SELECT status FROM account_deletion_requests WHERE id=?",
       ).get(REQUEST_ID) as { status: string }).status,
       "completed",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+test("staging-only cleanup probe creates secret-derived evidence and purges D1/R2", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const requestId = "staging-probe-20260730-queue-runtime";
+  let acknowledgements = 0;
+  let retries = 0;
+  try {
+    const message = {
+      id: "staging-probe-message",
+      timestamp: new Date(NOW),
+      attempts: 1,
+      body: {
+        schemaVersion: 1,
+        jobId: "staging-probe-job",
+        kind: "cleanup.run",
+        idempotencyKey: "staging-probe-idempotency",
+        subjectId: requestId,
+        correlationId: "staging-probe-correlation",
+        enqueuedAt: NOW,
+      },
+      ack() { acknowledgements += 1; },
+      retry() { retries += 1; },
+    } as unknown as Message<unknown>;
+    const batch = {
+      queue: expectedQueueName("cleanup.run", "staging"),
+      messages: [message],
+      ackAll() {},
+      retryAll() { retries += 1; },
+    } as unknown as MessageBatch<unknown>;
+    const env = {
+      DB: d1,
+      BUCKET: bucket,
+      APP_ENV: "staging",
+      ASYNC_RUNTIME_ENABLED: "true",
+      CRON_ENABLED: "true",
+      ACCOUNT_DELETION_PURGE_ENABLED: "true",
+      STAGING_SYNTHETIC_PROBES_ENABLED: "true",
+      LEGAL_ADVICE_INGESTION_ENABLED: "false",
+      JOB_SCHEMA_VERSION: "1",
+      IDENTITY_KEYRING: RAW_IDENTITY_KEYRING,
+      PLATFORM_ANALYTICS: { writeDataPoint() {} },
+    } as unknown as PlatformJobEnv;
+
+    await handleQueue(batch, env);
+
+    assert.equal(acknowledgements, 1);
+    assert.equal(retries, 0);
+    assert.equal(
+      bucket.objects.has(stagingDeletionProbeObjectKey(requestId)),
+      false,
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(`
+        SELECT request.status,evidence.r2_deleted_count AS r2DeletedCount,
+          profile.lifecycle_status AS lifecycleStatus
+        FROM account_deletion_requests request
+        JOIN account_deletion_purge_evidence evidence ON evidence.request_id=request.id
+        JOIN user_profiles profile ON profile.id=request.user_id
+        WHERE request.id=?
+      `).get(requestId) },
+      { status: "completed", r2DeletedCount: 1, lifecycleStatus: "deleted" },
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM account_deletion_lifecycle_events WHERE request_id=?",
+      ).get(requestId) as { total: number }).total,
+      3,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+test("synthetic deletion probe fails closed outside explicitly enabled staging", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const requestId = "staging-probe-production-denied";
+  try {
+    await assert.rejects(
+      prepareStagingDeletionProbe({
+        APP_ENV: "production",
+        DB: d1,
+        BUCKET: bucket as unknown as R2Bucket,
+        IDENTITY_KEYRING: RAW_IDENTITY_KEYRING,
+        STAGING_SYNTHETIC_PROBES_ENABLED: "true",
+      }, requestId, NOW),
+      (error: unknown) => error instanceof StagingDeletionProbeError
+        && error.code === "STAGING_SYNTHETIC_PROBE_DISABLED",
+    );
+    assert.equal(bucket.objects.size, 0);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM account_deletion_requests WHERE id=?",
+      ).get(requestId) as { total: number }).total,
+      0,
     );
   } finally {
     sqlite.close();
