@@ -18,7 +18,9 @@ export class StagingDeletionProbeError extends Error {
   constructor(
     readonly code:
       | "STAGING_SYNTHETIC_PROBE_DISABLED"
-      | "STAGING_SYNTHETIC_PROBE_FAILED",
+      | "STAGING_SYNTHETIC_PROBE_D1_FAILED"
+      | "STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED"
+      | "STAGING_SYNTHETIC_PROBE_R2_FAILED",
   ) {
     super(code);
     this.name = "StagingDeletionProbeError";
@@ -66,7 +68,14 @@ export async function prepareStagingDeletionProbe(
   const workspaceId = `staging-probe-workspace-${suffix}`;
   const fileId = `staging-probe-file-${suffix}`;
   const objectKey = stagingDeletionProbeObjectKey(requestId);
-  const subject = await accountDeletionSubjectHash(env.IDENTITY_KEYRING, userId);
+  let subject: Awaited<ReturnType<typeof accountDeletionSubjectHash>>;
+  try {
+    subject = await accountDeletionSubjectHash(env.IDENTITY_KEYRING, userId);
+  } catch {
+    throw new StagingDeletionProbeError(
+      "STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED",
+    );
+  }
   const lifecycleInput = {
     requestId,
     subjectHash: subject.hash,
@@ -76,24 +85,35 @@ export async function prepareStagingDeletionProbe(
     summary: { purpose: "staging-runtime-proof", scheduledPurgeAt: now },
     createdAt: now,
   };
-  const lifecycle = await createAccountDeletionLifecycleRecord(
-    env.DB,
-    lifecycleInput,
-  );
+  let lifecycle: Awaited<
+    ReturnType<typeof createAccountDeletionLifecycleRecord>
+  >;
+  try {
+    lifecycle = await createAccountDeletionLifecycleRecord(
+      env.DB,
+      lifecycleInput,
+    );
+  } catch {
+    throw new StagingDeletionProbeError("STAGING_SYNTHETIC_PROBE_D1_FAILED");
+  }
 
-  await env.BUCKET.put(
-    objectKey,
-    new TextEncoder().encode(
-      `JURO synthetic staging deletion probe ${requestId}\n`,
-    ),
-    {
-      httpMetadata: { contentType: "application/octet-stream" },
-      customMetadata: {
-        environment: "staging",
-        purpose: "account-deletion-probe",
+  try {
+    await env.BUCKET.put(
+      objectKey,
+      new TextEncoder().encode(
+        `JURO synthetic staging deletion probe ${requestId}\n`,
+      ),
+      {
+        httpMetadata: { contentType: "application/octet-stream" },
+        customMetadata: {
+          environment: "staging",
+          purpose: "account-deletion-probe",
+        },
       },
-    },
-  );
+    );
+  } catch {
+    throw new StagingDeletionProbeError("STAGING_SYNTHETIC_PROBE_R2_FAILED");
+  }
 
   try {
     await env.DB.batch([
@@ -155,7 +175,7 @@ export async function prepareStagingDeletionProbe(
     ]);
   } catch {
     await env.BUCKET.delete(objectKey).catch(() => undefined);
-    throw new StagingDeletionProbeError("STAGING_SYNTHETIC_PROBE_FAILED");
+    throw new StagingDeletionProbeError("STAGING_SYNTHETIC_PROBE_D1_FAILED");
   }
 
   return "created";
