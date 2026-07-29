@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-29
-Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains all 30 migrations through `0029`; the current Worker deployment `888a4800-daf8-4211-b41d-a653d067ecd8` / version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% from commit `288af4693d2679b48f016215caaabdcac9aa0fde` has its staging-only D1/R2/Queue/Vectorize/Analytics bindings, public Turnstile site key, and three server-only secret bindings. Aggregate D1 evidence shows three provider-accepted OTP challenges that were consumed successfully, but the current localized auth UI, mailbox delivery, session-rotation cookie/replay flow, full remote concurrency matrix, and lifecycle gates still require correlated browser/HTTP evidence. Production was not changed.
+Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains 34 migrations through `0033`; deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` / version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` has staging-only bindings, two reviewed Queue consumers, one five-minute cron, the public Turnstile key, and three server-only secret names. Current localized auth, mailbox delivery, session-cookie/replay, full concurrency, and lifecycle flows still require correlated authenticated browser/HTTP evidence. Production was not changed.
 
 ## Implemented
 

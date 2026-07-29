@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
-Updated: 2026-07-29
-Latest source migration: `0029_session_token_rotation.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0029` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 30-entry `0000`–`0029` ledger. Migration `0029` was applied only after a portable full/schema/data export, private-R2 checksum round trip, and a disposable remote restore drill. Post-migration staging reports 109 non-internal tables, 58 triggers, zero foreign-key violations, and no pending migration. No production migration was run.
+Updated: 2026-07-30
+Latest source migration: `0033_freezing_havok.sql`
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0033` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 34-entry `0000`–`0033` ledger. The `0030`–`0033` change set was applied only after a Time Travel bookmark plus full/schema/data export and private-R2 checksum round trip. Post-migration staging reports 114 non-internal tables, 70 triggers, 198 non-internal indexes, `quick_check=ok`, zero foreign-key violations, and no pending migration. No production migration was run.
 
 ## Migration policy
 
@@ -757,3 +757,9 @@ Queue/DLQ behavior, and real Resend delivery. Production is unchanged.
 The migration does not delete user content and does not execute a purge. It replaces only the active-request index so the new in-flight states remain one-per-user. The complete local sequence has 34 migrations (`0000`–`0033`). Clean-database application, Drizzle journal/snapshot continuity, `quick_check`, zero foreign-key violations, transition guards, append-only behavior, legacy normalization, and representative cascade behavior pass.
 
 Code rollback leaves additive columns/tables unused. D1 recovery uses the recorded pre-`0030`–`0033` staging Time Travel bookmark or private portable exports; no destructive down migration is planned. Production application is prohibited without its own snapshot, rehearsal, and explicit owner approval.
+
+### Staging `0030`–`0033` record — 2026-07-29 UTC
+
+Preflight reported `quick_check=ok`, zero deletion requests, zero duplicate active users, 30 applied migrations through `0029`, and exactly `0030`–`0033` pending. The first Wrangler run applied `0030`–`0032`; D1 rejected `0033` atomically because one Drizzle `statement-breakpoint` marker was concatenated with the following `CREATE TRIGGER`. Read-only verification proved that none of the `0033` tables or columns existed and the database remained integral.
+
+Commit `a1261c3c68151f9c275187fd422bd58c67b673a8` fixes only that separator. Migration/account-deletion tests passed 64/64 before retry. The second run applied only `0033`. Postflight proves 34 ledger rows through `0033`, two lifecycle/evidence tables, ten exact lifecycle trigger guards, two profile lifecycle columns, ten request lifecycle columns, `quick_check=ok`, an empty `foreign_key_check`, and no pending migration.

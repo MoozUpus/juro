@@ -1547,10 +1547,7 @@ concurrent replay.
 The email copy is available in RU and UZ and describes coarse region as an
 approximation, not proof of physical location or account compromise. A stolen
 continuity cookie can influence novelty classification but cannot authenticate.
-Local evidence is 368 tests (27 rendered, 265 core, 76 Cloudflare), plus passing
-type-check and lint. Migration `0032`, the pending `0030`/`0031` migrations,
-consumer activation, protected HTTP behavior, DLQ/redrive, and real provider
-mailbox delivery remain unverified in staging. Production is unchanged.
+Local evidence is 378 tests (27 rendered, 272 core, 79 Cloudflare), plus passing type-check and lint. Migrations `0030`–`0032` and the isolated staging email consumer are deployed; protected HTTP behavior, DLQ/redrive, and real provider mailbox delivery remain unverified. Production is unchanged.
 
 ## D-073 — make account deletion a fenced, retryable D1/R2 lifecycle
 
@@ -1560,4 +1557,12 @@ D1 cannot roll back an R2 object deletion. The purge therefore inventories exact
 
 Lifecycle edges and terminal purge evidence are append-only hash chains. The profile is tombstoned rather than deleted so retained consent/security/audit/signature/financial evidence remains referentially stable. Foreign-user contributions are redacted. Completed/cancelled requests and deleted profiles are immutable by trigger.
 
-A blocker may be corrected and retried from a fresh authenticated RU/UZ settings flow. A transient transaction marker fences concurrent retry requests, producing one new outbox job and one lifecycle edge. Local concurrency, failure, blocker, R2, D1, Queue, Cron, migration, route, and UI contracts pass. Staging activation requires migrations `0030`–`0033`, the reviewed email/cleanup consumers, the single `*/5` outbox cron, protected synthetic smoke, and log checks. Production purge/cron/async stay disabled and production remains unchanged.
+A blocker may be corrected and retried from a fresh authenticated RU/UZ settings flow. A transient transaction marker fences concurrent retry requests, producing one new outbox job and one lifecycle edge. Local concurrency, failure, blocker, R2, D1, Queue, Cron, migration, route, and UI contracts pass. Migrations `0030`–`0033`, the reviewed email/cleanup consumers, and the single `*/5` outbox cron are deployed only to owner-protected staging. Schema, Access, control-plane, first-cron, and private-backup evidence pass; authenticated synthetic purge and live provider/DLQ paths remain open. Production purge/cron/async stay disabled and production remains unchanged.
+
+## D-074 — treat remote migration parser failures as atomic, inspected gates
+
+Status: accepted and applied to protected staging
+
+Wrangler applied `0030`–`0032` and D1 atomically rejected `0033` because a Drizzle `statement-breakpoint` marker was concatenated with the next `CREATE TRIGGER`. The retry did not proceed blindly. Read-only checks first proved `quick_check=ok`, `0033` still pending, zero `0033` tables/columns, and no conflicting deletion rows. The separator-only fix was committed as `a1261c3`, then the migration/account-deletion subset passed 64/64 before the remote retry.
+
+The retry applied only `0033`; postflight proved the exact 34-entry ledger, empty foreign-key check, expected lifecycle schema/guards, and no pending migration. This establishes the operational rule: any remote parser divergence stops the sequence, requires atomicity evidence, a minimal committed fix, targeted regression coverage, and a second preflight before retry. Production is not an implicit retry target.

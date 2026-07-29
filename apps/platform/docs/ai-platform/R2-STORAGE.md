@@ -1,7 +1,7 @@
 # JURO R2 storage
 
 Updated: 2026-07-29
-Status: remote inventory verified. Six approved private EEUR Standard development/staging target buckets exist. `juro-staging-backups` contains ten verified staging D1 backup/restore artifacts across the earlier checkpoints and the `0029` pre/post sets; all other target buckets remain without verified application content. Production storage was unchanged.
+Status: remote inventory verified. Six approved private EEUR Standard development/staging target buckets exist. `juro-staging-backups` contains 18 verified staging D1 backup/restore artifacts, including the pre/post `0030`–`0033` checkpoints; all other target buckets remain without verified application content. Production storage was unchanged.
 
 ## Verified remote state
 

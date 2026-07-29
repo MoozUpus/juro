@@ -1,19 +1,18 @@
 # JURO known limitations checkpoint
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 Scope: current integration branch after the first local Phase 3 legal-source
 foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0029` are applied to `juro-staging`; migration-specific
+- migrations `0022`–`0033` are applied to `juro-staging`; migration-specific
   full/schema/data exports, private-R2 round trips, and the disposable remote-D1
   restore drill pass. Operational RTO/RPO under representative load remains
   unverified;
 - the protected staging Worker, custom domain, exact resource bindings, public
   Turnstile site key, and three server-only secret binding names are verified;
-  Queue consumers, schedules, async feature activation, and staff APIs remain
-  deliberately disabled;
+  exactly the email and data-retention Queue consumers plus one five-minute cron are active; legal ingestion and staff APIs remain deliberately disabled;
 - Cloudflare Access is enabled with a staging-only owner policy and anonymous
   requests are denied before application content with a no-store redirect;
 - aggregate D1 evidence shows three provider-accepted and consumed OTP
@@ -22,7 +21,7 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- local test totals (27 rendered route + 265 core + 76 Cloudflare = 368),
+- local test totals (27 rendered route + 272 core + 79 Cloudflare = 378),
   remote schema checks, and the currently deployed Worker are not a substitute for
   the exact current-version authenticated browser/cookie/replay flow. The
   available browser-control runtime currently exits during startup because its
@@ -63,9 +62,7 @@ foundation checkpoint.
   scheduler and a same-origin/CSRF route; its 30-second grace rejects an
   in-flight retired token without revoking the replacement, then restores the
   strict replay-revocation boundary. Continuity-backed new-device and conservative
-  comparable-region email jobs now pass locally, but exact protected-staging
-  HTTP/cookie/replay evidence, migration `0032`, and real security-mail delivery
-  remain incomplete;
+  comparable-region email jobs and migrations `0030`–`0032` are deployed to protected staging, but exact protected-staging HTTP/cookie/replay evidence and real security-mail delivery remain incomplete;
 - the 24-hour/30-day session choice is locally tested, but remote cookies,
   persisted expiry, idle expiry, and MFA completion have not been exercised
   through staging HTTP;
@@ -174,17 +171,12 @@ and incomplete location do not alert. A generic encrypted job, identifiers-only
 outbox, RU/UZ copy, one-winner provider idempotency, and atomic session rollback
 are covered locally.
 
-This does not prove physical location or compromise. Travel, carrier routing,
-VPNs, cookie clearing, and stolen continuity cookies can still create false
-positives or influence novelty. Migrations `0030`–`0032`, the reviewed email
-consumer, real Resend delivery, DLQ/redrive, and protected primary/MFA HTTP flows
-are not deployed or verified in staging. The currently deployed Worker does not
-contain this local slice, and production is unchanged.
+This does not prove physical location or compromise. Travel, carrier routing, VPNs, cookie clearing, and stolen continuity cookies can still create false positives or influence novelty. Migrations `0030`–`0032` and the reviewed email consumer are deployed to protected staging; real Resend delivery, operator DLQ/redrive, and protected primary/MFA HTTP flows remain unverified. Production is unchanged.
 
-## Account-deletion candidate limitations
+## Account-deletion staging limitations
 
-The current account-deletion slice is locally complete for the existing D1/R2 data model, but not yet staging-verified at this checkpoint. User-document Vectorize deletion is intentionally absent because that index does not yet accept user content. Provider-side AI retention deletion, guest purge, voice-audio purge, legal holds, scheduled backup automation, operator redrive UI, and a measured incident RTO remain open.
+The account-deletion D1/R2 slice is deployed to owner-only protected staging. Schema/integrity, runtime bindings, consumer/DLQ attachment, anonymous Access denial, one completed cron run, and private-R2 backup round-trip are verified; an authenticated synthetic deletion through HTTP/UI is still open. User-document Vectorize deletion is intentionally absent because that index does not yet accept user content. Provider-side AI retention deletion, guest purge, voice-audio purge, legal holds, scheduled backup automation, operator redrive UI, and a measured incident RTO remain open.
 
 A blocked immediate request cannot be cancelled, by design, but can be retried after the blocker is removed. Recoverable blocked requests may either cancel or retry before the irreversible boundary. Once R2 deletion begins, cancellation is impossible and retry is the only safe completion path.
 
-Production async runtime, cron, and account purge remain disabled. No local or staging evidence authorizes production migration or UI replacement.
+Production async runtime, cron, and account purge remain disabled. The protected staging evidence does not authorize production migration, production functional deployment, or production UI replacement.

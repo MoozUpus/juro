@@ -19,54 +19,24 @@ deployed without the separate production authorization required by the owner.
 
 ## Staging deployment target
 
-The checked-in staging Worker target is `juro-platform-staging`. Its primary
-bindings are `juro-staging`, `juro-staging-files`,
-`juro-staging-backups`, and `juro-staging-quarantine`, plus the seven staging
-Queue producers and four staging Vectorize indexes documented in
-`CLOUDFLARE-RESOURCES.md`.
+The checked-in and deployed target is `juro-platform-staging`. Deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` serves Worker version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` at 100% from pushed commit `a1261c3c68151f9c275187fd422bd58c67b673a8`. The exact flattened artifact was built with the staging profile and deployed without `--env`, with `--keep-vars`.
 
-The initial deployment was deliberately unreachable, and the current deployment preserves these execution safeguards:
+The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route, and the single Access-protected custom domain `staging.app.juro.uz`. It binds only staging D1/R2/Queues/Vectorize/Analytics resources. `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and `ACCOUNT_DELETION_PURGE_ENABLED` are true only in staging. Legal ingestion and the staff API remain false.
 
-- `workers_dev: false`;
-- `preview_urls: false`;
-- `routes: []`;
-- no Cron trigger;
-- no Queue consumer;
-- async runtime, legal ingestion, staff API, and Cron flags are false.
-
-The current deployment is `888a4800-daf8-4211-b41d-a653d067ecd8`
-serving version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% from pushed code
-commit `288af4693d2679b48f016215caaabdcac9aa0fde`. It attaches staging-only bindings and seven Queue producers.
-Workers.dev and previews are disabled; Queue consumers, schedules, async
-runtime, legal ingestion, and staff APIs remain disabled. The custom domain was
-attached only after the owner-only Access application existed and anonymous
-denial had been proven.
+Exactly two staging consumers are attached: `staging-email-notifications` (concurrency 2) and `staging-data-retention-cleanup` (concurrency 1), each with five retries and its own zero-consumer DLQ. The only schedule is locked outbox dispatch `*/5 * * * *`. All other consumers remain unattached. Production has no equivalent activation.
 
 ## Required sequence
 
-1. **Completed:** build and validate all environment artifacts from a clean pushed commit.
-2. **Completed:** run type-check, lint, full tests, Cloudflare matrix validation, generated
-   binding type check, artifact validation, and secret scan.
-3. **Completed:** confirm `juro-staging` has no pending migration and retain the private
-   pre/post checkpoint exports.
-4. **Completed:** deploy `juro-platform-staging` with no route, preview URL, schedule, or
-   consumer.
-5. **Completed:** re-read the Worker deployment, bindings, flags, routes, domains, schedules,
-   Queue attachments, and secret names; prove production resources unchanged.
-6. **Completed:** the owner entered Worker secrets directly on
-   `juro-platform-staging`; API re-read exposes names only:
-   `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`.
-7. **Completed:** Cloudflare Access protects `staging.app.juro.uz` with one
-   owner-only allow policy and an eight-hour session.
-8. **Completed:** the staging custom domain was attached only after Access was
-   configured; an anonymous request receives an Access 302 with `no-store`.
-9. **Partially completed:** an earlier version passed authenticated canonical
-   RU/UZ document-builder smoke. The exact current version has control-plane
-   and anonymous Access evidence, but authenticated UI/cookie/replay smoke is
-   still open: the available browser runtime failed during startup, and Access
-   was not bypassed. Broader accessibility, mobile, provider, and end-to-end
-   product smoke tests also remain open.
-10. Keep feature flags false for every incomplete or unverified integration.
+1. **Completed:** pushed exact source commit `a1261c3c68151f9c275187fd422bd58c67b673a8`.
+2. **Completed:** full gate passed: type-check, lint, 378 tests, generated binding types, staging build/artifact, environment matrix, builder/comparison smokes, and secret scan.
+3. **Completed:** verified the exact pending `0030`–`0033` set and pre-change Time Travel/private-R2 backup.
+4. **Completed with recorded retry:** `0030`–`0032` applied; `0033` was atomically rejected for a concatenated migration breakpoint, corrected in `a1261c3`, retested 64/64, then applied alone.
+5. **Completed:** postflight proves 34 migrations, `quick_check=ok`, empty foreign-key check, and the exact lifecycle schema/guards.
+6. **Completed:** deployed the exact staging artifact with preserved dashboard secrets and re-read version, bindings, custom domain, Access, flags, consumers/DLQs, and cron.
+7. **Completed:** anonymous root, canonical builder, and deletion API all receive Access 302 plus `no-store`.
+8. **Completed:** first durable cron run finished successfully with no error or stuck lock.
+9. **Completed:** post-`0033` full/schema/data/manifest private-R2 round trip passed SHA-256.
+10. **Open:** authenticated UI/cookie/provider flows and the wider accessibility/mobile matrix; the browser runtime failed before tab connection and Access was not bypassed.
 
 The standalone `validate:artifact` task defaults to the development profile.
 Running it immediately after a staging build without an explicit
@@ -86,9 +56,9 @@ Production rollback is intentionally not described as executable permission.
 It requires a separately approved change set, backup, migration rehearsal,
 Sites/Worker ownership resolution, and explicit production confirmation.
 
-## Protected builder checkpoint — 2026-07-29
+## Previous protected builder checkpoint — 2026-07-29
 
-The current staging deployment is `888a4800-daf8-4211-b41d-a653d067ecd8`
+The previous staging deployment was `888a4800-daf8-4211-b41d-a653d067ecd8`
 with Worker version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% of
 `juro-platform-staging` traffic. The current artifact also contains typed RU/UZ
 workspace copy for documents, contacts, and notifications. The previously
@@ -107,7 +77,7 @@ verification of this exact version remains pending because the available
 browser-control runtime exited before an owner Access session could be used.
 Production was not deployed or changed.
 
-## Pending email-change security notification candidate
+## Historical pre-deploy email-change checkpoint
 
 The next local candidate includes commit `79f8632` email-change token rotation
 plus additive migration `0030` and one staging-only email Queue consumer. It
@@ -126,9 +96,9 @@ then retain a post-0030 export. Roll back the Worker to version
 the verified pre-0030 recovery input. Production requires separate approval and
 is outside this candidate.
 
-## Account-deletion staging candidate — 2026-07-30
+## Account-deletion staging deployment record — 2026-07-30
 
-Candidate scope: migrations `0030`–`0033`, email-notification and data-retention Queue consumers with dedicated staging DLQs, one locked `*/5 * * * *` outbox cron, account-deletion purge flag, and the tested RU/UZ settings/API flow. Legal-source ingestion and staff APIs remain false; no other Queue consumer is attached.
+Deployed staging scope: migrations `0030`–`0033`, email-notification and data-retention Queue consumers with dedicated staging DLQs, one locked `*/5 * * * *` outbox cron, account-deletion purge flag, and the tested RU/UZ settings/API flow. Legal-source ingestion and staff APIs remain false; no other Queue consumer is attached.
 
 Pre-deploy gates passed locally: full tests (27 rendered, 272 core, 79 Cloudflare), type-check, lint, generated Cloudflare binding types, exact staging build/artifact, all-environment dry-run matrix, builder/comparison smokes, diff check, and filename-only current/history secret scan. The private pre-migration checkpoint and Time Travel bookmark are recorded in `BACKUP-RESTORE.md`.
 

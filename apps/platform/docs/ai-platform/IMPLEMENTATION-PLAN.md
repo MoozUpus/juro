@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-29
-Status: source reconciliation, control-plane inventory, local Phase 1 foundation, bounded browser baseline, Time Travel and portable-restore drills, protected staging, and the canonical builder checkpoint are verified. Owner-approved Wrangler OAuth applied isolated staging migrations through `0029`; owner-only Cloudflare Access protects `staging.app.juro.uz`; the current Worker deployment `888a4800-daf8-4211-b41d-a653d067ecd8` / version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% from commit `288af4693d2679b48f016215caaabdcac9aa0fde` has exact staging bindings, a public Turnstile site key, and three server-only secret binding names. Phase 2 identity/workspace and Phase 3 legal-source schema are present, while consumers, schedules, async execution, Advice ingestion, and staff APIs remain disabled. Aggregate D1 shows three provider-accepted and consumed OTP challenges but does not replace a correlated current-version browser/mailbox/session-rotation trace. Identity protection remains expand-safe `legacy` with no protected profile/challenge evidence. Operational RTO, full browser/a11y/performance, live negative-provider tests, and production gates remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Staging D1 is through `0033`; deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` / version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` has exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. Legal ingestion and staff APIs remain disabled. Authenticated current-version browser/provider, operational RTO, full a11y/performance, and production gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -117,7 +117,7 @@ The two existing document-builder isolation defects are fixed in this phase befo
 
 Gate:
 
-- local auth/race tests pass and staging schema is through `0029`; live
+- local auth/race tests pass and staging schema is through `0033`; live
   Turnstile/Resend and protected staging full-HTTP/session-rotation E2E remain
   required;
 - cross-account/workspace leaks: zero;
@@ -295,7 +295,7 @@ Then stop and request two separate explicit approvals: first for production depl
 ## Current blockers that do not stop local implementation
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
-2. Production D1 cannot be migrated before production-specific backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0029` with portable/private-R2 checksum and disposable remote-D1 restore evidence, but operational RTO/RPO under representative load remains unverified.
+2. Production D1 cannot be migrated before production-specific backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0033` with pre/post portable/private-R2 checksum and earlier disposable remote-D1 restore evidence, but operational RTO/RPO under representative load remains unverified.
 3. The exact staging Worker now exposes the public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` binding names; values remain unread and out of source. Aggregate D1 proves three provider-accepted and consumed OTP challenges, but the current-version Turnstile/browser/mailbox trace, provider-failure matrix, and sender/domain evidence remain open. Identity dual-write/backfill also remains a separate gated transition.
 4. Owner-only Cloudflare Access and anonymous deny-before-auth are verified for staging; authenticated QA of the latest localized workspace screens plus mobile, zoom, reduced-motion, keyboard, and assistive-technology matrices remains open.
 5. Operator legal identity placeholders require owner-supplied approved legal details.

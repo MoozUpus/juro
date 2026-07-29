@@ -1,7 +1,7 @@
 # JURO backup and restore boundary
 
 Updated: 2026-07-29
-Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and disposable remote-D1 import drills are verified through migration `0029`. Scheduled backup automation, production protection, and an operational RTO remain unverified.
+Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and disposable remote-D1 import drills are verified; protected staging is through migration `0033` with a separate post-migration private-R2 checkpoint. Scheduled backup automation, production protection, and an operational RTO remain unverified.
 
 ## What is not a backup
 
@@ -194,7 +194,7 @@ Still not verified:
 
 The verified-empty D-040 exception remains consumed. These staging artifacts
 do not authorize a production migration. Production/development remain through
-`0004`; only `juro-staging` is through `0029`.
+`0004`; only `juro-staging` is through `0033`.
 
 ### Pre-0030–0033 account-deletion checkpoint — 2026-07-30
 
@@ -214,3 +214,18 @@ Private prefix: `d1/juro-staging/20260729T203509Z/` in `juro-staging-backups`.
 All four objects were downloaded from private R2 and matched local bytes exactly. The current schema export is byte-identical to the prior verified post-`0029` schema; the data export differs only in `auth_sessions` and `auth_devices` rows, not table shape. The existing disposable logical-import drill therefore covers the same schema/import topology, while the current bookmark and round-tripped exports cover current row recovery. This is not a measured incident RTO.
 
 If staging verification fails, first roll the Worker back to version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` and disable async/cron/purge. If schema recovery is actually required, place staging in maintenance and use the recorded Time Travel bookmark; portable exports are the independent recovery input. Never run the restore against production.
+
+### Post-0033 account-deletion checkpoint — 2026-07-29 UTC
+
+After `0030`–`0033` were applied and postflight passed, Wrangler recorded Time Travel bookmark `00000038-00000000-000050b7-3dd08fc7ac98dc71649719b525b4abf6`. The exact deployed commit is `a1261c3c68151f9c275187fd422bd58c67b673a8`; staging deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` serves Worker version `12a3abf3-af6d-41da-8726-b7abf03f5dbf`.
+
+Private prefix: `d1/juro-staging/20260729T210508Z/` in `juro-staging-backups`.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| `juro-staging-full.sql` | 169,952 | `c52bf13c57d21671b592c680fe57f488347e280d3810164186b0fe73d06be398` |
+| `juro-staging-schema.sql` | 151,987 | `dd0410958e2428d3e0dddd7f31848592653c54148aa85f0f5a96250378810e25` |
+| `juro-staging-data.sql` | 17,997 | `4a124d8fc85abe9cb965e2576016c4017b5ded80d31cba3a0b4983575a489694` |
+| `manifest.json` | 1,007 | `fdbb0673933d3feb97c6201e998c9c5e4fc4cd8c63b9c50eb174fe325a71b10d` |
+
+All four objects were downloaded from the private bucket and matched their local SHA-256 exactly. This verifies portable backup round-trip, not a measured operational RTO. Application rollback uses prior Worker version `448e5bf1-4bf8-4000-af2b-2c034e3eca10`; schema recovery is reserved for demonstrated corruption and uses the pre-change bookmark under staging maintenance. Production is never a target for these commands.

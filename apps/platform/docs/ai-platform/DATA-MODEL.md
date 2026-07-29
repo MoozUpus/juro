@@ -1,7 +1,7 @@
 # JURO platform data model
 
 Updated: 2026-07-30
-Status: additive schema through local migration `0033`; remote staging is through `0029` until the migration gate is executed. Production remains on its existing schema.
+Status: additive schema through migration `0033`; isolated protected staging is through `0033` with integrity/backup evidence. Production and development remain on their existing `0004` schema.
 
 ## Modeling rules
 

@@ -1,7 +1,7 @@
 # JURO Cloudflare resources
 
-Updated: 2026-07-29
-Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0029`; migration-specific full/schema/data exports, private R2 checksum round trips, and a disposable remote restore drill are recorded. Worker `juro-platform-staging` is deployed from pushed commit `0544a56` behind owner-only Cloudflare Access at `staging.app.juro.uz`; workers.dev and previews remain disabled, all activation flags remain false, and no Queue consumer or schedule is attached. Exact staging resource bindings, the public Turnstile site key, and three server-only secret binding names are present. Production resources, traffic, Sites v20, and the legacy Worker were not changed.
+Updated: 2026-07-30
+Status: owner-approved Wrangler OAuth was used for staging only. `juro-staging` is through `0033` with verified pre/post Time Travel and private-R2 exports. Deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` serves version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` from commit `a1261c3` behind owner-only Access. Exactly two staging consumers and one five-minute cron are active; legal ingestion and staff APIs remain disabled. Production resources, traffic, Sites v20, and legacy Worker `juro` were not changed.
 
 ## Verified control-plane identity
 
@@ -25,10 +25,10 @@ The existing Sites project has no preview URL. Every Sites deployment is a produ
 | Environment | Database | ID | Remote state |
 |---|---|---|---|
 | Development | `juro-development` | `d07670cf-f7bf-460c-a668-101671d4c330` | exists; 61 non-internal tables reported |
-| Staging | `juro-staging` | `bb716a96-b2fb-4823-90d6-6c228fed181a` | exists; EEUR; exact 30-entry ledger `0000`–`0029`; 109 non-internal tables and 58 triggers; migration-specific remote restore drill and zero FK violations |
+| Staging | `juro-staging` | `bb716a96-b2fb-4823-90d6-6c228fed181a` | exists; EEUR; exact 34-entry ledger `0000`–`0033`; 114 non-internal tables, 70 triggers, 198 indexes; pre/post private-R2 checkpoints, `quick_check=ok`, zero FK violations |
 | Production | `juro-production` | `4cce509b-0e02-4ca9-a3ba-a5ce1327aeda` | exists; 61 non-internal tables reported; preserve |
 
-The current branch has migrations `0000`–`0029`. Staging's exact 30-entry ledger, table count, trigger count, and token/legal-source foundation tables were re-read after migration. The pre-`0029` export passed a disposable remote-D1 restore drill; the post-`0029` full/schema/data set passed private-R2 checksum round trips and remote D1 has zero foreign-key violations. Production/development remain at `0000`–`0004`; no migration was applied to either environment.
+The current branch has migrations `0000`–`0033`. Staging has the exact 34-entry ledger and post-`0033` integrity evidence. The pre/post full/schema/data/manifest sets passed private-R2 checksum round trips; the earlier disposable remote restore drill remains valid for its captured topology. Production/development remain at `0000`–`0004`; no migration was applied to either environment.
 
 ### R2
 
@@ -79,23 +79,16 @@ The task-specific development/staging v2 queues and distinct DLQ resources now e
 | Staging | data retention cleanup | `626ed10539354be1a1476fdd34a78993` | `2f7f59b8a2374616a210ed9dc8074caf` |
 | Staging | notifications | `d438df684a584891ac46a706bd8dc708` | `7ccbd9d4b02c41309af92a6692624a4d` |
 
-The current local source candidate changes only staging email execution: it sets
-`ASYNC_RUNTIME_ENABLED=true` and declares one consumer for
-`staging-email-notifications` with batch size 5, five-second batching, five
-retries, 30-second retry delay, concurrency 2, and the existing distinct DLQ.
-Development and production stay disabled and consumer-free. This candidate has
-not been deployed; the remote inventory below remains the authoritative state.
-
-Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The protected staging Worker attaches seven producer bindings; all execution flags are false and there is no consumer, DLQ attachment, schedule, or malware producer. The first API attempt created `development-document-analysis` and then rejected an unsupported settings mutation with generic error `10013`; inventory proved the single partial creation, after which provisioning resumed idempotently without duplicates. The API-supported creation default remains 86,400 seconds; retry, backoff, delivery, and DLQ policies are not claimed until a real consumer is implemented and reviewed. Remote legacy development queues remain unchanged; any later cleanup is a separate reviewed operation.
+The deployed staging source attaches only `staging-email-notifications` and `staging-data-retention-cleanup` as consumers. They use distinct DLQs, five retries, 30-second retry delay, and concurrency 2/1 respectively. The other five staging primaries remain producer-only; all development and production consumers remain absent. The only schedule is the locked `*/5 * * * *` outbox dispatcher. Remote legacy development queues remain unchanged; any later cleanup is a separate reviewed operation.
 
 ### Vectorize, scheduling, observability, and DNS
 
 - Vectorize indexes: eight empty v2 indexes exist — `development-{lex-uz,advice-uz,internal-legal-materials,user-documents}` and the matching `staging-*` set. Every index was re-read at 1,536 dimensions with cosine distance; no vector or metadata index is claimed.
-- Cron triggers: none.
+- Cron triggers: staging has exactly `*/5 * * * *`; development and production have none.
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
-- Staging primary queues have one producer binding from `juro-platform-staging`; all DLQs, development queues, and every Queue consumer remain unattached.
-- Staging Worker serves deployment `888a4800-daf8-4211-b41d-a653d067ecd8`, version `448e5bf1-4bf8-4000-af2b-2c034e3eca10`, at 100% from commit `288af4693d2679b48f016215caaabdcac9aa0fde`. Script subdomain and previews remain disabled; schedules and consumers remain absent.
+- Staging primary queues have one producer binding; email and data-retention each have one `juro-platform-staging` consumer and distinct DLQ. Other consumers remain unattached.
+- Staging Worker serves deployment `a38d3cbc-7fd1-4829-be9d-97249f265882`, version `12a3abf3-af6d-41da-8726-b7abf03f5dbf`, at 100% from commit `a1261c3c68151f9c275187fd422bd58c67b673a8`. Script subdomain and previews remain disabled; exactly one schedule and two reviewed staging consumers are active.
 - `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
@@ -281,26 +274,23 @@ Cloudflare Access is enabled for the `curly-rice-90a4` Zero Trust organization. 
 
 The Access application is hidden from the App Launcher and auto-redirects to the sole configured Cloudflare identity provider. A 200 API re-read proved the exact destination, provider, policy selector, cookie settings and session duration. An unauthenticated HTTPS smoke test was redirected to the Access login endpoint; it did not reach the application. This proves the external deny-before-auth gate. Production DNS, routes, domains, Workers, Sites and policies remained unchanged.
 
-## Active protected staging deployment — 2026-07-29
+## Active protected staging deployment — 2026-07-29 UTC
 
 | Evidence | Verified value |
 |---|---|
 | Worker | `juro-platform-staging` |
-| Deployment | `888a4800-daf8-4211-b41d-a653d067ecd8` |
-| Version | `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% |
-| Startup time | 172 ms reported by Wrangler |
+| Deployment | `a38d3cbc-7fd1-4829-be9d-97249f265882` |
+| Version | `12a3abf3-af6d-41da-8726-b7abf03f5dbf` at 100% |
+| Source | commit `a1261c3c68151f9c275187fd422bd58c67b673a8` |
+| Startup time | 167 ms reported by Wrangler |
 | Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` |
-| Anonymous boundary | 302 to Access login; `no-store`, application content denied |
-| Authenticated smoke | canonical RU/UZ library/category/template passed on a prior protected version; the current canonical business-workspace version still awaits an authenticated browser pass |
+| Consumers | staging email + data-retention only; each has its own DLQ |
+| Schedule | locked outbox dispatch `*/5 * * * *` |
+| Anonymous boundary | root, builder and deletion API return 302 to Access with `no-store` |
+| Authenticated smoke | prior protected builder evidence exists; exact-current browser/cookie/provider flow remains open |
 
-Secret values were neither read nor emitted. Async runtime, Cron, legal-source
-ingestion and staff API flags remain false. Production resources and traffic
-were not changed.
+Secret values were neither read nor emitted. Staging async/cron/account-purge flags are true; legal-source ingestion and staff API flags remain false. Workers.dev and previews are disabled. Production resources and traffic were not changed.
 
-## Pending account-deletion staging activation — 2026-07-30
+## Account-deletion staging activation evidence — 2026-07-29 UTC
 
-Read-only control-plane verification confirms custom domain `staging.app.juro.uz` belongs to `juro-platform-staging`, workers.dev/previews are disabled, and Access application `JURO platform staging — owner only` protects the exact hostname. The current deployed version remains `448e5bf1-4bf8-4000-af2b-2c034e3eca10`, with no cron and no Queue consumers.
-
-The tested candidate will attach only two staging consumers: `staging-email-notifications` -> `staging-email-notifications-dlq` and `staging-data-retention-cleanup` -> `staging-data-retention-cleanup-dlq`; it also attaches `*/5 * * * *`. Secret inventory remains names-only: `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`. The remaining provider/model secrets required by later AI phases are not claimed as present.
-
-Four current pre-migration backup objects under `d1/juro-staging/20260729T203509Z/` passed private R2 round-trip checksum verification. Production Workers, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.
+Control-plane verification confirms the exact custom domain and owner-only Access application, staging-only bindings, deployment/version, one schedule, two primary consumers and their distinct DLQs. The first durable cron run completed with `error_code=null` and no active lock. `juro-staging` is through `0033` with no pending migration, and the post-migration checkpoint under `d1/juro-staging/20260729T210508Z/` passed private-R2 SHA-256 round trip. Secret inventory remains names-only. Production Worker `juro`, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.
