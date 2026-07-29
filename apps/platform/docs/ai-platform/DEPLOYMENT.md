@@ -106,3 +106,22 @@ and all staging D1/R2/Queue/Vectorize/Analytics bindings. Authenticated browser
 verification of this exact version remains pending because the available
 browser-control runtime exited before an owner Access session could be used.
 Production was not deployed or changed.
+
+## Pending email-change security notification candidate
+
+The next local candidate includes commit `79f8632` email-change token rotation
+plus additive migration `0030` and one staging-only email Queue consumer. It
+has not been deployed. Local gates pass: 351 tests, type-check, lint,
+development/staging/production Cloudflare artifact matrix, staging build and
+artifact validation, canonical builder smoke, and document-comparison smoke.
+
+The safe staging order is: create/checksum a pre-0030 full/schema/data export;
+repeat the disposable restore drill; apply only migration `0030`; verify the
+31-entry ledger, new table/index/trigger, queue/DLQ resources, and zero FK
+violations; deploy `juro-platform-staging` with `--keep-vars`; re-read the
+version/settings/consumer; run anonymous Access denial and authenticated
+email-change/old-token/prior-mailbox evidence; inspect safe queue/job state;
+then retain a post-0030 export. Roll back the Worker to version
+`448e5bf1-4bf8-4000-af2b-2c034e3eca10` if runtime gates fail; D1 rollback uses
+the verified pre-0030 recovery input. Production requires separate approval and
+is outside this candidate.

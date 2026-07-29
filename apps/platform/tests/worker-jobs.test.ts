@@ -919,6 +919,47 @@ test("outbox dispatch is leased, identifiers-only, and fenced on success", async
   }
 });
 
+test("subject-scoped outbox dispatch leaves neighboring work pending", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    insertOutbox(sqlite, {
+      id: "outbox_neighbor",
+      idempotencyKey: "outbox_idem_neighbor",
+      subjectId: "subject_neighbor",
+      correlationId: "outbox_corr_neighbor",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_target",
+      idempotencyKey: "outbox_idem_target",
+      subjectId: "subject_target",
+      correlationId: "outbox_corr_target",
+    });
+    const { env, sends } = createEnv(d1);
+    assert.deepEqual(await dispatchOutbox(env, 1, "subject_target"), {
+      claimed: 1,
+      dispatched: 1,
+      rejected: 0,
+      retrying: 0,
+    });
+    assert.equal(sends.length, 1);
+    assert.equal(
+      (sends[0]?.body as { subjectId: string }).subjectId,
+      "subject_target",
+    );
+    const states = sqlite.prepare(
+      "SELECT subject_id AS subjectId,status FROM job_outbox ORDER BY subject_id",
+    ).all();
+    assert.equal((states[0] as { status: string }).status, "pending");
+    assert.equal((states[1] as { status: string }).status, "dispatched");
+    await assert.rejects(
+      dispatchOutbox(env, 1, "invalid subject"),
+      /Invalid outbox subject identifier/,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("outbox compatibility-blocks legacy job kinds without publishing", async () => {
   for (const legacyKind of LEGACY_JOB_KINDS) {
     const { sqlite, d1 } = createDatabase();

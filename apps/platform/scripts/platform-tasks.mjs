@@ -104,6 +104,7 @@ const coreTestFiles = [
   "tests/auth-mfa.test.ts",
   "tests/account-deletion.test.ts",
   "tests/email-change.test.ts",
+  "tests/security-email.test.ts",
   "tests/legal-source-trust.test.ts",
   "tests/legal-source-fetch.test.ts",
   "tests/legal-source-acquisition.test.ts",

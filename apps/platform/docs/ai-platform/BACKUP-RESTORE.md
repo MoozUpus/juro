@@ -172,6 +172,18 @@ bookmark at `2026-07-28T23:00:35Z` was also recorded as
 It was not used for a restore because the additive migration completed and all
 post-migration checks passed.
 
+### Pending security-email checkpoint - migration 0030
+
+Migration `0030` is local only. Before any remote application, create new
+pre-migration full/schema/data exports, record the staging bookmark and exact
+30-entry ledger, verify private-R2 checksum round trips, and repeat the
+disposable remote-D1 logical import. Apply only `0030`, verify the 31-entry
+ledger plus the new table/index/trigger and zero foreign-key violations, then
+retain and checksum a post-migration export. If any step fails, do not deploy
+the email consumer; restore to a disposable database and use the retained
+pre-0030 artifact as the reviewed recovery input. No 0030 backup or restore
+claim exists yet.
+
 Still not verified:
 
 - an operational RTO/RPO under representative incident conditions and load;

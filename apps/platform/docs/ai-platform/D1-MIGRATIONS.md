@@ -576,6 +576,34 @@ session and device. Raw session tokens are never persisted. The full local
 schema-applied to isolated staging; protected-staging HTTP/cookie/replay
 behavior remains a separate open gate.
 
+## Migration 0030
+
+`0030_eager_shen.sql` adds the durable security-email boundary required by a
+confirmed canonical email change:
+
+- `security_email_jobs` stores user/workspace/challenge references, locale,
+  encrypted recipient evidence, bounded status/attempt/error state, and the
+  Resend provider message ID after success;
+- the previous email address is never stored as a plaintext job or outbox field;
+- the challenge/event unique index gives the transaction one durable job winner;
+- status/user indexes support bounded retry and operational reconciliation;
+- a trigger makes recipient ciphertext, IV, and key version immutable.
+
+The migration has five additive statements: one table, three indexes, and one
+trigger. It contains no `ALTER`, `DROP`, `UPDATE`, or `DELETE`. The full
+local `0000`–`0030` sequence has 108 application tables, 154 foreign keys,
+and zero foreign-key violations. Runtime tests additionally prove one
+transactional outbox row, identifiers-only Queue delivery, provider
+idempotency, sequential and concurrent duplicate suppression, retryable
+failure state, and fail-closed missing configuration.
+
+This migration is not applied to remote staging. Before it can be applied,
+capture and checksum new full/schema/data exports, retain the current bookmark,
+repeat the disposable remote-D1 restore drill, apply only `0030`, verify the
+31-entry ledger/table/index/trigger/FK state, retain a post-migration export,
+and then deploy the reviewed staging-only email consumer. Production and
+development remain unchanged.
+
 ## Staging bootstrap evidence and remaining procedure
 
 The one-time D-040 verified-empty bootstrap is complete. It captured pre-bookmark

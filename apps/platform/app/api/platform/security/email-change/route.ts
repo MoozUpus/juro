@@ -18,6 +18,7 @@ import {
   parseJsonRequest,
 } from "../../../../../lib/auth/input";
 import {
+  identityKeyring,
   jsonNoStore,
   localSessionForRequest,
 } from "../../../../../lib/auth/mfa-http";
@@ -38,6 +39,8 @@ import {
   runtimeEnv,
 } from "../../../../../lib/document-builder/storage/runtime";
 import { ensureDefaultWorkspace } from "../../../../../lib/platform/workspace";
+import { dispatchOutbox } from "../../../../../worker/platform-outbox";
+import type { PlatformJobEnv } from "../../../../../worker/platform-jobs";
 
 const CHALLENGE_TTL_MS = 10 * 60 * 1_000;
 const RECENT_SESSION_MS = 10 * 60 * 1_000;
@@ -345,8 +348,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const now = nowDate.toISOString();
   let session: LocalSession;
   let currentToken: string;
+  let securityEmailKeyring: ReturnType<typeof identityKeyring>;
   try {
     session = await recentEmailChangeSession(request, nowDate);
+    securityEmailKeyring = identityKeyring();
     const token = sessionTokenFromCookie(request.headers.get("cookie"));
     if (!token) throw new MfaError("LOCAL_SESSION_REQUIRED");
     currentToken = token;
@@ -466,17 +471,32 @@ export const POST = withApiErrors(async function POST(request: Request) {
     currentCode: body.currentCode,
     newCode: body.newCode,
     assuranceLevel: session.assuranceLevel,
+    locale,
+    securityEmailKeyring,
     now,
     recentSince: new Date(nowMs - RECENT_SESSION_MS).toISOString(),
   });
   if (result.status !== "confirmed") {
     return confirmationError(result, locale);
   }
+  const env = runtimeEnv();
+  if (String((env as { ASYNC_RUNTIME_ENABLED?: string }).ASYNC_RUNTIME_ENABLED) === "true") {
+    try {
+      await dispatchOutbox(
+        env as unknown as PlatformJobEnv,
+        1,
+        result.securityEmailJobId,
+      );
+    } catch {
+      // The transactional outbox remains pending for a later safe retry.
+    }
+  }
   return jsonNoStore(
     {
       ok: true,
       email: result.newEmail,
       revokedSessions: result.revokedSessions,
+      securityNotificationQueued: true,
     },
     200,
     [sessionCookieUntil(result.session.token, result.session.expiresAt)],

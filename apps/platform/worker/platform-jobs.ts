@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  executeSecurityEmailJob,
+  SecurityEmailError,
+} from "../lib/auth/security-email";
+import {
   LegalSourceAcquisitionError,
   executeLegalSourceFetchRequest,
 } from "../lib/legal/source-acquisition";
@@ -73,6 +77,10 @@ export type JobEnvelope = z.infer<typeof jobEnvelopeSchema>;
 
 type JobErrorCode =
   | "ASYNC_RUNTIME_DISABLED"
+  | "EMAIL_CONFIGURATION_UNAVAILABLE"
+  | "EMAIL_JOB_INVALID"
+  | "EMAIL_PROVIDER_REJECTED"
+  | "EMAIL_PROVIDER_UNAVAILABLE"
   | "JOB_HANDLER_NOT_ENABLED"
   | "JOB_IDEMPOTENCY_CONFLICT"
   | "JOB_LEASE_LOST"
@@ -163,6 +171,9 @@ export type PlatformJobEnv = Omit<
   ASYNC_RUNTIME_ENABLED: string;
   CRON_ENABLED: string;
   LEGAL_ADVICE_INGESTION_ENABLED: string;
+  RESEND_API_KEY?: string;
+  EMAIL_FROM?: string;
+  IDENTITY_KEYRING?: string;
 };
 
 export function expectedQueueName(
@@ -473,6 +484,17 @@ async function executeJob(
 ): Promise<void> {
   if (queueName !== expectedQueueName(envelope.kind, env.APP_ENV)) {
     throw new SafeJobError("JOB_QUEUE_MISMATCH", false);
+  }
+  if (envelope.kind === "email.send") {
+    try {
+      await executeSecurityEmailJob(env, envelope.subjectId);
+      return;
+    } catch (error) {
+      if (error instanceof SecurityEmailError) {
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
   }
   if (envelope.kind === "legal.sync") {
     try {

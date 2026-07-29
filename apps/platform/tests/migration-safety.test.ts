@@ -49,6 +49,7 @@ const legalSourcePublicationEntry = journal.entries.find(
 const sessionTokenRotationEntry = journal.entries.find(
   ({ idx }) => idx === 29,
 );
+const securityEmailJobEntry = journal.entries.find(({ idx }) => idx === 30);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -109,6 +110,10 @@ assert.ok(
 assert.ok(
   sessionTokenRotationEntry,
   "Drizzle journal must contain migration 0029",
+);
+assert.ok(
+  securityEmailJobEntry,
+  "Drizzle journal must contain migration 0030",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2731,8 +2736,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 107);
-    assert.equal(foreignKeyCount(db), 151);
+    assert.equal(tableDefinitions(db).size, 108);
+    assert.equal(foreignKeyCount(db), 154);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3234,8 +3239,8 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 107);
-    assert.equal(foreignKeyCount(db), 151);
+    assert.equal(tableDefinitions(db).size, 108);
+    assert.equal(foreignKeyCount(db), 154);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3283,6 +3288,46 @@ test("0029 adds only constrained session token rotation evidence", () => {
       0,
     ),
     149,
+  );
+});
+
+test("0030 adds an encrypted, durable security email job boundary", () => {
+  const sql = migrationSql(securityEmailJobEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 5);
+  assert.match(migrationStatements[0], /^CREATE TABLE\b/i);
+  for (const statement of migrationStatements.slice(1, 4)) {
+    assert.match(statement, /^CREATE (?:UNIQUE )?INDEX\b/i);
+  }
+  assert.match(migrationStatements[4], /^CREATE TRIGGER\b/i);
+  assert.match(sql, /CREATE TABLE .*security_email_jobs/);
+  assert.match(sql, /recipient_ciphertext/);
+  assert.match(sql, /recipient_iv/);
+  assert.match(sql, /recipient_key_version/);
+  assert.match(sql, /security_email_jobs_challenge_event_uidx/);
+  assert.match(sql, /security_email_jobs_recipient_immutable/);
+  assert.doesNotMatch(sql, /recipient_email/);
+  assert.doesNotMatch(sql, /(?:^|\n)\s*(?:DROP|ALTER|DELETE|UPDATE)\b/im);
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0029_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0030_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(securityEmailJobEntry.idx, 30);
+  assert.equal(securityEmailJobEntry.tag, "0030_eager_shen");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 82);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    152,
   );
 });
 

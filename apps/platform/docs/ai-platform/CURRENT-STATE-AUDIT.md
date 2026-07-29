@@ -86,15 +86,15 @@ Verified durable resources:
 
 The production Worker currently binds only Assets, Images, production D1/R2, `EMAIL_FROM`, and secret `RESEND_API_KEY`. The Sites runtime inventory contains `APP_URL`, `EMAIL_FROM`, `PUBLIC_SITE_URL`, and secret `RESEND_API_KEY`. Required OpenAI, Anthropic, encryption/session, OTP pepper, Turnstile, TOTP, signed-URL, and Cron secrets are absent by name from the inspected production surfaces.
 
-The local Phase 1 source exports `fetch`, `queue`, and `scheduled` and uses the exact v2 R2/Vectorize names plus seven producer-only Queue bindings. `consumers` is empty, malware is unattached, legacy job kinds are blocked, and there is no trigger. A single `legal.sync` handler is now connected to the local request/outbox/fetch/R2/pending-review contract; every environment still has `ASYNC_RUNTIME_ENABLED=false`, and Advice has an additional `LEGAL_ADVICE_INGESTION_ENABLED=false` gate. Other handlers remain disabled. Control-plane inventory separately proves that empty non-production resources exist; neither source nor inventory proves a Worker attachment, consumer, retry/DLQ path, live legal ingestion, or runtime activation is safe.
+The local source exports `fetch`, `queue`, and `scheduled` and uses the exact v2 R2/Vectorize names plus seven Queue producer bindings. Development and production remain `ASYNC_RUNTIME_ENABLED=false` and consumer-free. The next staging candidate alone sets async execution true and attaches only `staging-email-notifications` to the implemented encrypted prior-address alert handler and its distinct DLQ; `legal.sync` remains implemented but unattached, Advice remains separately disabled, malware is unattached, legacy job kinds are blocked, and there is no schedule. The deployed staging Worker still has execution false and zero consumers. Control-plane inventory proves the isolated resources exist, but the new consumer, retry/DLQ path, and migration `0030` are not remote evidence until backup/restore, deploy, and staging delivery tests pass.
 
 The Sites read-only connector unexpectedly returned a bypass bearer token in raw tool output. Its value was not quoted, stored, reused, or committed. It must be rotated/revoked through the Sites control plane before production work.
 
 ## Data and migrations
 
-- Drizzle schema currently describes 79 application tables.
-- Local application of migrations `0000`–`0029` to an empty in-memory SQLite database succeeded.
-- The resulting local database had 107 application tables, 151 foreign keys, and zero foreign-key violations.
+- Drizzle schema currently describes 80 application tables.
+- Local application of migrations `0000`–`0030` to an empty in-memory SQLite database succeeded; `0030` is not remotely applied.
+- The resulting local database had 108 application tables, 154 foreign keys, and zero foreign-key violations.
 - The remote production and development D1 control plane reports 61 tables and migration ledgers `0000`–`0004`; migrations `0005`–`0029` are not applied to either database.
 - The isolated staging D1 reports the exact ordered ledger `0000`–`0029`, 109 non-internal tables, and 58 triggers. A migration-specific pre-`0029` export/private-R2 round trip and restore-only adapter reproduced all 106 exported tables, all 74 rows, the ledger/trigger inventory, and zero foreign-key errors in a disposable remote EEUR D1 before deletion. The post-`0029` full/schema/data set passed private-R2 checksum round trips, and remote D1 again reports zero foreign-key violations. Remote D1 does not authorize the integrity pragma itself.
 - No destructive `DROP` was found in the existing migrations.

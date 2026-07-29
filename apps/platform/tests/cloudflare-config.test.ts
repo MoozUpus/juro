@@ -84,14 +84,17 @@ function assertUnique(values: string[], label: string): void {
   );
 }
 
-test("declares isolated, disabled-by-default Cloudflare environments", () => {
+test("declares isolated Cloudflare environments with a staging-only email consumer", () => {
   const resourceNames = new Map<string, Set<string>>();
 
   for (const environment of environments) {
     const config = selectedEnvironment(environment);
     assert.equal(config.name, `juro-platform-${environment}`);
     assert.equal(config.vars.APP_ENV, environment);
-    assert.equal(config.vars.ASYNC_RUNTIME_ENABLED, "false");
+    assert.equal(
+      config.vars.ASYNC_RUNTIME_ENABLED,
+      environment === "staging" ? "true" : "false",
+    );
     assert.equal(config.vars.CRON_ENABLED, "false");
     assert.equal(config.vars.LEGAL_ADVICE_INGESTION_ENABLED, "false");
     assert.equal(config.vars.LEGAL_SOURCE_STAFF_API_ENABLED, "false");
@@ -143,7 +146,20 @@ test("declares isolated, disabled-by-default Cloudflare environments", () => {
       ),
       ["MALWARE_SCAN_QUEUE"],
     );
-    assert.deepEqual(config.queues.consumers, []);
+    assert.deepEqual(
+      config.queues.consumers,
+      environment === "staging"
+        ? [{
+            queue: "staging-email-notifications",
+            max_batch_size: 5,
+            max_batch_timeout: 5,
+            max_retries: 5,
+            dead_letter_queue: "staging-email-notifications-dlq",
+            max_concurrency: 2,
+            retry_delay: 30,
+          }]
+        : [],
+    );
 
     assert.deepEqual(
       config.vectorize,
@@ -267,7 +283,13 @@ test("does not attach legacy or premature queue contracts", () => {
   );
   assert.doesNotMatch(serialized, /"MALWARE_SCAN_QUEUE"/);
   assert.doesNotMatch(serialized, /-malware-scan"/);
-  assert.doesNotMatch(serialized, /"consumers":\[(?!\])/);
+  assert.deepEqual(source.queues.consumers, []);
+  assert.deepEqual(source.env.production.queues.consumers, []);
+  assert.equal(source.env.staging.queues.consumers.length, 1);
+  assert.equal(
+    source.env.staging.queues.consumers[0]?.queue,
+    "staging-email-notifications",
+  );
 });
 
 test("normalizes Sites primary bindings without losing add-ons", () => {

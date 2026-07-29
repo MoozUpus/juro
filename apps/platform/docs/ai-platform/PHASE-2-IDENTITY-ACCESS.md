@@ -223,6 +223,13 @@ raw email or legacy SHA fields can be cleared.
   or spend its wrong-code attempt budget;
 - the profile/settings UI shows the two-code flow in RU/UZ only when the
   current principal is a local session and Resend is configured.
+- the same guarded identity-change transaction creates one encrypted-recipient
+  security-email job and one identifiers-only outbox record for the previous
+  address; sequential and concurrent duplicate delivery are fenced locally;
+- the staging-only email consumer candidate uses a stable Resend idempotency
+  key, bounded retry state, a two-minute stale-send lease, RU/UZ copy, and
+  fail-closed configuration handling. Migration `0030` and this consumer are
+  not remotely active.
 
 Migration 0019 creates the dedicated additive challenge table and state
 triggers. Its schema is present only in isolated staging; no remote application
@@ -402,8 +409,8 @@ handling, 24-hour/30-day session persistence, structured onboarding,
 persona-preserving workspace selection, canonical localized auth routes, and the full existing builder/
 comparison/rendered Worker regression suite.
 
-The latest recorded local full suite passes 343/343 checks: 27 rendered
-Worker/security checks, 246 core/document/auth checks, and 70 Cloudflare
+The latest recorded local full suite passes 351/351 checks: 27 rendered
+Worker/security checks, 252 core/document/auth checks, and 71 Cloudflare
 configuration/migration/job checks. Remote staging now contains 110 total
 SQLite tables (109 non-internal), 58 triggers, the exact 30-entry ledger through
 `0029`, and zero pending migrations or foreign-key violations. Local service
@@ -541,8 +548,9 @@ provider, concurrency, or future-data evidence.
 
 - no live Turnstile or Resend delivery has been verified;
 - migrations 0011–0029 are schema-applied to isolated staging but not
-  production; no identity backfill, provider, or full-HTTP lifecycle is proven
-  by schema application and Worker deployment alone;
+  production; migration 0030 is locally verified but not remotely applied. No
+  identity backfill, provider, or full-HTTP lifecycle is proven by schema
+  application and Worker deployment alone;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, runtime activation, real-device authenticator flow, or remote D1
   concurrency test has been completed;
@@ -567,10 +575,12 @@ provider, concurrency, or future-data evidence.
   OTP email and all legacy SHA digests remain; no remote activation,
   dependency-safe retention drain, pseudonymization, contract migration, or
   key retirement has occurred;
-- protected email change is implemented and verified locally, and its schema
-  is in isolated staging, but real Resend batch delivery, remote D1 race tests,
-  alert mail, deployment of the current token-rotation code, and staging
-  session/device replay evidence are still absent;
+- protected email change is implemented and verified locally, and its challenge
+  schema is in isolated staging. Email-change token rotation plus an encrypted,
+  durable prior-address alert job/consumer pass locally, but real Resend
+  delivery, migration 0030 backup/restore and application, consumer deployment,
+  DLQ/redrive, remote D1 race tests, and staging session/device replay evidence
+  are still absent;
 - the platform staff policy and migrations 0020–0021 are schema-only in
   isolated staging; an
   internal fresh-MFA grant/revoke service and immutable role-change events now

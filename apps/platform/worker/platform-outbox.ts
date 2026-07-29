@@ -57,6 +57,7 @@ function isoAfter(iso: string, milliseconds: number): string {
 async function claimNextOutbox(
   env: PlatformJobEnv,
   now: string,
+  subjectId: string | null,
 ): Promise<OutboxRow | null> {
   const leaseOwner = crypto.randomUUID();
   const leaseExpiresAt = isoAfter(now, 2 * 60 * 1_000);
@@ -72,6 +73,7 @@ async function claimNextOutbox(
       SELECT id
       FROM job_outbox
       WHERE status IN ('pending', 'retrying', 'dispatching')
+        AND (? IS NULL OR subject_id = ?)
         AND available_at <= ?
         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
         AND (lease_expires_at IS NULL OR lease_expires_at <= ?)
@@ -86,6 +88,8 @@ async function claimNextOutbox(
     leaseOwner,
     leaseExpiresAt,
     now,
+    subjectId,
+    subjectId,
     now,
     now,
     now,
@@ -195,6 +199,7 @@ async function markOutboxDispatched(
 export async function dispatchOutbox(
   env: PlatformJobEnv,
   limit = 10,
+  subjectId: string | null = null,
 ): Promise<DispatchSummary> {
   const summary: DispatchSummary = {
     claimed: 0,
@@ -218,12 +223,15 @@ export async function dispatchOutbox(
   }
 
   const safeLimit = Math.max(1, Math.min(100, Math.trunc(limit)));
+  if (subjectId !== null && !/^[A-Za-z0-9:_-]{1,180}$/.test(subjectId)) {
+    throw new TypeError("Invalid outbox subject identifier.");
+  }
 
   for (let index = 0; index < safeLimit; index += 1) {
     const now = new Date().toISOString();
     let row: OutboxRow | null;
     try {
-      row = await claimNextOutbox(env, now);
+      row = await claimNextOutbox(env, now, subjectId);
     } catch {
       logOutbox("error", {
         event: "outbox.claim_failed",

@@ -799,6 +799,74 @@ export const emailChangeChallenges = sqliteTable(
   ],
 );
 
+export const securityEmailJobs = sqliteTable(
+  "security_email_jobs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "set null",
+    }),
+    challengeId: text("challenge_id").notNull().references(
+      () => emailChangeChallenges.id,
+      { onDelete: "cascade" },
+    ),
+    eventType: text("event_type").notNull(),
+    locale: text("locale").notNull(),
+    recipientCiphertext: text("recipient_ciphertext").notNull(),
+    recipientIv: text("recipient_iv").notNull(),
+    recipientKeyVersion: text("recipient_key_version").notNull(),
+    status: text("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    providerMessageId: text("provider_message_id"),
+    sentAt: text("sent_at"),
+    errorCode: text("error_code"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "security_email_jobs_event_check",
+      sql`${table.eventType} = 'email_changed_previous_address'`,
+    ),
+    check(
+      "security_email_jobs_locale_check",
+      sql`${table.locale} IN ('ru','uz')`,
+    ),
+    check(
+      "security_email_jobs_status_check",
+      sql`${table.status} IN ('pending','sending','retrying','sent','failed')`,
+    ),
+    check(
+      "security_email_jobs_attempts_check",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "security_email_jobs_recipient_check",
+      sql`length(${table.recipientCiphertext}) >= 22 AND length(${table.recipientIv}) = 16 AND length(${table.recipientKeyVersion}) BETWEEN 1 AND 32`,
+    ),
+    check(
+      "security_email_jobs_evidence_check",
+      sql`(
+        (${table.status} IN ('pending','sending') AND ${table.providerMessageId} IS NULL AND ${table.sentAt} IS NULL AND ${table.errorCode} IS NULL)
+        OR (${table.status} IN ('retrying','failed') AND ${table.providerMessageId} IS NULL AND ${table.sentAt} IS NULL AND ${table.errorCode} IS NOT NULL)
+        OR (${table.status} = 'sent' AND ${table.providerMessageId} IS NOT NULL AND ${table.sentAt} IS NOT NULL AND ${table.errorCode} IS NULL)
+      )`,
+    ),
+    uniqueIndex("security_email_jobs_challenge_event_uidx").on(
+      table.challengeId,
+      table.eventType,
+    ),
+    index("security_email_jobs_status_idx").on(
+      table.status,
+      table.updatedAt,
+    ),
+    index("security_email_jobs_user_idx").on(table.userId, table.createdAt),
+  ],
+);
+
 export const authTotpCredentials = sqliteTable("auth_totp_credentials", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),

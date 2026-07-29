@@ -123,7 +123,7 @@
       },
       "vars": {
         "APP_ENV": "staging",
-        "ASYNC_RUNTIME_ENABLED": "false",
+        "ASYNC_RUNTIME_ENABLED": "true",
         "CRON_ENABLED": "false",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
@@ -184,7 +184,17 @@
             "queue": "staging-notifications"
           }
         ],
-        "consumers": []
+        "consumers": [
+          {
+            "queue": "staging-email-notifications",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "staging-email-notifications-dlq",
+            "max_concurrency": 2,
+            "retry_delay": 30
+          }
+        ]
       },
       "vectorize": [
         {

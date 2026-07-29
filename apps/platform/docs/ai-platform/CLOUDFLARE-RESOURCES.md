@@ -79,6 +79,13 @@ The task-specific development/staging v2 queues and distinct DLQ resources now e
 | Staging | data retention cleanup | `626ed10539354be1a1476fdd34a78993` | `2f7f59b8a2374616a210ed9dc8074caf` |
 | Staging | notifications | `d438df684a584891ac46a706bd8dc708` | `7ccbd9d4b02c41309af92a6692624a4d` |
 
+The current local source candidate changes only staging email execution: it sets
+`ASYNC_RUNTIME_ENABLED=true` and declares one consumer for
+`staging-email-notifications` with batch size 5, five-second batching, five
+retries, 30-second retry delay, concurrency 2, and the existing distinct DLQ.
+Development and production stay disabled and consumer-free. This candidate has
+not been deployed; the remote inventory below remains the authoritative state.
+
 Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The protected staging Worker attaches seven producer bindings; all execution flags are false and there is no consumer, DLQ attachment, schedule, or malware producer. The first API attempt created `development-document-analysis` and then rejected an unsupported settings mutation with generic error `10013`; inventory proved the single partial creation, after which provisioning resumed idempotently without duplicates. The API-supported creation default remains 86,400 seconds; retry, backoff, delivery, and DLQ policies are not claimed until a real consumer is implemented and reviewed. Remote legacy development queues remain unchanged; any later cleanup is a separate reviewed operation.
 
 ### Vectorize, scheduling, observability, and DNS

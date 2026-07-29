@@ -19,7 +19,11 @@ import {
   type UserIdentityLookupPair,
   type UserIdentityRow,
 } from "./identity-protection";
+import type { IdentityKeyring } from "./keyring";
 import { batchWithSecurityEvent } from "./security-events";
+import {
+  prepareEmailChangedSecurityEmail,
+} from "./security-email";
 import { prepareSessionTokenRotation } from "./session-rotation";
 
 const MAX_HOURLY_CHALLENGES = 5;
@@ -88,6 +92,7 @@ export type EmailChangeConfirmation =
     newEmail: string;
     revokedSessions: number;
     session: { token: string; expiresAt: string };
+    securityEmailJobId: string;
   }
   | {
     status: "incorrect";
@@ -741,6 +746,8 @@ export async function confirmEmailChange(
     currentCode: string;
     newCode: string;
     assuranceLevel: "primary" | "mfa";
+    locale: "ru" | "uz";
+    securityEmailKeyring: IdentityKeyring;
     now: string;
     recentSince: string;
   },
@@ -953,6 +960,16 @@ export async function confirmEmailChange(
       ...emailChangedGuard.bindings,
     ],
   };
+  const securityEmail = await prepareEmailChangedSecurityEmail(db, {
+    keyring: input.securityEmailKeyring,
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    challengeId: challenge.id,
+    previousEmail: input.currentEmail,
+    locale: input.locale,
+    requiredGuard: completedGuard,
+    now: input.now,
+  });
   const oldOtp = otpEmailPredicate(
     input.currentEmail,
     oldOtpPairs,
@@ -975,6 +992,7 @@ export async function confirmEmailChange(
           verificationMethod: "dual_email_otp",
           sessionTokenRotated: true,
           tokenHistoryId: rotation.historyId,
+          securityEmailJobId: securityEmail.jobId,
         },
         createdAt: input.now,
       },
@@ -1148,6 +1166,7 @@ export async function confirmEmailChange(
           input.now,
           ...completedGuard.bindings,
         ),
+        ...securityEmail.statements,
       ],
       completedGuard,
     );
@@ -1175,12 +1194,15 @@ export async function confirmEmailChange(
     && Number(results[9]?.meta?.changes ?? 0) === 1
     && Number(results[10]?.meta?.changes ?? 0) === 1
     && Number(results[11]?.meta?.changes ?? 0) === 1
+    && Number(results[12]?.meta?.changes ?? 0) === 1
+    && Number(results[13]?.meta?.changes ?? 0) === 1
   ) {
     return {
       status: "confirmed",
       newEmail,
       revokedSessions: Number(results[6]?.meta?.changes ?? 0),
       session: { token: rotation.token, expiresAt: rotation.expiresAt },
+      securityEmailJobId: securityEmail.jobId,
     };
   }
   const after = await validatedChallenge(

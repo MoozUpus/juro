@@ -227,6 +227,8 @@ function confirm(
     currentCode: options.currentCode ?? CURRENT_CODE,
     newCode: options.newCode ?? NEW_CODE,
     assuranceLevel: options.assuranceLevel ?? "primary",
+    locale: "ru",
+    securityEmailKeyring: dualContext.keyring!,
     now,
     recentSince: new Date(
       Date.parse(now) - 10 * 60 * 1_000,
@@ -476,6 +478,7 @@ test("verified email change rotates canonical identity and revokes only other se
     const changedMetadata = JSON.parse(changedEvent.metadataJson) as {
       sessionTokenRotated: boolean;
       tokenHistoryId: string;
+      securityEmailJobId: string;
     };
     assert.equal(changedMetadata.sessionTokenRotated, true);
     const tokenHistory = sqlite.prepare(
@@ -489,6 +492,38 @@ test("verified email change rotates canonical identity and revokes only other se
     assert.equal(tokenHistory.tokenHash, await sha256(currentSession.token));
     assert.equal(tokenHistory.rotationReason, "email_change");
     assert.equal(tokenHistory.expiresAt, currentSession.expiresAt);
+    assert.equal(changedMetadata.securityEmailJobId, result.securityEmailJobId);
+    const securityEmail = sqlite.prepare(
+      `SELECT recipient_ciphertext AS recipientCiphertext,
+         recipient_iv AS recipientIv,recipient_key_version AS recipientKeyVersion,
+         status,attempt_count AS attemptCount
+       FROM security_email_jobs WHERE id=?`,
+    ).get(result.securityEmailJobId) as {
+      recipientCiphertext: string;
+      recipientIv: string;
+      recipientKeyVersion: string;
+      status: string;
+      attemptCount: number;
+    };
+    assert.notEqual(securityEmail.recipientCiphertext, CURRENT_EMAIL);
+    assert.equal(securityEmail.recipientIv.length, 16);
+    assert.equal(securityEmail.recipientKeyVersion, "v2");
+    assert.equal(securityEmail.status, "pending");
+    assert.equal(securityEmail.attemptCount, 0);
+    const outbox = sqlite.prepare(
+      `SELECT queue_binding AS queueBinding,job_type AS jobType,
+         subject_id AS subjectId,status
+       FROM job_outbox WHERE subject_id=?`,
+    ).get(result.securityEmailJobId) as {
+      queueBinding: string;
+      jobType: string;
+      subjectId: string;
+      status: string;
+    };
+    assert.equal(outbox.queueBinding, "EMAIL_NOTIFICATIONS_QUEUE");
+    assert.equal(outbox.jobType, "email.send");
+    assert.equal(outbox.subjectId, result.securityEmailJobId);
+    assert.equal(outbox.status, "pending");
   } finally {
     sqlite.close();
   }
@@ -589,6 +624,18 @@ test("parallel email confirmations have exactly one winner", async () => {
        WHERE session_id=? AND rotation_reason='email_change'`,
     ).get(currentSession.sessionId) as { total: number };
     assert.equal(historyCount.total, 1);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM security_email_jobs",
+      ).get() as { total: number }).total,
+      1,
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM job_outbox WHERE job_type='email.send'",
+      ).get() as { total: number }).total,
+      1,
+    );
   } finally {
     sqlite.close();
   }
@@ -795,6 +842,18 @@ test("email-change audit failure rolls back identity, claim, and revocation", as
        WHERE session_id=? AND rotation_reason='email_change'`,
     ).get(currentSession.sessionId) as { total: number };
     assert.equal(historyCount.total, 0);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM security_email_jobs",
+      ).get() as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM job_outbox WHERE job_type='email.send'",
+      ).get() as { total: number }).total,
+      0,
+    );
     assert.ok(await localSessionFromCookie(
       d1,
       `juro_session=${currentSession.token}`,

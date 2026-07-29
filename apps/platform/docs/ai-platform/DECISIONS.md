@@ -1405,3 +1405,35 @@ lint, staging build/artifact validation, canonical builder smoke, and comparison
 smoke pass. No migration or dependency is added. Exact-source CI, protected
 staging deployment, and authenticated HTTP/cookie/replay evidence remain
 pending. Production is unchanged.
+
+## D-068 — notify the previous address through an encrypted durable outbox
+
+Status: accepted and locally verified; migration and staging deployment pending
+Date: 2026-07-29
+
+A confirmed canonical email change must notify the previous address without
+putting that address into Queue payloads, logs, provider diagnostics, or
+plaintext job metadata. The identity-change transaction now creates exactly one
+`security_email_jobs` row whose recipient is protected with the versioned
+identity keyring and record-bound AES-GCM AAD, plus one identifiers-only
+`email.send` outbox row. The recipient ciphertext and key evidence are
+immutable. Migration `0030` is additive: one table, three indexes, and one
+trigger; the local sequence has 108 application tables, 154 foreign keys, and
+zero foreign-key violations.
+
+Only the staging source candidate enables async execution, and only for
+`staging-email-notifications`. Development and production remain disabled and
+consumer-free. The consumer calls Resend server-side with a stable provider
+idempotency key, stores only the provider message ID and safe status/error
+codes, suppresses sequential duplicates, fences concurrent sends, and permits a
+stale `sending` lease to retry after two minutes. Missing secrets fail closed.
+Local tests cover encrypted storage, identifiers-only dispatch, successful send,
+retryable provider failure, absent configuration, immutable recipient evidence,
+sequential replay, and concurrent delivery. The full suite passes 351 tests;
+type-check, lint, Cloudflare matrix, staging build/artifact, builder smoke, and
+comparison smoke pass.
+
+Migration `0030` has not been applied remotely. No consumer is attached to the
+deployed Worker, no real prior-address message has been sent, and no DLQ/redrive
+evidence is claimed. A new portable D1 checkpoint and disposable restore drill
+must precede any staging migration/deploy. Production is unchanged.

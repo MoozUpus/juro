@@ -6,10 +6,10 @@ Integration branch baseline: `1d3d23d` before this documentation update
 
 ## Verified baseline
 
-- Drizzle schema: 79 application tables.
-- Migration files: `0000`–`0029`.
+- Drizzle schema: 80 application tables.
+- Migration files: `0000`–`0030`; `0030` is a local staging candidate and is not remotely applied.
 - All migrations apply successfully to a new local SQLite database.
-- Local migrated result: 107 application tables, 151 foreign keys; zero foreign-key violations.
+- Local migrated result: 108 application tables, 154 foreign keys; zero foreign-key violations.
 - No destructive `DROP` statement was found.
 - The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0029` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 30-entry `0000`–`0029` ledger, 109 non-internal tables, and 58 triggers. Its migration-specific exports passed private-R2 round trips, and a disposable remote EEUR D1 reproduced every exported table/row plus the pre-`0029` ledger/trigger/FK state before deletion. Post-`0029` staging has zero foreign-key violations. No production/development data or schema was mutated.
 
@@ -131,7 +131,7 @@ No table will be dropped during an expand step.
 
 ## Proposed additive migration sequence
 
-Migrations `0005`–`0029` contain checked-in SQL, were verified locally, and are present in isolated staging. Portable/private-R2/remote-restore checkpoints surround the `0022`–`0029` application. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and a new migration-specific backup/preflight gate is satisfied.
+Migrations `0005`–`0029` contain checked-in SQL, were verified locally, and are present in isolated staging. Migration `0030` is additive and locally verified but remains unapplied pending its own portable checkpoint and restore drill. Portable/private-R2/remote-restore checkpoints surround the `0022`–`0029` application. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and a new migration-specific backup/preflight gate is satisfied.
 
 1. **Identity security**
    - devices, security events, TOTP credentials, backup-code hashes;

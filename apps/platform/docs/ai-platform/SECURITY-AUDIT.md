@@ -115,9 +115,13 @@ Protected email change also revokes every other local session/device. Its local
 implementation now retires the exact current token, preserves the verified
 session ID with a replacement cookie, and does not extend absolute expiry. MFA
 elevation and MFA disable are deployed to protected staging and use the same
-one-claim replay revocation boundary; email-change deployment is pending. Exact
-current-version protected HTTP/cookie/replay evidence, periodic rotation, regional
-signals, new-device/security alert mail, and staging replay tests remain absent;
+one-claim replay revocation boundary; email-change deployment is pending. The
+local email-change transaction now also creates one encrypted prior-address
+security-email job and one identifiers-only outbox row. A staging-only Resend
+consumer candidate fences parallel sends and provider replay, but migration
+0030, the consumer, and real mailbox delivery are not remotely active. Exact
+current-version protected HTTP/cookie/replay evidence, periodic rotation,
+regional signals, new-device mail, and staging replay tests remain absent;
 SEC-006 is therefore not closed.
 
 ### SEC-007 — weak standalone share secret
@@ -170,9 +174,12 @@ challenge invalidation, exact current-token retirement and replacement without
 expiry extension, replay revocation, and atomic workspace/security audit
 evidence. The
 built Worker also rejects missing/cross-origin CSRF and platform-header-only
-management. The schema is bootstrapped in staging, but no real two-mailbox delivery, remote D1 race,
-security-alert email, or rollback rehearsal has run, so SEC-013 remains a
-release gate rather than a remotely closed finding.
+management. The challenge schema is bootstrapped in staging. Encrypted prior-address alert
+storage, transactional outbox creation, and a replay-safe consumer pass locally,
+but migration 0030 is not remotely applied and no real two-mailbox or prior-
+address delivery, remote D1 race, DLQ/redrive, consumer deployment, or rollback
+rehearsal has run. SEC-013 remains a release gate rather than a remotely closed
+finding.
 
 ## Medium findings
 
