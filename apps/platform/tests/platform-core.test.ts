@@ -418,6 +418,9 @@ test("email change binds both address proofs to one fresh local session", async 
   assert.match(route, /https:\/\/api\.resend\.com\/emails\/batch/);
   assert.match(route, /"idempotency-key"/);
   assert.match(route, /markEmailChangeCodesQueued/);
+  assert.match(route, /sessionTokenFromCookie/);
+  assert.match(route, /sessionCookieUntil/);
+  assert.match(route, /currentToken,/);
   assert.ok(
     route.indexOf("localSessionForRequest(request)")
       < route.indexOf("invalidateEmailChangeChallenge(requireD1()"),
@@ -426,6 +429,9 @@ test("email change binds both address proofs to one fresh local session", async 
   assert.match(service, /batchWithSecurityEvent/);
   assert.match(service, /account\.email_changed/);
   assert.match(service, /account_email_changed/);
+  assert.match(service, /prepareSessionTokenRotation/);
+  assert.match(service, /reason: "email_change"/);
+  assert.match(service, /sessionTokenRotated: true/);
   for (const table of [
     "auth_sessions",
     "auth_otp_challenges",

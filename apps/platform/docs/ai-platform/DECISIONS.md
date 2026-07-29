@@ -1382,3 +1382,26 @@ serves version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100%. Control-plane
 bindings, owner-only Access, anonymous 302/no-store denial, and zero pending D1
 migrations were re-verified. Authenticated HTTP/cookie/replay evidence remains
 open; production is unchanged.
+
+## D-067 — rotate the current session token after confirmed email change
+
+Status: accepted and locally verified; protected staging deployment pending
+Date: 2026-07-29
+
+Completing the dual-mailbox email-change ceremony transfers the canonical login
+identity and therefore must also retire the bearer token used to authorize that
+transfer. Wrong-code spending and the final claim are now guarded by the exact
+active session-token digest. The guarded D1 batch first changes the identity,
+then uses that identity-change predicate as the prerequisite for token-history
+insertion and rotation. It keeps the session ID, replaces the HttpOnly, Secure,
+SameSite cookie, and preserves the original absolute expiry.
+
+Service tests prove that the replacement token resolves the new identity, a
+replay of the old token creates one durable replay claim and revokes the
+replacement session/device, concurrent confirmations have one winner and one
+history row, and an audit failure leaves the original identity and token valid
+without partial rotation. The full local suite passes 344 checks; type-check,
+lint, staging build/artifact validation, canonical builder smoke, and comparison
+smoke pass. No migration or dependency is added. Exact-source CI, protected
+staging deployment, and authenticated HTTP/cookie/replay evidence remain
+pending. Production is unchanged.

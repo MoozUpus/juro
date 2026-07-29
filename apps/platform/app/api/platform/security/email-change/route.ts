@@ -27,6 +27,8 @@ import {
   requireRecentLocalSession,
 } from "../../../../../lib/auth/mfa-service";
 import type { LocalSession } from "../../../../../lib/auth/session-management";
+import { sessionCookieUntil } from "../../../../../lib/auth/session-persistence";
+import { sessionTokenFromCookie } from "../../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -342,8 +344,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const nowMs = nowDate.getTime();
   const now = nowDate.toISOString();
   let session: LocalSession;
+  let currentToken: string;
   try {
     session = await recentEmailChangeSession(request, nowDate);
+    const token = sessionTokenFromCookie(request.headers.get("cookie"));
+    if (!token) throw new MfaError("LOCAL_SESSION_REQUIRED");
+    currentToken = token;
   } catch (error) {
     const response = authErrorResponse(error, locale);
     if (response) return response;
@@ -454,6 +460,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     challengeId: body.challengeId,
     userId: session.userId,
     sessionId: session.sessionId,
+    currentToken,
     currentEmail: session.email,
     workspaceId: await ensureDefaultWorkspace(session.userId),
     currentCode: body.currentCode,
@@ -465,9 +472,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (result.status !== "confirmed") {
     return confirmationError(result, locale);
   }
-  return jsonNoStore({
-    ok: true,
-    email: result.newEmail,
-    revokedSessions: result.revokedSessions,
-  });
+  return jsonNoStore(
+    {
+      ok: true,
+      email: result.newEmail,
+      revokedSessions: result.revokedSessions,
+    },
+    200,
+    [sessionCookieUntil(result.session.token, result.session.expiresAt)],
+  );
 });

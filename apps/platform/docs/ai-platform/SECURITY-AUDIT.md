@@ -111,11 +111,12 @@ JURO sessions, a 24-hour standard absolute lifetime, a 30-day remember-me
 absolute lifetime, cookie/persisted-expiry alignment, a seven-day idle cap,
 current/single/other/all revocation, and an append-only security-event chain.
 The same lifetime choice flows through both direct OTP and MFA completion.
-Protected email change also revokes every other local session/device while
-preserving the verified current session. MFA elevation and MFA disable are deployed
-to protected staging; both rotate the exact current token, return a replacement
-cookie, preserve absolute expiry, and share the one-claim replay revocation boundary. Exact current-version
-protected HTTP/cookie/replay evidence, periodic/email-change rotation, regional
+Protected email change also revokes every other local session/device. Its local
+implementation now retires the exact current token, preserves the verified
+session ID with a replacement cookie, and does not extend absolute expiry. MFA
+elevation and MFA disable are deployed to protected staging and use the same
+one-claim replay revocation boundary; email-change deployment is pending. Exact
+current-version protected HTTP/cookie/replay evidence, periodic rotation, regional
 signals, new-device/security alert mail, and staging replay tests remain absent;
 SEC-006 is therefore not closed.
 
@@ -165,7 +166,9 @@ Local remediation status: migration 0019 and the application add a dedicated
 session-bound challenge, separate current/new mailbox codes, idempotent Resend
 batch acceptance, fresh-session and MFA-assurance checks, target uniqueness
 fences, one-winner identity rotation, other-session/device revocation, related
-challenge invalidation, and atomic workspace/security audit evidence. The
+challenge invalidation, exact current-token retirement and replacement without
+expiry extension, replay revocation, and atomic workspace/security audit
+evidence. The
 built Worker also rejects missing/cross-origin CSRF and platform-header-only
 management. The schema is bootstrapped in staging, but no real two-mailbox delivery, remote D1 race,
 security-alert email, or rollback rehearsal has run, so SEC-013 remains a
@@ -262,7 +265,8 @@ A bounded authenticated Chrome pass now confirms canonical RU/UZ builder renderi
    - real current/new mailbox delivery and provider-failure invalidation;
    - stale/revoked/primary-only session denial;
    - target-address ownership race and concurrent one-winner confirmation;
-   - current-session preservation and all-other-session/device revocation;
+   - replacement-cookie issuance, retired-token replay revocation, and
+     all-other-session/device revocation;
    - old/new OTP, deletion, MFA-login, and competing challenge invalidation;
    - audit rollback and safe alerting to the prior address.
 9. Legal-source staff inbox:

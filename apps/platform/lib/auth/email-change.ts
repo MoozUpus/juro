@@ -4,7 +4,7 @@ import {
   prepareEmailChangeEvidence,
   resolveEmailChangeNewEmail,
 } from "./challenge-evidence";
-import { normalizeEmail } from "./crypto";
+import { normalizeEmail, sha256 } from "./crypto";
 import {
   identityEvidenceLookupPairs,
   type KeyedIdentityEvidencePair,
@@ -20,6 +20,7 @@ import {
   type UserIdentityRow,
 } from "./identity-protection";
 import { batchWithSecurityEvent } from "./security-events";
+import { prepareSessionTokenRotation } from "./session-rotation";
 
 const MAX_HOURLY_CHALLENGES = 5;
 
@@ -86,6 +87,7 @@ export type EmailChangeConfirmation =
     status: "confirmed";
     newEmail: string;
     revokedSessions: number;
+    session: { token: string; expiresAt: string };
   }
   | {
     status: "incorrect";
@@ -733,6 +735,7 @@ export async function confirmEmailChange(
     challengeId: string;
     userId: string;
     sessionId: string;
+    currentToken: string;
     currentEmail: string;
     workspaceId: string;
     currentCode: string;
@@ -754,6 +757,13 @@ export async function confirmEmailChange(
   if (unavailable) return unavailable;
   const challenge = validated!.challenge;
   const newEmail = validated!.newEmail;
+  const currentTokenHash = await sha256(input.currentToken);
+  const liveTokenGuard = `${liveSessionGuard()}
+    AND session.token_hash=?`;
+  const liveTokenBindings = [
+    ...liveSessionBindings(input),
+    currentTokenHash,
+  ];
   const [
     currentCodeMatches,
     newCodeMatches,
@@ -796,7 +806,7 @@ export async function confirmEmailChange(
          AND invalidated_at IS NULL
          AND expires_at>?
          AND attempt_count<max_attempts
-         AND EXISTS (${liveSessionGuard()})
+         AND EXISTS (${liveTokenGuard})
        RETURNING attempt_count AS attemptCount,max_attempts AS maxAttempts`,
     ).bind(
       challenge.id,
@@ -804,7 +814,7 @@ export async function confirmEmailChange(
       input.sessionId,
       ...fence.bindings,
       input.now,
-      ...liveSessionBindings(input),
+      ...liveTokenBindings,
     ).run<{ attemptCount: number; maxAttempts: number }>();
     const updated = result.results[0];
     if (updated) {
@@ -919,6 +929,30 @@ export async function confirmEmailChange(
       input.now,
     ],
   };
+  const rotation = await prepareSessionTokenRotation(db, {
+    userId: input.userId,
+    sessionId: input.sessionId,
+    currentToken: input.currentToken,
+    reason: "email_change",
+    requiredGuard: emailChangedGuard,
+    now: new Date(input.now),
+  });
+  if (!rotation || rotation.assuranceLevel !== input.assuranceLevel) {
+    return { status: "state_conflict" };
+  }
+  const completedGuard = {
+    selectSql: `SELECT 1 FROM auth_sessions rotated_session
+      WHERE rotated_session.id=? AND rotated_session.user_id=?
+        AND rotated_session.token_hash=?
+        AND rotated_session.revoked_at IS NULL
+        AND EXISTS (${emailChangedGuard.selectSql})`,
+    bindings: [
+      input.sessionId,
+      input.userId,
+      rotation.tokenHash,
+      ...emailChangedGuard.bindings,
+    ],
+  };
   const oldOtp = otpEmailPredicate(
     input.currentEmail,
     oldOtpPairs,
@@ -931,6 +965,7 @@ export async function confirmEmailChange(
       {
         userId: input.userId,
         sessionId: input.sessionId,
+        deviceId: rotation.deviceId,
         eventType: "account.email_changed",
         severity: "critical",
         authSource: "local_session",
@@ -938,6 +973,8 @@ export async function confirmEmailChange(
         metadata: {
           challengeId: challenge.id,
           verificationMethod: "dual_email_otp",
+          sessionTokenRotated: true,
+          tokenHistoryId: rotation.historyId,
         },
         createdAt: input.now,
       },
@@ -951,7 +988,7 @@ export async function confirmEmailChange(
              AND invalidated_at IS NULL
              AND expires_at>?
              AND attempt_count<max_attempts
-             AND EXISTS (${liveSessionGuard()})
+             AND EXISTS (${liveTokenGuard})
              AND EXISTS (
                SELECT 1 FROM user_profiles current_profile
                WHERE ${currentFence.sql}
@@ -965,7 +1002,7 @@ export async function confirmEmailChange(
           input.sessionId,
           ...fence.bindings,
           input.now,
-          ...liveSessionBindings(input),
+          ...liveTokenBindings,
           ...currentFence.bindings,
           ...targetAvailableBindings,
         ),
@@ -1090,13 +1127,15 @@ export async function confirmEmailChange(
           input.userId,
           ...emailChangedGuard.bindings,
         ),
+        rotation.historyStatement,
+        rotation.rotationStatement,
         db.prepare(
           `INSERT INTO workspace_audit_events (
              id,workspace_id,actor_user_id,entity_type,entity_id,action,
              metadata_json,created_at
            )
            SELECT ?,?,?, 'user',?,'account_email_changed',?,?
-           WHERE EXISTS (${emailChangedGuard.selectSql})`,
+           WHERE EXISTS (${completedGuard.selectSql})`,
         ).bind(
           crypto.randomUUID(),
           input.workspaceId,
@@ -1107,10 +1146,10 @@ export async function confirmEmailChange(
             verificationMethod: "dual_email_otp",
           }),
           input.now,
-          ...emailChangedGuard.bindings,
+          ...completedGuard.bindings,
         ),
       ],
-      emailChangedGuard,
+      completedGuard,
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -1132,11 +1171,16 @@ export async function confirmEmailChange(
   if (
     Number(results[0]?.meta?.changes ?? 0) === 1
     && Number(results[1]?.meta?.changes ?? 0) === 1
+    && Number(results[8]?.meta?.changes ?? 0) === 1
+    && Number(results[9]?.meta?.changes ?? 0) === 1
+    && Number(results[10]?.meta?.changes ?? 0) === 1
+    && Number(results[11]?.meta?.changes ?? 0) === 1
   ) {
     return {
       status: "confirmed",
       newEmail,
       revokedSessions: Number(results[6]?.meta?.changes ?? 0),
+      session: { token: rotation.token, expiresAt: rotation.expiresAt },
     };
   }
   const after = await validatedChallenge(

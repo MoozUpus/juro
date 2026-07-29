@@ -215,9 +215,9 @@ raw email or legacy SHA fields can be cleared.
   with database predicates and indexes;
 - one guarded D1 batch consumes the challenge, rotates the canonical protected
   email, invalidates old/new auth OTP, deletion, MFA-login, and competing
-  email-change challenges, revokes every other local session/device, and
+  email-change challenges, revokes every other local session/device, retires the exact current token with reason `email_change`, rotates it without extending absolute expiry, and
   appends workspace and security-chain evidence;
-- the verified current session is preserved and subsequently resolves the new
+- the verified current session ID is preserved with a replacement HttpOnly cookie and subsequently resolves the new
   canonical email; parallel confirmations have exactly one winner;
 - a revoked/stale or insufficient-assurance session cannot consume a challenge
   or spend its wrong-code attempt budget;
@@ -569,7 +569,8 @@ provider, concurrency, or future-data evidence.
   key retirement has occurred;
 - protected email change is implemented and verified locally, and its schema
   is in isolated staging, but real Resend batch delivery, remote D1 race tests,
-  alert mail, and staging session/device revocation evidence are still absent;
+  alert mail, deployment of the current token-rotation code, and staging
+  session/device replay evidence are still absent;
 - the platform staff policy and migrations 0020–0021 are schema-only in
   isolated staging; an
   internal fresh-MFA grant/revoke service and immutable role-change events now
@@ -583,12 +584,14 @@ provider, concurrency, or future-data evidence.
   unverified;
 - session persistence now has locally verified 24-hour standard and 30-day
   remember-me paths. MFA elevation and MFA disable each rotate the exact current
-  token without extending absolute expiry; stale-token replay revokes the
-  affected session/device, and concurrent disable has one guarded winner.
+  token without extending absolute expiry. Confirmed email change now has the
+  same locally verified rotation boundary. Stale-token replay revokes the
+  affected session/device, while concurrent disable and concurrent email
+  confirmation each have one guarded winner.
   Migration `0029`, migration-specific backup/restore, exact-source CI run
   `30453980092`, and the Worker deployment pass in staging for both elevation and
-  disable. Protected authenticated HTTP/cookie proof, periodic/email-change rotation,
-  regional signals, and security email remain open;
+  disable. Protected authenticated HTTP/cookie proof, deployment of email-change
+  rotation, periodic rotation, regional signals, and security email remain open;
 - workspace invitation migration 0022 and OTP-lock migration 0023 are applied
   to staging; their local one-winner/rollback/15-minute-lock tests are not
   full-HTTP remote behavior evidence;

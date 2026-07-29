@@ -565,10 +565,10 @@ without altering or deleting existing rows:
   session/user/expiry lookups.
 
 The migration contains exactly nine additive `CREATE` statements and no
-`ALTER`, `DROP`, `UPDATE`, or `DELETE`. Runtime tests prove both MFA elevation
-and MFA disable rotate the current token without extending absolute expiry.
+`ALTER`, `DROP`, `UPDATE`, or `DELETE`. Runtime tests prove MFA elevation, MFA disable, and confirmed email change
+rotate the current token without extending absolute expiry.
 Enrollment binds to the exact pre-rotation digest and rolls back on an
-intervening token change; concurrent disable has one guarded winner. A retired
+intervening token change; concurrent disable and concurrent email confirmation each have one guarded winner. A retired
 token records only one critical replay event before revoking the affected
 session and device. Raw session tokens are never persisted. The full local
 `0000`–`0029` sequence has 107 application tables,

@@ -6,6 +6,7 @@ import {
   markEmailChangeCodesQueued,
   reserveEmailChangeChallenge,
 } from "../lib/auth/email-change";
+import { sha256 } from "../lib/auth/crypto";
 import {
   createIdentityProtectionContext,
   IdentityProtectionError,
@@ -30,6 +31,7 @@ const NEW_CODE = "654321";
 const CURRENT_SALT = "current-email-change-salt";
 const NEW_SALT = "new-email-change-salt";
 const CHALLENGE_ID = "11111111-1111-4111-8111-111111111111";
+const sessionTokens = new Map<string, string>();
 
 function encodedKey(seed: number): string {
   const bytes = Uint8Array.from(
@@ -113,6 +115,8 @@ async function fixture(options: {
     userAgent: "Other browser/1.0",
     now: new Date("2026-07-26T12:00:30.000Z"),
   });
+  sessionTokens.set(currentSession.sessionId, currentSession.token);
+  sessionTokens.set(otherSession.sessionId, otherSession.token);
   if (options.activeMfa) {
     value.sqlite.prepare(
       `INSERT INTO auth_totp_credentials (
@@ -206,14 +210,18 @@ function confirm(
     newCode?: string;
     now?: string;
     assuranceLevel?: "primary" | "mfa";
+    currentToken?: string;
   } = {},
 ) {
   const now = options.now ?? "2026-07-26T12:02:00.000Z";
+  const currentToken = options.currentToken ?? sessionTokens.get(sessionId);
+  if (!currentToken) throw new Error("TEST_SESSION_TOKEN_NOT_FOUND");
   return confirmEmailChange(db, {
     identityContext,
     challengeId: options.challengeId ?? CHALLENGE_ID,
     userId: USER_ID,
     sessionId,
+    currentToken,
     currentEmail: CURRENT_EMAIL,
     workspaceId: WORKSPACE_ID,
     currentCode: options.currentCode ?? CURRENT_CODE,
@@ -369,11 +377,12 @@ test("verified email change rotates canonical identity and revokes only other se
       dualContext,
       { assuranceLevel: "mfa" },
     );
-    assert.deepEqual(result, {
-      status: "confirmed",
-      newEmail: NEW_EMAIL,
-      revokedSessions: 1,
-    });
+    assert.equal(result.status, "confirmed");
+    if (result.status !== "confirmed") assert.fail("email change not confirmed");
+    assert.equal(result.newEmail, NEW_EMAIL);
+    assert.equal(result.revokedSessions, 1);
+    assert.notEqual(result.session.token, currentSession.token);
+    assert.equal(result.session.expiresAt, currentSession.expiresAt);
     const current = sqlite.prepare(
       `SELECT
          email,email_ciphertext AS ciphertext,
@@ -403,7 +412,7 @@ test("verified email change rotates canonical identity and revokes only other se
     );
     const resolvedSession = await localSessionFromCookie(
       d1,
-      `juro_session=${currentSession.token}`,
+      `juro_session=${result.session.token}`,
       {
         touch: false,
         now: new Date("2026-07-26T12:02:01.000Z"),
@@ -458,6 +467,91 @@ test("verified email change rotates canonical identity and revokes only other se
       ).total,
       1,
     );
+    const changedEvent = sqlite.prepare(
+      `SELECT device_id AS deviceId,metadata_json AS metadataJson
+       FROM security_events
+       WHERE user_id=? AND event_type='account.email_changed'`,
+    ).get(USER_ID) as { deviceId: string; metadataJson: string };
+    assert.equal(changedEvent.deviceId, currentSession.deviceId);
+    const changedMetadata = JSON.parse(changedEvent.metadataJson) as {
+      sessionTokenRotated: boolean;
+      tokenHistoryId: string;
+    };
+    assert.equal(changedMetadata.sessionTokenRotated, true);
+    const tokenHistory = sqlite.prepare(
+      `SELECT token_hash AS tokenHash,rotation_reason AS rotationReason,
+         expires_at AS expiresAt FROM auth_session_token_history WHERE id=?`,
+    ).get(changedMetadata.tokenHistoryId) as {
+      tokenHash: string;
+      rotationReason: string;
+      expiresAt: string;
+    };
+    assert.equal(tokenHistory.tokenHash, await sha256(currentSession.token));
+    assert.equal(tokenHistory.rotationReason, "email_change");
+    assert.equal(tokenHistory.expiresAt, currentSession.expiresAt);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("retired pre-change token replay revokes the replacement session and device", async () => {
+  const { sqlite, d1, currentSession } = await fixture();
+  try {
+    await reserve(d1, currentSession.sessionId);
+    await queue(d1, currentSession.sessionId);
+    const result = await confirm(d1, currentSession.sessionId);
+    assert.equal(result.status, "confirmed");
+    if (result.status !== "confirmed") assert.fail("email change not confirmed");
+    assert.ok(await localSessionFromCookie(
+      d1,
+      `juro_session=${result.session.token}`,
+      {
+        touch: false,
+        now: new Date("2026-07-26T12:02:01.000Z"),
+        identity: dualContext,
+      },
+    ));
+    for (let replay = 0; replay < 2; replay += 1) {
+      assert.equal(await localSessionFromCookie(
+        d1,
+        `juro_session=${currentSession.token}`,
+        {
+          touch: false,
+          now: new Date("2026-07-26T12:02:02.000Z"),
+          identity: dualContext,
+        },
+      ), null);
+    }
+    const sessionState = sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_sessions WHERE id=?",
+    ).get(currentSession.sessionId) as { revokedAt: string | null };
+    assert.equal(sessionState.revokedAt, "2026-07-26T12:02:02.000Z");
+    const deviceState = sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_devices WHERE id=?",
+    ).get(currentSession.deviceId) as { revokedAt: string | null };
+    assert.equal(deviceState.revokedAt, "2026-07-26T12:02:02.000Z");
+    const replayEvidence = sqlite.prepare(
+      `SELECT count(*) AS total
+       FROM auth_session_token_replays replay
+       JOIN auth_session_token_history history
+         ON history.id=replay.token_history_id
+       WHERE history.session_id=? AND history.rotation_reason='email_change'`,
+    ).get(currentSession.sessionId) as { total: number };
+    assert.equal(replayEvidence.total, 1);
+    const replayEvents = sqlite.prepare(
+      `SELECT count(*) AS total FROM security_events
+       WHERE user_id=? AND event_type='session.token_replayed'`,
+    ).get(USER_ID) as { total: number };
+    assert.equal(replayEvents.total, 1);
+    assert.equal(await localSessionFromCookie(
+      d1,
+      `juro_session=${result.session.token}`,
+      {
+        touch: false,
+        now: new Date("2026-07-26T12:02:03.000Z"),
+        identity: dualContext,
+      },
+    ), null);
   } finally {
     sqlite.close();
   }
@@ -490,6 +584,11 @@ test("parallel email confirmations have exactly one winner", async () => {
       ).total,
       1,
     );
+    const historyCount = sqlite.prepare(
+      `SELECT count(*) AS total FROM auth_session_token_history
+       WHERE session_id=? AND rotation_reason='email_change'`,
+    ).get(currentSession.sessionId) as { total: number };
+    assert.equal(historyCount.total, 1);
   } finally {
     sqlite.close();
   }
@@ -691,6 +790,20 @@ test("email-change audit failure rolls back identity, claim, and revocation", as
       ).revokedAt,
       null,
     );
+    const historyCount = sqlite.prepare(
+      `SELECT count(*) AS total FROM auth_session_token_history
+       WHERE session_id=? AND rotation_reason='email_change'`,
+    ).get(currentSession.sessionId) as { total: number };
+    assert.equal(historyCount.total, 0);
+    assert.ok(await localSessionFromCookie(
+      d1,
+      `juro_session=${currentSession.token}`,
+      {
+        touch: false,
+        now: new Date("2026-07-26T12:02:01.000Z"),
+        identity: dualContext,
+      },
+    ));
   } finally {
     sqlite.close();
   }

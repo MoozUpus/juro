@@ -1,5 +1,8 @@
 import { randomToken, sha256 } from "./crypto";
-import { batchWithSecurityEvent } from "./security-events";
+import {
+  batchWithSecurityEvent,
+  type SecurityEventGuard,
+} from "./security-events";
 
 export type SessionTokenRotationReason =
   | "mfa_elevation"
@@ -51,6 +54,7 @@ export async function prepareSessionTokenRotation(
     sessionId: string;
     currentToken: string;
     reason: SessionTokenRotationReason;
+    requiredGuard?: SecurityEventGuard;
     now?: Date;
   },
 ): Promise<PreparedSessionTokenRotation | null> {
@@ -89,6 +93,19 @@ export async function prepareSessionTokenRotation(
     rotatedAt,
     rotatedAt,
   ];
+  if (
+    input.requiredGuard
+    && (
+      !/^\s*SELECT\b/i.test(input.requiredGuard.selectSql)
+      || input.requiredGuard.selectSql.includes(";")
+    )
+  ) {
+    throw new Error("INVALID_SESSION_ROTATION_GUARD");
+  }
+  const requiredGuardSql = input.requiredGuard
+    ? ` AND EXISTS (${input.requiredGuard.selectSql})`
+    : "";
+  const requiredGuardBindings = input.requiredGuard?.bindings ?? [];
 
   return {
     token,
@@ -107,18 +124,19 @@ export async function prepareSessionTokenRotation(
        )
        SELECT ?,id,user_id,token_hash,?,?,expires_at
        FROM auth_sessions
-       WHERE EXISTS (${activeGuard}) AND id=?`,
+       WHERE EXISTS (${activeGuard})${requiredGuardSql} AND id=?`,
     ).bind(
       historyId,
       input.reason,
       rotatedAt,
       ...activeBindings,
+      ...requiredGuardBindings,
       input.sessionId,
     ),
     rotationStatement: db.prepare(
       `UPDATE auth_sessions SET token_hash=?
        WHERE id=? AND user_id=? AND token_hash=? AND revoked_at IS NULL
-         AND expires_at>? AND coalesce(idle_expires_at,expires_at)>?`,
+         AND expires_at>? AND coalesce(idle_expires_at,expires_at)>?${requiredGuardSql}`,
     ).bind(
       tokenHash,
       input.sessionId,
@@ -126,6 +144,7 @@ export async function prepareSessionTokenRotation(
       previousTokenHash,
       rotatedAt,
       rotatedAt,
+      ...requiredGuardBindings,
     ),
     eventGuard: {
       selectSql: `SELECT 1 FROM auth_sessions
