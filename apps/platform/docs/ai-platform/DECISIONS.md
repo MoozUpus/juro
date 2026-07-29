@@ -1358,7 +1358,7 @@ Access was not bypassed. Production is unchanged.
 
 ## D-066 — rotate the local session token when MFA is disabled
 
-Status: accepted and locally verified; staging deployment pending
+Status: accepted, locally verified, and deployed to protected staging; authenticated HTTP evidence pending
 Date: 2026-07-29
 
 Disabling MFA is an assurance downgrade and must not leave the bearer token
@@ -1376,5 +1376,9 @@ one-claim replay boundary and revokes the downgraded session/device, and two
 concurrent disable attempts leave exactly one primary session without partial
 MFA state. The full local suite passes 343 checks; type-check, lint, staging
 build/artifact validation, canonical builder smoke, and comparison smoke pass.
-No migration or dependency is added. Protected-staging deployment and exact
-HTTP/cookie evidence remain open; production is unchanged.
+No migration or dependency is added. Exact-source GitHub Actions run
+`30453980092` passed; deployment `888a4800-daf8-4211-b41d-a653d067ecd8`
+serves version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100%. Control-plane
+bindings, owner-only Access, anonymous 302/no-store denial, and zero pending D1
+migrations were re-verified. Authenticated HTTP/cookie/replay evidence remains
+open; production is unchanged.

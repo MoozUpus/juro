@@ -34,9 +34,9 @@ The initial deployment was deliberately unreachable, and the current deployment 
 - no Queue consumer;
 - async runtime, legal ingestion, staff API, and Cron flags are false.
 
-The current deployment is `d033f009-426f-4283-9308-f6c7bdf7f29e`
-serving version `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd` at 100% from pushed code
-commit `0544a56`. It attaches staging-only bindings and seven Queue producers.
+The current deployment is `888a4800-daf8-4211-b41d-a653d067ecd8`
+serving version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% from pushed code
+commit `288af4693d2679b48f016215caaabdcac9aa0fde`. It attaches staging-only bindings and seven Queue producers.
 Workers.dev and previews are disabled; Queue consumers, schedules, async
 runtime, legal ingestion, and staff APIs remain disabled. The custom domain was
 attached only after the owner-only Access application existed and anonymous
@@ -88,8 +88,8 @@ Sites/Worker ownership resolution, and explicit production confirmation.
 
 ## Protected builder checkpoint — 2026-07-29
 
-The current staging deployment is `d033f009-426f-4283-9308-f6c7bdf7f29e`
-with Worker version `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd` at 100% of
+The current staging deployment is `888a4800-daf8-4211-b41d-a653d067ecd8`
+with Worker version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% of
 `juro-platform-staging` traffic. The current artifact also contains typed RU/UZ
 workspace copy for documents, contacts, and notifications. The previously
 verified routing change preserves locale and
@@ -97,8 +97,9 @@ account context for builder/library/documents/contacts/notifications links,
 removes the nested main landmark, and synchronizes the document language after
 client-side RU/UZ transitions. Control-plane and anonymous Access checks pass
 for the current deployment. The canonical business-workspace route tree,
-membership guard, legacy adapters, route-aware links, and MFA session-token
-rotation/replay defense are now deployed. Migration `0029` is applied only to
+membership guard, legacy adapters, route-aware links, and both MFA elevation and
+disable session-token rotation/replay defenses are now deployed. Exact-source CI
+run `30453980092` passed before deployment. Migration `0029` is applied only to
 staging. The Worker settings API re-read confirms the custom domain, owner-only
 Access application, public Turnstile binding, three server-only secret names,
 and all staging D1/R2/Queue/Vectorize/Analytics bindings. Authenticated browser

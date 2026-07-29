@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-29
-Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains all 30 migrations through `0029`; the current Worker version `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd` has its staging-only D1/R2/Queue/Vectorize/Analytics bindings, public Turnstile site key, and three server-only secret bindings. Aggregate D1 evidence shows three provider-accepted OTP challenges that were consumed successfully, but the current localized auth UI, mailbox delivery, session-rotation cookie/replay flow, full remote concurrency matrix, and lifecycle gates still require correlated browser/HTTP evidence. Production was not changed.
+Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains all 30 migrations through `0029`; the current Worker deployment `888a4800-daf8-4211-b41d-a653d067ecd8` / version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% from commit `288af4693d2679b48f016215caaabdcac9aa0fde` has its staging-only D1/R2/Queue/Vectorize/Analytics bindings, public Turnstile site key, and three server-only secret bindings. Aggregate D1 evidence shows three provider-accepted OTP challenges that were consumed successfully, but the current localized auth UI, mailbox delivery, session-rotation cookie/replay flow, full remote concurrency matrix, and lifecycle gates still require correlated browser/HTTP evidence. Production was not changed.
 
 ## Implemented
 
@@ -585,9 +585,9 @@ provider, concurrency, or future-data evidence.
   remember-me paths. MFA elevation and MFA disable each rotate the exact current
   token without extending absolute expiry; stale-token replay revokes the
   affected session/device, and concurrent disable has one guarded winner.
-  Migration `0029`, migration-specific backup/restore, and the elevation Worker
-  deployment pass in staging. The new MFA-disable code still requires exact-SHA
-  CI/deployment and protected HTTP/cookie proof; periodic/email-change rotation,
+  Migration `0029`, migration-specific backup/restore, exact-source CI run
+  `30453980092`, and the Worker deployment pass in staging for both elevation and
+  disable. Protected authenticated HTTP/cookie proof, periodic/email-change rotation,
   regional signals, and security email remain open;
 - workspace invitation migration 0022 and OTP-lock migration 0023 are applied
   to staging; their local one-winner/rollback/15-minute-lock tests are not

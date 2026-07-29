@@ -88,7 +88,7 @@ Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The prote
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
 - Staging primary queues have one producer binding from `juro-platform-staging`; all DLQs, development queues, and every Queue consumer remain unattached.
-- Staging Worker serves deployment `d033f009-426f-4283-9308-f6c7bdf7f29e`, version `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd`, at 100%. Script subdomain and previews remain disabled; schedules and consumers remain absent.
+- Staging Worker serves deployment `888a4800-daf8-4211-b41d-a653d067ecd8`, version `448e5bf1-4bf8-4000-af2b-2c034e3eca10`, at 100% from commit `288af4693d2679b48f016215caaabdcac9aa0fde`. Script subdomain and previews remain disabled; schedules and consumers remain absent.
 - `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
@@ -279,9 +279,9 @@ The Access application is hidden from the App Launcher and auto-redirects to the
 | Evidence | Verified value |
 |---|---|
 | Worker | `juro-platform-staging` |
-| Deployment | `d033f009-426f-4283-9308-f6c7bdf7f29e` |
-| Version | `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd` at 100% |
-| Startup time | 160 ms reported by Wrangler |
+| Deployment | `888a4800-daf8-4211-b41d-a653d067ecd8` |
+| Version | `448e5bf1-4bf8-4000-af2b-2c034e3eca10` at 100% |
+| Startup time | 172 ms reported by Wrangler |
 | Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` |
 | Anonymous boundary | 302 to Access login; `no-store`, application content denied |
 | Authenticated smoke | canonical RU/UZ library/category/template passed on a prior protected version; the current canonical business-workspace version still awaits an authenticated browser pass |
