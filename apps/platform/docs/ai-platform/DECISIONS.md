@@ -2,6 +2,19 @@
 
 This log records material implementation decisions. Status values are `accepted`, `pending approval`, or `superseded`.
 
+## D-075 — gate destructive staging probes behind runtime identity validation
+
+Status: accepted
+Date: 2026-07-30
+
+Account-deletion purge evidence uses an exact staging-only synthetic subject,
+an explicit disabled-by-default feature flag, and the real Cron/Queue consumer.
+The probe must validate the deployed identity key ring before creating any D1 or
+R2 fixture and must expose only a phase-specific safe error code. A malformed
+or unrecoverable key ring blocks identity dual-write, MFA enrollment, and purge
+rehearsal; it is never replaced automatically because rotation requires an
+owner-managed protected recovery copy.
+
 ## D-001 — implementation baseline
 
 Status: superseded by D-029

@@ -11,13 +11,23 @@ No inspected production surface exposed the following required names: `OPENAI_AP
 
 Only names were inventoried. A Sites connector operation unexpectedly returned a bypass bearer token in raw connector telemetry. The value was not copied, used, persisted, or committed and is intentionally absent from this document. It must be rotated/revoked before production work.
 
-The staging recheck used `wrangler secret list --env staging --format json`
+The staging recheck used `wrangler secret list`
 and the Worker settings API after deployment. Both expose the same three
 server-only names and the public `TURNSTILE_SITE_KEY` binding. The values were
 not requested, exported, logged, or copied. The production Worker still has
 its pre-existing `RESEND_API_KEY`; no evidence indicates that any new staging
 value was attached to production. Provider delivery and end-to-end browser
 behavior remain separate gates from binding presence.
+
+The 2026-07-30 runtime probe proved that the `IDENTITY_KEYRING` binding exists
+as `secret_text` but cannot be parsed by the documented key-ring contract. The
+Worker returned only `STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED`; no secret value,
+parser detail, protected identity, deletion request, or R2 object was logged or
+persisted. The probe flag was returned to `false`. Do not enable identity
+dual-write, MFA enrollment, or account-deletion purge rehearsal until the owner
+replaces this staging secret through protected Cloudflare controls and retains
+a separately protected recovery copy. Never paste the replacement into chat,
+Git, a ticket, a screenshot, or a command transcript.
 
 ## Identity key ring
 

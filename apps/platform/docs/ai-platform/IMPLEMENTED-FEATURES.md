@@ -15,6 +15,7 @@ Scope: verified local source/tests plus the protected staging deployment describ
 | Opaque browser continuity | Successful primary/MFA login issues a server-generated HttpOnly/Secure/SameSite=Lax token only when the identity keyring exists; D1 retains only user-bound versioned HMAC evidence and coarse region; concurrent first use, key rotation and tenant isolation are covered; normal logout preserves trust while security revoke, replay, logout-all, email change and account deletion revoke the applicable continuity; migration `0031` and Worker code are deployed to protected staging | Authenticated staging HTTP/cookie/revoke evidence remains open; the token is not an authentication factor and a stolen token can only affect future novelty classification |
 | Login-security notification | Continuity-backed new-device/coarse-region classification, encrypted-recipient job, identifiers-only outbox, MFA sequencing, RU/UZ copy and idempotent retry behavior are tested; migration `0032`, Worker handler and the isolated staging email consumer are deployed | Protected primary/MFA HTTP, real controlled Resend delivery, DLQ/redrive and false-positive observation remain open |
 | Prior-address security notification | Confirmed email change atomically creates encrypted-recipient evidence and an identifiers-only outbox job; migration `0030`, the staging-only email consumer and async runtime are deployed with provider idempotency and bounded retry semantics | Real prior-mailbox delivery, protected HTTP evidence and operator DLQ/redrive remain open |
+| Account-deletion purge probe | A strict staging-only synthetic subject, disabled-by-default flag, real Cron/Queue path, phase-safe error codes, D1/R2 cleanup contract, production fail-closed guard, and two real dispatches are implemented | The deployed `IDENTITY_KEYRING` is malformed, so both runs stopped before fixture creation; full D1/R2 purge proof requires owner-managed key replacement and rerun |
 | Structured onboarding | Canonical `/:locale/onboarding`; strict 4 KiB Zod input; required separate names, normalized phone with explicit unverified evidence, personal persona, primary goal, and exact current policy digests; deterministic personal workspace creation; staging migration `0024` applied | Protected staging browser flow; final policy approval; phone verification |
 | Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; business routes use `/:locale/business/:workspaceId/*`; shell, builder, invitations, and switching preserve that base; legacy reserved business roots remain authenticated compatibility adapters | Current-version protected staging browser evidence |
 
@@ -23,9 +24,9 @@ Scope: verified local source/tests plus the protected staging deployment describ
 The latest recorded successful local full suite contains:
 
 - 27 rendered-route/security tests;
-- 272 core/auth/document tests;
+- 274 core/auth/document tests;
 - 79 Cloudflare/migration/job tests, including migrations `0029`–`0033`, encrypted security-email evidence, account-deletion purge, continuity-backed login alerts, atomic rollback, cron, and queue concurrency/replay contracts;
-- 378 tests total.
+- 380 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. The canonical document-builder flow now also has
@@ -49,10 +50,10 @@ calls or the remaining full browser/accessibility/mobile matrix.
 
 - Production was not changed. Legacy Worker `juro` remains deployment `54aee3c6-39eb-4a16-ae59-c74418ae599f` / version `91774ed4-72e9-47bb-b93a-a4208d490b24`; Sites remains v20.
 - `juro-production` and `juro-development` remain through migration `0004`; `juro-staging` is through `0033` with 34 ledger rows, `quick_check=ok`, empty foreign-key check, and pre/post private-R2 checkpoints.
-- Protected staging deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` serves Worker version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` at 100% from commit `a1261c3c68151f9c275187fd422bd58c67b673a8`.
+- Protected staging deployment `bafea8e2-d061-4180-827b-1c047858fb36` serves Worker version `afde477b-db83-498f-aaf8-1a2e5aa9ab44` at 100% from commit `401c8b3`; `STAGING_SYNTHETIC_PROBES_ENABLED=false` in the final deployment.
 - Secret values were never read; the control plane exposes only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` by name plus the public Turnstile site key.
 - Owner-only Access denies anonymous root, canonical builder, and deletion API requests with 302 plus `no-store`.
-- Exactly two staging consumers and one five-minute cron are active. The first durable cron run completed without error or stuck lock. Legal ingestion and staff APIs remain disabled.
+- Exactly two staging consumers and one five-minute cron are active. Two synthetic deletion jobs were dispatched once each and rejected before fixture creation with `STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED`; no synthetic D1/R2 data was created. Legal ingestion and staff APIs remain disabled.
 - Authenticated current-version browser/cookie/provider evidence remains open because the browser runtime exited before tab connection; Access was not bypassed.
 
 ## Canonical builder integration checkpoint
@@ -101,6 +102,6 @@ not pushed or deployed; production remains unchanged.
 - The staging Worker has a durable locked `*/5` outbox dispatcher plus isolated email and data-retention Queue consumers/DLQs; all other consumers and legal ingestion remain absent/disabled.
 - The purge validates workspace/staff blockers, persists an irreversible fence, deletes exact private R2 keys, performs the D1 cleanup transaction, tombstones the profile, and writes append-only lifecycle/purge evidence.
 - Recoverable requests can cancel before the fence. Corrected blockers can be retried once under concurrency. R2 failure preserves D1 and retries; completed/cancelled states are idempotent and terminal.
-- Local evidence: 27 rendered route/security tests, 272 core tests, and 79 Cloudflare tests; type-check, lint, generated binding check, staging build/artifact, three-environment dry-run matrix, builder smoke, comparison smoke, and secret-pattern scan pass.
+- Local evidence: 27 rendered route/security tests, 274 core tests, and 79 Cloudflare tests; type-check, lint, generated binding check, staging build/artifact, three-environment dry-run matrix, builder smoke, comparison smoke, and secret-pattern scan pass.
 
 Migrations and the Worker runtime are deployed to owner-only protected staging. D1 integrity, exact schema, control-plane attachments, anonymous Access denial, one completed durable cron run, and the post-migration private-R2 backup are verified. A synthetic authenticated deletion through HTTP/UI, live email delivery, DLQ/redrive, and the broader browser/accessibility matrix remain open. Production is unchanged.

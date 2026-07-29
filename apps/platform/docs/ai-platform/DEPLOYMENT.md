@@ -1,6 +1,6 @@
 # JURO deployment boundary
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 Status: owner-only protected staging is active; production deployment is not authorized.
 
 ## Production surfaces that must remain unchanged
@@ -19,7 +19,7 @@ deployed without the separate production authorization required by the owner.
 
 ## Staging deployment target
 
-The checked-in and deployed target is `juro-platform-staging`. Deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` serves Worker version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` at 100% from pushed commit `a1261c3c68151f9c275187fd422bd58c67b673a8`. The exact flattened artifact was built with the staging profile and deployed without `--env`, with `--keep-vars`.
+The checked-in and deployed target is `juro-platform-staging`. Deployment `bafea8e2-d061-4180-827b-1c047858fb36` serves Worker version `afde477b-db83-498f-aaf8-1a2e5aa9ab44` at 100% from pushed commit `401c8b3`. The exact flattened artifact was built with the staging profile and deployed without `--env`, with `--keep-vars`.
 
 The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route, and the single Access-protected custom domain `staging.app.juro.uz`. It binds only staging D1/R2/Queues/Vectorize/Analytics resources. `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and `ACCOUNT_DELETION_PURGE_ENABLED` are true only in staging. Legal ingestion and the staff API remain false.
 
@@ -28,7 +28,7 @@ Exactly two staging consumers are attached: `staging-email-notifications` (concu
 ## Required sequence
 
 1. **Completed:** pushed exact source commit `a1261c3c68151f9c275187fd422bd58c67b673a8`.
-2. **Completed:** full gate passed: type-check, lint, 378 tests, generated binding types, staging build/artifact, environment matrix, builder/comparison smokes, and secret scan.
+2. **Completed:** full gate passed: type-check, lint, 380 tests, generated binding types, staging build/artifact, environment matrix, builder/comparison smokes, and secret scan.
 3. **Completed:** verified the exact pending `0030`–`0033` set and pre-change Time Travel/private-R2 backup.
 4. **Completed with recorded retry:** `0030`–`0032` applied; `0033` was atomically rejected for a concatenated migration breakpoint, corrected in `a1261c3`, retested 64/64, then applied alone.
 5. **Completed:** postflight proves 34 migrations, `quick_check=ok`, empty foreign-key check, and the exact lifecycle schema/guards.
@@ -36,7 +36,8 @@ Exactly two staging consumers are attached: `staging-email-notifications` (concu
 7. **Completed:** anonymous root, canonical builder, and deletion API all receive Access 302 plus `no-store`.
 8. **Completed:** first durable cron run finished successfully with no error or stuck lock.
 9. **Completed:** post-`0033` full/schema/data/manifest private-R2 round trip passed SHA-256.
-10. **Open:** authenticated UI/cookie/provider flows and the wider accessibility/mobile matrix; the browser runtime failed before tab connection and Access was not bypassed.
+10. **Completed, fail-closed:** two identifiers-only synthetic deletion jobs were dispatched once each by separate real cron runs and reached the cleanup consumer. The deployed runtime rejected both before any profile/request/file/R2 fixture was created because `IDENTITY_KEYRING` is present by name but malformed for the documented JSON key-ring contract. Final staging has `STAGING_SYNTHETIC_PROBES_ENABLED=false`.
+11. **Open:** the owner must replace the malformed staging `IDENTITY_KEYRING` through protected Cloudflare secret control, retain a separately protected recovery copy, and then rerun the probe. Authenticated UI/cookie/provider flows and the wider accessibility/mobile matrix also remain open; the browser runtime failed before tab connection and Access was not bypassed.
 
 The standalone `validate:artifact` task defaults to the development profile.
 Running it immediately after a staging build without an explicit
@@ -100,7 +101,7 @@ is outside this candidate.
 
 Deployed staging scope: migrations `0030`–`0033`, email-notification and data-retention Queue consumers with dedicated staging DLQs, one locked `*/5 * * * *` outbox cron, account-deletion purge flag, and the tested RU/UZ settings/API flow. Legal-source ingestion and staff APIs remain false; no other Queue consumer is attached.
 
-Pre-deploy gates passed locally: full tests (27 rendered, 272 core, 79 Cloudflare), type-check, lint, generated Cloudflare binding types, exact staging build/artifact, all-environment dry-run matrix, builder/comparison smokes, diff check, and filename-only current/history secret scan. The private pre-migration checkpoint and Time Travel bookmark are recorded in `BACKUP-RESTORE.md`.
+Pre-deploy gates passed locally: full tests (27 rendered, 274 core, 79 Cloudflare), type-check, lint, generated Cloudflare binding types, exact staging build/artifact, all-environment dry-run matrix, builder/comparison smokes, diff check, and filename-only current/history secret scan. The private pre-migration checkpoint and Time Travel bookmark are recorded in `BACKUP-RESTORE.md`.
 
 Safe order:
 

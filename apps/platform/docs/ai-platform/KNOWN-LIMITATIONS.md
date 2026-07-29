@@ -21,7 +21,13 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- local test totals (27 rendered route + 272 core + 79 Cloudflare = 378),
+- the staging `IDENTITY_KEYRING` secret name exists, but a real Cron/Queue
+  runtime probe rejects it as malformed. Both synthetic jobs were dispatched
+  exactly once; zero synthetic profiles, deletion requests, or file rows were
+  created, and both exact R2 keys are absent. The final probe flag is disabled;
+  a valid owner-managed key ring plus protected recovery copy is required
+  before rerunning the purge and identity gates;
+- local test totals (27 rendered route + 274 core + 79 Cloudflare = 380),
   remote schema checks, and the currently deployed Worker are not a substitute for
   the exact current-version authenticated browser/cookie/replay flow. The
   available browser-control runtime currently exits during startup because its

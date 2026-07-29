@@ -1,7 +1,14 @@
 # JURO backup and restore boundary
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and disposable remote-D1 import drills are verified; protected staging is through migration `0033` with a separate post-migration private-R2 checkpoint. Scheduled backup automation, production protection, and an operational RTO remain unverified.
+
+Before the 2026-07-30 synthetic account-deletion probe, staging bookmark
+`0000003f-00000004-000050b7-3c394315c39668592aa1df99f9932548` was recorded.
+The probe failed closed during identity-key validation before fixture creation:
+both exact R2 keys were absent, synthetic profile/deletion/file counts remained
+zero, `PRAGMA quick_check` returned `ok`, and `PRAGMA foreign_key_check`
+returned no rows. The bookmark is recovery evidence only; no restore was needed.
 
 ## What is not a backup
 

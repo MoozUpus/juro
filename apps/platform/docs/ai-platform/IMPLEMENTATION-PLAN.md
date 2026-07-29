@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
-Updated: 2026-07-29
-Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Staging D1 is through `0033`; deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` / version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` has exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. Legal ingestion and staff APIs remain disabled. Authenticated current-version browser/provider, operational RTO, full a11y/performance, and production gates remain open; production changes remain prohibited.
+Updated: 2026-07-30
+Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Staging D1 is through `0033`; deployment `bafea8e2-d061-4180-827b-1c047858fb36` / version `afde477b-db83-498f-aaf8-1a2e5aa9ab44` has exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. The synthetic deletion probe is installed but disabled after proving the configured `IDENTITY_KEYRING` malformed without writing fixture data. Legal ingestion and staff APIs remain disabled. Authenticated current-version browser/provider, valid key-ring recovery, operational RTO, full a11y/performance, and production gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -296,7 +296,7 @@ Then stop and request two separate explicit approvals: first for production depl
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
 2. Production D1 cannot be migrated before production-specific backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0033` with pre/post portable/private-R2 checksum and earlier disposable remote-D1 restore evidence, but operational RTO/RPO under representative load remains unverified.
-3. The exact staging Worker now exposes the public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` binding names; values remain unread and out of source. Aggregate D1 proves three provider-accepted and consumed OTP challenges, but the current-version Turnstile/browser/mailbox trace, provider-failure matrix, and sender/domain evidence remain open. Identity dual-write/backfill also remains a separate gated transition.
+3. The exact staging Worker exposes the public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` binding names; values remain unread and out of source. A real Cron/Queue probe proves the current `IDENTITY_KEYRING` malformed and fails before any synthetic fixture is written. Aggregate D1 proves three provider-accepted and consumed OTP challenges, but valid owner-managed key-ring recovery, identity dual-write/backfill, the current-version Turnstile/browser/mailbox trace, provider-failure matrix, and sender/domain evidence remain open.
 4. Owner-only Cloudflare Access and anonymous deny-before-auth are verified for staging; authenticated QA of the latest localized workspace screens plus mobile, zoom, reduced-motion, keyboard, and assistive-technology matrices remains open.
 5. Operator legal identity placeholders require owner-supplied approved legal details.
 6. Final RU/UZ policies and the legal-language priority rule require legal approval.
@@ -379,4 +379,15 @@ No remote staging write or production change is claimed by this checkpoint.
 
 ## Phase 2 account-deletion staging gate — 2026-07-30
 
-The next authorized staging-only action is the exact migration/deploy/smoke sequence in `DEPLOYMENT.md`. Success does not complete the overall program: AI providers, legal-source sync, document intelligence, file security/OCR, cases/plans, lawyers, tariffs, admin/support/status, cinematic prototype, Jurobek/voice, accessibility/performance matrices, and production readiness remain subsequent gates. Production still requires separate functional and UI confirmations.
+The exact probe sequence in `DEPLOYMENT.md` reached the real Cron and cleanup
+consumer twice, then failed closed at identity-key validation. No synthetic
+profile, deletion request, file row, or R2 object was created. The final staging
+deployment has the probe flag disabled. Full purge evidence remains blocked
+until the owner replaces the malformed key ring and retains a protected recovery
+copy. This does not block unrelated local implementation.
+
+AI providers, legal-source sync, document intelligence, file security/OCR,
+cases/plans, lawyers, tariffs, admin/support/status, the cinematic prototype,
+Jurobek/voice, accessibility/performance matrices, and production readiness
+remain subsequent gates. Production still requires separate functional and UI
+confirmations.
