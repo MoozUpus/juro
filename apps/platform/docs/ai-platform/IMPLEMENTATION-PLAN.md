@@ -80,7 +80,11 @@ Local checkpoint only; none of these statements is a staging or production claim
   delivery have not been exercised;
 - direct OTP and MFA completion use a 24-hour standard session or 30-day
   remember-me session, with the cookie maximum age aligned to the persisted
-  absolute expiry; the existing seven-day idle cap still applies;
+  absolute expiry; the existing seven-day idle cap still applies. A local
+  same-origin/CSRF refresh route and the application shell rotate a due token
+  every 12 hours without extending that expiry; the periodic-only 30-second
+  in-flight grace rejects the retired token without collateral session/device
+  revocation, while strict replay revocation resumes after the grace;
 - migration `0024` and the onboarding service require structured names,
   normalized but explicitly unverified phone evidence, personal persona,
   primary goal, and exact current policy digests while deterministically
@@ -92,8 +96,8 @@ Local checkpoint only; none of these statements is a staging or production claim
   `/:locale/business/:workspaceId/*`; shell, builder, workspace switching, and
   invitation acceptance share the workspace-aware route base, while reserved
   legacy business roots remain authenticated compatibility adapters;
-- the latest recorded successful local full suite is 341 tests: 27 rendered
-  route, 246 core, and 68 Cloudflare tests.
+- the latest recorded successful local full suite is 353 tests: 27 rendered
+  route, 254 core/auth/document, and 72 Cloudflare/migration/job tests.
 
 Vertical slices:
 

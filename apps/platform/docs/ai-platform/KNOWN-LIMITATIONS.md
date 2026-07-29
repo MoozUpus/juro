@@ -22,7 +22,7 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- local test totals (27 rendered route + 246 core + 70 Cloudflare = 343),
+- local test totals (27 rendered route + 254 core + 72 Cloudflare = 353),
   remote schema checks, and 100% Worker deployment are not a substitute for
   the exact current-version authenticated browser/cookie/replay flow. The
   available browser-control runtime currently exits during startup because its
@@ -56,11 +56,15 @@ foundation checkpoint.
 
 ## Identity and session gaps
 
-- migration `0029` is applied in staging and MFA-elevation rotation is deployed;
-  MFA-disable rotation, replacement-cookie issuance, replay revocation, and a
-  one-winner concurrent-disable fence now pass locally but are not yet deployed.
-  Exact protected-staging HTTP/cookie evidence, periodic/email-change rotation,
-  approximate location, and new-device/region security email remain incomplete;
+- migration `0029` is applied in staging and MFA-elevation/MFA-disable rotation
+  is deployed. Email-change rotation, encrypted prior-address notification, and
+  12-hour periodic token rotation now pass locally but are not deployed. The
+  periodic path is integrated through a delayed, jittered application-shell
+  scheduler and a same-origin/CSRF route; its 30-second grace rejects an
+  in-flight retired token without revoking the replacement, then restores the
+  strict replay-revocation boundary. Exact protected-staging HTTP/cookie/replay
+  evidence, approximate location, and new-device/region security mail remain
+  incomplete;
 - the 24-hour/30-day session choice is locally tested, but remote cookies,
   persisted expiry, idle expiry, and MFA completion have not been exercised
   through staging HTTP;

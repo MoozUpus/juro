@@ -63,6 +63,48 @@ test("session cookies are HttpOnly, secure and revocable", async () => {
   assert.match(source,/HttpOnly/);assert.match(source,/Secure/);assert.match(source,/SameSite=Lax/);assert.match(source,/Max-Age=0/);assert.doesNotMatch(source,/Domain=/);
 });
 
+test("application shell refreshes due local sessions through the protected periodic-rotation route", async () => {
+  const [route, shell, refresh, rotation] = await Promise.all([
+    readFile(
+      new URL(
+        "../app/api/platform/security/sessions/refresh/route.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/_platform/PlatformShell.tsx", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../app/_platform/useSessionRefresh.ts", import.meta.url),
+      "utf8",
+    ),
+    readFile(
+      new URL("../lib/auth/session-rotation.ts", import.meta.url),
+      "utf8",
+    ),
+  ]);
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /localSessionForRequest\(request/);
+  assert.match(route, /rotatePeriodicSessionToken/);
+  assert.match(
+    route,
+    /sessionCookieUntil\(result\.token, result\.expiresAt, now\)/,
+  );
+  assert.match(route, /jsonNoStore/);
+  assert.match(shell, /useSessionRefresh\(locale\)/);
+  assert.match(refresh, /sessions\/refresh\?lang=\$\{locale\}/);
+  assert.match(refresh, /"x-juro-csrf": "1"/);
+  assert.match(refresh, /credentials: "same-origin"/);
+  assert.match(refresh, /visibilitychange/);
+  assert.match(refresh, /authenticationRetryUsed/);
+  assert.match(refresh, /response\.status === 401/);
+  assert.match(rotation, /PERIODIC_SESSION_ROTATION_MS = 12 \* 60 \* 60/);
+  assert.match(rotation, /replayed\.rotationReason === "periodic"/);
+  assert.match(rotation, /replayElapsedMs < PERIODIC_REPLAY_GRACE_MS/);
+});
+
 test("OTP, MFA, and logout writes require the application CSRF contract", async () => {
   const [
     authForm,

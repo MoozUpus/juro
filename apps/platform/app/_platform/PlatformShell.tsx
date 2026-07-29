@@ -35,6 +35,7 @@ import type { WorkspaceOption } from "../../lib/platform/workspace";
 import { GlobalSearch } from "./GlobalSearch";
 import { LogoutButton } from "./LogoutButton";
 import { PlatformRouteProvider } from "./PlatformRouteContext";
+import { useSessionRefresh } from "./useSessionRefresh";
 
 type Props = {
   locale: PlatformLocale;
@@ -65,6 +66,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   const sidebarRef = useRef<HTMLElement>(null);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  useSessionRefresh(locale);
   const base = platformBasePath(locale, accountType, activeWorkspaceId);
   const business = accountType === "business";
   const visibleNav = nav.filter(([slug]) => slug !== "team" || business);

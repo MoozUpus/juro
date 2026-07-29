@@ -119,10 +119,16 @@ one-claim replay revocation boundary; email-change deployment is pending. The
 local email-change transaction now also creates one encrypted prior-address
 security-email job and one identifiers-only outbox row. A staging-only Resend
 consumer candidate fences parallel sends and provider replay, but migration
-0030, the consumer, and real mailbox delivery are not remotely active. Exact
-current-version protected HTTP/cookie/replay evidence, periodic rotation,
-regional signals, new-device mail, and staging replay tests remain absent;
-SEC-006 is therefore not closed.
+0030, the consumer, and real mailbox delivery are not remotely active. A local
+12-hour periodic rotation route now requires the same-origin/CSRF contract,
+atomically retires the current digest, preserves absolute expiry, and is called
+by a delayed, jittered, visibility-aware shell scheduler. A 30-second grace
+applies only to a periodic retired token already captured by an in-flight
+request: it remains unauthenticated but does not revoke the replacement session;
+later replay and every sensitive-trigger replay remain fail-closed. Exact
+current-version protected HTTP/cookie/replay evidence, regional signals,
+new-device mail, and staging replay tests remain absent; SEC-006 is therefore
+not closed.
 
 ### SEC-007 — weak standalone share secret
 

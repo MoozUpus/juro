@@ -14,6 +14,7 @@ import {
   revokeOneSession,
   revokeSessions,
 } from "../lib/auth/session-management";
+import { rotatePeriodicSessionToken } from "../lib/auth/session-rotation";
 import {
   sessionCookie,
   sessionCookieUntil,
@@ -584,6 +585,116 @@ test("active lookup enforces idle and absolute expiry and throttles session/devi
         },
       ),
       null,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("periodic rotation preserves absolute expiry and tolerates only an in-flight grace window", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    insertUser(sqlite, "user-a");
+    const createdAt = new Date("2026-07-01T00:00:00.000Z");
+    const created = await createEmailOtpSession(d1, {
+      userId: "user-a",
+      userAgent: "Mozilla/5.0 Windows Chrome/126.0",
+      rememberMe: true,
+      now: createdAt,
+    });
+
+    const notDue = await rotatePeriodicSessionToken(d1, {
+      userId: "user-a",
+      sessionId: created.sessionId,
+      currentToken: created.token,
+      now: new Date("2026-07-01T11:59:59.999Z"),
+    });
+    assert.deepEqual(notDue, {
+      status: "not_due",
+      expiresAt: created.expiresAt,
+      nextRotationAt: "2026-07-01T12:00:00.000Z",
+    });
+
+    const rotated = await rotatePeriodicSessionToken(d1, {
+      userId: "user-a",
+      sessionId: created.sessionId,
+      currentToken: created.token,
+      now: new Date("2026-07-01T12:00:00.000Z"),
+    });
+    assert.equal(rotated.status, "rotated");
+    if (rotated.status !== "rotated") throw new Error("rotation expected");
+    assert.notEqual(rotated.token, created.token);
+    assert.equal(rotated.expiresAt, created.expiresAt);
+    assert.equal(rotated.nextRotationAt, "2026-07-02T00:00:00.000Z");
+    const history = sqlite.prepare(`
+      SELECT rotation_reason AS rotationReason,rotated_at AS rotatedAt,
+        expires_at AS expiresAt
+      FROM auth_session_token_history WHERE session_id=?
+    `).get(created.sessionId) as {
+      rotationReason: string;
+      rotatedAt: string;
+      expiresAt: string;
+    };
+    assert.equal(history.rotationReason, "periodic");
+    assert.equal(history.rotatedAt, "2026-07-01T12:00:00.000Z");
+    assert.equal(history.expiresAt, created.expiresAt);
+
+    assert.deepEqual(
+      await rotatePeriodicSessionToken(d1, {
+        userId: "user-a",
+        sessionId: created.sessionId,
+        currentToken: rotated.token,
+        now: new Date("2026-07-01T12:00:01.000Z"),
+      }),
+      {
+        status: "not_due",
+        expiresAt: created.expiresAt,
+        nextRotationAt: "2026-07-02T00:00:00.000Z",
+      },
+    );
+
+    assert.equal(
+      await localSessionFromCookie(
+        d1,
+        `juro_session=${created.token}`,
+        { now: new Date("2026-07-01T12:00:10.000Z"), touch: false },
+      ),
+      null,
+    );
+    assert.equal(sessionRow(sqlite, created.sessionId).revokedAt, null);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM auth_session_token_replays",
+      ).get() as { total: number }).total,
+      0,
+    );
+    assert.ok(await localSessionFromCookie(
+      d1,
+      `juro_session=${rotated.token}`,
+      { now: new Date("2026-07-01T12:00:20.000Z"), touch: false },
+    ));
+
+    assert.equal(
+      await localSessionFromCookie(
+        d1,
+        `juro_session=${created.token}`,
+        { now: new Date("2026-07-01T12:00:30.000Z"), touch: false },
+      ),
+      null,
+    );
+    assert.equal(
+      sessionRow(sqlite, created.sessionId).revokedAt,
+      "2026-07-01T12:00:30.000Z",
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM auth_session_token_replays",
+      ).get() as { total: number }).total,
+      1,
+    );
+    assert.deepEqual(
+      securityEventsFor(sqlite, "user-a").map(({ eventType }) => eventType),
+      ["session.created", "session.token_rotated", "session.token_replayed"],
     );
   } finally {
     sqlite.close();

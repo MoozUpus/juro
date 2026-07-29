@@ -1437,3 +1437,36 @@ Migration `0030` has not been applied remotely. No consumer is attached to the
 deployed Worker, no real prior-address message has been sent, and no DLQ/redrive
 evidence is claimed. A new portable D1 checkpoint and disposable restore drill
 must precede any staging migration/deploy. Production is unchanged.
+
+## D-069 — rotate active local-session tokens on a bounded periodic schedule
+
+Status: accepted and locally verified; protected staging deployment pending
+Date: 2026-07-29
+
+An active JURO local session now becomes due for bearer-token rotation 12 hours
+after creation or its most recent token rotation. The authenticated application
+shell calls one dedicated no-store POST route after a delayed, per-tab jittered
+start and reschedules from the server-provided deadline. The route requires the
+existing exact same-origin, Fetch Metadata, and `x-juro-csrf` contract. It
+accepts only the HttpOnly local-session cookie, never exposes the token to
+client JavaScript, and returns a replacement HttpOnly, Secure, SameSite cookie
+only after the token-history insert, digest replacement, and hash-chained
+`session.token_rotated` event commit in one D1 batch. The session ID,
+assurance, idle policy, and original absolute expiry are preserved.
+
+Automatic rotation can overlap a request that captured the prior cookie before
+the browser processed `Set-Cookie`. For `periodic` history rows only, the
+first 30 seconds therefore form an in-flight compatibility window: the old
+token is still rejected and grants no access, but it does not revoke the new
+session/device. At 30 seconds the existing one-claim replay revocation resumes.
+MFA elevation, MFA disable, and email-change rotations receive no grace. The
+shell retries one authentication failure once to recover a concurrent-tab
+cookie update and then stops; it does not loop against upstream-header or
+expired sessions. Multi-request and strict-after-grace behavior are covered by
+service tests, and source contracts cover the CSRF route, cookie issuance, and
+shell scheduler. No migration or dependency is added. Type-check, lint, 353
+tests, the three-environment Cloudflare matrix, final staging build/artifact,
+canonical builder smoke, and document-comparison smoke pass.
+
+This slice has not been pushed, deployed, or exercised over protected staging
+HTTP. Production is unchanged.

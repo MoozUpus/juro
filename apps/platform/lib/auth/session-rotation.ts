@@ -11,6 +11,23 @@ export type SessionTokenRotationReason =
   | "manual"
   | "periodic";
 
+export const PERIODIC_SESSION_ROTATION_MS = 12 * 60 * 60 * 1_000;
+export const PERIODIC_REPLAY_GRACE_MS = 30 * 1_000;
+
+export type PeriodicSessionTokenRotationResult =
+  | {
+      status: "not_due";
+      expiresAt: string;
+      nextRotationAt: string;
+    }
+  | {
+      status: "rotated";
+      token: string;
+      expiresAt: string;
+      nextRotationAt: string;
+    }
+  | { status: "state_conflict" };
+
 export type PreparedSessionTokenRotation = {
   token: string;
   tokenHash: string;
@@ -154,6 +171,102 @@ export async function prepareSessionTokenRotation(
   };
 }
 
+export async function rotatePeriodicSessionToken(
+  db: D1Database,
+  input: {
+    userId: string;
+    sessionId: string;
+    currentToken: string;
+    now?: Date;
+  },
+): Promise<PeriodicSessionTokenRotationResult> {
+  const now = input.now ?? new Date();
+  const rotatedAt = now.toISOString();
+  const currentTokenHash = await sha256(input.currentToken);
+  const source = await db.prepare(
+    `SELECT s.created_at AS createdAt,s.expires_at AS expiresAt,
+       (
+         SELECT max(history.rotated_at)
+         FROM auth_session_token_history history
+         WHERE history.session_id=s.id AND history.user_id=s.user_id
+       ) AS lastRotatedAt
+     FROM auth_sessions s
+     WHERE s.id=? AND s.user_id=? AND s.token_hash=?
+       AND s.revoked_at IS NULL AND s.expires_at>?
+       AND coalesce(s.idle_expires_at,s.expires_at)>?
+     LIMIT 1`,
+  ).bind(
+    input.sessionId,
+    input.userId,
+    currentTokenHash,
+    rotatedAt,
+    rotatedAt,
+  ).first<{
+    createdAt: string;
+    expiresAt: string;
+    lastRotatedAt: string | null;
+  }>();
+  if (!source) return { status: "state_conflict" };
+
+  const anchorMs = Date.parse(source.lastRotatedAt ?? source.createdAt);
+  if (!Number.isFinite(anchorMs)) return { status: "state_conflict" };
+  const nextRotationAt = new Date(
+    anchorMs + PERIODIC_SESSION_ROTATION_MS,
+  ).toISOString();
+  if (now.getTime() < Date.parse(nextRotationAt)) {
+    return {
+      status: "not_due",
+      expiresAt: source.expiresAt,
+      nextRotationAt,
+    };
+  }
+
+  const rotation = await prepareSessionTokenRotation(db, {
+    userId: input.userId,
+    sessionId: input.sessionId,
+    currentToken: input.currentToken,
+    reason: "periodic",
+    now,
+  });
+  if (!rotation) return { status: "state_conflict" };
+
+  const results = await batchWithSecurityEvent(
+    db,
+    {
+      userId: input.userId,
+      sessionId: input.sessionId,
+      deviceId: rotation.deviceId,
+      eventType: "session.token_rotated",
+      authSource: "local_session",
+      assuranceLevel: rotation.assuranceLevel,
+      metadata: {
+        reason: "periodic",
+        tokenHistoryId: rotation.historyId,
+        absoluteExpiryPreserved: true,
+      },
+      createdAt: rotation.rotatedAt,
+    },
+    () => [rotation.historyStatement, rotation.rotationStatement],
+    rotation.eventGuard,
+  );
+  if (
+    Number(results[0]?.meta?.changes ?? 0) !== 1
+    || Number(results[1]?.meta?.changes ?? 0) !== 1
+    || Number(results[2]?.meta?.changes ?? 0) !== 1
+  ) {
+    return { status: "state_conflict" };
+  }
+
+  return {
+    status: "rotated",
+    token: rotation.token,
+    expiresAt: rotation.expiresAt,
+    nextRotationAt: new Date(
+      now.getTime() + PERIODIC_SESSION_ROTATION_MS,
+    ).toISOString(),
+  };
+}
+
 function isReplayClaimConflict(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error);
   return message.includes("auth_session_token_replays_history_uidx")
@@ -183,6 +296,18 @@ export async function revokeReplayedSessionToken(
     replayed.assuranceLevel !== "primary"
     && replayed.assuranceLevel !== "mfa"
   ) return false;
+  const replayElapsedMs = Date.parse(detectedAt) - Date.parse(replayed.rotatedAt);
+  if (
+    replayed.rotationReason === "periodic"
+    && Number.isFinite(replayElapsedMs)
+    && replayElapsedMs >= 0
+    && replayElapsedMs < PERIODIC_REPLAY_GRACE_MS
+  ) {
+    // A request that captured the previous cookie immediately before an
+    // automatic rotation remains unauthenticated, but it must not revoke the
+    // replacement session. Sensitive rotations intentionally have no grace.
+    return false;
+  }
 
   const replayId = crypto.randomUUID();
   let results: D1Result[];
