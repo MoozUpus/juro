@@ -128,8 +128,10 @@ export async function prepareStagingDeletionProbe(
          ) VALUES (?,?,'Synthetic control owner','ru','active',?,?)`,
       ).bind(controlUserId, `control-${suffix}@example.test`, now, now),
       env.DB.prepare(
-        `INSERT INTO workspaces (id,type,name,locale,created_at,updated_at)
-         VALUES (?,'business','Synthetic deletion probe','ru',?,?)`,
+        `INSERT INTO workspaces (
+           id,type,name,full_name,short_name,locale,created_at,updated_at
+         ) VALUES (?,'business','Synthetic deletion probe',
+           'Synthetic deletion probe','Deletion probe','ru',?,?)`,
       ).bind(workspaceId, now, now),
       env.DB.prepare(
         `INSERT INTO workspace_members (

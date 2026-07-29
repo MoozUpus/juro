@@ -19,11 +19,18 @@ export const workspaces = sqliteTable(
     id: text("id").primaryKey(),
     type: text("type").notNull(),
     name: text("name").notNull(),
+    fullName: text("full_name"),
+    shortName: text("short_name"),
+    createdByUserId: text("created_by_user_id"),
+    creationRequestId: text("creation_request_id"),
     locale: text("locale").notNull().default("ru"),
     ...timestamps,
   },
   (table) => [
     index("workspaces_type_idx").on(table.type, table.createdAt),
+    uniqueIndex("workspaces_creation_request_uidx")
+      .on(table.creationRequestId)
+      .where(sql`${table.creationRequestId} IS NOT NULL`),
   ],
 );
 

@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-30
-Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Staging D1 is through `0033`; deployment `bafea8e2-d061-4180-827b-1c047858fb36` / version `afde477b-db83-498f-aaf8-1a2e5aa9ab44` has exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. The synthetic deletion probe is installed but disabled after proving the configured `IDENTITY_KEYRING` malformed without writing fixture data. Legal ingestion and staff APIs remain disabled. Authenticated current-version browser/provider, valid key-ring recovery, operational RTO, full a11y/performance, and production gates remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Source migration `0034` plus idempotent business-workspace creation are local-only; staging D1 remains through `0033` pending a fresh backup/restore gate; deployment `bafea8e2-d061-4180-827b-1c047858fb36` / version `afde477b-db83-498f-aaf8-1a2e5aa9ab44` has exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. The synthetic deletion probe is installed but disabled after proving the configured `IDENTITY_KEYRING` malformed without writing fixture data. Legal ingestion and staff APIs remain disabled. Authenticated current-version browser/provider, valid key-ring recovery, operational RTO, full a11y/performance, and production gates remain open; production changes remain prohibited.
 
 ## Execution principles
 
@@ -96,8 +96,11 @@ Local checkpoint only; none of these statements is a staging or production claim
   `/:locale/business/:workspaceId/*`; shell, builder, workspace switching, and
   invitation acceptance share the workspace-aware route base, while reserved
   legacy business roots remain authenticated compatibility adapters;
-- the latest recorded successful local full suite is 353 tests: 27 rendered
-  route, 254 core/auth/document, and 72 Cloudflare/migration/job tests.
+- local migration `0034` and `POST /api/platform/workspaces` add bounded full/short
+  business identity and one atomic, idempotent owner-creation transaction;
+  staging schema/runtime proof remains pending the standard backup/restore gate;
+- the latest recorded successful local full suite is 390 tests: 27 rendered
+  route, 283 core/auth/document, and 80 Cloudflare/migration/job tests.
 
 Vertical slices:
 
@@ -117,7 +120,7 @@ The two existing document-builder isolation defects are fixed in this phase befo
 
 Gate:
 
-- local auth/race tests pass and staging schema is through `0033`; live
+- local auth/race tests pass; source is through `0034` while staging schema remains through `0033`; live
   Turnstile/Resend and protected staging full-HTTP/session-rotation E2E remain
   required;
 - cross-account/workspace leaks: zero;

@@ -110,8 +110,9 @@ async function seedRequest(options: {
   );
   fixture.sqlite.prepare(
     `INSERT INTO workspaces (
-       id,type,name,locale,created_at,updated_at
-     ) VALUES (?,'business','Synthetic Purge Workspace','ru',?,?)`,
+       id,type,name,full_name,short_name,locale,created_at,updated_at
+     ) VALUES (?,'business','Synthetic Purge Workspace',
+       'Synthetic Purge Workspace','Synthetic Purge','ru',?,?)`,
   ).run(WORKSPACE_ID, NOW, NOW);
   fixture.sqlite.prepare(
     `INSERT INTO workspace_members (

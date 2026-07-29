@@ -1,17 +1,17 @@
 # JURO data-model audit
 
-Audit date: 2026-07-29
+Audit date: 2026-07-30
 Production Sites revision: `4031078`
 Integration branch baseline: `1d3d23d` before this documentation update
 
 ## Verified baseline
 
-- Drizzle schema: 80 application tables.
-- Migration files: `0000`–`0030`; `0030` is a local staging candidate and is not remotely applied.
+- Current local Drizzle snapshot: 86 application tables.
+- Migration files: `0000`–`0034`; `0034` is a local staging candidate and is not remotely applied.
 - All migrations apply successfully to a new local SQLite database.
-- Local migrated result: 108 application tables, 154 foreign keys; zero foreign-key violations.
+- Local migrated result: 112 non-internal table definitions, 158 foreign keys, 72 triggers, and 199 indexes; zero foreign-key violations.
 - No destructive `DROP` statement was found.
-- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0029` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 34-entry `0000`–`0033` ledger, 114 non-internal tables, 70 triggers, and 198 indexes. Its pre/post migration exports passed private-R2 round trips, and the earlier disposable remote EEUR D1 reproduced its captured export topology before deletion. Post-`0033` staging has zero foreign-key violations. No production/development data or schema was mutated.
+- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0034` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 34-entry `0000`–`0033` ledger, 114 non-internal tables, 70 triggers, and 198 indexes. Its pre/post migration exports passed private-R2 round trips, and the earlier disposable remote EEUR D1 reproduced its captured export topology before deletion. Post-`0033` staging has zero foreign-key violations. No production/development data or schema was mutated.
 
 ## Existing migration outline
 
@@ -41,13 +41,24 @@ Integration branch baseline: `1d3d23d` before this documentation update
 | `0021` | immutable per-actor platform staff role-event chain |
 | `0022` | atomic and immutable workspace-invitation acceptance claim |
 | `0023` | immutable 15-minute OTP verification lock evidence |
+| `0024` | structured profile names and explicit unverified phone evidence |
+| `0025` | fail-closed legal-source lifecycle and review queue |
+| `0026` | bounded legal-source fetch request/evidence contract |
+| `0027` | immutable legal-review decision evidence |
+| `0028` | immutable verified-source publication evidence and reading rows |
+| `0029` | session-token rotation and replay evidence |
+| `0030` | encrypted prior-address security-email job boundary |
+| `0031` | opaque device continuity and session linkage |
+| `0032` | encrypted login-security notification boundary |
+| `0033` | fenced account-deletion lifecycle, purge evidence, and tombstone |
+| `0034` | business full/short identity, creator/request evidence, idempotency index, and guards (local-only) |
 
 ## Domain coverage
 
 | Domain | Present | Required additions / remediation |
 |---|---|---|
 | Identity | profiles, OTP challenges, sessions, acceptances, consents; local migrations also add devices, security events, TOTP/backup-code evidence, and the OTP verification-lock field | canonical users/email identities, notification preferences, session rotation/replay state, security-email evidence, and remote activation/verification |
-| Workspaces | workspaces, members, invitations, audit; local migration `0022` adds an immutable acceptance claim | settings, encryption-key records, complete business names, explicit lifecycle, workspace-ID route shape, and a broader tamper-evident audit chain |
+| Workspaces | workspaces, members, invitations, audit; migration `0022` adds an immutable acceptance claim; local-only `0034` adds complete business names and idempotent owner creation evidence | remote `0034` activation, settings/encryption-key records, explicit lifecycle, and a broader tamper-evident audit chain |
 | Billing and usage | subscriptions, payments | plans, entitlements, usage periods/counters, add-ons, promo codes, AI ledger, daily cost aggregates |
 | Chats and AI | conversations, messages, facts, source links | message versions/branches, attachments, AI runs/tool calls, feedback, memories and memory sources |
 | Cases and tasks | cases, events, action plans/steps | participants, linked documents/chats/sources, plan versions, tasks/reminders, access grants |

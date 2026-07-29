@@ -53,6 +53,7 @@ const securityEmailJobEntry = journal.entries.find(({ idx }) => idx === 30);
 const deviceContinuityEntry = journal.entries.find(({ idx }) => idx === 31);
 const securityNotificationEntry = journal.entries.find(({ idx }) => idx === 32);
 const accountDeletionLifecycleEntry = journal.entries.find(({ idx }) => idx === 33);
+const businessWorkspaceIdentityEntry = journal.entries.find(({ idx }) => idx === 34);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -128,6 +129,10 @@ assert.ok(
 );assert.ok(
   accountDeletionLifecycleEntry,
   "Drizzle journal must contain migration 0033",
+);
+assert.ok(
+  businessWorkspaceIdentityEntry,
+  "Drizzle journal must contain migration 0034",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -3816,6 +3821,108 @@ test("0033 prevents lifecycle forks, evidence mutation, cancellation after purge
         SET status='scheduled' WHERE id='request-33'
       `).run(),
       /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
+    );
+    assert.equal(tableDefinitions(db).size, 112);
+    assert.equal(foreignKeyCount(db), 158);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+test("0034 safely backfills and guards business workspace identity", () => {
+  const sql = migrationSql(businessWorkspaceIdentityEntry);
+  assert.equal(statements(sql).length, 8);
+  assert.match(sql, /workspaces_creation_request_uidx/);
+  assert.match(sql, /workspaces_business_identity_insert_guard/);
+  assert.match(sql, /workspaces_business_identity_update_guard/);
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0033_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0034_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    prevId: string;
+    tables: Record<string, {
+      columns: Record<string, unknown>;
+      indexes: Record<string, unknown>;
+      foreignKeys: Record<string, unknown>;
+    }>;
+  };
+  assert.equal(businessWorkspaceIdentityEntry.idx, 34);
+  assert.equal(
+    businessWorkspaceIdentityEntry.tag,
+    "0034_business_workspace_identity",
+  );
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 86);
+  for (const column of [
+    "full_name",
+    "short_name",
+    "created_by_user_id",
+    "creation_request_id",
+  ]) assert.ok(snapshot.tables.workspaces.columns[column]);
+  assert.ok(
+    snapshot.tables.workspaces.indexes.workspaces_creation_request_uidx,
+  );
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 34)) {
+      applyMigration(db, entry);
+    }
+    const now = "2026-07-30T00:00:00.000Z";
+    const insert = db.prepare(`
+      INSERT INTO workspaces (id,type,name,locale,created_at,updated_at)
+      VALUES (?,?,?,?,?,?)
+    `);
+    insert.run("business-long-34", "business", "Ю".repeat(240), "ru", now, now);
+    insert.run("business-short-34", "business", "X", "ru", now, now);
+    insert.run("personal-34", "individual", "P", "ru", now, now);
+
+    applyMigration(db, businessWorkspaceIdentityEntry);
+    const long = db.prepare(`
+      SELECT length(full_name) AS fullLength,length(short_name) AS shortLength
+      FROM workspaces WHERE id='business-long-34'
+    `).get() as { fullLength: number; shortLength: number };
+    assert.equal(long.fullLength, 200);
+    assert.equal(long.shortLength, 80);
+    const short = db.prepare(`
+      SELECT full_name AS fullName,short_name AS shortName
+      FROM workspaces WHERE id='business-short-34'
+    `).get() as { fullName: string; shortName: string };
+    assert.equal(short.fullName, "Business");
+    assert.equal(short.shortName, "Business");
+    const personal = db.prepare(`
+      SELECT full_name AS fullName,short_name AS shortName
+      FROM workspaces WHERE id='personal-34'
+    `).get() as { fullName: string | null; shortName: string | null };
+    assert.equal(personal.fullName, null);
+    assert.equal(personal.shortName, null);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO workspaces (id,type,name,locale,created_at,updated_at)
+        VALUES ('invalid-business-34','business','Invalid','ru',?,?)
+      `).run(now, now),
+      /WORKSPACE_BUSINESS_IDENTITY_REQUIRED/,
+    );
+    db.prepare(`
+      INSERT INTO workspaces (
+        id,type,name,full_name,short_name,creation_request_id,
+        locale,created_at,updated_at
+      ) VALUES ('request-a-34','business','A business','A business','AB',
+        '11111111-1111-4111-8111-111111111111','ru',?,?)
+    `).run(now, now);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO workspaces (
+          id,type,name,full_name,short_name,creation_request_id,
+          locale,created_at,updated_at
+        ) VALUES ('request-b-34','business','B business','B business','BB',
+          '11111111-1111-4111-8111-111111111111','ru',?,?)
+      `).run(now, now),
+      /UNIQUE constraint failed/,
     );
     assert.equal(tableDefinitions(db).size, 112);
     assert.equal(foreignKeyCount(db), 158);

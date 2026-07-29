@@ -15,7 +15,7 @@ export const GET = withApiErrors(async function GET() {
   );
   const [profile, workspaceRow, memberships, cases, documents, consents, acceptances, consultations, audit] = await db.batch([
     db.prepare("SELECT id,full_name,locale,account_type,company_name,organization_role,primary_goal,timezone,created_at,updated_at FROM user_profiles WHERE id=?").bind(user.id),
-    db.prepare("SELECT id,type,name,locale,created_at,updated_at FROM workspaces WHERE id=?").bind(workspace.id),
+    db.prepare("SELECT id,type,name,full_name,short_name,locale,created_at,updated_at FROM workspaces WHERE id=?").bind(workspace.id),
     db.prepare("SELECT user_id,role,status,joined_at,created_at,updated_at FROM workspace_members WHERE workspace_id=? AND user_id=?").bind(workspace.id, user.id),
     db.prepare("SELECT id,title,description,legal_area,status,next_deadline_at,created_at,updated_at FROM cases WHERE workspace_id=?").bind(workspace.id),
     db.prepare("SELECT id,title,category,status,language,archived_at,created_at,updated_at FROM documents WHERE workspace_id=? AND owner_user_id=?").bind(workspace.id, user.id),

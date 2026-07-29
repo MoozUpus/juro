@@ -5,7 +5,7 @@ import { usePlatformBasePath } from "./PlatformRouteContext";
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated profile data is hydrated after the first browser render */
 
 import Link from "next/link";
-import { CircleAlert, Copy, Database, Download, KeyRound, Languages, LoaderCircle, LogOut, MailCheck, MonitorSmartphone, RefreshCcw, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
+import { Building2, CircleAlert, Copy, Database, Download, KeyRound, Languages, LoaderCircle, LogOut, MailCheck, MonitorSmartphone, RefreshCcw, Save, ShieldCheck, Trash2, UserRound } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
@@ -108,6 +108,12 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const [newEmail, setNewEmail] = useState("");
   const [currentEmailCode, setCurrentEmailCode] = useState("");
   const [newEmailCode, setNewEmailCode] = useState("");
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [businessWorkspace, setBusinessWorkspace] = useState({
+    requestId: "",
+    fullName: "",
+    shortName: "",
+  });
   const mfaSetupRegion = useRef<HTMLDivElement>(null);
   const backupCodesRegion = useRef<HTMLDivElement>(null);
   const emailChangeRegion = useRef<HTMLDivElement>(null);
@@ -682,12 +688,55 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
       setSaving(false);
     }
   }
+  async function createBusinessWorkspace(event: FormEvent) {
+    event.preventDefault();
+    if (creatingWorkspace) return;
+    setCreatingWorkspace(true);
+    setError("");
+    setNotice("");
+    const requestId = businessWorkspace.requestId || crypto.randomUUID();
+    if (!businessWorkspace.requestId) {
+      setBusinessWorkspace(current => ({ ...current, requestId }));
+    }
+    try {
+      const response = await fetch("/api/platform/workspaces", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({
+          action: "create",
+          requestId,
+          fullName: businessWorkspace.fullName,
+          shortName: businessWorkspace.shortName,
+          locale,
+        }),
+      });
+      const body = await response.json() as { redirectTo?: string; error?: string };
+      if (!response.ok || !body.redirectTo) {
+        throw new Error(body.error || (ru
+          ? "Бизнес-пространство не создано."
+          : "Biznes makoni yaratilmadi."));
+      }
+      window.location.assign(body.redirectTo);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : (ru
+        ? "Бизнес-пространство не создано."
+        : "Biznes makoni yaratilmadi."));
+      setCreatingWorkspace(false);
+    }
+  }
   if (loading) return <div className="profile-loading" role="status"><LoaderCircle className="spin" aria-hidden="true" /><span className="sr-only">{ru ? "Загрузка настроек" : "Sozlamalar yuklanmoqda"}</span></div>;
   const title = view === "profile" ? (ru ? "Профиль" : "Profil") : view === "security" ? (ru ? "Безопасность" : "Xavfsizlik") : view === "privacy" ? (ru ? "Приватность и данные" : "Maxfiylik va ma’lumotlar") : (ru ? "Настройки" : "Sozlamalar");
   const Icon = view === "profile" ? UserRound : view === "security" ? ShieldCheck : view === "privacy" ? Database : Languages;
   return <section className="profile-workspace"><header><Icon /><div><small>JURO</small><h1>{title}</h1><p>{ru ? "Данные и права изменяются через защищённые серверные операции." : "Ma’lumotlar va huquqlar himoyalangan server amallari orqali o‘zgartiriladi."}</p></div></header><nav aria-label={ru ? "Настройки аккаунта" : "Hisob sozlamalari"}><Link className={view === "profile" ? "active" : ""} href={`${base}/profile`}>{ru ? "Профиль" : "Profil"}</Link><Link className={view === "settings" ? "active" : ""} href={`${base}/settings`}>{ru ? "Настройки" : "Sozlamalar"}</Link><Link className={view === "security" ? "active" : ""} href={`${base}/settings/security`}>{ru ? "Безопасность" : "Xavfsizlik"}</Link><Link className={view === "privacy" ? "active" : ""} href={`${base}/settings/privacy`}>{ru ? "Приватность" : "Maxfiylik"}</Link></nav>{error && <p className="profile-message error" role="alert"><CircleAlert aria-hidden="true" />{error}</p>}{view === "security" && error && !mfa && <button className="profile-retry" type="button" disabled={retrying} aria-busy={retrying} onClick={() => void retryLoad()}>{retrying && <LoaderCircle className="spin" aria-hidden="true" />}{ru ? "Повторить загрузку" : "Qayta yuklash"}</button>}{notice && <p className="profile-message success" role="status"><ShieldCheck aria-hidden="true" />{notice}</p>}
     {(view === "profile" || view === "settings") && data && <form className="profile-form" onSubmit={save}><section><h2>{ru ? "Основные данные" : "Asosiy ma’lumotlar"}</h2><label>{ru ? "Имя" : "Ism"}<input required value={form.fullName} onChange={(event) => setForm({ ...form, fullName: event.target.value })} /></label><label>Email<input disabled value={data.profile.email} /><small>{ru ? "Смена email требует отдельного подтверждения." : "Emailni o‘zgartirish alohida tasdiqni talab qiladi."}</small></label><label>{ru ? "Телефон" : "Telefon"}<input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} autoComplete="tel" /></label></section><section><h2>{ru ? "Пространство" : "Makon"}</h2><label>{ru ? "Язык" : "Til"}<select value={form.locale} onChange={(event) => setForm({ ...form, locale: event.target.value as PlatformLocale })}><option value="ru">Русский</option><option value="uz">O‘zbekcha</option></select></label><label>{ru ? "Часовой пояс" : "Vaqt mintaqasi"}<select value={form.timezone} onChange={(event) => setForm({ ...form, timezone: event.target.value })}><option value="Asia/Tashkent">Asia/Tashkent</option><option value="UTC">UTC</option></select></label>{accountType === "business" && <><label>{ru ? "Организация" : "Tashkilot"}<input value={form.companyName} onChange={(event) => setForm({ ...form, companyName: event.target.value })} /></label><label>{ru ? "Роль в организации" : "Tashkilotdagi rol"}<input value={form.organizationRole} onChange={(event) => setForm({ ...form, organizationRole: event.target.value })} /></label></>}</section><button disabled={saving}>{saving ? <LoaderCircle className="spin" /> : <Save />}{ru ? "Сохранить изменения" : "O‘zgarishlarni saqlash"}</button></form>}
-    {(view === "profile" || view === "settings") && data && emailChange && <section className="email-change-panel">
+    {view === "settings" && <section className="business-workspace-panel" id="business-workspace">
+      <div className="business-workspace-heading"><Building2 aria-hidden="true" /><div><h2>{ru ? "Новое бизнес-пространство" : "Yangi biznes makoni"}</h2><p id="business-workspace-description">{ru ? "Создайте отдельный контур для документов и дел организации. Вы станете владельцем; формальная государственная проверка компании на этом этапе не требуется." : "Tashkilot hujjatlari va ishlari uchun alohida makon yarating. Siz egasi bo‘lasiz; hozircha kompaniyani davlat orqali rasmiy tekshirish talab qilinmaydi."}</p></div></div>
+      <form onSubmit={createBusinessWorkspace} aria-describedby="business-workspace-description">
+        <label>{ru ? "Полное наименование" : "To‘liq nomi"}<input required minLength={2} maxLength={200} autoComplete="organization" value={businessWorkspace.fullName} onChange={(event) => setBusinessWorkspace(current => ({ ...current, fullName: event.target.value }))} /></label>
+        <label>{ru ? "Краткое наименование" : "Qisqa nomi"}<input required minLength={2} maxLength={80} value={businessWorkspace.shortName} onChange={(event) => setBusinessWorkspace(current => ({ ...current, shortName: event.target.value }))} /></label>
+        <button type="submit" disabled={creatingWorkspace || businessWorkspace.fullName.trim().length < 2 || businessWorkspace.shortName.trim().length < 2} aria-busy={creatingWorkspace}>{creatingWorkspace ? <LoaderCircle className="spin" aria-hidden="true" /> : <Building2 aria-hidden="true" />}{ru ? "Создать и перейти" : "Yaratish va o‘tish"}</button>
+      </form>
+    </section>}    {(view === "profile" || view === "settings") && data && emailChange && <section className="email-change-panel">
       <h2><MailCheck aria-hidden="true" />{ru ? "Защищённая смена email" : "Himoyalangan email almashtirish"}</h2>
       <p id="email-change-description">{ru
         ? "JURO отправит разные коды на текущий и новый адреса. Изменение применяется только после проверки обоих кодов и завершает остальные JURO email-сессии."

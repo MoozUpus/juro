@@ -31,7 +31,7 @@ No document in this directory authorizes or implies a production schema, traffic
 - `SECRETS.md` — server-only secret names/contracts and presence-by-name inventory, never values.
 - `RETENTION.md` — implemented account-deletion lifecycle, retained evidence, purge order, and open retention gates.
 - `SECURITY.md` — implemented platform controls, environment isolation, release evidence, and open security gates.
-- `DATA-MODEL.md` — additive domain model and migration `0033` deletion/tombstone contract.
+- `DATA-MODEL.md` — additive domain model, migration `0033` deletion/tombstone contract, and pending local `0034` business-workspace identity contract.
 - `IMPLEMENTED-FEATURES.md` and `DEFERRED-FEATURES.md` — evidence-backed implemented/deferred register.
 
 ## Identity foundation

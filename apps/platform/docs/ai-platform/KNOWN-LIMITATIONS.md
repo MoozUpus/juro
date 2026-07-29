@@ -6,7 +6,7 @@ foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0033` are applied to `juro-staging`; migration-specific
+- migrations `0022`–`0033` are applied to `juro-staging`; source migration `0034` is local-only and still requires a fresh migration-specific
   full/schema/data exports, private-R2 round trips, and the disposable remote-D1
   restore drill pass. Operational RTO/RPO under representative load remains
   unverified;
@@ -27,7 +27,7 @@ foundation checkpoint.
   created, and both exact R2 keys are absent. The final probe flag is disabled;
   a valid owner-managed key ring plus protected recovery copy is required
   before rerunning the purge and identity gates;
-- local test totals (27 rendered route + 274 core + 79 Cloudflare = 380),
+- local test totals (27 rendered route + 283 core + 80 Cloudflare = 390),
   remote schema checks, and the currently deployed Worker are not a substitute for
   the exact current-version authenticated browser/cookie/replay flow. The
   available browser-control runtime currently exits during startup because its
@@ -83,9 +83,10 @@ foundation checkpoint.
 - the one-winner acceptance claim schema from `0022` is active in staging, but
   the full route and remote concurrency behavior remain untested over HTTP;
 - `workspace_audit_events` is not a general append-only/tamper-evident ledger;
-- business acceptance now redirects to the workspace-aware canonical URL,
-  but authenticated remote invitation/switch/browser evidence for the current
-  staging version remains open;
+- business acceptance now redirects to the workspace-aware canonical URL;
+  local business creation is atomic/idempotent with full/short identity, but
+  migration `0034`, authenticated remote creation/switch/browser evidence, and
+  cross-account HTTP proof remain open;
 - the owner/member model and invitation flow do not prove tenant isolation for
   every object domain.
 

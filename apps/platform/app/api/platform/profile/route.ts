@@ -28,7 +28,7 @@ export const GET = withApiErrors(async function GET() {
         timezone,onboarding_completed_at AS onboardingCompletedAt,created_at AS createdAt
        FROM user_profiles WHERE id=? LIMIT 1`,
     ).bind(user.id),
-    db.prepare("SELECT id,name,type,locale FROM workspaces WHERE id=? LIMIT 1").bind(workspace.id),
+    db.prepare("SELECT id,name,full_name AS fullName,short_name AS shortName,type,locale FROM workspaces WHERE id=? LIMIT 1").bind(workspace.id),
     db.prepare(
       "SELECT type,version,granted_at AS grantedAt,revoked_at AS revokedAt FROM consents WHERE user_id=? ORDER BY granted_at DESC",
     ).bind(user.id),
@@ -190,8 +190,11 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     );
   await db.batch([
     profileUpdate,
-    db.prepare("UPDATE workspaces SET locale=?,name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE name END,updated_at=? WHERE id=?")
-      .bind(locale, companyName, companyName, now, workspace.id),
+    db.prepare(`UPDATE workspaces SET locale=?,
+      name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE name END,
+      full_name=CASE WHEN type='business' AND ? IS NOT NULL THEN ? ELSE full_name END,
+      updated_at=? WHERE id=?`)
+      .bind(locale, companyName, companyName, companyName, companyName, now, workspace.id),
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'user',?,'profile_updated',?,?)",
     ).bind(crypto.randomUUID(), workspace.id, user.id, user.id, JSON.stringify({ locale, timezone }), now),

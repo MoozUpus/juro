@@ -116,6 +116,8 @@ const coreTestFiles = [
   "tests/staff-role-management.test.ts",
   "tests/policy-acceptance.test.ts",
   "tests/onboarding-profile.test.ts",
+  "tests/workspace-routing.test.ts",
+  "tests/workspace-creation.test.ts",
   "tests/workspace-invitations.test.ts",
   "tests/platform-core.test.ts",
 ];

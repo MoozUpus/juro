@@ -7,6 +7,7 @@ Scope: verified local source/tests plus the protected staging deployment describ
 
 | Slice | Locally implemented and tested | Not yet proved |
 |---|---|---|
+| Business workspace creation | Strict 2 KiB RU/UZ payload; normalized full/short identity; UUID idempotency; authenticated same-origin/CSRF boundary; one D1 batch for workspace, owner membership, active selection, and audit; exact retry; cross-user/mismatch denial; migration `0034` legacy backfill and DB guards; responsive inline settings form | Fresh staging backup/restore, remote `0034`, deployment, authenticated browser and cross-account HTTP evidence |
 | Workspace invitation acceptance | Strict bounded RU/UZ input; exact token/identity binding; staging migration `0022` unique immutable claim; one D1 batch for claim, membership, default-workspace, and audit; one winner under concurrency; existing owner role preserved; rollback on audit failure; business redirect contains the accepted `workspaceId` | Protected staging HTTP/concurrency flow and broader append-only workspace audit |
 | OTP request limits | Separate `5/email/hour` and `20/IP/hour` gates; retained lookup-key versions share buckets; invalidated provider failures count toward email limits; missing connecting IP does not merge unrelated users; 60-second resend cooldown retained; aggregate staging D1 reports three provider-accepted challenges | Live traffic/rate behavior, provider failure, and enumeration parity through protected staging |
 | OTP verification lock | Staging migration `0023` adds immutable `verification_locked_until`; fifth wrong attempt applies a 15-minute lock; replacement challenge is denied while locked | Full-HTTP remote concurrency and lock timing |
@@ -24,9 +25,9 @@ Scope: verified local source/tests plus the protected staging deployment describ
 The latest recorded successful local full suite contains:
 
 - 27 rendered-route/security tests;
-- 274 core/auth/document tests;
-- 79 Cloudflare/migration/job tests, including migrations `0029`–`0033`, encrypted security-email evidence, account-deletion purge, continuity-backed login alerts, atomic rollback, cron, and queue concurrency/replay contracts;
-- 380 tests total.
+- 283 core/auth/document tests;
+- 80 Cloudflare/migration/job tests, including migrations `0029`–`0034`, encrypted security-email evidence, account-deletion purge, continuity-backed login alerts, atomic rollback, cron, and queue concurrency/replay contracts;
+- 390 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. The canonical document-builder flow now also has
@@ -102,6 +103,6 @@ not pushed or deployed; production remains unchanged.
 - The staging Worker has a durable locked `*/5` outbox dispatcher plus isolated email and data-retention Queue consumers/DLQs; all other consumers and legal ingestion remain absent/disabled.
 - The purge validates workspace/staff blockers, persists an irreversible fence, deletes exact private R2 keys, performs the D1 cleanup transaction, tombstones the profile, and writes append-only lifecycle/purge evidence.
 - Recoverable requests can cancel before the fence. Corrected blockers can be retried once under concurrency. R2 failure preserves D1 and retries; completed/cancelled states are idempotent and terminal.
-- Local evidence: 27 rendered route/security tests, 274 core tests, and 79 Cloudflare tests; type-check, lint, generated binding check, staging build/artifact, three-environment dry-run matrix, builder smoke, comparison smoke, and secret-pattern scan pass.
+- Local evidence: 27 rendered route/security tests, 283 core tests, and 80 Cloudflare tests; type-check, lint, generated binding check, staging build/artifact, three-environment dry-run matrix, builder smoke, comparison smoke, and secret-pattern scan pass.
 
 Migrations and the Worker runtime are deployed to owner-only protected staging. D1 integrity, exact schema, control-plane attachments, anonymous Access denial, one completed durable cron run, and the post-migration private-R2 backup are verified. A synthetic authenticated deletion through HTTP/UI, live email delivery, DLQ/redrive, and the broader browser/accessibility matrix remain open. Production is unchanged.

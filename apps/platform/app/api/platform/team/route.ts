@@ -46,7 +46,7 @@ export const GET = withApiErrors(async function GET() {
   const workspace = await workspaceForUser(user);
   const db = requireD1();
   const [workspaceRow, members, invitations] = await db.batch([
-    db.prepare("SELECT id,name,type,locale FROM workspaces WHERE id=? LIMIT 1").bind(workspace.id),
+    db.prepare("SELECT id,name,full_name AS fullName,short_name AS shortName,type,locale FROM workspaces WHERE id=? LIMIT 1").bind(workspace.id),
     db.prepare(
       `SELECT m.id,m.user_id AS userId,m.role,m.status,m.joined_at AS joinedAt,
         u.full_name AS fullName,${userIdentitySelect("u")}

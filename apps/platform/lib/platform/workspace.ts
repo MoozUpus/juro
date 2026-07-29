@@ -86,13 +86,16 @@ export async function ensureDefaultWorkspace(userId: string): Promise<string> {
     || profile.fullName
     || identity.email
   ).slice(0, 180);
+  const businessWorkspace = profile.accountType === "business";
   await db.batch([
     db.prepare(
-      "INSERT OR IGNORE INTO workspaces (id,type,name,locale,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+      "INSERT OR IGNORE INTO workspaces (id,type,name,full_name,short_name,locale,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
     ).bind(
       workspaceId,
-      profile.accountType === "business" ? "business" : "individual",
+      businessWorkspace ? "business" : "individual",
       workspaceName,
+      businessWorkspace ? workspaceName : null,
+      businessWorkspace ? workspaceName.slice(0, 80) : null,
       profile.locale === "uz" ? "uz" : "ru",
       now,
       now,

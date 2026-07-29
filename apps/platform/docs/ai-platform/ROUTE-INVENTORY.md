@@ -299,6 +299,9 @@ The page and its four API operations return neutral `404` behavior while the
 flag is false. It is not linked from customer navigation and is not enabled in
 development, staging, or production configuration.
 
+### Workspace creation API
+
+`POST /api/platform/workspaces` retains the legacy authenticated switch contract and adds strict action-discriminated business creation. The create payload is bounded to 2 KiB, requires RU/UZ locale, a UUID idempotency request, and normalized full/short names. It is same-origin/CSRF protected, creates the workspace plus owner membership, active selection, and audit in one D1 batch, and returns the canonical `/:locale/business/:workspaceId/dashboard` target. Exact replay returns the same workspace; cross-user or mismatched replay returns a neutral conflict. This source route requires migration `0034` and is not deployed to staging yet.
 ### Document builder
 
 ```text

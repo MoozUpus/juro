@@ -1,7 +1,7 @@
 # JURO platform data model
 
 Updated: 2026-07-30
-Status: additive schema through migration `0033`; isolated protected staging is through `0033` with integrity/backup evidence. Production and development remain on their existing `0004` schema.
+Status: additive source schema through migration `0034`; isolated protected staging remains through `0033` with integrity/backup evidence. Migration `0034` is local-only pending a fresh staging backup/restore gate. Production and development remain on their existing `0004` schema.
 
 ## Modeling rules
 
@@ -28,7 +28,11 @@ Deletion revokes/removes mutable authentication records while retaining only doc
 
 Migration `0033_freezing_havok.sql` is additive except for replacing the active-request partial index with the expanded state predicate and normalizing legacy in-flight rows to review-required `blocked`. It adds two tables, lifecycle/tombstone fields, indexes, state checks, and append-only/immutability triggers. It does not drop user content or run a purge.
 
-The complete local migration sequence is `0000`–`0033` (34 ledger entries). Migration-safety tests apply the sequence from empty D1, verify `quick_check`, `foreign_key_check`, Drizzle snapshot continuity, state guards, append-only evidence, and representative cascades.
+## Migration 0034 footprint
+
+Migration `0034_business_workspace_identity.sql` additively introduces full and short business names, creator and idempotency-request evidence, a partial unique request index, bounded legacy backfill, and insert/update guards for business identity. Personal workspaces remain nullable and unchanged. Creation uses one authenticated, CSRF-protected D1 batch for workspace, owner membership, active selection, and audit; exact request replay is idempotent and cross-user or payload-mismatched replay fails closed.
+
+The complete local migration sequence is `0000`–`0034` (35 ledger entries). Migration-safety tests apply the sequence from empty D1, verify `quick_check`, `foreign_key_check`, Drizzle snapshot continuity, the unchanged 112-table/158-FK topology, business-name normalization, state guards, append-only evidence, and representative cascades. Remote staging still has only the 34-entry `0000`–`0033` ledger.
 
 ## Deferred domains
 

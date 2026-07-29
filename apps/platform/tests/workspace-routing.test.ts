@@ -22,11 +22,13 @@ function seedWorkspaces(): ReturnType<typeof sqliteD1Fixture> {
     now,
   );
   const insertWorkspace = fixture.sqlite.prepare(
-    "INSERT INTO workspaces (id,type,name,locale,created_at,updated_at) VALUES (?,?,?,?,?,?)",
+    `INSERT INTO workspaces
+     (id,type,name,full_name,short_name,locale,created_at,updated_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
   );
-  insertWorkspace.run("ws_personal_route", "individual", "Personal", "ru", now, now);
-  insertWorkspace.run("ws_business_route", "business", "Business", "ru", now, now);
-  insertWorkspace.run("ws_foreign_route", "business", "Foreign", "ru", now, now);
+  insertWorkspace.run("ws_personal_route", "individual", "Personal", null, null, "ru", now, now);
+  insertWorkspace.run("ws_business_route", "business", "Business", "Business", "Business", "ru", now, now);
+  insertWorkspace.run("ws_foreign_route", "business", "Foreign", "Foreign", "Foreign", "ru", now, now);
   fixture.sqlite.prepare(
     "UPDATE user_profiles SET default_workspace_id=? WHERE id=?",
   ).run("ws_personal_route", "user_workspace_route");
