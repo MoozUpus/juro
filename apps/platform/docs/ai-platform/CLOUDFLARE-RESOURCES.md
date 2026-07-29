@@ -1,7 +1,7 @@
 # JURO Cloudflare resources
 
 Updated: 2026-07-29
-Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0028`; portable exports, private R2 retrieval, and isolated local restore checks are recorded. Worker `juro-platform-staging` is deployed from pushed commit `9d4f934` behind owner-only Cloudflare Access at `staging.app.juro.uz`; workers.dev and previews remain disabled, all activation flags remain false, and no Queue consumer or schedule is attached. Exact staging resource bindings, the public Turnstile site key, and three server-only secret binding names are present. Production resources, traffic, Sites v20, and the legacy Worker were not changed.
+Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0029`; migration-specific full/schema/data exports, private R2 checksum round trips, and a disposable remote restore drill are recorded. Worker `juro-platform-staging` is deployed from pushed commit `0544a56` behind owner-only Cloudflare Access at `staging.app.juro.uz`; workers.dev and previews remain disabled, all activation flags remain false, and no Queue consumer or schedule is attached. Exact staging resource bindings, the public Turnstile site key, and three server-only secret binding names are present. Production resources, traffic, Sites v20, and the legacy Worker were not changed.
 
 ## Verified control-plane identity
 
@@ -25,10 +25,10 @@ The existing Sites project has no preview URL. Every Sites deployment is a produ
 | Environment | Database | ID | Remote state |
 |---|---|---|---|
 | Development | `juro-development` | `d07670cf-f7bf-460c-a668-101671d4c330` | exists; 61 non-internal tables reported |
-| Staging | `juro-staging` | `bb716a96-b2fb-4823-90d6-6c228fed181a` | exists; EEUR; exact 29-entry ledger `0000`–`0028`; 107 non-internal tables and 58 triggers; post-migration export restored locally with `integrity_check = ok` and zero FK violations |
+| Staging | `juro-staging` | `bb716a96-b2fb-4823-90d6-6c228fed181a` | exists; EEUR; exact 30-entry ledger `0000`–`0029`; 109 non-internal tables and 58 triggers; migration-specific remote restore drill and zero FK violations |
 | Production | `juro-production` | `4cce509b-0e02-4ca9-a3ba-a5ce1327aeda` | exists; 61 non-internal tables reported; preserve |
 
-The current branch has migrations `0000`–`0028`. Staging's exact 29-entry ledger, table count, trigger count, and legal-source foundation tables were re-read after migration. A post-migration SQL export was independently restored into local SQLite and passed integrity and foreign-key checks. Production/development remain at `0000`–`0004`; no migration was applied to either environment.
+The current branch has migrations `0000`–`0029`. Staging's exact 30-entry ledger, table count, trigger count, and token/legal-source foundation tables were re-read after migration. The pre-`0029` export passed a disposable remote-D1 restore drill; the post-`0029` full/schema/data set passed private-R2 checksum round trips and remote D1 has zero foreign-key violations. Production/development remain at `0000`–`0004`; no migration was applied to either environment.
 
 ### R2
 
@@ -40,7 +40,7 @@ Existing private JURO buckets:
 - `juro-quarantine-development` — existing development quarantine namespace;
 - `juro-development-files`, `juro-development-backups`, and `juro-development-quarantine` — newly created empty EEUR Standard targets; private and not bound;
 - `juro-staging-files` and `juro-staging-quarantine` — private EEUR Standard targets bound only to `juro-platform-staging`; no public bucket access or active processing consumer is configured;
-- `juro-staging-backups` — private EEUR Standard target containing the three verified D1 migration checkpoint exports documented in `BACKUP-RESTORE.md`; bound only to protected staging and not publicly exposed.
+- `juro-staging-backups` — private EEUR Standard target containing ten verified D1 migration/restore artifacts documented in `BACKUP-RESTORE.md`; bound only to protected staging and not publicly exposed.
 
 The account also contains `site-creator-r2`, a Sites-managed/non-JURO-primary resource. It must not be repurposed as a JURO file, backup, or quarantine bucket.
 
@@ -53,7 +53,7 @@ The owner-approved target names differ from the older source/runtime names:
 | Dev primary files | `juro-development-files` | `juro-private-documents-development` | empty target exists; do not abandon or duplicate data; inventory objects, choose an additive copy/cutover plan, then update binding |
 | Staging primary files | `juro-staging-files` | absent | isolated target is bound only to the protected staging Worker; upload/scanning remains feature-gated |
 | Production primary files | `juro-private-documents` | same | preserve; no replacement |
-| Backups | `juro-{environment}-backups` | dev uses `juro-private-backups-development` | staging contains three checksum-verified D1 checkpoint exports with local restore evidence; development remains empty and production remains absent |
+| Backups | `juro-{environment}-backups` | dev uses `juro-private-backups-development` | staging contains ten checksum-verified D1 export/restore artifacts including the `0029` pre/post sets; development remains empty and production remains absent |
 | Quarantine | `juro-{environment}-quarantine` | dev uses `juro-quarantine-development` | empty dev/staging targets exist; they are not scanners and remain unbound until a real fail-closed workflow; production remains absent |
 
 ### Queues
@@ -88,7 +88,7 @@ Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The prote
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
 - Staging primary queues have one producer binding from `juro-platform-staging`; all DLQs, development queues, and every Queue consumer remain unattached.
-- Staging Worker serves deployment `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa`, version `f320057f-740d-465c-9aa2-777538ba5e44`, at 100%. Script subdomain and previews remain disabled; schedules and consumers remain absent.
+- Staging Worker serves deployment `d033f009-426f-4283-9308-f6c7bdf7f29e`, version `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd`, at 100%. Script subdomain and previews remain disabled; schedules and consumers remain absent.
 - `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
@@ -243,7 +243,7 @@ Completed inactive-deploy gates and remaining public-staging gates:
 2. resolve `app.juro.uz` ownership between Sites and the legacy Worker without changing production traffic;
 3. create only the approved missing isolated development/staging resources; never create a second production D1 or replace `juro-private-documents`;
 4. preserve the completed portable export/private-R2/local-restore evidence; require a separate remote disposable-D1 import drill before treating recovery time as proven or before any production migration;
-5. preserve and recheck staging's exact `0000`–`0028` ledger, integrity results, and schema manifest; do not reapply completed migrations;
+5. preserve and recheck staging's exact `0000`–`0029` ledger, restore/checksum evidence, and schema manifest; do not reapply completed migrations;
 6. verify Queue/DLQ delivery, R2 operations, Vectorize tenant filters, Analytics redaction, and alerts;
 7. implement quarantine/DLQ consumption, alerts, redrive, ledger reconciliation, and per-kind producer/handler flags;
 8. require globally namespaced server-generated idempotency keys until a tenant-scoped composite key migration exists;
@@ -279,9 +279,9 @@ The Access application is hidden from the App Launcher and auto-redirects to the
 | Evidence | Verified value |
 |---|---|
 | Worker | `juro-platform-staging` |
-| Deployment | `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa` |
-| Version | `f320057f-740d-465c-9aa2-777538ba5e44` at 100% |
-| Startup time | 149 ms reported by Wrangler |
+| Deployment | `d033f009-426f-4283-9308-f6c7bdf7f29e` |
+| Version | `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd` at 100% |
+| Startup time | 160 ms reported by Wrangler |
 | Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` |
 | Anonymous boundary | 302 to Access login; `no-store`, application content denied |
 | Authenticated smoke | canonical RU/UZ library/category/template passed on a prior protected version; the current canonical business-workspace version still awaits an authenticated browser pass |

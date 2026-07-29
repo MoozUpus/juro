@@ -1,7 +1,7 @@
 # JURO server-only secrets
 
-Updated: 2026-07-28
-Status: names, contracts, and read-only presence inventory only; no secret value is stored here, in Git, or in the client bundle. On 2026-07-29, after the owner reported entering staging values, Wrangler and the Worker settings API still returned zero secret bindings for the exact `juro-platform-staging` service.
+Updated: 2026-07-29
+Status: names, contracts, and read-only presence inventory only; no secret value is stored here, in Git, or in the client bundle. The exact `juro-platform-staging` service now exposes server-only bindings named `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; Wrangler and the Worker settings API returned names and types only, never values.
 
 ## Verified remote presence by name
 
@@ -11,13 +11,13 @@ No inspected production surface exposed the following required names: `OPENAI_AP
 
 Only names were inventoried. A Sites connector operation unexpectedly returned a bypass bearer token in raw connector telemetry. The value was not copied, used, persisted, or committed and is intentionally absent from this document. It must be rotated/revoked before production work.
 
-The staging recheck used both `--name juro-platform-staging` and
-`--env staging`; each returned `[]`. The Worker version timestamp also
-predates the reported entry action. The production Worker still has its
-pre-existing `RESEND_API_KEY`; no evidence indicates that new staging values
-were attached there. No account Secrets Store or local secret file was found.
-This is a binding-location blocker, not evidence that a provider credential is
-invalid.
+The staging recheck used `wrangler secret list --env staging --format json`
+and the Worker settings API after deployment. Both expose the same three
+server-only names and the public `TURNSTILE_SITE_KEY` binding. The values were
+not requested, exported, logged, or copied. The production Worker still has
+its pre-existing `RESEND_API_KEY`; no evidence indicates that any new staging
+value was attached to production. Provider delivery and end-to-end browser
+behavior remain separate gates from binding presence.
 
 ## Identity key ring
 
@@ -122,8 +122,9 @@ Provider secrets must remain separate per environment and may not use
 - server validation uses Cloudflare Siteverify, requires action `auth_otp` and
   an exact expected hostname, and fails closed on invalid, malformed,
   unavailable, or timed-out verification;
-- neither Turnstile binding is configured on the inspected live surfaces, and
-  no real Turnstile or Resend mailbox flow has been verified in staging.
+- both Turnstile binding names are present on protected staging, together with
+  `RESEND_API_KEY` and `EMAIL_FROM`; no real current-version Turnstile/Resend
+  mailbox trace has yet been captured, so provider delivery is not claimed.
 
 Model names, feature flags, URLs, and email sender identities are server-side variables/configuration, not secrets. They still require environment isolation and must not contain credentials.
 

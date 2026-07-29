@@ -1332,7 +1332,7 @@ Commit `9d4f934` passed GitHub Actions run `30439184724`, was deployed only to p
 
 ## D-065 — rotate the local session token inside MFA elevation and fail closed on replay
 
-Status: accepted and locally verified; staging migration pending
+Status: accepted, locally verified, schema-applied, and Worker-deployed to protected staging; HTTP evidence pending
 Date: 2026-07-29
 
 MFA enrollment confirmation now binds its first durable claim to the exact
@@ -1347,6 +1347,11 @@ revokes the affected current session and its linked device, and appends a
 critical `session.token_replayed` event. Only SHA-256 token digests are stored;
 the replacement cookie preserves the original absolute expiry. Periodic, email-
 change, and MFA-disable rotation triggers are intentionally not claimed by this
-slice. Additive migration `0029` and protected-staging HTTP/cookie evidence
-remain blocked on a migration-specific backup and restore drill. Production is
-unchanged.
+slice. A migration-specific portable checkpoint, remote restore drill, additive
+staging migration `0029`, post-migration R2 checksum round trip, staging build,
+and Worker deployment all passed. Deployment
+d033f009-426f-4283-9308-f6c7bdf7f29e serves version
+b4a497ce-9a47-4ea9-be75-b0f48e46c7cd at 100%. The exact current-version
+HTTP/cookie/replay flow remains unverified because the available browser
+control runtime failed before an authenticated Access session could be used;
+Access was not bypassed. Production is unchanged.

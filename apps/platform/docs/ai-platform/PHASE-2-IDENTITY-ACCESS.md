@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-29
-Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains all 29 migrations through `0028`; the current Worker has its staging-only D1/R2/Queue/Vectorize/Analytics bindings, public Turnstile site key, and server-only secret bindings. Aggregate D1 evidence shows three provider-accepted OTP challenges that were consumed successfully, but the current localized auth UI, mailbox delivery, full remote concurrency matrix, and lifecycle gates still require correlated browser/HTTP evidence. Production was not changed.
+Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains all 30 migrations through `0029`; the current Worker version `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd` has its staging-only D1/R2/Queue/Vectorize/Analytics bindings, public Turnstile site key, and three server-only secret bindings. Aggregate D1 evidence shows three provider-accepted OTP challenges that were consumed successfully, but the current localized auth UI, mailbox delivery, session-rotation cookie/replay flow, full remote concurrency matrix, and lifecycle gates still require correlated browser/HTTP evidence. Production was not changed.
 
 ## Implemented
 
@@ -402,11 +402,13 @@ handling, 24-hour/30-day session persistence, structured onboarding,
 persona-preserving workspace selection, canonical localized auth routes, and the full existing builder/
 comparison/rendered Worker regression suite.
 
-The latest recorded local full suite passes 338/338 checks: 27 rendered
-Worker/security checks, 246 core/document/auth checks, and 68 Cloudflare
-configuration/migration/job checks. The full local migration sequence contains
-108 total tables (107 non-internal) in remote staging and zero pending migrations. Local
-evidence is not staging or production runtime evidence.
+The latest recorded local full suite passes 342/342 checks: 27 rendered
+Worker/security checks, 245 core/document/auth checks, and 70 Cloudflare
+configuration/migration/job checks. Remote staging now contains 110 total
+SQLite tables (109 non-internal), 58 triggers, the exact 30-entry ledger through
+`0029`, and zero pending migrations or foreign-key violations. Local service
+tests and remote schema evidence are not full staging HTTP or production
+runtime evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
 
@@ -538,9 +540,9 @@ provider, concurrency, or future-data evidence.
 ## Not complete
 
 - no live Turnstile or Resend delivery has been verified;
-- migrations 0011–0028 are schema-applied to isolated staging but not
-  production; no identity runtime, backfill, provider, or full-HTTP behavior is
-  proven by schema application alone;
+- migrations 0011–0029 are schema-applied to isolated staging but not
+  production; no identity backfill, provider, or full-HTTP lifecycle is proven
+  by schema application and Worker deployment alone;
 - TOTP and backup codes are implemented and verified locally, but no staging
   key ring, runtime activation, real-device authenticator flow, or remote D1
   concurrency test has been completed;
@@ -582,7 +584,8 @@ provider, concurrency, or future-data evidence.
 - session persistence now has locally verified 24-hour standard and 30-day
   remember-me paths. MFA elevation also rotates the exact current token, retains
   its absolute expiry, and revokes the affected session/device after one stale-
-  token replay; migration `0029`, protected-staging HTTP/cookie evidence,
+  token replay. Migration `0029`, migration-specific backup/restore, and Worker
+  deployment now pass in staging; protected-staging HTTP/cookie evidence,
   additional rotation triggers, regional signals, and security email remain
   open;
 - workspace invitation migration 0022 and OTP-lock migration 0023 are applied

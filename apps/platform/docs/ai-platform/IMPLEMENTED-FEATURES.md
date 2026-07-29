@@ -12,7 +12,7 @@ staging or production evidence.
 | OTP request limits | Separate `5/email/hour` and `20/IP/hour` gates; retained lookup-key versions share buckets; invalidated provider failures count toward email limits; missing connecting IP does not merge unrelated users; 60-second resend cooldown retained; aggregate staging D1 reports three provider-accepted challenges | Live traffic/rate behavior, provider failure, and enumeration parity through protected staging |
 | OTP verification lock | Staging migration `0023` adds immutable `verification_locked_until`; fifth wrong attempt applies a 15-minute lock; replacement challenge is denied while locked | Full-HTTP remote concurrency and lock timing |
 | Turnstile | Server Siteverify integration with action `auth_otp`, exact hostname, optional remote IP, eight-second timeout, schema validation, and fail-closed invalid/unavailable handling; client widget integrated into auth flow; exact staging site/secret binding names are present | Current-version browser widget trace, provider response correlation, and Resend mailbox/failure flow in staging |
-| Session persistence and MFA rotation | 24-hour default and 30-day explicit remember-me absolute lifetimes; aligned cookie `Max-Age` and D1 expiry; same choice after OTP or MFA; strict boolean inputs with false default; existing seven-day idle cap; MFA elevation atomically retires the current token digest and returns a replacement cookie without extending absolute expiry; one stale-token replay claim revokes the affected session/device and records a critical audit event; an intervening-token race leaves no MFA side effects | Remote migration `0029` and protected-staging HTTP/cookie/replay behavior; periodic, email-change, and MFA-disable rotation; region signals and security email |
+| Session persistence and MFA rotation | 24-hour default and 30-day explicit remember-me absolute lifetimes; aligned cookie `Max-Age` and D1 expiry; same choice after OTP or MFA; strict boolean inputs with false default; existing seven-day idle cap; MFA elevation atomically retires the current token digest and returns a replacement cookie without extending absolute expiry; one stale-token replay claim revokes the affected session/device and records a critical audit event; an intervening-token race leaves no MFA side effects; staging migration `0029`, restore drill, and Worker deployment pass | Protected-staging HTTP/cookie/replay behavior; periodic, email-change, and MFA-disable rotation; region signals and security email |
 | Structured onboarding | Canonical `/:locale/onboarding`; strict 4 KiB Zod input; required separate names, normalized phone with explicit unverified evidence, personal persona, primary goal, and exact current policy digests; deterministic personal workspace creation; staging migration `0024` applied | Protected staging browser flow; final policy approval; phone verification |
 | Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; business routes use `/:locale/business/:workspaceId/*`; shell, builder, invitations, and switching preserve that base; legacy reserved business roots remain authenticated compatibility adapters | Current-version protected staging browser evidence |
 
@@ -47,15 +47,15 @@ calls or the remaining full browser/accessibility/mobile matrix.
 
 - production was not changed;
 - `juro-production` and `juro-development` remain through migration `0004`;
-- `juro-staging` is through migration `0028` with portable checkpoint and local restore evidence;
+- `juro-staging` is through migration `0029` with pre/post private-R2 checkpoints and a disposable remote restore drill;
 - `juro-production` and `juro-development` were not changed;
 - `LEGAL_SOURCE_STAFF_API_ENABLED=false` is pinned in development, staging,
   and production source/artifacts;
-- protected staging deployment `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa`
-  serves Worker version `f320057f-740d-465c-9aa2-777538ba5e44` at 100% from commit `9d4f934`;
+- protected staging deployment `d033f009-426f-4283-9308-f6c7bdf7f29e`
+  serves Worker version `b4a497ce-9a47-4ea9-be75-b0f48e46c7cd` at 100% from commit `0544a56`;
 - the control plane exposes only the secret names `IDENTITY_KEYRING`,
   `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; values were never read;
-- Access denies anonymous application access across root, legacy business, canonical business, invalid-workspace, and builder paths; an earlier protected version passed authenticated canonical RU/UZ builder smoke, while authenticated browser evidence for the current business-workspace routing remains open;
+- Access denies anonymous application access with a 302 `no-store` redirect; an earlier protected version passed authenticated canonical RU/UZ builder smoke, while exact-current-version business/session-rotation browser evidence remains open because the available browser runtime failed before an owner Access session could be used;
 - aggregate remote D1 reports three provider-accepted and consumed OTP
   challenges without exposing identities or codes. This is not yet a captured
   current-version Turnstile/mailbox trace and does not close negative-provider

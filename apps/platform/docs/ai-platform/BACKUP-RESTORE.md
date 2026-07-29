@@ -1,7 +1,7 @@
 # JURO backup and restore boundary
 
 Updated: 2026-07-29
-Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and a disposable remote-D1 import drill are verified through migration `0028`. Scheduled backup automation, production protection, and an operational RTO remain unverified.
+Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and disposable remote-D1 import drills are verified through migration `0029`. Scheduled backup automation, production protection, and an operational RTO remain unverified.
 
 ## What is not a backup
 
@@ -99,9 +99,9 @@ Deletion of R2-backed content will require a tombstone/outbox flow so the object
 
 ## Current evidence and remaining recovery gate
 
-Wrangler OAuth was approved only for staging. Three portable SQL checkpoints
-were exported, hashed locally, uploaded to private `juro-staging-backups`,
-downloaded again, and compared byte-for-byte:
+Wrangler OAuth was approved only for staging. The first three portable SQL
+checkpoints were exported, hashed locally, uploaded to private
+`juro-staging-backups`, downloaded again, and compared byte-for-byte:
 
 | Checkpoint | Protected object | Bytes | SHA-256 | Restored state |
 |---|---|---:|---|---|
@@ -127,6 +127,45 @@ was revalidated, the database was deleted, and the local temporary copy was
 removed. This proves the remote logical import path for this staging artifact;
 it is not a production RTO or an incident/load recovery measurement.
 
+### Session-token rotation checkpoint — 2026-07-29
+
+Before migration `0029`, a second migration-specific set was retained under
+`d1/juro-staging/20260729T111105Z/`:
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| `pre-0029.sql` | 147,785 | `8388fe9098d9c1ec14ff4d4ce2c18e5a173522104546188c4cdb771995b63c00` |
+| `pre-0029.schema.sql` | 130,474 | `94b91cdfb6c57a72cd085001de211693e1994b9338542abb15aeb4cbff489850` |
+| `pre-0029.data.sql` | 17,343 | `3738a618cb46176a3ba7bbcd8da21bfc53020049819b145c7570c4d745a3589f` |
+| `pre-0029.restore.sql` | 159,412 | `33576f95ecffc97d3eaaceae764821264001b84ea7f99f2f52d096aa19d1238e` |
+
+Every object passed a private-R2 download/checksum round trip. The official
+full export was retained unchanged but is not directly importable because its
+statement order references `workspaces` before creating it. Schema-then-data
+also fails against its trigger/foreign-key order. The restore-only adapter is a
+deterministic reconstruction of the exact official schema/data with parent-
+first rows and triggers last; it never changes the retained source exports.
+A clean remote drill processed 414 queries. Read-only comparison proved all
+106 exported tables and all 74 rows identical to source, together with 29
+migrations, 58 triggers, and zero foreign-key violations. The exact disposable
+D1 was revalidated and deleted after the drill.
+
+After migration `0029`, a fresh set was retained under
+`d1/juro-staging/20260729T113422Z/`:
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| `post-0029.sql` | 150,134 | `c8474fc28b5a80c8705b10cc59de158bbf3bc60687211dfce16042beec9accfd` |
+| `post-0029.schema.sql` | 132,700 | `edb5751fd97af0c1fd8995b6bb5d05eda50185e54af55edb54fb09033139caaf` |
+| `post-0029.data.sql` | 17,466 | `00d5566e6eadfca0a89f23c8d96ef803505b2a77438d2ee461cf2e0c38dd4953` |
+
+All three post-migration objects passed byte-for-byte private-R2 round trips.
+Remote D1 then reported 30 migrations through `0029`, 109 non-internal tables,
+58 triggers, both new token-security tables, zero rows in them, no pending
+migration, and zero foreign-key violations. A direct incident-load RTO remains
+unmeasured; the verified pre-migration restore plus additive migration file is
+the tested recovery route for this checkpoint.
+
 The earlier Time Travel drill remains valid and separate. A pre-migration
 bookmark at `2026-07-28T23:00:35Z` was also recorded as
 `00000017-00000002-000050b6-5518e3818b19ceb53f63bd9b37be4e08`.
@@ -143,4 +182,4 @@ Still not verified:
 
 The verified-empty D-040 exception remains consumed. These staging artifacts
 do not authorize a production migration. Production/development remain through
-`0004`; only `juro-staging` is through `0028`.
+`0004`; only `juro-staging` is through `0029`.

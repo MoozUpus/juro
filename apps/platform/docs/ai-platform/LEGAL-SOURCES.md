@@ -228,8 +228,8 @@ separate reviewed staging activation.
 
 ## Local evidence
 
-The migration test applies `0000`–`0028` to an in-memory SQLite database,
-asserts 105 non-internal tables and 146 foreign keys, verifies zero foreign-key
+The migration test applies `0000`–`0029` to an in-memory SQLite database,
+asserts 107 application tables and 151 foreign keys, verifies zero foreign-key
 violations, proves legacy sources remain draft, rejects evidence-free
 verification, protects verified hashes, rejects impossible sync/review states,
 and rejects unsafe request scope/lifecycle changes. Source-fetch/acquisition
@@ -256,11 +256,11 @@ idempotent-replay D1/R2 flow.
 Source-trust tests exercise host/type/hash/timestamp failures and
 evidence-backed acceptance.
 
-Remote staging is at `0000`–`0028`; this establishes schema only. No legal
+Remote staging is at `0000`–`0029`; legal-source migrations remain `0025`–`0028`, and this establishes schema only. No legal
 source row, fetch request, normalized/raw evidence object, publication,
 Vectorize content, Queue consumer, route, DNS record, runtime secret, or
 production resource was created or changed by this checkpoint. The inactive
 staging Worker binds the empty indexes/R2/D1 and seven Queue producers while
-all execution flags remain false. The three
-private R2 objects in `juro-staging-backups` are D1 migration exports, not
-legal-source evidence.
+all execution flags remain false. The ten
+private R2 objects in `juro-staging-backups` are D1 migration/restore artifacts,
+not legal-source evidence.

@@ -2,7 +2,7 @@
 
 Updated: 2026-07-29
 Latest source migration: `0029_session_token_rotation.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0029` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger; additive migration `0029` is source-verified and pending a fresh portable checkpoint and remote restore drill. Its current post-`0028` export restores with `integrity_check = ok`, zero foreign-key violations, 107 non-internal tables, and 58 triggers. No production migration was run.
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0029` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 30-entry `0000`–`0029` ledger. Migration `0029` was applied only after a portable full/schema/data export, private-R2 checksum round trip, and a disposable remote restore drill. Post-migration staging reports 109 non-internal tables, 58 triggers, zero foreign-key violations, and no pending migration. No production migration was run.
 
 ## Migration policy
 
@@ -49,6 +49,29 @@ foreign-key violations. Wrangler processed 396 import queries with 667 rows
 written. The disposable database was reidentified by exact name/UUID and
 deleted after evidence capture. This verifies logical remote import for the
 staging artifact, not production compatibility or an operational RTO.
+
+### Staging migration `0029` record — 2026-07-29 UTC
+
+Before applying `0029`, Wrangler recorded bookmark
+`00000028-00000000-000050b7-42614e5669d57a2adc22f5edb39bd29d` and exported
+full, schema-only, and data-only artifacts. Exact bytes were uploaded to
+private `juro-staging-backups`, downloaded again, and SHA-256 compared. Because
+the official full export orders some child objects before parent
+`workspaces`, a restore-only adapter was deterministically derived without
+modifying the source exports. Its disposable EEUR import processed 414 queries;
+source and restore matched all 106 exported tables and all 74 rows, the
+29-entry migration ledger, 58 triggers, and zero foreign-key violations. The
+revalidated disposable D1
+`juro-staging-restore-drill-0029-20260729t111105z-v2`
+(`a3738cff-5d2f-4083-8871-d4af98e000b5`) was then deleted.
+
+Wrangler applied only `0029_session_token_rotation.sql` to exact D1
+`juro-staging`: ten executed commands and a successful migration record. The
+post-check reports 30 migrations through `0029`, 109 non-internal tables, 58
+triggers, both new tables, nine SQLite indexes including primary-key auto
+indexes, zero history/replay rows, and zero foreign-key violations. A fresh
+post-`0029` full/schema/data export also passed private-R2 byte-for-byte
+round-trip verification. Exact objects and hashes are in `BACKUP-RESTORE.md`.
 
 Remote D1 rejects `PRAGMA integrity_check` through the service authorization
 boundary. The integrity claim above comes from the exact exported bytes after
@@ -522,9 +545,10 @@ request table; migration `0027` expands the review queue; migration `0028` adds
 one publication table. This is compatibility evidence for the checked-in
 `0000`–`0029` sequence. Remote production and development each report 61
 non-internal tables and ledger entries only through `0004`. Isolated staging
-reports 107 non-internal tables, 58 triggers, and the exact `0000`–`0028`
-ledger. The post-migration portable export restores locally with integrity
-`ok` and zero foreign-key violations.
+reports 109 non-internal tables, 58 triggers, and the exact `0000`–`0029`
+ledger. The migration-specific portable checkpoint passed a remote restore
+rehearsal, and the post-migration exports passed private-R2 checksum round
+trips with zero remote foreign-key violations.
 
 ## Migration 0029
 
@@ -547,8 +571,9 @@ enrollment claim to the exact pre-rotation digest, rolls back on an
 intervening token change, and records only one critical replay event before
 revoking the affected session and device. Raw session tokens are never
 persisted. The full local `0000`–`0029` sequence has 107 application tables,
-151 foreign keys, and zero foreign-key violations. Remote application remains
-blocked on the migration-specific checkpoint and restore drill.
+151 foreign keys, and zero foreign-key violations. Migration `0029` is now
+schema-applied to isolated staging; protected-staging HTTP/cookie/replay
+behavior remains a separate open gate.
 
 ## Staging bootstrap evidence and remaining procedure
 

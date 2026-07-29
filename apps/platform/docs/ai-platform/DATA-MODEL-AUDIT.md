@@ -6,12 +6,12 @@ Integration branch baseline: `1d3d23d` before this documentation update
 
 ## Verified baseline
 
-- Drizzle schema: 77 application tables.
-- Migration files: `0000`–`0028`.
+- Drizzle schema: 79 application tables.
+- Migration files: `0000`–`0029`.
 - All migrations apply successfully to a new local SQLite database.
-- Local migrated result: 105 non-internal tables, 146 foreign keys; zero foreign-key violations.
+- Local migrated result: 107 application tables, 151 foreign keys; zero foreign-key violations.
 - No destructive `DROP` statement was found.
-- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0028` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Its post-migration export/private-R2 round trip restores locally with integrity `ok` and zero foreign-key violations, and a disposable remote EEUR D1 reproduced the same ledger/table/trigger/FK state before deletion. No production/development data or schema was mutated.
+- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0029` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 30-entry `0000`–`0029` ledger, 109 non-internal tables, and 58 triggers. Its migration-specific exports passed private-R2 round trips, and a disposable remote EEUR D1 reproduced every exported table/row plus the pre-`0029` ledger/trigger/FK state before deletion. Post-`0029` staging has zero foreign-key violations. No production/development data or schema was mutated.
 
 ## Existing migration outline
 
@@ -131,7 +131,7 @@ No table will be dropped during an expand step.
 
 ## Proposed additive migration sequence
 
-Migrations `0005`–`0028` contain checked-in SQL, were verified locally, and are present in isolated staging. Portable/private-R2/local-restore checkpoints surround the `0022`–`0028` application. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and a new migration-specific backup/preflight gate is satisfied.
+Migrations `0005`–`0029` contain checked-in SQL, were verified locally, and are present in isolated staging. Portable/private-R2/remote-restore checkpoints surround the `0022`–`0029` application. Exact SQL for the remaining future domains below will be generated only after the current staging schema is re-read and a new migration-specific backup/preflight gate is satisfied.
 
 1. **Identity security**
    - devices, security events, TOTP credentials, backup-code hashes;
@@ -184,4 +184,4 @@ Before any further remote migration or any migration of a populated database; D-
 9. validate data invariants and the document-builder regression;
 10. keep production unchanged until explicit approval.
 
-Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0028` ledger, 107 non-internal tables, and 58 triggers. Three protected portable checkpoints round-trip through private R2 and restore locally with integrity/FK checks. The post-`0028` artifact also reproduced the same ledger/table/trigger inventory and zero foreign-key errors in a disposable remote EEUR D1, which was deleted after verification. Runtime behavior and operational RTO remain unverified; production/development remain unchanged.
+Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0029` ledger, 109 non-internal tables, and 58 triggers. Ten protected artifacts round-trip through private R2. The migration-specific pre-`0029` adapter reproduced every exported table/row plus ledger/trigger/FK state in a disposable remote EEUR D1, which was deleted after verification; the post-`0029` set also passed checksum round trips and remote FK validation. Runtime behavior and operational RTO remain unverified; production/development remain unchanged.

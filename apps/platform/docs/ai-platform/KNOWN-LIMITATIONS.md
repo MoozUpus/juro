@@ -6,9 +6,10 @@ foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0028` are applied to `juro-staging`; the post-migration
-  portable export/private-R2/local restore and disposable remote-D1 import
-  checks pass. Operational RTO/RPO under representative load remains unverified;
+- migrations `0022`–`0029` are applied to `juro-staging`; migration-specific
+  full/schema/data exports, private-R2 round trips, and the disposable remote-D1
+  restore drill pass. Operational RTO/RPO under representative load remains
+  unverified;
 - the protected staging Worker, custom domain, exact resource bindings, public
   Turnstile site key, and three server-only secret binding names are verified;
   Queue consumers, schedules, async feature activation, and staff APIs remain
@@ -21,8 +22,12 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- local test totals (27 rendered route + 245 core + 70 Cloudflare = 342) are
-  not remote D1, live-provider, or protected staging browser evidence.
+- local test totals (27 rendered route + 245 core + 70 Cloudflare = 342),
+  remote schema checks, and 100% Worker deployment are not a substitute for
+  the exact current-version authenticated browser/cookie/replay flow. The
+  available browser-control runtime currently exits during startup because its
+  generated CommonJS kernel is treated as ESM by a user-home package boundary;
+  Access was not bypassed and this gate remains open.
 
 ## Legal-source acquisition gaps
 
