@@ -7,6 +7,7 @@ import {
   type UserIdentityRow,
 } from "./identity-protection";
 import { sessionTokenFromCookie } from "./session-token";
+import { revokeReplayedSessionToken } from "./session-rotation";
 import {
   batchWithSecurityEvent,
 } from "./security-events";
@@ -327,6 +328,7 @@ export async function localSessionFromCookie(
   if (!token) return null;
   const now = options.now ?? new Date();
   const nowIso = now.toISOString();
+  const tokenHash = await sha256(token);
   const session = await db.prepare(
     `SELECT
        s.id AS sessionId,s.user_id AS userId,u.id,
@@ -347,12 +349,15 @@ export async function localSessionFromCookie(
        AND coalesce(s.idle_expires_at,s.expires_at)>?
        AND (s.device_id IS NULL OR d.revoked_at IS NULL)
      LIMIT 1`,
-  ).bind(await sha256(token), nowIso, nowIso).first<
+  ).bind(tokenHash, nowIso, nowIso).first<
     Omit<LocalSession, "assuranceLevel"> & UserIdentityRow & {
       assuranceLevel: string;
     }
   >();
-  if (!session) return null;
+  if (!session) {
+    await revokeReplayedSessionToken(db, tokenHash, { now });
+    return null;
+  }
   if (
     session.assuranceLevel !== "primary"
     && session.assuranceLevel !== "mfa"

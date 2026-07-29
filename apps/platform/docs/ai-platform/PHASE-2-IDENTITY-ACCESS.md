@@ -580,8 +580,11 @@ provider, concurrency, or future-data evidence.
   but live staging behavior and product impact behind shared NATs remain
   unverified;
 - session persistence now has locally verified 24-hour standard and 30-day
-  remember-me paths, but token rotation/fixation/replay detection, regional
-  signals, security email, and remote cookie/session evidence remain absent;
+  remember-me paths. MFA elevation also rotates the exact current token, retains
+  its absolute expiry, and revokes the affected session/device after one stale-
+  token replay; migration `0029`, protected-staging HTTP/cookie evidence,
+  additional rotation triggers, regional signals, and security email remain
+  open;
 - workspace invitation migration 0022 and OTP-lock migration 0023 are applied
   to staging; their local one-winner/rollback/15-minute-lock tests are not
   full-HTTP remote behavior evidence;

@@ -46,6 +46,9 @@ const legalSourceReviewEvidenceEntry = journal.entries.find(
 const legalSourcePublicationEntry = journal.entries.find(
   ({ idx }) => idx === 28,
 );
+const sessionTokenRotationEntry = journal.entries.find(
+  ({ idx }) => idx === 29,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -102,6 +105,10 @@ assert.ok(
 assert.ok(
   legalSourcePublicationEntry,
   "Drizzle journal must contain migration 0028",
+);
+assert.ok(
+  sessionTokenRotationEntry,
+  "Drizzle journal must contain migration 0029",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2724,8 +2731,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 105);
-    assert.equal(foreignKeyCount(db), 146);
+    assert.equal(tableDefinitions(db).size, 107);
+    assert.equal(foreignKeyCount(db), 151);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3227,8 +3234,147 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 105);
-    assert.equal(foreignKeyCount(db), 146);
+    assert.equal(tableDefinitions(db).size, 107);
+    assert.equal(foreignKeyCount(db), 151);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+
+test("0029 adds only constrained session token rotation evidence", () => {
+  const sql = migrationSql(sessionTokenRotationEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 9);
+  for (const statement of migrationStatements) {
+    assert.match(
+      statement,
+      /^CREATE (?:TABLE|INDEX|UNIQUE INDEX)\b/i,
+      `unexpected session rotation statement: ${statement.slice(0, 100)}`,
+    );
+  }
+  assert.match(sql, /CREATE TABLE .*auth_session_token_history/);
+  assert.match(sql, /CREATE TABLE .*auth_session_token_replays/);
+  assert.match(sql, /auth_session_token_history_reason_check/);
+  assert.match(sql, /auth_session_token_replays_action_check/);
+  assert.doesNotMatch(
+    sql,
+    /(?:^|\n)\s*(?:DROP|ALTER|DELETE|UPDATE)\b/im,
+  );
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0028_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0029_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(sessionTokenRotationEntry.idx, 29);
+  assert.equal(sessionTokenRotationEntry.tag, "0029_session_token_rotation");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 81);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    149,
+  );
+});
+
+test("0029 fences duplicate retirement and replay claims", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-29T10:00:00.000Z";
+    const expiresAt = "2026-07-30T10:00:00.000Z";
+    db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,locale,account_type,timezone,created_at,updated_at
+      ) VALUES ('rotation-user','rotation@example.test','ru','individual',
+        'Asia/Tashkent',?,?)
+    `).run(now, now);
+    db.prepare(`
+      INSERT INTO auth_devices (
+        id,user_id,display_name,first_seen_at,last_seen_at
+      ) VALUES ('rotation-device','rotation-user','Test device',?,?)
+    `).run(now, now);
+    db.prepare(`
+      INSERT INTO auth_sessions (
+        id,user_id,device_id,token_hash,expires_at,idle_expires_at,
+        created_at,last_seen_at
+      ) VALUES (
+        'rotation-session','rotation-user','rotation-device',?, ?, ?, ?, ?
+      )
+    `).run("b".repeat(64), expiresAt, expiresAt, now, now);
+    db.prepare(`
+      INSERT INTO auth_session_token_history (
+        id,session_id,user_id,token_hash,rotation_reason,rotated_at,expires_at
+      ) VALUES ('history-29','rotation-session','rotation-user',?,
+        'mfa_elevation',?,?)
+    `).run("a".repeat(64), now, expiresAt);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_session_token_history (
+          id,session_id,user_id,token_hash,rotation_reason,rotated_at,expires_at
+        ) VALUES ('duplicate-history-29','rotation-session','rotation-user',?,
+          'manual',?,?)
+      `).run("a".repeat(64), now, expiresAt),
+      /UNIQUE constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_session_token_history (
+          id,session_id,user_id,token_hash,rotation_reason,rotated_at,expires_at
+        ) VALUES ('bad-reason-29','rotation-session','rotation-user',?,
+          'unknown',?,?)
+      `).run("c".repeat(64), now, expiresAt),
+      /CHECK constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_session_token_history (
+          id,session_id,user_id,token_hash,rotation_reason,rotated_at,expires_at
+        ) VALUES ('bad-expiry-29','rotation-session','rotation-user',?,
+          'manual',?,?)
+      `).run("d".repeat(64), now, "2026-07-29T09:59:59.000Z"),
+      /CHECK constraint failed/,
+    );
+    db.prepare(`
+      INSERT INTO auth_session_token_replays (
+        id,token_history_id,session_id,user_id,detected_at,action
+      ) VALUES ('replay-29','history-29','rotation-session','rotation-user',?,
+        'session_and_device_revoked')
+    `).run(now);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_session_token_replays (
+          id,token_history_id,session_id,user_id,detected_at,action
+        ) VALUES ('duplicate-replay-29','history-29','rotation-session',
+          'rotation-user',?,'session_and_device_revoked')
+      `).run(now),
+      /UNIQUE constraint failed/,
+    );
+    db.prepare(`
+      INSERT INTO auth_session_token_history (
+        id,session_id,user_id,token_hash,rotation_reason,rotated_at,expires_at
+      ) VALUES ('history-action-29','rotation-session','rotation-user',?,
+        'manual',?,?)
+    `).run("e".repeat(64), now, expiresAt);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_session_token_replays (
+          id,token_history_id,session_id,user_id,detected_at,action
+        ) VALUES ('bad-action-29','history-action-29','rotation-session',
+          'rotation-user',?,'ignored')
+      `).run(now),
+      /CHECK constraint failed/,
+    );
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

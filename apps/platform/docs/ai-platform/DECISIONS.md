@@ -1329,3 +1329,24 @@ dashboard entry. This preserves bookmarks without accepting URL shape as
 authorization.
 
 Commit `9d4f934` passed GitHub Actions run `30439184724`, was deployed only to protected staging as deployment `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa` / version `f320057f-740d-465c-9aa2-777538ba5e44`, and was re-read at 100% traffic. Exact staging bindings, disabled execution flags, disabled workers.dev/previews, zero schedules, the custom domain, and anonymous Access denial were verified. Authenticated route traversal remains an explicit open gate. Production remains unchanged.
+
+## D-065 — rotate the local session token inside MFA elevation and fail closed on replay
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-07-29
+
+MFA enrollment confirmation now binds its first durable claim to the exact
+current session-token digest, retires that digest, rotates to a newly generated
+token, elevates assurance, creates backup codes, revokes other sessions, and
+writes the security event in one guarded D1 batch. An intervening token change
+leaves the credential pending and creates no claim, backup code, history row,
+audit event, or neighboring-session revocation.
+
+A request using the unexpired retired token creates at most one replay claim,
+revokes the affected current session and its linked device, and appends a
+critical `session.token_replayed` event. Only SHA-256 token digests are stored;
+the replacement cookie preserves the original absolute expiry. Periodic, email-
+change, and MFA-disable rotation triggers are intentionally not claimed by this
+slice. Additive migration `0029` and protected-staging HTTP/cookie evidence
+remain blocked on a migration-specific backup and restore drill. Production is
+unchanged.

@@ -12,3 +12,19 @@ export function sessionTtlSeconds(rememberMe: boolean): number {
 export function sessionCookie(token: string, rememberMe = false): string {
   return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${sessionTtlSeconds(rememberMe)}`;
 }
+
+export function sessionCookieUntil(
+  token: string,
+  expiresAt: string,
+  now = new Date(),
+): string {
+  const expiresAtMs = Date.parse(expiresAt);
+  if (!Number.isFinite(expiresAtMs)) {
+    throw new RangeError("INVALID_SESSION_EXPIRY");
+  }
+  const maxAgeSeconds = Math.max(
+    0,
+    Math.floor((expiresAtMs - now.getTime()) / 1_000),
+  );
+  return `${SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+}

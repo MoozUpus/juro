@@ -3,9 +3,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import PizZip from "pizzip";
 
 const baseUrl = process.env.JURO_SMOKE_BASE_URL ?? "http://127.0.0.1:4180";
-const runId = Date.now().toString(36);
-const ownerEmail = `comparison-owner-${runId}@example.test`;
-const otherEmail = `comparison-other-${runId}@example.test`;
+const ownerEmail = "owner@example.test";
+const otherEmail = "counterparty@example.test";
 const docxType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 type ApiOptions = RequestInit & {
@@ -110,11 +109,13 @@ async function main() {
       method: "POST",
       user: email,
       json: {
-        accountType: "individual",
-        displayName: name,
+        lastName: "Tester",
+        firstName: name,
+        middleName: "",
+        phone: email === ownerEmail ? "+998901234567" : "+998909876543",
         locale: "ru",
+        accountPersona: "individual",
         primaryGoal: "review_document",
-        acceptPolicies: true,
       },
     });
   }

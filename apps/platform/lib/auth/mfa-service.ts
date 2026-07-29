@@ -23,6 +23,7 @@ import {
   type LocalSession,
   type SessionInsertGuard,
 } from "./session-management";
+import { prepareSessionTokenRotation } from "./session-rotation";
 import { generateTotpSecret, verifyTotpCode } from "./totp";
 
 const MFA_CHALLENGE_TTL_MS = 5 * 60 * 1_000;
@@ -477,11 +478,15 @@ export async function confirmTotpEnrollment(
   input: {
     userId: string;
     sessionId: string;
+    currentToken: string;
     credentialId: string;
     code: string;
     now?: Date;
   },
-): Promise<{ backupCodes: string[] }> {
+): Promise<{
+  backupCodes: string[];
+  session: { token: string; expiresAt: string };
+}> {
   const now = input.now ?? new Date();
   const timestamp = nowIso(now);
   const credential = await pendingCredential(
@@ -523,6 +528,14 @@ export async function confirmTotpEnrollment(
     userId: input.userId,
     batchId,
   });
+  const rotation = await prepareSessionTokenRotation(db, {
+    userId: input.userId,
+    sessionId: input.sessionId,
+    currentToken: input.currentToken,
+    reason: "mfa_elevation",
+    now,
+  });
+  if (!rotation) throw new MfaError("MFA_STATE_CONFLICT");
   const backupKeyVersion = backup.records[0].keyVersion;
   const statements: D1PreparedStatement[] = [
     db.prepare(
@@ -536,7 +549,7 @@ export async function confirmTotpEnrollment(
          AND verification_attempt_count<verification_max_attempts
          AND EXISTS (
            SELECT 1 FROM auth_sessions
-           WHERE id=? AND user_id=? AND revoked_at IS NULL
+           WHERE id=? AND user_id=? AND token_hash=? AND revoked_at IS NULL
              AND expires_at>? AND coalesce(idle_expires_at,expires_at)>?
          )`,
     ).bind(
@@ -549,6 +562,7 @@ export async function confirmTotpEnrollment(
       timestamp,
       input.sessionId,
       input.userId,
+      rotation.previousTokenHash,
       timestamp,
       timestamp,
     ),
@@ -617,11 +631,13 @@ export async function confirmTotpEnrollment(
       claimId,
       operationId,
     ),
+    rotation.historyStatement,
+    rotation.rotationStatement,
     db.prepare(
       `UPDATE auth_sessions
        SET auth_method='email_otp+totp',assurance_level='mfa',
            mfa_verified_at=?
-       WHERE id=? AND user_id=? AND revoked_at IS NULL
+       WHERE id=? AND user_id=? AND token_hash=? AND revoked_at IS NULL
          AND EXISTS (
            SELECT 1 FROM auth_totp_credentials
            WHERE id=? AND status='active' AND backup_batch_id=?
@@ -630,6 +646,7 @@ export async function confirmTotpEnrollment(
       timestamp,
       input.sessionId,
       input.userId,
+      rotation.tokenHash,
       credential.id,
       batchId,
     ),
@@ -647,6 +664,8 @@ export async function confirmTotpEnrollment(
         metadata: {
           credentialId: credential.id,
           backupCodeCount: backup.records.length,
+          sessionTokenRotated: true,
+          tokenHistoryId: rotation.historyId,
         },
         createdAt: timestamp,
       },
@@ -654,8 +673,20 @@ export async function confirmTotpEnrollment(
       {
         selectSql: `SELECT 1 FROM auth_totp_credentials
           WHERE id=? AND user_id=? AND status='active'
-            AND backup_batch_id=?`,
-        bindings: [credential.id, input.userId, batchId],
+            AND backup_batch_id=?
+            AND EXISTS (
+              SELECT 1 FROM auth_sessions
+              WHERE id=? AND user_id=? AND token_hash=?
+                AND assurance_level='mfa' AND revoked_at IS NULL
+            )`,
+        bindings: [
+          credential.id,
+          input.userId,
+          batchId,
+          input.sessionId,
+          input.userId,
+          rotation.tokenHash,
+        ],
       },
     );
   } catch (error) {
@@ -664,15 +695,22 @@ export async function confirmTotpEnrollment(
     }
     throw error;
   }
-  const currentSessionResult = results[2 + backup.records.length + 1];
+  const historyResult = results[2 + backup.records.length + 1];
+  const rotationResult = results[2 + backup.records.length + 2];
+  const currentSessionResult = results[2 + backup.records.length + 3];
   if (
     Number(results[0]?.meta?.changes ?? 0) !== 1
     || Number(results[1]?.meta?.changes ?? 0) !== 1
+    || Number(historyResult?.meta?.changes ?? 0) !== 1
+    || Number(rotationResult?.meta?.changes ?? 0) !== 1
     || Number(currentSessionResult?.meta?.changes ?? 0) !== 1
   ) {
     throw new MfaError("MFA_STATE_CONFLICT");
   }
-  return { backupCodes: backup.displayCodes };
+  return {
+    backupCodes: backup.displayCodes,
+    session: { token: rotation.token, expiresAt: rotation.expiresAt },
+  };
 }
 
 export async function createLoginMfaChallenge(

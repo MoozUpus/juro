@@ -74,22 +74,26 @@ async function main(): Promise<void> {
     method: "POST",
     user: ownerEmail,
     json: {
-      accountType: "individual",
-      displayName: "Owner Test",
+      lastName: "Tester",
+      firstName: "Owner",
+      middleName: "",
+      phone: "+998901234567",
       locale: "ru",
+      accountPersona: "individual",
       primaryGoal: "create_document",
-      acceptPolicies: true,
     },
   });
   await api("/api/onboarding", {
     method: "POST",
     user: collaboratorEmail,
     json: {
-      accountType: "individual",
-      displayName: "Counterparty Test",
+      lastName: "Tester",
+      firstName: "Counterparty",
+      middleName: "",
+      phone: "+998909876543",
       locale: "ru",
-      primaryGoal: "personal_issue",
-      acceptPolicies: true,
+      accountPersona: "individual",
+      primaryGoal: "manage_case",
     },
   });
 
@@ -105,7 +109,7 @@ async function main(): Promise<void> {
     user: ownerEmail,
     headers: { "x-juro-csrf": "0" },
     json: { answers: EXAMPLE_RU },
-    expected: 401,
+    expected: 403,
   });
 
   const answers = { ...EXAMPLE_RU, accuracyConfirmed: true };

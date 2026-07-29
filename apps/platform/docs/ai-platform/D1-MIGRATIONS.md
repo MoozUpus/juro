@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
 Updated: 2026-07-29
-Latest source migration: `0028_orange_nightmare.sql`
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0028` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger. Its post-migration export restores with `integrity_check = ok`, zero foreign-key violations, 107 non-internal tables, and 58 triggers. No production migration was run.
+Latest source migration: `0029_session_token_rotation.sql`
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0029` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 29-entry `0000`–`0028` ledger; additive migration `0029` is source-verified and pending a fresh portable checkpoint and remote restore drill. Its current post-`0028` export restores with `integrity_check = ok`, zero foreign-key violations, 107 non-internal tables, and 58 triggers. No production migration was run.
 
 ## Migration policy
 
@@ -515,16 +515,40 @@ rows, one-winner concurrency, exact idempotent replay, and tamper/pre-existing-
 data rejection.
 
 The full local migration sequence changes the SQLite table count from 79 to
-105, contains 146 foreign keys, and reports zero foreign-key integrity errors. Migration `0025` adds six
+107, contains 151 foreign keys, and reports zero foreign-key integrity errors. Migration `0025` adds six
 tables and expands `legal_sources`; migrations `0022`–`0024` alter existing
 tables and add indexes/triggers rather than tables; migration `0026` adds one
 request table; migration `0027` expands the review queue; migration `0028` adds
 one publication table. This is compatibility evidence for the checked-in
-`0000`–`0028` sequence. Remote production and development each report 61
+`0000`–`0029` sequence. Remote production and development each report 61
 non-internal tables and ledger entries only through `0004`. Isolated staging
 reports 107 non-internal tables, 58 triggers, and the exact `0000`–`0028`
 ledger. The post-migration portable export restores locally with integrity
 `ok` and zero foreign-key violations.
+
+## Migration 0029
+
+`0029_session_token_rotation.sql` adds two session-security evidence tables
+without altering or deleting existing rows:
+
+- `auth_session_token_history` stores only the retired SHA-256 token digest,
+  session/user references, a bounded rotation reason, rotation time, and the
+  original absolute expiry;
+- `auth_session_token_replays` allows one durable replay claim per retired
+  token and fixes the response action to current-session and device
+  revocation;
+- seven indexes provide unique retired-token and replay fences plus bounded
+  session/user/expiry lookups.
+
+The migration contains exactly nine additive `CREATE` statements and no
+`ALTER`, `DROP`, `UPDATE`, or `DELETE`. Runtime tests prove MFA elevation
+rotates the current token without extending absolute expiry, binds the
+enrollment claim to the exact pre-rotation digest, rolls back on an
+intervening token change, and records only one critical replay event before
+revoking the affected session and device. Raw session tokens are never
+persisted. The full local `0000`–`0029` sequence has 107 application tables,
+151 foreign keys, and zero foreign-key violations. Remote application remains
+blocked on the migration-specific checkpoint and restore drill.
 
 ## Staging bootstrap evidence and remaining procedure
 

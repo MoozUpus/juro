@@ -12,7 +12,7 @@ staging or production evidence.
 | OTP request limits | Separate `5/email/hour` and `20/IP/hour` gates; retained lookup-key versions share buckets; invalidated provider failures count toward email limits; missing connecting IP does not merge unrelated users; 60-second resend cooldown retained; aggregate staging D1 reports three provider-accepted challenges | Live traffic/rate behavior, provider failure, and enumeration parity through protected staging |
 | OTP verification lock | Staging migration `0023` adds immutable `verification_locked_until`; fifth wrong attempt applies a 15-minute lock; replacement challenge is denied while locked | Full-HTTP remote concurrency and lock timing |
 | Turnstile | Server Siteverify integration with action `auth_otp`, exact hostname, optional remote IP, eight-second timeout, schema validation, and fail-closed invalid/unavailable handling; client widget integrated into auth flow; exact staging site/secret binding names are present | Current-version browser widget trace, provider response correlation, and Resend mailbox/failure flow in staging |
-| Session persistence | 24-hour default and 30-day explicit remember-me absolute lifetimes; aligned cookie `Max-Age` and D1 expiry; same choice after OTP or MFA; strict boolean inputs with false default; existing seven-day idle cap | Remote cookie/session behavior; rotation, fixation/replay detection, region signals, and security email |
+| Session persistence and MFA rotation | 24-hour default and 30-day explicit remember-me absolute lifetimes; aligned cookie `Max-Age` and D1 expiry; same choice after OTP or MFA; strict boolean inputs with false default; existing seven-day idle cap; MFA elevation atomically retires the current token digest and returns a replacement cookie without extending absolute expiry; one stale-token replay claim revokes the affected session/device and records a critical audit event; an intervening-token race leaves no MFA side effects | Remote migration `0029` and protected-staging HTTP/cookie/replay behavior; periodic, email-change, and MFA-disable rotation; region signals and security email |
 | Structured onboarding | Canonical `/:locale/onboarding`; strict 4 KiB Zod input; required separate names, normalized phone with explicit unverified evidence, personal persona, primary goal, and exact current policy digests; deterministic personal workspace creation; staging migration `0024` applied | Protected staging browser flow; final policy approval; phone verification |
 | Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; business routes use `/:locale/business/:workspaceId/*`; shell, builder, invitations, and switching preserve that base; legacy reserved business roots remain authenticated compatibility adapters | Current-version protected staging browser evidence |
 
@@ -21,9 +21,9 @@ staging or production evidence.
 The latest recorded successful local full suite contains:
 
 - 27 rendered-route/security tests;
-- 246 core/auth/document tests;
-- 68 Cloudflare/migration/job tests, including the remote-D1 trigger syntax regression;
-- 341 tests total.
+- 245 core/auth/document tests;
+- 70 Cloudflare/migration/job tests, including migration `0029` and the remote-D1 trigger syntax regression;
+- 342 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. The canonical document-builder flow now also has

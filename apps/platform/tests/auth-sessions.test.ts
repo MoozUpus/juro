@@ -14,7 +14,10 @@ import {
   revokeOneSession,
   revokeSessions,
 } from "../lib/auth/session-management";
-import { sessionCookie } from "../lib/auth/session-persistence";
+import {
+  sessionCookie,
+  sessionCookieUntil,
+} from "../lib/auth/session-persistence";
 
 type SqliteBinding = null | number | bigint | string;
 
@@ -146,6 +149,31 @@ function databaseFixture(): {
       last_seen_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE,
       FOREIGN KEY (device_id) REFERENCES auth_devices(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE auth_session_token_history (
+      id TEXT PRIMARY KEY NOT NULL,
+      session_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      rotation_reason TEXT NOT NULL,
+      rotated_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      FOREIGN KEY (session_id) REFERENCES auth_sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE auth_session_token_replays (
+      id TEXT PRIMARY KEY NOT NULL,
+      token_history_id TEXT NOT NULL UNIQUE,
+      session_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      detected_at TEXT NOT NULL,
+      action TEXT NOT NULL,
+      FOREIGN KEY (token_history_id)
+        REFERENCES auth_session_token_history(id) ON DELETE CASCADE,
+      FOREIGN KEY (session_id) REFERENCES auth_sessions(id) ON DELETE CASCADE,
+      FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE
     );
 
     CREATE TABLE security_events (
@@ -445,6 +473,26 @@ test("remember-me keeps cookie and persisted absolute expiry aligned", async () 
     }
 
     assert.match(sessionCookie("token"), /(?:^|; )Max-Age=86400(?:;|$)/);
+    assert.match(
+      sessionCookieUntil(
+        "rotated-token",
+        "2026-07-26T10:00:10.900Z",
+        now,
+      ),
+      /(?:^|; )Max-Age=10(?:;|$)/,
+    );
+    assert.match(
+      sessionCookieUntil(
+        "expired-token",
+        "2026-07-26T09:59:59.999Z",
+        now,
+      ),
+      /(?:^|; )Max-Age=0(?:;|$)/,
+    );
+    assert.throws(
+      () => sessionCookieUntil("token", "invalid", now),
+      /INVALID_SESSION_EXPIRY/,
+    );
   } finally {
     sqlite.close();
   }

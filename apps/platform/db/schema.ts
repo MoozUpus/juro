@@ -657,6 +657,79 @@ export const authSessions = sqliteTable("auth_sessions", {
   index("auth_sessions_device_idx").on(table.deviceId, table.expiresAt),
 ]);
 
+export const authSessionTokenHistory = sqliteTable(
+  "auth_session_token_history",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id").notNull().references(() => authSessions.id, {
+      onDelete: "cascade",
+    }),
+    userId: text("user_id").notNull().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    tokenHash: text("token_hash").notNull(),
+    rotationReason: text("rotation_reason").notNull(),
+    rotatedAt: text("rotated_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    check(
+      "auth_session_token_history_reason_check",
+      sql`${table.rotationReason} IN ('mfa_elevation','email_change','mfa_disabled','manual','periodic')`,
+    ),
+    check(
+      "auth_session_token_history_expiry_check",
+      sql`${table.expiresAt} >= ${table.rotatedAt}`,
+    ),
+    uniqueIndex("auth_session_token_history_hash_uidx").on(table.tokenHash),
+    index("auth_session_token_history_session_idx").on(
+      table.sessionId,
+      table.rotatedAt,
+    ),
+    index("auth_session_token_history_user_idx").on(
+      table.userId,
+      table.rotatedAt,
+    ),
+    index("auth_session_token_history_expiry_idx").on(table.expiresAt),
+  ],
+);
+
+export const authSessionTokenReplays = sqliteTable(
+  "auth_session_token_replays",
+  {
+    id: text("id").primaryKey(),
+    tokenHistoryId: text("token_history_id").notNull().references(
+      () => authSessionTokenHistory.id,
+      { onDelete: "cascade" },
+    ),
+    sessionId: text("session_id").notNull().references(() => authSessions.id, {
+      onDelete: "cascade",
+    }),
+    userId: text("user_id").notNull().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    detectedAt: text("detected_at").notNull(),
+    action: text("action").notNull(),
+  },
+  (table) => [
+    check(
+      "auth_session_token_replays_action_check",
+      sql`${table.action} = 'session_and_device_revoked'`,
+    ),
+    uniqueIndex("auth_session_token_replays_history_uidx").on(
+      table.tokenHistoryId,
+    ),
+    index("auth_session_token_replays_user_idx").on(
+      table.userId,
+      table.detectedAt,
+    ),
+    index("auth_session_token_replays_session_idx").on(
+      table.sessionId,
+      table.detectedAt,
+    ),
+  ],
+);
+
 export const emailChangeChallenges = sqliteTable(
   "email_change_challenges",
   {

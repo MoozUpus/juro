@@ -9,7 +9,7 @@ import { localSessionFromCookie } from "./session-management";
 import type { LocalAssuranceLevel } from "./session-management";
 
 export { MFA_CHALLENGE_COOKIE, SESSION_COOKIE } from "./session-token";
-export { sessionCookie } from "./session-persistence";
+export { sessionCookie, sessionCookieUntil } from "./session-persistence";
 
 export type SessionUser = {
   email: string;

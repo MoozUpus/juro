@@ -21,7 +21,7 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- local test totals (27 rendered route + 246 core + 68 Cloudflare = 341) are
+- local test totals (27 rendered route + 245 core + 70 Cloudflare = 342) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
@@ -51,9 +51,11 @@ foundation checkpoint.
 
 ## Identity and session gaps
 
-- session-token rotation, fixation/replay detection, approximate location,
-  new-device/region security email, and security-event-triggered revocation
-  remain incomplete;
+- MFA-elevation token rotation and stale-token replay revocation are locally
+  implemented behind pending migration `0029`; remote D1/HTTP/cookie evidence,
+  periodic/email-change/MFA-disable rotations, fixation controls beyond this
+  elevation boundary, approximate location, and new-device/region security
+  email remain incomplete;
 - the 24-hour/30-day session choice is locally tested, but remote cookies,
   persisted expiry, idle expiry, and MFA completion have not been exercised
   through staging HTTP;

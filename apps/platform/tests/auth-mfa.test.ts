@@ -14,7 +14,10 @@ import {
   regenerateBackupCodes,
   verifyLoginMfa,
 } from "../lib/auth/mfa-service";
-import { createEmailOtpSession } from "../lib/auth/session-management";
+import {
+  createEmailOtpSession,
+  localSessionFromCookie,
+} from "../lib/auth/session-management";
 import { totpCode } from "../lib/auth/totp";
 
 type SqliteBinding = null | number | bigint | string;
@@ -222,6 +225,7 @@ async function enrolledFixture() {
   const confirmed = await confirmTotpEnrollment(value.d1, keyring(), {
     userId: "user-mfa",
     sessionId: value.first.sessionId,
+    currentToken: value.first.token,
     credentialId: value.enrollment.credentialId,
     code,
     now: confirmationAt,
@@ -264,6 +268,7 @@ test("concurrent enrollment confirmation has one exact-claim winner", async () =
       confirmTotpEnrollment(synchronized, keyring(), {
         userId: "user-mfa",
         sessionId: first.sessionId,
+        currentToken: first.token,
         credentialId: enrollment.credentialId,
         code,
         now,
@@ -271,6 +276,7 @@ test("concurrent enrollment confirmation has one exact-claim winner", async () =
       confirmTotpEnrollment(synchronized, keyring(), {
         userId: "user-mfa",
         sessionId: second.sessionId,
+        currentToken: second.token,
         credentialId: enrollment.credentialId,
         code,
         now,
@@ -301,6 +307,165 @@ test("concurrent enrollment confirmation has one exact-claim winner", async () =
   }
 });
 
+test("MFA elevation rotates the token and one replay revokes the session and device", async () => {
+  const value = await pendingFixture();
+  const { sqlite, d1, first, enrollment } = value;
+  try {
+    const confirmationAt = new Date("2026-07-26T12:02:00.000Z");
+    const code = (await totpCode(enrollment.secret, confirmationAt)).code;
+    const confirmed = await confirmTotpEnrollment(d1, keyring(), {
+      userId: "user-mfa",
+      sessionId: first.sessionId,
+      currentToken: first.token,
+      credentialId: enrollment.credentialId,
+      code,
+      now: confirmationAt,
+    });
+    assert.notEqual(confirmed.session.token, first.token);
+    assert.equal(confirmed.session.expiresAt, first.expiresAt);
+
+    const oldTokenHash = await sha256(first.token);
+    const newTokenHash = await sha256(confirmed.session.token);
+    const history = sqlite.prepare(`
+      SELECT id,token_hash AS tokenHash,rotation_reason AS rotationReason
+      FROM auth_session_token_history WHERE session_id=?
+    `).get(first.sessionId) as {
+      id: string;
+      tokenHash: string;
+      rotationReason: string;
+    };
+    assert.equal(history.tokenHash, oldTokenHash);
+    assert.equal(history.rotationReason, "mfa_elevation");
+    assert.notEqual(history.tokenHash, first.token);
+    assert.equal((
+      sqlite.prepare("SELECT token_hash AS tokenHash FROM auth_sessions WHERE id=?")
+        .get(first.sessionId) as { tokenHash: string }
+    ).tokenHash, newTokenHash);
+
+    const current = await localSessionFromCookie(
+      d1,
+      `juro_session=${confirmed.session.token}`,
+      { now: new Date("2026-07-26T12:02:30.000Z"), touch: false },
+    );
+    assert.equal(current?.assuranceLevel, "mfa");
+
+    assert.equal(await localSessionFromCookie(
+      d1,
+      `juro_session=${first.token}`,
+      { now: new Date("2026-07-26T12:03:00.000Z"), touch: false },
+    ), null);
+    const revoked = sqlite.prepare(`
+      SELECT s.revoked_at AS sessionRevokedAt,d.revoked_at AS deviceRevokedAt
+      FROM auth_sessions s JOIN auth_devices d ON d.id=s.device_id
+      WHERE s.id=?
+    `).get(first.sessionId) as {
+      sessionRevokedAt: string | null;
+      deviceRevokedAt: string | null;
+    };
+    assert.equal(revoked.sessionRevokedAt, "2026-07-26T12:03:00.000Z");
+    assert.equal(revoked.deviceRevokedAt, "2026-07-26T12:03:00.000Z");
+    assert.equal((
+      sqlite.prepare("SELECT count(*) AS total FROM auth_session_token_replays")
+        .get() as { total: number }
+    ).total, 1);
+    const replayEvent = sqlite.prepare(`
+      SELECT event_type AS eventType,severity,metadata_json AS metadataJson
+      FROM security_events WHERE event_type='session.token_replayed'
+    `).get() as {
+      eventType: string;
+      severity: string;
+      metadataJson: string;
+    };
+    assert.equal(replayEvent.eventType, "session.token_replayed");
+    assert.equal(replayEvent.severity, "critical");
+    assert.deepEqual(JSON.parse(replayEvent.metadataJson), {
+      action: "session_and_device_revoked",
+      replayId: JSON.parse(replayEvent.metadataJson).replayId,
+      rotatedAt: confirmationAt.toISOString(),
+      rotationReason: "mfa_elevation",
+      tokenHistoryId: history.id,
+    });
+
+    assert.equal(await localSessionFromCookie(
+      d1,
+      `juro_session=${first.token}`,
+      { now: new Date("2026-07-26T12:03:01.000Z"), touch: false },
+    ), null);
+    assert.equal((
+      sqlite.prepare("SELECT count(*) AS total FROM auth_session_token_replays")
+        .get() as { total: number }
+    ).total, 1);
+    assert.equal((
+      sqlite.prepare(`
+        SELECT count(*) AS total FROM security_events
+        WHERE event_type='session.token_replayed'
+      `).get() as { total: number }
+    ).total, 1);
+    assert.equal(await localSessionFromCookie(
+      d1,
+      `juro_session=${confirmed.session.token}`,
+      { now: new Date("2026-07-26T12:03:02.000Z"), touch: false },
+    ), null);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("token change before enrollment batch leaves no MFA side effects", async () => {
+  const value = await pendingFixture();
+  const { sqlite, d1, first, second, enrollment } = value;
+  try {
+    const replacementHash = await sha256("intervening-session-token");
+    let mutated = false;
+    const raced = {
+      prepare: d1.prepare.bind(d1),
+      async batch(statements: D1PreparedStatement[]) {
+        if (!mutated) {
+          sqlite.prepare(
+            "UPDATE auth_sessions SET token_hash=? WHERE id=?",
+          ).run(replacementHash, first.sessionId);
+          mutated = true;
+        }
+        return d1.batch(statements);
+      },
+    } as unknown as D1Database;
+    const now = new Date("2026-07-26T12:02:00.000Z");
+    const code = (await totpCode(enrollment.secret, now)).code;
+    await assert.rejects(
+      confirmTotpEnrollment(raced, keyring(), {
+        userId: "user-mfa",
+        sessionId: first.sessionId,
+        currentToken: first.token,
+        credentialId: enrollment.credentialId,
+        code,
+        now,
+      }),
+      (error: unknown) =>
+        error instanceof MfaError && error.code === "MFA_STATE_CONFLICT",
+    );
+    assert.equal((sqlite.prepare(
+      "SELECT status FROM auth_totp_credentials WHERE id=?",
+    ).get(enrollment.credentialId) as { status: string }).status, "pending");
+    for (const table of [
+      "auth_mfa_factor_claims",
+      "auth_backup_codes",
+      "auth_session_token_history",
+    ]) {
+      assert.equal((sqlite.prepare(
+        `SELECT count(*) AS total FROM ${table}`,
+      ).get() as { total: number }).total, 0, table);
+    }
+    assert.equal((sqlite.prepare(`
+      SELECT count(*) AS total FROM security_events
+      WHERE event_type='mfa.enabled'
+    `).get() as { total: number }).total, 0);
+    assert.equal((sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_sessions WHERE id=?",
+    ).get(second.sessionId) as { revokedAt: string | null }).revokedAt, null);
+  } finally {
+    sqlite.close();
+  }
+});
 test("failed confirmation with a revoked source session has no side effects", async () => {
   const value = await pendingFixture();
   const { sqlite, d1, first, second, enrollment } = value;
@@ -315,6 +480,7 @@ test("failed confirmation with a revoked source session has no side effects", as
       confirmTotpEnrollment(d1, keyring(), {
         userId: "user-mfa",
         sessionId: first.sessionId,
+        currentToken: first.token,
         credentialId: enrollment.credentialId,
         code,
         now,
