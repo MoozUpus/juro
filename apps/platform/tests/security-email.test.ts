@@ -4,7 +4,16 @@ import {
   executeSecurityEmailJob,
   prepareEmailChangedSecurityEmail,
 } from "../lib/auth/security-email";
+import {
+  prepareDeviceContinuity,
+  type PreparedDeviceContinuity,
+} from "../lib/auth/device-continuity";
+import {
+  loginSecurityNotificationEvent,
+  prepareLoginSecurityNotification,
+} from "../lib/auth/security-notification";
 import { parseIdentityKeyring } from "../lib/auth/keyring";
+import { createEmailOtpSession } from "../lib/auth/session-management";
 import { handleQueue, type JobEnvelope, type PlatformJobEnv } from "../worker/platform-jobs";
 import { dispatchOutbox } from "../worker/platform-outbox";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
@@ -366,6 +375,270 @@ test("missing provider configuration fails closed without issuing a request", as
     );
   } finally {
     globalThis.fetch = originalFetch;
+    sqlite.close();
+  }
+});
+function continuity(
+  values: Partial<PreparedDeviceContinuity> = {},
+): PreparedDeviceContinuity {
+  return {
+    id: "device-continuity-security-email",
+    userId: USER_ID,
+    token: "A".repeat(43),
+    tokenHmac: "B".repeat(43),
+    keyVersion: "v1",
+    recognized: false,
+    previousCountryCode: null,
+    previousRegionCode: null,
+    countryCode: "UZ",
+    regionCode: "TK",
+    timestamp: "2026-07-29T12:00:00.000Z",
+    ...values,
+  };
+}
+
+test("login novelty policy is conservative and continuity-backed", () => {
+  assert.equal(loginSecurityNotificationEvent(null), null);
+  assert.equal(
+    loginSecurityNotificationEvent(continuity()),
+    "login_new_device",
+  );
+  assert.equal(
+    loginSecurityNotificationEvent(continuity({
+      recognized: true,
+      previousCountryCode: "UZ",
+      previousRegionCode: "TK",
+    })),
+    null,
+  );
+  assert.equal(
+    loginSecurityNotificationEvent(continuity({
+      recognized: true,
+      previousCountryCode: "UZ",
+      previousRegionCode: "TK",
+      regionCode: "AN",
+    })),
+    "login_new_region",
+  );
+  assert.equal(
+    loginSecurityNotificationEvent(continuity({
+      recognized: true,
+      previousCountryCode: null,
+      previousRegionCode: null,
+      countryCode: "KZ",
+      regionCode: "ALA",
+    })),
+    null,
+  );
+});
+
+test("generic login-security outbox encrypts recipient and sends new-device email once", async () => {
+  const { sqlite, d1 } = fixture();
+  const prepared = await prepareLoginSecurityNotification(d1, {
+    config: {
+      keyring: parseIdentityKeyring(RAW_KEYRING),
+      recipientEmail: "new@example.test",
+      locale: "ru",
+      workspaceId: WORKSPACE_ID,
+    },
+    userId: USER_ID,
+    sessionId: "new-device-session",
+    deviceName: "Chrome · Windows <unsafe>",
+    continuity: continuity(),
+    occurredAt: "2026-07-29T12:00:00.000Z",
+  });
+  assert.ok(prepared);
+  await d1.batch(prepared.statements({ selectSql: "SELECT 1", bindings: [] }));
+  const stored = sqlite.prepare(`
+    SELECT event_type AS eventType,recipient_ciphertext AS ciphertext,
+      country_code AS countryCode,region_code AS regionCode,status
+    FROM security_notification_jobs WHERE id=?
+  `).get(prepared.jobId) as {
+    eventType: string;
+    ciphertext: string;
+    countryCode: string;
+    regionCode: string;
+    status: string;
+  };
+  assert.equal(stored.eventType, "login_new_device");
+  assert.notEqual(stored.ciphertext, "new@example.test");
+  assert.equal(stored.countryCode, "UZ");
+  assert.equal(stored.regionCode, "TK");
+  assert.equal(stored.status, "pending");
+  assert.throws(
+    () => sqlite.prepare(`
+      UPDATE security_notification_jobs SET device_name='Changed'
+      WHERE id=?
+    `).run(prepared.jobId),
+    /security notification content is immutable/,
+  );
+  const outbox = sqlite.prepare(`
+    SELECT subject_id AS subjectId,idempotency_key AS idempotencyKey
+    FROM job_outbox WHERE id=?
+  `).get(prepared.outboxId) as { subjectId: string; idempotencyKey: string };
+  assert.equal(outbox.subjectId, prepared.jobId);
+  assert.equal(outbox.idempotencyKey.includes("new@example.test"), false);
+
+  const capture: QueueCapture = { envelope: null };
+  const env = envFor(d1, capture);
+  const calls: Array<{ body: { to: string[]; subject: string; html: string } }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    calls.push({ body: JSON.parse(String(init?.body)) });
+    return new Response(JSON.stringify({ id: "resend_new_device" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    assert.deepEqual(await executeSecurityEmailJob(env, prepared.jobId), {
+      providerMessageId: "resend_new_device",
+      alreadySent: false,
+    });
+    assert.deepEqual(await executeSecurityEmailJob(env, prepared.jobId), {
+      providerMessageId: "resend_new_device",
+      alreadySent: true,
+    });
+    assert.equal(calls.length, 1);
+    assert.deepEqual(calls[0]?.body.to, ["new@example.test"]);
+    assert.equal(calls[0]?.body.subject, "Вход в JURO с нового устройства");
+    assert.match(calls[0]?.body.html ?? "", /Chrome · Windows &lt;unsafe&gt;/);
+    assert.equal((calls[0]?.body.html ?? "").includes("<unsafe>"), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    sqlite.close();
+  }
+});
+
+test("recognized device with comparable region change gets Uzbek region copy", async () => {
+  const { sqlite, d1 } = fixture();
+  const prepared = await prepareLoginSecurityNotification(d1, {
+    config: {
+      keyring: parseIdentityKeyring(RAW_KEYRING),
+      recipientEmail: "new@example.test",
+      locale: "uz",
+      workspaceId: WORKSPACE_ID,
+    },
+    userId: USER_ID,
+    sessionId: "new-region-session",
+    deviceName: "Safari · iOS",
+    continuity: continuity({
+      recognized: true,
+      previousCountryCode: "UZ",
+      previousRegionCode: "TK",
+      regionCode: "AN",
+    }),
+    occurredAt: "2026-07-29T13:00:00.000Z",
+  });
+  assert.ok(prepared);
+  assert.equal(prepared.eventType, "login_new_region");
+  await d1.batch(prepared.statements({ selectSql: "SELECT 1", bindings: [] }));
+  const capture: QueueCapture = { envelope: null };
+  const env = envFor(d1, capture);
+  let body: { subject: string; html: string } | null = null;
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_input, init) => {
+    body = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ id: "resend_new_region" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  };
+  try {
+    await executeSecurityEmailJob(env, prepared.jobId);
+    const sentBody = body as { subject: string; html: string } | null;
+    assert.ok(sentBody);
+    assert.equal(sentBody.subject, "JURO hisobiga yangi hududdan kirish");
+    assert.match(sentBody.html, /AN, UZ/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    sqlite.close();
+  }
+});
+test("new-device notification is committed atomically with its session", async () => {
+  const { sqlite, d1 } = fixture();
+  const keyring = parseIdentityKeyring(RAW_KEYRING);
+  const preparedContinuity = await prepareDeviceContinuity(d1, keyring, {
+    userId: USER_ID,
+    deviceToken: null,
+    now: new Date("2026-07-29T14:00:00.000Z"),
+  });
+  assert.ok(preparedContinuity);
+  try {
+    const session = await createEmailOtpSession(d1, {
+      userId: USER_ID,
+      userAgent: "Mozilla/5.0 (Windows NT 10.0) Chrome/126.0",
+      deviceContinuity: preparedContinuity,
+      loginSecurityNotification: {
+        keyring,
+        recipientEmail: "new@example.test",
+        locale: "ru",
+        workspaceId: WORKSPACE_ID,
+      },
+      now: new Date("2026-07-29T14:00:00.000Z"),
+    });
+    const job = sqlite.prepare(`
+      SELECT session_id AS sessionId,event_type AS eventType,status
+      FROM security_notification_jobs WHERE user_id=?
+    `).get(USER_ID) as { sessionId: string; eventType: string; status: string };
+    assert.equal(job.sessionId, session.sessionId);
+    assert.equal(job.eventType, "login_new_device");
+    assert.equal(job.status, "pending");
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM job_outbox").get() as { total: number }).total,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("notification insert failure rolls back session, continuity, audit, and outbox", async () => {
+  const { sqlite, d1 } = fixture();
+  const keyring = parseIdentityKeyring(RAW_KEYRING);
+  const preparedContinuity = await prepareDeviceContinuity(d1, keyring, {
+    userId: USER_ID,
+    deviceToken: null,
+    now: new Date("2026-07-29T15:00:00.000Z"),
+  });
+  assert.ok(preparedContinuity);
+  sqlite.exec(`
+    CREATE TRIGGER fail_login_security_notification
+    BEFORE INSERT ON security_notification_jobs
+    BEGIN
+      SELECT RAISE(ABORT, 'forced login security notification failure');
+    END
+  `);
+  try {
+    await assert.rejects(
+      createEmailOtpSession(d1, {
+        userId: USER_ID,
+        userAgent: "Mozilla/5.0 (Linux) Firefox/127.0",
+        deviceContinuity: preparedContinuity,
+        loginSecurityNotification: {
+          keyring,
+          recipientEmail: "new@example.test",
+          locale: "ru",
+          workspaceId: WORKSPACE_ID,
+        },
+        now: new Date("2026-07-29T15:00:00.000Z"),
+      }),
+      /forced login security notification failure/,
+    );
+    for (const table of [
+      "auth_sessions",
+      "auth_devices",
+      "auth_device_continuities",
+      "security_events",
+      "security_notification_jobs",
+      "job_outbox",
+    ]) {
+      const count = sqlite.prepare(`SELECT count(*) AS total FROM ${table}`).get() as {
+        total: number;
+      };
+      assert.equal(count.total, 0, `${table} must roll back`);
+    }
+  } finally {
     sqlite.close();
   }
 });

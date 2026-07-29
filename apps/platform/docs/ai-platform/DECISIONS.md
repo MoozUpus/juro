@@ -1522,3 +1522,32 @@ change, account deletion, cookie boundaries, and additive migration integrity.
 The full local suite passes 361 tests; type-check and lint pass. No dependency
 was added. Migration `0031` is not applied remotely, the branch is not pushed,
 and no new-device/new-region notification is claimed. Production is unchanged.
+## D-072 — alert only from durable device continuity and comparable coarse region
+
+Status: accepted and locally verified; migration and protected staging delivery pending
+Date: 2026-07-29
+
+A login is classified as `login_new_device` only when a successful login issues
+a new opaque continuity record for that user. User-Agent or IP changes alone do
+not establish a new device. `login_new_region` is emitted only for an already
+recognized, non-revoked continuity when both the previous and current coarse
+Cloudflare locations are comparable and either country changes or region changes
+inside the same known country. Missing or incomplete location evidence produces
+no region alert. Registration does not emit a new-device login alert.
+
+A new additive `security_notification_jobs` table preserves `0030` unchanged and
+reuses the encrypted-recipient, identifiers-only outbox and staging email Queue
+boundary. The login session, continuity update, notification job, outbox row,
+and chained `session.created` event commit in one D1 batch; a forced notification
+insert failure rolls all of them back. MFA prepares the notification only after
+the second factor succeeds. Recipient/event/context evidence is immutable,
+delivery state is leased, and Resend idempotency suppresses sequential and
+concurrent replay.
+
+The email copy is available in RU and UZ and describes coarse region as an
+approximation, not proof of physical location or account compromise. A stolen
+continuity cookie can influence novelty classification but cannot authenticate.
+Local evidence is 368 tests (27 rendered, 265 core, 76 Cloudflare), plus passing
+type-check and lint. Migration `0032`, the pending `0030`/`0031` migrations,
+consumer activation, protected HTTP behavior, DLQ/redrive, and real provider
+mailbox delivery remain unverified in staging. Production is unchanged.

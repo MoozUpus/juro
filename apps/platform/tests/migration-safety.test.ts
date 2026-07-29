@@ -51,6 +51,7 @@ const sessionTokenRotationEntry = journal.entries.find(
 );
 const securityEmailJobEntry = journal.entries.find(({ idx }) => idx === 30);
 const deviceContinuityEntry = journal.entries.find(({ idx }) => idx === 31);
+const securityNotificationEntry = journal.entries.find(({ idx }) => idx === 32);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -119,6 +120,10 @@ assert.ok(
 assert.ok(
   deviceContinuityEntry,
   "Drizzle journal must contain migration 0031",
+);
+assert.ok(
+  securityNotificationEntry,
+  "Drizzle journal must contain migration 0032",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2741,8 +2746,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 109);
-    assert.equal(foreignKeyCount(db), 156);
+    assert.equal(tableDefinitions(db).size, 110);
+    assert.equal(foreignKeyCount(db), 158);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3244,8 +3249,8 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 109);
-    assert.equal(foreignKeyCount(db), 156);
+    assert.equal(tableDefinitions(db).size, 110);
+    assert.equal(foreignKeyCount(db), 158);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3520,6 +3525,129 @@ test("0031 enforces tenant-scoped continuity evidence without touching old sessi
       `).run("B".repeat(43), now, now),
       /CHECK constraint failed/,
     );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+test("0032 adds an additive encrypted login-security notification boundary", () => {
+  const sql = migrationSql(securityNotificationEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 5);
+  assert.match(migrationStatements[0], /^CREATE TABLE\b/i);
+  for (const statement of migrationStatements.slice(1, 4)) {
+    assert.match(statement, /^CREATE (?:UNIQUE )?INDEX\b/i);
+  }
+  assert.match(migrationStatements[4], /^CREATE TRIGGER\b/i);
+  assert.match(sql, /CREATE TABLE .*security_notification_jobs/);
+  assert.match(sql, /login_new_device/);
+  assert.match(sql, /login_new_region/);
+  assert.match(sql, /security_notification_jobs_session_event_uidx/);
+  assert.match(sql, /security_notification_jobs_content_immutable/);
+  assert.match(sql, /recipient_ciphertext/);
+  assert.doesNotMatch(sql, /recipient_email/);
+  assert.doesNotMatch(sql, /(?:^|\n)\s*(?:DROP|ALTER|DELETE|UPDATE)\b/im);
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0031_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0032_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(securityNotificationEntry.idx, 32);
+  assert.equal(securityNotificationEntry.tag, "0032_fixed_wasp");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 84);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    156,
+  );
+});
+
+test("0032 fences immutable login notification evidence and duplicate delivery", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-29T12:00:00.000Z";
+    db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,locale,account_type,timezone,created_at,updated_at
+      ) VALUES ('notification-user','notice@example.test','ru','individual',
+        'Asia/Tashkent',?,?)
+    `).run(now, now);
+    db.prepare(`
+      INSERT INTO workspaces (id,type,name,locale,created_at,updated_at)
+      VALUES ('notification-workspace','individual','Notifications','ru',?,?)
+    `).run(now, now);
+    const insert = db.prepare(`
+      INSERT INTO security_notification_jobs (
+        id,user_id,workspace_id,session_id,event_type,delivery_channel,locale,
+        recipient_ciphertext,recipient_iv,recipient_key_version,device_name,
+        country_code,region_code,status,attempt_count,occurred_at,created_at,
+        updated_at
+      ) VALUES (?,?,?,?,?,'email','ru',?,?,?,?,?,?,'pending',0,?,?,?)
+    `);
+    insert.run(
+      'notification-32',
+      'notification-user',
+      'notification-workspace',
+      'session-32',
+      'login_new_device',
+      'ciphertext-value-long-enough',
+      'A'.repeat(16),
+      'v1',
+      'Chrome · Windows',
+      'UZ',
+      'TK',
+      now,
+      now,
+      now,
+    );
+    assert.throws(
+      () => db.prepare(`
+        UPDATE security_notification_jobs SET recipient_ciphertext='changed'
+        WHERE id='notification-32'
+      `).run(),
+      /security notification content is immutable/,
+    );
+    assert.throws(
+      () => insert.run(
+        'duplicate-32',
+        'notification-user',
+        'notification-workspace',
+        'session-32',
+        'login_new_device',
+        'ciphertext-value-long-enough',
+        'B'.repeat(16),
+        'v1',
+        'Firefox · Linux',
+        'UZ',
+        'TK',
+        now,
+        now,
+        now,
+      ),
+      /UNIQUE constraint failed/,
+    );
+    db.prepare(`
+      UPDATE security_notification_jobs
+      SET status='sending',attempt_count=1,updated_at=?
+      WHERE id='notification-32'
+    `).run(now);
+    db.prepare("DELETE FROM workspaces WHERE id='notification-workspace'").run();
+    const row = db.prepare(`
+      SELECT status,workspace_id AS workspaceId
+      FROM security_notification_jobs WHERE id='notification-32'
+    `).get() as { status: string; workspaceId: string | null };
+    assert.equal(row.status, "sending");
+    assert.equal(row.workspaceId, null);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

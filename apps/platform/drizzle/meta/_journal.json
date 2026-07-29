@@ -225,6 +225,13 @@
       "when": 1785344724409,
       "tag": "0031_melted_nextwave",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "6",
+      "when": 1785348920976,
+      "tag": "0032_fixed_wasp",
+      "breakpoints": true
     }
   ]
 }

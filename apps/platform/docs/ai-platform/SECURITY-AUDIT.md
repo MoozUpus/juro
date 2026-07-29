@@ -126,8 +126,8 @@ by a delayed, jittered, visibility-aware shell scheduler. A 30-second grace
 applies only to a periodic retired token already captured by an in-flight
 request: it remains unauthenticated but does not revoke the replacement session;
 later replay and every sensitive-trigger replay remain fail-closed. Exact
-current-version protected HTTP/cookie/replay evidence, regional signals,
-new-device mail, and staging replay tests remain absent; SEC-006 is therefore
+current-version protected HTTP/cookie/replay evidence and deployed
+continuity-backed region/new-device mail remain absent; SEC-006 is therefore
 not closed.
 
 ### SEC-007 — weak standalone share secret
@@ -312,11 +312,10 @@ accepted.
 
 Positive tests cover oversized input rejection, code normalization, keyed digest
 shape, raw-value absence in the stored event, both login branches, and chain
-verification. Residual risk remains: this is not device continuity, region can
-change legitimately, and no alert is sent from this signal yet. A stable opaque
-device cookie, revocation semantics, novelty policy, durable notification
-outbox, and false-positive controls require a separate reviewed schema slice.
-The local change has not been exercised over protected staging HTTP.
+verification. Request evidence alone is not device continuity and does not emit
+an alert; the later continuity and notification layers consume only the bounded
+coarse fields under the conservative policy below. None of these layers has been
+exercised over protected staging HTTP.
 ## Opaque device continuity review — 2026-07-29
 
 - Browser continuity uses a random 256-bit HttpOnly/Secure/SameSite=Lax cookie.
@@ -334,6 +333,29 @@ The local change has not been exercised over protected staging HTTP.
   contract and service test.
 
 Residual risk: a stolen continuity cookie can affect future novelty
-classification but cannot authenticate. Notification policy, false-positive
-handling, protected staging HTTP evidence and real security-email delivery are
-not implemented/verified by this slice.
+classification but cannot authenticate. The notification policy below is local
+only; protected staging HTTP evidence and real security-email delivery remain
+unverified.
+
+## Login-security notification review — 2026-07-29
+
+- `login_new_device` requires a newly issued user-scoped continuity record;
+  IP/User-Agent changes alone cannot trigger it, and registration is excluded.
+- `login_new_region` requires an already recognized continuity and comparable
+  previous/current coarse Cloudflare location. Missing evidence emits nothing.
+- Session, device, continuity, encrypted-recipient notification, identifiers-only
+  outbox, and chained audit are one D1 transaction; forced notification failure
+  rolls the full batch back.
+- MFA does not prepare or persist the notification until the second factor is
+  successfully consumed.
+- Recipient, event, session, locale, device, region, and occurrence fields are
+  immutable. Delivery state alone moves through pending/sending/retrying/sent/
+  failed under provider idempotency and a stale-send lease.
+- Email HTML escapes dynamic device/location data and supports RU/UZ copy. Raw
+  IP, raw User-Agent, raw continuity token, and recipient address are absent
+  from Queue envelopes.
+
+Residual risk remains from travel, VPN/carrier routing, cookie clearing, and
+continuity-cookie theft. Migration `0032`, consumer activation, controlled real
+mailbox delivery, retry/DLQ/redrive, and full protected HTTP verification remain
+mandatory staging gates. No remote or production claim is made.

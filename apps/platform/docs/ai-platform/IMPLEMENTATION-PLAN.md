@@ -347,3 +347,32 @@ Next ordered work:
    coarse evidence without treating the cookie as authentication;
 5. reuse the encrypted generic security-email boundary with one-winner
    deduplication and prove real Resend delivery before enabling alerts.
+## Phase 2 checkpoint — conservative login alerts
+
+The local branch now converts opaque continuity into two deliberately narrow
+signals. A missing/unrecognized continuity yields `login_new_device` only after
+a successful login; a previously recognized continuity yields
+`login_new_region` only when previous/current coarse Cloudflare locations are
+both comparable and differ. Registration, User-Agent changes, missing location,
+and incomplete location do not create region alerts.
+
+Migration `0032` adds an encrypted, immutable-context notification job while
+preserving the email-change table from `0030`. Direct OTP and MFA login enqueue
+the job in the same D1 batch as session/device/continuity/audit state, and MFA
+does so only after the second factor. The existing identifiers-only Queue
+consumer handles legacy and generic jobs with one-winner provider idempotency,
+RU/UZ copy, durable retry state, and stale-send recovery. The local suite passes
+368 tests; type-check and lint pass.
+
+Next ordered work:
+
+1. obtain explicit remote-write authorization for the exact branch commit;
+2. create/checksum a fresh staging D1/R2 checkpoint and repeat the disposable
+   restore drill for pending migrations `0030`–`0032`;
+3. push the reviewed commits, apply only those pending migrations in order, and
+   deploy the protected staging Worker with the single reviewed email consumer;
+4. prove primary/MFA login, continuity-cookie, session rollback, outbox,
+   retry/DLQ/redrive, safe logs, and real controlled RU/UZ Resend delivery;
+5. keep alerts and consumer disabled outside staging until those gates pass.
+
+No remote staging write or production change is claimed by this checkpoint.

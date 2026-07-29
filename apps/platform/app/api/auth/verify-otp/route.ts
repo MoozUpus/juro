@@ -207,7 +207,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       now,
     ).run();
   }
-  await ensureDefaultWorkspace(user.id);
+  const workspaceId = await ensureDefaultWorkspace(user.id);
 
   if (purpose === "register") {
     await recordRegistrationAcceptances(db, {
@@ -268,6 +268,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
     userAgent: request.headers.get("user-agent"),
     securityEvidence,
     deviceContinuity,
+    loginSecurityNotification: purpose === "login" && continuityKeyring
+      ? {
+          keyring: continuityKeyring,
+          recipientEmail: email,
+          locale,
+          workspaceId,
+        }
+      : null,
     rememberMe: body.rememberMe,
     now: new Date(now),
   });

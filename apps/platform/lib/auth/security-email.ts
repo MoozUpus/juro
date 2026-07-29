@@ -6,6 +6,7 @@ import {
   type IdentityKeyring,
 } from "./keyring";
 import type { SecurityEventGuard } from "./security-events";
+import { SECURITY_NOTIFICATION_RECIPIENT_PURPOSE } from "./security-notification";
 
 const RECIPIENT_PURPOSE = "security-email-recipient";
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
@@ -40,16 +41,57 @@ export type PreparedSecurityEmailJob = {
 };
 
 type SecurityEmailJobRow = {
+  source: "legacy" | "notification";
   id: string;
   userId: string;
   eventType: string;
+  deliveryChannel: string;
   locale: string;
   recipientCiphertext: string;
   recipientIv: string;
   recipientKeyVersion: string;
+  deviceName: string | null;
+  countryCode: string | null;
+  regionCode: string | null;
+  occurredAt: string;
   status: string;
   providerMessageId: string | null;
 };
+
+function jobTable(row: SecurityEmailJobRow): string {
+  return row.source === "notification"
+    ? "security_notification_jobs"
+    : "security_email_jobs";
+}
+
+async function securityEmailJob(
+  db: D1Database,
+  jobId: string,
+): Promise<SecurityEmailJobRow | null> {
+  const notification = await db.prepare(
+    `SELECT 'notification' AS source,id,user_id AS userId,
+       event_type AS eventType,delivery_channel AS deliveryChannel,locale,
+       recipient_ciphertext AS recipientCiphertext,
+       recipient_iv AS recipientIv,
+       recipient_key_version AS recipientKeyVersion,
+       device_name AS deviceName,country_code AS countryCode,
+       region_code AS regionCode,occurred_at AS occurredAt,status,
+       provider_message_id AS providerMessageId
+     FROM security_notification_jobs WHERE id=? LIMIT 1`,
+  ).bind(jobId).first<SecurityEmailJobRow>();
+  if (notification) return notification;
+  return db.prepare(
+    `SELECT 'legacy' AS source,id,user_id AS userId,event_type AS eventType,
+       'email' AS deliveryChannel,locale,
+       recipient_ciphertext AS recipientCiphertext,
+       recipient_iv AS recipientIv,
+       recipient_key_version AS recipientKeyVersion,
+       NULL AS deviceName,NULL AS countryCode,NULL AS regionCode,
+       created_at AS occurredAt,status,
+       provider_message_id AS providerMessageId
+     FROM security_email_jobs WHERE id=? LIMIT 1`,
+  ).bind(jobId).first<SecurityEmailJobRow>();
+}
 
 function assertGuard(guard: SecurityEventGuard): void {
   if (!/^\s*SELECT\b/i.test(guard.selectSql) || guard.selectSql.includes(";")) {
@@ -143,36 +185,82 @@ export async function prepareEmailChangedSecurityEmail(
   };
 }
 
-function emailCopy(locale: "ru" | "uz"): { subject: string; html: string } {
-  if (locale === "uz") {
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[character] ?? character);
+}
+
+function loginLocation(row: SecurityEmailJobRow, locale: "ru" | "uz"): string {
+  const location = [row.regionCode, row.countryCode].filter(Boolean).join(", ");
+  return location || (locale === "uz" ? "aniqlanmadi" : "не определён");
+}
+
+function emailCopy(row: SecurityEmailJobRow): { subject: string; html: string } {
+  const locale = row.locale === "uz" ? "uz" : "ru";
+  if (row.eventType === "email_changed_previous_address") {
+    if (locale === "uz") {
+      return {
+        subject: "JURO emailingiz o‘zgartirildi",
+        html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>JURO emailingiz o‘zgartirildi</h2><p>JURO hisobingizga kirish uchun email manzili muvaffaqiyatli o‘zgartirildi.</p><p>Agar bu amalni siz bajarmagan bo‘lsangiz, darhol <a href="mailto:support@juro.uz">support@juro.uz</a> bilan bog‘laning va faol sessiyalaringizni bekor qiling.</p></div>`,
+      };
+    }
     return {
-      subject: "JURO emailingiz o‘zgartirildi",
-      html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>JURO emailingiz o‘zgartirildi</h2><p>JURO hisobingizga kirish uchun email manzili muvaffaqiyatli o‘zgartirildi.</p><p>Agar bu amalni siz bajarmagan bo‘lsangiz, darhol <a href="mailto:support@juro.uz">support@juro.uz</a> bilan bog‘laning va faol sessiyalaringizni bekor qiling.</p></div>`,
+      subject: "Email для входа в JURO изменён",
+      html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Email для входа в JURO изменён</h2><p>Адрес для входа в ваш аккаунт JURO был успешно изменён.</p><p>Если это сделали не вы, немедленно напишите на <a href="mailto:support@juro.uz">support@juro.uz</a> и завершите активные сессии.</p></div>`,
     };
   }
+
+  const device = escapeHtml(row.deviceName ?? "Unknown device");
+  const location = escapeHtml(loginLocation(row, locale));
+  const occurredAt = escapeHtml(row.occurredAt);
+  const newRegion = row.eventType === "login_new_region";
+  if (locale === "uz") {
+    const subject = newRegion
+      ? "JURO hisobiga yangi hududdan kirish"
+      : "JURO hisobiga yangi qurilmadan kirish";
+    const lead = newRegion
+      ? "Tanish qurilma avvalgi kirishdan boshqa hududdan JURO hisobingizga kirdi."
+      : "JURO hisobingizga yangi qurilmadan kirildi.";
+    return {
+      subject,
+      html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>${subject}</h2><p>${lead}</p><p><strong>Qurilma:</strong> ${device}<br><strong>Hudud:</strong> ${location}<br><strong>Vaqt:</strong> ${occurredAt}</p><p>Agar bu siz bo‘lsangiz, hech narsa qilish shart emas. Aks holda JURO sozlamalarida faol sessiyalarni yakunlang va <a href="mailto:support@juro.uz">support@juro.uz</a> bilan bog‘laning.</p></div>`,
+    };
+  }
+  const subject = newRegion
+    ? "Вход в JURO из нового региона"
+    : "Вход в JURO с нового устройства";
+  const lead = newRegion
+    ? "Знакомое устройство вошло в ваш аккаунт JURO из региона, отличающегося от предыдущего входа."
+    : "В ваш аккаунт JURO выполнен вход с нового устройства.";
   return {
-    subject: "Email для входа в JURO изменён",
-    html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>Email для входа в JURO изменён</h2><p>Адрес для входа в ваш аккаунт JURO был успешно изменён.</p><p>Если это сделали не вы, немедленно напишите на <a href="mailto:support@juro.uz">support@juro.uz</a> и завершите активные сессии.</p></div>`,
+    subject,
+    html: `<div style="font-family:Arial,sans-serif;color:#111d36"><h2>${subject}</h2><p>${lead}</p><p><strong>Устройство:</strong> ${device}<br><strong>Регион:</strong> ${location}<br><strong>Время:</strong> ${occurredAt}</p><p>Если это были вы, ничего делать не нужно. В противном случае завершите активные сессии в настройках JURO и напишите на <a href="mailto:support@juro.uz">support@juro.uz</a>.</p></div>`,
   };
 }
 
 async function updateFailure(
   db: D1Database,
   input: {
-    jobId: string;
+    row: SecurityEmailJobRow;
     error: SecurityEmailError;
     now: string;
   },
 ): Promise<void> {
+  const table = jobTable(input.row);
   await db.prepare(
-    `UPDATE security_email_jobs
+    `UPDATE ${table}
      SET status=?,error_code=?,updated_at=?
      WHERE id=? AND status<>'sent'`,
   ).bind(
     input.error.retryable ? "retrying" : "failed",
     input.error.code,
     input.now,
-    input.jobId,
+    input.row.id,
   ).run();
 }
 
@@ -187,15 +275,16 @@ export async function executeSecurityEmailJob(
   env: SecurityEmailRuntimeEnv,
   jobId: string,
 ): Promise<{ providerMessageId: string | null; alreadySent: boolean }> {
-  const row = await env.DB.prepare(
-    `SELECT id,user_id AS userId,event_type AS eventType,locale,
-       recipient_ciphertext AS recipientCiphertext,
-       recipient_iv AS recipientIv,
-       recipient_key_version AS recipientKeyVersion,status,
-       provider_message_id AS providerMessageId
-     FROM security_email_jobs WHERE id=? LIMIT 1`,
-  ).bind(jobId).first<SecurityEmailJobRow>();
-  if (!row || row.eventType !== "email_changed_previous_address") {
+  const row = await securityEmailJob(env.DB, jobId);
+  if (
+    !row
+    || row.deliveryChannel !== "email"
+    || ![
+      "email_changed_previous_address",
+      "login_new_device",
+      "login_new_region",
+    ].includes(row.eventType)
+  ) {
     throw new SecurityEmailError("EMAIL_JOB_INVALID", false);
   }
   if (row.status === "sent") {
@@ -211,7 +300,7 @@ export async function executeSecurityEmailJob(
       "EMAIL_CONFIGURATION_UNAVAILABLE",
       false,
     );
-    await updateFailure(env.DB, { jobId, error, now });
+    await updateFailure(env.DB, { row, error, now });
     throw error;
   }
 
@@ -226,22 +315,25 @@ export async function executeSecurityEmailJob(
         keyVersion: row.recipientKeyVersion,
       },
       {
-        purpose: RECIPIENT_PURPOSE,
+        purpose: row.source === "notification"
+          ? SECURITY_NOTIFICATION_RECIPIENT_PURPOSE
+          : RECIPIENT_PURPOSE,
         subjectId: row.userId,
         recordId: row.id,
       },
     ));
   } catch {
     const error = new SecurityEmailError("EMAIL_JOB_INVALID", false);
-    await updateFailure(env.DB, { jobId, error, now });
+    await updateFailure(env.DB, { row, error, now });
     throw error;
   }
 
   const staleSendingBefore = new Date(
     Date.parse(now) - 2 * 60 * 1_000,
   ).toISOString();
+  const table = jobTable(row);
   const claimed = await env.DB.prepare(
-    `UPDATE security_email_jobs
+    `UPDATE ${table}
      SET status='sending',attempt_count=attempt_count+1,error_code=NULL,
          updated_at=?
      WHERE id=?
@@ -253,7 +345,7 @@ export async function executeSecurityEmailJob(
   if (Number(claimed.meta.changes ?? 0) !== 1) {
     const current = await env.DB.prepare(
       `SELECT status,provider_message_id AS providerMessageId
-       FROM security_email_jobs WHERE id=? LIMIT 1`,
+       FROM ${table} WHERE id=? LIMIT 1`,
     ).bind(jobId).first<{
       status: string;
       providerMessageId: string | null;
@@ -267,7 +359,7 @@ export async function executeSecurityEmailJob(
     throw new SecurityEmailError("EMAIL_PROVIDER_UNAVAILABLE", true);
   }
 
-  const copy = emailCopy(row.locale === "uz" ? "uz" : "ru");
+  const copy = emailCopy(row);
   let response: Response | null = null;
   try {
     response = await fetch(RESEND_ENDPOINT, {
@@ -289,7 +381,7 @@ export async function executeSecurityEmailJob(
       const error = providerFailure(response.status);
       await response.body?.cancel();
       await updateFailure(env.DB, {
-        jobId,
+        row,
         error,
         now: new Date().toISOString(),
       });
@@ -299,7 +391,7 @@ export async function executeSecurityEmailJob(
     if (typeof payload?.id !== "string" || !/^[A-Za-z0-9_-]{1,180}$/.test(payload.id)) {
       const error = new SecurityEmailError("EMAIL_PROVIDER_UNAVAILABLE", true);
       await updateFailure(env.DB, {
-        jobId,
+        row,
         error,
         now: new Date().toISOString(),
       });
@@ -307,7 +399,7 @@ export async function executeSecurityEmailJob(
     }
     const sentAt = new Date().toISOString();
     const sent = await env.DB.prepare(
-      `UPDATE security_email_jobs
+      `UPDATE ${table}
        SET status='sent',provider_message_id=?,sent_at=?,error_code=NULL,
            updated_at=?
        WHERE id=? AND status='sending'`,
@@ -325,7 +417,7 @@ export async function executeSecurityEmailJob(
       // The failed provider response has no usable body.
     }
     await updateFailure(env.DB, {
-      jobId,
+      row,
       error: safe,
       now: new Date().toISOString(),
     });

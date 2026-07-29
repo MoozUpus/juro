@@ -21,6 +21,11 @@ import {
   deviceContinuityStatements,
   type PreparedDeviceContinuity,
 } from "./device-continuity";
+import {
+  prepareLoginSecurityNotification,
+  type LoginSecurityNotificationConfig,
+  type PreparedSecurityNotificationJob,
+} from "./security-notification";
 
 const IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const TOUCH_INTERVAL_MS = 5 * 60 * 1_000;
@@ -66,6 +71,7 @@ export type PreparedSessionCreation = {
   assuranceLevel: LocalAssuranceLevel;
   createdAt: string;
   deviceContinuity: PreparedDeviceContinuity | null;
+  securityNotification: PreparedSecurityNotificationJob | null;
   statements: D1PreparedStatement[];
 };
 
@@ -128,8 +134,12 @@ export function guardedSessionInsertStatements(
   const continuityStatements = prepared.deviceContinuity
     ? deviceContinuityStatements(db, prepared.deviceContinuity, guard)
     : [];
+  const notificationStatements = prepared.securityNotification
+    ? prepared.securityNotification.statements(guard)
+    : [];
   return [
     ...continuityStatements,
+    ...notificationStatements,
     db.prepare(
       `INSERT INTO auth_devices (
          id,user_id,continuity_id,display_name,user_agent_hash,
@@ -196,6 +206,7 @@ export async function prepareLocalSessionCreation(
     assuranceLevel: LocalAssuranceLevel;
     rememberMe?: boolean;
     deviceContinuity?: PreparedDeviceContinuity | null;
+    loginSecurityNotification?: LoginSecurityNotificationConfig | null;
     now?: Date;
   },
 ): Promise<PreparedSessionCreation> {
@@ -214,6 +225,16 @@ export async function prepareLocalSessionCreation(
   // until the versioned identity HMAC key ring is configured.
   const userAgentHash = null;
   const deviceContinuity = input.deviceContinuity ?? null;
+  const securityNotification = input.loginSecurityNotification
+    ? await prepareLoginSecurityNotification(db, {
+        config: input.loginSecurityNotification,
+        userId: input.userId,
+        sessionId,
+        deviceName: displayName,
+        continuity: deviceContinuity,
+        occurredAt: nowIso,
+      })
+    : null;
 
   return {
     session: {
@@ -233,9 +254,16 @@ export async function prepareLocalSessionCreation(
     assuranceLevel: input.assuranceLevel,
     createdAt: nowIso,
     deviceContinuity,
+    securityNotification,
     statements: [
       ...(deviceContinuity
         ? deviceContinuityStatements(db, deviceContinuity)
+        : []),
+      ...(securityNotification
+        ? securityNotification.statements({
+            selectSql: "SELECT 1",
+            bindings: [],
+          })
         : []),
       db.prepare(
         `INSERT INTO auth_devices (
@@ -282,6 +310,7 @@ export async function createEmailOtpSession(
     userAgent: string | null;
     securityEvidence?: AuthRequestSecurityEvidence | null;
     deviceContinuity?: PreparedDeviceContinuity | null;
+    loginSecurityNotification?: LoginSecurityNotificationConfig | null;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -323,6 +352,7 @@ export async function createPrimarySessionIfMfaDisabled(
     userAgent: string | null;
     securityEvidence?: AuthRequestSecurityEvidence | null;
     deviceContinuity?: PreparedDeviceContinuity | null;
+    loginSecurityNotification?: LoginSecurityNotificationConfig | null;
     rememberMe?: boolean;
     now?: Date;
   },

@@ -712,3 +712,33 @@ This migration is not applied to remote staging. Before applying `0030` and
 `0031`, create a new portable D1 checkpoint, verify its checksum, repeat the
 disposable restore drill, record the pending migration list, and stop on any
 schema or ledger mismatch. Production is unchanged.
+## Migration 0032
+
+`0032_fixed_wasp.sql` adds the generic encrypted login-security notification
+boundary without rebuilding the email-change-specific table from `0030`:
+
+- `security_notification_jobs` accepts only `login_new_device` and
+  `login_new_region` over the email delivery channel;
+- recipient addresses use authenticated encryption and a dedicated key purpose;
+- only coarse country/region, a bounded generic device label, event/session IDs,
+  and delivery state are stored; raw IP, raw User-Agent, and the continuity
+  token are absent;
+- `(session_id, event_type, delivery_channel)` fences duplicate jobs;
+- immutable-content enforcement covers recipient, event, session, device,
+  location, locale, and occurrence evidence while allowing delivery-state
+  transitions and workspace `ON DELETE SET NULL`;
+- the existing identifiers-only `job_outbox` and `email.send` consumer contract
+  are reused with provider idempotency and stale-lease recovery.
+
+The migration has five additive statements: one table, three indexes, and one
+trigger. It contains no `ALTER`, `DROP`, data `UPDATE`, or `DELETE`. The full
+local `0000`–`0032` sequence has 110 application tables, 158 foreign-key
+references, and a clean `foreign_key_check`; the Drizzle snapshot has 84 modeled
+tables and 156 modeled foreign keys. Constraint tests cover duplicate delivery,
+immutable evidence, legal status transitions, and workspace deletion.
+
+Migrations `0030`–`0032` are not applied to remote staging. Before any staging
+write, capture/checksum a new D1 checkpoint, repeat the disposable restore
+exercise, verify the exact pending list, apply the reviewed migrations in order,
+retain a post-migration export, and then prove protected primary/MFA login,
+Queue/DLQ behavior, and real Resend delivery. Production is unchanged.

@@ -927,6 +927,98 @@ export const securityEmailJobs = sqliteTable(
   ],
 );
 
+export const securityNotificationJobs = sqliteTable(
+  "security_notification_jobs",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    workspaceId: text("workspace_id").references(() => workspaces.id, {
+      onDelete: "set null",
+    }),
+    sessionId: text("session_id").notNull(),
+    eventType: text("event_type").notNull(),
+    deliveryChannel: text("delivery_channel").notNull().default("email"),
+    locale: text("locale").notNull(),
+    recipientCiphertext: text("recipient_ciphertext").notNull(),
+    recipientIv: text("recipient_iv").notNull(),
+    recipientKeyVersion: text("recipient_key_version").notNull(),
+    deviceName: text("device_name").notNull(),
+    countryCode: text("country_code"),
+    regionCode: text("region_code"),
+    status: text("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    providerMessageId: text("provider_message_id"),
+    sentAt: text("sent_at"),
+    errorCode: text("error_code"),
+    occurredAt: text("occurred_at").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    check(
+      "security_notification_jobs_event_check",
+      sql`${table.eventType} IN ('login_new_device','login_new_region')`,
+    ),
+    check(
+      "security_notification_jobs_channel_check",
+      sql`${table.deliveryChannel} = 'email'`,
+    ),
+    check(
+      "security_notification_jobs_locale_check",
+      sql`${table.locale} IN ('ru','uz')`,
+    ),
+    check(
+      "security_notification_jobs_status_check",
+      sql`${table.status} IN ('pending','sending','retrying','sent','failed')`,
+    ),
+    check(
+      "security_notification_jobs_attempts_check",
+      sql`${table.attemptCount} >= 0`,
+    ),
+    check(
+      "security_notification_jobs_context_check",
+      sql`length(${table.sessionId}) BETWEEN 1 AND 128
+        AND length(${table.deviceName}) BETWEEN 1 AND 80
+        AND (${table.countryCode} IS NULL OR (
+          length(${table.countryCode}) = 2
+          AND ${table.countryCode} NOT GLOB '*[^A-Z0-9]*'
+        ))
+        AND (${table.regionCode} IS NULL OR (
+          length(${table.regionCode}) BETWEEN 1 AND 12
+          AND ${table.regionCode} NOT GLOB '*[^A-Z0-9-]*'
+        ))`,
+    ),
+    check(
+      "security_notification_jobs_recipient_check",
+      sql`length(${table.recipientCiphertext}) >= 22
+        AND length(${table.recipientIv}) = 16
+        AND length(${table.recipientKeyVersion}) BETWEEN 1 AND 32`,
+    ),
+    check(
+      "security_notification_jobs_evidence_check",
+      sql`(
+        (${table.status} IN ('pending','sending') AND ${table.providerMessageId} IS NULL AND ${table.sentAt} IS NULL AND ${table.errorCode} IS NULL)
+        OR (${table.status} IN ('retrying','failed') AND ${table.providerMessageId} IS NULL AND ${table.sentAt} IS NULL AND ${table.errorCode} IS NOT NULL)
+        OR (${table.status} = 'sent' AND ${table.providerMessageId} IS NOT NULL AND ${table.sentAt} IS NOT NULL AND ${table.errorCode} IS NULL)
+      )`,
+    ),
+    uniqueIndex("security_notification_jobs_session_event_uidx").on(
+      table.sessionId,
+      table.eventType,
+      table.deliveryChannel,
+    ),
+    index("security_notification_jobs_status_idx").on(
+      table.status,
+      table.updatedAt,
+    ),
+    index("security_notification_jobs_user_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+);
 export const authTotpCredentials = sqliteTable("auth_totp_credentials", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),

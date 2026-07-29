@@ -12,6 +12,8 @@ export type PreparedDeviceContinuity = {
   tokenHmac: string;
   keyVersion: string;
   recognized: boolean;
+  previousCountryCode: string | null;
+  previousRegionCode: string | null;
   countryCode: string | null;
   regionCode: string | null;
   timestamp: string;
@@ -63,7 +65,9 @@ async function matchingContinuity(
     () => "(key_version=? AND token_hmac=?)",
   );
   return db.prepare(
-    `SELECT id,revoked_at AS revokedAt
+    `SELECT id,revoked_at AS revokedAt,
+       last_country_code AS lastCountryCode,
+       last_region_code AS lastRegionCode
      FROM auth_device_continuities
      WHERE user_id=? AND (${predicates.join(" OR ")})
      ORDER BY CASE WHEN revoked_at IS NULL THEN 0 ELSE 1 END,last_seen_at DESC
@@ -71,7 +75,12 @@ async function matchingContinuity(
   ).bind(
     userId,
     ...evidence.flatMap(item => [item.keyVersion, item.digest]),
-  ).first<{ id: string; revokedAt: string | null }>();
+  ).first<{
+    id: string;
+    revokedAt: string | null;
+    lastCountryCode: string | null;
+    lastRegionCode: string | null;
+  }>();
 }
 
 export async function prepareDeviceContinuity(
@@ -106,6 +115,8 @@ export async function prepareDeviceContinuity(
     tokenHmac: active.digest,
     keyVersion: active.keyVersion,
     recognized: Boolean(existing),
+    previousCountryCode: existing?.lastCountryCode ?? null,
+    previousRegionCode: existing?.lastRegionCode ?? null,
     countryCode: input.securityEvidence?.countryCode ?? null,
     regionCode: input.securityEvidence?.regionCode ?? null,
     timestamp: (input.now ?? new Date()).toISOString(),

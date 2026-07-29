@@ -600,8 +600,10 @@ provider, concurrency, or future-data evidence.
   confirmation each have one guarded winner.
   Migration `0029`, migration-specific backup/restore, exact-source CI run
   `30453980092`, and the Worker deployment pass in staging for both elevation and
-  disable. Protected authenticated HTTP/cookie proof, deployment of email-change
-  rotation, periodic rotation, regional signals, and security email remain open;
+  disable. Opaque continuity plus conservative new-device/comparable-region
+  notification jobs now pass locally with migration `0032`, but protected
+  authenticated HTTP/cookie proof, deployment of email-change/periodic rotation,
+  migrations `0030`–`0032`, and real security-email delivery remain open;
 - workspace invitation migration 0022 and OTP-lock migration 0023 are applied
   to staging; their local one-winner/rollback/15-minute-lock tests are not
   full-HTTP remote behavior evidence;

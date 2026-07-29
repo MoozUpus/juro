@@ -12,8 +12,11 @@ import {
 } from "./keyring";
 import {
   createIdentityProtectionContext,
+  resolveUserIdentity,
+  USER_IDENTITY_SELECT,
   userIdByEmail,
   type IdentityProtectionContext,
+  type UserIdentityRow,
 } from "./identity-protection";
 import { batchWithSecurityEvent } from "./security-events";
 import {
@@ -1166,6 +1169,18 @@ export async function verifyLoginMfa(
     securityEvidence,
     now,
   });
+  const profile = await db.prepare(
+    `SELECT id,${USER_IDENTITY_SELECT},
+       default_workspace_id AS defaultWorkspaceId
+     FROM user_profiles WHERE id=? LIMIT 1`,
+  ).bind(challenge.userId).first<UserIdentityRow & {
+    defaultWorkspaceId: string | null;
+  }>();
+  if (!profile) throw new MfaError("MFA_STATE_CONFLICT");
+  const identity = await resolveUserIdentity(
+    { mode: "dual_write", keyring },
+    profile,
+  );
   const prepared = await prepareLocalSessionCreation(db, {
     userId: challenge.userId,
     userAgent: input.userAgent,
@@ -1174,6 +1189,12 @@ export async function verifyLoginMfa(
       : "email_otp+backup_code",
     assuranceLevel: "mfa",
     deviceContinuity,
+    loginSecurityNotification: {
+      keyring,
+      recipientEmail: identity.email,
+      locale: challenge.locale === "uz" ? "uz" : "ru",
+      workspaceId: profile.defaultWorkspaceId,
+    },
     rememberMe: input.rememberMe,
     now,
   });

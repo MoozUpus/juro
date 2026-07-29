@@ -22,8 +22,8 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- local test totals (27 rendered route + 254 core + 72 Cloudflare = 353),
-  remote schema checks, and 100% Worker deployment are not a substitute for
+- local test totals (27 rendered route + 265 core + 76 Cloudflare = 368),
+  remote schema checks, and the currently deployed Worker are not a substitute for
   the exact current-version authenticated browser/cookie/replay flow. The
   available browser-control runtime currently exits during startup because its
   generated CommonJS kernel is treated as ESM by a user-home package boundary;
@@ -62,9 +62,10 @@ foundation checkpoint.
   periodic path is integrated through a delayed, jittered application-shell
   scheduler and a same-origin/CSRF route; its 30-second grace rejects an
   in-flight retired token without revoking the replacement, then restores the
-  strict replay-revocation boundary. Exact protected-staging HTTP/cookie/replay
-  evidence, approximate location, and new-device/region security mail remain
-  incomplete;
+  strict replay-revocation boundary. Continuity-backed new-device and conservative
+  comparable-region email jobs now pass locally, but exact protected-staging
+  HTTP/cookie/replay evidence, migration `0032`, and real security-mail delivery
+  remain incomplete;
 - the 24-hour/30-day session choice is locally tested, but remote cookies,
   persisted expiry, idle expiry, and MFA completion have not been exercised
   through staging HTTP;
@@ -166,9 +167,16 @@ missing identity keyring omits continuity rather than creating an unkeyed
 fallback. Coarse country/region and bounded User-Agent evidence remain risk
 signals only.
 
-No new-device/new-region notification is implemented yet: novelty thresholds,
-travel/region-change policy, false-positive handling, notification deduplication,
-and real Resend delivery still require their next reviewed slice. Migration
-`0031` and the runtime are not deployed to protected staging, so no remote
-cookie, revoke, or browser evidence is claimed. The currently deployed Worker
-does not contain this local slice.
+The local policy now alerts on a genuinely new continuity record and on a coarse
+country/region change only for an already recognized device with comparable
+previous/current evidence. Registration, User-Agent change, missing location,
+and incomplete location do not alert. A generic encrypted job, identifiers-only
+outbox, RU/UZ copy, one-winner provider idempotency, and atomic session rollback
+are covered locally.
+
+This does not prove physical location or compromise. Travel, carrier routing,
+VPNs, cookie clearing, and stolen continuity cookies can still create false
+positives or influence novelty. Migrations `0030`–`0032`, the reviewed email
+consumer, real Resend delivery, DLQ/redrive, and protected primary/MFA HTTP flows
+are not deployed or verified in staging. The currently deployed Worker does not
+contain this local slice, and production is unchanged.
