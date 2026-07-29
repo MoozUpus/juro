@@ -1236,3 +1236,16 @@ zero writes. Null-workspace document/file counts were zero; duplicate active
 deletion, collaborator, acceptance, encrypted-profile-key, and staff-role
 queries returned empty sets. This permits continued empty-state compatibility
 work but does not activate identity runtime or prove HTTP/provider behavior.
+
+## D-060 — protect staging with an owner-only Access application before exposing it
+
+Status: accepted and HTTP/control-plane verified; staging only
+Date: 2026-07-29
+
+Cloudflare Zero Trust is enabled for organization `curly-rice-90a4`. Its Cloudflare identity provider (`42ab9b55-7e07-45f5-962f-c3d464bd42fe`) is restricted to account members. A self-hosted Access application, `JURO platform staging — owner only` (`d88c147e-bbd0-43bd-b783-3fc49a7edd11`), targets only `staging.app.juro.uz` and has the sole inline allow policy `90306b71-4731-47fa-969e-34fc22722f17`, matching one exact owner email.
+
+The application is hidden from the App Launcher, auto-redirects to the sole Cloudflare IdP, uses an eight-hour session and enables binding, HttpOnly and Strict-SameSite cookies. It contains no wildcard domain, group, bypass, or service-token rule. The application was re-read from the Access API after creation.
+
+Only after that verification, the new custom domain `staging.app.juro.uz` was attached to the staging Worker `juro-platform-staging` using custom-domain ID `83fa11970645f783cf0b7cfa6c8b914f2753325e`. An anonymous HTTPS request was redirected to the Cloudflare Access login endpoint rather than receiving application content, proving deny-before-auth.
+
+No production Worker, Sites deployment, production policy, route, or resource was changed. The next gate is an owner login through Access, followed by staging application smoke tests. The previous UI and production traffic remain recoverable and untouched.

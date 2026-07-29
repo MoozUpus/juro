@@ -259,3 +259,19 @@ Completed inactive-deploy gates and remaining public-staging gates:
 16. keep production data, traffic, domains, and deployments unchanged.
 
 No secret value belongs in `wrangler.jsonc`, Git, logs, or this document.
+
+## Staging Access boundary
+
+Cloudflare Access is enabled for the `curly-rice-90a4` Zero Trust organization. The staging perimeter is configured before a DNS record or Worker custom domain is attached.
+
+| Resource | Verified value | Boundary |
+|---|---|---|
+| Access application | `JURO platform staging — owner only` | staging only |
+| Application ID / UID | `d88c147e-bbd0-43bd-b783-3fc49a7edd11` | Cloudflare Access API, 2026-07-29 |
+| Protected destination | `staging.app.juro.uz` | attached only to `juro-platform-staging` |
+| Worker custom-domain ID | `83fa11970645f783cf0b7cfa6c8b914f2753325e` | staging only |
+| Identity provider | Cloudflare account-members provider `42ab9b55-7e07-45f5-962f-c3d464bd42fe` | restricted to Cloudflare account members |
+| Owner allow policy | `90306b71-4731-47fa-969e-34fc22722f17` | one exact owner email; no group/domain-wide bypass |
+| Session | 8 hours | `HttpOnly`, `SameSite=Strict`, binding cookie enabled |
+
+The Access application is hidden from the App Launcher and auto-redirects to the sole configured Cloudflare identity provider. A 200 API re-read proved the exact destination, provider, policy selector, cookie settings and session duration. An unauthenticated HTTPS smoke test was redirected to the Access login endpoint; it did not reach the application. This proves the external deny-before-auth gate. Production DNS, routes, domains, Workers, Sites and policies remained unchanged.
