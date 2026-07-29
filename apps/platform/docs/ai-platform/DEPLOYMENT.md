@@ -19,7 +19,7 @@ deployed without the separate production authorization required by the owner.
 
 ## Staging deployment target
 
-The checked-in and deployed target is `juro-platform-staging`. Deployment `bafea8e2-d061-4180-827b-1c047858fb36` serves Worker version `afde477b-db83-498f-aaf8-1a2e5aa9ab44` at 100% from pushed commit `401c8b3`. The exact flattened artifact was built with the staging profile and deployed without `--env`, with `--keep-vars`.
+The checked-in and deployed target is `juro-platform-staging`. Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` serves 100% from pushed commit `cd24095c8307a4c3b145549f147a823000a438e3`. The exact flattened artifact was built with the staging profile and deployed with `--env staging`, `--keep-vars`, and `--strict`; production was not targeted.
 
 The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route, and the single Access-protected custom domain `staging.app.juro.uz`. It binds only staging D1/R2/Queues/Vectorize/Analytics resources. `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and `ACCOUNT_DELETION_PURGE_ENABLED` are true only in staging. Legal ingestion and the staff API remain false.
 
@@ -27,17 +27,17 @@ Exactly two staging consumers are attached: `staging-email-notifications` (concu
 
 ## Required sequence
 
-1. **Completed:** pushed exact source commit `a1261c3c68151f9c275187fd422bd58c67b673a8`.
-2. **Completed:** full gate passed: type-check, lint, 380 tests, generated binding types, staging build/artifact, environment matrix, builder/comparison smokes, and secret scan.
-3. **Completed:** verified the exact pending `0030`–`0033` set and pre-change Time Travel/private-R2 backup.
-4. **Completed with recorded retry:** `0030`–`0032` applied; `0033` was atomically rejected for a concatenated migration breakpoint, corrected in `a1261c3`, retested 64/64, then applied alone.
-5. **Completed:** postflight proves 34 migrations, `quick_check=ok`, empty foreign-key check, and the exact lifecycle schema/guards.
-6. **Completed:** deployed the exact staging artifact with preserved dashboard secrets and re-read version, bindings, custom domain, Access, flags, consumers/DLQs, and cron.
-7. **Completed:** anonymous root, canonical builder, and deletion API all receive Access 302 plus `no-store`.
-8. **Completed:** first durable cron run finished successfully with no error or stuck lock.
-9. **Completed:** post-`0033` full/schema/data/manifest private-R2 round trip passed SHA-256.
-10. **Completed, fail-closed:** two identifiers-only synthetic deletion jobs were dispatched once each by separate real cron runs and reached the cleanup consumer. The deployed runtime rejected both before any profile/request/file/R2 fixture was created because `IDENTITY_KEYRING` is present by name but malformed for the documented JSON key-ring contract. Final staging has `STAGING_SYNTHETIC_PROBES_ENABLED=false`.
-11. **Open:** the owner must replace the malformed staging `IDENTITY_KEYRING` through protected Cloudflare secret control, retain a separately protected recovery copy, and then rerun the probe. Authenticated UI/cookie/provider flows and the wider accessibility/mobile matrix also remain open; the browser runtime failed before tab connection and Access was not bypassed.
+1. **Completed:** pushed commits `cc462a9`, `2118475`, and `cd24095` to draft PR #3.
+2. **Completed:** type-check, lint, 391 tests, staging build, artifact validation, and diff check pass.
+3. **Completed:** pre-`0034` Time Travel bookmark, full/schema/data/manifest private-R2 round trip, and isolated restore pass.
+4. **Completed:** Wrangler applied only migration `0034` to `juro-staging`.
+5. **Completed:** postflight proves 35 migrations, 113 application tables (114 including `d1_migrations`), 72 triggers, 199 indexes, no pending migration, and zero foreign-key violations.
+6. **Completed:** final staging artifact is deployed with preserved dashboard secrets; current version, bindings, triggers, and 100% traffic were re-read.
+7. **Completed:** owner-only Access authenticated browser QA created one synthetic business workspace and proved one owner, one creation audit, creator/request evidence, and intact foreign keys.
+8. **Completed after corrective iteration:** personal builder routing remains canonical after business becomes default; explicit business routes remain workspace-scoped.
+9. **Completed:** RU/UZ metadata and content pass for personal/business builder routes at desktop, tablet, 390 px, and 320 px without horizontal overflow or console errors.
+10. **Completed:** post-`0034` full/schema/data/manifest private-R2 round trip passed SHA-256.
+11. **Open:** validate the newly entered opaque identity key ring non-destructively, then complete auth/session/provider, cross-account, axe, 200% zoom, reduced-motion, Lighthouse, and real-device gates.
 
 The standalone `validate:artifact` task defaults to the development profile.
 Running it immediately after a staging build without an explicit
@@ -115,3 +115,16 @@ Safe order:
 8. Inspect safe Worker/Queue/D1 logs and retain post-migration exports with checksums.
 
 Rollback application first: disable purge/cron/async or roll traffic to Worker version `448e5bf1-4bf8-4000-af2b-2c034e3eca10`. Queue consumers may be detached without deleting queues. Migrations are additive and may remain unused. Restore D1 only for demonstrated data/schema corruption, using bookmark `00000035-00000000-000050b7-179d399e193e3067399de9571322a50b` under staging maintenance. Production deployment and production UI replacement are separately prohibited.
+
+## Business-workspace staging checkpoint — 2026-07-30
+
+Exact backup, migration, Worker version, D1, authenticated RU/UZ browser,
+responsive, synthetic workspace, and rollback evidence is consolidated in
+`STAGING-0034-EVIDENCE.md`. Production functional deployment and production UI
+replacement remain separately unauthorized.
+Current staging sequence: pre-`0034` Time Travel and portable/private-R2
+checkpoint; isolated local restore; apply only `0034`; D1 postflight; post-`0034`
+checkpoint; deploy commit `cd24095` with `--keep-vars`; control-plane re-read;
+authenticated RU/UZ responsive route QA; synthetic workspace/membership/audit
+verification. The prior `0030`–`0033` record above is retained as historical
+evidence and is not the current deployment identity.

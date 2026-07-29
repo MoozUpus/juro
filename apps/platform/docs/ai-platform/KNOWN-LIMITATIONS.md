@@ -6,10 +6,7 @@ foundation checkpoint.
 
 ## Release blockers
 
-- migrations `0022`–`0033` are applied to `juro-staging`; source migration `0034` is local-only and still requires a fresh migration-specific
-  full/schema/data exports, private-R2 round trips, and the disposable remote-D1
-  restore drill pass. Operational RTO/RPO under representative load remains
-  unverified;
+- migrations `0022`–`0034` are applied to `juro-staging`; the `0034` migration-specific full/schema/data/manifest exports, private-R2 round trips, isolated pre-change restore, postflight, and deployment pass. Operational RTO/RPO under representative load remains unverified;
 - the protected staging Worker, custom domain, exact resource bindings, public
   Turnstile site key, and three server-only secret binding names are verified;
   exactly the email and data-retention Queue consumers plus one five-minute cron are active; legal ingestion and staff APIs remain deliberately disabled;
@@ -21,18 +18,8 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- the staging `IDENTITY_KEYRING` secret name exists, but a real Cron/Queue
-  runtime probe rejects it as malformed. Both synthetic jobs were dispatched
-  exactly once; zero synthetic profiles, deletion requests, or file rows were
-  created, and both exact R2 keys are absent. The final probe flag is disabled;
-  a valid owner-managed key ring plus protected recovery copy is required
-  before rerunning the purge and identity gates;
-- local test totals (27 rendered route + 283 core + 80 Cloudflare = 390),
-  remote schema checks, and the currently deployed Worker are not a substitute for
-  the exact current-version authenticated browser/cookie/replay flow. The
-  available browser-control runtime currently exits during startup because its
-  generated CommonJS kernel is treated as ESM by a user-home package boundary;
-  Access was not bypassed and this gate remains open.
+- the staging `IDENTITY_KEYRING` secret name exists. The last real Cron/Queue probe before the owner-reported secret re-entry rejected the then-current value as malformed; both jobs were dispatched once, created no fixture rows/objects, and the final probe flag remains disabled. Secret values are opaque, so the newly entered value is not considered valid until a non-destructive runtime validation and protected recovery-copy check pass;
+- local test totals (27 rendered route + 284 core + 80 Cloudflare = 391), remote schema checks, and authenticated RU/UZ personal/business builder QA now pass on the current Worker. They do not substitute for full auth/cookie/replay, cross-account, 200% zoom, reduced-motion, axe, Lighthouse, real-device, and provider matrices.
 
 ## Legal-source acquisition gaps
 
@@ -83,10 +70,7 @@ foundation checkpoint.
 - the one-winner acceptance claim schema from `0022` is active in staging, but
   the full route and remote concurrency behavior remain untested over HTTP;
 - `workspace_audit_events` is not a general append-only/tamper-evident ledger;
-- business acceptance now redirects to the workspace-aware canonical URL;
-  local business creation is atomic/idempotent with full/short identity, but
-  migration `0034`, authenticated remote creation/switch/browser evidence, and
-  cross-account HTTP proof remain open;
+- business acceptance redirects to the workspace-aware canonical URL; business creation is atomic/idempotent with full/short identity, and migration `0034` plus authenticated remote creation/switch/browser evidence pass. Cross-account HTTP proof remains open;
 - the owner/member model and invitation flow do not prove tenant isolation for
   every object domain.
 
@@ -95,9 +79,7 @@ foundation checkpoint.
 - canonical localized root/auth/onboarding routing, Uzbek-default behavior,
   structured personal-profile completion, persona-preserving workspace
   selection, canonical business `workspaceId` routes, and the tested
-  `/main` to `/dashboard` migration are deployed on protected staging; authenticated
-  staging browser evidence, policy approval, deletion purge/recovery, and
-  externally reachable staff administration are not complete;
+  `/main` to `/dashboard` migration are deployed on protected staging; bounded authenticated builder/browser evidence passes, while the full auth/onboarding matrix, policy approval, deletion purge/recovery, and externally reachable staff administration are not complete;
 - the local staff-role foundation remains deliberately unreachable and has no
   operator bootstrap or customer-resource access grant;
 - no production behavior or UI was replaced, and no production migration or

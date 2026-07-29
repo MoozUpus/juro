@@ -7,11 +7,11 @@ Integration branch baseline: `1d3d23d` before this documentation update
 ## Verified baseline
 
 - Current local Drizzle snapshot: 86 application tables.
-- Migration files: `0000`–`0034`; `0034` is a local staging candidate and is not remotely applied.
+- Migration files: `0000`–`0034`; `0034` is applied only to isolated staging.
 - All migrations apply successfully to a new local SQLite database.
 - Local migrated result: 112 non-internal table definitions, 158 foreign keys, 72 triggers, and 199 indexes; zero foreign-key violations.
 - No destructive `DROP` statement was found.
-- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0034` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 34-entry `0000`–`0033` ledger, 114 non-internal tables, 70 triggers, and 198 indexes. Its pre/post migration exports passed private-R2 round trips, and the earlier disposable remote EEUR D1 reproduced its captured export topology before deletion. Post-`0033` staging has zero foreign-key violations. No production/development data or schema was mutated.
+- The Cloudflare control plane reports 61 tables in both `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`) and `juro-development` (`d07670cf-f7bf-460c-a668-101671d4c330`). Both ledgers contain `0000`–`0004`; `0005`–`0034` are not applied there. `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 35-entry `0000`–`0034` ledger, 113 application tables (114 including `d1_migrations`), 72 triggers, and 199 indexes. Migration-specific pre/post exports passed private-R2 round trips, and the pre-`0034` set passed an isolated restore with source-equivalent counts. Post-`0034` staging has zero foreign-key violations. No production/development data or schema was mutated.
 
 ## Existing migration outline
 
@@ -51,7 +51,7 @@ Integration branch baseline: `1d3d23d` before this documentation update
 | `0031` | opaque device continuity and session linkage |
 | `0032` | encrypted login-security notification boundary |
 | `0033` | fenced account-deletion lifecycle, purge evidence, and tombstone |
-| `0034` | business full/short identity, creator/request evidence, idempotency index, and guards (local-only) |
+| `0034` | business full/short identity, creator/request evidence, idempotency index, and guards (staging-applied) |
 
 ## Domain coverage
 
@@ -195,4 +195,4 @@ Before any further remote migration or any migration of a populated database; D-
 9. validate data invariants and the document-builder regression;
 10. keep production unchanged until explicit approval.
 
-Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0033` ledger, 114 non-internal tables, 70 triggers, and 198 indexes. Eighteen protected artifacts round-trip through private R2. The migration-specific pre-`0029` adapter reproduced every exported table/row plus ledger/trigger/FK state in a disposable remote EEUR D1, which was deleted after verification; the post-`0029` set also passed checksum round trips and remote FK validation. Runtime behavior and operational RTO remain unverified; production/development remain unchanged.
+Remote `juro-staging` exists as `bb716a96-b2fb-4823-90d6-6c228fed181a` in EEUR with the exact `0000`–`0034` ledger, 113 application tables (114 including `d1_migrations`), 72 triggers, and 199 indexes. Twenty-six protected artifacts round-trip through private R2. The migration-specific pre-`0034` set passed an isolated local restore with source-equivalent topology, row counts, `quick_check=ok`, and zero FK violations; the post set passed checksum round trips. Operational RTO remains unverified; production/development remain unchanged.

@@ -27,11 +27,12 @@ No document in this directory authorizes or implies a production schema, traffic
 - `CLOUDFLARE-RESOURCES.md` — verified production inventory, scoped non-production provisioning, and source/target configuration.
 - `D1-MIGRATIONS.md` — checked-in migrations, verified staging bootstrap manifest, and remote application state.
 - `R2-STORAGE.md` — private storage inventory, target names, object policy, and additive cutover.
-- `BACKUP-RESTORE.md` — backup evidence contract, passed empty-staging Time Travel/one-time bootstrap evidence, and still-missing portable export/import, protected-object, isolated-restore, and RTO evidence.
+- `BACKUP-RESTORE.md` — backup evidence contract, Time Travel checkpoints, portable private-R2 exports, isolated restore evidence, and still-open operational RTO.
+- `STAGING-0034-EVIDENCE.md` — exact pre/post bookmarks, hashes, isolated restore, migration, deployment, synthetic workspace, protected browser QA, and rollback evidence for the current staging checkpoint.
 - `SECRETS.md` — server-only secret names/contracts and presence-by-name inventory, never values.
 - `RETENTION.md` — implemented account-deletion lifecycle, retained evidence, purge order, and open retention gates.
 - `SECURITY.md` — implemented platform controls, environment isolation, release evidence, and open security gates.
-- `DATA-MODEL.md` — additive domain model, migration `0033` deletion/tombstone contract, and pending local `0034` business-workspace identity contract.
+- `DATA-MODEL.md` — additive domain model, migration `0033` deletion/tombstone contract, and staged `0034` business-workspace identity contract.
 - `IMPLEMENTED-FEATURES.md` and `DEFERRED-FEATURES.md` — evidence-backed implemented/deferred register.
 
 ## Identity foundation

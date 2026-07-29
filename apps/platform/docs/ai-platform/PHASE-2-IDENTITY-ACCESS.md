@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-29
-Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains 34 migrations through `0033`; deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` / version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` has staging-only bindings, two reviewed Queue consumers, one five-minute cron, the public Turnstile key, and three server-only secret names. Current localized auth, mailbox delivery, session-cookie/replay, full concurrency, and lifecycle flows still require correlated authenticated browser/HTTP evidence. Production was not changed.
+Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains 35 migrations through `0034`; Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` has staging-only bindings, two reviewed Queue consumers, one five-minute cron, the public Turnstile key, and three server-only secret names. Authenticated workspace creation and RU/UZ personal/business builder routing are verified; mailbox delivery, session-cookie/replay, full concurrency, cross-account, and deletion lifecycle flows still require correlated evidence. Production was not changed.
 
 ## Implemented
 
@@ -409,13 +409,7 @@ handling, 24-hour/30-day session persistence, structured onboarding,
 persona-preserving workspace selection, canonical localized auth routes, and the full existing builder/
 comparison/rendered Worker regression suite.
 
-The latest recorded local full suite passes 351/351 checks: 27 rendered
-Worker/security checks, 252 core/document/auth checks, and 71 Cloudflare
-configuration/migration/job checks. Remote staging now contains 110 total
-SQLite tables (109 non-internal), 58 triggers, the exact 30-entry ledger through
-`0029`, and zero pending migrations or foreign-key violations. Local service
-tests and remote schema evidence are not full staging HTTP or production
-runtime evidence.
+The current local full suite passes 391/391 checks: 27 rendered Worker/security checks, 284 core/document/auth checks, and 80 Cloudflare configuration/migration/job checks. Remote staging contains 113 application tables (114 including `d1_migrations`), 72 triggers, 199 non-internal indexes, the exact 35-entry ledger through `0034`, and zero pending migrations or foreign-key violations. Protected RU/UZ personal/business builder routes have bounded authenticated browser evidence; the broader identity/provider/security matrix is not complete staging or production evidence.
 
 `scripts/smoke-document-builder.ts` now follows the required lifecycle:
 
@@ -428,7 +422,7 @@ The local suite is complemented by the read-only staging evidence recorded below
 ### Read-only protected-staging evidence — 2026-07-29
 
 - `wrangler d1 migrations list juro-staging --env staging --remote` reports no pending migrations;
-- D1 reports 110 total SQLite tables (109 non-internal) and 30 migration-ledger rows;
+- the historical 2026-07-29 D1 read reported 110 total SQLite tables (109 non-internal) and 30 migration-ledger rows; the current `0034` postflight is 113 application tables (114 including `d1_migrations`) and 35 ledger rows;
 - aggregate-only queries, without reading email addresses, codes, names, or content, report three OTP challenges accepted by the provider path and three consumed challenges;
 - the same aggregate check reports one profile, zero keyed OTP challenges, and zero profiles with protected identity fields;
 - the Worker settings API returns the public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` binding names; secret values were not read;
@@ -440,12 +434,12 @@ The OTP aggregates prove persisted staging state and successful challenge consum
 
 Before enabling OTP/MFA in staging:
 
-1. retain and re-read the completed Cloudflare inventory and ten verified private-R2 backup/restore artifacts;
+1. retain and re-read the completed Cloudflare inventory and 26 checksum-verified private-R2 checkpoint artifacts;
 2. repeat the disposable remote-D1 import drill for any new checkpoint; the
    verified 2026-07-29 logical import does not establish operational RTO;
 3. inspect collaborator state distribution;
 4. prove there are no duplicate active legacy deletion requests and confirm
-   the exact `0000`–`0029` ledger while keeping identity mode `legacy`;
+   the exact `0000`–`0034` ledger while keeping identity mode `legacy`;
 5. require zero null document/file workspace rows;
 6. run the isolated document-builder smoke flow;
 7. send and verify real RU and UZ OTP emails through the configured Resend

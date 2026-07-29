@@ -1,7 +1,7 @@
 # JURO backup and restore boundary
 
 Updated: 2026-07-30
-Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and disposable remote-D1 import drills are verified; protected staging is through migration `0033` with a separate post-migration private-R2 checkpoint. Scheduled backup automation, production protection, and an operational RTO remain unverified.
+Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and disposable remote-D1 import drills are verified; protected staging is through migration `0034` with migration-specific pre/post private-R2 checkpoints and a pre-change isolated restore. Scheduled backup automation, production protection, and an operational RTO remain unverified.
 
 Before the 2026-07-30 synthetic account-deletion probe, staging bookmark
 `0000003f-00000004-000050b7-3c394315c39668592aa1df99f9932548` was recorded.
@@ -236,3 +236,12 @@ Private prefix: `d1/juro-staging/20260729T210508Z/` in `juro-staging-backups`.
 | `manifest.json` | 1,007 | `fdbb0673933d3feb97c6201e998c9c5e4fc4cd8c63b9c50eb174fe325a71b10d` |
 
 All four objects were downloaded from the private bucket and matched their local SHA-256 exactly. This verifies portable backup round-trip, not a measured operational RTO. Application rollback uses prior Worker version `448e5bf1-4bf8-4000-af2b-2c034e3eca10`; schema recovery is reserved for demonstrated corruption and uses the pre-change bookmark under staging maintenance. Production is never a target for these commands.
+
+## Migration 0034 checkpoint
+
+The exact bookmarks, private object prefixes, byte sizes, SHA-256 values,
+restore ordering evidence, topology, and postflight for the `0034` migration
+are recorded in `STAGING-0034-EVIDENCE.md`. The pre-change set passed an
+isolated local restore with source-equivalent counts and integrity. Both
+pre/post four-object sets passed private-R2 round-trip verification. This does
+not establish an operational RTO or production recovery readiness.

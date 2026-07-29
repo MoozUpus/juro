@@ -1,7 +1,7 @@
 # JURO Cloudflare resources
 
 Updated: 2026-07-30
-Status: owner-approved Wrangler OAuth was used for staging only. `juro-staging` is through `0033` with verified pre/post Time Travel and private-R2 exports. Deployment `a38d3cbc-7fd1-4829-be9d-97249f265882` serves version `12a3abf3-af6d-41da-8726-b7abf03f5dbf` from commit `a1261c3` behind owner-only Access. Exactly two staging consumers and one five-minute cron are active; legal ingestion and staff APIs remain disabled. Production resources, traffic, Sites v20, and legacy Worker `juro` were not changed.
+Status: owner-approved Wrangler OAuth was used for staging only. `juro-staging` is through `0034` with verified pre/post Time Travel/private-R2 exports and a pre-change isolated restore. Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` serves 100% from commit `cd24095` behind owner-only Access. Exactly two staging consumers and one five-minute cron are active; legal ingestion and staff APIs remain disabled. Production resources, traffic, Sites v20, and legacy Worker `juro` were not changed.
 
 ## Verified control-plane identity
 
@@ -25,10 +25,10 @@ The existing Sites project has no preview URL. Every Sites deployment is a produ
 | Environment | Database | ID | Remote state |
 |---|---|---|---|
 | Development | `juro-development` | `d07670cf-f7bf-460c-a668-101671d4c330` | exists; 61 non-internal tables reported |
-| Staging | `juro-staging` | `bb716a96-b2fb-4823-90d6-6c228fed181a` | exists; EEUR; exact 34-entry ledger `0000`–`0033`; 114 non-internal tables, 70 triggers, 198 indexes; pre/post private-R2 checkpoints, `quick_check=ok`, zero FK violations |
+| Staging | `juro-staging` | `bb716a96-b2fb-4823-90d6-6c228fed181a` | exists; EEUR; exact 35-entry ledger `0000`–`0034`; 113 application tables (114 including `d1_migrations`), 72 triggers, 199 indexes; pre/post private-R2 checkpoints, isolated pre-change restore, zero FK violations |
 | Production | `juro-production` | `4cce509b-0e02-4ca9-a3ba-a5ce1327aeda` | exists; 61 non-internal tables reported; preserve |
 
-The current branch has migrations `0000`–`0033`. Staging has the exact 34-entry ledger and post-`0033` integrity evidence. The pre/post full/schema/data/manifest sets passed private-R2 checksum round trips; the earlier disposable remote restore drill remains valid for its captured topology. Production/development remain at `0000`–`0004`; no migration was applied to either environment.
+The current branch has migrations `0000`–`0034`. Staging has the exact 35-entry ledger and post-`0034` integrity evidence. The migration-specific pre/post full/schema/data/manifest sets passed private-R2 checksum round trips; the pre-`0034` set also passed an isolated restore with source-equivalent topology. Production/development remain at `0000`–`0004`; no migration was applied to either environment.
 
 ### R2
 
@@ -40,7 +40,7 @@ Existing private JURO buckets:
 - `juro-quarantine-development` — existing development quarantine namespace;
 - `juro-development-files`, `juro-development-backups`, and `juro-development-quarantine` — newly created empty EEUR Standard targets; private and not bound;
 - `juro-staging-files` and `juro-staging-quarantine` — private EEUR Standard targets bound only to `juro-platform-staging`; no public bucket access or active processing consumer is configured;
-- `juro-staging-backups` — private EEUR Standard target containing ten verified D1 migration/restore artifacts documented in `BACKUP-RESTORE.md`; bound only to protected staging and not publicly exposed.
+- `juro-staging-backups` — private EEUR Standard target containing 26 verified D1 migration/restore artifacts documented in `BACKUP-RESTORE.md` and `STAGING-0034-EVIDENCE.md`; bound only to protected staging and not publicly exposed.
 
 The account also contains `site-creator-r2`, a Sites-managed/non-JURO-primary resource. It must not be repurposed as a JURO file, backup, or quarantine bucket.
 
@@ -53,7 +53,7 @@ The owner-approved target names differ from the older source/runtime names:
 | Dev primary files | `juro-development-files` | `juro-private-documents-development` | empty target exists; do not abandon or duplicate data; inventory objects, choose an additive copy/cutover plan, then update binding |
 | Staging primary files | `juro-staging-files` | absent | isolated target is bound only to the protected staging Worker; upload/scanning remains feature-gated |
 | Production primary files | `juro-private-documents` | same | preserve; no replacement |
-| Backups | `juro-{environment}-backups` | dev uses `juro-private-backups-development` | staging contains ten checksum-verified D1 export/restore artifacts including the `0029` pre/post sets; development remains empty and production remains absent |
+| Backups | `juro-{environment}-backups` | dev uses `juro-private-backups-development` | staging contains 26 checksum-verified D1 checkpoint artifacts including the `0034` pre/post sets; development remains empty and production remains absent |
 | Quarantine | `juro-{environment}-quarantine` | dev uses `juro-quarantine-development` | empty dev/staging targets exist; they are not scanners and remain unbound until a real fail-closed workflow; production remains absent |
 
 ### Queues
@@ -88,7 +88,7 @@ The deployed staging source attaches only `staging-email-notifications` and `sta
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
 - Staging primary queues have one producer binding; email and data-retention each have one `juro-platform-staging` consumer and distinct DLQ. Other consumers remain unattached.
-- Staging Worker serves deployment `a38d3cbc-7fd1-4829-be9d-97249f265882`, version `12a3abf3-af6d-41da-8726-b7abf03f5dbf`, at 100% from commit `a1261c3c68151f9c275187fd422bd58c67b673a8`. Script subdomain and previews remain disabled; exactly one schedule and two reviewed staging consumers are active.
+- Staging Worker serves version `3d1ac5c1-2f69-4c0e-b000-377054c8606a`, at 100% from commit `cd24095c8307a4c3b145549f147a823000a438e3`. Script subdomain and previews remain disabled; exactly one schedule and two reviewed staging consumers are active.
 - `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
@@ -274,23 +274,21 @@ Cloudflare Access is enabled for the `curly-rice-90a4` Zero Trust organization. 
 
 The Access application is hidden from the App Launcher and auto-redirects to the sole configured Cloudflare identity provider. A 200 API re-read proved the exact destination, provider, policy selector, cookie settings and session duration. An unauthenticated HTTPS smoke test was redirected to the Access login endpoint; it did not reach the application. This proves the external deny-before-auth gate. Production DNS, routes, domains, Workers, Sites and policies remained unchanged.
 
-## Active protected staging deployment — 2026-07-29 UTC
+## Active protected staging deployment — 2026-07-30 UTC
 
 | Evidence | Verified value |
 |---|---|
 | Worker | `juro-platform-staging` |
-| Deployment | `a38d3cbc-7fd1-4829-be9d-97249f265882` |
-| Version | `12a3abf3-af6d-41da-8726-b7abf03f5dbf` at 100% |
-| Source | commit `a1261c3c68151f9c275187fd422bd58c67b673a8` |
-| Startup time | 167 ms reported by Wrangler |
+| Version | `3d1ac5c1-2f69-4c0e-b000-377054c8606a` at 100% |
+| Source | commit `cd24095c8307a4c3b145549f147a823000a438e3` |
 | Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` |
 | Consumers | staging email + data-retention only; each has its own DLQ |
 | Schedule | locked outbox dispatch `*/5 * * * *` |
-| Anonymous boundary | root, builder and deletion API return 302 to Access with `no-store` |
-| Authenticated smoke | prior protected builder evidence exists; exact-current browser/cookie/provider flow remains open |
+| Anonymous boundary | owner-only Access denies application access before authentication |
+| Authenticated smoke | exact-version RU personal and RU/UZ business builder routes verified across desktop, tablet, and mobile widths |
 
 Secret values were neither read nor emitted. Staging async/cron/account-purge flags are true; legal-source ingestion and staff API flags remain false. Workers.dev and previews are disabled. Production resources and traffic were not changed.
 
-## Account-deletion staging activation evidence — 2026-07-29 UTC
+## Current staging control-plane delta — 2026-07-30 UTC
 
-Control-plane verification confirms the exact custom domain and owner-only Access application, staging-only bindings, deployment/version, one schedule, two primary consumers and their distinct DLQs. The first durable cron run completed with `error_code=null` and no active lock. `juro-staging` is through `0033` with no pending migration, and the post-migration checkpoint under `d1/juro-staging/20260729T210508Z/` passed private-R2 SHA-256 round trip. Secret inventory remains names-only. Production Worker `juro`, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.
+Control-plane verification confirms the exact custom domain and owner-only Access application, staging-only bindings, Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` at 100%, one schedule, two primary consumers and their distinct DLQs. `juro-staging` is through `0034` with no pending migration; the pre/post checkpoints and hashes are in `STAGING-0034-EVIDENCE.md`. Secret inventory remains names-only. Production Worker `juro`, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.

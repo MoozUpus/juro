@@ -4,12 +4,12 @@ This log records material implementation decisions. Status values are `accepted`
 
 ## D-076 — create business workspaces as idempotent tenant transactions
 
-Status: accepted locally; staging migration/deployment pending
+Status: accepted and verified in owner-only staging
 Date: 2026-07-30
 
 A company remains a business workspace, not a login persona. The settings flow accepts a normalized full name, separate short name, locale, and client-generated UUID request ID. The server authenticates and CSRF-checks first, then atomically inserts the business workspace, owner membership, default-workspace selection, and workspace audit. Deterministic opaque IDs plus a partial unique request index make exact retry idempotent; payload mismatch or cross-user request collision fails closed without membership disclosure.
 
-Migration `0034` additively backfills bounded identity for legacy business rows and guards future insert/update identity while leaving personal workspaces nullable. No new runtime dependency was added: the form uses existing primitives and CSS-only press feedback with reduced-motion support. Local evidence is included in the 390-test suite, type-check, lint, generated binding check, staging build/artifact, and builder/comparison HTTP smokes. Remote staging remains on `0033` until the standard backup/restore migration gate is completed.
+Migration `0034` additively backfills bounded identity for legacy business rows and guards future insert/update identity while leaving personal workspaces nullable. No new runtime dependency was added: the form uses existing primitives and CSS-only press feedback with reduced-motion support. The standard backup/restore gate, remote migration, 391-test suite, type-check, lint, staging build/artifact, authenticated RU/UZ browser QA, D1 audit/integrity proof, and 100% staging deployment are complete. Production remains unchanged; exact evidence is in `STAGING-0034-EVIDENCE.md`.
 ## D-075 — gate destructive staging probes behind runtime identity validation
 
 Status: accepted

@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-30
-Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Source migration `0034` plus idempotent business-workspace creation are local-only; staging D1 remains through `0033` pending a fresh backup/restore gate; deployment `bafea8e2-d061-4180-827b-1c047858fb36` / version `afde477b-db83-498f-aaf8-1a2e5aa9ab44` has exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. The synthetic deletion probe is installed but disabled after proving the configured `IDENTITY_KEYRING` malformed without writing fixture data. Legal ingestion and staff APIs remain disabled. Authenticated current-version browser/provider, valid key-ring recovery, operational RTO, full a11y/performance, and production gates remain open; production changes remain prohibited.
+Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Migration `0034` plus idempotent business-workspace creation are applied and authenticated in staging after the backup/restore gate. Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` serves 100% from commit `cd24095` with exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. Bounded RU/UZ personal/business builder browser QA passes. Legal ingestion and staff APIs remain disabled; secret-value validation, provider flows, cross-account proof, operational RTO, full a11y/performance, and production gates remain open. Production changes remain prohibited. See `STAGING-0034-EVIDENCE.md`.
 
 ## Execution principles
 
@@ -41,13 +41,13 @@ Order and current state:
 2. **Locally verified:** generated Worker environment types and freshness check;
 3. **Locally verified:** environment-safe binding normalization, artifact validation, and three-environment dry-run matrix;
 4. **Locally verified:** additive D1 job/idempotency/operation tables in migration `0011`;
-5. **Source-only/disabled:** identifiers-only v2 queue envelope/handler boundary, outbox, idempotency, short leases, and fencing tests; seven producers are declared but consumers/DLQs are absent; only `legal.sync` has a local implementation, and the global runtime kill switch remains false;
-6. **Partial/source-only:** scheduled handler is inert with no trigger; locks/run ledgers exist, but reviewed schedules, manual retry, and alerts are pending;
+5. **Partially deployed in staging:** identifiers-only v2 queue envelope/handler boundary, outbox, idempotency, short leases, and fencing tests pass; seven producers are bound, while only email and data-retention have reviewed consumers/DLQs; legal ingestion remains disabled and unattached;
+6. **Partially deployed in staging:** the locked five-minute outbox schedule is active and has durable run evidence; legal midnight sync, cleanup portfolio, manual retry UI, backup scheduling, and alerts remain pending;
 7. **Candidate selected, quality gate open:** official OpenAI and Cloudflare documentation support `text-embedding-3-large` with an explicit reduced `dimensions=1536` and Vectorize `cosine`; no legal ingestion starts until RU/UZ/cross-language retrieval evaluation and citation checks pass;
 8. **Locally verified/source-only contract v2:** exact approved R2/Queue/Vectorize bindings replace the older generic source contract without relabeling data classes; legacy remote dev resources remain untouched and no data/binding cutover has occurred;
-9. **Provisioned and re-read:** staging D1 `bb716a96-b2fb-4823-90d6-6c228fed181a` has the exact `0000`–`0029` ledger, 109 non-internal tables, and 58 triggers; its migration-specific exports pass private-R2 checksum round trips and a disposable remote restore drill; private dev/staging R2 targets, 28 primary/DLQ queues, and eight empty 1,536/cosine Vectorize indexes exist; protected staging Worker binds staging resources/seven producers while consumers and production Queue/Vectorize/backup/quarantine remain absent;
-10. **Partially verified:** redacted structured logs and Analytics binding exist; Time Travel restore/undo passed while staging was empty; ten portable D1 export/restore artifacts are checksum-verified in private staging R2 and the pre-`0029` adapter passed a disposable remote-D1 drill; operational RTO, observability, cost metadata, and live provider execution remain pending;
-11. **Validated protected staging:** staging source and artifact disable `workers.dev`, preview URLs, schedules, consumers, async execution, cron execution, and platform-header auth bypass; owner-only Access protects the sole custom domain and anonymous denial is proved. Exact current-version authenticated browser/session-rotation evidence remains open.
+9. **Provisioned and re-read:** staging D1 `bb716a96-b2fb-4823-90d6-6c228fed181a` has the exact `0000`–`0034` ledger, 113 application tables (114 including `d1_migrations`), 72 triggers, and 199 indexes; migration-specific exports pass private-R2 checksum round trips and the pre-`0034` set passes an isolated restore; private dev/staging R2 targets, 28 primary/DLQ queues, and eight empty 1,536/cosine Vectorize indexes exist; protected staging binds seven producers and only the reviewed email/retention consumers;
+10. **Partially verified:** redacted structured logs and Analytics binding exist; Time Travel restore/undo passed while staging was empty; 26 portable D1 artifacts are checksum-verified in private staging R2, with earlier disposable remote-D1 drills and the pre-`0034` isolated restore; operational RTO, backup automation, cost metadata, and live provider execution remain pending;
+11. **Validated protected staging:** source and artifact disable `workers.dev`, preview URLs, and platform-header auth bypass; owner-only Access protects the sole custom domain. Only the reviewed email/retention consumers and one outbox schedule are active. Anonymous denial and bounded authenticated RU/UZ builder evidence pass; session-rotation/provider and full accessibility evidence remain open.
 
 Cron for 00:00 Asia/Tashkent is `0 19 * * *` UTC. It will not be configured until the scheduled handler and locking are tested.
 
@@ -60,11 +60,11 @@ Gate:
 - backup and isolated restore pass;
 - production unchanged.
 
-The existing Sites project cannot be used as staging: it has no preview URL and every Sites deployment is production. Staging requires a distinct inactive-first Cloudflare Worker followed by a Cloudflare Access-protected custom hostname. `staging.app.juro.uz` currently has no DNS record. The first Worker must be created with Wrangler `deploy` while `workers_dev`, previews, routes, schedules, consumers, async runtime, and cron remain disabled; only a later reviewed step may attach the protected hostname.
+The existing Sites project cannot be used as staging: it has no preview URL and every Sites deployment is production. Staging therefore uses the distinct Worker `juro-platform-staging` and the owner-only Access-protected hostname `staging.app.juro.uz`. Workers.dev and preview URLs remain disabled. Any additional schedule, consumer, route, or feature activation still requires its own reviewed gate.
 
 ## Phase 2 — identity, workspaces, and policies
 
-Local checkpoint only; none of these statements is a staging or production claim:
+Current source/test checkpoint with the explicitly identified staging evidence below; none of it is a production claim:
 
 - workspace invitation acceptance is guarded by migration `0022` and one D1
   batch; concurrent attempts have one winner, an existing owner is not
@@ -96,11 +96,8 @@ Local checkpoint only; none of these statements is a staging or production claim
   `/:locale/business/:workspaceId/*`; shell, builder, workspace switching, and
   invitation acceptance share the workspace-aware route base, while reserved
   legacy business roots remain authenticated compatibility adapters;
-- local migration `0034` and `POST /api/platform/workspaces` add bounded full/short
-  business identity and one atomic, idempotent owner-creation transaction;
-  staging schema/runtime proof remains pending the standard backup/restore gate;
-- the latest recorded successful local full suite is 390 tests: 27 rendered
-  route, 283 core/auth/document, and 80 Cloudflare/migration/job tests.
+- migration `0034` and `POST /api/platform/workspaces` add bounded full/short business identity and one atomic, idempotent owner-creation transaction; the backup/restore, staging schema/runtime, authenticated creation, D1 audit/FK, and canonical routing evidence pass;
+- the latest recorded successful local full suite is 391 tests: 27 rendered route, 284 core/auth/document, and 80 Cloudflare/migration/job tests.
 
 Vertical slices:
 
@@ -120,9 +117,7 @@ The two existing document-builder isolation defects are fixed in this phase befo
 
 Gate:
 
-- local auth/race tests pass; source is through `0034` while staging schema remains through `0033`; live
-  Turnstile/Resend and protected staging full-HTTP/session-rotation E2E remain
-  required;
+- local auth/race tests and staging migration `0034` pass; authenticated workspace creation and RU/UZ builder routing pass, while live Turnstile/Resend and protected staging full-HTTP/session-rotation E2E remain required;
 - cross-account/workspace leaks: zero;
 - privileged access requires 2FA;
 - staff assignment/event tables remain empty and the internal role-management
@@ -298,7 +293,7 @@ Then stop and request two separate explicit approvals: first for production depl
 ## Current blockers that do not stop local implementation
 
 1. Production is split between Sites (`app.juro.uz`) and the legacy Worker (`admin.juro.uz`), while the Workers Domains API reports overlapping ownership; staging/prod routing changes wait for reconciliation.
-2. Production D1 cannot be migrated before production-specific backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0033` with pre/post portable/private-R2 checksum and earlier disposable remote-D1 restore evidence, but operational RTO/RPO under representative load remains unverified.
+2. Production D1 cannot be migrated before production-specific backup and restore rehearsal. Remote production and development each report 61 non-internal tables and applied migrations only through `0004`; isolated staging is through `0034` with pre/post portable/private-R2 checksum, a pre-`0034` isolated restore, and earlier disposable remote-D1 restore evidence, but operational RTO/RPO under representative load remains unverified.
 3. The exact staging Worker exposes the public `TURNSTILE_SITE_KEY` binding and server-only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` binding names; values remain unread and out of source. A real Cron/Queue probe proves the current `IDENTITY_KEYRING` malformed and fails before any synthetic fixture is written. Aggregate D1 proves three provider-accepted and consumed OTP challenges, but valid owner-managed key-ring recovery, identity dual-write/backfill, the current-version Turnstile/browser/mailbox trace, provider-failure matrix, and sender/domain evidence remain open.
 4. Owner-only Cloudflare Access and anonymous deny-before-auth are verified for staging; authenticated QA of the latest localized workspace screens plus mobile, zoom, reduced-motion, keyboard, and assistive-technology matrices remains open.
 5. Operator legal identity placeholders require owner-supplied approved legal details.
@@ -307,7 +302,7 @@ Then stop and request two separate explicit approvals: first for production depl
 8. Live Queue consumers require quarantine/DLQ consumption, alerts, redrive, durable ledger reconciliation, and per-kind producer/handler flags.
 9. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing. Consumers remain absent and the global runtime is disabled. Only `legal.sync` has a local handler; every other valid v2 job fails closed as `JOB_HANDLER_NOT_ENABLED`.
 10. The Sites deployment pipeline must prove it selects the explicit production build; ordinary `npm run build` intentionally produces development.
-11. The Browser bootstrap was recovered through a session-local CommonJS package scope without modifying JURO or the user-home package. Bounded builder viewport evidence exists; keyboard/focus, zoom, reduced-motion, axe, Lighthouse, real-device, and broader critical-route validation remain open.
+11. The Browser bootstrap was recovered through a temporary session-local CommonJS scope without modifying JURO or the user-home package. Authenticated current-version RU/UZ personal/business builder evidence now covers desktop, tablet, 390 px, 320 px, skip-link reachability, mobile navigation, overflow, and console state; 200% zoom, reduced-motion, axe, Lighthouse, real-device, and broader critical-route validation remain open.
 12. No approved rigged 3D Jurobek asset is present; avatar/voice-with-avatar remains disabled and a static fallback is mandatory.
 13. Rotate/revoke the Sites bypass token unexpectedly exposed in read-only connector telemetry before production work.
 

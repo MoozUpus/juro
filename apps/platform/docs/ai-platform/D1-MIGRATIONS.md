@@ -1,12 +1,12 @@
 # JURO D1 migrations
 
 Updated: 2026-07-30
-Latest source migration: `0034_business_workspace_identity.sql` (local candidate; not remotely applied)
-Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0034` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 34-entry `0000`–`0033` ledger; source migration `0034` is pending there. The `0030`–`0033` change set was applied only after a Time Travel bookmark plus full/schema/data export and private-R2 checksum round trip. Post-`0033` staging reports 114 non-internal tables, 70 triggers, 198 non-internal indexes, `quick_check=ok`, and zero foreign-key violations. No production migration was run.
+Latest source migration: `0034_business_workspace_identity.sql` (applied only to isolated staging)
+Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0034` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 35-entry `0000`–`0034` ledger. Migration `0034` was applied only after a new Time Travel bookmark, full/schema/data/manifest export, private-R2 checksum round trip, and isolated pre-change restore. Postflight reports 113 application tables (114 including `d1_migrations`), 72 triggers, 199 non-internal indexes, no pending migration, and zero foreign-key violations. No production or development migration was run.
 
-## Local candidate `0034` — business workspace identity
+## Staging-applied `0034` — business workspace identity
 
-The candidate is additive: four nullable workspace columns, one partial unique index, a bounded backfill for existing business names, and two fail-closed identity guards. It adds no table or foreign key and drops no content. Local tests prove a 35-entry ledger, 112 table definitions, 158 foreign keys, exact replay idempotency, cross-user denial, and batch rollback on audit failure. Staging application requires a new Time Travel bookmark, full/schema/data export, private-R2 checksum round trip, isolated restore verification, read-only legacy-name preflight, postflight integrity/topology checks, and a separately recorded Worker deployment. Until then, `0034` is not staging evidence.
+The migration is additive: four nullable workspace columns, one partial unique index, a bounded backfill for existing business names, and two fail-closed identity guards. It adds no table or foreign key and drops no content. Local and staging evidence proves a 35-entry ledger, exact replay idempotency, one-owner creation, creator/request evidence, cross-user denial, batch rollback on audit failure, canonical personal/business routing after workspace selection, and intact foreign keys. Exact backup, restore, migration, deployment, browser, and synthetic workspace evidence is recorded in `STAGING-0034-EVIDENCE.md`.
 ## Migration policy
 
 JURO uses additive expand-contract migrations. A remote migration requires:

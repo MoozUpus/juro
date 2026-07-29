@@ -10,7 +10,7 @@ Method: source review, production HTTP smoke checks, current test suite, targete
 | Scope | Current state | Release consequence |
 |---|---|---|
 | Deployed Sites v20 | four original critical findings remain unproven in production | production remains frozen |
-| Integration branch | SEC-001 and SEC-002 have local fixes; SEC-003 has atomic verification plus the staging-applied `0023` lock; SEC-005 has local independent rate controls and Turnstile integration; structured onboarding migration `0024` is applied to staging; migrations `0025`–`0028` add the staging schema for a fail-closed legal-source lifecycle, review evidence, and publication evidence; protected routes remain locally disabled by `LEGAL_SOURCE_STAFF_API_ENABLED=false`; SEC-004 remains open | no upload/AI staging enablement; identity and legal-source changes still require protected Worker/runtime activation, reviewed staff route, browser evidence, live-provider/network, and full-HTTP staging evidence; Advice remains disabled |
+| Integration branch / protected staging | SEC-001 and SEC-002 have local fixes; identity/workspace migrations through `0034`, reviewed Queue consumers, cron, and owner-only Access are active in isolated staging; bounded authenticated RU/UZ builder routing is verified; legal staff routes remain disabled by `LEGAL_SOURCE_STAFF_API_ENABLED=false`; SEC-004 remains open | no upload/AI staging enablement; identity controls still require live-provider, cookie/replay, concurrency, cross-account, and full-HTTP evidence; legal review/ingestion requires separate controlled activation; Advice remains disabled |
 | High/medium findings | several local identity/security foundations exist, but broad file, deletion, CSP, alerting, and privileged-access controls remain open | affected features remain disabled or unavailable |
 
 ## Critical findings
@@ -29,7 +29,7 @@ Required fix:
 - update the existing smoke test, which currently expects the insecure behavior;
 - add replay and concurrent-accept tests.
 
-Local branch status: fixed and covered by pre-accept denial, replay-safe atomic acceptance/decline, one-winner concurrency, and audit rollback tests. The fix is not deployed or staging-verified, so the production finding remains open.
+Integration-branch status: fixed and covered by pre-accept denial, replay-safe atomic acceptance/decline, one-winner concurrency, and audit rollback tests. The code and migration are present in owner-only protected staging, but the collaborator invitation flow has not been exercised through protected staging HTTP, so the production finding remains open.
 
 ### SEC-002 — cross-workspace builder listing
 
@@ -189,7 +189,7 @@ finding.
 
 ## Medium findings
 
-- deployed team invitation acceptance is not a conditional atomic consume; local migration `0022` and the acceptance service use a unique immutable claim plus one D1 batch for the guarded claim, membership/default-workspace effects, and audit, with one-winner, stale-identity, owner-role preservation, replay, and rollback tests; `0022` is not remote and no full-HTTP staging evidence exists;
+- deployed production team invitation acceptance is not a conditional atomic consume; migration `0022` is active in isolated staging and the acceptance service uses a unique immutable claim plus one D1 batch for the guarded claim, membership/default-workspace effects, and audit, with one-winner, stale-identity, owner-role preservation, replay, and rollback tests; no full-HTTP staging invitation evidence exists;
 - several authorization errors reveal object/workspace existence instead of neutral not-found behavior;
 - deployed Sites v20 has no `security_events` store; migration 0013 is present in isolated staging schema only, with no runtime evidence, and does not replace the broader access-audit model;
 - document attachments rely on declared MIME/extension rather than complete magic-byte validation;
