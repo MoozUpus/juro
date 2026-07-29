@@ -21,9 +21,9 @@ staging or production evidence.
 The latest recorded successful local full suite contains:
 
 - 27 rendered-route/security tests;
-- 242 core/auth/document tests;
+- 243 core/auth/document tests;
 - 68 Cloudflare/migration/job tests, including the remote-D1 trigger syntax regression;
-- 337 tests total.
+- 338 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. The canonical document-builder flow now also has
@@ -67,3 +67,14 @@ Nested page-level `main` landmarks were replaced with neutral containers so
 the application shell remains the sole main landmark. The builder header and
 library route update RU/UZ content after client navigation, and the shell keeps
 `html[lang]` synchronized with the active locale.
+
+## Builder workspace localization — branch checkpoint
+
+Documents, contacts, and notifications now consume a single typed RU/UZ Latin
+copy contract keyed by the canonical route locale. Persisted Russian document
+status values remain unchanged for compatibility and are mapped only for UZ
+display. Date formatting follows the route locale. The contacts dialog has
+explicit dialog semantics, and notification read actions are keyboard-reachable
+buttons instead of pointer-only article clicks. Local type-check, lint, full
+tests, and staging build pass; protected remote browser verification is still
+required before this slice is marked staged.

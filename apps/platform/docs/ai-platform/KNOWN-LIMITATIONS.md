@@ -121,12 +121,24 @@ foundation checkpoint.
 
 - The canonical RU/UZ builder library, category, generic template and route
   transitions are verified in protected staging.
-- `/uz/individual/documents` still renders predominantly Russian management
-  copy. Its route and `html[lang]` are correct, but the screen is not yet a
-  complete Uzbek localization and must not be reported as such.
+- the branch now contains UZ Latin copy for documents, contacts, and
+  notifications, but this newer localization slice has not yet received a
+  protected staging browser pass; the currently recorded remote evidence must
+  not be used to claim that those three screens are staged.
 - The attached authenticated Chrome surface was fixed at a desktop viewport.
   The 320/360/390/768/1024 responsive matrix, 200% zoom, reduced motion,
   forced colors, screen reader, and real touch-device verification remain
   open.
 - Live OTP/Resend and Turnstile provider operations remain unverified even
   though the staging secret bindings now exist.
+
+## Remaining builder language gaps
+
+- User-authored document titles, participant names, and legacy stored category
+  values are displayed as stored and are not machine-translated.
+- Server-originated document-builder error messages and notification payloads
+  may still be Russian; the new copy contract covers the client workspace UI,
+  not every backend error or historical notification record.
+- The specialized receipt builder still needs a separate UZ Latin interface
+  pass; its Uzbek Cyrillic document-output option is not a substitute for UZ
+  Latin application UI.

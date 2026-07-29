@@ -1267,3 +1267,19 @@ signature scan, a 100% staging deployment, control-plane re-read, anonymous
 Access denial, and authenticated RU/UZ browser traversal without console
 entries or horizontal overflow. The UZ document-management screen remains a
 separate known localization defect. Production was not changed.
+
+## D-062 — localize builder workspace chrome without mutating persisted workflow values
+
+Status: accepted and locally verified; protected staging browser verification pending
+Date: 2026-07-29
+
+Document, contact, and notification workspace copy is selected from one typed
+RU/UZ Latin contract using the canonical route locale. Existing Russian status
+values remain the API and storage contract; the client maps them for display so
+localization cannot break filtering, archive rules, or draft continuation.
+Notification read actions are explicit buttons rather than pointer-only article
+clicks, and the contact form exposes dialog semantics.
+
+This branch state passes type-check, lint, 338 tests, and the staging build.
+It has not replaced the protected staging deployment yet because authenticated
+browser verification must be performed against the exact deployed artifact.
