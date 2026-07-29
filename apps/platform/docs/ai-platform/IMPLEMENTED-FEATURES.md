@@ -51,12 +51,11 @@ calls or the remaining full browser/accessibility/mobile matrix.
 - `juro-production` and `juro-development` were not changed;
 - `LEGAL_SOURCE_STAFF_API_ENABLED=false` is pinned in development, staging,
   and production source/artifacts;
-- protected staging deployment `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`
-  serves Worker version `7423ffc2-f307-43df-87e0-60d609e47fa1` at 100%;
+- protected staging deployment `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa`
+  serves Worker version `f320057f-740d-465c-9aa2-777538ba5e44` at 100% from commit `9d4f934`;
 - the control plane exposes only the secret names `IDENTITY_KEYRING`,
   `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; values were never read;
-- Access denies anonymous application access and the authenticated canonical
-  builder route passed RU/UZ browser smoke tests;
+- Access denies anonymous application access across root, legacy business, canonical business, invalid-workspace, and builder paths; an earlier protected version passed authenticated canonical RU/UZ builder smoke, while authenticated browser evidence for the current business-workspace routing remains open;
 - aggregate remote D1 reports three provider-accepted and consumed OTP
   challenges without exposing identities or codes. This is not yet a captured
   current-version Turnstile/mailbox trace and does not close negative-provider

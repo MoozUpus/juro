@@ -1311,7 +1311,7 @@ checkpoint. Production remains unchanged.
 
 ## D-064 — make the business workspace identifier canonical without breaking legacy URLs
 
-Status: accepted and locally verified; protected-staging deployment and authenticated browser evidence pending
+Status: accepted; locally and protected-staging control-plane verified; authenticated browser evidence pending
 Date: 2026-07-29
 
 Business workspaces use `/:locale/business/:workspaceId/*`. The route layout
@@ -1326,4 +1326,6 @@ Because the static `business` segment outranks the older dynamic
 adapters. They resolve the active tenant and redirect to the canonical workspace
 URL; localized `main` retains its existing 308 redirect to the legacy
 dashboard entry. This preserves bookmarks without accepting URL shape as
-authorization. Production remains unchanged.
+authorization.
+
+Commit `9d4f934` passed GitHub Actions run `30439184724`, was deployed only to protected staging as deployment `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa` / version `f320057f-740d-465c-9aa2-777538ba5e44`, and was re-read at 100% traffic. Exact staging bindings, disabled execution flags, disabled workers.dev/previews, zero schedules, the custom domain, and anonymous Access denial were verified. Authenticated route traversal remains an explicit open gate. Production remains unchanged.

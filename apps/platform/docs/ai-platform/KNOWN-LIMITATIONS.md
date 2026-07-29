@@ -79,7 +79,7 @@ foundation checkpoint.
 - canonical localized root/auth/onboarding routing, Uzbek-default behavior,
   structured personal-profile completion, persona-preserving workspace
   selection, canonical business `workspaceId` routes, and the tested
-  `/main` to `/dashboard` migration are implemented on the branch; protected
+  `/main` to `/dashboard` migration are deployed on protected staging; authenticated
   staging browser evidence, policy approval, deletion purge/recovery, and
   externally reachable staff administration are not complete;
 - the local staff-role foundation remains deliberately unreachable and has no

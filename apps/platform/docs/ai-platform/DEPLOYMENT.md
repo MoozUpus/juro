@@ -34,9 +34,9 @@ The initial deployment was deliberately unreachable, and the current deployment 
 - no Queue consumer;
 - async runtime, legal ingestion, staff API, and Cron flags are false.
 
-The current deployment is `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`
-serving version `7423ffc2-f307-43df-87e0-60d609e47fa1` from pushed code
-commit `5ce68d4`. It attaches staging-only bindings and seven Queue producers.
+The current deployment is `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa`
+serving version `f320057f-740d-465c-9aa2-777538ba5e44` from pushed code
+commit `9d4f934`. It attaches staging-only bindings and seven Queue producers.
 Workers.dev and previews are disabled; Queue consumers, schedules, async
 runtime, legal ingestion, and staff APIs remain disabled. The custom domain was
 attached only after the owner-only Access application existed and anonymous
@@ -86,13 +86,12 @@ Sites/Worker ownership resolution, and explicit production confirmation.
 
 ## Protected builder checkpoint — 2026-07-29
 
-The current staging deployment is `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`
-with Worker version `7423ffc2-f307-43df-87e0-60d609e47fa1` at 100% of
+The current staging deployment is `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa`
+with Worker version `f320057f-740d-465c-9aa2-777538ba5e44` at 100% of
 `juro-platform-staging` traffic. The current artifact also contains typed RU/UZ
 workspace copy for documents, contacts, and notifications. The previously
 verified routing change preserves locale and
 account context for builder/library/documents/contacts/notifications links,
 removes the nested main landmark, and synchronizes the document language after
 client-side RU/UZ transitions. Control-plane and anonymous Access checks pass
-for the current deployment; authenticated browser verification of the newer
-workspace localization is still pending. Production was not deployed or changed.
+for the current deployment. The canonical business-workspace route tree, membership guard, legacy adapters, and route-aware links are now deployed; authenticated browser verification of that newer routing remains pending because no browser runtime with the owner Access session was available in this execution. Production was not deployed or changed.

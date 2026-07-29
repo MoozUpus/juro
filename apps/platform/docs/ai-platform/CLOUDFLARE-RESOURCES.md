@@ -1,7 +1,7 @@
 # JURO Cloudflare resources
 
 Updated: 2026-07-29
-Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0028`; portable exports, private R2 retrieval, and isolated local restore checks are recorded. Worker `juro-platform-staging` is deployed from pushed commit `5ce68d4` behind owner-only Cloudflare Access at `staging.app.juro.uz`; workers.dev and previews remain disabled, all activation flags remain false, and no Queue consumer or schedule is attached. Exact staging resource bindings, the public Turnstile site key, and three server-only secret binding names are present. Production resources, traffic, Sites v20, and the legacy Worker were not changed.
+Status: owner-approved Wrangler OAuth was used for staging only. The isolated staging D1 is through `0028`; portable exports, private R2 retrieval, and isolated local restore checks are recorded. Worker `juro-platform-staging` is deployed from pushed commit `9d4f934` behind owner-only Cloudflare Access at `staging.app.juro.uz`; workers.dev and previews remain disabled, all activation flags remain false, and no Queue consumer or schedule is attached. Exact staging resource bindings, the public Turnstile site key, and three server-only secret binding names are present. Production resources, traffic, Sites v20, and the legacy Worker were not changed.
 
 ## Verified control-plane identity
 
@@ -88,7 +88,7 @@ Names are `{environment}-{purpose}` and `{environment}-{purpose}-dlq`. The prote
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
 - Staging primary queues have one producer binding from `juro-platform-staging`; all DLQs, development queues, and every Queue consumer remain unattached.
-- Staging Worker serves deployment `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`, version `7423ffc2-f307-43df-87e0-60d609e47fa1`, at 100%. Script subdomain and previews remain disabled; schedules and consumers remain absent.
+- Staging Worker serves deployment `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa`, version `f320057f-740d-465c-9aa2-777538ba5e44`, at 100%. Script subdomain and previews remain disabled; schedules and consumers remain absent.
 - `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
@@ -223,7 +223,7 @@ Artifact validation proves:
 - the Sites manifest is unchanged;
 - the built Worker exposes all three module handlers.
 
-Dry-run validates deploy shape only. The independent post-deploy control-plane read now proves the staging Worker version, exact binding names/types, Analytics Engine attachment, seven Queue producers, disabled subdomain/previews, and absence of routes, schedules, consumers, and secrets. Queue/DLQ execution policy, public staging routing, provider configuration, and authenticated HTTP behavior remain unverified.
+Dry-run validates deploy shape only. The independent post-deploy control-plane read now proves the staging Worker version, exact binding names/types, Analytics Engine attachment, seven Queue producers, disabled subdomain/previews, and absence of Worker routes, schedules, and Queue consumers; secret values were never read. Queue/DLQ execution policy, public staging routing, provider configuration, and authenticated HTTP behavior remain unverified.
 
 The ordinary `npm run build` intentionally selects development. A Sites
 checkpoint or deploy must use the dedicated production build path and prove
@@ -279,12 +279,12 @@ The Access application is hidden from the App Launcher and auto-redirects to the
 | Evidence | Verified value |
 |---|---|
 | Worker | `juro-platform-staging` |
-| Deployment | `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a` |
-| Version | `7423ffc2-f307-43df-87e0-60d609e47fa1` at 100% |
-| Startup time | 154 ms reported by Wrangler |
+| Deployment | `8a44aae3-e5c1-4ca5-90c1-547fb9af7bfa` |
+| Version | `f320057f-740d-465c-9aa2-777538ba5e44` at 100% |
+| Startup time | 149 ms reported by Wrangler |
 | Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` |
 | Anonymous boundary | 302 to Access login; `no-store`, application content denied |
-| Authenticated smoke | canonical RU/UZ library/category/template passed on the prior version; workspace localization on the current version still awaits a new browser pass |
+| Authenticated smoke | canonical RU/UZ library/category/template passed on a prior protected version; the current canonical business-workspace version still awaits an authenticated browser pass |
 
 Secret values were neither read nor emitted. Async runtime, Cron, legal-source
 ingestion and staff API flags remain false. Production resources and traffic
