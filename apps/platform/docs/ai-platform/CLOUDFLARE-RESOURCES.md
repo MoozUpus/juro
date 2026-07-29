@@ -281,12 +281,12 @@ The Access application is hidden from the App Launcher and auto-redirects to the
 | Evidence | Verified value |
 |---|---|
 | Worker | `juro-platform-staging` |
-| Deployment | `bb9b8ab8-528f-4c30-93bf-be5276088dd9` |
-| Version | `16b79e54-a326-4bd4-bda9-3f9605b52c06` at 100% |
-| Startup time | 142 ms reported by Wrangler |
+| Deployment | `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a` |
+| Version | `7423ffc2-f307-43df-87e0-60d609e47fa1` at 100% |
+| Startup time | 154 ms reported by Wrangler |
 | Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` |
 | Anonymous boundary | 302 to Access login; `no-store`, application content denied |
-| Authenticated smoke | canonical RU/UZ document builder passed |
+| Authenticated smoke | canonical RU/UZ library/category/template passed on the prior version; workspace localization on the current version still awaits a new browser pass |
 
 Secret values were neither read nor emitted. Async runtime, Cron, legal-source
 ingestion and staff API flags remain false. Production resources and traffic

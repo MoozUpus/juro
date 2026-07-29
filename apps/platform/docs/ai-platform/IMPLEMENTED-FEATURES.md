@@ -51,8 +51,8 @@ calls or the remaining full browser/accessibility/mobile matrix.
 - `juro-production` and `juro-development` were not changed;
 - `LEGAL_SOURCE_STAFF_API_ENABLED=false` is pinned in development, staging,
   and production source/artifacts;
-- protected staging deployment `bb9b8ab8-528f-4c30-93bf-be5276088dd9`
-  serves Worker version `16b79e54-a326-4bd4-bda9-3f9605b52c06` at 100%;
+- protected staging deployment `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`
+  serves Worker version `7423ffc2-f307-43df-87e0-60d609e47fa1` at 100%;
 - the control plane exposes only the secret names `IDENTITY_KEYRING`,
   `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; values were never read;
 - Access denies anonymous application access and the authenticated canonical
@@ -76,5 +76,6 @@ status values remain unchanged for compatibility and are mapped only for UZ
 display. Date formatting follows the route locale. The contacts dialog has
 explicit dialog semantics, and notification read actions are keyboard-reachable
 buttons instead of pointer-only article clicks. Local type-check, lint, full
-tests, and staging build pass; protected remote browser verification is still
-required before this slice is marked staged.
+tests, staging build, dry-run, CI, staging deployment, control-plane re-read,
+and anonymous Access denial pass. Authenticated remote browser verification is
+still required before the localized workspace UI is marked fully verified.

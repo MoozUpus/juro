@@ -1270,7 +1270,7 @@ separate known localization defect. Production was not changed.
 
 ## D-062 — localize builder workspace chrome without mutating persisted workflow values
 
-Status: accepted and locally verified; protected staging browser verification pending
+Status: accepted, deployed to protected staging; browser verification pending
 Date: 2026-07-29
 
 Document, contact, and notification workspace copy is selected from one typed
@@ -1280,6 +1280,10 @@ localization cannot break filtering, archive rules, or draft continuation.
 Notification read actions are explicit buttons rather than pointer-only article
 clicks, and the contact form exposes dialog semantics.
 
-This branch state passes type-check, lint, 338 tests, and the staging build.
-It has not replaced the protected staging deployment yet because authenticated
-browser verification must be performed against the exact deployed artifact.
+This state passes type-check, lint, 338 tests, staging build/dry-run, both CI
+jobs, and deployment to `juro-platform-staging`. Deployment
+`d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a` serves version
+`7423ffc2-f307-43df-87e0-60d609e47fa1` at 100%; Access and secret-name
+re-reads returned 200 and anonymous application access remains denied.
+Authenticated browser verification must still be performed against this exact
+version before the localized screens are marked fully verified.

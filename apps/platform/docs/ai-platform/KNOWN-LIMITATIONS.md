@@ -121,10 +121,10 @@ foundation checkpoint.
 
 - The canonical RU/UZ builder library, category, generic template and route
   transitions are verified in protected staging.
-- the branch now contains UZ Latin copy for documents, contacts, and
-  notifications, but this newer localization slice has not yet received a
-  protected staging browser pass; the currently recorded remote evidence must
-  not be used to claim that those three screens are staged.
+- the current protected staging deployment now contains UZ Latin copy for
+  documents, contacts, and notifications, but it has not yet received a new
+  authenticated browser pass; control-plane deployment evidence alone must not
+  be used to claim those three screens are visually verified.
 - The attached authenticated Chrome surface was fixed at a desktop viewport.
   The 320/360/390/768/1024 responsive matrix, 200% zoom, reduced motion,
   forced colors, screen reader, and real touch-device verification remain

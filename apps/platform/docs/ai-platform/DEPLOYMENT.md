@@ -89,9 +89,13 @@ Sites/Worker ownership resolution, and explicit production confirmation.
 
 ## Protected builder checkpoint — 2026-07-29
 
-The current staging deployment is `bb9b8ab8-528f-4c30-93bf-be5276088dd9`
-with Worker version `16b79e54-a326-4bd4-bda9-3f9605b52c06` at 100% of
-`juro-platform-staging` traffic. The verified change preserves locale and
+The current staging deployment is `d9f56c5f-2c3e-4f5e-9e3f-117e51e5d79a`
+with Worker version `7423ffc2-f307-43df-87e0-60d609e47fa1` at 100% of
+`juro-platform-staging` traffic. The current artifact also contains typed RU/UZ
+workspace copy for documents, contacts, and notifications. The previously
+verified routing change preserves locale and
 account context for builder/library/documents/contacts/notifications links,
 removes the nested main landmark, and synchronizes the document language after
-client-side RU/UZ transitions. Production was not deployed or changed.
+client-side RU/UZ transitions. Control-plane and anonymous Access checks pass
+for the current deployment; authenticated browser verification of the newer
+workspace localization is still pending. Production was not deployed or changed.
