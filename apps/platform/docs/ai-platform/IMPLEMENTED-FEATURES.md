@@ -105,3 +105,15 @@ still required before the localized workspace UI is marked fully verified.
 Local evidence: 355/355 tests, type-check, lint, Cloudflare matrix, final staging
 build/artifact, document-builder smoke, and comparison smoke pass. The slice is
 not pushed or deployed; production remains unchanged.
+
+## Account deletion lifecycle and purge — local release candidate
+
+- RU/UZ profile settings expose immediate and 30-day recoverable deletion with accurate cancellation language.
+- A recent local JURO email session, CSRF proof, six-digit deletion OTP, exact session/challenge binding, and purpose-separated keyed subject are required.
+- Confirmation atomically revokes sessions/devices/continuity and creates the identifiers-only `cleanup.run` outbox job.
+- The staging Worker has a durable locked `*/5` outbox dispatcher plus isolated email and data-retention Queue consumers/DLQs; all other consumers and legal ingestion remain absent/disabled.
+- The purge validates workspace/staff blockers, persists an irreversible fence, deletes exact private R2 keys, performs the D1 cleanup transaction, tombstones the profile, and writes append-only lifecycle/purge evidence.
+- Recoverable requests can cancel before the fence. Corrected blockers can be retried once under concurrency. R2 failure preserves D1 and retries; completed/cancelled states are idempotent and terminal.
+- Local evidence: 27 rendered route/security tests, 272 core tests, and 79 Cloudflare tests; type-check, lint, generated binding check, staging build/artifact, three-environment dry-run matrix, builder smoke, comparison smoke, and secret-pattern scan pass.
+
+Remote staging still requires migration/deployment and protected synthetic end-to-end evidence before this entry is promoted from local release candidate. Production is unchanged.

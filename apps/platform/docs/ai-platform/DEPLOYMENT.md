@@ -125,3 +125,22 @@ then retain a post-0030 export. Roll back the Worker to version
 `448e5bf1-4bf8-4000-af2b-2c034e3eca10` if runtime gates fail; D1 rollback uses
 the verified pre-0030 recovery input. Production requires separate approval and
 is outside this candidate.
+
+## Account-deletion staging candidate — 2026-07-30
+
+Candidate scope: migrations `0030`–`0033`, email-notification and data-retention Queue consumers with dedicated staging DLQs, one locked `*/5 * * * *` outbox cron, account-deletion purge flag, and the tested RU/UZ settings/API flow. Legal-source ingestion and staff APIs remain false; no other Queue consumer is attached.
+
+Pre-deploy gates passed locally: full tests (27 rendered, 272 core, 79 Cloudflare), type-check, lint, generated Cloudflare binding types, exact staging build/artifact, all-environment dry-run matrix, builder/comparison smokes, diff check, and filename-only current/history secret scan. The private pre-migration checkpoint and Time Travel bookmark are recorded in `BACKUP-RESTORE.md`.
+
+Safe order:
+
+1. Commit the exact tested source state.
+2. Re-read pending migrations and stop unless they are exactly `0030`–`0033`.
+3. Apply migrations only to `juro-staging`.
+4. Verify 34 ledger entries through `0033`, `quick_check`, `foreign_key_check`, new tables/columns/triggers, and safe row counts.
+5. Deploy the exact staging artifact to `juro-platform-staging` with `--keep-vars`.
+6. Re-read custom domain, Access app/policy, version/deployment, bindings, secret names, consumers/DLQs, cron, flags, and production control-plane invariants.
+7. Prove anonymous Access denial and authenticated synthetic route/API/UI flows; do not delete an owner or real account.
+8. Inspect safe Worker/Queue/D1 logs and retain post-migration exports with checksums.
+
+Rollback application first: disable purge/cron/async or roll traffic to Worker version `448e5bf1-4bf8-4000-af2b-2c034e3eca10`. Queue consumers may be detached without deleting queues. Migrations are additive and may remain unused. Restore D1 only for demonstrated data/schema corruption, using bookmark `00000035-00000000-000050b7-179d399e193e3067399de9571322a50b` under staging maintenance. Production deployment and production UI replacement are separately prohibited.

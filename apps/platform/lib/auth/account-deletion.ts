@@ -5,13 +5,23 @@ import {
 } from "./challenge-evidence";
 import type { IdentityProtectionContext } from "./identity-protection";
 import { batchWithSecurityEvent } from "./security-events";
+import {
+  ACCOUNT_DELETION_POLICY_VERSION,
+  accountDeletionLifecycleStatement,
+  accountDeletionSubjectHash,
+  createAccountDeletionLifecycleRecord,
+  type AccountDeletionLifecycleInput,
+  type AccountDeletionMode,
+} from "./account-deletion-lifecycle";
 
 const MAX_HOURLY_CHALLENGES = 5;
 
 export type ExistingDeletionRequest = {
   id: string;
   status: string;
+  deletionMode: AccountDeletionMode;
   requestedAt: string;
+  scheduledPurgeAt: string | null;
 };
 
 export type DeletionChallengeReservation =
@@ -46,6 +56,8 @@ export type DeletionConfirmationResult =
   | {
     status: "confirmed";
     requestId: string;
+    deletionMode: AccountDeletionMode;
+    scheduledPurgeAt: string;
     revokedSessions: number;
   }
   | { status: "incorrect"; attemptCount: number; maxAttempts: number }
@@ -92,7 +104,7 @@ export async function reserveAccountDeletionChallenge(
     NOT EXISTS (
       SELECT 1 FROM account_deletion_requests
       WHERE user_id=?
-        AND status IN ('requested','reviewing')
+        AND status IN ('requested','reviewing','scheduled','purging','blocked')
     )
     AND NOT EXISTS (
       SELECT 1 FROM account_deletion_challenges
@@ -179,24 +191,38 @@ export async function reserveAccountDeletionChallenge(
          (
            SELECT id FROM account_deletion_requests
            WHERE user_id=?
-             AND status IN ('requested','reviewing')
+             AND status IN ('requested','reviewing','scheduled','purging','blocked')
            ORDER BY requested_at DESC
            LIMIT 1
          ) AS requestId,
          (
            SELECT status FROM account_deletion_requests
            WHERE user_id=?
-             AND status IN ('requested','reviewing')
+             AND status IN ('requested','reviewing','scheduled','purging','blocked')
            ORDER BY requested_at DESC
            LIMIT 1
          ) AS requestStatus,
          (
            SELECT requested_at FROM account_deletion_requests
            WHERE user_id=?
-             AND status IN ('requested','reviewing')
+             AND status IN ('requested','reviewing','scheduled','purging','blocked')
            ORDER BY requested_at DESC
            LIMIT 1
          ) AS requestedAt,
+         (
+           SELECT deletion_mode FROM account_deletion_requests
+           WHERE user_id=?
+             AND status IN ('requested','reviewing','scheduled','purging','blocked')
+           ORDER BY requested_at DESC
+           LIMIT 1
+         ) AS requestDeletionMode,
+         (
+           SELECT scheduled_purge_at FROM account_deletion_requests
+           WHERE user_id=?
+             AND status IN ('requested','reviewing','scheduled','purging','blocked')
+           ORDER BY requested_at DESC
+           LIMIT 1
+         ) AS scheduledPurgeAt,
          (
            SELECT max(created_at)
            FROM account_deletion_challenges
@@ -216,6 +242,8 @@ export async function reserveAccountDeletionChallenge(
       input.userId,
       input.userId,
       input.userId,
+      input.userId,
+      input.userId,
       input.hourlySince,
     ),
   ]);
@@ -224,6 +252,8 @@ export async function reserveAccountDeletionChallenge(
     requestId?: string | null;
     requestStatus?: string | null;
     requestedAt?: string | null;
+    requestDeletionMode?: AccountDeletionMode | null;
+    scheduledPurgeAt?: string | null;
     latestActiveCreatedAt?: string | null;
     hourlyCount?: number;
   } | undefined;
@@ -238,7 +268,9 @@ export async function reserveAccountDeletionChallenge(
       request: {
         id: snapshot.requestId,
         status: snapshot.requestStatus,
+        deletionMode: snapshot.requestDeletionMode ?? "recoverable_30d",
         requestedAt: snapshot.requestedAt,
+        scheduledPurgeAt: snapshot.scheduledPurgeAt ?? null,
       },
     };
   }
@@ -344,9 +376,10 @@ async function activeDeletionRequest(
   userId: string,
 ): Promise<ExistingDeletionRequest | null> {
   return db.prepare(
-    `SELECT id,status,requested_at AS requestedAt
+    `SELECT id,status,deletion_mode AS deletionMode,
+       requested_at AS requestedAt,scheduled_purge_at AS scheduledPurgeAt
      FROM account_deletion_requests
-     WHERE user_id=? AND status IN ('requested','reviewing')
+     WHERE user_id=? AND status IN ('requested','reviewing','scheduled','purging','blocked')
      ORDER BY requested_at DESC
      LIMIT 1`,
   ).bind(userId).first<ExistingDeletionRequest>();
@@ -371,6 +404,10 @@ export async function confirmAccountDeletion(
     workspaceId: string;
     code: string;
     reason: string | null;
+    deletionMode: AccountDeletionMode;
+    scheduledPurgeAt: string;
+    subjectHash: string;
+    subjectKeyVersion: string;
     assuranceLevel: "primary" | "mfa";
     now: string;
     recentSince: string;
@@ -445,6 +482,22 @@ export async function confirmAccountDeletion(
 
   const operationId = crypto.randomUUID();
   const requestId = crypto.randomUUID();
+  const lifecycleInput: AccountDeletionLifecycleInput = {
+    requestId,
+    subjectHash: input.subjectHash,
+    subjectKeyVersion: input.subjectKeyVersion,
+    eventType: "scheduled",
+    deletionMode: input.deletionMode,
+    summary: {
+      policyVersion: ACCOUNT_DELETION_POLICY_VERSION,
+      scheduledPurgeAt: input.scheduledPurgeAt,
+    },
+    createdAt: input.now,
+  };
+  const lifecycleRecord = await createAccountDeletionLifecycleRecord(
+    db,
+    lifecycleInput,
+  );
   const sessionGuard = `SELECT 1 FROM auth_sessions
     WHERE id=? AND user_id=? AND revoked_at IS NULL
       AND expires_at>?
@@ -511,19 +564,24 @@ export async function confirmAccountDeletion(
         db.prepare(
           `INSERT INTO account_deletion_requests (
              id,user_id,verification_challenge_id,requested_session_id,
-             status,reason,verification_method,verified_at,requested_at,
+             status,deletion_mode,subject_hash,subject_key_version,reason,
+             verification_method,verified_at,requested_at,scheduled_purge_at,
              completed_at
            )
-           SELECT ?,user_id,id,?,'requested',?,'email_otp',?,?,NULL
+           SELECT ?,user_id,id,?,'scheduled',?,?,?,?,'email_otp',?,?,?,NULL
            FROM account_deletion_challenges
            WHERE id=? AND user_id=? AND session_id=?
              AND consumed_by_operation_id=? AND consumed_at=?`,
         ).bind(
           requestId,
           input.sessionId,
+          input.deletionMode,
+          input.subjectHash,
+          input.subjectKeyVersion,
           input.reason,
           input.now,
           input.now,
+          input.scheduledPurgeAt,
           input.challengeId,
           input.userId,
           input.sessionId,
@@ -546,6 +604,8 @@ export async function confirmAccountDeletion(
           JSON.stringify({
             requestId,
             verificationMethod: "email_otp",
+            deletionMode: input.deletionMode,
+            scheduledPurgeAt: input.scheduledPurgeAt,
           }),
           input.now,
           requestId,
@@ -593,6 +653,39 @@ export async function confirmAccountDeletion(
           requestId,
           input.userId,
         ),
+        db.prepare(
+          `INSERT INTO job_outbox (
+             id,queue_binding,job_type,schema_version,idempotency_key,
+             subject_id,workspace_id,correlation_id,enqueued_at,available_at,
+             status,dispatch_attempts,lease_owner,lease_expires_at,
+             next_attempt_at,dispatched_at,error_code,created_at,updated_at
+           )
+           SELECT ?,'DATA_RETENTION_CLEANUP_QUEUE','cleanup.run',1,?,?,NULL,?,
+             ?,?,'pending',0,NULL,NULL,NULL,NULL,NULL,?,?
+           FROM account_deletion_requests
+           WHERE id=? AND user_id=? AND status='scheduled'`,
+        ).bind(
+          crypto.randomUUID(),
+          `account_deletion_purge_${requestId}`,
+          requestId,
+          `account_deletion_${requestId}`,
+          input.now,
+          input.scheduledPurgeAt,
+          input.now,
+          input.now,
+          requestId,
+          input.userId,
+        ),
+        accountDeletionLifecycleStatement(
+          db,
+          lifecycleInput,
+          lifecycleRecord,
+          {
+            selectSql: `SELECT 1 FROM account_deletion_requests
+              WHERE id=? AND user_id=? AND status='scheduled'`,
+            bindings: [requestId, input.userId],
+          },
+        ),
       ],
       {
         selectSql: `SELECT 1 FROM account_deletion_requests
@@ -612,6 +705,8 @@ export async function confirmAccountDeletion(
     return {
       status: "confirmed",
       requestId,
+      deletionMode: input.deletionMode,
+      scheduledPurgeAt: input.scheduledPurgeAt,
       revokedSessions: Number(results[3]?.meta?.changes ?? 0),
     };
   }
@@ -619,4 +714,333 @@ export async function confirmAccountDeletion(
     unavailableState(await validatedChallenge(db, input), input.now)
     ?? { status: "invalid" }
   );
+}
+
+export type DeletionCancellationResult =
+  | { status: "cancelled"; requestId: string }
+  | { status: "already_cancelled" }
+  | { status: "completed" }
+  | { status: "not_cancelable" }
+  | { status: "invalid" };
+
+export async function cancelAccountDeletionRequest(
+  db: D1Database,
+  input: {
+    requestId: string;
+    userId: string;
+    sessionId: string;
+    workspaceId: string;
+    identityKeyring: string;
+    assuranceLevel: "primary" | "mfa";
+    now: string;
+  },
+): Promise<DeletionCancellationResult> {
+  const request = await db.prepare(
+    `SELECT id,status,deletion_mode AS deletionMode,
+       subject_hash AS subjectHash,subject_key_version AS subjectKeyVersion,
+       purge_irreversible_at AS purgeIrreversibleAt
+     FROM account_deletion_requests
+     WHERE id=? AND user_id=? LIMIT 1`,
+  ).bind(input.requestId, input.userId).first<{
+    id: string;
+    status: string;
+    deletionMode: AccountDeletionMode;
+    subjectHash: string | null;
+    subjectKeyVersion: string | null;
+    purgeIrreversibleAt: string | null;
+  }>();
+  if (!request) return { status: "invalid" };
+  if (request.status === "cancelled") return { status: "already_cancelled" };
+  if (request.status === "completed") return { status: "completed" };
+  if (
+    request.deletionMode !== "recoverable_30d"
+    || !["scheduled", "blocked"].includes(request.status)
+    || request.purgeIrreversibleAt
+    || !request.subjectHash
+    || !request.subjectKeyVersion
+  ) {
+    return { status: "not_cancelable" };
+  }
+  const subject = await accountDeletionSubjectHash(
+    input.identityKeyring,
+    input.userId,
+    request.subjectKeyVersion,
+  );
+  if (subject.hash !== request.subjectHash) return { status: "invalid" };
+
+  const lifecycleInput: AccountDeletionLifecycleInput = {
+    requestId: input.requestId,
+    subjectHash: subject.hash,
+    subjectKeyVersion: subject.keyVersion,
+    eventType: "cancelled",
+    deletionMode: request.deletionMode,
+    summary: { cancelledBy: "user" },
+    createdAt: input.now,
+  };
+  const lifecycle = await createAccountDeletionLifecycleRecord(
+    db,
+    lifecycleInput,
+  );
+  const results = await batchWithSecurityEvent(
+    db,
+    {
+      userId: input.userId,
+      sessionId: input.sessionId,
+      eventType: "account.deletion_cancelled",
+      severity: "warning",
+      authSource: "local_session",
+      assuranceLevel: input.assuranceLevel,
+      metadata: { requestId: input.requestId },
+      createdAt: input.now,
+    },
+    () => [
+      db.prepare(
+        `UPDATE account_deletion_requests
+         SET status='cancelled',cancelled_at=?,failure_code=NULL,
+             purge_lease_owner=NULL,purge_lease_expires_at=NULL
+         WHERE id=? AND user_id=? AND deletion_mode='recoverable_30d'
+           AND status IN ('scheduled','blocked')
+           AND purge_irreversible_at IS NULL
+           AND completed_at IS NULL AND cancelled_at IS NULL`,
+      ).bind(input.now, input.requestId, input.userId),
+      db.prepare(
+        `UPDATE job_outbox
+         SET status='rejected',error_code='ACCOUNT_DELETION_CANCELLED',
+             lease_owner=NULL,lease_expires_at=NULL,next_attempt_at=NULL,
+             updated_at=?
+         WHERE subject_id=? AND job_type='cleanup.run'
+           AND status IN ('pending','retrying')`,
+      ).bind(input.now, input.requestId),
+      db.prepare(
+        `INSERT INTO workspace_audit_events (
+           id,workspace_id,actor_user_id,entity_type,entity_id,action,
+           metadata_json,created_at
+         )
+         SELECT ?,?,?, 'user',?,'account_deletion_cancelled',?,?
+         FROM account_deletion_requests
+         WHERE id=? AND user_id=? AND status='cancelled'`,
+      ).bind(
+        crypto.randomUUID(),
+        input.workspaceId,
+        input.userId,
+        input.userId,
+        JSON.stringify({ requestId: input.requestId }),
+        input.now,
+        input.requestId,
+        input.userId,
+      ),
+      accountDeletionLifecycleStatement(db, lifecycleInput, lifecycle, {
+        selectSql: `SELECT 1 FROM account_deletion_requests
+          WHERE id=? AND user_id=? AND status='cancelled'`,
+        bindings: [input.requestId, input.userId],
+      }),
+    ],
+    {
+      selectSql: `SELECT 1 FROM account_deletion_requests
+        WHERE id=? AND user_id=? AND status='cancelled'`,
+      bindings: [input.requestId, input.userId],
+    },
+  );
+  if (Number(results[0]?.meta?.changes ?? 0) === 1) {
+    return { status: "cancelled", requestId: input.requestId };
+  }
+  const current = await db.prepare(
+    `SELECT status FROM account_deletion_requests
+     WHERE id=? AND user_id=? LIMIT 1`,
+  ).bind(input.requestId, input.userId).first<{ status: string }>();
+  if (current?.status === "cancelled") return { status: "already_cancelled" };
+  if (current?.status === "completed") return { status: "completed" };
+  return current ? { status: "not_cancelable" } : { status: "invalid" };
+}
+export type DeletionRetryResult =
+  | { status: "retried"; requestId: string; revokedSessions: number }
+  | { status: "already_queued" }
+  | { status: "completed" }
+  | { status: "not_retryable" }
+  | { status: "invalid" };
+
+export async function retryAccountDeletionRequest(
+  db: D1Database,
+  input: {
+    requestId: string;
+    userId: string;
+    sessionId: string;
+    workspaceId: string;
+    identityKeyring: string;
+    assuranceLevel: "primary" | "mfa";
+    now: string;
+  },
+): Promise<DeletionRetryResult> {
+  const request = await db.prepare(
+    `SELECT id,status,deletion_mode AS deletionMode,
+       subject_hash AS subjectHash,subject_key_version AS subjectKeyVersion,
+       failure_code AS failureCode,
+       purge_irreversible_at AS purgeIrreversibleAt
+     FROM account_deletion_requests
+     WHERE id=? AND user_id=? LIMIT 1`,
+  ).bind(input.requestId, input.userId).first<{
+    id: string;
+    status: string;
+    deletionMode: AccountDeletionMode;
+    subjectHash: string | null;
+    subjectKeyVersion: string | null;
+    failureCode: string | null;
+    purgeIrreversibleAt: string | null;
+  }>();
+  if (!request) return { status: "invalid" };
+  if (request.status === "completed") return { status: "completed" };
+  if (["scheduled", "purging"].includes(request.status)) {
+    return { status: "already_queued" };
+  }
+  if (
+    request.status !== "blocked"
+    || request.purgeIrreversibleAt
+    || !request.subjectHash
+    || !request.subjectKeyVersion
+  ) {
+    return { status: "not_retryable" };
+  }
+  const subject = await accountDeletionSubjectHash(
+    input.identityKeyring,
+    input.userId,
+    request.subjectKeyVersion,
+  );
+  if (subject.hash !== request.subjectHash) return { status: "invalid" };
+
+  const operationId = crypto.randomUUID();
+  const lifecycleInput: AccountDeletionLifecycleInput = {
+    requestId: input.requestId,
+    subjectHash: subject.hash,
+    subjectKeyVersion: subject.keyVersion,
+    eventType: "scheduled",
+    deletionMode: request.deletionMode,
+    summary: {
+      retry: true,
+      previousFailureCode: request.failureCode,
+    },
+    createdAt: input.now,
+  };
+  const lifecycle = await createAccountDeletionLifecycleRecord(
+    db,
+    lifecycleInput,
+  );
+  const markerGuard = {
+    selectSql: `SELECT 1 FROM account_deletion_requests
+      WHERE id=? AND user_id=? AND status='scheduled'
+        AND purge_lease_owner=?`,
+    bindings: [input.requestId, input.userId, operationId],
+  };
+  const results = await batchWithSecurityEvent(
+    db,
+    {
+      userId: input.userId,
+      sessionId: input.sessionId,
+      eventType: "account.deletion_retry_requested",
+      severity: "warning",
+      authSource: "local_session",
+      assuranceLevel: input.assuranceLevel,
+      metadata: {
+        requestId: input.requestId,
+        previousFailureCode: request.failureCode,
+      },
+      createdAt: input.now,
+    },
+    () => [
+      db.prepare(
+        `UPDATE account_deletion_requests
+         SET status='scheduled',failure_code=NULL,
+             purge_lease_owner=?,purge_lease_expires_at=NULL
+         WHERE id=? AND user_id=? AND status='blocked'
+           AND purge_irreversible_at IS NULL
+           AND completed_at IS NULL AND cancelled_at IS NULL`,
+      ).bind(operationId, input.requestId, input.userId),
+      db.prepare(
+        `INSERT INTO job_outbox (
+           id,queue_binding,job_type,schema_version,idempotency_key,
+           subject_id,workspace_id,correlation_id,enqueued_at,available_at,
+           status,dispatch_attempts,lease_owner,lease_expires_at,
+           next_attempt_at,dispatched_at,error_code,created_at,updated_at
+         )
+         SELECT ?,'DATA_RETENTION_CLEANUP_QUEUE','cleanup.run',1,?,?,NULL,?,
+           ?,?,'pending',0,NULL,NULL,NULL,NULL,NULL,?,?
+         WHERE EXISTS (${markerGuard.selectSql})`,
+      ).bind(
+        crypto.randomUUID(),
+        `account_deletion_purge_${input.requestId}_retry_${operationId}`,
+        input.requestId,
+        `account_deletion_retry_${input.requestId}_${operationId}`,
+        input.now,
+        input.now,
+        input.now,
+        input.now,
+        ...markerGuard.bindings,
+      ),
+      db.prepare(
+        `INSERT INTO workspace_audit_events (
+           id,workspace_id,actor_user_id,entity_type,entity_id,action,
+           metadata_json,created_at
+         )
+         SELECT ?,?,?, 'user',?,'account_deletion_retry_requested',?,?
+         WHERE EXISTS (${markerGuard.selectSql})`,
+      ).bind(
+        crypto.randomUUID(),
+        input.workspaceId,
+        input.userId,
+        input.userId,
+        JSON.stringify({
+          requestId: input.requestId,
+          previousFailureCode: request.failureCode,
+        }),
+        input.now,
+        ...markerGuard.bindings,
+      ),
+      db.prepare(
+        `UPDATE auth_sessions SET revoked_at=?
+         WHERE user_id=? AND revoked_at IS NULL
+           AND EXISTS (${markerGuard.selectSql})`,
+      ).bind(input.now, input.userId, ...markerGuard.bindings),
+      db.prepare(
+        `UPDATE auth_devices SET revoked_at=?
+         WHERE user_id=? AND revoked_at IS NULL
+           AND EXISTS (${markerGuard.selectSql})`,
+      ).bind(input.now, input.userId, ...markerGuard.bindings),
+      db.prepare(
+        `UPDATE auth_device_continuities SET revoked_at=?
+         WHERE user_id=? AND revoked_at IS NULL
+           AND EXISTS (${markerGuard.selectSql})`,
+      ).bind(input.now, input.userId, ...markerGuard.bindings),
+      accountDeletionLifecycleStatement(
+        db,
+        lifecycleInput,
+        lifecycle,
+        markerGuard,
+      ),
+      db.prepare(
+        `UPDATE account_deletion_requests
+         SET purge_lease_owner=NULL
+         WHERE id=? AND user_id=? AND status='scheduled'
+           AND purge_lease_owner=?`,
+      ).bind(input.requestId, input.userId, operationId),
+    ],
+    {
+      selectSql: `SELECT 1 FROM account_deletion_lifecycle_events WHERE id=?`,
+      bindings: [lifecycle.id],
+    },
+  );
+  if (Number(results[0]?.meta?.changes ?? 0) === 1) {
+    return {
+      status: "retried",
+      requestId: input.requestId,
+      revokedSessions: Number(results[3]?.meta?.changes ?? 0),
+    };
+  }
+  const current = await db.prepare(
+    `SELECT status FROM account_deletion_requests
+     WHERE id=? AND user_id=? LIMIT 1`,
+  ).bind(input.requestId, input.userId).first<{ status: string }>();
+  if (["scheduled", "purging"].includes(current?.status ?? "")) {
+    return { status: "already_queued" };
+  }
+  if (current?.status === "completed") return { status: "completed" };
+  return current ? { status: "not_retryable" } : { status: "invalid" };
 }

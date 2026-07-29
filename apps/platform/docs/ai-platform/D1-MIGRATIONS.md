@@ -742,3 +742,18 @@ write, capture/checksum a new D1 checkpoint, repeat the disposable restore
 exercise, verify the exact pending list, apply the reviewed migrations in order,
 retain a post-migration export, and then prove protected primary/MFA login,
 Queue/DLQ behavior, and real Resend delivery. Production is unchanged.
+
+## Migration 0033
+
+`0033_freezing_havok.sql` adds the durable account-deletion lifecycle:
+
+- deletion mode, keyed subject, schedule, cancellation, lease, irreversible-boundary, failure, and terminal timestamps on `account_deletion_requests`;
+- `lifecycle_status` and `deletion_completed_at` on `user_profiles`;
+- append-only `account_deletion_lifecycle_events` and `account_deletion_purge_evidence`;
+- state, hash, JSON, tombstone, append-only, and terminal-immutability guards;
+- schedule/subject/hash indexes and an expanded one-active-request predicate;
+- safe normalization of legacy `requested`/`reviewing` rows to `blocked` with `LEGACY_REQUEST_REQUIRES_REVIEW`.
+
+The migration does not delete user content and does not execute a purge. It replaces only the active-request index so the new in-flight states remain one-per-user. The complete local sequence has 34 migrations (`0000`–`0033`). Clean-database application, Drizzle journal/snapshot continuity, `quick_check`, zero foreign-key violations, transition guards, append-only behavior, legacy normalization, and representative cascade behavior pass.
+
+Code rollback leaves additive columns/tables unused. D1 recovery uses the recorded pre-`0030`–`0033` staging Time Travel bookmark or private portable exports; no destructive down migration is planned. Production application is prohibited without its own snapshot, rehearsal, and explicit owner approval.

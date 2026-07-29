@@ -1,5 +1,9 @@
 import { z } from "zod";
 import {
+  AccountDeletionPurgeError,
+  executeAccountDeletionPurge,
+} from "../lib/auth/account-deletion-purge";
+import {
   executeSecurityEmailJob,
   SecurityEmailError,
 } from "../lib/auth/security-email";
@@ -76,6 +80,12 @@ export const jobEnvelopeSchema = z.object({
 export type JobEnvelope = z.infer<typeof jobEnvelopeSchema>;
 
 type JobErrorCode =
+  | "ACCOUNT_DELETION_D1_FAILED"
+  | "ACCOUNT_DELETION_NOT_DUE"
+  | "ACCOUNT_DELETION_PURGE_DISABLED"
+  | "ACCOUNT_DELETION_R2_FAILED"
+  | "ACCOUNT_DELETION_REQUEST_INVALID"
+  | "ACCOUNT_DELETION_STATE_CONFLICT"
   | "ASYNC_RUNTIME_DISABLED"
   | "EMAIL_CONFIGURATION_UNAVAILABLE"
   | "EMAIL_JOB_INVALID"
@@ -89,7 +99,9 @@ type JobErrorCode =
   | "JOB_TRANSIENT_FAILURE"
   | "JOB_VALIDATION_FAILED"
   | "LEGAL_SOURCE_SYNC_FAILED"
-  | "LEGAL_SOURCE_PARSE_FAILED";
+  | "LEGAL_SOURCE_PARSE_FAILED"
+  | "PRIVILEGED_ACCOUNT_REVIEW_REQUIRED"
+  | "WORKSPACE_OWNERSHIP_TRANSFER_REQUIRED";
 
 type OperationalError = {
   code: JobErrorCode;
@@ -171,6 +183,7 @@ export type PlatformJobEnv = Omit<
   ASYNC_RUNTIME_ENABLED: string;
   CRON_ENABLED: string;
   LEGAL_ADVICE_INGESTION_ENABLED: string;
+  ACCOUNT_DELETION_PURGE_ENABLED: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   IDENTITY_KEYRING?: string;
@@ -524,6 +537,17 @@ async function executeJob(
       throw error;
     }
   }
+  if (envelope.kind === "cleanup.run") {
+    try {
+      await executeAccountDeletionPurge(env, envelope.subjectId);
+      return;
+    } catch (error) {
+      if (error instanceof AccountDeletionPurgeError) {
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
+  }
   throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
 }
 
@@ -749,34 +773,4 @@ export async function handleQueue(
       message.retry({ delaySeconds: retryDelay(message.attempts) });
     }
   }
-}
-
-/**
- * No cron schedule is attached in Phase 1. Even if this handler is invoked
- * manually, it cannot start maintenance work until an explicit schedule is
- * implemented and reviewed.
- */
-export async function handleScheduled(
-  controller: ScheduledController,
-  env: PlatformJobEnv,
-): Promise<void> {
-  if (
-    String(env.ASYNC_RUNTIME_ENABLED) !== "true" ||
-    String(env.CRON_ENABLED) !== "true"
-  ) {
-    logEvent("info", {
-      event: "scheduled.runtime_disabled",
-      environment: env.APP_ENV,
-      cron: controller.cron,
-    });
-    controller.noRetry();
-    return;
-  }
-
-  logEvent("error", {
-    event: "scheduled.unknown_cron",
-    environment: env.APP_ENV,
-    cron: controller.cron,
-  });
-  controller.noRetry();
 }

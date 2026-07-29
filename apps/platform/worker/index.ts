@@ -3,9 +3,9 @@ import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } fr
 import handler from "vinext/server/app-router-entry";
 import {
   handleQueue,
-  handleScheduled,
   type PlatformJobEnv,
 } from "./platform-jobs";
+import { handleScheduled } from "./platform-scheduled";
 
 type FrameworkEnv = PlatformJobEnv & {
   OPENAI_API_KEY?: string;

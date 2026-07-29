@@ -308,6 +308,61 @@
   color: #684e1f;
 }
 
+.deletion-mode-options {
+  display: grid;
+  max-width: 620px;
+  margin: 2px 0 6px;
+  padding: 0;
+  border: 0;
+  gap: 8px;
+}
+
+.deletion-mode-options legend {
+  margin-bottom: 7px;
+  color: #465965;
+  font-size: 12px;
+  font-weight: 820;
+}
+
+.delete-request .deletion-mode-options label {
+  display: grid;
+  max-width: none;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 1px solid rgba(6,40,68,.16);
+  border-radius: 10px;
+  grid-template-columns: 22px 1fr;
+  align-items: start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.delete-request .deletion-mode-options input[type="radio"] {
+  width: 20px;
+  min-height: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+  padding: 0;
+  accent-color: #8a6728;
+}
+
+.deletion-mode-options label:has(input:checked) {
+  border-color: #8a6728;
+  background: #fff9eb;
+}
+.deletion-mode-options label:focus-within {
+  outline: 3px solid rgba(6, 40, 68, .28);
+  outline-offset: 2px;
+}
+
+.deletion-mode-options label span {
+  line-height: 1.45;
+}
+
+.deletion-mode-options:disabled label {
+  cursor: default;
+  opacity: .68;
+}
 .deletion-actions {
   display: flex;
   flex-wrap: wrap;

@@ -64,7 +64,19 @@ export const accountDeletionInputSchema = z.discriminatedUnion("action", [
     challengeId: z.string().uuid(),
     code: z.string().regex(/^\d{6}$/),
     confirmation: z.literal("DELETE"),
+    deletionMode: z.enum(["immediate", "recoverable_30d"])
+      .default("recoverable_30d"),
     reason: z.string().trim().max(500).optional(),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("cancel"),
+    requestId: z.string().uuid(),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("retry"),
+    requestId: z.string().uuid(),
     locale: localeInput,
   }).strict(),
 ]);

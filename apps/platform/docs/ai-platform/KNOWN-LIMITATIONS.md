@@ -180,3 +180,11 @@ positives or influence novelty. Migrations `0030`–`0032`, the reviewed email
 consumer, real Resend delivery, DLQ/redrive, and protected primary/MFA HTTP flows
 are not deployed or verified in staging. The currently deployed Worker does not
 contain this local slice, and production is unchanged.
+
+## Account-deletion candidate limitations
+
+The current account-deletion slice is locally complete for the existing D1/R2 data model, but not yet staging-verified at this checkpoint. User-document Vectorize deletion is intentionally absent because that index does not yet accept user content. Provider-side AI retention deletion, guest purge, voice-audio purge, legal holds, scheduled backup automation, operator redrive UI, and a measured incident RTO remain open.
+
+A blocked immediate request cannot be cancelled, by design, but can be retried after the blocker is removed. Recoverable blocked requests may either cancel or retry before the irreversible boundary. Once R2 deletion begins, cancellation is impossible and retry is the only safe completion path.
+
+Production async runtime, cron, and account purge remain disabled. No local or staging evidence authorizes production migration or UI replacement.

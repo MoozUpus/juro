@@ -66,6 +66,8 @@ export const userProfiles = sqliteTable(
     timezone: text("timezone").notNull().default("Asia/Tashkent"),
     defaultWorkspaceId: text("default_workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
     onboardingCompletedAt: text("onboarding_completed_at"),
+    lifecycleStatus: text("lifecycle_status").notNull().default("active"),
+    deletionCompletedAt: text("deletion_completed_at"),
     ...timestamps,
   },
   (table) => [
@@ -1750,10 +1752,20 @@ export const accountDeletionRequests = sqliteTable("account_deletion_requests", 
   verificationChallengeId: text("verification_challenge_id").references(() => accountDeletionChallenges.id, { onDelete: "restrict" }),
   requestedSessionId: text("requested_session_id").references(() => authSessions.id, { onDelete: "set null" }),
   status: text("status").notNull().default("requested"),
+  deletionMode: text("deletion_mode").notNull().default("recoverable_30d"),
+  subjectHash: text("subject_hash"),
+  subjectKeyVersion: text("subject_key_version"),
   reason: text("reason"),
   verificationMethod: text("verification_method"),
   verifiedAt: text("verified_at"),
   requestedAt: text("requested_at").notNull(),
+  scheduledPurgeAt: text("scheduled_purge_at"),
+  cancelledAt: text("cancelled_at"),
+  purgeStartedAt: text("purge_started_at"),
+  purgeIrreversibleAt: text("purge_irreversible_at"),
+  purgeLeaseOwner: text("purge_lease_owner"),
+  purgeLeaseExpiresAt: text("purge_lease_expires_at"),
+  failureCode: text("failure_code"),
   completedAt: text("completed_at"),
 }, (table) => [
   index("account_deletion_requests_user_idx").on(
@@ -1765,8 +1777,93 @@ export const accountDeletionRequests = sqliteTable("account_deletion_requests", 
   ),
   uniqueIndex("account_deletion_requests_active_user_uidx")
     .on(table.userId)
-    .where(sql`${table.status} IN ('requested','reviewing')`),
+    .where(sql`${table.status} IN ('requested','reviewing','scheduled','purging','blocked')`),
+  index("account_deletion_requests_schedule_idx").on(
+    table.status,
+    table.scheduledPurgeAt,
+  ),
 ]);
+
+export const accountDeletionLifecycleEvents = sqliteTable(
+  "account_deletion_lifecycle_events",
+  {
+    id: text("id").primaryKey(),
+    requestId: text("request_id").notNull(),
+    subjectHash: text("subject_hash").notNull(),
+    subjectKeyVersion: text("subject_key_version").notNull(),
+    eventType: text("event_type").notNull(),
+    deletionMode: text("deletion_mode").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    summaryJson: text("summary_json").notNull().default("{}"),
+    previousHash: text("previous_hash").notNull(),
+    eventHash: text("event_hash").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    check(
+      "account_deletion_lifecycle_event_type_check",
+      sql`${table.eventType} IN ('scheduled','cancelled','purge_started','blocked','completed','failed')`,
+    ),
+    check(
+      "account_deletion_lifecycle_mode_check",
+      sql`${table.deletionMode} IN ('immediate','recoverable_30d')`,
+    ),
+    check(
+      "account_deletion_lifecycle_hash_check",
+      sql`length(${table.subjectHash}) = 64 AND length(${table.previousHash}) = 64 AND length(${table.eventHash}) = 64`,
+    ),
+    uniqueIndex("account_deletion_lifecycle_hash_uidx").on(table.eventHash),
+    uniqueIndex("account_deletion_lifecycle_chain_uidx").on(
+      table.requestId,
+      table.previousHash,
+    ),
+    index("account_deletion_lifecycle_request_idx").on(
+      table.requestId,
+      table.createdAt,
+    ),
+    index("account_deletion_lifecycle_subject_idx").on(
+      table.subjectHash,
+      table.createdAt,
+    ),
+  ],
+);
+
+export const accountDeletionPurgeEvidence = sqliteTable(
+  "account_deletion_purge_evidence",
+  {
+    requestId: text("request_id").primaryKey(),
+    subjectHash: text("subject_hash").notNull(),
+    subjectKeyVersion: text("subject_key_version").notNull(),
+    deletionMode: text("deletion_mode").notNull(),
+    policyVersion: text("policy_version").notNull(),
+    requestedAt: text("requested_at").notNull(),
+    completedAt: text("completed_at").notNull(),
+    r2DeletedCount: integer("r2_deleted_count").notNull().default(0),
+    d1DeletedCount: integer("d1_deleted_count").notNull().default(0),
+    redactedCount: integer("redacted_count").notNull().default(0),
+    retainedEvidenceJson: text("retained_evidence_json").notNull().default("[]"),
+    evidenceHash: text("evidence_hash").notNull(),
+  },
+  (table) => [
+    check(
+      "account_deletion_purge_mode_check",
+      sql`${table.deletionMode} IN ('immediate','recoverable_30d')`,
+    ),
+    check(
+      "account_deletion_purge_counts_check",
+      sql`${table.r2DeletedCount} >= 0 AND ${table.d1DeletedCount} >= 0 AND ${table.redactedCount} >= 0`,
+    ),
+    check(
+      "account_deletion_purge_hash_check",
+      sql`length(${table.subjectHash}) = 64 AND length(${table.evidenceHash}) = 64`,
+    ),
+    uniqueIndex("account_deletion_purge_hash_uidx").on(table.evidenceHash),
+    index("account_deletion_purge_subject_idx").on(
+      table.subjectHash,
+      table.completedAt,
+    ),
+  ],
+);
 
 export const documentAnalyses = sqliteTable("document_analyses", {
   id: text("id").primaryKey(),

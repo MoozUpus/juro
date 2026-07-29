@@ -52,9 +52,25 @@ export const GET = withApiErrors(async function GET() {
     ).bind(user.id),
     db.prepare(
       `SELECT
-         id,status,requested_at AS requestedAt,verified_at AS verifiedAt
+         id,status,deletion_mode AS deletionMode,
+         requested_at AS requestedAt,verified_at AS verifiedAt,
+         scheduled_purge_at AS scheduledPurgeAt,
+         purge_started_at AS purgeStartedAt,
+         purge_irreversible_at AS purgeIrreversibleAt,
+         failure_code AS failureCode,
+         CASE
+           WHEN deletion_mode='recoverable_30d'
+             AND status IN ('scheduled','blocked')
+             AND purge_irreversible_at IS NULL
+           THEN 1 ELSE 0
+         END AS cancelable,
+          CASE
+            WHEN status='blocked' AND purge_irreversible_at IS NULL
+            THEN 1 ELSE 0
+          END AS retryable
        FROM account_deletion_requests
-       WHERE user_id=? AND status IN ('requested','reviewing')
+       WHERE user_id=?
+         AND status IN ('requested','reviewing','scheduled','purging','blocked')
        ORDER BY requested_at DESC
        LIMIT 1`,
     ).bind(user.id),

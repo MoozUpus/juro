@@ -41,7 +41,14 @@ assert.equal(
   artifact.vars?.ASYNC_RUNTIME_ENABLED,
   requestedEnvironment === "staging" ? "true" : "false",
 );
-assert.equal(artifact.vars?.CRON_ENABLED, "false");
+assert.equal(
+  artifact.vars?.CRON_ENABLED,
+  requestedEnvironment === "staging" ? "true" : "false",
+);
+assert.equal(
+  artifact.vars?.ACCOUNT_DELETION_PURGE_ENABLED,
+  requestedEnvironment === "staging" ? "true" : "false",
+);
 assert.equal(artifact.vars?.LEGAL_ADVICE_INGESTION_ENABLED, "false");
 assert.equal(artifact.vars?.LEGAL_SOURCE_STAFF_API_ENABLED, "false");
 assert.equal(
@@ -185,7 +192,8 @@ assert.deepEqual(
 assert.deepEqual(
   artifact.queues?.consumers,
   requestedEnvironment === "staging"
-    ? [{
+    ? [
+      {
         queue: "staging-email-notifications",
         max_batch_size: 5,
         max_batch_timeout: 5,
@@ -193,9 +201,19 @@ assert.deepEqual(
         dead_letter_queue: "staging-email-notifications-dlq",
         max_concurrency: 2,
         retry_delay: 30,
-      }]
+      },
+      {
+        queue: "staging-data-retention-cleanup",
+        max_batch_size: 5,
+        max_batch_timeout: 5,
+        max_retries: 5,
+        dead_letter_queue: "staging-data-retention-cleanup-dlq",
+        max_concurrency: 1,
+        retry_delay: 30,
+      },
+    ]
     : [],
-  "Only the reviewed staging security-email consumer may be attached",
+  "Only reviewed staging consumers may be attached",
 );
 assert.equal(
   artifact.queues?.producers.some(({ binding }) =>
@@ -249,14 +267,12 @@ assert.equal(
 );
 
 const triggers = artifact.triggers;
-assert.ok(
-  triggers === undefined ||
-    (
-      triggers &&
-      typeof triggers === "object" &&
-      Object.keys(triggers).length === 0
-    ),
-  "Cron triggers must remain absent until control-plane inventory is verified",
+assert.deepEqual(
+  triggers,
+  requestedEnvironment === "staging"
+    ? { crons: ["*/5 * * * *"] }
+    : {},
+  "Only the reviewed staging outbox cron may be attached",
 );
 
 async function filesBelow(root) {

@@ -12,6 +12,7 @@
     "APP_ENV": "development",
     "ASYNC_RUNTIME_ENABLED": "false",
     "CRON_ENABLED": "false",
+    "ACCOUNT_DELETION_PURGE_ENABLED": "false",
     "LEGAL_ADVICE_INGESTION_ENABLED": "false",
     "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
@@ -121,10 +122,14 @@
       "assets": {
         "binding": "ASSETS"
       },
+      "triggers": {
+        "crons": ["*/5 * * * *"]
+      },
       "vars": {
         "APP_ENV": "staging",
         "ASYNC_RUNTIME_ENABLED": "true",
-        "CRON_ENABLED": "false",
+        "CRON_ENABLED": "true",
+        "ACCOUNT_DELETION_PURGE_ENABLED": "true",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
@@ -193,6 +198,15 @@
             "dead_letter_queue": "staging-email-notifications-dlq",
             "max_concurrency": 2,
             "retry_delay": 30
+          },
+          {
+            "queue": "staging-data-retention-cleanup",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "staging-data-retention-cleanup-dlq",
+            "max_concurrency": 1,
+            "retry_delay": 30
           }
         ]
       },
@@ -233,6 +247,7 @@
         "APP_ENV": "production",
         "ASYNC_RUNTIME_ENABLED": "false",
         "CRON_ENABLED": "false",
+        "ACCOUNT_DELETION_PURGE_ENABLED": "false",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",

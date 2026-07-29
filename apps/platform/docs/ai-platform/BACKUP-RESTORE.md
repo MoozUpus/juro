@@ -195,3 +195,22 @@ Still not verified:
 The verified-empty D-040 exception remains consumed. These staging artifacts
 do not authorize a production migration. Production/development remain through
 `0004`; only `juro-staging` is through `0029`.
+
+### Pre-0030–0033 account-deletion checkpoint — 2026-07-30
+
+Immediately before the staging candidate, remote `juro-staging` reported `quick_check=ok`, 30 applied migrations through `0029`, and exactly four pending files: `0030_eager_shen.sql`, `0031_melted_nextwave.sql`, `0032_fixed_wasp.sql`, and `0033_freezing_havok.sql`.
+
+Time Travel bookmark: `00000035-00000000-000050b7-179d399e193e3067399de9571322a50b`.
+
+Private prefix: `d1/juro-staging/20260729T203509Z/` in `juro-staging-backups`.
+
+| Artifact | Bytes | SHA-256 |
+|---|---:|---|
+| `juro-staging-pre-0030-0033-full.sql` | 150,134 | `cca4b78cee1e56b323da2a3a89d88df07ea6f14aff310ba3b04681e4b0de4832` |
+| `juro-staging-pre-0030-0033-schema.sql` | 132,700 | `edb5751fd97af0c1fd8995b6bb5d05eda50185e54af55edb54fb09033139caaf` |
+| `juro-staging-pre-0030-0033-data.sql` | 17,466 | `4d585bcc89cf3c80eb131e526ad7d7da2d80b97d6cb8c77fd97e0c5e4566df73` |
+| `manifest.json` | 1,023 | `99f4321c3db6a7ec5e84971c3dbecc6c71338f069aa4226cff53f48862b65f53` |
+
+All four objects were downloaded from private R2 and matched local bytes exactly. The current schema export is byte-identical to the prior verified post-`0029` schema; the data export differs only in `auth_sessions` and `auth_devices` rows, not table shape. The existing disposable logical-import drill therefore covers the same schema/import topology, while the current bookmark and round-tripped exports cover current row recovery. This is not a measured incident RTO.
+
+If staging verification fails, first roll the Worker back to version `448e5bf1-4bf8-4000-af2b-2c034e3eca10` and disable async/cron/purge. If schema recovery is actually required, place staging in maintenance and use the recorded Time Travel bookmark; portable exports are the independent recovery input. Never run the restore against production.

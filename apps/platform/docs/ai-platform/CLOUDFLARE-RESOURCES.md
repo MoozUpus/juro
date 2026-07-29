@@ -296,3 +296,11 @@ The Access application is hidden from the App Launcher and auto-redirects to the
 Secret values were neither read nor emitted. Async runtime, Cron, legal-source
 ingestion and staff API flags remain false. Production resources and traffic
 were not changed.
+
+## Pending account-deletion staging activation — 2026-07-30
+
+Read-only control-plane verification confirms custom domain `staging.app.juro.uz` belongs to `juro-platform-staging`, workers.dev/previews are disabled, and Access application `JURO platform staging — owner only` protects the exact hostname. The current deployed version remains `448e5bf1-4bf8-4000-af2b-2c034e3eca10`, with no cron and no Queue consumers.
+
+The tested candidate will attach only two staging consumers: `staging-email-notifications` -> `staging-email-notifications-dlq` and `staging-data-retention-cleanup` -> `staging-data-retention-cleanup-dlq`; it also attaches `*/5 * * * *`. Secret inventory remains names-only: `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`. The remaining provider/model secrets required by later AI phases are not claimed as present.
+
+Four current pre-migration backup objects under `d1/juro-staging/20260729T203509Z/` passed private R2 round-trip checksum verification. Production Workers, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.

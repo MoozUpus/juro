@@ -1,9 +1,15 @@
 import {
+  cancelAccountDeletionRequest,
   confirmAccountDeletion,
   invalidateAccountDeletionChallenge,
   reserveAccountDeletionChallenge,
+  retryAccountDeletionRequest,
   type DeletionConfirmationResult,
 } from "../../../../../lib/auth/account-deletion";
+import {
+  RECOVERABLE_DELETION_DELAY_MS,
+  accountDeletionSubjectHash,
+} from "../../../../../lib/auth/account-deletion-lifecycle";
 import {
   randomOtp,
   randomToken,
@@ -28,6 +34,8 @@ import {
   runtimeEnv,
 } from "../../../../../lib/document-builder/storage/runtime";
 import { ensureDefaultWorkspace } from "../../../../../lib/platform/workspace";
+import { dispatchOutbox } from "../../../../../worker/platform-outbox";
+import type { PlatformJobEnv } from "../../../../../worker/platform-jobs";
 
 const CHALLENGE_TTL_MS = 10 * 60 * 1_000;
 const RECENT_SESSION_MS = 10 * 60 * 1_000;
@@ -153,11 +161,20 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
 
   const db = requireD1();
+  const env = runtimeEnv();
+  const identityKeyring = env.IDENTITY_KEYRING;
+  if (!identityKeyring) {
+    return jsonNoStore({
+      code: "IDENTITY_KEYRING_UNAVAILABLE",
+      error: locale === "ru"
+        ? "Защищённое удаление аккаунта временно недоступно."
+        : "Hisobni himoyalangan tarzda o‘chirish vaqtincha mavjud emas.",
+    }, 503);
+  }
   const identityContext = runtimeIdentityProtection();
   const nowMs = Date.now();
   const now = new Date(nowMs).toISOString();
   if (body.action === "request_code") {
-    const env = runtimeEnv();
     if (!env.RESEND_API_KEY || !env.EMAIL_FROM) {
       return jsonNoStore({
         code: "EMAIL_NOT_CONFIGURED",
@@ -260,15 +277,110 @@ export const POST = withApiErrors(async function POST(request: Request) {
     });
   }
 
+  const workspaceId = await ensureDefaultWorkspace(session.userId);
+  if (body.action === "cancel") {
+    const result = await cancelAccountDeletionRequest(db, {
+      requestId: body.requestId,
+      userId: session.userId,
+      sessionId: session.sessionId,
+      workspaceId,
+      identityKeyring,
+      assuranceLevel: session.assuranceLevel,
+      now,
+    });
+    if (result.status === "cancelled" || result.status === "already_cancelled") {
+      return jsonNoStore({
+        ok: true,
+        requestId: body.requestId,
+        status: "cancelled",
+      });
+    }
+    const code = result.status === "completed"
+      ? "DELETION_ALREADY_COMPLETED"
+      : result.status === "not_cancelable"
+        ? "DELETION_NOT_CANCELABLE"
+        : "DELETION_REQUEST_INVALID";
+    return jsonNoStore({
+      code,
+      error: locale === "ru"
+        ? result.status === "completed"
+          ? "Удаление аккаунта уже завершено."
+          : result.status === "not_cancelable"
+            ? "Этот запрос уже нельзя отменить."
+            : "Запрос удаления не найден."
+        : result.status === "completed"
+          ? "Hisobni o‘chirish allaqachon yakunlangan."
+          : result.status === "not_cancelable"
+            ? "Bu so‘rovni endi bekor qilib bo‘lmaydi."
+            : "O‘chirish so‘rovi topilmadi.",
+    }, result.status === "completed" ? 410 : result.status === "invalid" ? 404 : 409);
+  }
+
+  if (body.action === "retry") {
+    const result = await retryAccountDeletionRequest(db, {
+      requestId: body.requestId,
+      userId: session.userId,
+      sessionId: session.sessionId,
+      workspaceId,
+      identityKeyring,
+      assuranceLevel: session.assuranceLevel,
+      now,
+    });
+    if (result.status === "retried" || result.status === "already_queued") {
+      await dispatchOutbox(
+        env as PlatformJobEnv,
+        1,
+        body.requestId,
+      );
+      return jsonNoStore({
+        ok: true,
+        requestId: body.requestId,
+        status: "scheduled",
+        logout: true,
+      }, 200, [clearSessionCookie()]);
+    }
+    const code = result.status === "completed"
+      ? "DELETION_ALREADY_COMPLETED"
+      : result.status === "not_retryable"
+        ? "DELETION_NOT_RETRYABLE"
+        : "DELETION_REQUEST_INVALID";
+    return jsonNoStore({
+      code,
+      error: locale === "ru"
+        ? result.status === "completed"
+          ? "Удаление аккаунта уже завершено."
+          : result.status === "not_retryable"
+            ? "Этот запрос сейчас нельзя запустить повторно."
+            : "Запрос удаления не найден."
+        : result.status === "completed"
+          ? "Hisobni o‘chirish allaqachon yakunlangan."
+          : result.status === "not_retryable"
+            ? "Bu so‘rovni hozir qayta ishga tushirib bo‘lmaydi."
+            : "O‘chirish so‘rovi topilmadi.",
+    }, result.status === "completed" ? 410 : result.status === "invalid" ? 404 : 409);
+  }
+  const deletionSubject = await accountDeletionSubjectHash(
+    identityKeyring,
+    session.userId,
+  );
+  const scheduledPurgeAt = new Date(
+    nowMs + (body.deletionMode === "recoverable_30d"
+      ? RECOVERABLE_DELETION_DELAY_MS
+      : 0),
+  ).toISOString();
   const result = await confirmAccountDeletion(db, {
     identityContext,
     challengeId: body.challengeId,
     userId: session.userId,
     sessionId: session.sessionId,
     email: session.email,
-    workspaceId: await ensureDefaultWorkspace(session.userId),
+    workspaceId,
     code: body.code,
     reason: body.reason || null,
+    deletionMode: body.deletionMode,
+    scheduledPurgeAt,
+    subjectHash: deletionSubject.hash,
+    subjectKeyVersion: deletionSubject.keyVersion,
     assuranceLevel: session.assuranceLevel,
     now,
     recentSince: new Date(nowMs - RECENT_SESSION_MS).toISOString(),
@@ -276,10 +388,19 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (result.status !== "confirmed") {
     return confirmationError(result, locale);
   }
+  if (body.deletionMode === "immediate") {
+    await dispatchOutbox(
+      env as PlatformJobEnv,
+      1,
+      result.requestId,
+    );
+  }
   return jsonNoStore({
     ok: true,
     requestId: result.requestId,
-    status: "requested",
+    status: "scheduled",
+    deletionMode: result.deletionMode,
+    scheduledPurgeAt: result.scheduledPurgeAt,
     logout: true,
     revokedSessions: result.revokedSessions,
   }, 201, [clearSessionCookie()]);

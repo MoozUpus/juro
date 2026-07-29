@@ -52,6 +52,7 @@ const sessionTokenRotationEntry = journal.entries.find(
 const securityEmailJobEntry = journal.entries.find(({ idx }) => idx === 30);
 const deviceContinuityEntry = journal.entries.find(({ idx }) => idx === 31);
 const securityNotificationEntry = journal.entries.find(({ idx }) => idx === 32);
+const accountDeletionLifecycleEntry = journal.entries.find(({ idx }) => idx === 33);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -124,6 +125,9 @@ assert.ok(
 assert.ok(
   securityNotificationEntry,
   "Drizzle journal must contain migration 0032",
+);assert.ok(
+  accountDeletionLifecycleEntry,
+  "Drizzle journal must contain migration 0033",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2746,7 +2750,7 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 110);
+    assert.equal(tableDefinitions(db).size, 112);
     assert.equal(foreignKeyCount(db), 158);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
@@ -3249,7 +3253,7 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 110);
+    assert.equal(tableDefinitions(db).size, 112);
     assert.equal(foreignKeyCount(db), 158);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
@@ -3648,6 +3652,173 @@ test("0032 fences immutable login notification evidence and duplicate delivery",
     `).get() as { status: string; workspaceId: string | null };
     assert.equal(row.status, "sending");
     assert.equal(row.workspaceId, null);
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0033 adds a fenced account-deletion lifecycle and purge evidence boundary", () => {
+  const sql = migrationSql(accountDeletionLifecycleEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 34);
+  assert.match(sql, /CREATE TABLE .*account_deletion_lifecycle_events/);
+  assert.match(sql, /CREATE TABLE .*account_deletion_purge_evidence/);
+  assert.match(sql, /ADD `purge_irreversible_at` text/);
+  assert.match(sql, /account_deletion_lifecycle_chain_uidx/);
+  assert.match(sql, /APPEND_ONLY_ACCOUNT_DELETION_LIFECYCLE/);
+  assert.match(sql, /APPEND_ONLY_ACCOUNT_DELETION_PURGE_EVIDENCE/);
+  assert.match(sql, /OLD\.status IN \('cancelled','completed'\)/);
+  assert.match(sql, /OLD\.lifecycle_status='deleted'/);
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0032_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0033_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    prevId: string;
+    tables: Record<string, {
+      columns: Record<string, unknown>;
+      foreignKeys: Record<string, unknown>;
+    }>;
+  };
+  assert.equal(accountDeletionLifecycleEntry.idx, 33);
+  assert.equal(accountDeletionLifecycleEntry.tag, "0033_freezing_havok");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 86);
+  assert.ok(
+    snapshot.tables.account_deletion_requests.columns.purge_irreversible_at,
+  );
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    156,
+  );
+});
+
+test("0033 prevents lifecycle forks, evidence mutation, cancellation after purge, and tombstone resurrection", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-30T00:00:00.000Z";
+    const subjectHash = "a".repeat(64);
+    db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,locale,account_type,timezone,created_at,updated_at
+      ) VALUES ('deletion-33','deletion-33@example.test','ru','individual',
+        'Asia/Tashkent',?,?)
+    `).run(now, now);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO user_profiles (
+          id,email,locale,account_type,timezone,lifecycle_status,
+          deletion_completed_at,created_at,updated_at
+        ) VALUES ('invalid-tombstone-33','invalid-33@example.test','ru',
+          'individual','Asia/Tashkent','deleted',?,?,?)
+      `).run(now, now, now),
+      /USER_PROFILE_LIFECYCLE_INVALID/,
+    );
+    db.prepare(`
+      INSERT INTO account_deletion_requests (
+        id,user_id,status,deletion_mode,subject_hash,subject_key_version,
+        verification_method,verified_at,requested_at,scheduled_purge_at
+      ) VALUES ('request-33','deletion-33','scheduled','recoverable_30d',
+        ?,'v1','email_otp',?,?,?)
+    `).run(subjectHash, now, now, now);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE account_deletion_requests
+        SET status='completed',completed_at=? WHERE id='request-33'
+      `).run(now),
+      /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
+    );
+    db.prepare(`
+      INSERT INTO account_deletion_lifecycle_events (
+        id,request_id,subject_hash,subject_key_version,event_type,
+        deletion_mode,policy_version,summary_json,previous_hash,event_hash,
+        created_at
+      ) VALUES ('event-33','request-33',?,'v1','scheduled','recoverable_30d',
+        'account-purge-v1','{}',?,?,?)
+    `).run(subjectHash, "0".repeat(64), "b".repeat(64), now);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO account_deletion_lifecycle_events (
+          id,request_id,subject_hash,subject_key_version,event_type,
+          deletion_mode,policy_version,summary_json,previous_hash,event_hash,
+          created_at
+        ) VALUES ('fork-33','request-33',?,'v1','failed','recoverable_30d',
+          'account-purge-v1','{}',?,?,?)
+      `).run(subjectHash, "0".repeat(64), "c".repeat(64), now),
+      /UNIQUE constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        UPDATE account_deletion_lifecycle_events
+        SET summary_json='{"tampered":true}' WHERE id='event-33'
+      `).run(),
+      /APPEND_ONLY_ACCOUNT_DELETION_LIFECYCLE/,
+    );
+    db.prepare(`
+      UPDATE account_deletion_requests
+      SET status='purging',purge_started_at=?,purge_irreversible_at=?,
+          purge_lease_owner='lease-33',purge_lease_expires_at=?
+      WHERE id='request-33'
+    `).run(now, now, "2026-07-30T00:05:00.000Z");
+    assert.throws(
+      () => db.prepare(`
+        UPDATE account_deletion_requests
+        SET status='cancelled',cancelled_at=? WHERE id='request-33'
+      `).run(now),
+      /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
+    );
+    db.prepare(`
+      UPDATE account_deletion_requests
+      SET status='completed',completed_at=?,purge_lease_owner=NULL,
+          purge_lease_expires_at=NULL
+      WHERE id='request-33'
+    `).run(now);
+    db.prepare(`
+      INSERT INTO account_deletion_purge_evidence (
+        request_id,subject_hash,subject_key_version,deletion_mode,
+        policy_version,requested_at,completed_at,r2_deleted_count,
+        d1_deleted_count,redacted_count,retained_evidence_json,evidence_hash
+      ) VALUES ('request-33',?,'v1','recoverable_30d','account-purge-v1',
+        ?,?,0,0,0,'[]',?)
+    `).run(subjectHash, now, now, "d".repeat(64));
+    assert.throws(
+      () => db.prepare(`
+        UPDATE account_deletion_purge_evidence
+        SET redacted_count=1 WHERE request_id='request-33'
+      `).run(),
+      /APPEND_ONLY_ACCOUNT_DELETION_PURGE_EVIDENCE/,
+    );
+    db.prepare(`
+      UPDATE user_profiles
+      SET email='deleted.migration-33@invalid.juro',lifecycle_status='deleted',
+          deletion_completed_at=?,updated_at=?
+      WHERE id='deletion-33'
+    `).run(now, now);
+    assert.throws(
+      () => db.prepare(`
+        UPDATE user_profiles
+        SET email='resurrected-33@example.test',lifecycle_status='active',
+          deletion_completed_at=NULL WHERE id='deletion-33'
+      `).run(),
+      /USER_PROFILE_LIFECYCLE_INVALID/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        UPDATE account_deletion_requests
+        SET status='scheduled' WHERE id='request-33'
+      `).run(),
+      /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
+    );
+    assert.equal(tableDefinitions(db).size, 112);
+    assert.equal(foreignKeyCount(db), 158);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

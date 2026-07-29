@@ -1551,3 +1551,13 @@ Local evidence is 368 tests (27 rendered, 265 core, 76 Cloudflare), plus passing
 type-check and lint. Migration `0032`, the pending `0030`/`0031` migrations,
 consumer activation, protected HTTP behavior, DLQ/redrive, and real provider
 mailbox delivery remain unverified in staging. Production is unchanged.
+
+## D-073 — make account deletion a fenced, retryable D1/R2 lifecycle
+
+A verified deletion request now selects either immediate or 30-day recoverable mode. Confirmation requires a recent local email session, CSRF, one-time email OTP, and a versioned purpose-separated keyed subject. Confirmation, outbox creation, workspace audit, session/device/continuity revocation, and the first lifecycle edge are one D1 batch.
+
+D1 cannot roll back an R2 object deletion. The purge therefore inventories exact owned keys first, rejects sole-owner and active-staff blockers, and then atomically persists `purge_irreversible_at` before touching R2. Cancellation is legal only for recoverable requests before that marker. R2 failure leaves D1 content intact; D1 failure after R2 remains retryable but never cancelable. This avoids both false cancellation and orphaned private objects.
+
+Lifecycle edges and terminal purge evidence are append-only hash chains. The profile is tombstoned rather than deleted so retained consent/security/audit/signature/financial evidence remains referentially stable. Foreign-user contributions are redacted. Completed/cancelled requests and deleted profiles are immutable by trigger.
+
+A blocker may be corrected and retried from a fresh authenticated RU/UZ settings flow. A transient transaction marker fences concurrent retry requests, producing one new outbox job and one lifecycle edge. Local concurrency, failure, blocker, R2, D1, Queue, Cron, migration, route, and UI contracts pass. Staging activation requires migrations `0030`–`0033`, the reviewed email/cleanup consumers, the single `*/5` outbox cron, protected synthetic smoke, and log checks. Production purge/cron/async stay disabled and production remains unchanged.

@@ -376,3 +376,7 @@ Next ordered work:
 5. keep alerts and consumer disabled outside staging until those gates pass.
 
 No remote staging write or production change is claimed by this checkpoint.
+
+## Phase 2 account-deletion staging gate — 2026-07-30
+
+The next authorized staging-only action is the exact migration/deploy/smoke sequence in `DEPLOYMENT.md`. Success does not complete the overall program: AI providers, legal-source sync, document intelligence, file security/OCR, cases/plans, lawyers, tariffs, admin/support/status, cinematic prototype, Jurobek/voice, accessibility/performance matrices, and production readiness remain subsequent gates. Production still requires separate functional and UI confirmations.

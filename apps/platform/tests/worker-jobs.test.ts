@@ -9,13 +9,13 @@ import {
   QUEUE_BINDING_BY_KIND,
   expectedQueueName,
   handleQueue,
-  handleScheduled,
   jobEnvelopeSchema,
   type JobEnvelope,
   type JobKind,
   type PlatformJobEnv,
 } from "../worker/platform-jobs";
 import { dispatchOutbox } from "../worker/platform-outbox";
+import { handleScheduled } from "../worker/platform-scheduled";
 
 class SqliteD1Statement {
   constructor(
@@ -292,7 +292,7 @@ function mockBatch(
 }
 
 function envelope(
-  kind: JobKind = "cleanup.run",
+  kind: JobKind = "document.analyze",
   overrides: Partial<JobEnvelope> = {},
 ): JobEnvelope {
   const tenantKind = new Set<JobKind>([
@@ -686,7 +686,11 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
       "JOB_QUEUE_MISMATCH",
     );
 
-    const disabledBody = envelope("document.analyze");
+    const disabledBody = envelope("document.analyze", {
+      jobId: "job_document_analyze_disabled",
+      idempotencyKey: "idem_document_analyze_disabled",
+      correlationId: "corr_document_analyze_disabled",
+    });
     const disabled = mockMessage(disabledBody, "disabled_handler");
     await runBatch(
       env,
@@ -794,7 +798,7 @@ test("structured logs never contain rejected message content", async () => {
   }
 });
 
-test("scheduled runtime is inert without an attached reviewed schedule", async () => {
+test("scheduled runtime remains inert when disabled and rejects unknown cron", async () => {
   for (const options of [
     { asyncEnabled: "false", cronEnabled: "false" },
     { asyncEnabled: "true", cronEnabled: "false" },
@@ -822,6 +826,52 @@ test("scheduled runtime is inert without an attached reviewed schedule", async (
   }
 });
 
+test("reviewed outbox cron is locked, durable, and idempotent", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    insertOutbox(sqlite);
+    const { env, sends } = createEnv(d1, {
+      asyncEnabled: "true",
+      cronEnabled: "true",
+    });
+    let noRetryCalls = 0;
+    const controller = {
+      scheduledTime: Date.UTC(2026, 6, 26, 0, 5),
+      cron: "*/5 * * * *",
+      noRetry() {
+        noRetryCalls += 1;
+      },
+    } satisfies ScheduledController;
+    await handleScheduled(controller, env);
+    assert.equal(noRetryCalls, 0);
+    assert.equal(sends.length, 1);
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        `SELECT status,error_code AS errorCode
+         FROM scheduled_runs WHERE schedule_name='outbox-dispatch'`,
+      ).get() },
+      { status: "completed", errorCode: null },
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM scheduled_locks").get() as { total: number }).total,
+      0,
+    );
+
+    await handleScheduled(controller, env);
+    assert.equal(noRetryCalls, 1);
+    assert.equal(sends.length, 1);
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM scheduled_runs").get() as { total: number }).total,
+      1,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM scheduled_locks").get() as { total: number }).total,
+      0,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
 function insertOutbox(
   sqlite: DatabaseSync,
   overrides: Partial<{

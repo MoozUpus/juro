@@ -1,6 +1,6 @@
 # JURO AI platform documentation
 
-Updated: 2026-07-28
+Updated: 2026-07-30
 
 This directory is the evidence-backed engineering record for the staged JURO AI platform program. Documentation distinguishes four states explicitly:
 
@@ -29,6 +29,10 @@ No document in this directory authorizes or implies a production schema, traffic
 - `R2-STORAGE.md` — private storage inventory, target names, object policy, and additive cutover.
 - `BACKUP-RESTORE.md` — backup evidence contract, passed empty-staging Time Travel/one-time bootstrap evidence, and still-missing portable export/import, protected-object, isolated-restore, and RTO evidence.
 - `SECRETS.md` — server-only secret names/contracts and presence-by-name inventory, never values.
+- `RETENTION.md` — implemented account-deletion lifecycle, retained evidence, purge order, and open retention gates.
+- `SECURITY.md` — implemented platform controls, environment isolation, release evidence, and open security gates.
+- `DATA-MODEL.md` — additive domain model and migration `0033` deletion/tombstone contract.
+- `IMPLEMENTED-FEATURES.md` and `DEFERRED-FEATURES.md` — evidence-backed implemented/deferred register.
 
 ## Identity foundation
 

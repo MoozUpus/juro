@@ -84,7 +84,7 @@ function assertUnique(values: string[], label: string): void {
   );
 }
 
-test("declares isolated Cloudflare environments with a staging-only email consumer", () => {
+test("declares isolated Cloudflare environments with reviewed staging consumers and cron", () => {
   const resourceNames = new Map<string, Set<string>>();
 
   for (const environment of environments) {
@@ -95,12 +95,22 @@ test("declares isolated Cloudflare environments with a staging-only email consum
       config.vars.ASYNC_RUNTIME_ENABLED,
       environment === "staging" ? "true" : "false",
     );
-    assert.equal(config.vars.CRON_ENABLED, "false");
+    assert.equal(
+      config.vars.CRON_ENABLED,
+      environment === "staging" ? "true" : "false",
+    );
+    assert.equal(
+      config.vars.ACCOUNT_DELETION_PURGE_ENABLED,
+      environment === "staging" ? "true" : "false",
+    );
     assert.equal(config.vars.LEGAL_ADVICE_INGESTION_ENABLED, "false");
     assert.equal(config.vars.LEGAL_SOURCE_STAFF_API_ENABLED, "false");
     assert.equal(config.vars.IDENTITY_PROTECTION_MODE, "legacy");
     assert.equal(config.vars.JOB_SCHEMA_VERSION, "1");
-    assert.equal(Object.hasOwn(config, "triggers"), false);
+    assert.deepEqual(
+      config.triggers,
+      environment === "staging" ? { crons: ["*/5 * * * *"] } : undefined,
+    );
     assert.deepEqual(config.assets, { binding: "ASSETS" });
 
     assert.deepEqual(
@@ -149,7 +159,8 @@ test("declares isolated Cloudflare environments with a staging-only email consum
     assert.deepEqual(
       config.queues.consumers,
       environment === "staging"
-        ? [{
+        ? [
+          {
             queue: "staging-email-notifications",
             max_batch_size: 5,
             max_batch_timeout: 5,
@@ -157,7 +168,17 @@ test("declares isolated Cloudflare environments with a staging-only email consum
             dead_letter_queue: "staging-email-notifications-dlq",
             max_concurrency: 2,
             retry_delay: 30,
-          }]
+          },
+          {
+            queue: "staging-data-retention-cleanup",
+            max_batch_size: 5,
+            max_batch_timeout: 5,
+            max_retries: 5,
+            dead_letter_queue: "staging-data-retention-cleanup-dlq",
+            max_concurrency: 1,
+            retry_delay: 30,
+          },
+        ]
         : [],
     );
 
@@ -285,10 +306,10 @@ test("does not attach legacy or premature queue contracts", () => {
   assert.doesNotMatch(serialized, /-malware-scan"/);
   assert.deepEqual(source.queues.consumers, []);
   assert.deepEqual(source.env.production.queues.consumers, []);
-  assert.equal(source.env.staging.queues.consumers.length, 1);
-  assert.equal(
-    source.env.staging.queues.consumers[0]?.queue,
-    "staging-email-notifications",
+  assert.equal(source.env.staging.queues.consumers.length, 2);
+  assert.deepEqual(
+    source.env.staging.queues.consumers.map(({ queue }) => queue),
+    ["staging-email-notifications", "staging-data-retention-cleanup"],
   );
 });
 

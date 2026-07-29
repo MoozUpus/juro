@@ -29,8 +29,15 @@ type ProfileData = {
   deletionRequest: {
     id: string;
     status: string;
+    deletionMode: "immediate" | "recoverable_30d";
     requestedAt: string;
     verifiedAt: string | null;
+    scheduledPurgeAt: string | null;
+    purgeStartedAt: string | null;
+    purgeIrreversibleAt: string | null;
+    failureCode: string | null;
+    cancelable: number | boolean;
+    retryable: number | boolean;
   } | null;
 };
 type Session = {
@@ -92,6 +99,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletionCode, setDeletionCode] = useState("");
   const [deletionChallenge, setDeletionChallenge] = useState<DeletionChallenge | null>(null);
+  const [deletionMode, setDeletionMode] = useState<"immediate" | "recoverable_30d">("recoverable_30d");
   const [mfa, setMfa] = useState<MfaStatus | null>(null);
   const [mfaSetup, setMfaSetup] = useState<MfaSetup | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -536,6 +544,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
               challengeId: deletionChallenge.challengeId,
               code: deletionCode,
               confirmation: deleteConfirmation,
+              deletionMode,
               locale,
             }
             : { action: "request_code", locale }),
@@ -554,8 +563,12 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
           : "So‘rov yaratilmadi."));
       } else if (body.logout) {
         setNotice(ru
-          ? "Проверенный запрос зарегистрирован. Сессии завершены."
-          : "Tasdiqlangan so‘rov ro‘yxatdan o‘tdi. Sessiyalar yakunlandi.");
+          ? deletionMode === "recoverable_30d"
+            ? "Удаление запланировано через 30 дней. До начала очистки запрос можно отменить после повторного входа."
+            : "Немедленная очистка поставлена в защищённую очередь. Сессии завершены."
+          : deletionMode === "recoverable_30d"
+            ? "O‘chirish 30 kundan keyin rejalashtirildi. Tozalash boshlanguncha qayta kirib so‘rovni bekor qilish mumkin."
+            : "Darhol tozalash himoyalangan navbatga qo‘yildi. Sessiyalar yakunlandi.");
         window.location.assign(localizedSignOut);
       } else if (
         body.challengeId
@@ -580,6 +593,95 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
     }
   }
 
+  async function cancelDeletionRequest() {
+    if (!data?.deletionRequest?.cancelable) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(
+        "/api/platform/privacy/deletion-request",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+          },
+          body: JSON.stringify({
+            action: "cancel",
+            requestId: data.deletionRequest.id,
+            locale,
+          }),
+        },
+      );
+      const body = await response.json() as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error || (ru
+          ? "Запрос удаления не отменён."
+          : "O‘chirish so‘rovi bekor qilinmadi."));
+      }
+      setNotice(ru
+        ? "Запрос удаления отменён. Данные аккаунта сохранены."
+        : "O‘chirish so‘rovi bekor qilindi. Hisob ma’lumotlari saqlandi.");
+      await load();
+    } catch (value) {
+      setError(value instanceof Error
+        ? value.message
+        : (ru
+          ? "Запрос удаления не отменён."
+          : "O‘chirish so‘rovi bekor qilinmadi."));
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function retryDeletionRequest() {
+    if (!data?.deletionRequest?.retryable) return;
+    setSaving(true);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch(
+        "/api/platform/privacy/deletion-request",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+          },
+          body: JSON.stringify({
+            action: "retry",
+            requestId: data.deletionRequest.id,
+            locale,
+          }),
+        },
+      );
+      const body = await response.json() as {
+        error?: string;
+        logout?: boolean;
+      };
+      if (!response.ok) {
+        throw new Error(body.error || (ru
+          ? "Очистка не запущена повторно."
+          : "Tozalash qayta ishga tushirilmadi."));
+      }
+      setNotice(ru
+        ? "Очистка снова поставлена в защищённую очередь."
+        : "Tozalash himoyalangan navbatga qayta qo‘yildi.");
+      if (body.logout) {
+        window.location.assign(localizedSignOut);
+      } else {
+        await load();
+      }
+    } catch (value) {
+      setError(value instanceof Error
+        ? value.message
+        : (ru
+          ? "Очистка не запущена повторно."
+          : "Tozalash qayta ishga tushirilmadi."));
+    } finally {
+      setSaving(false);
+    }
+  }
   if (loading) return <div className="profile-loading" role="status"><LoaderCircle className="spin" aria-hidden="true" /><span className="sr-only">{ru ? "Загрузка настроек" : "Sozlamalar yuklanmoqda"}</span></div>;
   const title = view === "profile" ? (ru ? "Профиль" : "Profil") : view === "security" ? (ru ? "Безопасность" : "Xavfsizlik") : view === "privacy" ? (ru ? "Приватность и данные" : "Maxfiylik va ma’lumotlar") : (ru ? "Настройки" : "Sozlamalar");
   const Icon = view === "profile" ? UserRound : view === "security" ? ShieldCheck : view === "privacy" ? Database : Languages;
@@ -809,24 +911,84 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
         </p>}
       </section>
       {data.deletionRequest
-        ? <section className="deletion-request-status">
-          <h2><Trash2 />{ru ? "Запрос на удаление зарегистрирован" : "O‘chirish so‘rovi ro‘yxatdan o‘tgan"}</h2>
-          <p>{ru
-            ? "JURO принял проверенный запрос. Данные не стираются автоматически: оператор должен проверить обязательные сроки хранения и последующие действия."
-            : "JURO tasdiqlangan so‘rovni qabul qildi. Ma’lumotlar avtomatik o‘chirilmaydi: operator majburiy saqlash muddati va keyingi amallarni tekshiradi."}</p>
+        ? <section className="deletion-request-status" aria-live="polite">
+          <h2><Trash2 aria-hidden="true" />{ru ? "Удаление аккаунта" : "Hisobni o‘chirish"}</h2>
+          <p>{data.deletionRequest.status === "blocked"
+            ? (ru
+              ? "Автоматическая очистка приостановлена: данные не удалены. Устраните ограничение или отмените восстанавливаемый запрос."
+              : "Avtomatik tozalash to‘xtatildi: ma’lumotlar o‘chirilmagan. Cheklovni bartaraf eting yoki tiklanadigan so‘rovni bekor qiling.")
+            : data.deletionRequest.deletionMode === "recoverable_30d"
+              ? (ru
+                ? "Запрос подтверждён. До указанного срока аккаунт можно восстановить, отменив удаление после свежего входа."
+                : "So‘rov tasdiqlandi. Ko‘rsatilgan muddatgacha yangi kirishdan so‘ng o‘chirishni bekor qilib hisobni saqlash mumkin.")
+              : (ru
+                ? "Немедленная очистка подтверждена и выполняется защищённой фоновой задачей."
+                : "Darhol tozalash tasdiqlandi va himoyalangan fon vazifasi orqali bajarilmoqda.")}</p>
           <div className="consent-row">
             <strong>{data.deletionRequest.status}</strong>
-            <span>{data.deletionRequest.id}</span>
-            <time>{formatDateTime(data.deletionRequest.requestedAt, ru)}</time>
+            <span>{data.deletionRequest.deletionMode === "recoverable_30d"
+              ? (ru ? "30 дней на восстановление" : "Tiklash uchun 30 kun")
+              : (ru ? "Без периода восстановления" : "Tiklash muddatlarisiz")}</span>
+            <time>{formatDateTime(
+              data.deletionRequest.scheduledPurgeAt || data.deletionRequest.requestedAt,
+              ru,
+            )}</time>
           </div>
+          {Boolean(data.deletionRequest.cancelable) && <button
+            className="danger-outline"
+            type="button"
+            disabled={saving}
+            aria-busy={saving}
+            onClick={cancelDeletionRequest}
+          >
+            {saving && <LoaderCircle className="spin" aria-hidden="true" />}
+            {ru ? "Отменить удаление" : "O‘chirishni bekor qilish"}
+          </button>}
+          {Boolean(data.deletionRequest.retryable) && <button
+            className="danger-outline"
+            type="button"
+            disabled={saving}
+            aria-busy={saving}
+            onClick={retryDeletionRequest}
+          >
+            {saving && <LoaderCircle className="spin" aria-hidden="true" />}
+            {ru ? "Повторить очистку" : "Tozalashni takrorlash"}
+          </button>}
         </section>
         : <form className="delete-request" onSubmit={requestDeletion}>
         <Trash2 />
         <div>
           <h2>{ru ? "Запросить удаление аккаунта" : "Hisobni o‘chirishni so‘rash"}</h2>
           <p id="deletion-request-description">{ru
-            ? "Это проверенный запрос, а не немедленное стирание: после подтверждения JURO завершит все email-сессии, а оператор проверит обязательные сроки хранения. Архивирование документов к этому процессу не относится."
-            : "Bu darhol o‘chirish emas, tasdiqlangan so‘rov: tasdiqlangach JURO barcha email sessiyalarini yakunlaydi, operator esa majburiy saqlash muddatlarini tekshiradi. Hujjatlarni arxivlash bu jarayonga kirmaydi."}</p>
+            ? "После подтверждения JURO завершит все сессии и удалит пользовательские данные, сохранив только минимальные записи, обязательные для безопасности, согласий и финансового учёта."
+            : "Tasdiqlangach JURO barcha sessiyalarni yakunlaydi va foydalanuvchi ma’lumotlarini o‘chiradi, faqat xavfsizlik, rozilik va moliyaviy hisob uchun zarur minimal yozuvlarni saqlaydi."}</p>
+          <fieldset className="deletion-mode-options" disabled={Boolean(deletionChallenge) || saving}>
+            <legend>{ru ? "Когда удалить данные" : "Ma’lumotlarni qachon o‘chirish"}</legend>
+            <label>
+              <input
+                type="radio"
+                name="deletion-mode"
+                value="recoverable_30d"
+                checked={deletionMode === "recoverable_30d"}
+                onChange={() => setDeletionMode("recoverable_30d")}
+              />
+              <span><strong>{ru ? "Через 30 дней" : "30 kundan keyin"}</strong>{ru
+                ? " Можно войти снова и отменить удаление до начала очистки."
+                : " Tozalash boshlanguncha qayta kirib o‘chirishni bekor qilish mumkin."}</span>
+            </label>
+            <label>
+              <input
+                type="radio"
+                name="deletion-mode"
+                value="immediate"
+                checked={deletionMode === "immediate"}
+                onChange={() => setDeletionMode("immediate")}
+              />
+              <span><strong>{ru ? "Немедленно" : "Darhol"}</strong>{ru
+                ? " Очистку нельзя отменить после запуска фоновой задачи."
+                : " Fon vazifasi boshlangach tozalashni bekor qilib bo‘lmaydi."}</span>
+            </label>
+          </fieldset>
           {!deletionChallenge
             ? <button type="submit" disabled={saving} aria-busy={saving}>
               {saving && <LoaderCircle className="spin" aria-hidden="true" />}

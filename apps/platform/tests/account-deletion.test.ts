@@ -5,6 +5,10 @@ import {
   reserveAccountDeletionChallenge,
 } from "../lib/auth/account-deletion";
 import {
+  RECOVERABLE_DELETION_DELAY_MS,
+  accountDeletionSubjectHash,
+} from "../lib/auth/account-deletion-lifecycle";
+import {
   createIdentityProtectionContext,
   IdentityProtectionError,
 } from "../lib/auth/identity-protection";
@@ -32,15 +36,17 @@ function encodedKey(seed: number): string {
     .replaceAll("=", "");
 }
 
+const RAW_IDENTITY_KEYRING = JSON.stringify({
+  active: "v2",
+  versions: {
+    v1: { aead: encodedKey(1), hmac: encodedKey(33) },
+    v2: { aead: encodedKey(65), hmac: encodedKey(97) },
+  },
+});
+
 const dualContext = createIdentityProtectionContext(
   "dual_write",
-  JSON.stringify({
-    active: "v2",
-    versions: {
-      v1: { aead: encodedKey(1), hmac: encodedKey(33) },
-      v2: { aead: encodedKey(65), hmac: encodedKey(97) },
-    },
-  }),
+  RAW_IDENTITY_KEYRING,
 );
 
 async function fixture() {
@@ -124,7 +130,7 @@ function activeChallengeId(
   ).id;
 }
 
-function confirm(
+async function confirm(
   d1: D1Database,
   sessionId: string,
   challengeId: string,
@@ -135,6 +141,10 @@ function confirm(
   } = {},
 ) {
   const now = options.now ?? "2026-07-26T12:02:00.000Z";
+  const subject = await accountDeletionSubjectHash(
+    RAW_IDENTITY_KEYRING,
+    USER_ID,
+  );
   return confirmAccountDeletion(d1, {
     identityContext: dualContext,
     challengeId,
@@ -144,6 +154,12 @@ function confirm(
     workspaceId: WORKSPACE_ID,
     code: options.code ?? CODE,
     reason: null,
+    deletionMode: "recoverable_30d",
+    scheduledPurgeAt: new Date(
+      Date.parse(now) + RECOVERABLE_DELETION_DELAY_MS,
+    ).toISOString(),
+    subjectHash: subject.hash,
+    subjectKeyVersion: subject.keyVersion,
     assuranceLevel: "primary",
     now,
     recentSince: new Date(
@@ -269,7 +285,9 @@ test("verified deletion request stores exact evidence and revokes sessions", asy
     const request = sqlite.prepare(
       `SELECT
          user_id AS userId,verification_challenge_id AS challengeId,
-         requested_session_id AS sessionId,status,verification_method AS method,
+         requested_session_id AS sessionId,status,deletion_mode AS deletionMode,
+         subject_hash AS subjectHash,subject_key_version AS subjectKeyVersion,
+         scheduled_purge_at AS scheduledPurgeAt,verification_method AS method,
          verified_at AS verifiedAt,requested_at AS requestedAt
        FROM account_deletion_requests WHERE id=?`,
     ).get(result.requestId) as Record<string, unknown>;
@@ -277,7 +295,13 @@ test("verified deletion request stores exact evidence and revokes sessions", asy
       userId: USER_ID,
       challengeId,
       sessionId: session.sessionId,
-      status: "requested",
+      status: "scheduled",
+      deletionMode: "recoverable_30d",
+      subjectHash: result.status === "confirmed"
+        ? (await accountDeletionSubjectHash(RAW_IDENTITY_KEYRING, USER_ID)).hash
+        : null,
+      subjectKeyVersion: "v2",
+      scheduledPurgeAt: "2026-08-25T12:02:00.000Z",
       method: "email_otp",
       verifiedAt: "2026-07-26T12:02:00.000Z",
       requestedAt: "2026-07-26T12:02:00.000Z",
@@ -323,7 +347,36 @@ test("verified deletion request stores exact evidence and revokes sessions", asy
       ).total,
       1,
     );
-    assert.equal(
+    const lifecycle = sqlite.prepare(
+      `SELECT event_type AS eventType,deletion_mode AS deletionMode,
+         subject_hash AS subjectHash,subject_key_version AS subjectKeyVersion
+       FROM account_deletion_lifecycle_events WHERE request_id=?`,
+    ).get(result.requestId) as {
+      eventType: string;
+      deletionMode: string;
+      subjectHash: string;
+      subjectKeyVersion: string;
+    };
+    assert.equal(lifecycle.eventType, "scheduled");
+    assert.equal(lifecycle.deletionMode, "recoverable_30d");
+    assert.match(lifecycle.subjectHash, /^[a-f0-9]{64}$/);
+    assert.equal(lifecycle.subjectKeyVersion, "v2");
+    const outbox = sqlite.prepare(
+      `SELECT job_type AS jobType,subject_id AS subjectId,
+         available_at AS availableAt,status
+       FROM job_outbox WHERE subject_id=?`,
+    ).get(result.requestId) as {
+      jobType: string;
+      subjectId: string;
+      availableAt: string;
+      status: string;
+    };
+    assert.deepEqual({ ...outbox }, {
+      jobType: "cleanup.run",
+      subjectId: result.requestId,
+      availableAt: "2026-08-25T12:02:00.000Z",
+      status: "pending",
+    });    assert.equal(
       (
         sqlite.prepare(
           `SELECT count(*) AS total FROM security_events
