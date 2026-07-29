@@ -11,7 +11,11 @@ import type {
   AccountType,
   PlatformLocale,
 } from "../../lib/platform/routing";
-import { platformPath, workspaceTypeForAccountType } from "../../lib/platform/routing";
+import {
+  platformPath,
+  workspaceForAccountRoute,
+  workspaceTypeForAccountType,
+} from "../../lib/platform/routing";
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { PlatformShell } from "./PlatformShell";
 
@@ -39,13 +43,22 @@ export async function WorkspaceShellLayout({
     redirect(`/${profile.locale}/onboarding`);
   }
 
-  const activeWorkspace = requestedWorkspaceId
+  const defaultWorkspace = requestedWorkspaceId
     ? await workspaceForUserById(userProfile.id, requestedWorkspaceId, {
         activate: true,
         source: "canonical_business_route",
       })
     : await workspaceForUser(userProfile);
-  if (!activeWorkspace) notFound();
+  if (!defaultWorkspace) notFound();
+
+  const availableWorkspaces = await workspacesForUser(userProfile.id);
+  const activeWorkspace = requestedWorkspaceId
+    ? defaultWorkspace
+    : workspaceForAccountRoute(
+        defaultWorkspace,
+        availableWorkspaces,
+        accountType,
+      );
 
   if (activeWorkspace.type !== workspaceTypeForAccountType(accountType)) {
     const destination = activeWorkspace.type === "business"
@@ -67,7 +80,6 @@ export async function WorkspaceShellLayout({
     redirect(`/${profile.locale}/${profile.accountType}/dashboard`);
   }
 
-  const availableWorkspaces = await workspacesForUser(userProfile.id);
   return (
     <PlatformShell
       locale={locale}

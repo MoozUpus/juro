@@ -6,7 +6,7 @@ import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
-import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath } from "../lib/platform/routing";
+import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, workspaceForAccountRoute } from "../lib/platform/routing";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 
@@ -32,6 +32,28 @@ test("builder navigation preserves canonical locale and account context", () => 
   assert.equal(legacy.locale, null);
   assert.equal(legacy.library, "/document-builder/library");
   assert.equal(legacy.document("doc-1"), "/document-builder/documents/doc-1");
+});
+
+test("personal routes retain the personal workspace when business is default", () => {
+  const personal = { id: "ws_personal", type: "individual" as const };
+  const business = { id: "ws_business", type: "business" as const };
+
+  assert.equal(
+    workspaceForAccountRoute(business, [personal, business], "individual"),
+    personal,
+  );
+  assert.equal(
+    workspaceForAccountRoute(business, [personal, business], "entrepreneur"),
+    personal,
+  );
+  assert.equal(
+    workspaceForAccountRoute(business, [personal, business], "lawyer"),
+    personal,
+  );
+  assert.equal(
+    workspaceForAccountRoute(business, [personal, business], "business"),
+    business,
+  );
 });
 
 test("builder workspaces expose complete RU and UZ navigation copy", () => {

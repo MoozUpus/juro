@@ -47,6 +47,27 @@ export function workspaceTypeForAccountType(
   return value === "business" ? "business" : "individual";
 }
 
+export function workspaceForAccountRoute<
+  T extends { type: "individual" | "business" },
+>(
+  defaultWorkspace: T,
+  availableWorkspaces: readonly T[],
+  accountType: AccountType,
+): T {
+  const requestedType = workspaceTypeForAccountType(accountType);
+  if (defaultWorkspace.type === requestedType) return defaultWorkspace;
+
+  // A selected business workspace must not make canonical personal routes
+  // unusable. The URL remains the source of truth for personal work surfaces;
+  // explicit business routes still require their workspace identifier.
+  if (requestedType === "individual") {
+    return availableWorkspaces.find(workspace => workspace.type === "individual")
+      ?? defaultWorkspace;
+  }
+
+  return defaultWorkspace;
+}
+
 export function isPlatformModule(value: string): value is PlatformModule {
   return PLATFORM_MODULES.includes(value as PlatformModule);
 }
