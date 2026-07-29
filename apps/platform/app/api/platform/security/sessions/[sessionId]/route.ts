@@ -1,4 +1,5 @@
 import {
+  clearDeviceContinuityCookie,
   clearSessionCookie,
 } from "../../../../../../lib/auth/session";
 import {
@@ -14,15 +15,13 @@ import {
   requireD1,
 } from "../../../../../../lib/document-builder/storage/runtime";
 
-function response(body: unknown, status = 200, headers?: HeadersInit) {
-  return Response.json(body, {
-    status,
-    headers: {
-      "cache-control": "private, no-store",
-      pragma: "no-cache",
-      ...headers,
-    },
+function response(body: unknown, status = 200, cookies: string[] = []) {
+  const headers = new Headers({
+    "cache-control": "private, no-store",
+    pragma: "no-cache",
   });
+  for (const cookie of cookies) headers.append("set-cookie", cookie);
+  return Response.json(body, { status, headers });
 }
 
 export const DELETE = withApiErrors(async function DELETE(
@@ -56,8 +55,8 @@ export const DELETE = withApiErrors(async function DELETE(
       { ok: true, ...result },
       200,
       result.revokedCurrent
-        ? { "set-cookie": clearSessionCookie() }
-        : undefined,
+        ? [clearSessionCookie(), clearDeviceContinuityCookie()]
+        : [],
     );
   } catch (error) {
     if (

@@ -687,3 +687,28 @@ migration:
 24. retain the backup until the release window and restore test are complete.
 
 Production migration remains prohibited without explicit owner approval after all staging gates.
+## Migration 0031
+
+`0031_melted_nextwave.sql` adds the opaque device-continuity boundary:
+
+- `auth_device_continuities` stores a tenant-scoped versioned HMAC, never the
+  raw browser token;
+- bounded first/last country and region codes are optional coarse risk evidence;
+- `(user_id, key_version, token_hmac)` is unique;
+- existing `auth_devices` receives a nullable `continuity_id` with `ON DELETE
+  SET NULL`, so legacy rows remain valid;
+- user deletion cascades continuity records while account-deletion workflow
+  revokes them before later purge.
+
+The migration has five additive statements: one table, two table indexes, one
+nullable `ALTER TABLE ... ADD`, and one device index. It contains no `DROP`,
+`DELETE`, or data `UPDATE`. The full local `0000`–`0031` sequence reports 109
+application tables, 156 foreign-key references, a clean `foreign_key_check`, and
+constraint tests for malformed HMAC/location evidence and duplicate lookup
+claims. A code rollback may leave the additive table/column unused; no down
+migration or destructive drop is required.
+
+This migration is not applied to remote staging. Before applying `0030` and
+`0031`, create a new portable D1 checkpoint, verify its checksum, repeat the
+disposable restore drill, record the pending migration list, and stop on any
+schema or ledger mismatch. Production is unchanged.

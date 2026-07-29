@@ -2,13 +2,18 @@ import { headers } from "next/headers";
 import { requireD1 } from "../document-builder/storage/runtime";
 import { runtimeIdentityProtection } from "./identity-runtime";
 import {
+  DEVICE_CONTINUITY_COOKIE,
   MFA_CHALLENGE_COOKIE,
   SESSION_COOKIE,
 } from "./session-token";
 import { localSessionFromCookie } from "./session-management";
 import type { LocalAssuranceLevel } from "./session-management";
 
-export { MFA_CHALLENGE_COOKIE, SESSION_COOKIE } from "./session-token";
+export {
+  DEVICE_CONTINUITY_COOKIE,
+  MFA_CHALLENGE_COOKIE,
+  SESSION_COOKIE,
+} from "./session-token";
 export { sessionCookie, sessionCookieUntil } from "./session-persistence";
 
 export type SessionUser = {
@@ -52,6 +57,16 @@ export function clearSessionCookie(): string {
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 }
 
+export function deviceContinuityCookie(
+  token: string,
+  maxAgeSeconds = 365 * 24 * 60 * 60,
+): string {
+  return `${DEVICE_CONTINUITY_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+}
+
+export function clearDeviceContinuityCookie(): string {
+  return `${DEVICE_CONTINUITY_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+}
 export function mfaChallengeCookie(
   token: string,
   maxAgeSeconds = 5 * 60,

@@ -625,16 +625,76 @@ export const authOtpChallenges = sqliteTable("auth_otp_challenges", {
   index("auth_otp_expiry_idx").on(table.expiresAt),
 ]);
 
+export const authDeviceContinuities = sqliteTable(
+  "auth_device_continuities",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id").notNull().references(() => userProfiles.id, {
+      onDelete: "cascade",
+    }),
+    tokenHmac: text("token_hmac").notNull(),
+    keyVersion: text("key_version").notNull(),
+    firstCountryCode: text("first_country_code"),
+    firstRegionCode: text("first_region_code"),
+    lastCountryCode: text("last_country_code"),
+    lastRegionCode: text("last_region_code"),
+    firstSeenAt: text("first_seen_at").notNull(),
+    lastSeenAt: text("last_seen_at").notNull(),
+    revokedAt: text("revoked_at"),
+  },
+  (table) => [
+    check(
+      "auth_device_continuities_hmac_check",
+      sql`length(${table.tokenHmac}) = 43
+        AND ${table.tokenHmac} NOT GLOB '*[^A-Za-z0-9_-]*'`,
+    ),
+    check(
+      "auth_device_continuities_country_check",
+      sql`(${table.firstCountryCode} IS NULL OR (
+          length(${table.firstCountryCode}) = 2
+          AND ${table.firstCountryCode} NOT GLOB '*[^A-Z0-9]*'
+        )) AND (${table.lastCountryCode} IS NULL OR (
+          length(${table.lastCountryCode}) = 2
+          AND ${table.lastCountryCode} NOT GLOB '*[^A-Z0-9]*'
+        ))`,
+    ),
+    check(
+      "auth_device_continuities_region_check",
+      sql`(${table.firstRegionCode} IS NULL OR (
+          length(${table.firstRegionCode}) BETWEEN 1 AND 12
+          AND ${table.firstRegionCode} NOT GLOB '*[^A-Z0-9-]*'
+        )) AND (${table.lastRegionCode} IS NULL OR (
+          length(${table.lastRegionCode}) BETWEEN 1 AND 12
+          AND ${table.lastRegionCode} NOT GLOB '*[^A-Z0-9-]*'
+        ))`,
+    ),
+    uniqueIndex("auth_device_continuities_lookup_uidx").on(
+      table.userId,
+      table.keyVersion,
+      table.tokenHmac,
+    ),
+    index("auth_device_continuities_user_idx").on(
+      table.userId,
+      table.lastSeenAt,
+    ),
+  ],
+);
+
 export const authDevices = sqliteTable("auth_devices", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
   displayName: text("display_name").notNull(),
   userAgentHash: text("user_agent_hash"),
+  continuityId: text("continuity_id").references(
+    () => authDeviceContinuities.id,
+    { onDelete: "set null" },
+  ),
   firstSeenAt: text("first_seen_at").notNull(),
   lastSeenAt: text("last_seen_at").notNull(),
   revokedAt: text("revoked_at"),
 }, (table) => [
   index("auth_devices_user_idx").on(table.userId, table.lastSeenAt),
+  index("auth_devices_continuity_idx").on(table.continuityId),
 ]);
 
 export const authSessions = sqliteTable("auth_sessions", {

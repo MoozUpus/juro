@@ -308,7 +308,27 @@ test("verified email change rotates canonical identity and revokes only other se
     otherSession,
   } = await fixture({ activeMfa: true });
   try {
-    await reserve(d1, currentSession.sessionId);
+    sqlite.prepare(`
+      INSERT INTO auth_device_continuities (
+        id,user_id,token_hmac,key_version,first_seen_at,last_seen_at
+      ) VALUES ('current-continuity',?,?,'v2',?,?),
+        ('other-continuity',?,?,'v2',?,?)
+    `).run(
+      USER_ID,
+      "A".repeat(43),
+      "2026-07-26T12:00:00.000Z",
+      "2026-07-26T12:00:00.000Z",
+      USER_ID,
+      "B".repeat(43),
+      "2026-07-26T12:00:00.000Z",
+      "2026-07-26T12:00:00.000Z",
+    );
+    sqlite.prepare(
+      "UPDATE auth_devices SET continuity_id=? WHERE id=?",
+    ).run("current-continuity", currentSession.deviceId);
+    sqlite.prepare(
+      "UPDATE auth_devices SET continuity_id=? WHERE id=?",
+    ).run("other-continuity", otherSession.deviceId);    await reserve(d1, currentSession.sessionId);
     await queue(d1, currentSession.sessionId);
     const now = "2026-07-26T12:01:30.000Z";
     sqlite.prepare(
@@ -383,6 +403,13 @@ test("verified email change rotates canonical identity and revokes only other se
     if (result.status !== "confirmed") assert.fail("email change not confirmed");
     assert.equal(result.newEmail, NEW_EMAIL);
     assert.equal(result.revokedSessions, 1);
+    assert.equal((sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_device_continuities WHERE id=?",
+    ).get("current-continuity") as { revokedAt: string | null }).revokedAt, null);
+    assert.equal((sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_device_continuities WHERE id=?",
+    ).get("other-continuity") as { revokedAt: string | null }).revokedAt,
+    "2026-07-26T12:02:00.000Z");
     assert.notEqual(result.session.token, currentSession.token);
     assert.equal(result.session.expiresAt, currentSession.expiresAt);
     const current = sqlite.prepare(

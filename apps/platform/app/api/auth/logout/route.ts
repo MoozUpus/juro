@@ -22,6 +22,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       userId: session.userId,
       sessionId: session.sessionId,
       currentSessionId: session.sessionId,
+      revokeDeviceContinuity: false,
     });
   }
   const headers = new Headers({ "cache-control": "private, no-store" });

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import {
+  prepareDeviceContinuity,
+} from "../lib/auth/device-continuity";
 import { parseIdentityKeyring } from "../lib/auth/keyring";
 import {
   authRequestSecurityContext,
@@ -151,15 +154,33 @@ function databaseFixture(): {
       full_name TEXT
     );
 
+    CREATE TABLE auth_device_continuities (
+      id TEXT PRIMARY KEY NOT NULL,
+      user_id TEXT NOT NULL,
+      token_hmac TEXT NOT NULL,
+      key_version TEXT NOT NULL,
+      first_country_code TEXT,
+      first_region_code TEXT,
+      last_country_code TEXT,
+      last_region_code TEXT,
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      revoked_at TEXT,
+      UNIQUE (user_id,key_version,token_hmac),
+      FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE
+    );
+
     CREATE TABLE auth_devices (
       id TEXT PRIMARY KEY NOT NULL,
       user_id TEXT NOT NULL,
+      continuity_id TEXT,
       display_name TEXT NOT NULL,
       user_agent_hash TEXT,
       first_seen_at TEXT NOT NULL,
       last_seen_at TEXT NOT NULL,
       revoked_at TEXT,
-      FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE
+      FOREIGN KEY (user_id) REFERENCES user_profiles(id) ON DELETE CASCADE,
+      FOREIGN KEY (continuity_id) REFERENCES auth_device_continuities(id)
     );
 
     CREATE TABLE auth_sessions (
@@ -491,6 +512,192 @@ test("session request evidence stores only keyed hashes and coarse location", as
   }
 });
 
+test("opaque continuity is HMAC-only, tenant-scoped, rotation-safe, and concurrency-safe", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    insertUser(sqlite, "user-a");
+    insertUser(sqlite, "user-b");
+    const v1 = securityEvidenceKeyring();
+    const evidence = {
+      ipHash: "A".repeat(43),
+      userAgentHash: "B".repeat(43),
+      keyVersion: "v1",
+      countryCode: "UZ",
+      regionCode: "TK",
+    };
+    const browserToken = "C".repeat(43);
+    const preparedOne = await prepareDeviceContinuity(d1, v1, {
+      userId: "user-a",
+      deviceToken: browserToken,
+      securityEvidence: evidence,
+      now: new Date("2026-07-26T09:10:00.000Z"),
+    });
+    const preparedConcurrent = await prepareDeviceContinuity(d1, v1, {
+      userId: "user-a",
+      deviceToken: browserToken,
+      securityEvidence: evidence,
+      now: new Date("2026-07-26T09:10:00.000Z"),
+    });
+    assert.ok(preparedOne);
+    assert.ok(preparedConcurrent);
+    assert.equal(preparedOne.id, preparedConcurrent.id);
+    assert.equal(preparedOne.recognized, false);
+    assert.equal(preparedConcurrent.recognized, false);
+
+    const first = await createEmailOtpSession(d1, {
+      userId: "user-a",
+      userAgent: "Browser/1.0",
+      securityEvidence: evidence,
+      deviceContinuity: preparedOne,
+      now: new Date("2026-07-26T09:10:00.000Z"),
+    });
+    const concurrent = await createEmailOtpSession(d1, {
+      userId: "user-a",
+      userAgent: "Browser/1.0",
+      securityEvidence: evidence,
+      deviceContinuity: preparedConcurrent,
+      now: new Date("2026-07-26T09:10:01.000Z"),
+    });
+    assert.equal(first.deviceContinuityId, concurrent.deviceContinuityId);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS total FROM auth_device_continuities WHERE user_id=?",
+    ).get("user-a") as { total: number }).total, 1);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS total FROM auth_devices WHERE continuity_id=?",
+    ).get(first.deviceContinuityId) as { total: number }).total, 2);
+    const stored = sqlite.prepare(
+      `SELECT token_hmac AS tokenHmac,key_version AS keyVersion,
+         first_country_code AS countryCode,first_region_code AS regionCode
+       FROM auth_device_continuities WHERE id=?`,
+    ).get(first.deviceContinuityId) as {
+      tokenHmac: string;
+      keyVersion: string;
+      countryCode: string;
+      regionCode: string;
+    };
+    assert.match(stored.tokenHmac, /^[A-Za-z0-9_-]{43}$/);
+    assert.notEqual(stored.tokenHmac, browserToken);
+    assert.deepEqual(
+      { keyVersion: stored.keyVersion, countryCode: stored.countryCode, regionCode: stored.regionCode },
+      { keyVersion: "v1", countryCode: "UZ", regionCode: "TK" },
+    );
+
+    const recognized = await prepareDeviceContinuity(d1, v1, {
+      userId: "user-a",
+      deviceToken: browserToken,
+      securityEvidence: evidence,
+      now: new Date("2026-07-26T09:11:00.000Z"),
+    });
+    assert.equal(recognized?.recognized, true);
+    assert.equal(recognized?.id, first.deviceContinuityId);
+
+    const foreign = await prepareDeviceContinuity(d1, v1, {
+      userId: "user-b",
+      deviceToken: browserToken,
+      securityEvidence: evidence,
+      now: new Date("2026-07-26T09:12:00.000Z"),
+    });
+    assert.equal(foreign?.recognized, false);
+    assert.notEqual(foreign?.id, first.deviceContinuityId);
+
+    const rotated = parseIdentityKeyring(JSON.stringify({
+      active: "v2",
+      versions: {
+        v1: { aead: encodedKey(1), hmac: encodedKey(65) },
+        v2: { aead: encodedKey(2), hmac: encodedKey(66) },
+      },
+    }));
+    const rekeyed = await prepareDeviceContinuity(d1, rotated, {
+      userId: "user-a",
+      deviceToken: browserToken,
+      securityEvidence: evidence,
+      now: new Date("2026-07-26T09:13:00.000Z"),
+    });
+    assert.equal(rekeyed?.recognized, true);
+    assert.equal(rekeyed?.id, first.deviceContinuityId);
+    await createEmailOtpSession(d1, {
+      userId: "user-a",
+      userAgent: "Browser/2.0",
+      deviceContinuity: rekeyed,
+      now: new Date("2026-07-26T09:13:00.000Z"),
+    });
+    assert.equal((sqlite.prepare(
+      "SELECT key_version AS keyVersion FROM auth_device_continuities WHERE id=?",
+    ).get(first.deviceContinuityId) as { keyVersion: string }).keyVersion, "v2");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("security revoke propagates through continuity while normal logout preserves trust", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    insertUser(sqlite, "user-a");
+    const keyring = securityEvidenceKeyring();
+    const token = "D".repeat(43);
+    const firstContinuity = await prepareDeviceContinuity(d1, keyring, {
+      userId: "user-a",
+      deviceToken: token,
+      now: new Date("2026-07-26T09:20:00.000Z"),
+    });
+    const first = await createEmailOtpSession(d1, {
+      userId: "user-a",
+      userAgent: "Browser/1.0",
+      deviceContinuity: firstContinuity,
+      now: new Date("2026-07-26T09:20:00.000Z"),
+    });
+    const recognized = await prepareDeviceContinuity(d1, keyring, {
+      userId: "user-a",
+      deviceToken: token,
+      now: new Date("2026-07-26T09:21:00.000Z"),
+    });
+    const second = await createEmailOtpSession(d1, {
+      userId: "user-a",
+      userAgent: "Browser/1.0",
+      deviceContinuity: recognized,
+      now: new Date("2026-07-26T09:21:00.000Z"),
+    });
+    assert.deepEqual(await revokeOneSession(d1, {
+      userId: "user-a",
+      sessionId: first.sessionId,
+      currentSessionId: first.sessionId,
+      revokeDeviceContinuity: false,
+      now: new Date("2026-07-26T09:22:00.000Z"),
+    }), { revoked: true, revokedCurrent: true });
+    assert.equal((sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_device_continuities WHERE id=?",
+    ).get(first.deviceContinuityId) as { revokedAt: string | null }).revokedAt, null);
+    assert.ok(await localSessionFromCookie(d1, `juro_session=${second.token}`, {
+      now: new Date("2026-07-26T09:22:01.000Z"),
+      touch: false,
+    }));
+
+    assert.deepEqual(await revokeOneSession(d1, {
+      userId: "user-a",
+      sessionId: second.sessionId,
+      currentSessionId: second.sessionId,
+      now: new Date("2026-07-26T09:23:00.000Z"),
+    }), { revoked: true, revokedCurrent: true });
+    assert.equal((sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_device_continuities WHERE id=?",
+    ).get(first.deviceContinuityId) as { revokedAt: string | null }).revokedAt,
+    "2026-07-26T09:23:00.000Z");
+    assert.equal(await localSessionFromCookie(d1, `juro_session=${second.token}`, {
+      now: new Date("2026-07-26T09:23:01.000Z"),
+      touch: false,
+    }), null);
+    const replacement = await prepareDeviceContinuity(d1, keyring, {
+      userId: "user-a",
+      deviceToken: token,
+      now: new Date("2026-07-26T09:24:00.000Z"),
+    });
+    assert.equal(replacement?.recognized, false);
+    assert.notEqual(replacement?.token, token);
+    assert.notEqual(replacement?.id, first.deviceContinuityId);
+  } finally {
+    sqlite.close();
+  }
+});
 test("email OTP session creation atomically stores device, primary assurance, and audit event", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {
@@ -826,6 +1033,60 @@ test("periodic rotation preserves absolute expiry and tolerates only an in-fligh
   }
 });
 
+test("replayed retired token revokes every session in its continuity chain", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    insertUser(sqlite, "user-replay-chain");
+    const keyring = securityEvidenceKeyring();
+    const token = "F".repeat(43);
+    const firstContinuity = await prepareDeviceContinuity(d1, keyring, {
+      userId: "user-replay-chain",
+      deviceToken: token,
+      now: new Date("2026-07-26T00:00:00.000Z"),
+    });
+    const first = await createEmailOtpSession(d1, {
+      userId: "user-replay-chain",
+      userAgent: "Browser/1.0",
+      deviceContinuity: firstContinuity,
+      now: new Date("2026-07-26T00:00:00.000Z"),
+    });
+    const recognized = await prepareDeviceContinuity(d1, keyring, {
+      userId: "user-replay-chain",
+      deviceToken: token,
+      now: new Date("2026-07-26T00:01:00.000Z"),
+    });
+    const second = await createEmailOtpSession(d1, {
+      userId: "user-replay-chain",
+      userAgent: "Browser/1.0",
+      deviceContinuity: recognized,
+      now: new Date("2026-07-26T00:01:00.000Z"),
+    });
+    const rotated = await rotatePeriodicSessionToken(d1, {
+      userId: "user-replay-chain",
+      sessionId: first.sessionId,
+      currentToken: first.token,
+      now: new Date("2026-07-26T13:00:00.000Z"),
+    });
+    assert.equal(rotated.status, "rotated");
+    assert.equal(await localSessionFromCookie(d1, `juro_session=${first.token}`, {
+      now: new Date("2026-07-26T13:00:31.000Z"),
+      touch: false,
+    }), null);
+    assert.equal(await localSessionFromCookie(d1, `juro_session=${second.token}`, {
+      now: new Date("2026-07-26T13:00:32.000Z"),
+      touch: false,
+    }), null);
+    assert.equal((sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_device_continuities WHERE id=?",
+    ).get(first.deviceContinuityId) as { revokedAt: string | null }).revokedAt,
+    "2026-07-26T13:00:31.000Z");
+    const event = securityEventsFor(sqlite, "user-replay-chain").at(-1);
+    assert.equal(event?.eventType, "session.token_replayed");
+    assert.equal(event?.metadata?.deviceContinuityRevoked, true);
+  } finally {
+    sqlite.close();
+  }
+});
 test("single-session revocation is user-scoped and reports whether the current session was revoked", async () => {
   const { sqlite, d1 } = databaseFixture();
   try {

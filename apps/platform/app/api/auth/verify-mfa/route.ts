@@ -13,10 +13,14 @@ import {
 } from "../../../../lib/auth/mfa-service";
 import {
   clearMfaChallengeCookie,
+  deviceContinuityCookie,
   sessionCookie,
 } from "../../../../lib/auth/session";
 import { authRequestSecurityContext } from "../../../../lib/auth/request-security-evidence";
-import { mfaChallengeTokenFromCookie } from "../../../../lib/auth/session-token";
+import {
+  deviceContinuityTokenFromCookie,
+  mfaChallengeTokenFromCookie,
+} from "../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -67,6 +71,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
         code,
         userAgent: request.headers.get("user-agent"),
         securityContext: authRequestSecurityContext(request),
+        deviceToken: deviceContinuityTokenFromCookie(
+          request.headers.get("cookie"),
+        ),
         rememberMe,
       },
     );
@@ -80,6 +87,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
     return jsonNoStore({ ok: true, redirectTo }, 200, [
       clearMfaChallengeCookie(),
       sessionCookie(result.session.token, rememberMe),
+      ...(result.session.deviceContinuityToken
+        ? [deviceContinuityCookie(result.session.deviceContinuityToken)]
+        : []),
     ]);
   } catch (error) {
     const response = mfaErrorResponse(error, locale);

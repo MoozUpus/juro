@@ -317,3 +317,23 @@ change legitimately, and no alert is sent from this signal yet. A stable opaque
 device cookie, revocation semantics, novelty policy, durable notification
 outbox, and false-positive controls require a separate reviewed schema slice.
 The local change has not been exercised over protected staging HTTP.
+## Opaque device continuity review — 2026-07-29
+
+- Browser continuity uses a random 256-bit HttpOnly/Secure/SameSite=Lax cookie.
+- D1 stores only a user-bound, domain-separated HMAC and key version; the raw
+  token, raw IP and raw User-Agent are absent.
+- A continuity token grants no session, MFA bypass, workspace access or API
+  authorization. All existing session/tenant checks remain mandatory.
+- Cross-user reuse is separated by user-bound HMAC input and lookup scope.
+- Retained HMAC-key versions permit controlled rotation; successful use rewrites
+  the row under the active key.
+- Revoked continuity invalidates linked active-session lookup. Replay,
+  security-device revoke, logout-all and account deletion revoke linked state;
+  email change revokes non-current state while preserving the current chain.
+- Normal logout deliberately preserves recognition and is covered by a route
+  contract and service test.
+
+Residual risk: a stolen continuity cookie can affect future novelty
+classification but cannot authenticate. Notification policy, false-positive
+handling, protected staging HTTP evidence and real security-email delivery are
+not implemented/verified by this slice.

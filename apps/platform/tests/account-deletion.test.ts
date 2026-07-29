@@ -242,7 +242,19 @@ test("deletion challenge enforces hourly budget and recent active session", asyn
 test("verified deletion request stores exact evidence and revokes sessions", async () => {
   const { sqlite, d1, session } = await fixture();
   try {
-    assert.deepEqual(await reserve(d1, session.sessionId), {
+    sqlite.prepare(`
+      INSERT INTO auth_device_continuities (
+        id,user_id,token_hmac,key_version,first_seen_at,last_seen_at
+      ) VALUES ('deletion-continuity',?,?,'v2',?,?)
+    `).run(
+      USER_ID,
+      "C".repeat(43),
+      "2026-07-26T12:00:00.000Z",
+      "2026-07-26T12:00:00.000Z",
+    );
+    sqlite.prepare(
+      "UPDATE auth_devices SET continuity_id=? WHERE id=?",
+    ).run("deletion-continuity", session.deviceId);    assert.deepEqual(await reserve(d1, session.sessionId), {
       status: "reserved",
     });
     const challengeId = activeChallengeId(sqlite);
@@ -250,6 +262,10 @@ test("verified deletion request stores exact evidence and revokes sessions", asy
     assert.equal(result.status, "confirmed");
     if (result.status !== "confirmed") return;
     assert.equal(result.revokedSessions, 1);
+    assert.equal((sqlite.prepare(
+      "SELECT revoked_at AS revokedAt FROM auth_device_continuities WHERE id=?",
+    ).get("deletion-continuity") as { revokedAt: string | null }).revokedAt,
+    "2026-07-26T12:02:00.000Z");
     const request = sqlite.prepare(
       `SELECT
          user_id AS userId,verification_challenge_id AS challengeId,

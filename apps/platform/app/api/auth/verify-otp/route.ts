@@ -19,6 +19,9 @@ import {
   prepareAuthRequestSecurityEvidence,
 } from "../../../../lib/auth/request-security-evidence";
 import {
+  prepareDeviceContinuity,
+} from "../../../../lib/auth/device-continuity";
+import {
   createLoginMfaChallenge,
   hasActiveMfa,
 } from "../../../../lib/auth/mfa-service";
@@ -27,12 +30,16 @@ import {
   verifyOtpInputSchema,
 } from "../../../../lib/auth/input";
 import {
+  deviceContinuityCookie,
   mfaChallengeCookie,
   sessionCookie,
 } from "../../../../lib/auth/session";
 import {
   createPrimarySessionIfMfaDisabled,
 } from "../../../../lib/auth/session-management";
+import {
+  deviceContinuityTokenFromCookie,
+} from "../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
   withApiErrors,
@@ -44,9 +51,11 @@ import {
 import { ensureDefaultWorkspace } from "../../../../lib/platform/workspace";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
 
-function json(body: unknown, status = 200, cookie?: string) {
+function json(body: unknown, status = 200, cookies?: string | string[]) {
   const headers = new Headers({ "content-type": "application/json", "cache-control": "private, no-store", pragma: "no-cache" });
-  if (cookie) headers.set("set-cookie", cookie);
+  for (const cookie of cookies ? (Array.isArray(cookies) ? cookies : [cookies]) : []) {
+    headers.append("set-cookie", cookie);
+  }
   return new Response(JSON.stringify(body), { status, headers });
 }
 
@@ -236,14 +245,29 @@ export const POST = withApiErrors(async function POST(request: Request) {
       throw error;
     }
   }
+  const continuityKeyring = optionalIdentityKeyring();
+  const securityEvidence = await prepareAuthRequestSecurityEvidence(
+    continuityKeyring,
+    user.id,
+    authRequestSecurityContext(request),
+  );
+  const deviceContinuity = await prepareDeviceContinuity(
+    db,
+    continuityKeyring,
+    {
+      userId: user.id,
+      deviceToken: deviceContinuityTokenFromCookie(
+        request.headers.get("cookie"),
+      ),
+      securityEvidence,
+      now: new Date(now),
+    },
+  );
   const session = await createPrimarySessionIfMfaDisabled(db, {
     userId: user.id,
     userAgent: request.headers.get("user-agent"),
-    securityEvidence: await prepareAuthRequestSecurityEvidence(
-      optionalIdentityKeyring(),
-      user.id,
-      authRequestSecurityContext(request),
-    ),
+    securityEvidence,
+    deviceContinuity,
     rememberMe: body.rememberMe,
     now: new Date(now),
   });
@@ -274,5 +298,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
   return json({
     ok: true,
     redirectTo,
-  }, 200, sessionCookie(session.token, body.rememberMe));
+  }, 200, [
+    sessionCookie(session.token, body.rememberMe),
+    ...(session.deviceContinuityToken
+      ? [deviceContinuityCookie(session.deviceContinuityToken)]
+      : []),
+  ]);
 });

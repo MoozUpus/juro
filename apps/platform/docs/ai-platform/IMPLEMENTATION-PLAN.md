@@ -326,3 +326,24 @@ Next identity slices remain ordered as follows:
    idempotency and RU/UZ copy;
 5. prove protected staging HTTP and real provider delivery before enabling
    alerts.
+## Phase 2 checkpoint — opaque device continuity
+
+The local branch now completes the non-authenticating continuity primitive from
+the previous checkpoint. Migration `0031` is additive, the raw token is not
+persisted, successful MFA issues it only after factor completion, and revocation
+propagates through replay, security-device removal, logout-all, email change and
+account deletion. Normal logout intentionally preserves continuity. Local
+evidence is 361/361 tests plus passing type-check and lint.
+
+Next ordered work:
+
+1. prepare a new staging D1/R2 checkpoint and disposable restore drill for
+   pending migrations `0030` and `0031`;
+2. after explicit remote-write approval, push the exact commit, apply only the
+   reviewed pending migrations and deploy protected staging;
+3. prove primary/MFA cookie issuance, normal logout, remote revoke, logout-all,
+   replay and key-rotation behavior through owner-authenticated staging HTTP;
+4. implement a conservative new-device/new-region policy over continuity plus
+   coarse evidence without treating the cookie as authentication;
+5. reuse the encrypted generic security-email boundary with one-winner
+   deduplication and prove real Resend delivery before enabling alerts.

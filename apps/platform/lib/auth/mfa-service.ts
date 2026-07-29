@@ -17,6 +17,10 @@ import {
 } from "./identity-protection";
 import { batchWithSecurityEvent } from "./security-events";
 import {
+  deviceContinuityEventMetadata,
+  prepareDeviceContinuity,
+} from "./device-continuity";
+import {
   prepareAuthRequestSecurityEvidence,
   requestSecurityEventMetadata,
   type AuthRequestSecurityContext,
@@ -1090,6 +1094,7 @@ export async function verifyLoginMfa(
     code: string;
     userAgent: string | null;
     securityContext?: AuthRequestSecurityContext;
+    deviceToken?: string | null;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -1148,16 +1153,6 @@ export async function verifyLoginMfa(
 
   const operationId = challenge.challengeId;
   const claimId = crypto.randomUUID();
-  const prepared = await prepareLocalSessionCreation(db, {
-    userId: challenge.userId,
-    userAgent: input.userAgent,
-    authMethod: factor.factorType === "totp"
-      ? "email_otp+totp"
-      : "email_otp+backup_code",
-    assuranceLevel: "mfa",
-    rememberMe: input.rememberMe,
-    now,
-  });
   const securityEvidence = input.securityContext
     ? await prepareAuthRequestSecurityEvidence(
         keyring,
@@ -1165,6 +1160,23 @@ export async function verifyLoginMfa(
         input.securityContext,
       )
     : null;
+  const deviceContinuity = await prepareDeviceContinuity(db, keyring, {
+    userId: challenge.userId,
+    deviceToken: input.deviceToken ?? null,
+    securityEvidence,
+    now,
+  });
+  const prepared = await prepareLocalSessionCreation(db, {
+    userId: challenge.userId,
+    userAgent: input.userAgent,
+    authMethod: factor.factorType === "totp"
+      ? "email_otp+totp"
+      : "email_otp+backup_code",
+    assuranceLevel: "mfa",
+    deviceContinuity,
+    rememberMe: input.rememberMe,
+    now,
+  });
   const factorGuard = factorConsumedGuard(
     challenge,
     factor,
@@ -1248,6 +1260,7 @@ export async function verifyLoginMfa(
         metadata: {
           authMethod: prepared.authMethod,
           deviceName: prepared.displayName,
+          ...deviceContinuityEventMetadata(prepared.deviceContinuity),
           challengeId: challenge.challengeId,
           ...requestSecurityEventMetadata(securityEvidence),
         },
@@ -1265,11 +1278,12 @@ export async function verifyLoginMfa(
     }
     throw error;
   }
+  const sessionInsertResultIndex = 3 + sessionStatements.length - 1;
   if (
     Number(results[0]?.meta?.changes ?? 0) !== 1
     || Number(results[1]?.meta?.changes ?? 0) !== 1
     || Number(results[2]?.meta?.changes ?? 0) !== 1
-    || Number(results[4]?.meta?.changes ?? 0) !== 1
+    || Number(results[sessionInsertResultIndex]?.meta?.changes ?? 0) !== 1
   ) {
     throw new MfaError("MFA_STATE_CONFLICT");
   }

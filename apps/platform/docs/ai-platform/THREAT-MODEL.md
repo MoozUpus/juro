@@ -110,3 +110,14 @@ Every boundary assumes incoming identifiers and document text are untrusted. Vec
 - Vectorize pre/post-authorization leak tests;
 - secret scans across source, history, bundles, artifacts, logs, and docs;
 - backup and rollback rehearsal against isolated staging resources.
+## Device-continuity threats — 2026-07-29
+
+| Threat | Control | Remaining gate |
+|---|---|---|
+| Raw stable browser identifier leaks from D1/logs | Random token remains only in HttpOnly cookie; D1 stores user-bound versioned HMAC; audit metadata stores only `new`/`recognized` | Protected staging log/bundle scan |
+| Cookie is mistaken for authentication | Continuity never participates in session lookup, MFA, CSRF, membership or authorization decisions | Staging negative HTTP test with continuity cookie only |
+| Same cookie links two accounts | HMAC input and query are user-scoped; tests prove distinct continuity IDs | Protected staging multi-account test |
+| Concurrent first login creates duplicate trust records | Deterministic ID, unique lookup and `INSERT OR IGNORE`; tests prove one row and multiple per-session devices | Remote D1 concurrency test |
+| Retired session replay leaves sibling sessions trusted | One replay claim revokes linked sessions/devices/continuity and writes critical audit evidence | Protected staging replay test |
+| Security revoke is bypassed by a sibling session | Remote device revoke and logout-all propagate to continuity; active lookup rejects revoked continuity | Protected staging browser/session-list test |
+| Key rotation loses recognition or stores raw fallback | Retained HMAC versions are checked, active evidence replaces old evidence; missing keyring omits continuity | Staging key-rotation rehearsal |

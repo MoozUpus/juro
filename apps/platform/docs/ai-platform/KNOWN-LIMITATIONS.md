@@ -159,11 +159,16 @@ foundation checkpoint.
 
 ## Login device and region limitation — 2026-07-29
 
-The local branch can retain privacy-safe HMAC evidence and coarse country/region
-for a successful session, but it does not yet identify a new device. A
-User-Agent hash is not stable device identity and must not trigger a
-"new device" claim by itself. There is no durable device cookie, novelty model,
-new-region policy, or security email for this signal yet. If the identity
-keyring is absent, evidence is intentionally omitted; no raw or unkeyed fallback
-is stored. Protected staging HTTP evidence is pending, and the deployed Worker
+The local branch now has an opaque device-continuity cookie backed only by a
+user-bound versioned HMAC in D1. It is not an authentication factor and does not
+prove hardware identity, physical location, or control by the same person. A
+missing identity keyring omits continuity rather than creating an unkeyed
+fallback. Coarse country/region and bounded User-Agent evidence remain risk
+signals only.
+
+No new-device/new-region notification is implemented yet: novelty thresholds,
+travel/region-change policy, false-positive handling, notification deduplication,
+and real Resend delivery still require their next reviewed slice. Migration
+`0031` and the runtime are not deployed to protected staging, so no remote
+cookie, revoke, or browser evidence is claimed. The currently deployed Worker
 does not contain this local slice.

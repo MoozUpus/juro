@@ -384,6 +384,7 @@ test("MFA elevation rotates the token and one replay revokes the session and dev
     assert.equal(replayEvent.severity, "critical");
     assert.deepEqual(JSON.parse(replayEvent.metadataJson), {
       action: "session_and_device_revoked",
+      deviceContinuityRevoked: false,
       replayId: JSON.parse(replayEvent.metadataJson).replayId,
       rotatedAt: confirmationAt.toISOString(),
       rotationReason: "mfa_elevation",
@@ -599,6 +600,70 @@ test("MFA login issues exactly one session and fences replay", async () => {
   }
 });
 
+test("MFA session creates continuity only after the second factor succeeds", async () => {
+  const value = await enrolledFixture();
+  const { sqlite, d1, enrollment } = value;
+  try {
+    const emailHash = await insertConsumedOtp(
+      sqlite,
+      "otp-continuity",
+      "2026-07-26T12:05:00.000Z",
+    );
+    const challenge = await createLoginMfaChallenge(d1, keyring(), {
+      userId: "user-mfa",
+      emailHash,
+      emailOtpChallengeId: "otp-continuity",
+      userAgent: "Browser/continuity",
+      now: new Date("2026-07-26T12:05:00.000Z"),
+    });
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS total FROM auth_device_continuities",
+    ).get() as { total: number }).total, 0);
+    const now = new Date("2026-07-26T12:05:30.000Z");
+    const result = await verifyLoginMfa(d1, keyring(), {
+      token: challenge.token,
+      code: (await totpCode(enrollment.secret, now)).code,
+      userAgent: "Browser/continuity",
+      deviceToken: "E".repeat(43),
+      securityContext: {
+        connectingIp: "203.0.113.22",
+        userAgent: "Browser/continuity",
+        countryCode: "UZ",
+        regionCode: "TK",
+      },
+      now,
+    });
+    assert.equal(result.session.deviceContinuityToken, "E".repeat(43));
+    assert.equal(result.session.deviceRecognized, false);
+    assert.ok(result.session.deviceContinuityId);
+    const stored = sqlite.prepare(
+      `SELECT continuity.token_hmac AS tokenHmac,
+         continuity.key_version AS keyVersion,
+         device.continuity_id AS continuityId
+       FROM auth_devices device
+       JOIN auth_device_continuities continuity
+         ON continuity.id=device.continuity_id
+       WHERE device.id=?`,
+    ).get(result.session.deviceId) as {
+      tokenHmac: string;
+      keyVersion: string;
+      continuityId: string;
+    };
+    assert.match(stored.tokenHmac, /^[A-Za-z0-9_-]{43}$/);
+    assert.notEqual(stored.tokenHmac, "E".repeat(43));
+    assert.equal(stored.keyVersion, "v1");
+    assert.equal(stored.continuityId, result.session.deviceContinuityId);
+    const event = sqlite.prepare(
+      `SELECT metadata_json AS metadataJson FROM security_events
+       WHERE session_id=? AND event_type='session.created'`,
+    ).get(result.session.sessionId) as { metadataJson: string };
+    assert.deepEqual(JSON.parse(event.metadataJson).deviceContinuity, {
+      recognition: "new",
+    });
+  } finally {
+    sqlite.close();
+  }
+});
 test("regeneration rotates backup codes and revokes the old batch", async () => {
   const value = await enrolledFixture();
   const { sqlite, d1, first, enrollment, backupCodes } = value;

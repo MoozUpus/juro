@@ -59,6 +59,7 @@ type ReplayedToken = {
   sessionId: string;
   userId: string;
   deviceId: string | null;
+  continuityId: string | null;
   assuranceLevel: string;
   rotationReason: string;
   rotatedAt: string;
@@ -282,10 +283,12 @@ export async function revokeReplayedSessionToken(
   const replayed = await db.prepare(
     `SELECT h.id AS historyId,h.session_id AS sessionId,
        h.user_id AS userId,s.device_id AS deviceId,
+       device.continuity_id AS continuityId,
        s.assurance_level AS assuranceLevel,
        h.rotation_reason AS rotationReason,h.rotated_at AS rotatedAt
      FROM auth_session_token_history h
      JOIN auth_sessions s ON s.id=h.session_id AND s.user_id=h.user_id
+     LEFT JOIN auth_devices device ON device.id=s.device_id
      WHERE h.token_hash=? AND h.expires_at>?
        AND s.revoked_at IS NULL AND s.expires_at>?
        AND coalesce(s.idle_expires_at,s.expires_at)>?
@@ -328,6 +331,7 @@ export async function revokeReplayedSessionToken(
           rotationReason: replayed.rotationReason,
           rotatedAt: replayed.rotatedAt,
           action: "session_and_device_revoked",
+          deviceContinuityRevoked: Boolean(replayed.continuityId),
         },
         createdAt: detectedAt,
       },
@@ -353,21 +357,31 @@ export async function revokeReplayedSessionToken(
         ),
         db.prepare(
           `UPDATE auth_sessions SET revoked_at=?
-           WHERE id=? AND user_id=? AND revoked_at IS NULL
+           WHERE user_id=? AND revoked_at IS NULL
+             AND (
+               id=? OR (? IS NOT NULL AND device_id IN (
+                 SELECT id FROM auth_devices
+                 WHERE user_id=? AND continuity_id=?
+               ))
+             )
              AND EXISTS (
                SELECT 1 FROM auth_session_token_replays
                WHERE id=? AND token_history_id=?
              )`,
         ).bind(
           detectedAt,
-          replayed.sessionId,
           replayed.userId,
+          replayed.sessionId,
+          replayed.continuityId,
+          replayed.userId,
+          replayed.continuityId,
           replayId,
           replayed.historyId,
         ),
         db.prepare(
           `UPDATE auth_devices SET revoked_at=?
-           WHERE id=? AND user_id=? AND revoked_at IS NULL
+           WHERE user_id=? AND revoked_at IS NULL
+             AND (id=? OR (? IS NOT NULL AND continuity_id=?))
              AND EXISTS (
                SELECT 1 FROM auth_session_token_replays replay
                JOIN auth_sessions session ON session.id=replay.session_id
@@ -375,10 +389,26 @@ export async function revokeReplayedSessionToken(
              )`,
         ).bind(
           detectedAt,
-          replayed.deviceId,
           replayed.userId,
+          replayed.deviceId,
+          replayed.continuityId,
+          replayed.continuityId,
           replayId,
           detectedAt,
+        ),
+        db.prepare(
+          `UPDATE auth_device_continuities SET revoked_at=?
+           WHERE id=? AND user_id=? AND revoked_at IS NULL
+             AND EXISTS (
+               SELECT 1 FROM auth_session_token_replays
+               WHERE id=? AND token_history_id=?
+             )`,
+        ).bind(
+          detectedAt,
+          replayed.continuityId,
+          replayed.userId,
+          replayId,
+          replayed.historyId,
         ),
       ],
       {

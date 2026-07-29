@@ -50,6 +50,7 @@ const sessionTokenRotationEntry = journal.entries.find(
   ({ idx }) => idx === 29,
 );
 const securityEmailJobEntry = journal.entries.find(({ idx }) => idx === 30);
+const deviceContinuityEntry = journal.entries.find(({ idx }) => idx === 31);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -114,6 +115,10 @@ assert.ok(
 assert.ok(
   securityEmailJobEntry,
   "Drizzle journal must contain migration 0030",
+);
+assert.ok(
+  deviceContinuityEntry,
+  "Drizzle journal must contain migration 0031",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2736,8 +2741,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 108);
-    assert.equal(foreignKeyCount(db), 154);
+    assert.equal(tableDefinitions(db).size, 109);
+    assert.equal(foreignKeyCount(db), 156);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3239,8 +3244,8 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 108);
-    assert.equal(foreignKeyCount(db), 154);
+    assert.equal(tableDefinitions(db).size, 109);
+    assert.equal(foreignKeyCount(db), 156);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3418,6 +3423,101 @@ test("0029 fences duplicate retirement and replay claims", () => {
         ) VALUES ('bad-action-29','history-action-29','rotation-session',
           'rotation-user',?,'ignored')
       `).run(now),
+      /CHECK constraint failed/,
+    );
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+test("0031 adds only HMAC-backed device continuity and a nullable device link", () => {
+  const sql = migrationSql(deviceContinuityEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 5);
+  assert.match(migrationStatements[0], /^CREATE TABLE\b/i);
+  assert.match(migrationStatements[1], /^CREATE UNIQUE INDEX\b/i);
+  assert.match(migrationStatements[2], /^CREATE INDEX\b/i);
+  assert.match(migrationStatements[3], /^ALTER TABLE\b/i);
+  assert.match(migrationStatements[4], /^CREATE INDEX\b/i);
+  assert.match(sql, /CREATE TABLE .*auth_device_continuities/);
+  assert.match(sql, /auth_device_continuities_hmac_check/);
+  assert.match(sql, /auth_device_continuities_country_check/);
+  assert.match(sql, /auth_device_continuities_region_check/);
+  assert.match(sql, /auth_device_continuities_lookup_uidx/);
+  assert.match(sql, /ALTER TABLE .*auth_sessions|ALTER TABLE .*auth_devices/);
+  assert.match(sql, /auth_devices.*ADD .*continuity_id/s);
+  assert.match(sql, /continuity_id.*ON DELETE set null/i);
+  assert.doesNotMatch(sql, /(?:^|\n)\s*(?:DROP|DELETE|UPDATE)\b/im);
+
+  const previous = JSON.parse(
+    readFileSync(new URL("meta/0030_snapshot.json", drizzleRoot), "utf8"),
+  ) as { id: string };
+  const snapshot = JSON.parse(
+    readFileSync(new URL("meta/0031_snapshot.json", drizzleRoot), "utf8"),
+  ) as {
+    prevId: string;
+    tables: Record<string, { foreignKeys: Record<string, unknown> }>;
+  };
+  assert.equal(deviceContinuityEntry.idx, 31);
+  assert.equal(deviceContinuityEntry.tag, "0031_melted_nextwave");
+  assert.equal(snapshot.prevId, previous.id);
+  assert.equal(Object.keys(snapshot.tables).length, 83);
+  assert.equal(
+    Object.values(snapshot.tables).reduce(
+      (count, table) => count + Object.keys(table.foreignKeys).length,
+      0,
+    ),
+    154,
+  );
+});
+
+test("0031 enforces tenant-scoped continuity evidence without touching old sessions", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-29T11:00:00.000Z";
+    db.prepare(`
+      INSERT INTO user_profiles (
+        id,email,locale,account_type,timezone,created_at,updated_at
+      ) VALUES ('continuity-user','continuity@example.test','ru','individual',
+        'Asia/Tashkent',?,?)
+    `).run(now, now);
+    db.prepare(`
+      INSERT INTO auth_device_continuities (
+        id,user_id,token_hmac,key_version,first_country_code,
+        first_region_code,last_country_code,last_region_code,
+        first_seen_at,last_seen_at
+      ) VALUES ('continuity-31','continuity-user',?,'v1','UZ','TK','UZ','TK',?,?)
+    `).run("A".repeat(43), now, now);
+    db.prepare(`
+      INSERT INTO auth_devices (
+        id,user_id,continuity_id,display_name,first_seen_at,last_seen_at
+      ) VALUES ('device-31','continuity-user','continuity-31','Test device',?,?)
+    `).run(now, now);
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_device_continuities (
+          id,user_id,token_hmac,key_version,first_seen_at,last_seen_at
+        ) VALUES ('duplicate-31','continuity-user',?,'v1',?,?)
+      `).run("A".repeat(43), now, now),
+      /UNIQUE constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_device_continuities (
+          id,user_id,token_hmac,key_version,first_seen_at,last_seen_at
+        ) VALUES ('bad-hmac-31','continuity-user','raw-token','v1',?,?)
+      `).run(now, now),
+      /CHECK constraint failed/,
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO auth_device_continuities (
+          id,user_id,token_hmac,key_version,first_country_code,
+          first_seen_at,last_seen_at
+        ) VALUES ('bad-country-31','continuity-user',?,'v1','uzb',?,?)
+      `).run("B".repeat(43), now, now),
       /CHECK constraint failed/,
     );
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);

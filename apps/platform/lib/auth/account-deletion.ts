@@ -579,6 +579,20 @@ export async function confirmAccountDeletion(
           requestId,
           input.userId,
         ),
+        db.prepare(
+          `UPDATE auth_device_continuities
+           SET revoked_at=?
+           WHERE user_id=? AND revoked_at IS NULL
+             AND EXISTS (
+               SELECT 1 FROM account_deletion_requests
+               WHERE id=? AND user_id=?
+             )`,
+        ).bind(
+          input.now,
+          input.userId,
+          requestId,
+          input.userId,
+        ),
       ],
       {
         selectSql: `SELECT 1 FROM account_deletion_requests

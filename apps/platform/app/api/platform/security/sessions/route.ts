@@ -1,6 +1,9 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
-import { clearSessionCookie } from "../../../../../lib/auth/session";
+import {
+  clearDeviceContinuityCookie,
+  clearSessionCookie,
+} from "../../../../../lib/auth/session";
 import {
   localSessionFromCookie,
   revokeSessions,
@@ -34,6 +37,12 @@ export const GET = withApiErrors(async function GET(request: Request) {
        AND s.expires_at>?
        AND coalesce(s.idle_expires_at,s.expires_at)>?
        AND (s.device_id IS NULL OR d.revoked_at IS NULL)
+       AND (d.continuity_id IS NULL OR EXISTS (
+         SELECT 1 FROM auth_device_continuities continuity
+         WHERE continuity.id=d.continuity_id
+           AND continuity.user_id=s.user_id
+           AND continuity.revoked_at IS NULL
+       ))
      ORDER BY isCurrent DESC,s.last_seen_at DESC
      LIMIT 50`,
   ).bind(current?.sessionId ?? "", user.id, now, now).all();
@@ -73,9 +82,11 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
     currentSessionId: current?.userId === user.id ? current.sessionId : null,
     scope,
   });
-  return response(
-    { ok: true, scope, revoked },
-    200,
-    scope === "all" ? { "set-cookie": clearSessionCookie() } : undefined,
-  );
+  if (scope === "all") {
+    const headers = new Headers({ "cache-control": "private, no-store" });
+    headers.append("set-cookie", clearSessionCookie());
+    headers.append("set-cookie", clearDeviceContinuityCookie());
+    return Response.json({ ok: true, scope, revoked }, { status: 200, headers });
+  }
+  return response({ ok: true, scope, revoked });
 });

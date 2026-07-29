@@ -1491,3 +1491,34 @@ value absence, and hash-chain integrity. The full local suite passes 355 tests;
 type-check, lint, the three-environment Cloudflare dry-run matrix, final staging
 build/artifact validation, canonical builder smoke, and comparison smoke pass.
 No migration or dependency is added. Production is unchanged.
+## D-071 — recognize a browser with an opaque, non-authenticating continuity token
+
+Status: accepted and locally verified; migration and protected staging deployment pending
+Date: 2026-07-29
+
+A successful email-OTP or MFA login may now issue a year-bounded `juro_device`
+cookie. It is HttpOnly, Secure, SameSite=Lax, scoped to `/`, and is never an
+authentication factor. The raw 256-bit token exists only in the browser response.
+D1 stores a user-bound, purpose-separated HMAC under the versioned identity
+keyring, an opaque deterministic record ID, first/last coarse country and region,
+and timestamps. Missing key material omits continuity rather than storing a raw
+or unkeyed identifier.
+
+Migration `0031` is additive: it creates `auth_device_continuities`, two lookup
+indexes, and a nullable `auth_devices.continuity_id` foreign key/index. Existing
+devices and sessions remain valid with a null link. Concurrent first use of the
+same browser token converges through a deterministic ID plus `INSERT OR IGNORE`;
+key rotation recognizes retained key versions and rewrites evidence under the
+active version. The same token cannot link different users.
+
+Normal logout revokes only the current session/device row and intentionally
+preserves browser continuity. Security-device revocation, logout-all, replay of
+a retired session token, account deletion, and non-current sessions affected by
+an email change revoke the applicable continuity and linked sessions. Active
+session lookup rejects a revoked continuity. Tests cover raw-token absence,
+tenant isolation, concurrent first use, key rotation, MFA issuance only after
+the second factor, normal logout, remote revoke, replay propagation, email
+change, account deletion, cookie boundaries, and additive migration integrity.
+The full local suite passes 361 tests; type-check and lint pass. No dependency
+was added. Migration `0031` is not applied remotely, the branch is not pushed,
+and no new-device/new-region notification is claimed. Production is unchanged.

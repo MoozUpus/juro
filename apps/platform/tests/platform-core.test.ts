@@ -158,6 +158,8 @@ test("OTP, MFA, and logout writes require the application CSRF contract", async 
     /sessionCookie\(session\.token, body\.rememberMe\)/,
   );
   assert.match(verifyMfaRoute, /sessionCookie\(result\.session\.token, rememberMe\)/);
+  assert.match(verifyRoute, /deviceContinuityCookie\(session\.deviceContinuityToken\)/);
+  assert.match(verifyMfaRoute, /deviceContinuityCookie\(result\.session\.deviceContinuityToken\)/);
 });
 
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
@@ -335,11 +337,14 @@ test("session management distinguishes the current local device and audits revoc
   assert.match(sessionStore, /coalesce\(s\.idle_expires_at,s\.expires_at\)>\?/);
   assert.match(sessionStore, /TOUCH_INTERVAL_MS/);
   assert.match(sessionStore, /batchWithSecurityEvent/);
+  assert.match(sessionStore, /auth_device_continuities/);
   assert.match(sessionRoute, /s\.user_id=\?/);
   assert.match(sessionRoute, /externalProviderSessionsIncluded: false/);
   assert.match(sessionRoute, /scope !== "all" && scope !== "others"/);
   assert.match(singleRoute, /userId: user\.id,\s*sessionId/s);
   assert.match(singleRoute, /assertSafeWrite\(request\)/);
+  assert.match(sessionRoute, /clearDeviceContinuityCookie/);
+  assert.match(singleRoute, /clearDeviceContinuityCookie/);
   assert.match(settings, /JURO email-сессии/);
   assert.match(settings, /внешнего защищённого провайдера/);
   assert.match(settings, /2FA включена/);
@@ -359,6 +364,10 @@ test("MFA cookies and logout use narrow, server-only boundaries", async () => {
     /Path=\/api\/auth\/verify-mfa; HttpOnly; Secure; SameSite=Strict/,
   );
   assert.match(session, /clearMfaChallengeCookie/);
+  assert.match(
+    session,
+    /DEVICE_CONTINUITY_COOKIE.*Path=\/; HttpOnly; Secure; SameSite=Lax/s,
+  );
   assert.match(logout, /clearSessionCookie/);
   assert.match(logout, /clearMfaChallengeCookie/);
   assert.match(logout, /headers\.append\("set-cookie"/);

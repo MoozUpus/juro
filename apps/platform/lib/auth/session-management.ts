@@ -16,6 +16,11 @@ import {
   type AuthRequestSecurityEvidence,
 } from "./request-security-evidence";
 import { sessionTtlSeconds } from "./session-persistence";
+import {
+  deviceContinuityEventMetadata,
+  deviceContinuityStatements,
+  type PreparedDeviceContinuity,
+} from "./device-continuity";
 
 const IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1_000;
 const TOUCH_INTERVAL_MS = 5 * 60 * 1_000;
@@ -45,6 +50,9 @@ export type CreatedSession = {
   token: string;
   sessionId: string;
   deviceId: string;
+  deviceContinuityId: string | null;
+  deviceContinuityToken: string | null;
+  deviceRecognized: boolean | null;
   expiresAt: string;
   idleExpiresAt: string;
 };
@@ -57,6 +65,7 @@ export type PreparedSessionCreation = {
   authMethod: string;
   assuranceLevel: LocalAssuranceLevel;
   createdAt: string;
+  deviceContinuity: PreparedDeviceContinuity | null;
   statements: D1PreparedStatement[];
 };
 
@@ -116,20 +125,35 @@ export function guardedSessionInsertStatements(
   guard: SessionInsertGuard,
 ): D1PreparedStatement[] {
   assertGuard(guard);
+  const continuityStatements = prepared.deviceContinuity
+    ? deviceContinuityStatements(db, prepared.deviceContinuity, guard)
+    : [];
   return [
+    ...continuityStatements,
     db.prepare(
       `INSERT INTO auth_devices (
-         id,user_id,display_name,user_agent_hash,first_seen_at,last_seen_at
+         id,user_id,continuity_id,display_name,user_agent_hash,
+         first_seen_at,last_seen_at
        )
-       SELECT ?,?,?,NULL,?,?
-       WHERE EXISTS (${guard.selectSql})`,
+       SELECT ?,?,?,?,NULL,?,?
+       WHERE EXISTS (${guard.selectSql})
+         AND (
+           ? IS NULL OR EXISTS (
+             SELECT 1 FROM auth_device_continuities
+             WHERE id=? AND user_id=? AND revoked_at IS NULL
+           )
+         )`,
     ).bind(
       prepared.session.deviceId,
       prepared.userId,
+      prepared.session.deviceContinuityId,
       prepared.displayName,
       prepared.createdAt,
       prepared.createdAt,
       ...guard.bindings,
+      prepared.session.deviceContinuityId,
+      prepared.session.deviceContinuityId,
+      prepared.userId,
     ),
     db.prepare(
       `INSERT INTO auth_sessions (
@@ -171,6 +195,7 @@ export async function prepareLocalSessionCreation(
     authMethod: string;
     assuranceLevel: LocalAssuranceLevel;
     rememberMe?: boolean;
+    deviceContinuity?: PreparedDeviceContinuity | null;
     now?: Date;
   },
 ): Promise<PreparedSessionCreation> {
@@ -188,23 +213,39 @@ export async function prepareLocalSessionCreation(
   // A raw SHA-256 of a user agent is a stable fingerprint. Keep this empty
   // until the versioned identity HMAC key ring is configured.
   const userAgentHash = null;
+  const deviceContinuity = input.deviceContinuity ?? null;
 
   return {
-    session: { token, sessionId, deviceId, expiresAt, idleExpiresAt },
+    session: {
+      token,
+      sessionId,
+      deviceId,
+      deviceContinuityId: deviceContinuity?.id ?? null,
+      deviceContinuityToken: deviceContinuity?.token ?? null,
+      deviceRecognized: deviceContinuity?.recognized ?? null,
+      expiresAt,
+      idleExpiresAt,
+    },
     userId: input.userId,
     tokenHash,
     displayName,
     authMethod: input.authMethod,
     assuranceLevel: input.assuranceLevel,
     createdAt: nowIso,
+    deviceContinuity,
     statements: [
+      ...(deviceContinuity
+        ? deviceContinuityStatements(db, deviceContinuity)
+        : []),
       db.prepare(
         `INSERT INTO auth_devices (
-           id,user_id,display_name,user_agent_hash,first_seen_at,last_seen_at
-         ) VALUES (?,?,?,?,?,?)`,
+           id,user_id,continuity_id,display_name,user_agent_hash,
+           first_seen_at,last_seen_at
+         ) VALUES (?,?,?,?,?,?,?)`,
       ).bind(
         deviceId,
         input.userId,
+        deviceContinuity?.id ?? null,
         displayName,
         userAgentHash,
         nowIso,
@@ -240,6 +281,7 @@ export async function createEmailOtpSession(
     userId: string;
     userAgent: string | null;
     securityEvidence?: AuthRequestSecurityEvidence | null;
+    deviceContinuity?: PreparedDeviceContinuity | null;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -263,6 +305,7 @@ export async function createEmailOtpSession(
       metadata: {
         authMethod: "email_otp",
         deviceName: prepared.displayName,
+        ...deviceContinuityEventMetadata(prepared.deviceContinuity),
         ...requestSecurityEventMetadata(input.securityEvidence),
       },
       createdAt: prepared.createdAt,
@@ -279,6 +322,7 @@ export async function createPrimarySessionIfMfaDisabled(
     userId: string;
     userAgent: string | null;
     securityEvidence?: AuthRequestSecurityEvidence | null;
+    deviceContinuity?: PreparedDeviceContinuity | null;
     rememberMe?: boolean;
     now?: Date;
   },
@@ -311,6 +355,7 @@ export async function createPrimarySessionIfMfaDisabled(
       metadata: {
         authMethod: "email_otp",
         deviceName: prepared.displayName,
+        ...deviceContinuityEventMetadata(prepared.deviceContinuity),
         ...requestSecurityEventMetadata(input.securityEvidence),
       },
       createdAt: prepared.createdAt,
@@ -321,7 +366,7 @@ export async function createPrimarySessionIfMfaDisabled(
       bindings: [prepared.session.sessionId, input.userId],
     },
   );
-  return Number(results[1]?.meta?.changes ?? 0) === 1
+  return Number(results[statements.length - 1]?.meta?.changes ?? 0) === 1
     ? prepared.session
     : null;
 }
@@ -359,6 +404,12 @@ export async function localSessionFromCookie(
        AND s.expires_at>?
        AND coalesce(s.idle_expires_at,s.expires_at)>?
        AND (s.device_id IS NULL OR d.revoked_at IS NULL)
+       AND (d.continuity_id IS NULL OR EXISTS (
+         SELECT 1 FROM auth_device_continuities continuity
+         WHERE continuity.id=d.continuity_id
+           AND continuity.user_id=s.user_id
+           AND continuity.revoked_at IS NULL
+       ))
      LIMIT 1`,
   ).bind(tokenHash, nowIso, nowIso).first<
     Omit<LocalSession, "assuranceLevel"> & UserIdentityRow & {
@@ -455,6 +506,34 @@ export async function revokeSessions(
   const deviceBindings = input.scope === "others"
     ? [input.userId, input.userId, input.currentSessionId, now]
     : [input.userId];
+  const continuityPredicate = input.scope === "others"
+    ? `user_id=? AND revoked_at IS NULL
+       AND id IN (
+         SELECT device.continuity_id
+         FROM auth_devices device
+         JOIN auth_sessions session ON session.device_id=device.id
+         WHERE session.user_id=? AND session.id<>?
+           AND session.revoked_at=? AND device.continuity_id IS NOT NULL
+       )
+       AND id NOT IN (
+         SELECT device.continuity_id
+         FROM auth_devices device
+         JOIN auth_sessions session ON session.device_id=device.id
+         WHERE session.user_id=? AND session.id=?
+           AND session.revoked_at IS NULL
+           AND device.continuity_id IS NOT NULL
+       )`
+    : "user_id=? AND revoked_at IS NULL";
+  const continuityBindings = input.scope === "others"
+    ? [
+        input.userId,
+        input.userId,
+        input.currentSessionId,
+        now,
+        input.userId,
+        input.currentSessionId,
+      ]
+    : [input.userId];
 
   const results = await batchWithSecurityEvent(
     db,
@@ -478,6 +557,10 @@ export async function revokeSessions(
         `UPDATE auth_devices SET revoked_at=?
          WHERE ${devicePredicate}`,
       ).bind(now, ...deviceBindings),
+      db.prepare(
+        `UPDATE auth_device_continuities SET revoked_at=?
+         WHERE ${continuityPredicate}`,
+      ).bind(now, ...continuityBindings),
     ],
   );
   return Number(results[0]?.meta?.changes ?? 0);
@@ -489,17 +572,22 @@ export async function revokeOneSession(
     userId: string;
     sessionId: string;
     currentSessionId: string | null;
+    revokeDeviceContinuity?: boolean;
     now?: Date;
   },
 ): Promise<{ revoked: boolean; revokedCurrent: boolean }> {
   const owned = await db.prepare(
-    `SELECT id,device_id AS deviceId,revoked_at AS revokedAt
-     FROM auth_sessions
-     WHERE id=? AND user_id=?
+    `SELECT session.id,session.device_id AS deviceId,
+       device.continuity_id AS continuityId,
+       session.revoked_at AS revokedAt
+     FROM auth_sessions session
+     LEFT JOIN auth_devices device ON device.id=session.device_id
+     WHERE session.id=? AND session.user_id=?
      LIMIT 1`,
   ).bind(input.sessionId, input.userId).first<{
     id: string;
     deviceId: string | null;
+    continuityId: string | null;
     revokedAt: string | null;
   }>();
   if (!owned) throw new Error("SESSION_NOT_FOUND");
@@ -509,7 +597,51 @@ export async function revokeOneSession(
       revokedCurrent: input.sessionId === input.currentSessionId,
     };
   }
+  const revokeContinuity = input.revokeDeviceContinuity !== false
+    && Boolean(owned.continuityId);
+  const currentSharesContinuity = revokeContinuity && input.currentSessionId
+    ? Boolean(await db.prepare(
+        `SELECT 1
+         FROM auth_sessions session
+         JOIN auth_devices device ON device.id=session.device_id
+         WHERE session.id=? AND session.user_id=?
+           AND session.revoked_at IS NULL AND device.continuity_id=?
+         LIMIT 1`,
+      ).bind(
+        input.currentSessionId,
+        input.userId,
+        owned.continuityId,
+      ).first())
+    : false;
   const now = (input.now ?? new Date()).toISOString();
+  const statements = revokeContinuity
+    ? [
+        db.prepare(
+          `UPDATE auth_sessions SET revoked_at=?
+           WHERE user_id=? AND revoked_at IS NULL AND device_id IN (
+             SELECT id FROM auth_devices
+             WHERE user_id=? AND continuity_id=?
+           )`,
+        ).bind(now, input.userId, input.userId, owned.continuityId),
+        db.prepare(
+          `UPDATE auth_devices SET revoked_at=?
+           WHERE user_id=? AND continuity_id=? AND revoked_at IS NULL`,
+        ).bind(now, input.userId, owned.continuityId),
+        db.prepare(
+          `UPDATE auth_device_continuities SET revoked_at=?
+           WHERE id=? AND user_id=? AND revoked_at IS NULL`,
+        ).bind(now, owned.continuityId, input.userId),
+      ]
+    : [
+        db.prepare(
+          `UPDATE auth_sessions SET revoked_at=?
+           WHERE id=? AND user_id=? AND revoked_at IS NULL`,
+        ).bind(now, input.sessionId, input.userId),
+        db.prepare(
+          `UPDATE auth_devices SET revoked_at=?
+           WHERE id=? AND user_id=? AND revoked_at IS NULL`,
+        ).bind(now, owned.deviceId, input.userId),
+      ];
   const results = await batchWithSecurityEvent(
     db,
     {
@@ -519,22 +651,17 @@ export async function revokeOneSession(
       eventType: "session.revoked",
       severity: "warning",
       authSource: input.currentSessionId ? "local_session" : "platform_header",
-      metadata: eventMetadata("single"),
+      metadata: {
+        ...eventMetadata("single"),
+        deviceContinuityRevoked: revokeContinuity,
+      },
       createdAt: now,
     },
-    () => [
-      db.prepare(
-        `UPDATE auth_sessions SET revoked_at=?
-         WHERE id=? AND user_id=? AND revoked_at IS NULL`,
-      ).bind(now, input.sessionId, input.userId),
-      db.prepare(
-        `UPDATE auth_devices SET revoked_at=?
-         WHERE id=? AND user_id=? AND revoked_at IS NULL`,
-      ).bind(now, owned.deviceId, input.userId),
-    ],
+    () => statements,
   );
   return {
-    revoked: Number(results[0]?.meta?.changes ?? 0) === 1,
-    revokedCurrent: input.sessionId === input.currentSessionId,
+    revoked: Number(results[0]?.meta?.changes ?? 0) >= 1,
+    revokedCurrent: input.sessionId === input.currentSessionId
+      || currentSharesContinuity,
   };
 }

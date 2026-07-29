@@ -1167,6 +1167,37 @@ export async function confirmEmailChange(
           ...completedGuard.bindings,
         ),
         ...securityEmail.statements,
+        db.prepare(
+          `UPDATE auth_device_continuities
+           SET revoked_at=?
+           WHERE user_id=? AND revoked_at IS NULL
+             AND id IN (
+               SELECT device.continuity_id
+               FROM auth_devices device
+               JOIN auth_sessions session ON session.device_id=device.id
+               WHERE session.user_id=? AND session.id<>?
+                 AND session.revoked_at=?
+                 AND device.continuity_id IS NOT NULL
+             )
+             AND id NOT IN (
+               SELECT device.continuity_id
+               FROM auth_devices device
+               JOIN auth_sessions session ON session.device_id=device.id
+               WHERE session.id=? AND session.user_id=?
+                 AND session.revoked_at IS NULL
+                 AND device.continuity_id IS NOT NULL
+             )
+             AND EXISTS (${emailChangedGuard.selectSql})`,
+        ).bind(
+          input.now,
+          input.userId,
+          input.userId,
+          input.sessionId,
+          input.now,
+          input.sessionId,
+          input.userId,
+          ...emailChangedGuard.bindings,
+        ),
       ],
       completedGuard,
     );
@@ -1195,7 +1226,7 @@ export async function confirmEmailChange(
     && Number(results[10]?.meta?.changes ?? 0) === 1
     && Number(results[11]?.meta?.changes ?? 0) === 1
     && Number(results[12]?.meta?.changes ?? 0) === 1
-    && Number(results[13]?.meta?.changes ?? 0) === 1
+    && Number(results[results.length - 1]?.meta?.changes ?? 0) === 1
   ) {
     return {
       status: "confirmed",
