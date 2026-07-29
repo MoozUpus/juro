@@ -1,10 +1,13 @@
+"use client";
+
+import { usePlatformBasePath } from "./PlatformRouteContext";
 import Link from "next/link";
 import { BookOpenCheck, Bot, ExternalLink, FilePenLine, HelpCircle, Scale, ShieldCheck } from "lucide-react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
-export function HelpClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
+export function HelpClient({ locale }: { locale: PlatformLocale; accountType: AccountType }) {
   const ru = locale === "ru";
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
   return (
     <section className="help-workspace">
       <header>

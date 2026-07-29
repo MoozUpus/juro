@@ -146,7 +146,10 @@ export async function acceptWorkspaceInvitation(
 export function workspaceInvitationRedirect(
   locale: WorkspaceInvitationLocale,
   workspaceType: string,
+  workspaceId: string,
 ): string {
-  const accountType = workspaceType === "business" ? "business" : "individual";
-  return `/${locale}/${accountType}/dashboard`;
+  if (workspaceType === "business") {
+    return `/${locale}/business/${encodeURIComponent(workspaceId)}/dashboard`;
+  }
+  return `/${locale}/individual/dashboard`;
 }

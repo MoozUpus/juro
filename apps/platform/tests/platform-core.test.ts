@@ -6,7 +6,7 @@ import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
-import { isAccountType, isLocale, isPlatformModule, platformPath } from "../lib/platform/routing";
+import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath } from "../lib/platform/routing";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 
@@ -22,6 +22,11 @@ test("builder navigation preserves canonical locale and account context", () => 
   const uz = builderNavigationPaths("/uz/business/document-builder/");
   assert.equal(uz.contacts, "/uz/business/contacts");
   assert.equal(uz.notifications, "/uz/business/notifications");
+
+  const business = builderNavigationPaths("/ru/business/ws_business_1/document-builder/contracts");
+  assert.equal(business.builder, "/ru/business/ws_business_1/document-builder");
+  assert.equal(business.documents, "/ru/business/ws_business_1/documents");
+  assert.equal(business.switchLocale("uz"), "/uz/business/ws_business_1/document-builder/contracts");
 
   const legacy = builderNavigationPaths("/document-builder/library");
   assert.equal(legacy.locale, null);
@@ -504,7 +509,12 @@ test("canonical platform route classifier is stable", () => {
   assert.ok(isAccountType("individual"));assert.ok(isAccountType("entrepreneur"));assert.ok(isAccountType("lawyer"));assert.ok(isAccountType("business"));assert.ok(!isAccountType("admin"));
   assert.ok(isPlatformModule("dashboard"));assert.ok(isPlatformModule("action-plan"));assert.ok(!isPlatformModule("main"));assert.ok(!isPlatformModule("document-builder-test"));
   assert.equal(platformPath("uz","business","document-builder"),"/uz/business/document-builder");
+  assert.equal(platformPath("uz","business","dashboard","ws_business_1"),"/uz/business/ws_business_1/dashboard");
+  assert.equal(platformBasePath("ru","business","ws_business_1"),"/ru/business/ws_business_1");
   assert.equal(platformPath("ru","lawyer","dashboard"),"/ru/lawyer/dashboard");
+  assert.ok(isWorkspaceId("ws_business_1"));
+  assert.ok(!isWorkspaceId("workspace/escape"));
+  assert.throws(() => platformBasePath("ru", "business", "workspace/escape"), /INVALID_WORKSPACE_ID/);
 });
 
 test("legacy builder routing preserves every supported profile persona", async () => {
@@ -617,15 +627,18 @@ test("AI conversations and facts remain owner-scoped inside a tenant", async () 
 });
 
 test("workspace switching is membership-scoped and never reuses an invalid default tenant", async () => {
-  const [workspaceLibrary, route] = await Promise.all([
+  const [workspaceLibrary, workspaceAccess, route] = await Promise.all([
     readFile(new URL("../lib/platform/workspace.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/workspace-route-access.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/workspaces/route.ts", import.meta.url), "utf8"),
   ]);
-  assert.match(route, /m\.user_id=\? AND m\.status='active'/);
-  assert.match(route, /UPDATE user_profiles SET default_workspace_id=\?,updated_at=\?/);
+  assert.match(route, /workspaceForUserById\(user\.id, body\.workspaceId/);
+  assert.match(route, /source: "workspace_switcher"/);
   assert.doesNotMatch(route, /SET default_workspace_id=\?,account_type=\?/);
-  assert.match(route, /isPersonalAccountType\(target\.accountPersona\)/);
-  assert.match(route, /workspace_selected/);
+  assert.match(route, /isPersonalAccountType\(profile\.accountPersona\)/);
+  assert.match(workspaceAccess, /m\.user_id=\? AND m\.status='active'/);
+  assert.match(workspaceAccess, /UPDATE user_profiles SET default_workspace_id=\?,updated_at=\?/);
+  assert.match(workspaceAccess, /workspace_selected/);
   assert.match(workspaceLibrary, /const workspaceId = `ws_\$\{crypto\.randomUUID\(\)/);
   assert.doesNotMatch(workspaceLibrary, /profile\.defaultWorkspaceId \?\? `ws_/);
   assert.match(workspaceLibrary, /m\.status='active'/);

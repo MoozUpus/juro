@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlatformBasePath } from "./PlatformRouteContext";
+
 /* eslint-disable react-hooks/set-state-in-effect -- private dashboard data is loaded after authentication */
 
 import Link from "next/link";
@@ -64,7 +66,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   const fileInputRef = useRef<HTMLInputElement>(null);
   const copy = dashboardCopy(locale);
   const ru = locale === "ru";
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

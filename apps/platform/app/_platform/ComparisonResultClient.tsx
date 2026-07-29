@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlatformBasePath } from "./PlatformRouteContext";
+
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated comparison state is hydrated and polled after mount */
 
 import {
@@ -97,7 +99,6 @@ const resultTabs: Tab[] = ["summary", "all", "side", "redline", "risks", "source
 export function ComparisonResultClient({
   comparisonId,
   locale,
-  accountType,
 }: {
   comparisonId: string;
   locale: PlatformLocale;
@@ -107,7 +108,7 @@ export function ComparisonResultClient({
   const stageCopy = comparisonText[locale];
   const ru = locale === "ru";
   const router = useRouter();
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
   const [detail, setDetail] = useState<ComparisonDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);

@@ -88,11 +88,12 @@ Local checkpoint only; none of these statements is a staging or production claim
 - canonical RU/UZ auth and onboarding routes exist locally, unauthenticated
   root defaults to Uzbek, registration offers individual/entrepreneur/lawyer,
   and selecting a workspace no longer rewrites the stored persona;
-- `/:locale/:accountType/dashboard` is now the local canonical dashboard
-  route; shell/auth/onboarding/workspace/invitation transitions use it, while
-  `/:locale/:accountType/main` is a tested 308 compatibility redirect;
-- the latest recorded successful local full suite is 336 tests: 27 rendered
-  route, 241 core, and 68 Cloudflare tests.
+- personal personas keep `/:locale/:accountType/*`; business workspaces use
+  `/:locale/business/:workspaceId/*`; shell, builder, workspace switching, and
+  invitation acceptance share the workspace-aware route base, while reserved
+  legacy business roots remain authenticated compatibility adapters;
+- the latest recorded successful local full suite is 341 tests: 27 rendered
+  route, 246 core, and 68 Cloudflare tests.
 
 Vertical slices:
 

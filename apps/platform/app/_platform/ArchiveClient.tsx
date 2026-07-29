@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlatformBasePath } from "./PlatformRouteContext";
+
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated archive data is hydrated after the first browser render */
 
 import Link from "next/link";
@@ -9,9 +11,9 @@ import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 type Item = { id: string; title: string; category?: string; legalArea?: string; archivedAt: string; canRestore?: number };
 
-export function ArchiveClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
+export function ArchiveClient({ locale }: { locale: PlatformLocale; accountType: AccountType }) {
   const ru = locale === "ru";
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
   const [documents, setDocuments] = useState<Item[]>([]);
   const [cases, setCases] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);

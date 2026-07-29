@@ -1,8 +1,7 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
-import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
-import { workspaceForUser, workspacesForUser } from "../../../../lib/platform/workspace";
-import { isPersonalAccountType } from "../../../../lib/platform/routing";
+import { workspaceForUser, workspaceForUserById, workspacesForUser } from "../../../../lib/platform/workspace";
+import { isPersonalAccountType, isWorkspaceId, platformPath } from "../../../../lib/platform/routing";
 
 function response(body: unknown, status = 200, accountType?: string) {
   const headers = new Headers({
@@ -30,17 +29,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const user = await requireApiUser();
   const body = await request.json().catch(() => null) as { workspaceId?: string; locale?: string } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
-  if (!body?.workspaceId || body.workspaceId.length > 128) {
+  if (!body?.workspaceId || !isWorkspaceId(body.workspaceId)) {
     return response({ error: locale === "ru" ? "Пространство не выбрано." : "Makon tanlanmagan." }, 400);
   }
-  const db = requireD1();
-  const target = await db.prepare(
-    `SELECT w.id,w.type,w.name,m.role,p.account_type AS accountPersona
-     FROM workspace_members m
-     JOIN workspaces w ON w.id=m.workspace_id
-     JOIN user_profiles p ON p.user_id=m.user_id
-     WHERE w.id=? AND m.user_id=? AND m.status='active' LIMIT 1`,
-  ).bind(body.workspaceId, user.id).first<{ id: string; type: string; name: string; role: string; accountPersona: string }>();
+  const target = await workspaceForUserById(user.id, body.workspaceId, {
+    activate: true,
+    source: "workspace_switcher",
+  });
   if (!target) {
     return response({
       error: locale === "ru"
@@ -48,31 +43,22 @@ export const POST = withApiErrors(async function POST(request: Request) {
         : "Tanlangan makonga kirish huquqingiz yo‘q.",
     }, 403);
   }
-  const previous = await workspaceForUser(user);
+  const profile = await requireD1().prepare(
+    "SELECT account_type AS accountPersona FROM user_profiles WHERE id=? LIMIT 1",
+  ).bind(user.id).first<{ accountPersona: string }>();
   const accountType = target.type === "business"
     ? "business"
-    : isPersonalAccountType(target.accountPersona)
-      ? target.accountPersona
+    : profile && isPersonalAccountType(profile.accountPersona)
+      ? profile.accountPersona
       : "individual";
-  const now = isoNow();
-  await db.batch([
-    db.prepare(
-      "UPDATE user_profiles SET default_workspace_id=?,updated_at=? WHERE id=?",
-    ).bind(target.id, now, user.id),
-    db.prepare(
-      `INSERT INTO workspace_audit_events
-       (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
-       VALUES (?,?,?,'workspace',?,'workspace_selected',?,?)`,
-    ).bind(crypto.randomUUID(), target.id, user.id, target.id, JSON.stringify({
-      previousWorkspaceId: previous.id,
-      targetWorkspaceType: target.type,
-      routeAccountType: accountType,
-      role: target.role,
-    }), now),
-  ]);
   return response({
     ok: true,
     activeWorkspaceId: target.id,
-    redirectTo: `/${locale}/${accountType}/dashboard`,
+    redirectTo: platformPath(
+      locale,
+      accountType,
+      "dashboard",
+      target.type === "business" ? target.id : undefined,
+    ),
   }, 200, accountType);
 });

@@ -1,6 +1,6 @@
 # JURO implemented-features checkpoint
 
-Updated: 2026-07-28
+Updated: 2026-07-29
 Scope: verified local source and tests on the integration worktree. This is not
 staging or production evidence.
 
@@ -8,22 +8,22 @@ staging or production evidence.
 
 | Slice | Locally implemented and tested | Not yet proved |
 |---|---|---|
-| Workspace invitation acceptance | Strict bounded RU/UZ input; exact token/identity binding; staging migration `0022` unique immutable claim; one D1 batch for claim, membership, default-workspace, and audit; one winner under concurrency; existing owner role preserved; rollback on audit failure | Protected staging HTTP/concurrency flow; broader append-only workspace audit; business route containing `workspaceId` |
+| Workspace invitation acceptance | Strict bounded RU/UZ input; exact token/identity binding; staging migration `0022` unique immutable claim; one D1 batch for claim, membership, default-workspace, and audit; one winner under concurrency; existing owner role preserved; rollback on audit failure; business redirect contains the accepted `workspaceId` | Protected staging HTTP/concurrency flow and broader append-only workspace audit |
 | OTP request limits | Separate `5/email/hour` and `20/IP/hour` gates; retained lookup-key versions share buckets; invalidated provider failures count toward email limits; missing connecting IP does not merge unrelated users; 60-second resend cooldown retained; aggregate staging D1 reports three provider-accepted challenges | Live traffic/rate behavior, provider failure, and enumeration parity through protected staging |
 | OTP verification lock | Staging migration `0023` adds immutable `verification_locked_until`; fifth wrong attempt applies a 15-minute lock; replacement challenge is denied while locked | Full-HTTP remote concurrency and lock timing |
 | Turnstile | Server Siteverify integration with action `auth_otp`, exact hostname, optional remote IP, eight-second timeout, schema validation, and fail-closed invalid/unavailable handling; client widget integrated into auth flow; exact staging site/secret binding names are present | Current-version browser widget trace, provider response correlation, and Resend mailbox/failure flow in staging |
 | Session persistence | 24-hour default and 30-day explicit remember-me absolute lifetimes; aligned cookie `Max-Age` and D1 expiry; same choice after OTP or MFA; strict boolean inputs with false default; existing seven-day idle cap | Remote cookie/session behavior; rotation, fixation/replay detection, region signals, and security email |
 | Structured onboarding | Canonical `/:locale/onboarding`; strict 4 KiB Zod input; required separate names, normalized phone with explicit unverified evidence, personal persona, primary goal, and exact current policy digests; deterministic personal workspace creation; staging migration `0024` applied | Protected staging browser flow; final policy approval; phone verification |
-| Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; workspace switches preserve the stored persona; `dashboard` is canonical and localized `main` uses a tested 308 redirect; legacy builder redirects preserve supported personas | Staging HTTP/browser evidence; business `workspaceId` route |
+| Localized auth and persona routing | Canonical RU/UZ login/register routes; guest root defaults to Uzbek; registration personas are individual, entrepreneur, or lawyer; business routes use `/:locale/business/:workspaceId/*`; shell, builder, invitations, and switching preserve that base; legacy reserved business roots remain authenticated compatibility adapters | Current-version protected staging browser evidence |
 
 ## Evidence checkpoint
 
 The latest recorded successful local full suite contains:
 
 - 27 rendered-route/security tests;
-- 243 core/auth/document tests;
+- 246 core/auth/document tests;
 - 68 Cloudflare/migration/job tests, including the remote-D1 trigger syntax regression;
-- 338 tests total.
+- 341 tests total.
 
 This evidence includes local migration/schema contracts and service-level
 concurrency/rollback paths. The canonical document-builder flow now also has

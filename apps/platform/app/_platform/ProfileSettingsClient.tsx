@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlatformBasePath } from "./PlatformRouteContext";
+
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated profile data is hydrated after the first browser render */
 
 import Link from "next/link";
@@ -77,7 +79,7 @@ type EmailChangeStatus = {
 
 export function ProfileSettingsClient({ locale, accountType, view }: { locale: PlatformLocale; accountType: AccountType; view: View }) {
   const ru = locale === "ru";
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
   const localizedSignOut = `/signout-with-chatgpt?return_to=${encodeURIComponent(`/${locale}/auth/login`)}`;
   const [data, setData] = useState<ProfileData | null>(null);
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -181,7 +183,10 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
     if (!response.ok) setError(body.error || (ru ? "Изменения не сохранены." : "O‘zgarishlar saqlanmadi."));
     else {
       setNotice(ru ? "Изменения сохранены." : "O‘zgarishlar saqlandi.");
-      if (form.locale !== locale) window.location.assign(`/${form.locale}/${accountType}/${view === "profile" ? "profile" : "settings"}`);
+      if (form.locale !== locale) {
+        const localizedBase = base.replace(`/${locale}/`, `/${form.locale}/`);
+        window.location.assign(`${localizedBase}/${view === "profile" ? "profile" : "settings"}`);
+      }
       else await load();
     }
     setSaving(false);

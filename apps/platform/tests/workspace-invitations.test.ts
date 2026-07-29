@@ -358,9 +358,9 @@ test("claim guard rejects stale identity evidence and partial acceptance", async
 });
 
 test("invite route and UI keep canonical bilingual states", async () => {
-  assert.equal(workspaceInvitationRedirect("ru", "business"), "/ru/business/dashboard");
-  assert.equal(workspaceInvitationRedirect("uz", "business"), "/uz/business/dashboard");
-  assert.equal(workspaceInvitationRedirect("uz", "individual"), "/uz/individual/dashboard");
+  assert.equal(workspaceInvitationRedirect("ru", "business", "ws_business_1"), "/ru/business/ws_business_1/dashboard");
+  assert.equal(workspaceInvitationRedirect("uz", "business", "ws_business_1"), "/uz/business/ws_business_1/dashboard");
+  assert.equal(workspaceInvitationRedirect("uz", "individual", "ws_individual_1"), "/uz/individual/dashboard");
 
   const [route, page, client, invitationEmail] = await Promise.all([
     readFile(new URL(

@@ -6,6 +6,13 @@ import {
   type UserIdentityRow,
 } from "../auth/identity-protection";
 import { runtimeIdentityProtection } from "../auth/identity-runtime";
+import {
+  workspaceForUserByIdInDatabase as workspaceForUserByIdInDatabaseInternal,
+  type WorkspaceRouteOption,
+  type WorkspaceRouteSource,
+} from "./workspace-route-access";
+
+export { workspaceForUserByIdInDatabase } from "./workspace-route-access";
 
 type WorkspaceProfileRow = UserIdentityRow & {
   defaultWorkspaceId: string | null;
@@ -15,12 +22,7 @@ type WorkspaceProfileRow = UserIdentityRow & {
   fullName: string | null;
 };
 
-export type WorkspaceOption = {
-  id: string;
-  name: string;
-  type: "individual" | "business";
-  role: string;
-};
+export type WorkspaceOption = WorkspaceRouteOption;
 
 export async function workspacesForUser(userId: string): Promise<WorkspaceOption[]> {
   const rows = await requireD1().prepare(
@@ -105,6 +107,19 @@ export async function ensureDefaultWorkspace(userId: string): Promise<string> {
     ).bind(crypto.randomUUID(), workspaceId, userId, workspaceId, JSON.stringify({ source: "account_bootstrap" }), now),
   ]);
   return workspaceId;
+}
+
+export function workspaceForUserById(
+  userId: string,
+  workspaceId: string,
+  options: { activate?: boolean; source?: WorkspaceRouteSource } = {},
+): Promise<WorkspaceOption | null> {
+  return workspaceForUserByIdInDatabaseInternal(
+    requireD1(),
+    userId,
+    workspaceId,
+    options,
+  );
 }
 
 export async function workspaceForUser(user: UserProfile): Promise<WorkspaceOption> {

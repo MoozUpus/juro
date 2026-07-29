@@ -112,13 +112,19 @@ Existing handlers cover:
 
 Authenticated Chrome verification on 2026-07-28 confirmed that `/ru/individual/document-builder` renders and that `/uz/individual/document-builder` preserves the localized route and Uzbek shell. The builder module inside the UZ route remains Russian and is an implementation/i18n defect, not a route failure. A direct Chrome check of `/ru/individual/document-builder-test` was blocked by the client before response inspection, so it does not replace the existing HTTP/source evidence for the `308` redirect.
 
-## Target route gaps
+## Canonical workspace routing
 
 ### Profiles and workspaces
 
-- `entrepreneur` and `lawyer` personal personas are supported locally.
-- Business URLs do not contain `workspaceId`.
-- Target: `/:locale/business/:workspaceId/...`.
+- `entrepreneur` and `lawyer` personal personas remain on
+  `/:locale/:accountType/*`.
+- Business workspaces use `/:locale/business/:workspaceId/*`.
+- The canonical business layout re-authorizes active membership server-side,
+  activates only an accessible workspace, and returns neutral not-found behavior
+  for an inaccessible identifier.
+- Reserved legacy roots such as `/business/dashboard` and
+  `/business/document-builder/**` remain compatibility entries and redirect
+  an authenticated user to the active workspace URL.
 
 ### Dashboard and AI lawyer
 

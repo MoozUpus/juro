@@ -21,7 +21,7 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- local test totals (27 rendered route + 243 core + 68 Cloudflare = 338) are
+- local test totals (27 rendered route + 246 core + 68 Cloudflare = 341) are
   not remote D1, live-provider, or protected staging browser evidence.
 
 ## Legal-source acquisition gaps
@@ -68,8 +68,9 @@ foundation checkpoint.
 - the one-winner acceptance claim schema from `0022` is active in staging, but
   the full route and remote concurrency behavior remain untested over HTTP;
 - `workspace_audit_events` is not a general append-only/tamper-evident ledger;
-- acceptance redirects to `/:locale/:accountType/dashboard`; the target business
-  URL still lacks the required `workspaceId` segment;
+- business acceptance now redirects to the workspace-aware canonical URL,
+  but authenticated remote invitation/switch/browser evidence for the current
+  staging version remains open;
 - the owner/member model and invitation flow do not prove tenant isolation for
   every object domain.
 
@@ -77,10 +78,10 @@ foundation checkpoint.
 
 - canonical localized root/auth/onboarding routing, Uzbek-default behavior,
   structured personal-profile completion, persona-preserving workspace
-  selection, and the tested `/main` to `/dashboard` migration are staged
-  behind owner-only Access; business `workspaceId` routes, policy approval,
-  deletion purge/recovery, and externally reachable staff administration are
-  not complete;
+  selection, canonical business `workspaceId` routes, and the tested
+  `/main` to `/dashboard` migration are implemented on the branch; protected
+  staging browser evidence, policy approval, deletion purge/recovery, and
+  externally reachable staff administration are not complete;
 - the local staff-role foundation remains deliberately unreachable and has no
   operator bootstrap or customer-resource access grant;
 - no production behavior or UI was replaced, and no production migration or

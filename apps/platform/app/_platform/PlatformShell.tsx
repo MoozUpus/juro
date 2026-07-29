@@ -30,10 +30,11 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+import { platformBasePath, type AccountType, type PlatformLocale } from "../../lib/platform/routing";
 import type { WorkspaceOption } from "../../lib/platform/workspace";
 import { GlobalSearch } from "./GlobalSearch";
 import { LogoutButton } from "./LogoutButton";
+import { PlatformRouteProvider } from "./PlatformRouteContext";
 
 type Props = {
   locale: PlatformLocale;
@@ -64,7 +65,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   const sidebarRef = useRef<HTMLElement>(null);
   const openButtonRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const base = `/${locale}/${accountType}`;
+  const base = platformBasePath(locale, accountType, activeWorkspaceId);
   const business = accountType === "business";
   const visibleNav = nav.filter(([slug]) => slug !== "team" || business);
   const activeIndex = visibleNav.findIndex(([slug]) => {
@@ -137,7 +138,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
       setSwitchingWorkspace(false);
     }
   };
-  return <div className={`platform-shell ${collapsed ? "is-collapsed" : ""}`}>
+  return <PlatformRouteProvider basePath={base}><div className={`platform-shell ${collapsed ? "is-collapsed" : ""}`}>
     <a className="platform-skip-link" href="#main-content">{locale === "ru" ? "Перейти к содержанию" : "Asosiy mazmunga o‘tish"}</a>
     <aside ref={sidebarRef} id="platform-navigation" className={`platform-sidebar ${open ? "open" : ""}`} aria-label={locale === "ru" ? "Основная навигация" : "Asosiy navigatsiya"}>
       <div className="platform-brand"><Image src="/juro-logo-light.png" alt="JURO" width={236} height={120} priority unoptimized/><button className="platform-mobile-close" ref={closeButtonRef} onClick={()=>setOpen(false)} aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}><X/></button></div>
@@ -190,5 +191,5 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
         <button onClick={()=>setOpen(true)} aria-expanded={open} aria-controls="platform-navigation"><MoreHorizontal/><span>{locale === "ru" ? "Ещё" : "Yana"}</span></button>
       </nav>
     </div>
-  </div>;
+  </div></PlatformRouteProvider>;
 }

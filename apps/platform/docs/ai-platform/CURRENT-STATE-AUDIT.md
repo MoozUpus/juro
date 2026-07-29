@@ -135,7 +135,7 @@ No production snapshot or migration was performed. On the initially empty EEUR s
 
 ## Baseline verification
 
-Executed on Windows against checkpoint base `8ab1693` plus the current Phase 2 worktree and generated build output:
+Executed on Windows against checkpoint base `6178266` plus the current canonical business-workspace routing worktree and generated build output:
 
 ```text
 npm run cf:types:check  PASS
@@ -146,9 +146,9 @@ npm run install:ci -- --validate-only
 npm test                PASS
   bounded development build and artifact validation: PASS
   rendered route/security tests: 27 PASS
-  core/auth/document tests: 241 PASS
+  core/auth/document tests: 246 PASS
   Cloudflare/migration/job tests: 68 PASS
-  total: 336 PASS
+  total: 341 PASS
 npm run build:staging   PASS
   staging artifact validation: PASS
 npm run validate:cloudflare:matrix
@@ -159,7 +159,7 @@ strict high-confidence secret scan
   tracked source: 0; built bundle: 0; git history: 0
 ```
 
-The latest recorded successful local full suite is the 336-test run above: 27 rendered-route, 241 core, and 68 Cloudflare tests. It includes local coverage for migrations `0022`–`0028`, the remote-D1 trigger syntax regression, workspace-invitation one-winner/rollback behavior, independent OTP rate limits, the verification lock, Turnstile contract behavior, 24-hour/30-day session persistence, structured onboarding, canonical localized auth routes, persona-preserving workspace switches, the `/main` to `/dashboard` redirect contract, and the fail-closed legal-source lifecycle, acquisition, untrusted normalization, MFA-bound review evidence, immutable first-version publication, and the protected-but-disabled claim/decision/publication HTTP boundary. This is not staging or live-provider evidence. The clean network-install path remains unverified because actual `npm ci` was deliberately not run.
+The latest recorded successful local full suite is the 341-test run above: 27 rendered-route, 246 core/auth/document, and 68 Cloudflare tests. It includes local coverage for migrations `0022`–`0028`, the remote-D1 trigger syntax regression, workspace-invitation one-winner/rollback behavior, independent OTP rate limits, the verification lock, Turnstile contract behavior, 24-hour/30-day session persistence, structured onboarding, canonical localized auth routes, server-enforced canonical business workspace activation, persona-preserving workspace switches, the `/main` to `/dashboard` redirect contract, and the fail-closed legal-source lifecycle, acquisition, untrusted normalization, MFA-bound review evidence, immutable first-version publication, and the protected-but-disabled claim/decision/publication HTTP boundary. This is not authenticated staging or live-provider evidence. The clean network-install path remains unverified because actual `npm ci` was deliberately not run.
 
 The online npm audit was not run because the execution policy rejected sending dependency metadata to the npm registry; the offline result is not presented as equivalent to a fresh registry audit. The existing suite is a baseline, not evidence that the target Definition of Done is met.
 

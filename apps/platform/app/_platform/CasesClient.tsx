@@ -1,4 +1,6 @@
 "use client";
+
+import { usePlatformBasePath } from "./PlatformRouteContext";
 import Link from "next/link";
 import { BriefcaseBusiness, CalendarClock, CircleAlert, LoaderCircle, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -16,14 +18,14 @@ type CaseItem = {
   steps?: Array<{ id: string; status: string }>;
 };
 
-export function CasesClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
+export function CasesClient({ locale }: { locale: PlatformLocale; accountType: AccountType }) {
   const [items, setItems] = useState<CaseItem[]>([]);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("active");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const ru = locale === "ru";
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
 
   useEffect(() => {
     let cancelled = false;

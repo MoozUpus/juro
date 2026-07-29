@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlatformBasePath } from "./PlatformRouteContext";
+
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated monitoring preferences are hydrated after the first browser render */
 
 import {
@@ -317,7 +319,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         <section className="monitoring-feed">
           <div className="monitoring-section-heading"><Gavel /><div><h2>{t.feed}</h2><p>{locale === "ru" ? "Только проверенные записи, соответствующие вашим темам." : "Faqat mavzularingizga mos tekshirilgan yozuvlar."}</p></div></div>
           {loading ? <div className="monitoring-loading"><LoaderCircle className="spin" /><span>{locale === "ru" ? "Проверяем сохранённые записи…" : "Saqlangan yozuvlar tekshirilmoqda…"}</span></div>
-            : updates.length ? <div className="monitoring-updates">{updates.map(update => <UpdateCard key={update.id} update={update} locale={locale} accountType={accountType} />)}</div>
+            : updates.length ? <div className="monitoring-updates">{updates.map(update => <UpdateCard key={update.id} update={update} locale={locale} />)}</div>
               : <div className="monitoring-empty"><Scale /><h3>{t.empty}</h3><p>{t.emptyHint}</p></div>}
         </section>
       </div>
@@ -325,9 +327,9 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
   );
 }
 
-function UpdateCard({ update, locale, accountType }: { update: LegislationUpdate; locale: PlatformLocale; accountType: AccountType }) {
+function UpdateCard({ update, locale }: { update: LegislationUpdate; locale: PlatformLocale }) {
   const t = copy[locale];
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
   return <article className="monitoring-update">
     <div className="monitoring-update-meta">
       {update.topics.map(topic => <span key={topic}>{topicLabels[topic as Topic]?.[locale] ?? topic}</span>)}

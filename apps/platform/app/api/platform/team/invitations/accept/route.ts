@@ -127,6 +127,10 @@ export const POST = withApiErrors(async function POST(request: Request) {
     : "individual";
   return response({
     ok: true,
-    redirectTo: workspaceInvitationRedirect(locale, invitation.workspaceType),
+    redirectTo: workspaceInvitationRedirect(
+      locale,
+      invitation.workspaceType,
+      invitation.workspaceId,
+    ),
   }, 200, accountType);
 });

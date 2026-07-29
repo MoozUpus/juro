@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlatformBasePath } from "./PlatformRouteContext";
+
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated comparison lists are hydrated after mount */
 
 import Link from "next/link";
@@ -69,7 +71,6 @@ const stageOrder = [
 
 export function DocumentComparisonClient({
   locale,
-  accountType,
 }: {
   locale: PlatformLocale;
   accountType: AccountType;
@@ -77,7 +78,7 @@ export function DocumentComparisonClient({
   const copy = comparisonText[locale];
   const ru = locale === "ru";
   const router = useRouter();
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
   const [first, setFirst] = useState<FileSelection>(null);
   const [second, setSecond] = useState<FileSelection>(null);
   const [consent, setConsent] = useState(false);

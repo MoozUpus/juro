@@ -53,10 +53,11 @@ sessions; a later failure requires a fresh code.
 - local tests cover one-winner concurrency, replay, stale identity evidence,
   owner-role preservation, and full rollback when audit insertion fails.
 
-The redirect now uses canonical `/:locale/:accountType/dashboard`; the target
-business route still lacks its required `workspaceId` segment. The immutable
-acceptance claim does not make `workspace_audit_events` a general append-only
-hash chain.
+Invitation acceptance now redirects business memberships to
+`/:locale/business/:workspaceId/dashboard`. The canonical layout independently
+re-authorizes membership and switches the active tenant idempotently; the
+immutable acceptance claim still does not make `workspace_audit_events` a
+general append-only hash chain.
 
 ### Files
 
@@ -108,10 +109,10 @@ hash chain.
   selecting a business workspace changes the active workspace route but no
   longer rewrites the user's persistent personal persona.
 
-The current canonical platform module is now `/dashboard`; localized legacy
-`/main` routes receive a tested method-preserving 308 redirect. Business
-routes containing `workspaceId` remain separate route-migration work and are
-not claimed by this checkpoint.
+The canonical platform module is `/dashboard`; localized legacy `/main`
+routes receive a tested method-preserving 308 redirect. Business workspace
+routes now include `workspaceId`, and reserved legacy business roots resolve
+the authenticated active tenant before redirecting to the canonical URL.
 
 ### Identity cryptography foundation
 
@@ -402,7 +403,7 @@ persona-preserving workspace selection, canonical localized auth routes, and the
 comparison/rendered Worker regression suite.
 
 The latest recorded local full suite passes 338/338 checks: 27 rendered
-Worker/security checks, 243 core/document/auth checks, and 68 Cloudflare
+Worker/security checks, 246 core/document/auth checks, and 68 Cloudflare
 configuration/migration/job checks. The full local migration sequence contains
 108 total tables (107 non-internal) in remote staging and zero pending migrations. Local
 evidence is not staging or production runtime evidence.

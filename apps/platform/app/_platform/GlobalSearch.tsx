@@ -1,5 +1,7 @@
 "use client";
 
+import { usePlatformBasePath } from "./PlatformRouteContext";
+
 /* eslint-disable react-hooks/set-state-in-effect -- search state is synchronized with a debounced authenticated request */
 
 import {
@@ -39,7 +41,6 @@ const icons = {
 
 export function GlobalSearch({
   locale,
-  accountType,
 }: {
   locale: PlatformLocale;
   accountType: AccountType;
@@ -54,7 +55,7 @@ export function GlobalSearch({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [active, setActive] = useState(0);
-  const base = `/${locale}/${accountType}`;
+  const base = usePlatformBasePath();
 
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {

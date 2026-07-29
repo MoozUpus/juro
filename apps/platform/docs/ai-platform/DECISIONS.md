@@ -1308,3 +1308,22 @@ tests, or timing-parity tests. Staging remains in expand-safe
 evidence and zero profiles have protected identity fields. Dual-write
 activation requires its own backfill, verification, rollback, and deployment
 checkpoint. Production remains unchanged.
+
+## D-064 — make the business workspace identifier canonical without breaking legacy URLs
+
+Status: accepted and locally verified; protected-staging deployment and authenticated browser evidence pending
+Date: 2026-07-29
+
+Business workspaces use `/:locale/business/:workspaceId/*`. The route layout
+does not trust the identifier: it joins active membership, returns neutral
+not-found behavior when inaccessible, and idempotently synchronizes the active
+workspace with an audit event. Shell navigation, builder paths, global search
+results, profile links, invitation acceptance, and workspace switching use one
+workspace-aware base.
+
+Because the static `business` segment outranks the older dynamic
+`:accountType` segment, reserved legacy roots receive explicit authenticated
+adapters. They resolve the active tenant and redirect to the canonical workspace
+URL; localized `main` retains its existing 308 redirect to the legacy
+dashboard entry. This preserves bookmarks without accepting URL shape as
+authorization. Production remains unchanged.

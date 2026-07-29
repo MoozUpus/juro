@@ -1,4 +1,10 @@
-import { isAccountType, isLocale, type PlatformLocale } from "./routing";
+import {
+  isAccountType,
+  isLocale,
+  isWorkspaceId,
+  platformBasePath,
+  type PlatformLocale,
+} from "./routing";
 
 export type BuilderNavigationPaths = {
   locale: PlatformLocale | null;
@@ -25,7 +31,35 @@ export function builderNavigationPaths(pathname: string): BuilderNavigationPaths
   const accountType = segments[1];
 
   if (locale && accountType && isLocale(locale) && isAccountType(accountType)) {
-    const base = `/${locale}/${accountType}`;
+    const canonicalBusinessRoots = new Set([
+      "dashboard",
+      "ai-chat",
+      "cases",
+      "documents",
+      "document-builder",
+      "contacts",
+      "notifications",
+      "document-review",
+      "monitoring",
+      "action-plan",
+      "consultations",
+      "history",
+      "archive",
+      "team",
+      "billing",
+      "security",
+      "help",
+      "profile",
+      "settings",
+    ]);
+    const workspaceId = accountType === "business"
+      && segments[2]
+      && segments[3]
+      && isWorkspaceId(segments[2])
+      && canonicalBusinessRoots.has(segments[3])
+      ? segments[2]
+      : undefined;
+    const base = platformBasePath(locale, accountType, workspaceId);
     const builder = `${base}/document-builder`;
     return {
       locale,
@@ -37,7 +71,10 @@ export function builderNavigationPaths(pathname: string): BuilderNavigationPaths
       category: (categorySlug) => `${builder}/${encodeURIComponent(categorySlug)}`,
       template: (categorySlug, documentCode) => `${builder}/${encodeURIComponent(categorySlug)}/${encodeURIComponent(documentCode)}`,
       document: (documentId) => `${base}/documents/${encodeURIComponent(documentId)}`,
-      switchLocale: (nextLocale) => `/${nextLocale}/${accountType}${currentPath.slice(base.length)}`,
+      switchLocale: (nextLocale) => {
+        const nextBase = platformBasePath(nextLocale, accountType, workspaceId);
+        return `${nextBase}${currentPath.slice(base.length)}`;
+      },
     };
   }
 
