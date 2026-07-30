@@ -19,12 +19,34 @@ export type BuilderNavigationPaths = {
   switchLocale: (locale: PlatformLocale) => string;
 };
 
+export type BuilderNavigationContext = {
+  caseId?: string | null;
+  planStepId?: string | null;
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 function cleanPathname(pathname: string): string {
   const path = pathname.split(/[?#]/, 1)[0] || "/";
   return path.length > 1 ? path.replace(/\/+$/, "") : path;
 }
 
-export function builderNavigationPaths(pathname: string): BuilderNavigationPaths {
+function withBuilderContext(path: string, context: BuilderNavigationContext): string {
+  const params = new URLSearchParams();
+  if (context.caseId && UUID_PATTERN.test(context.caseId)) {
+    params.set("caseId", context.caseId);
+    if (context.planStepId && UUID_PATTERN.test(context.planStepId)) {
+      params.set("stepId", context.planStepId);
+    }
+  }
+  const query = params.toString();
+  return query ? `${path}?${query}` : path;
+}
+
+export function builderNavigationPaths(
+  pathname: string,
+  context: BuilderNavigationContext = {},
+): BuilderNavigationPaths {
   const currentPath = cleanPathname(pathname);
   const segments = currentPath.split("/").filter(Boolean);
   const locale = segments[0];
@@ -63,17 +85,23 @@ export function builderNavigationPaths(pathname: string): BuilderNavigationPaths
     const builder = `${base}/document-builder`;
     return {
       locale,
-      builder,
-      library: builder,
+      builder: withBuilderContext(builder, context),
+      library: withBuilderContext(builder, context),
       documents: `${base}/documents`,
       contacts: `${base}/contacts`,
       notifications: `${base}/notifications`,
-      category: (categorySlug) => `${builder}/${encodeURIComponent(categorySlug)}`,
-      template: (categorySlug, documentCode) => `${builder}/${encodeURIComponent(categorySlug)}/${encodeURIComponent(documentCode)}`,
+      category: (categorySlug) => withBuilderContext(
+        `${builder}/${encodeURIComponent(categorySlug)}`,
+        context,
+      ),
+      template: (categorySlug, documentCode) => withBuilderContext(
+        `${builder}/${encodeURIComponent(categorySlug)}/${encodeURIComponent(documentCode)}`,
+        context,
+      ),
       document: (documentId) => `${base}/documents/${encodeURIComponent(documentId)}`,
       switchLocale: (nextLocale) => {
         const nextBase = platformBasePath(nextLocale, accountType, workspaceId);
-        return `${nextBase}${currentPath.slice(base.length)}`;
+        return withBuilderContext(`${nextBase}${currentPath.slice(base.length)}`, context);
       },
     };
   }
@@ -81,14 +109,20 @@ export function builderNavigationPaths(pathname: string): BuilderNavigationPaths
   const builder = "/document-builder";
   return {
     locale: null,
-    builder,
-    library: `${builder}/library`,
+    builder: withBuilderContext(builder, context),
+    library: withBuilderContext(`${builder}/library`, context),
     documents: `${builder}/documents`,
     contacts: `${builder}/contacts`,
     notifications: `${builder}/notifications`,
-    category: (categorySlug) => `${builder}/${encodeURIComponent(categorySlug)}`,
-    template: (categorySlug, documentCode) => `${builder}/${encodeURIComponent(categorySlug)}/${encodeURIComponent(documentCode)}`,
+    category: (categorySlug) => withBuilderContext(
+      `${builder}/${encodeURIComponent(categorySlug)}`,
+      context,
+    ),
+    template: (categorySlug, documentCode) => withBuilderContext(
+      `${builder}/${encodeURIComponent(categorySlug)}/${encodeURIComponent(documentCode)}`,
+      context,
+    ),
     document: (documentId) => `${builder}/documents/${encodeURIComponent(documentId)}`,
-    switchLocale: () => currentPath,
+    switchLocale: () => withBuilderContext(currentPath, context),
   };
 }

@@ -3,7 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- localized builder copy follows the route after client-side locale navigation */
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Bell, Clock3, FileCheck2, FilePenLine, Search, ShieldCheck, UsersRound } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { DocumentCategory, DocumentLibraryItem } from "../../../lib/document-builder/registry";
@@ -37,7 +37,11 @@ function TemplateCard({ document, language, paths }: { document: DocumentLibrary
 export function DocumentLibraryClient({ categories, documents, activeCategory, signedIn = false }: { categories: readonly DocumentCategory[]; documents: readonly DocumentLibraryItem[]; activeCategory?: DocumentCategory; signedIn?: boolean }) {
   const pathname = usePathname();
   const router = useRouter();
-  const paths = builderNavigationPaths(pathname);
+  const searchParams = useSearchParams();
+  const paths = builderNavigationPaths(pathname, {
+    caseId: searchParams.get("caseId"),
+    planStepId: searchParams.get("stepId"),
+  });
   const [language, setLanguage] = useState<BuilderLanguage>(paths.locale ?? "ru");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "verified" | "beta">("all");

@@ -7,17 +7,23 @@ import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
 import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, workspaceForAccountRoute } from "../lib/platform/routing";
+import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 
 test("builder navigation preserves canonical locale and account context", () => {
-  const ru = builderNavigationPaths("/ru/individual/document-builder/debt?caseId=case-1");
+  const caseId = "11111111-1111-4111-8111-111111111111";
+  const stepId = "22222222-2222-4222-8222-222222222222";
+  const ru = builderNavigationPaths(
+    "/ru/individual/document-builder/debt?caseId=discarded",
+    { caseId, planStepId: stepId },
+  );
   assert.equal(ru.locale, "ru");
-  assert.equal(ru.builder, "/ru/individual/document-builder");
+  assert.equal(ru.builder, `/ru/individual/document-builder?caseId=${caseId}&stepId=${stepId}`);
   assert.equal(ru.documents, "/ru/individual/documents");
-  assert.equal(ru.template("debt", "0602001"), "/ru/individual/document-builder/debt/0602001");
+  assert.equal(ru.template("debt", "0602001"), `/ru/individual/document-builder/debt/0602001?caseId=${caseId}&stepId=${stepId}`);
   assert.equal(ru.document("doc / 1"), "/ru/individual/documents/doc%20%2F%201");
-  assert.equal(ru.switchLocale("uz"), "/uz/individual/document-builder/debt");
+  assert.equal(ru.switchLocale("uz"), `/uz/individual/document-builder/debt?caseId=${caseId}&stepId=${stepId}`);
 
   const uz = builderNavigationPaths("/uz/business/document-builder/");
   assert.equal(uz.contacts, "/uz/business/contacts");
@@ -32,6 +38,39 @@ test("builder navigation preserves canonical locale and account context", () => 
   assert.equal(legacy.locale, null);
   assert.equal(legacy.library, "/document-builder/library");
   assert.equal(legacy.document("doc-1"), "/document-builder/documents/doc-1");
+
+  const unsafe = builderNavigationPaths("/ru/individual/document-builder", {
+    caseId: "not-a-uuid",
+    planStepId: stepId,
+  });
+  assert.equal(unsafe.builder, "/ru/individual/document-builder");
+  assert.equal(unsafe.template("debt", "0602001"), "/ru/individual/document-builder/debt/0602001");
+});
+test("action plan step updates accept only bounded calendar data", () => {
+  assert.deepEqual(
+    actionPlanStepPatchSchema.parse({
+      status: "in_progress",
+      revision: 1,
+      dueAt: "2026-08-31",
+    }),
+    { status: "in_progress", revision: 1, dueAt: "2026-08-31" },
+  );
+  assert.equal(actionPlanStepPatchSchema.safeParse({
+    status: "completed",
+    revision: 2,
+    dueAt: null,
+  }).success, true);
+  for (const dueAt of ["2026-02-30", "2026-8-01", "tomorrow", "2026-08-01T00:00:00Z"]) {
+    assert.equal(actionPlanStepPatchSchema.safeParse({
+      status: "not_started",
+      revision: 1,
+      dueAt,
+    }).success, false);
+  }
+  assert.equal(actionPlanStepPatchSchema.safeParse({ status: "unknown", revision: 1, dueAt: null }).success, false);
+  assert.equal(actionPlanStepPatchSchema.safeParse({ status: "completed", revision: 0, dueAt: null }).success, false);
+  assert.equal(actionPlanStepPatchSchema.safeParse({ status: "completed", revision: 1, dueAt: null, userId: "other" }).success, false);
+
 });
 
 test("personal routes retain the personal workspace when business is default", () => {

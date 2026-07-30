@@ -64,10 +64,13 @@ function FieldControl({ field, language, value, error, onChange }: { field: Ques
 export function ConfigurableDocumentBuilder({ definition, initialUser, signInPath, initialDocumentId }: { definition: DocumentDefinition; initialUser: BuilderUser | null; signInPath: string; initialDocumentId?: string }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
-  const paths = useMemo(() => builderNavigationPaths(pathname), [pathname]);
-  const routeLocale = paths.locale;
   const caseId = searchParams.get("caseId") ?? undefined;
   const planStepId = searchParams.get("stepId") ?? undefined;
+  const paths = useMemo(
+    () => builderNavigationPaths(pathname, { caseId, planStepId }),
+    [pathname, caseId, planStepId],
+  );
+  const routeLocale = paths.locale;
   const [phase, setPhase] = useState<Phase>(initialDocumentId ? "builder" : "intro");
   const [language, setLanguage] = useState<BuilderLanguage>(paths.locale ?? "ru");
   const [answers, setAnswers] = useState<QuestionnaireAnswers>(() => createQuestionnaireAnswers(definition));
