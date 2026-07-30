@@ -50,6 +50,19 @@ No signed download URL or secret value is recorded in this repository.
 - staging has no inspected `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` binding, so no live provider answer is claimed;
 - authenticated browser QA is blocked by the local browser-control kernel failing before connection; Cloudflare Access was not bypassed;
 - streaming, branching, memory, Vectorize hybrid retrieval, guest flow, and entitlement service remain unimplemented;
-- the fallback extension must receive its own staging build/deploy/version evidence after commit;
 - production deployment remains prohibited without separate owner approval.
 
+## Post-deploy read-back
+
+- commit: `92a45ef`;
+- Worker: `juro-platform-staging`;
+- active version: `fdbce9be-06d6-45ef-bd01-ac49bd7b44a7`;
+- deployment strategy: 100% of staging traffic on that version;
+- active non-secret model vars: `OPENAI_CHAT_MODEL`, `OPENAI_DEEP_MODEL`, and `ANTHROPIC_FALLBACK_MODEL` with the checked-in staging values;
+- secret-name read-back: only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; provider secrets remain absent;
+- D1 postflight: `quick_check=ok`, zero foreign-key violations, migration ledger ID 38;
+- Phase 4 tables after deployment: zero `ai_runs` and zero `ai_usage_ledger` rows, consistent with no live provider execution;
+- anonymous AI route, AI API, and canonical document-builder route each return Cloudflare Access `302`;
+- production remains unchanged.
+
+Live AI and authenticated UI evidence remain blocked by missing provider secrets and the browser-control kernel failure. The deployed API continues to fail closed.

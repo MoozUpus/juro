@@ -135,3 +135,7 @@ The feature branch now contains a real authenticated `POST /api/platform/ai` bou
 - OpenAI Responses API primary adapter;
 - Anthropic Messages API structured-output fallback that cannot bypass a safety refusal;
 - real UI rendering for findings, assumptions, risks, actions, documents, deadlines, sources, and usage.
+
+Local verification passed 301 core/rendered checks and 82 Cloudflare checks. Staging migration `0037`, the OpenAI boundary, and the Anthropic fallback extension are deployed to owner-protected staging as version `fdbce9be-06d6-45ef-bd01-ac49bd7b44a7` at 100% traffic.
+
+Live provider execution remains blocked by absent `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` bindings and is not claimed. Production remains unchanged.
