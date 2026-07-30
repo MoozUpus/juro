@@ -141,6 +141,10 @@ test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", 
       "https://lex.uz/ru/docs/-42",
     ],
   );
+  assert.equal(
+    new Headers(synthetic.calls[0]?.init?.headers).get("accept"),
+    "text/plain, */*;q=0.1",
+  );
   for (const call of synthetic.calls) {
     assert.equal(call.init?.redirect, "manual");
     assert.equal(call.init?.cache, "no-store");

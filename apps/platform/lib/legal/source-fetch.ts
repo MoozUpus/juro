@@ -481,7 +481,7 @@ export async function fetchLegalSource(
     fetchImpl,
     timeoutMs,
     maxRedirects,
-    accept: "text/plain;charset=UTF-8",
+    accept: "text/plain, */*;q=0.1",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
       return candidate.protocol === "https:"
