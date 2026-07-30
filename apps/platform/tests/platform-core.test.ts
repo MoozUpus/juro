@@ -706,6 +706,18 @@ test("workspace and product migrations enforce tenant links, token hashes and an
   assert.doesNotMatch(sql, /otp[^;\n]*text[^;\n]*123456/i);
 });
 
+test("AI platform migration adds tenant-scoped run and usage evidence without destructive SQL", async () => {
+  const sql = await readFile(new URL("../drizzle/0037_square_blacklash.sql", import.meta.url), "utf8");
+  for (const table of ["ai_runs", "ai_usage_ledger"]) {
+    assert.match(sql, new RegExp("CREATE TABLE `" + table + "`"));
+  }
+  for (const index of [
+    "ai_runs_idempotency_uidx", "ai_usage_ledger_run_uidx",
+    "ai_usage_ledger_idempotency_uidx", "ai_usage_ledger_period_idx",
+  ]) assert.match(sql, new RegExp(index));
+  assert.doesNotMatch(sql, /^\s*(?:DROP\b|DELETE\s+FROM\b|TRUNCATE\b)/im);
+});
+
 test("comparison and monitoring migrations preserve immutable versions and verified-source publishing", async () => {
   const [comparisonSql, monitoringSql] = await Promise.all([
     readFile(new URL("../drizzle/0009_glossy_sunspot.sql", import.meta.url), "utf8"),

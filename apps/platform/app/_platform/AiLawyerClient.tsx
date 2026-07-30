@@ -7,32 +7,28 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useState } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
-type ProviderStatus = { configured: boolean; provider: string | null; model: string | null };
+type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
+type Usage = { used: number; limit: number; periodEnd: string };
 type Conversation = { id: string; title: string; locale: string; status: string; updatedAt: string; lastAnswer: string | null; facts: Fact[] };
 type Fact = { id: string; statement: string; status: string };
-type Source = {
-  id: string;
-  actTitle: string;
-  actIdentifier: string | null;
-  officialUrl: string;
-  publishedAt: string | null;
-  revisionDate: string | null;
-  lastCheckedAt: string;
-  locale: string;
-  sourceType: string;
-  status: string;
-};
-type IntakeResult = {
-  understanding: string;
+type Source = { sourceId: string; actTitle: string; actIdentifier: string | null; article: string | null; excerpt: string | null; originalUrl: string; status: string; effectiveDate: string | null; verifiedAt: string };
+type LegalResult = {
+  responseKind: "answer" | "clarification_required";
+  summary: string;
+  answer: string;
   clarificationQuestions: string[];
-  nextSteps: string[];
-  cautions: string[];
-  sourceMode: "verified_sources" | "intake_only";
-  confidencePercent: number;
-  sourceConflict: boolean;
-  sourceWarning: string | null;
+  confirmedFindings: Array<{ title: string; explanation: string }>;
+  assumptions: Array<{ statement: string; impact: string }>;
+  risks: Array<{ level: "low" | "medium" | "high" | "critical"; title: string; explanation: string }>;
+  sources: Source[];
+  requiredDocuments: Array<{ name: string; reason: string; required: boolean }>;
+  actionPlan: Array<{ title: string; description: string }>;
+  deadlines: Array<{ title: string; dueDate: string | null; calculationMethod: string; confidence: string }>;
+  urgency: "normal" | "high" | "critical";
+  suggestLawyer: boolean;
+  legalDatabaseAsOf: string;
 };
-type Answer = { conversationId: string; result: IntakeResult; facts: Fact[]; sources: Source[] };
+type Answer = { conversationId: string; messageId?: string; result: LegalResult; facts: Fact[]; usage?: Usage };
 
 export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const ru = locale === "ru";
@@ -41,8 +37,11 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const router = useRouter();
   const selectedConversationId = searchParams.get("conversationId") || "";
   const [status, setStatus] = useState<ProviderStatus | null>(null);
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [question, setQuestion] = useState(() => (searchParams.get("prompt") || "").slice(0, 4_000));
+  const [answerMode, setAnswerMode] = useState<"short" | "detailed">("detailed");
+  const [reasoningMode, setReasoningMode] = useState<"fast" | "deep">("fast");
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -51,11 +50,12 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const load = useCallback(async () => {
     try {
       const response = await fetch(`/api/platform/ai${selectedConversationId ? `?conversationId=${encodeURIComponent(selectedConversationId)}` : ""}`, { cache: "no-store" });
-      const body = await response.json() as { status?: ProviderStatus; conversations?: Conversation[]; selected?: Answer | null; error?: string };
+      const body = await response.json() as { status?: ProviderStatus; usage?: Usage; conversations?: Conversation[]; selected?: Answer | null; error?: string };
       if (!response.ok) throw new Error(body.error || (ru ? "AI-модуль не загрузился." : "AI moduli yuklanmadi."));
       setStatus(body.status ?? null);
+      setUsage(body.usage ?? null);
       setConversations(body.conversations ?? []);
-      if (body.selected) setAnswer(body.selected);
+      setAnswer(body.selected ?? null);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
@@ -73,12 +73,24 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     try {
       const response = await fetch("/api/platform/ai", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ question, locale }),
+        headers: {
+          "content-type": "application/json",
+          "x-juro-csrf": "1",
+          "idempotency-key": crypto.randomUUID(),
+        },
+        body: JSON.stringify({
+          question,
+          locale,
+          answerMode,
+          reasoningMode,
+          conversationId: answer?.conversationId || selectedConversationId || undefined,
+        }),
       });
-      const body = await response.json() as Answer & { error?: string };
+      const body = await response.json() as Answer & { error?: string; code?: string };
       if (!response.ok) throw new Error(body.error || (ru ? "Не удалось получить ответ." : "Javob olinmadi."));
+      if (response.status === 202) throw new Error(ru ? "Запрос уже обрабатывается. Откройте диалог через несколько секунд." : "So‘rov qayta ishlanmoqda. Suhbatni bir necha soniyadan so‘ng oching.");
       setAnswer(body);
+      if (body.usage) setUsage(body.usage);
       setQuestion("");
       router.replace(`${pathname}?conversationId=${encodeURIComponent(body.conversationId)}`, { scroll: false });
       await load();
@@ -104,7 +116,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     });
     const body = await response.json() as { error?: string };
     if (!response.ok) { setError(body.error || (ru ? "Факт не обновлён." : "Fakt yangilanmadi.")); return; }
-    setAnswer(current => current ? { ...current, facts: current.facts.map(fact => fact.id === factId ? { ...fact, status: nextStatus } : fact) } : current);
+    setAnswer((current) => current ? { ...current, facts: current.facts.map((fact) => fact.id === factId ? { ...fact, status: nextStatus } : fact) } : current);
   }
 
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
@@ -113,53 +125,51 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
         <button className="ai-new" onClick={() => { setAnswer(null); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
-        <div>{conversations.length ? conversations.map(item => <button key={item.id} onClick={() => router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false })}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
+        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false })}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
       </aside>
       <main className="ai-dialog">
-        <header><span><Bot /></span><div><h1>{ru ? "AI-юрист" : "AI-yurist"}</h1><p>{status?.configured ? (ru ? "Первичный разбор · юрисдикция Узбекистан" : "Dastlabki tahlil · O‘zbekiston yurisdiksiyasi") : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div></header>
-        {!status?.configured && <div className="ai-unavailable" role="status"><ShieldAlert /><div><strong>{ru ? "AI пока недоступен" : "AI hozircha ishlamaydi"}</strong><p>{ru ? "На сервере отсутствует ключ AI-провайдера. JURO не имитирует ответ и не показывает ложный success. Остальные модули продолжают работать." : "Serverda AI-provayder kaliti yo‘q. JURO javobni taqlid qilmaydi va soxta muvaffaqiyatni ko‘rsatmaydi. Boshqa modullar ishlashda davom etadi."}</p></div></div>}
+        <header><span><Bot /></span><div><h1>{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div></header>
+        {!status?.configured && <div className="ai-unavailable" role="status"><ShieldAlert /><div><strong>{ru ? "AI пока недоступен" : "AI hozircha ishlamaydi"}</strong><p>{ru ? "Сервер не подтвердил ключ AI-провайдера. JURO не имитирует ответ и не показывает ложный success." : "Server AI-provayder kalitini tasdiqlamadi. JURO javobni taqlid qilmaydi va soxta muvaffaqiyatni ko‘rsatmaydi."}</p></div></div>}
         {error && <div className="ai-error" role="alert"><CircleAlert />{error}</div>}
-        <div className="ai-answer-stream">
+        <div className="ai-answer-stream" aria-live="polite" aria-busy={sending}>
           {!answer ? (
-            <div className="ai-start"><FileQuestion /><h2>{ru ? "Опишите юридическую ситуацию" : "Yuridik vaziyatni yozing"}</h2><p>{ru ? "Не указывайте лишние персональные данные. AI отделит факты от предположений и задаст уточняющие вопросы." : "Ortiqcha shaxsiy ma’lumotlarni yozmang. AI faktlarni taxminlardan ajratadi va aniqlashtiruvchi savollar beradi."}</p></div>
-          ) : (
-            <article className="ai-answer">
-              <small>JURO · {answer.result.sourceMode === "verified_sources" ? (ru ? "проверенные источники" : "tekshirilgan manbalar") : (ru ? "только первичный разбор" : "faqat dastlabki tahlil")}</small>
-              <h2>{ru ? "Как JURO понял ситуацию" : "JURO vaziyatni qanday tushundi"}</h2>
-              <p>{answer.result.understanding}</p>
-              <div className="ai-confidence">
-                <span>{ru ? "Уверенность в понимании фактов" : "Faktlarni tushunish ishonchi"}</span>
-                <div aria-hidden="true"><i style={{ width: `${answer.result.confidencePercent}%` }} /></div>
-                <strong>{answer.result.confidencePercent}%</strong>
-              </div>
-              {(answer.result.sourceConflict || answer.result.sourceWarning) && <div className="ai-cautions"><ShieldAlert /><p>{answer.result.sourceWarning || (ru ? "Источники требуют дополнительной проверки." : "Manbalar qo‘shimcha tekshiruvni talab qiladi.")}</p></div>}
-              <h3>{ru ? "Что уточнить" : "Nimani aniqlashtirish kerak"}</h3>
-              <ol>{answer.result.clarificationQuestions.map(item => <li key={item}>{item}</li>)}</ol>
-              <h3>{ru ? "Безопасные следующие шаги" : "Xavfsiz keyingi qadamlar"}</h3>
-              <ul>{answer.result.nextSteps.map(item => <li key={item}>{item}</li>)}</ul>
-              {answer.result.cautions.length > 0 && <div className="ai-cautions"><ShieldAlert /><ul>{answer.result.cautions.map(item => <li key={item}>{item}</li>)}</ul></div>}
-            </article>
-          )}
+            <div className="ai-start"><FileQuestion /><h2>{ru ? "Опишите юридическую ситуацию" : "Yuridik vaziyatni yozing"}</h2><p>{ru ? "Не указывайте лишние персональные данные. JURO отделит подтверждённые нормы от предположений." : "Ortiqcha shaxsiy ma’lumotlarni yozmang. JURO tasdiqlangan normalarni taxminlardan ajratadi."}</p></div>
+          ) : <LegalAnswer result={answer.result} ru={ru} />}
         </div>
-        <form className="ai-composer" onSubmit={submit}><label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label><textarea id="ai-question" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Что произошло? Enter — отправить, Shift+Enter — новая строка" : "Nima bo‘ldi? Enter — yuborish, Shift+Enter — yangi qator"} /><button disabled={!status?.configured || !question.trim() || sending} aria-label={ru ? "Отправить" : "Yuborish"}>{sending ? <LoaderCircle className="spin" /> : <Send />}</button><small>{ru ? "AI может ошибаться. Для важных решений проверьте результат у специалиста." : "AI xato qilishi mumkin. Muhim qarorlar uchun natijani mutaxassis bilan tekshiring."}</small></form>
+        <form className="ai-composer" onSubmit={submit}>
+          <div className="ai-modes">
+            <label>{ru ? "Ответ" : "Javob"}<select value={answerMode} onChange={(event) => setAnswerMode(event.target.value as "short" | "detailed")}><option value="short">{ru ? "Кратко" : "Qisqa"}</option><option value="detailed">{ru ? "Подробно" : "Batafsil"}</option></select></label>
+            <label>{ru ? "Режим" : "Rejim"}<select value={reasoningMode} onChange={(event) => setReasoningMode(event.target.value as "fast" | "deep")}><option value="fast">{ru ? "Быстро" : "Tez"}</option><option value="deep">{ru ? "Глубоко" : "Chuqur"}</option></select></label>
+          </div>
+          <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
+          <textarea id="ai-question" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Что произошло? Enter — отправить" : "Nima bo‘ldi? Enter — yuborish"} />
+          <button disabled={!status?.configured || !question.trim() || sending} aria-label={ru ? "Отправить" : "Yuborish"}>{sending ? <LoaderCircle className="spin" /> : <Send />}</button>
+          <small>{ru ? "Подтверждённые выводы строятся только на опубликованных источниках JURO." : "Tasdiqlangan xulosalar faqat JUROda e’lon qilingan manbalarga asoslanadi."}</small>
+        </form>
       </main>
       <aside className="ai-context">
         <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
-        <section><h2>{ru ? "Подтверждённые факты" : "Tasdiqlangan faktlar"}</h2>{answer?.facts.length ? answer.facts.map(fact => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предложенные факты появятся после разбора." : "Taklif qilingan faktlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence">
-          <h2>{ru ? "Доказательность" : "Dalillilik"}</h2>
-          {answer?.sources.length ? answer.sources.map(source => safeOfficialUrl(source.officialUrl) ? (
-            <a key={source.id} href={source.officialUrl} target="_blank" rel="noreferrer">
-              <strong>{source.actTitle}</strong>
-              <small>{source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")}</small>
-              <span>{ru ? "Актуальность" : "Dolzarblik"}: {formatDate(source.revisionDate || source.lastCheckedAt, ru)} · {source.locale.toUpperCase()} · {ru ? "действие проверено" : "amal qilishi tekshirilgan"}</span>
-              <em>{ru ? "Конкретная статья и цитата временно не проверены" : "Aniq modda va iqtibos vaqtincha tekshirilmagan"}</em>
-            </a>
-          ) : null) : <p>{ru ? "Источник временно не проверен. JURO не придумывает статью, цитату или ссылку." : "Manba vaqtincha tekshirilmagan. JURO modda, iqtibos yoki havolani o‘ylab topmaydi."}</p>}
-        </section>
+        <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
+        <section className="ai-evidence"><h2>{ru ? "Источники" : "Manbalar"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <a key={`${source.sourceId}:${source.article || "source"}`} href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`}</em></a> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );
+}
+
+function LegalAnswer({ result, ru }: { result: LegalResult; ru: boolean }) {
+  return <article className="ai-answer">
+    <small>JURO · {result.responseKind === "answer" ? (ru ? "структурированный ответ" : "tuzilgan javob") : (ru ? "нужно уточнение · лимит не списан" : "aniqlik kerak · limit yechilmadi")}</small>
+    <h2>{result.summary}</h2>
+    <p className="ai-answer-body">{result.answer}</p>
+    {result.urgency !== "normal" && <div className="ai-cautions"><ShieldAlert /><p>{result.urgency === "critical" ? (ru ? "Критическая срочность: проверьте ближайший срок и возможность немедленной помощи." : "Juda shoshilinch: yaqin muddat va zudlik bilan yordam olish imkonini tekshiring.") : (ru ? "Вопрос требует приоритетного внимания." : "Masala ustuvor e’tiborni talab qiladi.")}</p></div>}
+    {result.clarificationQuestions.length > 0 && <><h3>{ru ? "Что уточнить" : "Nimani aniqlashtirish kerak"}</h3><ol>{result.clarificationQuestions.map((item) => <li key={item}>{item}</li>)}</ol></>}
+    {result.confirmedFindings.length > 0 && <><h3>{ru ? "Подтверждено источниками" : "Manbalar bilan tasdiqlangan"}</h3>{result.confirmedFindings.map((item) => <section className="ai-result-block" key={item.title}><strong>{item.title}</strong><p>{item.explanation}</p></section>)}</>}
+    {result.assumptions.length > 0 && <><h3>{ru ? "Предположения" : "Taxminlar"}</h3>{result.assumptions.map((item) => <section className="ai-result-block ai-assumption" key={item.statement}><strong>{item.statement}</strong><p>{item.impact}</p></section>)}</>}
+    {result.risks.length > 0 && <><h3>{ru ? "Риски" : "Xavflar"}</h3>{result.risks.map((risk) => <section className={`ai-result-block risk-${risk.level}`} key={`${risk.level}:${risk.title}`}><strong>{risk.title}</strong><p>{risk.explanation}</p></section>)}</>}
+    {result.actionPlan.length > 0 && <><h3>{ru ? "План действий" : "Harakatlar rejasi"}</h3><ol>{result.actionPlan.map((step) => <li key={step.title}><strong>{step.title}</strong><p>{step.description}</p></li>)}</ol></>}
+    {result.requiredDocuments.length > 0 && <><h3>{ru ? "Документы" : "Hujjatlar"}</h3><ul>{result.requiredDocuments.map((document) => <li key={document.name}><strong>{document.name}</strong> — {document.reason}</li>)}</ul></>}
+    {result.deadlines.length > 0 && <><h3>{ru ? "Сроки" : "Muddatlar"}</h3>{result.deadlines.map((deadline) => <section className="ai-result-block" key={deadline.title}><strong>{deadline.title}{deadline.dueDate ? ` · ${deadline.dueDate}` : ""}</strong><p>{deadline.calculationMethod}</p></section>)}</>}
+  </article>;
 }
 
 function formatDate(value: string, ru: boolean) {
@@ -167,9 +177,5 @@ function formatDate(value: string, ru: boolean) {
 }
 
 function safeOfficialUrl(value: string) {
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
 }

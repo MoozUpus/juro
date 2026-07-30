@@ -1435,6 +1435,68 @@ export const conversationMessages = sqliteTable("conversation_messages", {
   createdAt: text("created_at").notNull(),
 }, (table) => [index("conversation_messages_conversation_idx").on(table.conversationId, table.createdAt)]);
 
+export const aiRuns = sqliteTable("ai_runs", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  requestMessageId: text("request_message_id").references(() => conversationMessages.id, { onDelete: "set null" }),
+  responseMessageId: text("response_message_id").references(() => conversationMessages.id, { onDelete: "set null" }),
+  idempotencyKey: text("idempotency_key").notNull(),
+  correlationId: text("correlation_id").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  providerResponseId: text("provider_response_id"),
+  fallbackFromProvider: text("fallback_from_provider"),
+  answerMode: text("answer_mode").notNull(),
+  reasoningMode: text("reasoning_mode").notNull(),
+  status: text("status").notNull(),
+  legalDatabaseAsOf: text("legal_database_as_of").notNull(),
+  instructionHash: text("instruction_hash").notNull(),
+  sourceVersionHash: text("source_version_hash").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  cachedInputTokens: integer("cached_input_tokens").notNull().default(0),
+  estimatedCostMicrousd: integer("estimated_cost_microusd"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  latencyMs: integer("latency_ms"),
+  errorCode: text("error_code"),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("ai_runs_idempotency_uidx").on(table.workspaceId, table.userId, table.idempotencyKey),
+  index("ai_runs_workspace_status_idx").on(table.workspaceId, table.status, table.createdAt),
+  index("ai_runs_conversation_idx").on(table.conversationId, table.createdAt),
+]);
+
+export const aiUsageLedger = sqliteTable("ai_usage_ledger", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  aiRunId: text("ai_run_id").notNull().references(() => aiRuns.id, { onDelete: "restrict" }),
+  idempotencyKey: text("idempotency_key").notNull(),
+  feature: text("feature").notNull().default("legal_chat"),
+  periodStart: text("period_start").notNull(),
+  periodEnd: text("period_end").notNull(),
+  units: integer("units").notNull().default(1),
+  status: text("status").notNull().default("reserved"),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull().default(0),
+  outputTokens: integer("output_tokens").notNull().default(0),
+  cachedInputTokens: integer("cached_input_tokens").notNull().default(0),
+  estimatedCostMicrousd: integer("estimated_cost_microusd"),
+  releasedAt: text("released_at"),
+  consumedAt: text("consumed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("ai_usage_ledger_run_uidx").on(table.aiRunId),
+  uniqueIndex("ai_usage_ledger_idempotency_uidx").on(table.workspaceId, table.userId, table.idempotencyKey),
+  index("ai_usage_ledger_period_idx").on(table.workspaceId, table.userId, table.feature, table.periodStart, table.status),
+]);
+
+
 export const confirmedFacts = sqliteTable("confirmed_facts", {
   id: text("id").primaryKey(),
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),

@@ -260,6 +260,13 @@
       "when": 1785419600000,
       "tag": "0036_current_lex_url_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "6",
+      "when": 1785433361557,
+      "tag": "0037_square_blacklash",
+      "breakpoints": true
     }
   ]
 }

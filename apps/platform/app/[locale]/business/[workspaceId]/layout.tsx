@@ -7,6 +7,7 @@ import "../../../_platform/dashboard.css";
 import "../../../_platform/cases.css";
 import "../../../_platform/team.css";
 import "../../../_platform/ai-lawyer.css";
+import "../../../_platform/ai-lawyer-phase4.css";
 import "../../../_platform/ai-evidence.css";
 import "../../../_platform/billing.css";
 import "../../../_platform/profile-settings.css";
