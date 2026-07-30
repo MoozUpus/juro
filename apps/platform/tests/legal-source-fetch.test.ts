@@ -69,6 +69,16 @@ test("legal source URL classifier accepts only exact HTTPS document routes", () 
     },
   );
   assert.deepEqual(
+    classifyLegalSourceUrl("https://lex.uz/ru/docs/8282675"),
+    {
+      sourceKind: "lex",
+      locale: "ru",
+      canonicalId: "8282675",
+      canonicalUrl: "https://lex.uz/ru/docs/8282675",
+      host: "lex.uz",
+    },
+  );
+  assert.deepEqual(
     classifyLegalSourceUrl("https://advice.uz/uz/questions/21"),
     {
       sourceKind: "advice",

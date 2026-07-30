@@ -98,7 +98,7 @@ function parseSourcePath(url: URL, sourceKind: LegalSourceKind): {
   canonicalId: string;
 } | null {
   const pattern = sourceKind === "lex"
-    ? /^\/(ru|uz)\/docs\/(-\d+)\/?$/
+    ? /^\/(ru|uz)\/docs\/(-?\d+)\/?$/
     : /^\/(ru|uz)\/questions\/(\d+)\/?$/;
   const match = pattern.exec(url.pathname);
   if (!match) return null;
