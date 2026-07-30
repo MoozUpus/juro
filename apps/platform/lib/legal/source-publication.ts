@@ -10,6 +10,11 @@ import {
   type ApprovedLegalSourceReview,
   type LegalSourceReviewEnv,
 } from "./source-review";
+import {
+  loadLegalSourceActivationPredecessor,
+  prepareLegalSourceActivation,
+  validateLegalSourcePublicationLifecycle,
+} from "./source-lifecycle";
 
 export const LEGAL_SOURCE_PUBLICATION_ERROR_CODES = [
   "LEGAL_SOURCE_PUBLICATION_NOT_FOUND",
@@ -60,6 +65,8 @@ type PublicationStateRow = {
   version_content_sha256: string;
   version_verified_at: string | null;
   version_verified_by_user_id: string | null;
+  current_publication_id: string | null;
+  current_version_id: string | null;
 };
 
 type PublishedReadingRow = {
@@ -333,9 +340,13 @@ async function loadPublicationState(
       version.status AS version_status,
       version.content_sha256 AS version_content_sha256,
       version.verified_at AS version_verified_at,
-      version.verified_by_user_id AS version_verified_by_user_id
+      version.verified_by_user_id AS version_verified_by_user_id,
+      current.publication_id AS current_publication_id,
+      current.version_id AS current_version_id
     FROM legal_sources source
     INNER JOIN legal_source_versions version ON version.source_id = source.id
+    LEFT JOIN legal_source_current_activations current
+      ON current.source_id = source.id
     WHERE source.id = ? AND version.id = ?
     LIMIT 1
   `).bind(review.sourceId, review.versionId).first<PublicationStateRow>();
@@ -371,6 +382,8 @@ export type LegalSourcePublicationResult = {
   publishedAt: string;
   sectionCount: number;
   chunkCount: number;
+  activationEventId: string;
+  activationType: "activated_initial" | "activated_replacement";
   changed: boolean;
 };
 
@@ -418,18 +431,42 @@ async function validatePublicationReplay(
     );
   }
   const state = await loadPublicationState(env.DB, review);
+  let lifecycle: Awaited<
+    ReturnType<typeof validateLegalSourcePublicationLifecycle>
+  >;
+  try {
+    lifecycle = await validateLegalSourcePublicationLifecycle(env.DB, {
+      sourceId: review.sourceId,
+      publicationId: publication.id,
+      versionId: review.versionId,
+    });
+  } catch {
+    throw new LegalSourcePublicationError(
+      "LEGAL_SOURCE_PUBLICATION_EVIDENCE_CONFLICT",
+    );
+  }
+  const commonVersionEvidenceValid = state
+    && state.version_content_sha256 === review.source.rawContentSha256
+    && state.version_verified_at === publication.published_at
+    && state.version_verified_by_user_id === publication.published_by_user_id;
+  const currentStateValid = lifecycle.current
+    && state
+    && state.current_publication_id === publication.id
+    && state.current_version_id === review.versionId
+    && state.source_status === "verified"
+    && state.source_verification_state === "verified"
+    && state.source_content_sha256 === review.source.rawContentSha256
+    && state.source_verified_at === publication.published_at
+    && state.source_verified_by_user_id === publication.published_by_user_id
+    && state.source_verification_notes === `publication:${publication.id}`
+    && state.version_status === "verified";
+  const retiredStateValid = lifecycle.retired
+    && state
+    && state.current_publication_id !== publication.id
+    && state.version_status === "archived";
   if (
-    !state
-    || state.source_status !== "verified"
-    || state.source_verification_state !== "verified"
-    || state.source_content_sha256 !== review.source.rawContentSha256
-    || state.source_verified_at !== publication.published_at
-    || state.source_verified_by_user_id !== publication.published_by_user_id
-    || state.source_verification_notes !== `publication:${publication.id}`
-    || state.version_status !== "verified"
-    || state.version_content_sha256 !== review.source.rawContentSha256
-    || state.version_verified_at !== publication.published_at
-    || state.version_verified_by_user_id !== publication.published_by_user_id
+    !commonVersionEvidenceValid
+    || (!currentStateValid && !retiredStateValid)
   ) {
     throw new LegalSourcePublicationError(
       "LEGAL_SOURCE_PUBLICATION_EVIDENCE_CONFLICT",
@@ -477,6 +514,8 @@ async function validatePublicationReplay(
     publishedAt: publication.published_at,
     sectionCount: expectedRows.length,
     chunkCount: expectedRows.length,
+    activationEventId: lifecycle.eventId,
+    activationType: lifecycle.eventType,
     changed: false,
   };
 }
@@ -510,13 +549,50 @@ export async function publishApprovedLegalSource(
     );
   }
   const state = await loadPublicationState(env.DB, review);
+  const predecessor = await loadLegalSourceActivationPredecessor(
+    env.DB,
+    review.sourceId,
+  );
+  const activePredecessor = predecessor?.isCurrent ? predecessor : null;
+  let withdrawnPredecessor = predecessor && !predecessor.isCurrent
+    ? predecessor
+    : null;
+  if (withdrawnPredecessor) {
+    try {
+      const predecessorLifecycle =
+        await validateLegalSourcePublicationLifecycle(env.DB, {
+          sourceId: review.sourceId,
+          publicationId: withdrawnPredecessor.publicationId,
+          versionId: withdrawnPredecessor.versionId,
+        });
+      if (
+        predecessorLifecycle.current
+        || !predecessorLifecycle.withdrawn
+      ) {
+        withdrawnPredecessor = null;
+      }
+    } catch {
+      withdrawnPredecessor = null;
+    }
+  }
+  const sourceCanPublish = activePredecessor
+    ? state
+      && state.source_status === "verified"
+      && state.source_verification_state === "verified"
+      && state.current_publication_id === activePredecessor.publicationId
+      && state.current_version_id === activePredecessor.versionId
+    : state
+      && state.source_status !== "verified"
+      && state.source_verification_state !== "verified"
+      && (
+        state.source_content_sha256 === review.source.rawContentSha256
+        || withdrawnPredecessor !== null
+      );
   if (
     !state
     || state.version_status !== "pending_review"
     || state.version_content_sha256 !== review.source.rawContentSha256
-    || state.source_status === "verified"
-    || state.source_verification_state === "verified"
-    || state.source_content_sha256 !== review.source.rawContentSha256
+    || !sourceCanPublish
   ) {
     throw new LegalSourcePublicationError(
       "LEGAL_SOURCE_PUBLICATION_STATE_CONFLICT",
@@ -530,7 +606,11 @@ export async function publishApprovedLegalSource(
     sections: number;
     chunks: number;
   }>();
-  if (!existingCounts || existingCounts.sections !== 0 || existingCounts.chunks !== 0) {
+  if (
+    !existingCounts
+    || existingCounts.sections !== 0
+    || existingCounts.chunks !== 0
+  ) {
     throw new LegalSourcePublicationError(
       "LEGAL_SOURCE_PUBLICATION_STATE_CONFLICT",
     );
@@ -564,6 +644,13 @@ export async function publishApprovedLegalSource(
     publishedAt,
   }));
   const publicationEvidenceSha256 = await sha256Text(evidence);
+  const activation = await prepareLegalSourceActivation(env.DB, access, {
+    sourceId: review.sourceId,
+    publicationId,
+    versionId: review.versionId,
+    predecessor,
+    activatedAt: publishedAt,
+  });
   const statements: D1PreparedStatement[] = [];
   for (const row of readingRows) {
     statements.push(
@@ -600,7 +687,6 @@ export async function publishApprovedLegalSource(
       ),
     );
   }
-  const publicationIndex = statements.length;
   statements.push(
     env.DB.prepare(`
       INSERT INTO legal_source_publications (
@@ -625,7 +711,8 @@ export async function publishApprovedLegalSource(
     ),
     env.DB.prepare(`
       UPDATE legal_source_versions
-      SET status='verified',verified_at=?,verified_by_user_id=?,updated_at=?
+      SET status='verified',verified_at=?,verified_by_user_id=?,
+        expires_at=NULL,updated_at=?
       WHERE id=? AND source_id=? AND status='pending_review'
         AND content_sha256=? AND parsed_object_key IS NOT NULL
     `).bind(
@@ -636,32 +723,70 @@ export async function publishApprovedLegalSource(
       review.sourceId,
       review.source.rawContentSha256,
     ),
+  );
+  if (activePredecessor) {
+    statements.push(env.DB.prepare(`
+      UPDATE legal_source_versions
+      SET status='archived',expires_at=?,updated_at=?
+      WHERE id=? AND source_id=? AND status='verified'
+    `).bind(
+      publishedAt,
+      publishedAt,
+      activePredecessor.versionId,
+      review.sourceId,
+    ));
+  }
+  statements.push(
     env.DB.prepare(`
       UPDATE legal_sources
-      SET status='verified',verification_state='verified',verified_at=?,
-        verified_by_user_id=?,verification_notes=?,updated_at=?
-      WHERE id=? AND status<>'verified' AND verification_state<>'verified'
-        AND content_sha256=?
+      SET status='verified',verification_state='verified',
+        content_sha256=?,verified_at=?,verified_by_user_id=?,
+        verification_notes=?,expires_at=NULL,updated_at=?
+      WHERE id=? AND (
+        (? IS NULL AND status<>'verified' AND verification_state<>'verified'
+          AND (
+            content_sha256=? OR (
+              ? IS NOT NULL AND EXISTS (
+                SELECT 1 FROM legal_source_lifecycle_events lifecycle
+                WHERE lifecycle.source_id=legal_sources.id
+                  AND lifecycle.publication_id=?
+                  AND lifecycle.version_id=?
+                  AND lifecycle.event_type='withdrawn'
+              )
+            )
+          ))
+        OR
+        (? IS NOT NULL AND status='verified'
+          AND verification_state='verified'
+          AND EXISTS (
+            SELECT 1 FROM legal_source_current_activations current
+            WHERE current.source_id=legal_sources.id
+              AND current.publication_id=?
+              AND current.version_id=?
+          ))
+      )
     `).bind(
+      review.source.rawContentSha256,
       publishedAt,
       access.userId,
       `publication:${publicationId}`,
       publishedAt,
       review.sourceId,
+      activePredecessor?.publicationId ?? null,
       review.source.rawContentSha256,
+      withdrawnPredecessor?.publicationId ?? null,
+      withdrawnPredecessor?.publicationId ?? null,
+      withdrawnPredecessor?.versionId ?? null,
+      activePredecessor?.publicationId ?? null,
+      activePredecessor?.publicationId ?? null,
+      activePredecessor?.versionId ?? null,
     ),
+    ...activation.statements,
   );
 
   try {
     const results = await env.DB.batch(statements);
-    if (
-      results.slice(0, publicationIndex).some(
-        (result) => Number(result.meta.changes ?? 0) !== 1,
-      )
-      || Number(results[publicationIndex]?.meta.changes ?? 0) !== 1
-      || Number(results[publicationIndex + 1]?.meta.changes ?? 0) !== 1
-      || Number(results[publicationIndex + 2]?.meta.changes ?? 0) !== 1
-    ) {
+    if (results.some((result) => Number(result.meta.changes ?? 0) !== 1)) {
       throw new LegalSourcePublicationError(
         "LEGAL_SOURCE_PUBLICATION_PERSISTENCE_FAILED",
       );
@@ -686,6 +811,8 @@ export async function publishApprovedLegalSource(
     publishedAt,
     sectionCount: readingRows.length,
     chunkCount: readingRows.length,
+    activationEventId: activation.eventId,
+    activationType: activation.eventType,
     changed: true,
   };
 }

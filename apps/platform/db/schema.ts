@@ -1630,6 +1630,42 @@ export const legalSourcePublications = sqliteTable("legal_source_publications", 
   index("legal_source_publications_publisher_idx").on(table.publishedByUserId, table.publishedAt),
 ]);
 
+export const legalSourceCurrentActivations = sqliteTable("legal_source_current_activations", {
+  sourceId: text("source_id").primaryKey().references(() => legalSources.id, { onDelete: "restrict" }),
+  publicationId: text("publication_id").notNull().references(() => legalSourcePublications.id, { onDelete: "restrict" }),
+  versionId: text("version_id").notNull().references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  activatedByUserId: text("activated_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  activatedAt: text("activated_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("legal_source_current_activations_publication_uidx").on(table.publicationId),
+  uniqueIndex("legal_source_current_activations_version_uidx").on(table.versionId),
+  index("legal_source_current_activations_actor_idx").on(table.activatedByUserId, table.activatedAt),
+]);
+
+export const legalSourceLifecycleEvents = sqliteTable("legal_source_lifecycle_events", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  publicationId: text("publication_id").notNull().references(() => legalSourcePublications.id, { onDelete: "restrict" }),
+  versionId: text("version_id").notNull().references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  previousPublicationId: text("previous_publication_id").references(() => legalSourcePublications.id, { onDelete: "restrict" }),
+  previousVersionId: text("previous_version_id").references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  eventType: text("event_type").notNull(),
+  reasonNotes: text("reason_notes"),
+  actedByUserId: text("acted_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  actorSessionId: text("actor_session_id").notNull(),
+  actorAssignmentIdsJson: text("actor_assignment_ids_json").notNull(),
+  mfaVerifiedAt: text("mfa_verified_at").notNull(),
+  evidenceJson: text("evidence_json").notNull(),
+  evidenceSha256: text("evidence_sha256").notNull(),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("legal_source_lifecycle_events_source_idx").on(table.sourceId, table.occurredAt),
+  index("legal_source_lifecycle_events_publication_idx").on(table.publicationId, table.eventType),
+  index("legal_source_lifecycle_events_actor_idx").on(table.actedByUserId, table.occurredAt),
+]);
+
 export const conversationSources = sqliteTable("conversation_sources", {
   id: text("id").primaryKey(),
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),

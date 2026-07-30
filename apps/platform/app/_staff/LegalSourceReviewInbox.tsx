@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArchiveX,
   ArrowUpRight,
   Check,
   ChevronRight,
@@ -36,6 +37,9 @@ type ReviewItem = {
   versionStatus: string;
   fetchedAt: string;
   parsedSnapshotReady: boolean;
+  publicationId: string | null;
+  publicationEvidenceSha256: string | null;
+  isCurrentPublication: boolean;
 };
 type SourceBlock = {
   index: number;
@@ -85,6 +89,12 @@ const labels = {
     publishing: "Публикуется проверенный снимок…", deciding: "Решение сохраняется…",
     approvedDone: "Снимок одобрен. Он доступен в фильтре «Одобрены» для отдельной публикации.",
     rejectedDone: "Снимок отклонён и не опубликован.", publishedDone: "Проверенный снимок опубликован.",
+    withdraw: "Отозвать", withdrawing: "Публикация отзывается…",
+    withdrawalTitle: "Отозвать текущую публикацию",
+    withdrawalHint: "Укажите юридически значимую причину. Опубликованный снимок и доказательства сохранятся в истории.",
+    withdrawalNotes: "Причина отзыва", withdrawalCancel: "Отмена",
+    withdrawalConfirm: "Подтвердить отзыв",
+    withdrawalDone: "Публикация отозвана и исключена из текущих источников.",
     error: "Не удалось выполнить запрос.", count: "заданий",
   },
   uz: {
@@ -106,6 +116,12 @@ const labels = {
     publishing: "Tekshirilgan nusxa nashr qilinmoqda…", deciding: "Qaror saqlanmoqda…",
     approvedDone: "Nusxa tasdiqlandi. Alohida nashr uchun «Tasdiqlangan» filtrida mavjud.",
     rejectedDone: "Nusxa rad etildi va nashr qilinmadi.", publishedDone: "Tekshirilgan nusxa nashr qilindi.",
+    withdraw: "Qaytarib olish", withdrawing: "Nashr qaytarib olinmoqda…",
+    withdrawalTitle: "Joriy nashrni qaytarib olish",
+    withdrawalHint: "Yuridik ahamiyatga ega sababni kiriting. Nashr nusxasi va dalillari tarixda saqlanadi.",
+    withdrawalNotes: "Qaytarib olish sababi", withdrawalCancel: "Bekor qilish",
+    withdrawalConfirm: "Qaytarib olishni tasdiqlash",
+    withdrawalDone: "Nashr qaytarib olindi va joriy manbalardan chiqarildi.",
     error: "So‘rovni bajarib bo‘lmadi.", count: "topshiriq",
   },
 } as const;
@@ -136,6 +152,8 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
   const [visibleBlocks, setVisibleBlocks] = useState(80);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState("");
+  const [withdrawing, setWithdrawing] = useState<ReviewItem | null>(null);
+  const [withdrawalNotes, setWithdrawalNotes] = useState("");
   const requestSequence = useRef(0);
 
   const query = useMemo(() => new URLSearchParams({
@@ -231,6 +249,35 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
     } finally { setBusy(""); }
   };
 
+  const withdraw = async () => {
+    if (
+      !withdrawing?.publicationId
+      || !withdrawing.publicationEvidenceSha256
+      || withdrawalNotes.trim().length < 10
+    ) return;
+    setBusy(withdrawing.reviewId);
+    setError("");
+    setAnnouncement(l.withdrawing);
+    try {
+      const response = await fetch(`/api/platform/legal-sources/publications/${encodeURIComponent(withdrawing.publicationId)}/withdrawal?lang=${locale}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({
+          expectedPublicationEvidenceSha256:
+            withdrawing.publicationEvidenceSha256,
+          reasonNotes: withdrawalNotes.trim(),
+        }),
+      });
+      await responseJson(response);
+      setWithdrawing(null);
+      setWithdrawalNotes("");
+      setAnnouncement(l.withdrawalDone);
+      await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : l.error);
+    } finally { setBusy(""); }
+  };
+
   const date = (value: string) => new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", {
     dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent",
   }).format(new Date(value));
@@ -279,6 +326,11 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
           <label>{l.language}<select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">{l.allLanguages}</option><option value="ru">Русский</option><option value="uz">O‘zbekcha</option></select></label>
         </section>
         <div className="staff-count">{items.length} {l.count}</div>
+        {withdrawing && <section className="staff-withdrawal" aria-labelledby="withdrawal-title">
+          <div><ArchiveX aria-hidden="true"/><div><h2 id="withdrawal-title">{l.withdrawalTitle}</h2><p>{l.withdrawalHint}</p><b>{withdrawing.title}</b></div></div>
+          <label>{l.withdrawalNotes}<textarea value={withdrawalNotes} onChange={(event) => setWithdrawalNotes(event.target.value)} minLength={10} maxLength={2000} rows={4}/></label>
+          <div><button type="button" onClick={() => { setWithdrawing(null); setWithdrawalNotes(""); }} disabled={busy !== ""}>{l.withdrawalCancel}</button><button type="button" className="staff-withdraw-confirm" onClick={() => void withdraw()} disabled={busy !== "" || withdrawalNotes.trim().length < 10}>{busy === withdrawing.reviewId ? <LoaderCircle className="is-spinning" aria-hidden="true"/> : <ArchiveX aria-hidden="true"/>}{l.withdrawalConfirm}</button></div>
+        </section>}
         {error && <div className="staff-error" role="alert"><span>{error}</span><button type="button" onClick={() => void load()}>{l.retry}</button></div>}
         <section className="staff-queue" aria-busy={loading} aria-labelledby="queue-caption">
           <h2 id="queue-caption" className="sr-only">{l.title}</h2>
@@ -289,7 +341,7 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
               <div role="cell" data-label={l.reasonCol}><code>{item.reasonCode}</code><small className={`confidence-${item.confidence}`}>{item.confidence}</small></div>
               <div role="cell" data-label={l.stateCol}><span className={`staff-status status-${item.status}`}>{statusLabel(item.status, locale)}</span>{item.versionStatus === "verified" && <small className="staff-verified"><FileCheck2 aria-hidden="true"/>{l.published}</small>}</div>
               <time role="cell" data-label={l.receivedCol} dateTime={item.createdAt}>{date(item.createdAt)}</time>
-              <div role="cell" data-label={l.actionCol} className="staff-row-actions">{(item.status === "pending" || (item.status === "in_review" && item.assignedToMe)) && <button type="button" disabled={busy !== "" || !item.parsedSnapshotReady} onClick={() => void claim(item)}>{busy === item.reviewId ? <LoaderCircle className="is-spinning" aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{item.status === "pending" ? l.claim : l.resume}</button>}{item.status === "approved" && item.versionStatus !== "verified" && item.decisionEvidenceSha256 && <button type="button" disabled={busy !== ""} onClick={() => void publish(item)}>{busy === item.reviewId ? <LoaderCircle className="is-spinning" aria-hidden="true"/> : <FileCheck2 aria-hidden="true"/>}{l.publish}</button>}<a href={item.officialUrl} target="_blank" rel="noreferrer" aria-label={`${l.openOriginal}: ${item.title}`}><ArrowUpRight aria-hidden="true"/></a></div>
+              <div role="cell" data-label={l.actionCol} className="staff-row-actions">{(item.status === "pending" || (item.status === "in_review" && item.assignedToMe)) && <button type="button" disabled={busy !== "" || !item.parsedSnapshotReady} onClick={() => void claim(item)}>{busy === item.reviewId ? <LoaderCircle className="is-spinning" aria-hidden="true"/> : <ChevronRight aria-hidden="true"/>}{item.status === "pending" ? l.claim : l.resume}</button>}{item.status === "approved" && item.versionStatus !== "verified" && item.decisionEvidenceSha256 && <button type="button" disabled={busy !== ""} onClick={() => void publish(item)}>{busy === item.reviewId ? <LoaderCircle className="is-spinning" aria-hidden="true"/> : <FileCheck2 aria-hidden="true"/>}{l.publish}</button>}{item.isCurrentPublication && item.publicationId && item.publicationEvidenceSha256 && <button type="button" className="staff-withdraw" disabled={busy !== ""} onClick={() => { setWithdrawing(item); setWithdrawalNotes(""); }}>{l.withdraw}<ArchiveX aria-hidden="true"/></button>}<a href={item.officialUrl} target="_blank" rel="noreferrer" aria-label={`${l.openOriginal}: ${item.title}`}><ArrowUpRight aria-hidden="true"/></a></div>
             </div>)}
           </div>
           {!loading && items.length === 0 && !error && <div className="staff-empty"><FileCheck2 aria-hidden="true"/><h2>{l.emptyTitle}</h2><p>{l.emptyText}</p></div>}

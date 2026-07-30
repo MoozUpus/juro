@@ -30,6 +30,11 @@ import {
   LegalSourcePublicationError,
   publishApprovedLegalSource,
 } from "./source-publication";
+import {
+  legalSourceWithdrawalInputSchema,
+  LegalSourceLifecycleError,
+  withdrawPublishedLegalSource,
+} from "./source-lifecycle";
 
 type StaffHttpSession = Pick<
   LocalSession,
@@ -53,6 +58,9 @@ const decisionRequestSchema = legalSourceReviewDecisionInputSchema.omit({
 });
 const publicationRequestSchema = legalSourcePublicationInputSchema.omit({
   reviewId: true,
+});
+const withdrawalRequestSchema = legalSourceWithdrawalInputSchema.omit({
+  publicationId: true,
 });
 const reviewIdSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
@@ -226,6 +234,31 @@ function legalSourceErrorResponse(
             : status === 413
               ? "Manba xavfsiz nashr qilish uchun juda katta."
               : "Tekshirilgan manba nusxasini nashr qilib bo‘lmadi.",
+      ),
+    }, status);
+  }
+  if (error instanceof LegalSourceLifecycleError) {
+    const status = error.code === "LEGAL_SOURCE_LIFECYCLE_NOT_FOUND"
+      ? 404
+      : error.code === "LEGAL_SOURCE_LIFECYCLE_STATE_CONFLICT"
+          || error.code === "LEGAL_SOURCE_LIFECYCLE_EVIDENCE_CONFLICT"
+        ? 409
+        : 503;
+    return jsonNoStore({
+      code: error.code,
+      correlationId,
+      error: message(
+        locale,
+        status === 404
+          ? "Публикация источника не найдена."
+          : status === 409
+            ? "Текущая публикация или её доказательства изменились."
+            : "Не удалось отозвать публикацию источника.",
+        status === 404
+          ? "Manba nashri topilmadi."
+          : status === 409
+            ? "Joriy nashr yoki uning dalillari o‘zgargan."
+            : "Manba nashrini qaytarib bo‘lmadi.",
       ),
     }, status);
   }
@@ -428,6 +461,42 @@ export async function handleLegalSourcePublicationRequest(
       ...parsed.data,
     }, { now });
     return jsonNoStore({ ok: true, publication: result });
+  } catch (error) {
+    const response = legalSourceErrorResponse(error, locale);
+    if (response) return response;
+    return unavailableResponse(locale);
+  }
+}
+export async function handleLegalSourceWithdrawalRequest(
+  request: Request,
+  publicationId: string,
+  dependencies: LegalSourceStaffHttpDependencies,
+): Promise<Response> {
+  const locale = localeForRequest(request);
+  if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
+    return disabledResponse(locale);
+  }
+  if (!dependencies.env) return unavailableResponse(locale);
+  const now = dependencies.now?.() ?? new Date();
+  try {
+    const { env, session } = await authorize(
+      request,
+      dependencies,
+      "legal.sources.publish",
+      now,
+    );
+    const parsedPublicationId = reviewIdSchema.parse(publicationId);
+    const parsed = await parseJsonRequest(
+      request,
+      withdrawalRequestSchema,
+      4_096,
+    );
+    if (!parsed.ok) return inputErrorResponse(locale, parsed.error);
+    const result = await withdrawPublishedLegalSource(env, session, {
+      publicationId: parsedPublicationId,
+      ...parsed.data,
+    }, { now });
+    return jsonNoStore({ ok: true, withdrawal: result });
   } catch (error) {
     const response = legalSourceErrorResponse(error, locale);
     if (response) return response;

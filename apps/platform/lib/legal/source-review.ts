@@ -52,6 +52,7 @@ type ReviewRow = {
   decided_at: string | null;
   version_status: string | null;
   version_content_sha256: string | null;
+  publication_id: string | null;
 };
 
 const identifierSchema = z.string().min(1).max(180)
@@ -128,6 +129,9 @@ type ReviewListRow = {
   version_status: string | null;
   fetched_at: string | null;
   parsed_object_key: string | null;
+  publication_id: string | null;
+  publication_evidence_sha256: string | null;
+  current_publication_id: string | null;
 };
 
 const reviewCursorSchema = z.object({
@@ -181,6 +185,9 @@ export type LegalSourceReviewListItem = {
   versionStatus: string;
   fetchedAt: string;
   parsedSnapshotReady: boolean;
+  publicationId: string | null;
+  publicationEvidenceSha256: string | null;
+  isCurrentPublication: boolean;
 };
 
 export type LegalSourceReviewListResult = {
@@ -271,10 +278,17 @@ export async function listLegalSourceReviews(
       source.canonical_id,
       version.status AS version_status,
       version.fetched_at,
-      version.parsed_object_key
+      version.parsed_object_key,
+      publication.id AS publication_id,
+      publication.publication_evidence_sha256,
+      current.publication_id AS current_publication_id
     FROM legal_review_queue AS review
     JOIN legal_sources AS source ON source.id = review.source_id
     LEFT JOIN legal_source_versions AS version ON version.id = review.version_id
+    LEFT JOIN legal_source_publications AS publication
+      ON publication.version_id = version.id
+    LEFT JOIN legal_source_current_activations AS current
+      ON current.source_id = source.id
     WHERE ${clauses.join(" AND ")}
     ORDER BY review.created_at DESC, review.id DESC
     LIMIT ?
@@ -299,6 +313,16 @@ export async function listLegalSourceReviews(
       || (
         row.decision_evidence_sha256 !== null
         && !sha256Schema.safeParse(row.decision_evidence_sha256).success
+      )
+      || (
+        (row.publication_id === null)
+          !== (row.publication_evidence_sha256 === null)
+      )
+      || (
+        row.publication_evidence_sha256 !== null
+        && !sha256Schema.safeParse(
+          row.publication_evidence_sha256,
+        ).success
       )
       || trustedLegalSourceKind(officialUrl) !== sourceKind
     ) {
@@ -326,6 +350,10 @@ export async function listLegalSourceReviews(
       versionStatus: row.version_status,
       fetchedAt: row.fetched_at,
       parsedSnapshotReady: row.parsed_object_key !== null,
+      publicationId: row.publication_id,
+      publicationEvidenceSha256: row.publication_evidence_sha256,
+      isCurrentPublication: row.publication_id !== null
+        && row.publication_id === row.current_publication_id,
     };
   });
   const last = pageRows.at(-1);
@@ -349,9 +377,12 @@ async function loadReview(
       review.decision_evidence_json, review.decision_evidence_sha256,
       review.decided_at,
       version.status AS version_status,
-      version.content_sha256 AS version_content_sha256
+      version.content_sha256 AS version_content_sha256,
+      publication.id AS publication_id
     FROM legal_review_queue AS review
     LEFT JOIN legal_source_versions AS version ON version.id = review.version_id
+    LEFT JOIN legal_source_publications AS publication
+      ON publication.review_id = review.id
     WHERE review.id = ?
     LIMIT 1
   `).bind(reviewId).first<ReviewRow>();
@@ -712,7 +743,13 @@ export async function loadApprovedLegalSourceReview(
     || !row.decision_evidence_sha256
     || !row.reviewed_parsed_sha256
     || !row.decided_at
-    || !["pending_review", "verified"].includes(row.version_status ?? "")
+    || !(
+      ["pending_review", "verified"].includes(row.version_status ?? "")
+      || (
+        row.version_status === "archived"
+        && row.publication_id !== null
+      )
+    )
   ) {
     throw new LegalSourceReviewError(
       "LEGAL_SOURCE_REVIEW_STATE_CONFLICT",

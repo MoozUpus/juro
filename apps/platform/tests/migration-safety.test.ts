@@ -54,6 +54,9 @@ const deviceContinuityEntry = journal.entries.find(({ idx }) => idx === 31);
 const securityNotificationEntry = journal.entries.find(({ idx }) => idx === 32);
 const accountDeletionLifecycleEntry = journal.entries.find(({ idx }) => idx === 33);
 const businessWorkspaceIdentityEntry = journal.entries.find(({ idx }) => idx === 34);
+const legalSourcePublicationLifecycleEntry = journal.entries.find(
+  ({ idx }) => idx === 35,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -133,6 +136,10 @@ assert.ok(
 assert.ok(
   businessWorkspaceIdentityEntry,
   "Drizzle journal must contain migration 0034",
+);
+assert.ok(
+  legalSourcePublicationLifecycleEntry,
+  "Drizzle journal must contain migration 0035",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -2755,8 +2762,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 112);
-    assert.equal(foreignKeyCount(db), 158);
+    assert.equal(tableDefinitions(db).size, 114);
+    assert.equal(foreignKeyCount(db), 168);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3258,8 +3265,8 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 112);
-    assert.equal(foreignKeyCount(db), 158);
+    assert.equal(tableDefinitions(db).size, 114);
+    assert.equal(foreignKeyCount(db), 168);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3822,8 +3829,8 @@ test("0033 prevents lifecycle forks, evidence mutation, cancellation after purge
       `).run(),
       /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
     );
-    assert.equal(tableDefinitions(db).size, 112);
-    assert.equal(foreignKeyCount(db), 158);
+    assert.equal(tableDefinitions(db).size, 114);
+    assert.equal(foreignKeyCount(db), 168);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3930,4 +3937,53 @@ test("0034 safely backfills and guards business workspace identity", () => {
   } finally {
     db.close();
   }
+});
+
+test("0035 adds current legal-source activation and append-only lifecycle evidence", () => {
+  const sql = migrationSql(legalSourcePublicationLifecycleEntry);
+  assert.equal(statements(sql).length, 18);
+  for (const pattern of [
+    /CREATE TABLE `legal_source_current_activations`/,
+    /CREATE TABLE `legal_source_lifecycle_events`/,
+    /legal_source_lifecycle_events_insert_guard/,
+    /legal_source_lifecycle_events_update_guard/,
+    /legal_source_lifecycle_events_delete_guard/,
+    /legal_source_current_activations_insert_guard/,
+    /legal_source_current_activations_update_guard/,
+    /legal_source_current_activations_delete_guard/,
+    /prior_replacement/,
+    /prior_withdrawal/,
+  ]) {
+    assert.match(sql, pattern);
+  }
+  const snapshot = JSON.parse(readFileSync(
+    new URL("meta/0035_snapshot.json", drizzleRoot),
+    "utf8",
+  )) as {
+    tables: Record<string, {
+      columns: Record<string, unknown>;
+      foreignKeys: Record<string, unknown>;
+    }>;
+  };
+  assert.deepEqual(
+    Object.keys(snapshot.tables.legal_source_current_activations.columns),
+    [
+      "source_id",
+      "publication_id",
+      "version_id",
+      "activated_by_user_id",
+      "activated_at",
+      "updated_at",
+    ],
+  );
+  assert.equal(
+    Object.keys(snapshot.tables.legal_source_current_activations.foreignKeys)
+      .length,
+    4,
+  );
+  assert.equal(
+    Object.keys(snapshot.tables.legal_source_lifecycle_events.foreignKeys)
+      .length,
+    6,
+  );
 });

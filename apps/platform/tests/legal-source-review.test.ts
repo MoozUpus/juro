@@ -20,10 +20,15 @@ import {
   publishApprovedLegalSource,
 } from "../lib/legal/source-publication";
 import {
+  LegalSourceLifecycleError,
+  withdrawPublishedLegalSource,
+} from "../lib/legal/source-lifecycle";
+import {
   handleLegalSourcePublicationRequest,
   handleLegalSourceReviewClaimRequest,
   handleLegalSourceReviewDecisionRequest,
   handleLegalSourceReviewListRequest,
+  handleLegalSourceWithdrawalRequest,
 } from "../lib/legal/source-staff-http";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -130,10 +135,11 @@ async function normalizedReviewFixture(
   env: LegalSourceReviewEnv & LegalSourceAcquisitionEnv,
   canonicalId: number,
   documentHtml?: string,
+  requestSuffix = "",
 ) {
   const request = await createLegalSourceFetchRequest(env, {
     url: `https://lex.uz/ru/docs/-${canonicalId}`,
-    idempotencyKey: `review_lex_${canonicalId}`,
+    idempotencyKey: `review_lex_${canonicalId}${requestSuffix}`,
   });
   const acquired = await executeLegalSourceFetchRequest(env, request.id, {
     fetchImpl: sourceFetch([
@@ -144,12 +150,22 @@ async function normalizedReviewFixture(
         headers: { "content-type": "text/html; charset=utf-8" },
       }),
     ]),
-    now: () => new Date("2026-07-28T01:00:00.000Z"),
+    now: () => new Date(
+      requestSuffix
+        ? "2026-07-28T01:02:00.000Z"
+        : "2026-07-28T01:00:00.000Z",
+    ),
   });
   const normalized = await executeLegalSourceNormalization(
     env,
     acquired.versionId,
-    { now: () => new Date("2026-07-28T01:01:00.000Z") },
+    {
+      now: () => new Date(
+        requestSuffix
+          ? "2026-07-28T01:03:00.000Z"
+          : "2026-07-28T01:01:00.000Z",
+      ),
+    },
   );
   const review = await env.DB.prepare(`
     SELECT id FROM legal_review_queue
@@ -266,8 +282,14 @@ async function approvedReviewFixture(
   canonicalId: number,
   suffix: string,
   documentHtml?: string,
+  requestSuffix = "",
 ) {
-  const fixture = await normalizedReviewFixture(env, canonicalId, documentHtml);
+  const fixture = await normalizedReviewFixture(
+    env,
+    canonicalId,
+    documentHtml,
+    requestSuffix,
+  );
   const reviewer = insertStaff(sqlite, `decision-${suffix}`, "legal_reviewer");
   await claimLegalSourceReview(env, reviewer, fixture.reviewId, {
     now: REVIEW_AT,
@@ -1213,6 +1235,361 @@ test("protected legal-source HTTP flow claims, decides, and publishes real D1/R2
         .publication.changed,
       false,
     );
+  } finally {
+    sqlite.close();
+  }
+});
+test("replacement publication atomically archives the previous current version", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const first = await approvedReviewFixture(
+      env,
+      sqlite,
+      240,
+      "replacement-first",
+      legalDocument("Закон 240", "Первая проверенная редакция нормы."),
+    );
+    const publisher = insertStaff(
+      sqlite,
+      "replacement-publisher",
+      "legal_reviewer",
+    );
+    const firstPublication = await publishApprovedLegalSource(
+      env,
+      publisher,
+      {
+        reviewId: first.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          first.decision.decisionEvidenceSha256,
+      },
+      { now: new Date("2026-07-28T01:13:00.000Z") },
+    );
+    assert.equal(firstPublication.activationType, "activated_initial");
+
+    const second = await approvedReviewFixture(
+      env,
+      sqlite,
+      240,
+      "replacement-second",
+      legalDocument(
+        "Закон 240",
+        "Вторая проверенная редакция нормы с изменённым порядком действий.",
+      ),
+      "_replacement",
+    );
+    const secondPublication = await publishApprovedLegalSource(
+      env,
+      publisher,
+      {
+        reviewId: second.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          second.decision.decisionEvidenceSha256,
+      },
+      { now: new Date("2026-07-28T01:14:00.000Z") },
+    );
+    assert.equal(secondPublication.activationType, "activated_replacement");
+
+    assert.deepEqual({
+      ...sqlite.prepare(`
+        SELECT
+          (SELECT status FROM legal_source_versions WHERE id=?)
+            AS first_status,
+          (SELECT status FROM legal_source_versions WHERE id=?)
+            AS second_status,
+          current.publication_id AS current_publication_id,
+          current.version_id AS current_version_id,
+          source.content_sha256 AS source_sha256
+        FROM legal_source_current_activations current
+        INNER JOIN legal_sources source ON source.id=current.source_id
+        WHERE current.source_id=?
+      `).get(
+        firstPublication.versionId,
+        secondPublication.versionId,
+        secondPublication.sourceId,
+      ) as Record<string, unknown>,
+    }, {
+      first_status: "archived",
+      second_status: "verified",
+      current_publication_id: secondPublication.publicationId,
+      current_version_id: secondPublication.versionId,
+      source_sha256: second.fixture.rawContentSha256,
+    });
+    const events = sqlite.prepare(`
+      SELECT event_type,publication_id,previous_publication_id
+      FROM legal_source_lifecycle_events
+      WHERE source_id=?
+      ORDER BY occurred_at
+    `).all(secondPublication.sourceId) as Array<Record<string, unknown>>;
+    assert.deepEqual(events.map((row) => ({ ...row })), [
+      {
+        event_type: "activated_initial",
+        publication_id: firstPublication.publicationId,
+        previous_publication_id: null,
+      },
+      {
+        event_type: "activated_replacement",
+        publication_id: secondPublication.publicationId,
+        previous_publication_id: firstPublication.publicationId,
+      },
+    ]);
+    const historicalReplay = await publishApprovedLegalSource(
+      env,
+      publisher,
+      {
+        reviewId: first.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          first.decision.decisionEvidenceSha256,
+      },
+      { now: new Date("2026-07-28T01:14:30.000Z") },
+    );
+    assert.equal(historicalReplay.changed, false);
+    assert.equal(historicalReplay.publicationId, firstPublication.publicationId);
+    assert.throws(
+      () => sqlite.prepare(`
+        UPDATE legal_source_current_activations
+        SET publication_id=?,version_id=? WHERE source_id=?
+      `).run(
+        firstPublication.publicationId,
+        firstPublication.versionId,
+        firstPublication.sourceId,
+      ),
+      /legal source current activation invalid/,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("withdrawal is atomic, immutable, replay-safe, and removes current trust", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const approved = await approvedReviewFixture(
+      env,
+      sqlite,
+      241,
+      "withdrawal",
+    );
+    const publisher = insertStaff(
+      sqlite,
+      "withdrawal-publisher",
+      "legal_reviewer",
+    );
+    const publication = await publishApprovedLegalSource(
+      env,
+      publisher,
+      {
+        reviewId: approved.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          approved.decision.decisionEvidenceSha256,
+      },
+      { now: new Date("2026-07-28T01:13:00.000Z") },
+    );
+    const successor = await approvedReviewFixture(
+      env,
+      sqlite,
+      241,
+      "withdrawal-successor",
+      legalDocument(
+        "Закон 241",
+        "Новая редакция была одобрена до отзыва текущей публикации.",
+      ),
+      "_withdrawal_successor",
+    );
+    const input = {
+      publicationId: publication.publicationId,
+      expectedPublicationEvidenceSha256:
+        publication.publicationEvidenceSha256,
+      reasonNotes:
+        "Официальный источник требует повторной юридической проверки перед дальнейшим использованием.",
+    };
+    const results = await Promise.all([
+      withdrawPublishedLegalSource(env, publisher, input, {
+        now: new Date("2026-07-28T01:14:00.000Z"),
+      }),
+      withdrawPublishedLegalSource(env, publisher, input, {
+        now: new Date("2026-07-28T01:14:01.000Z"),
+      }),
+    ]);
+    assert.deepEqual(
+      results.map((result) => result.changed).sort(),
+      [false, true],
+    );
+    assert.equal(results[0].eventId, results[1].eventId);
+    assert.deepEqual({
+      ...sqlite.prepare(`
+        SELECT
+          (SELECT status FROM legal_sources WHERE id=?) AS source_status,
+          (SELECT verification_state FROM legal_sources WHERE id=?)
+            AS source_state,
+          (SELECT status FROM legal_source_versions WHERE id=?)
+            AS version_status,
+          (SELECT count(*) FROM legal_source_current_activations
+            WHERE source_id=?) AS current_count,
+          (SELECT count(*) FROM legal_source_lifecycle_events
+            WHERE source_id=? AND event_type='withdrawn') AS withdrawal_count
+      `).get(
+        publication.sourceId,
+        publication.sourceId,
+        publication.versionId,
+        publication.sourceId,
+        publication.sourceId,
+      ) as Record<string, unknown>,
+    }, {
+      source_status: "archived",
+      source_state: "archived",
+      version_status: "archived",
+      current_count: 0,
+      withdrawal_count: 1,
+    });
+    assert.equal((await publishApprovedLegalSource(
+      env,
+      publisher,
+      {
+        reviewId: approved.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          approved.decision.decisionEvidenceSha256,
+      },
+      { now: new Date("2026-07-28T01:14:30.000Z") },
+    )).changed, false);
+    await assert.rejects(
+      withdrawPublishedLegalSource(env, publisher, {
+        ...input,
+        reasonNotes: "Другая причина не может переписать сохранённое решение.",
+      }, { now: new Date("2026-07-28T01:14:30.000Z") }),
+      (error) => error instanceof LegalSourceLifecycleError
+        && error.code === "LEGAL_SOURCE_LIFECYCLE_EVIDENCE_CONFLICT",
+    );
+    const eventId = results[0].eventId;
+    assert.throws(
+      () => sqlite.prepare(`
+        UPDATE legal_source_lifecycle_events
+        SET reason_notes='tamper' WHERE id=?
+      `).run(eventId),
+      /legal source lifecycle evidence is immutable/,
+    );
+    assert.throws(
+      () => sqlite.prepare(
+        "DELETE FROM legal_source_lifecycle_events WHERE id=?",
+      ).run(eventId),
+      /legal source lifecycle evidence cannot be deleted/,
+    );
+    const reactivated = await publishApprovedLegalSource(
+      env,
+      publisher,
+      {
+        reviewId: successor.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          successor.decision.decisionEvidenceSha256,
+      },
+      { now: new Date("2026-07-28T01:15:00.000Z") },
+    );
+    assert.equal(reactivated.activationType, "activated_replacement");
+    assert.deepEqual({
+      ...sqlite.prepare(`
+        SELECT publication_id,version_id
+        FROM legal_source_current_activations
+        WHERE source_id=?
+      `).get(publication.sourceId) as Record<string, unknown>,
+    }, {
+      publication_id: reactivated.publicationId,
+      version_id: reactivated.versionId,
+    });
+    const reactivationEvent = sqlite.prepare(`
+      SELECT previous_publication_id,previous_version_id
+      FROM legal_source_lifecycle_events
+      WHERE id=?
+    `).get(reactivated.activationEventId) as Record<string, unknown>;
+    assert.deepEqual({ ...reactivationEvent }, {
+      previous_publication_id: publication.publicationId,
+      previous_version_id: publication.versionId,
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("protected withdrawal HTTP validates access, evidence, and RU/UZ response", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const approved = await approvedReviewFixture(
+      env,
+      sqlite,
+      242,
+      "withdrawal-http",
+    );
+    const publisher = insertStaff(
+      sqlite,
+      "withdrawal-http-publisher",
+      "legal_reviewer",
+    );
+    const support = insertStaff(
+      sqlite,
+      "withdrawal-http-support",
+      "support",
+    );
+    const publication = await publishApprovedLegalSource(
+      env,
+      publisher,
+      {
+        reviewId: approved.fixture.reviewId,
+        expectedDecisionEvidenceSha256:
+          approved.decision.decisionEvidenceSha256,
+      },
+      { now: new Date("2026-07-28T01:13:00.000Z") },
+    );
+    const path =
+      `/api/platform/legal-sources/publications/${publication.publicationId}/withdrawal?lang=uz`;
+    const body = {
+      expectedPublicationEvidenceSha256:
+        publication.publicationEvidenceSha256,
+      reasonNotes:
+        "Rasmiy manba qayta yuridik tekshiruvdan o‘tkazilishi kerak.",
+    };
+    const denied = await handleLegalSourceWithdrawalRequest(
+      staffRequest(path, body),
+      publication.publicationId,
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => support,
+        now: () => new Date("2026-07-28T01:14:00.000Z"),
+      },
+    );
+    assert.equal(denied.status, 403);
+    const response = await handleLegalSourceWithdrawalRequest(
+      staffRequest(path, body),
+      publication.publicationId,
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => publisher,
+        now: () => new Date("2026-07-28T01:14:00.000Z"),
+      },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      ((await response.json()) as { withdrawal: { changed: boolean } })
+        .withdrawal.changed,
+      true,
+    );
+    const list = await listLegalSourceReviews(
+      env,
+      publisher,
+      { status: "approved", scope: "all", limit: 10 },
+      { now: new Date("2026-07-28T01:14:30.000Z") },
+    );
+    const item = list.items.find(
+      (candidate) => candidate.reviewId === approved.fixture.reviewId,
+    );
+    assert.ok(item);
+    assert.equal(item.publicationId, publication.publicationId);
+    assert.equal(item.isCurrentPublication, false);
   } finally {
     sqlite.close();
   }
