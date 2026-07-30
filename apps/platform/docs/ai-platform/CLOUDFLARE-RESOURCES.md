@@ -1,7 +1,7 @@
 # JURO Cloudflare resources
 
 Updated: 2026-07-30
-Status: owner-approved Wrangler OAuth was used for staging only. `juro-staging` is through `0034` with verified pre/post Time Travel/private-R2 exports and a pre-change isolated restore. Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` serves 100% from commit `cd24095` behind owner-only Access. Exactly two staging consumers and one five-minute cron are active; legal ingestion and staff APIs remain disabled. Production resources, traffic, Sites v20, and legacy Worker `juro` were not changed.
+Status: owner-approved Wrangler OAuth was used for staging only. `juro-staging` is through `0034` with verified pre/post Time Travel/private-R2 exports and a pre-change isolated restore. Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` serves 100% from commit `cd24095` behind owner-only Access. Exactly two staging consumers and one five-minute cron are active; legal ingestion and staff APIs remain disabled. Production resources, traffic, Sites v20, and legacy Worker `juro` were not changed.
 
 ## Verified control-plane identity
 
@@ -88,7 +88,7 @@ The deployed staging source attaches only `staging-email-notifications` and `sta
 - AI Gateway: none verified.
 - Logpush/metrics export/observability destinations: none verified.
 - Staging primary queues have one producer binding; email and data-retention each have one `juro-platform-staging` consumer and distinct DLQ. Other consumers remain unattached.
-- Staging Worker serves version `3d1ac5c1-2f69-4c0e-b000-377054c8606a`, at 100% from commit `cd24095c8307a4c3b145549f147a823000a438e3`. Script subdomain and previews remain disabled; exactly one schedule and two reviewed staging consumers are active.
+- Staging Worker serves version `2ebc2ea8-6216-4f39-af96-d1b600973b74`, at 100% from commit `cd24095c8307a4c3b145549f147a823000a438e3`. Script subdomain and previews remain disabled; exactly one schedule and two reviewed staging consumers are active.
 - `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
@@ -279,7 +279,7 @@ The Access application is hidden from the App Launcher and auto-redirects to the
 | Evidence | Verified value |
 |---|---|
 | Worker | `juro-platform-staging` |
-| Version | `3d1ac5c1-2f69-4c0e-b000-377054c8606a` at 100% |
+| Version | `2ebc2ea8-6216-4f39-af96-d1b600973b74` at 100% |
 | Source | commit `cd24095c8307a4c3b145549f147a823000a438e3` |
 | Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY` |
 | Consumers | staging email + data-retention only; each has its own DLQ |
@@ -291,4 +291,4 @@ Secret values were neither read nor emitted. Staging async/cron/account-purge fl
 
 ## Current staging control-plane delta — 2026-07-30 UTC
 
-Control-plane verification confirms the exact custom domain and owner-only Access application, staging-only bindings, Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` at 100%, one schedule, two primary consumers and their distinct DLQs. `juro-staging` is through `0034` with no pending migration; the pre/post checkpoints and hashes are in `STAGING-0034-EVIDENCE.md`. Secret inventory remains names-only. Production Worker `juro`, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.
+Control-plane verification confirms the exact custom domain and owner-only Access application, staging-only bindings, Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` at 100%, one schedule, two primary consumers and their distinct DLQs. `juro-staging` is through `0034` with no pending migration; the pre/post checkpoints and hashes are in `STAGING-0034-EVIDENCE.md`. Secret inventory remains names-only. Production Worker `juro`, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.

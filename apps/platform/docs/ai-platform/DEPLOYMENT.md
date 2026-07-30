@@ -19,7 +19,7 @@ deployed without the separate production authorization required by the owner.
 
 ## Staging deployment target
 
-The checked-in and deployed target is `juro-platform-staging`. Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` serves 100% from pushed commit `cd24095c8307a4c3b145549f147a823000a438e3`. The exact flattened artifact was built with the staging profile and deployed with `--env staging`, `--keep-vars`, and `--strict`; production was not targeted.
+The checked-in and deployed target is `juro-platform-staging`. Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` serves 100% from pushed commit `cd24095c8307a4c3b145549f147a823000a438e3`. The exact flattened artifact was built with the staging profile and deployed with `--env staging`, `--keep-vars`, and `--strict`; production was not targeted.
 
 The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route, and the single Access-protected custom domain `staging.app.juro.uz`. It binds only staging D1/R2/Queues/Vectorize/Analytics resources. `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and `ACCOUNT_DELETION_PURGE_ENABLED` are true only in staging. Legal ingestion and the staff API remain false.
 
@@ -37,7 +37,7 @@ Exactly two staging consumers are attached: `staging-email-notifications` (concu
 8. **Completed after corrective iteration:** personal builder routing remains canonical after business becomes default; explicit business routes remain workspace-scoped.
 9. **Completed:** RU/UZ metadata and content pass for personal/business builder routes at desktop, tablet, 390 px, and 320 px without horizontal overflow or console errors.
 10. **Completed:** post-`0034` full/schema/data/manifest private-R2 round trip passed SHA-256.
-11. **Open:** validate the newly entered opaque identity key ring non-destructively, then complete auth/session/provider, cross-account, axe, 200% zoom, reduced-motion, Lighthouse, and real-device gates.
+11. **Blocked on owner correction:** the post-reentry Cron/Queue validation still rejects the staging identity key ring before fixture creation. After protected correction and recovery-copy verification, rerun the synthetic purge; then complete auth/session/provider, cross-account, axe, 200% zoom, reduced-motion, Lighthouse, and real-device gates.
 
 The standalone `validate:artifact` task defaults to the development profile.
 Running it immediately after a staging build without an explicit

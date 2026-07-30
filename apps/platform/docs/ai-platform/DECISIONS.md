@@ -12,17 +12,28 @@ A company remains a business workspace, not a login persona. The settings flow a
 Migration `0034` additively backfills bounded identity for legacy business rows and guards future insert/update identity while leaving personal workspaces nullable. No new runtime dependency was added: the form uses existing primitives and CSS-only press feedback with reduced-motion support. The standard backup/restore gate, remote migration, 391-test suite, type-check, lint, staging build/artifact, authenticated RU/UZ browser QA, D1 audit/integrity proof, and 100% staging deployment are complete. Production remains unchanged; exact evidence is in `STAGING-0034-EVIDENCE.md`.
 ## D-075 — gate destructive staging probes behind runtime identity validation
 
-Status: accepted
+Status: accepted; post-reentry runtime validation failed closed and the flag was restored
 Date: 2026-07-30
 
 Account-deletion purge evidence uses an exact staging-only synthetic subject,
 an explicit disabled-by-default feature flag, and the real Cron/Queue consumer.
-The probe must validate the deployed identity key ring before creating any D1 or
-R2 fixture and must expose only a phase-specific safe error code. A malformed
-or unrecoverable key ring blocks identity dual-write, MFA enrollment, and purge
-rehearsal; it is never replaced automatically because rotation requires an
-owner-managed protected recovery copy.
+The probe validates the deployed identity key ring before creating any D1 or R2
+fixture and exposes only a phase-specific safe error code. Secret values are
+never read back, copied into a command, or inferred from control-plane presence.
 
+The controlled post-reentry run was bounded by owner-only Access,
+`APP_ENV=staging`, a unique identifiers-only outbox subject, pre-run Time Travel
+bookmark, and aggregate D1/R2 postflight. Temporary version
+`8e12a990-5ea0-4d60-9a5f-6000903a668c` enabled the probe. The consumer returned
+`STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED` before creating a deletion request,
+profile, file, lifecycle/purge evidence, or R2 object. Final version
+`2ebc2ea8-6216-4f39-af96-d1b600973b74` restores the flag to `false` at 100%.
+
+The result proves the opaque staging value remains malformed; it does not expose
+which field is wrong and is not permission to guess or auto-rotate it. Owner
+correction through protected Cloudflare controls and a protected recovery copy
+are required before another controlled rerun. Production remains unchanged and
+unauthorized.
 ## D-001 — implementation baseline
 
 Status: superseded by D-029

@@ -1,6 +1,6 @@
 # JURO server-only secrets
 
-Updated: 2026-07-29
+Updated: 2026-07-30
 Status: names, contracts, and read-only presence inventory only; no secret value is stored here, in Git, or in the client bundle. The exact `juro-platform-staging` service now exposes server-only bindings named `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`; Wrangler and the Worker settings API returned names and types only, never values.
 
 ## Verified remote presence by name
@@ -19,15 +19,17 @@ its pre-existing `RESEND_API_KEY`; no evidence indicates that any new staging
 value was attached to production. Provider delivery and end-to-end browser
 behavior remain separate gates from binding presence.
 
-The 2026-07-30 runtime probe proved that the `IDENTITY_KEYRING` binding exists
-as `secret_text` but cannot be parsed by the documented key-ring contract. The
-Worker returned only `STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED`; no secret value,
-parser detail, protected identity, deletion request, or R2 object was logged or
-persisted. The probe flag was returned to `false`. Do not enable identity
-dual-write, MFA enrollment, or account-deletion purge rehearsal until the owner
-replaces this staging secret through protected Cloudflare controls and retains
-a separately protected recovery copy. Never paste the replacement into chat,
-Git, a ticket, a screenshot, or a command transcript.
+The 2026-07-30 runtime probes prove that the `IDENTITY_KEYRING` binding exists
+as `secret_text` but still cannot be parsed by the documented key-ring contract
+after the owner-reported re-entry. The controlled post-reentry Cron/Queue rerun
+returned only `STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED`; no secret value, parser
+detail, protected identity, deletion request, profile, file, lifecycle/purge
+evidence, or R2 object was logged or persisted. The final Worker version is
+`2ebc2ea8-6216-4f39-af96-d1b600973b74` with the probe flag restored to `false`.
+Do not enable identity dual-write, MFA enrollment, or another purge rehearsal
+until the owner corrects the staging secret through protected Cloudflare
+controls and retains a separately protected recovery copy. Never paste the
+replacement into chat, Git, a ticket, a screenshot, or a command transcript.
 
 ## Identity key ring
 

@@ -55,7 +55,7 @@ development remain through `0004`.
 ## Deployment and authenticated QA
 
 The final pushed source is commit `cd24095c8307a4c3b145549f147a823000a438e3`.
-Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` serves 100% of
+Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` serves 100% of
 `juro-platform-staging` traffic behind owner-only Cloudflare Access. The
 artifact retains staging-only D1/R2/Queue/Vectorize/Analytics/Images/Assets
 bindings, seven Queue producers, the email and retention consumers, and the
@@ -80,6 +80,31 @@ is bounded route/responsive evidence, not a complete axe, 200% zoom,
 reduced-motion, Lighthouse, real-device, provider, or cross-account security
 matrix.
 
+## Post-reentry identity-keyring runtime validation
+
+Before the controlled rerun, Time Travel returned bookmark
+`00000060-00000004-000050b8-05b86b19e07b519d820dca953e9803ae` and aggregate
+preflight proved zero rows for the unique subject
+`staging-probe-20260730-keyring-rerun-a1`. Version
+`8e12a990-5ea0-4d60-9a5f-6000903a668c` temporarily enabled only
+`STAGING_SYNTHETIC_PROBES_ENABLED` while retaining the exact staging bindings,
+consumers, cron, source artifact, and owner-only Access boundary.
+
+One identifiers-only outbox row was dispatched once at
+`2026-07-30T00:10:55.893Z`. The cleanup consumer rejected it once at
+`2026-07-30T00:11:02.273Z` with
+`STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED`. Postflight proved zero deletion
+requests, purge-evidence rows, lifecycle rows, synthetic profiles, and file
+rows; the exact private-R2 object key returned not-found, and
+`foreign_key_check` remained empty. The opaque secret was never read or
+returned. This proves the owner-reentered value still fails the documented
+parser/HMAC contract; it does not prove what part of the value is malformed.
+
+Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` then restored
+`STAGING_SYNTHETIC_PROBES_ENABLED=false` and serves 100% of staging under tag
+`staging-keyring-probe-disabled-20260730`. A successful D1/R2 purge remains
+blocked on owner correction of the secret through protected Cloudflare
+controls and protected retention of a recovery copy.
 ## Rollback boundary
 
 Application rollback uses the prior staging Worker version while keeping the

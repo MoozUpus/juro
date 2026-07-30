@@ -18,7 +18,7 @@ foundation checkpoint.
 - `IDENTITY_PROTECTION_MODE` remains `legacy`: the single staging profile and
   all three retained OTP challenges have zero protected/keyed evidence. The
   guarded dual-write/backfill/verification gate remains a release blocker;
-- the staging `IDENTITY_KEYRING` secret name exists. The last real Cron/Queue probe before the owner-reported secret re-entry rejected the then-current value as malformed; both jobs were dispatched once, created no fixture rows/objects, and the final probe flag remains disabled. Secret values are opaque, so the newly entered value is not considered valid until a non-destructive runtime validation and protected recovery-copy check pass;
+- the staging `IDENTITY_KEYRING` secret name exists, but a controlled Cron/Queue rerun after the owner-reported secret re-entry still returned `STAGING_SYNTHETIC_PROBE_IDENTITY_FAILED`. It created no request/profile/file/evidence rows or R2 object, and the final Worker version restores the probe flag to `false`. The opaque value must be corrected through protected Cloudflare controls and retained in a protected recovery copy before another controlled rerun;
 - local test totals (27 rendered route + 284 core + 80 Cloudflare = 391), remote schema checks, and authenticated RU/UZ personal/business builder QA now pass on the current Worker. They do not substitute for full auth/cookie/replay, cross-account, 200% zoom, reduced-motion, axe, Lighthouse, real-device, and provider matrices.
 
 ## Legal-source acquisition gaps

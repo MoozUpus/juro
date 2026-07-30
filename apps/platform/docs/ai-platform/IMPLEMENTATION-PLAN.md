@@ -1,7 +1,7 @@
 # JURO AI platform implementation plan
 
 Updated: 2026-07-30
-Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Migration `0034` plus idempotent business-workspace creation are applied and authenticated in staging after the backup/restore gate. Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` serves 100% from commit `cd24095` with exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. Bounded RU/UZ personal/business builder browser QA passes. Legal ingestion and staff APIs remain disabled; secret-value validation, provider flows, cross-account proof, operational RTO, full a11y/performance, and production gates remain open. Production changes remain prohibited. See `STAGING-0034-EVIDENCE.md`.
+Status: source reconciliation, control-plane inventory, local foundation, protected staging, and canonical builder checkpoint are verified. Migration `0034` plus idempotent business-workspace creation are applied and authenticated in staging after the backup/restore gate. Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` serves 100% from commit `cd24095` with exact staging bindings, two reviewed consumers and one five-minute cron behind owner-only Access. Bounded RU/UZ personal/business builder browser QA passes. Legal ingestion and staff APIs remain disabled; the controlled post-reentry runtime validation proves the staging identity keyring is still malformed, while provider flows, cross-account proof, operational RTO, full a11y/performance, and production gates remain open. Production changes remain prohibited. See `STAGING-0034-EVIDENCE.md`.
 
 ## Execution principles
 

@@ -1,7 +1,7 @@
 # Phase 2 identity and access slice
 
 Updated: 2026-07-29
-Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains 35 migrations through `0034`; Worker version `3d1ac5c1-2f69-4c0e-b000-377054c8606a` has staging-only bindings, two reviewed Queue consumers, one five-minute cron, the public Turnstile key, and three server-only secret names. Authenticated workspace creation and RU/UZ personal/business builder routing are verified; mailbox delivery, session-cookie/replay, full concurrency, cross-account, and deletion lifecycle flows still require correlated evidence. Production was not changed.
+Status: identity/access foundations are implemented and partially verified in isolated, Access-protected staging. D1 contains 35 migrations through `0034`; Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` has staging-only bindings, two reviewed Queue consumers, one five-minute cron, the public Turnstile key, and three server-only secret names. Authenticated workspace creation and RU/UZ personal/business builder routing are verified. The controlled post-reentry keyring probe still fails closed before fixture creation; mailbox delivery, session-cookie/replay, full concurrency, cross-account, and deletion lifecycle flows still require correlated evidence. Production was not changed.
 
 ## Implemented
 

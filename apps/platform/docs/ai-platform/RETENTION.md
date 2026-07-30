@@ -1,7 +1,7 @@
 # JURO retention and account deletion
 
 Updated: 2026-07-30
-Status: the account-deletion lifecycle and purge implementation is locally verified and deployed to owner-only protected staging. Schema, bindings, consumers, cron, and fail-closed probe dispatch are verified; the full authenticated synthetic D1/R2 purge remains open pending non-destructive validation of the owner-reentered identity keyring. Production is unchanged.
+Status: the account-deletion lifecycle and purge implementation is locally verified and deployed to owner-only protected staging. Schema, bindings, consumers, cron, and fail-closed probe dispatch are verified. A controlled rerun after secret re-entry still rejected the malformed identity keyring before fixture creation; the full synthetic D1/R2 purge remains open pending owner correction. Production is unchanged.
 
 ## Policy boundary
 
