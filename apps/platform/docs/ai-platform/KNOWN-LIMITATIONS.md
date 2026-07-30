@@ -229,3 +229,14 @@ No Phase 5 production-readiness claim is made.
 - Audio/video calls remain feature-off and are not simulated; no provider has been selected.
 - Authenticated RU/UZ browser traversal remains blocked by the recorded browser-control runtime failure before connection. Cloudflare Access was not bypassed.
 - Phase 7 is not production-ready. Functional deployment and replacement of the production UI remain separate owner approvals.
+
+## Phase 8–10 design and release open gates — 2026-07-30
+
+- The owner-approved rigged Jurobek source is absent; armature, skinning, clips, shirt lettering, facial corrections, gaze, materials, lip sync, and 3D optimization are not implemented or claimed.
+- STT, TTS, realtime voice, audio retention/purge, and voice-with-avatar remain feature-off; text AI remains the honest fallback.
+- Authenticated screenshots, keyboard traversal, axe, NVDA/VoiceOver, 200% zoom, console/hydration, 320–1440+ matrix, and real-device touch checks remain blocked by the recorded browser-control kernel failure. Access was not bypassed.
+- LCP/INP/CLS, route bundle delta, GPU/memory, long-session, and WebGL context-loss measurements are not claimed.
+- The shared pre-existing desktop shell collapse animates `grid-template-columns` and `width`; it is a P1 motion debt for a separately approved production shell migration, not introduced by the prototype.
+- The full phases 3–7 product definition, legal/document evaluation corpus, live provider calls, malware scan, hybrid retrieval, complete lawyer marketplace/admin/support/status, and closed beta remain incomplete.
+- Phase 9 is not a closed beta until authenticated owner test accounts and the full browser/security matrix pass.
+- Phase 10 production readiness is not reached. Production functional deployment and production UI replacement require separate explicit owner approvals.

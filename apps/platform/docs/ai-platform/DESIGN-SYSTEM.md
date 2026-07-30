@@ -1,13 +1,13 @@
 # JURO platform design system
 
-Updated: 2026-07-28
-Status: candidate implementation contract derived from the owner-approved Cinematic Legal Intelligence direction; not implemented or deployed. Production UI is unchanged.
+Updated: 2026-07-30
+Status: implemented as a scoped staging-only prototype; production UI is unchanged and replacement is not authorized.
 
 ## Purpose and scope
 
 This system translates **Cinematic Legal Intelligence** into a functional application. It creates a dark, controlled orientation shell around light, stable legal work surfaces. It does not turn the dashboard into a landing page and never allows styling, animation, or Jurobek to outrank legal content, evidence, uncertainty, deadlines, or the user's current object context.
 
-The contract applies first to the future staging-only routes `/:locale/:accountType/prototypes/platform/cinematic` and, for business workspaces, `/:locale/business/:workspaceId/prototypes/platform/cinematic`. No compliant staging Worker or route exists yet. Existing production routes retain their current CSS until the owner separately approves the visual replacement.
+The contract is implemented on staging-only routes `/:locale/:accountType/prototypes/platform/cinematic` and `/:locale/business/:workspaceId/prototypes/platform/cinematic`. An exact server environment guard fails closed outside staging, both routes require a real session, and existing production routes retain their current CSS until the owner separately approves visual replacement.
 
 ## Current-state defect
 

@@ -44,6 +44,21 @@ const runtime = {
 };
 const context = { waitUntil() {}, passThroughOnException() {} };
 
+test("cinematic prototype entry fails closed in the production artifact", async () => {
+  const worker = await createWorker();
+  const assets = { fetch: async () => new Response("Not found", { status: 404 }) };
+
+  const production = await worker.fetch(
+    new Request("http://localhost/prototypes/platform/cinematic", {
+      headers: { accept: "text/html" },
+      redirect: "manual",
+    }),
+    { APP_ENV: "production", ASSETS: assets },
+    context,
+  );
+  assert.equal(production.status, 404);
+});
+
 test("routes /document-builder to the canonical account space", async () => {
   const worker = await createWorker();
   const response = await worker.fetch(new Request("http://localhost/document-builder", { headers: { accept: "text/html" } }), runtime, context);

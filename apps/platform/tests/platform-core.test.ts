@@ -13,6 +13,37 @@ import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBaseP
 import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
+import { isCinematicPrototypeEnvironment } from "../lib/platform/cinematic-prototype";
+
+test("cinematic prototype is fail-closed outside staging", async () => {
+  assert.equal(isCinematicPrototypeEnvironment("staging"), true);
+  for (const environment of [undefined, "development", "production", "preview"]) {
+    assert.equal(isCinematicPrototypeEnvironment(environment), false);
+  }
+  const [personalRoute, businessRoute, entryRoute, surface, styles] = await Promise.all([
+    readFile(new URL("../app/[locale]/[accountType]/prototypes/platform/cinematic/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/[locale]/business/[workspaceId]/prototypes/platform/cinematic/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/prototypes/platform/cinematic/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/CinematicPrototypeSurface.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/cinematic-prototype.css", import.meta.url), "utf8"),
+  ]);
+  for (const route of [personalRoute, businessRoute, entryRoute]) {
+    assert.match(route, /isCinematicPrototypeEnvironment\(runtimeEnv\(\)\.APP_ENV\)/);
+    assert.match(route, /notFound\(\)/);
+    assert.match(route, /index: false, follow: false, nocache: true/);
+  }
+  for (const route of [personalRoute, businessRoute]) assert.match(route, /requireChatGPTUser\(returnTo\)/);
+  assert.match(surface, /DashboardClient/);
+  assert.match(surface, /jurobek-avatar\.webp/);
+  assert.match(surface, /MicOff/);
+  assert.doesNotMatch(surface, /Canvas|useFrame|onPointerMove|requestAnimationFrame/);
+  assert.match(styles, /prefers-reduced-motion:reduce/);
+  assert.match(styles, /prefers-reduced-transparency:reduce/);
+  assert.match(styles, /prefers-contrast:more/);
+  assert.match(styles, /forced-colors:active/);
+  assert.doesNotMatch(styles, /transition:\s*all|animation:[^;}]*infinite|width:100vw/i);
+});
+
 
 test("builder navigation preserves canonical locale and account context", () => {
   const caseId = "11111111-1111-4111-8111-111111111111";

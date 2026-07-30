@@ -1675,3 +1675,14 @@ Date: 2026-07-30
 Workspace capability is derived server-side from current D1 subscription evidence. Missing, malformed, unknown, inactive, past-due, or expired evidence resolves to Free. Only current `active` or `trialing` paid evidence enables specialist handoff. The billing and consultation APIs expose the same derived result, and consultation creation checks it before any booking or consent write.
 
 The consultation flow keeps the existing atomic booking/consent/audit batch, adds strict RU/UZ contracts and authoritative case, plan-step, and comparison tenant checks, and returns neutral object errors. Payment remains fail closed until a real configured provider and adapter exist. No subscription, slot, booking, lawyer assignment, or payment was synthesized for evidence. Production is unchanged.
+
+## D-081 — isolate Cinematic Legal Intelligence behind an exact staging boundary
+
+Status: accepted and locally verified; remote staging deployment pending
+Date: 2026-07-30
+
+The first cinematic platform slice is an additive authenticated route, not a replacement of canonical UI. It requires exact `APP_ENV=staging`, carries `noindex/nofollow/nocache`, reuses the real shell, tenant, dashboard API, and canonical workflow routes, and has separate personal and business-workspace paths. The unscoped entry returns 404 in a production artifact. No schema, provider, secret, or dependency change is introduced.
+
+The owner-approved Jurobek 3D source is absent. The prototype uses only the existing 60,670-byte WebP, labels it as a static no-WebGL fallback, links to real text chat, and does not simulate microphone, STT, TTS, lip sync, or a live lawyer. Motion is limited to short state feedback and respects reduced motion/transparency/contrast. The Impeccable detector returned no findings; the remaining shared grid/width shell transition is recorded as production migration debt rather than changed before approval.
+
+Production functional deployment and production UI replacement remain two separate owner approvals.

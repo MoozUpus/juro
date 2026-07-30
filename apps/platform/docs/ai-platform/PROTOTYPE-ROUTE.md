@@ -1,7 +1,7 @@
 # Cinematic platform prototype route
 
-Updated: 2026-07-28
-Status: route contract approved; no compliant staging route is deployed yet; production UI unchanged.
+Updated: 2026-07-30
+Status: isolated route implemented and locally verified; remote staging deployment pending; production UI unchanged.
 
 ## Required surface
 
@@ -11,7 +11,7 @@ The protected design surface will use a route such as:
 /:locale/:accountType/prototypes/platform/cinematic
 ```
 
-For business workspaces, the canonical account route shape remains `/:locale/business/:workspaceId/...`. The final prototype path may move the prototype segment earlier if required by the existing route compiler, but must preserve locale/account/workspace identity and direct-refresh behavior.
+For business workspaces the implemented route is `/:locale/business/:workspaceId/prototypes/platform/cinematic`. Personal, entrepreneur, and lawyer profiles use the first route. `/prototypes/platform/cinematic` is a staging-only entry that redirects to the default Uzbek individual prototype.
 
 ## Deployment boundary
 
@@ -58,3 +58,11 @@ Before owner review, the route requires:
 - a documented switch back to the existing UI.
 
 After review, production migration still requires a separate explicit UI-replacement approval. Publishing the staging prototype is not that approval.
+
+## Implementation checkpoint
+
+The prototype reuses `WorkspaceShellLayout`, `PlatformShell`, and `DashboardClient`; it therefore reads the authenticated user, active workspace, and `/api/platform/dashboard` rather than demo objects. Its route map opens real AI chat, analysis, builder, cases, plan, consultation, profile, and settings surfaces. Missing avatar voice capability is shown as an explicit disabled static fallback.
+
+Automated local evidence currently covers noindex, exact staging guard, authentication source contracts, production-entry 404, RU/UZ copy, responsive/preference CSS, static Jurobek, no new motion runtime, type-check, lint, core/rendered tests, and staging build route manifests.
+
+Authenticated screenshot, keyboard/axe, zoom, console, and performance gates remain open and must not be inferred from source/build checks.

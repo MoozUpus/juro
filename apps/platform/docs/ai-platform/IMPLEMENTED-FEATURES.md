@@ -198,3 +198,18 @@ Protected staging now contains a single server-side entitlement boundary shared 
 - absent payment configuration/adapter returns an honest `503`/`501` response.
 
 Worker version `5feeab28-f23e-4dd6-a95c-88963306bf2a` serves 100% of `juro-platform-staging`. Staging currently has no subscriptions, consultation slots, or bookings, so a live paid handoff is not claimed. Production is unchanged. See `STAGING-PHASE7-ENTITLEMENTS-HANDOFF-EVIDENCE.md`.
+
+## Phase 8 cinematic staging prototype — 2026-07-30
+
+The current candidate adds a protected, isolated Cinematic Legal Intelligence surface without replacing canonical routes:
+
+- exact staging-only server guard and noindex metadata;
+- personal and business-workspace prototype routes;
+- real authenticated shell, workspace context, dashboard API, and canonical workflow links;
+- RU/UZ product copy;
+- scoped navy/gold cinematic orientation surfaces around existing light work surfaces;
+- static official Jurobek fallback with honest voice/avatar status;
+- mobile/tablet/desktop CSS plus reduced-motion, reduced-transparency, increased-contrast, and forced-colors states;
+- no new dependency, schema migration, WebGL, fake provider result, or production UI change.
+
+Local type-check, lint, 41 targeted core tests, 28 rendered Worker tests, staging build, and Impeccable detector pass. Remote deployment and authenticated visual/browser gates remain pending; see `STAGING-PHASE8-CINEMATIC-PROTOTYPE-EVIDENCE.md`.
