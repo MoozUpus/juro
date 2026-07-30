@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { glob, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
+import { entitlementsForSubscription } from "../lib/billing/entitlements";
+import { billingPlanSelectionSchema } from "../lib/billing/input";
+import { consultationBookingSchema } from "../lib/platform/consultation";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -71,6 +74,65 @@ test("action plan step updates accept only bounded calendar data", () => {
   assert.equal(actionPlanStepPatchSchema.safeParse({ status: "completed", revision: 0, dueAt: null }).success, false);
   assert.equal(actionPlanStepPatchSchema.safeParse({ status: "completed", revision: 1, dueAt: null, userId: "other" }).success, false);
 
+});
+test("workspace entitlements fail closed without current paid evidence", () => {
+  const now = new Date("2026-07-30T12:00:00.000Z");
+  assert.deepEqual(entitlementsForSubscription(null, now), {
+    planCode: "free",
+    subscriptionStatus: null,
+    lawyerHandoff: false,
+    fullDocumentAnalysis: false,
+    expertDocumentAnalysis: false,
+    documentComparison: false,
+  });
+  const active = entitlementsForSubscription({
+    planCode: "individual",
+    status: "active",
+    currentPeriodEndsAt: "2026-08-30T12:00:00.000Z",
+  }, now);
+  assert.equal(active.lawyerHandoff, true);
+  assert.equal(active.planCode, "individual");
+  for (const evidence of [
+    { planCode: "individual", status: "past_due", currentPeriodEndsAt: "2026-08-30T12:00:00.000Z" },
+    { planCode: "individual", status: "active", currentPeriodEndsAt: "invalid" },
+    { planCode: "individual", status: "active", currentPeriodEndsAt: "2026-07-01T00:00:00.000Z" },
+    { planCode: "unknown", status: "active", currentPeriodEndsAt: null },
+  ]) {
+    assert.equal(entitlementsForSubscription(evidence, now).lawyerHandoff, false);
+  }
+});
+
+test("consultation and billing requests are strict and tenant-context shaped", () => {
+  const slotId = "11111111-1111-4111-8111-111111111111";
+  const caseId = "22222222-2222-4222-8222-222222222222";
+  const planStepId = "33333333-3333-4333-8333-333333333333";
+  assert.equal(consultationBookingSchema.safeParse({
+    slotId,
+    caseId,
+    planStepId,
+    consent: true,
+    locale: "uz",
+  }).success, true);
+  assert.equal(consultationBookingSchema.safeParse({
+    slotId,
+    planStepId,
+    consent: true,
+    locale: "ru",
+  }).success, false);
+  assert.equal(consultationBookingSchema.safeParse({
+    slotId,
+    consent: false,
+    locale: "ru",
+  }).success, false);
+  assert.equal(consultationBookingSchema.safeParse({
+    slotId,
+    consent: true,
+    locale: "ru",
+    userId: "other",
+  }).success, false);
+  assert.equal(billingPlanSelectionSchema.safeParse({ planCode: "individual", locale: "ru" }).success, true);
+  assert.equal(billingPlanSelectionSchema.safeParse({ planCode: "free", locale: "ru" }).success, false);
+  assert.equal(billingPlanSelectionSchema.safeParse({ planCode: "business" }).success, false);
 });
 
 test("personal routes retain the personal workspace when business is default", () => {

@@ -1,0 +1,63 @@
+.consult-plan-limit {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #dfd4bd;
+  border-radius: 16px;
+  background: #fff9ed;
+  color: #4f432f;
+}
+
+.consult-plan-limit > svg {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  color: #8f6b28;
+}
+
+.consult-plan-limit strong,
+.consult-plan-limit p {
+  display: block;
+}
+
+.consult-plan-limit p {
+  max-width: 720px;
+  margin: 6px 0 12px;
+  color: #695b46;
+  line-height: 1.55;
+}
+
+.consult-plan-limit a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 15px;
+  border-radius: 10px;
+  background: #062844;
+  color: #fff;
+  font-weight: 800;
+}
+
+.consult-consent:has(input:disabled) {
+  opacity: .62;
+}
+
+.slot-grid button:disabled {
+  cursor: not-allowed;
+  opacity: .58;
+  transform: none;
+}
+
+.consult-plan-limit a:focus-visible,
+.slot-grid button:focus-visible,
+.consult-consent input:focus-visible {
+  outline: 3px solid #87631f;
+  outline-offset: 3px;
+}
+
+@media (max-width: 620px) {
+  .consult-plan-limit {
+    padding: 15px;
+  }
+}

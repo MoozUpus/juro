@@ -39,7 +39,7 @@ export function BillingClient({ locale }: { locale: PlatformLocale }) {
     const response = await fetch("/api/platform/billing", {
       method: "POST",
       headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-      body: JSON.stringify({ planCode }),
+      body: JSON.stringify({ planCode, locale }),
     });
     const body = await response.json() as { error?: string };
     if (!response.ok) setError(body.error || (ru ? "Оплата не началась." : "To‘lov boshlanmadi."));
