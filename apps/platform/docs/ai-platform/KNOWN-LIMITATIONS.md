@@ -169,3 +169,10 @@ The account-deletion D1/R2 slice is deployed to owner-only protected staging. Sc
 A blocked immediate request cannot be cancelled, by design, but can be retried after the blocker is removed. Recoverable blocked requests may either cancel or retry before the irreversible boundary. Once R2 deletion begins, cancellation is impossible and retry is the only safe completion path.
 
 Production async runtime, cron, and account purge remain disabled. The protected staging evidence does not authorize production migration, production functional deployment, or production UI replacement.
+## Legal-source Phase 3 residual limits
+
+The staging Lex acquisition/parse slice is operational, but it is not a production legal knowledge base. The only live source remains fetched/pending_review and cannot be used by the AI until an authorized legal reviewer explicitly approves immutable evidence. Sections, chunks, and Vectorize publication remain empty by design.
+
+Advice ingestion, RU/UZ corpus coverage, historical revisions, midnight Asia/Tashkent sync, source health alerts, hybrid retrieval, citation verification, legal-editor browser QA, and the 250-scenario evaluation are incomplete. Authenticated browser traversal is also open because the available local browser runtime is unavailable; anonymous Cloudflare Access denial is the only HTTP/browser boundary proven in this checkpoint.
+
+The deployed Worker version exposes only three secret binding names. A live OpenAI/Anthropic Phase 4 call must not be attempted or reported until the exact staging version proves the required provider secret names and server-side model configuration. Secret values must never be requested in chat.

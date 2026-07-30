@@ -1598,3 +1598,12 @@ Status: accepted and applied to protected staging
 Wrangler applied `0030`–`0032` and D1 atomically rejected `0033` because a Drizzle `statement-breakpoint` marker was concatenated with the next `CREATE TRIGGER`. The retry did not proceed blindly. Read-only checks first proved `quick_check=ok`, `0033` still pending, zero `0033` tables/columns, and no conflicting deletion rows. The separator-only fix was committed as `a1261c3`, then the migration/account-deletion subset passed 64/64 before the remote retry.
 
 The retry applied only `0033`; postflight proved the exact 34-entry ledger, empty foreign-key check, expected lifecycle schema/guards, and no pending migration. This establishes the operational rule: any remote parser divergence stops the sequence, requires atomicity evidence, a minimal committed fix, targeted regression coverage, and a second preflight before retry. Production is not an implicit retry target.
+## D-075 — honor bounded robots delay and adapt only to observed official Lex structure
+
+Status: accepted, tested, and deployed to protected staging
+
+The first live source probes exposed two facts that local generic fixtures did not: Lex robots negotiation requires a text/plain-compatible Accept header and its public policy declares Crawl-delay: 20; current document content is expressed primarily through lx_elem div blocks rather than paragraph tags. JURO must honor both facts rather than bypass robots or persist an incomplete page.
+
+The acquisition layer now waits supported crawl delays up to 60 seconds and rejects larger/unusable policies. The legal-source consumer remains serial with maximum concurrency one, so a batch cannot parallelize around the source policy. The parser activates the Lex adapter only when official lx_elem blocks actually exist, uses ACT_TITLE as the authoritative title, excludes surrounding chrome, and keeps the generic semantic parser as fallback.
+
+The live staging proof produced 231 normalized blocks and 59536 plain-text characters, while the pre-fix diagnostic produced only three blocks. The source remains pending human review; no auto-publication or Vectorize indexing was introduced. See STAGING-0036-EVIDENCE.md.

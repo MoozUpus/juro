@@ -292,3 +292,10 @@ Secret values were neither read nor emitted. Staging async/cron/account-purge fl
 ## Current staging control-plane delta — 2026-07-30 UTC
 
 Control-plane verification confirms the exact custom domain and owner-only Access application, staging-only bindings, Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` at 100%, one schedule, two primary consumers and their distinct DLQs. `juro-staging` is through `0034` with no pending migration; the pre/post checkpoints and hashes are in `STAGING-0034-EVIDENCE.md`. Secret inventory remains names-only. Production Worker `juro`, Sites, D1, R2, routes, queues, domains, and schedules remain unchanged.
+## Current Phase 3 staging resource state — 2026-07-30
+
+juro-platform-staging serves Worker version d65ad586-98ef-47bc-95e2-158e4dfd45cf at 100% traffic. The exact flattened artifact exposes fetch, queue, and scheduled handlers; the five-minute cron; seven staging producers; and three reviewed consumers, including the serial staging-legal-sources-sync consumer with its dedicated DLQ. workers.dev and preview URLs remain disabled, and the single custom domain remains owner-only Access protected.
+
+juro-staging is through migration 0036. The legal source probe persisted one raw and one normalized content-addressed object only in private juro-staging-files. The pre/post recovery artifacts are in private juro-staging-backups. No quarantine, production R2, production D1, production Worker, production route, or Sites resource was changed.
+
+Version inspection lists only the names IDENTITY_KEYRING, RESEND_API_KEY, and TURNSTILE_SECRET_KEY. It does not prove broader Phase 4 provider secrets, and no secret value was read. LEGAL_ADVICE_INGESTION_ENABLED, LEGAL_SOURCE_STAFF_API_ENABLED, and STAGING_SYNTHETIC_PROBES_ENABLED remain false.

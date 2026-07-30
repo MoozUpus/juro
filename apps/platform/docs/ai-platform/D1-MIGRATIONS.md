@@ -766,3 +766,10 @@ Code rollback leaves additive columns/tables unused. D1 recovery uses the record
 Preflight reported `quick_check=ok`, zero deletion requests, zero duplicate active users, 30 applied migrations through `0029`, and exactly `0030`–`0033` pending. The first Wrangler run applied `0030`–`0032`; D1 rejected `0033` atomically because one Drizzle `statement-breakpoint` marker was concatenated with the following `CREATE TRIGGER`. Read-only verification proved that none of the `0033` tables or columns existed and the database remained integral.
 
 Commit `a1261c3c68151f9c275187fd422bd58c67b673a8` fixes only that separator. Migration/account-deletion tests passed 64/64 before retry. The second run applied only `0033`. Postflight proves 34 ledger rows through `0033`, two lifecycle/evidence tables, ten exact lifecycle trigger guards, two profile lifecycle columns, ten request lifecycle columns, `quick_check=ok`, an empty `foreign_key_check`, and no pending migration.
+## Staging checkpoint 0036 — current Lex URL guard
+
+Migration 0036_current_lex_url_guard.sql is additive in effect: it drops and recreates only legal_source_fetch_requests_insert_guard. The new guard accepts both current positive and retained legacy negative Lex document IDs, requires the canonical ID to match the exact URL suffix, and preserves the Advice host/feature boundary. It does not modify production.
+
+The migration chain passes 53/53 migration tests and the Cloudflare suite passes 82/82. Staging preflight showed 36 ledger rows through 0035, quick_check=ok, and no foreign-key violations. The apply changed only the guard and produced 37 ledger rows through 0036. Postflight again returned quick_check=ok, no foreign-key violations, and no pending migration.
+
+Pre/post bookmarks, portable export hashes, private-R2 round trips, and both remote restore drills are recorded in STAGING-0036-EVIDENCE.md. The post checkpoint restored 753 queries into a disposable EEUR D1 with 115 application tables, 295 indexes, 78 triggers, 37 migrations, exact exported non-empty row counts, quick_check=ok, and zero foreign-key violations. The disposable database was deleted after verification.

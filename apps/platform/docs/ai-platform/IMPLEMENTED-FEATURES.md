@@ -108,3 +108,19 @@ not pushed or deployed; production remains unchanged.
 - Current local evidence: 27 rendered route/security tests, 284 core tests, and 80 Cloudflare tests; type-check, lint, generated binding check, staging build/artifact, builder smoke, comparison smoke, and secret-pattern scan pass.
 
 Migrations and the Worker runtime are deployed to owner-only protected staging. D1 integrity, exact schema, control-plane attachments, anonymous Access denial, one completed durable cron run, and the post-migration private-R2 backup are verified. A synthetic authenticated deletion through HTTP/UI, live email delivery, DLQ/redrive, and the broader browser/accessibility matrix remain open. Production is unchanged.
+## Legal source acquisition and normalization
+
+The following Phase 3 vertical slice is implemented and proven in owner-only staging:
+
+- exact current/legacy Lex URL classification and D1 guard;
+- bounded robots negotiation with Allow/Disallow and supported Crawl-delay enforcement;
+- serial legal-source Queue consumer and idempotent outbox/job lifecycle;
+- content-type/encoding/redirect/byte validation;
+- exact-byte SHA-256 and private content-addressed raw R2 storage;
+- parse5 semantic normalization plus current Lex lx_elem adapter;
+- official ACT_TITLE selection, chrome exclusion, and wrapper de-duplication;
+- private content-addressed normalized R2 storage;
+- low-confidence pending human review and fail-closed publication boundary;
+- replay suppression across an additional cron cycle.
+
+The live probe produced one source/version/review and zero published sections/chunks. No source is marked verified and no Vectorize write occurs. STAGING-0036-EVIDENCE.md contains exact IDs, hashes, sizes, tests, restore, and limitations.

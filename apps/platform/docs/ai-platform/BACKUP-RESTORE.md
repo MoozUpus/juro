@@ -244,4 +244,10 @@ restore ordering evidence, topology, and postflight for the `0034` migration
 are recorded in `STAGING-0034-EVIDENCE.md`. The pre-change set passed an
 isolated local restore with source-equivalent counts and integrity. Both
 pre/post four-object sets passed private-R2 round-trip verification. This does
-not establish an operational RTO or production recovery readiness.
+not establish an operational RTO or production recovery readiness.## Post-0036 legal-source checkpoint — 2026-07-30
+
+The current post-0036/probe Time Travel bookmark is 00000132-00000000-000050b8-5322bcabc623a793a84c98f8d6290f3d. Four portable artifacts are retained under private R2 prefix juro-staging-backups/d1/juro-staging/20260730T170300Z/. Their byte sizes, SHA-256 values, and exact download round trips are listed in STAGING-0036-EVIDENCE.md.
+
+Because the raw Cloudflare export order can violate foreign-key insertion order on remote import, the recovery set includes a deterministic parent-first artifact generated from the actual exported schema's foreign-key graph. That artifact was first restored locally and then imported into disposable remote D1 a4959a8e-a93b-435a-a9d2-4412ee651f89. Aggregate data/schema fingerprints, quick_check, and foreign_key_check passed. The disposable D1 was deleted after the drill; the private R2 recovery set remains available.
+
+This is a verified staging checkpoint, not a production backup authorization or a measured production RTO.

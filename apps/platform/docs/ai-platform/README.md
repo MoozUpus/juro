@@ -56,3 +56,5 @@ No document in this directory authorizes or implies a production schema, traffic
 ## Documentation lifecycle
 
 The remaining owner-required documents are created or expanded only alongside the corresponding implemented vertical slice, so they describe actual contracts and evidence rather than speculative completion. Every staging claim must include a resource identity, command/test result, HTTP smoke, durable-record/object evidence where applicable, and known limitations. Production requires two separate future approvals: functional platform deployment and Cinematic UI replacement.
+- LEGAL-SOURCE-SYNC.md — the implemented Lex acquisition, robots-policy, normalization, review, and publication boundary.
+- STAGING-0036-EVIDENCE.md — migration 0036, backups, remote restore, Worker version, live Lex acquisition/parse, private R2 hashes, replay evidence, and remaining gates.
