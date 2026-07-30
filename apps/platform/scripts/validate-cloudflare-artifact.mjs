@@ -194,6 +194,15 @@ assert.deepEqual(
   requestedEnvironment === "staging"
     ? [
       {
+        queue: "staging-legal-sources-sync",
+        max_batch_size: 5,
+        max_batch_timeout: 5,
+        max_retries: 5,
+        dead_letter_queue: "staging-legal-sources-sync-dlq",
+        max_concurrency: 1,
+        retry_delay: 30,
+      },
+      {
         queue: "staging-email-notifications",
         max_batch_size: 5,
         max_batch_timeout: 5,

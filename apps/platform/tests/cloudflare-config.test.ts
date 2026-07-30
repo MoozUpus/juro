@@ -161,6 +161,15 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
       environment === "staging"
         ? [
           {
+            queue: "staging-legal-sources-sync",
+            max_batch_size: 5,
+            max_batch_timeout: 5,
+            max_retries: 5,
+            dead_letter_queue: "staging-legal-sources-sync-dlq",
+            max_concurrency: 1,
+            retry_delay: 30,
+          },
+          {
             queue: "staging-email-notifications",
             max_batch_size: 5,
             max_batch_timeout: 5,
@@ -306,10 +315,10 @@ test("does not attach legacy or premature queue contracts", () => {
   assert.doesNotMatch(serialized, /-malware-scan"/);
   assert.deepEqual(source.queues.consumers, []);
   assert.deepEqual(source.env.production.queues.consumers, []);
-  assert.equal(source.env.staging.queues.consumers.length, 2);
+  assert.equal(source.env.staging.queues.consumers.length, 3);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
-    ["staging-email-notifications", "staging-data-retention-cleanup"],
+    ["staging-legal-sources-sync", "staging-email-notifications", "staging-data-retention-cleanup"],
   );
 });
 

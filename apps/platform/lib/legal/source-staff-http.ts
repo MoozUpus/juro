@@ -35,6 +35,11 @@ import {
   LegalSourceLifecycleError,
   withdrawPublishedLegalSource,
 } from "./source-lifecycle";
+import {
+  createLegalSourceFetchRequest,
+  LegalSourceAcquisitionError,
+  type LegalSourceAcquisitionEnv,
+} from "./source-acquisition";
 
 type StaffHttpSession = Pick<
   LocalSession,
@@ -45,7 +50,10 @@ type MfaLocale = "ru" | "uz";
 
 export type LegalSourceStaffHttpDependencies = {
   enabled: string | undefined;
-  env?: LegalSourceReviewEnv;
+  env?: LegalSourceReviewEnv & Pick<
+    LegalSourceAcquisitionEnv,
+    "LEGAL_ADVICE_INGESTION_ENABLED"
+  >;
   sessionForRequest: (
     request: Request,
     options: { now: Date },
@@ -62,6 +70,13 @@ const publicationRequestSchema = legalSourcePublicationInputSchema.omit({
 const withdrawalRequestSchema = legalSourceWithdrawalInputSchema.omit({
   publicationId: true,
 });
+const syncIdentifierSchema = z.string().min(1).max(120)
+  .regex(/^[A-Za-z0-9:_-]+$/);
+const syncRequestSchema = z.object({
+  url: z.string().min(1).max(2_048),
+  idempotencyKey: syncIdentifierSchema,
+  correlationId: syncIdentifierSchema.optional(),
+}).strict();
 const reviewIdSchema = z.string().min(1).max(180)
   .regex(/^[A-Za-z0-9:_-]+$/);
 const FRESH_MFA_WINDOW_MS = 15 * 60 * 1_000;
@@ -77,6 +92,39 @@ function jsonNoStore(body: unknown, status = 200): Response {
       pragma: "no-cache",
     },
   });
+}
+
+function acquisitionErrorMessage(locale: MfaLocale, code: string): string {
+  if (locale === "uz") {
+    switch (code) {
+      case "LEGAL_SOURCE_POLICY_DISABLED":
+        return "Bu manbaga sinxronlash uchun ruxsat vaqtincha o‘chirilgan.";
+      case "LEGAL_SOURCE_REQUEST_NOT_FOUND":
+        return "Sync so‘rovi topilmadi.";
+      case "LEGAL_SOURCE_REQUEST_CONFLICT":
+      case "LEGAL_SOURCE_REQUEST_CANCELLED":
+      case "LEGAL_SOURCE_REQUEST_TERMINAL":
+      case "LEGAL_SOURCE_SYNC_BUSY":
+      case "LEGAL_SOURCE_STORAGE_FAILED":
+      case "LEGAL_SOURCE_PERSISTENCE_FAILED":
+      default:
+        return "Bu so‘rovni bajarib bo‘lmadi yoki to‘liq ishlov berilmadi.";
+    }
+  }
+  switch (code) {
+    case "LEGAL_SOURCE_POLICY_DISABLED":
+      return "Синхронизация источника временно недоступна.";
+    case "LEGAL_SOURCE_REQUEST_NOT_FOUND":
+      return "Sync-запрос не найден.";
+    case "LEGAL_SOURCE_REQUEST_CONFLICT":
+    case "LEGAL_SOURCE_REQUEST_CANCELLED":
+    case "LEGAL_SOURCE_REQUEST_TERMINAL":
+    case "LEGAL_SOURCE_SYNC_BUSY":
+    case "LEGAL_SOURCE_STORAGE_FAILED":
+    case "LEGAL_SOURCE_PERSISTENCE_FAILED":
+    default:
+      return "Не удалось выполнить/подтвердить запрос синхронизации.";
+  }
 }
 
 function legalSourceMfaErrorResponse(
@@ -152,6 +200,22 @@ function legalSourceErrorResponse(
   const mfa = legalSourceMfaErrorResponse(error, locale);
   if (mfa) return mfa;
   const correlationId = crypto.randomUUID();
+  if (error instanceof LegalSourceAcquisitionError) {
+    const status = error.code === "LEGAL_SOURCE_REQUEST_NOT_FOUND"
+      ? 404
+      : error.code === "LEGAL_SOURCE_REQUEST_CONFLICT"
+        || error.code === "LEGAL_SOURCE_REQUEST_CANCELLED"
+        || error.code === "LEGAL_SOURCE_REQUEST_TERMINAL"
+        || error.code === "LEGAL_SOURCE_SYNC_BUSY"
+        || error.code === "LEGAL_SOURCE_POLICY_DISABLED"
+        ? 409
+        : 503;
+    return jsonNoStore({
+      code: error.code,
+      correlationId,
+      error: acquisitionErrorMessage(locale, error.code),
+    }, status);
+  }
   if (error instanceof ApiAuthError) {
     return jsonNoStore({
       code: "REQUEST_REJECTED",
@@ -271,7 +335,13 @@ async function authorize(
   capability: PlatformStaffCapability,
   now: Date,
   options: { write?: boolean } = {},
-): Promise<{ env: LegalSourceReviewEnv; session: StaffHttpSession }> {
+): Promise<{
+  env: LegalSourceReviewEnv & Pick<
+    LegalSourceAcquisitionEnv,
+    "LEGAL_ADVICE_INGESTION_ENABLED"
+  >;
+  session: StaffHttpSession;
+}> {
   if (options.write === false) {
     const fetchSite = request.headers.get("sec-fetch-site");
     if (
@@ -310,6 +380,50 @@ function reviewSourceDto(
     documentTitle: source.snapshot.documentTitle,
     blocks: source.snapshot.blocks,
   };
+}
+
+export async function handleLegalSourceSyncRequest(
+  request: Request,
+  dependencies: LegalSourceStaffHttpDependencies,
+): Promise<Response> {
+  const locale = localeForRequest(request);
+  if (!legalSourceStaffApiEnabled(dependencies.enabled)) {
+    return disabledResponse(locale);
+  }
+  if (!dependencies.env) return unavailableResponse(locale);
+  const now = dependencies.now?.() ?? new Date();
+  try {
+    const { env, session } = await authorize(
+      request,
+      dependencies,
+      "legal.sources.review",
+      now,
+    );
+    const parsedBody = await parseJsonRequest(
+      request,
+      syncRequestSchema,
+      4_096,
+    );
+    if (!parsedBody.ok) return inputErrorResponse(locale, parsedBody.error);
+    const result = await createLegalSourceFetchRequest(env, {
+      ...parsedBody.data,
+      requestedByUserId: session.userId,
+    }, { now: () => now });
+    return jsonNoStore({
+      ok: true,
+      request: {
+        requestId: result.id,
+        sourceKind: result.sourceKind,
+        locale: result.locale,
+        canonicalUrl: result.canonicalUrl,
+        status: result.status,
+      },
+    });
+  } catch (error) {
+    const response = legalSourceErrorResponse(error, locale);
+    if (response) return response;
+    return unavailableResponse(locale);
+  }
 }
 
 export async function handleLegalSourceReviewListRequest(

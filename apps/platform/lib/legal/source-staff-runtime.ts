@@ -21,6 +21,8 @@ export function runtimeLegalSourceStaffDependencies(): LegalSourceStaffHttpDepen
       DB: runtime.DB,
       BUCKET: runtime.BUCKET,
       APP_ENV: appEnv,
+      LEGAL_ADVICE_INGESTION_ENABLED:
+        runtime.LEGAL_ADVICE_INGESTION_ENABLED ?? "false",
     }
     : undefined;
   return {

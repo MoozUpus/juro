@@ -28,6 +28,7 @@ import {
   handleLegalSourceReviewClaimRequest,
   handleLegalSourceReviewDecisionRequest,
   handleLegalSourceReviewListRequest,
+  handleLegalSourceSyncRequest,
   handleLegalSourceWithdrawalRequest,
 } from "../lib/legal/source-staff-http";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
@@ -1590,6 +1591,206 @@ test("protected withdrawal HTTP validates access, evidence, and RU/UZ response",
     assert.ok(item);
     assert.equal(item.publicationId, publication.publicationId);
     assert.equal(item.isCurrentPublication, false);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("disabled legal-source sync route returns NOT_FOUND and does not touch session", async () => {
+  let sessionRequested = false;
+  const response = await handleLegalSourceSyncRequest(
+    staffRequest("/api/platform/legal-sources/sync"),
+    {
+      enabled: "false",
+      sessionForRequest: async () => {
+        sessionRequested = true;
+        throw new Error("Disabled sync route must not resolve a session.");
+      },
+    },
+  );
+  assert.equal(response.status, 404);
+  assert.equal(sessionRequested, false);
+  assert.deepEqual(await response.json(), {
+    code: "NOT_FOUND",
+    error: "Маршрут не найден.",
+  });
+});
+
+test("legal-source sync route requires reviewer role before request parsing", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const support = insertStaff(sqlite, "sync-support", "support");
+    const response = await handleLegalSourceSyncRequest(
+      staffRequest(
+        "/api/platform/legal-sources/sync",
+        {
+          url: "https://lex.uz/ru/docs/-301",
+          idempotencyKey: "reviewer_sync_not_allowed_301",
+        },
+      ),
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => support,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(response.status, 403);
+    assert.equal(((await response.json()) as { code: string }).code, "ACCESS_DENIED");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("legal-source sync route validates idempotency payload and rejects malformed requests", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const reviewer = insertStaff(sqlite, "sync-reviewer", "legal_reviewer");
+    const invalidBody = await handleLegalSourceSyncRequest(
+      new Request("https://app.juro.test/api/platform/legal-sources/sync", {
+        method: "POST",
+        headers: {
+          origin: "https://app.juro.test",
+          "sec-fetch-site": "same-origin",
+          "x-juro-csrf": "1",
+          "content-type": "application/json",
+        },
+        body: "{invalid",
+      }),
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(invalidBody.status, 400);
+    assert.equal(((await invalidBody.json()) as { code: string }).code, "INVALID_JSON");
+
+    const spoofedActor = await handleLegalSourceSyncRequest(
+      staffRequest("/api/platform/legal-sources/sync", {
+        url: "https://lex.uz/ru/docs/-302",
+        idempotencyKey: "legal_source_sync_spoofed_actor_302",
+        requestedByUserId: "another-user",
+      }),
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(spoofedActor.status, 400);
+    assert.equal(
+      ((await spoofedActor.json()) as { code: string }).code,
+      "INVALID_INPUT",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("legal-source sync endpoint creates legal source fetch request and queue envelope", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const reviewer = insertStaff(sqlite, "sync-reviewer-success", "legal_reviewer");
+    const response = await handleLegalSourceSyncRequest(
+      staffRequest(
+        "/api/platform/legal-sources/sync?lang=ru",
+        {
+          url: "https://lex.uz/ru/docs/-302",
+          idempotencyKey: "legal_source_sync_302",
+          correlationId: "sync_corr_302",
+        },
+      ),
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => reviewer,
+        now: () => new Date("2026-07-28T01:10:00.000Z"),
+      },
+    );
+    assert.equal(response.status, 200);
+    const responseBody = await response.json() as {
+      ok: boolean;
+      request: { requestId: string; sourceKind: string; locale: string; status: string };
+    };
+    assert.equal(responseBody.ok, true);
+    assert.equal(responseBody.request.sourceKind, "lex");
+    assert.equal(responseBody.request.locale, "ru");
+    assert.equal(responseBody.request.status, "queued");
+
+    const fetchRow = sqlite.prepare(`
+      SELECT id, source_kind, locale, requested_url, status, requested_by_user_id
+      FROM legal_source_fetch_requests
+      WHERE id = ?
+    `).get(responseBody.request.requestId) as {
+      id: string;
+      source_kind: string;
+      locale: string;
+      requested_url: string;
+      status: string;
+      requested_by_user_id: string;
+    };
+    assert.equal(fetchRow.id, responseBody.request.requestId);
+    assert.equal(fetchRow.source_kind, "lex");
+    assert.equal(fetchRow.locale, "ru");
+    assert.equal(fetchRow.requested_url, "https://lex.uz/ru/docs/-302");
+    assert.equal(fetchRow.status, "queued");
+    assert.equal(fetchRow.requested_by_user_id, reviewer.userId);
+
+    const job = sqlite.prepare(`
+      SELECT queue_binding, job_type, subject_id, status
+      FROM job_outbox
+      WHERE subject_id = ?
+      LIMIT 1
+    `).get(responseBody.request.requestId) as {
+      queue_binding: string;
+      job_type: string;
+      subject_id: string;
+      status: string;
+    };
+    assert.equal(job.queue_binding, "LEGAL_SOURCES_SYNC_QUEUE");
+    assert.equal(job.job_type, "legal.sync");
+    assert.equal(job.subject_id, responseBody.request.requestId);
+    assert.equal(job.status, "pending");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("advice sync request is blocked when advice ingestion policy is off", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const reviewer = insertStaff(sqlite, "sync-advice-reviewer", "legal_reviewer");
+    const response = await handleLegalSourceSyncRequest(
+      staffRequest(
+        "/api/platform/legal-sources/sync?lang=uz",
+        {
+          url: "https://advice.uz/ru/questions/99",
+          idempotencyKey: "advice_sync_disabled_99",
+        },
+      ),
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(response.status, 409);
+    assert.equal(
+      ((await response.json()) as { code: string }).code,
+      "LEGAL_SOURCE_POLICY_DISABLED",
+    );
   } finally {
     sqlite.close();
   }
