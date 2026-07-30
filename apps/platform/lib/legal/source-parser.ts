@@ -101,6 +101,14 @@ function attribute(element: Element, name: string): string | null {
     ?.value ?? null;
 }
 
+function classTokens(element: Element): Set<string> {
+  return new Set(
+    (attribute(element, "class") ?? "")
+      .split(/\s+/)
+      .filter(Boolean),
+  );
+}
+
 function isHidden(element: Element): boolean {
   if (attribute(element, "hidden") !== null) return true;
   if (attribute(element, "aria-hidden")?.toLowerCase() === "true") return true;
@@ -203,10 +211,35 @@ function pushBlock(
   });
 }
 
-function collectBlocks(root: Element): MutableBlock[] {
+function collectBlocks(
+  root: Element,
+  sourceKind: LegalSourceKind,
+): MutableBlock[] {
   const blocks: MutableBlock[] = [];
+  let usesLexBlockAdapter = false;
+  if (sourceKind === "lex") {
+    walkElements(root, (element) => {
+      if (classTokens(element).has("lx_elem")) usesLexBlockAdapter = true;
+    }, { value: 0 });
+  }
   const visit = (element: Element): void => {
     if (SKIPPED_TAGS.has(element.tagName) || isHidden(element)) return;
+    const classes = classTokens(element);
+    if (usesLexBlockAdapter && !classes.has("lx_elem")) {
+      for (const child of element.childNodes) {
+        if (isElement(child)) visit(child);
+      }
+      return;
+    }
+    if (sourceKind === "lex" && classes.has("lx_elem")) {
+      pushBlock(
+        blocks,
+        classes.has("ACT_TITLE") ? "heading" : "paragraph",
+        collectText(element),
+        classes.has("ACT_TITLE") ? 1 : undefined,
+      );
+      return;
+    }
     const heading = /^h([1-6])$/.exec(element.tagName);
     if (heading) {
       pushBlock(blocks, "heading", collectText(element), Number(heading[1]));
@@ -257,8 +290,20 @@ function collectBlocks(root: Element): MutableBlock[] {
 
 function documentTitle(
   document: DefaultTreeAdapterTypes.Document,
+  primary: Element,
   blocks: MutableBlock[],
+  sourceKind: LegalSourceKind,
 ): string {
+  if (sourceKind === "lex") {
+    let officialTitle = "";
+    walkElements(primary, (element) => {
+      const classes = classTokens(element);
+      if (!officialTitle && classes.has("lx_elem") && classes.has("ACT_TITLE")) {
+        officialTitle = normalizeText(collectText(element));
+      }
+    }, { value: 0 });
+    if (officialTitle) return officialTitle.slice(0, 2_000);
+  }
   const heading = blocks.find((block) => block.kind === "heading")?.text;
   if (heading) return heading.slice(0, 2_000);
   let title = "";
@@ -289,7 +334,7 @@ export function normalizeLegalSourceHtml(input: {
       "LEGAL_SOURCE_PRIMARY_CONTENT_MISSING",
     );
   }
-  const blocks = collectBlocks(primary);
+  const blocks = collectBlocks(primary, input.reference.sourceKind);
   const plainText = blocks.map((block) => block.text).join("\n\n");
   if (blocks.length === 0 || plainText.length < 200) {
     throw new LegalSourceParserError("LEGAL_SOURCE_CONTENT_INSUFFICIENT");
@@ -312,7 +357,7 @@ export function normalizeLegalSourceHtml(input: {
       rawContentSha256: input.rawContentSha256,
     },
     primarySelector: primaryCandidates.selector,
-    documentTitle: documentTitle(document, blocks),
+    documentTitle: documentTitle(document, primary, blocks, input.reference.sourceKind),
     blocks,
     plainText,
   });

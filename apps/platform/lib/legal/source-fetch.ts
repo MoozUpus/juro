@@ -64,6 +64,7 @@ type FetchOptions = {
   timeoutMs?: number;
   maxBytes?: number;
   maxRedirects?: number;
+  wait?: (delayMs: number) => Promise<void>;
 };
 
 type RobotsRule = {
@@ -84,6 +85,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const ROBOTS_MAX_BYTES = 128 * 1024;
 const DEFAULT_MAX_REDIRECTS = 2;
+const MAX_ROBOTS_CRAWL_DELAY_SECONDS = 60;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
 function sourceHostKind(hostname: string): LegalSourceKind | null {
@@ -514,8 +516,13 @@ export async function fetchLegalSource(
   if (!robots.allowed) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_DISALLOWED", false);
   }
-  if (robots.crawlDelay > 0) {
+  if (robots.crawlDelay > MAX_ROBOTS_CRAWL_DELAY_SECONDS) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_RATE_POLICY", false);
+  }
+  if (robots.crawlDelay > 0) {
+    const wait = options.wait ?? ((delayMs: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
+    await wait(Math.ceil(robots.crawlDelay * 1_000));
   }
 
   const contentResult = await fetchFollowingRedirects(

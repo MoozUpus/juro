@@ -107,6 +107,49 @@ test("parser chooses the largest primary candidate without falling back to body"
   );
 });
 
+test("parser extracts the current Lex div-based document structure without wrapper duplication", () => {
+  const actText = "Норма определяет права, обязанности и проверяемый порядок действий. ".repeat(6);
+  const snapshot = normalizeLegalSourceHtml({
+    html: [
+      "<html><body>",
+      "<main><h1>Технический раздел</h1><table><tr><td>",
+      "Меню ".repeat(40),
+      "</td></tr></table></main>",
+      '<main id="doc_main"><h1>Lex</h1><div class="container docBody-container">',
+      '<div class="docBody__content"><div id="divBody">',
+      '<div class="ACT_FORM lx_elem"><div class="lx_elem2"><div class="lx_elem3">Законодательная форма</div></div></div>',
+      '<div class="ACT_TITLE lx_elem"><div class="lx_elem2"><div class="lx_elem3">Закон Республики Узбекистан</div></div></div>',
+      '<div class="ACT_TEXT lx_elem"><div class="lx_elem2"><div class="lx_elem3">',
+      actText,
+      '</div></div><div aria-hidden="true">Скрытая служебная команда</div></div>',
+      '<div class="ACT_TEXT lx_elem"><div class="lx_elem2"><div class="lx_elem3">',
+      actText,
+      "</div></div></div>",
+      "</div></div></div></main>",
+      "</body></html>",
+    ].join(""),
+    reference: {
+      ...reference,
+      canonicalId: "8282675",
+      canonicalUrl: "https://lex.uz/ru/docs/8282675",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.primarySelector, "main");
+  assert.equal(snapshot.documentTitle, "Закон Республики Узбекистан");
+  assert.deepEqual(
+    snapshot.blocks.map((block) => block.kind),
+    ["paragraph", "heading", "paragraph", "paragraph"],
+  );
+  assert.equal(
+    snapshot.blocks.filter((block) => block.text.includes(actText.trim())).length,
+    2,
+  );
+  assert.equal(snapshot.plainText.includes("Технический раздел"), false);
+  assert.equal(snapshot.plainText.includes("Скрытая служебная команда"), false);
+});
+
 test("parser rejects a primary container without enough legal content", () => {
   assert.throws(
     () => normalizeLegalSourceHtml({

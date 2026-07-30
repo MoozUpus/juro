@@ -156,10 +156,10 @@ test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", 
   }
 });
 
-test("robots disallow and crawl-delay policies fail closed", async () => {
+test("robots disallow and excessive crawl-delay policies fail closed", async () => {
   for (const [body, code] of [
     ["User-agent: *\nDisallow: /ru/docs/\n", "LEGAL_SOURCE_ROBOTS_DISALLOWED"],
-    ["User-agent: *\nAllow: /\nCrawl-delay: 1\n", "LEGAL_SOURCE_ROBOTS_RATE_POLICY"],
+    ["User-agent: *\nAllow: /\nCrawl-delay: 61\n", "LEGAL_SOURCE_ROBOTS_RATE_POLICY"],
   ] as const) {
     const synthetic = sequenceFetch([robots(body)]);
     await rejectsCode(
@@ -171,6 +171,26 @@ test("robots disallow and crawl-delay policies fail closed", async () => {
     );
     assert.equal(synthetic.calls.length, 1);
   }
+});
+
+test("supported robots crawl-delay is awaited before source fetch", async () => {
+  const synthetic = sequenceFetch([
+    robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),
+    html(),
+  ]);
+  const waits: number[] = [];
+  const result = await fetchLegalSource("https://lex.uz/ru/docs/8282675", {
+    adviceEnabled: false,
+    fetchImpl: synthetic.fetchImpl,
+    wait: async (delayMs) => {
+      assert.equal(synthetic.calls.length, 1);
+      waits.push(delayMs);
+    },
+  });
+
+  assert.equal(result.canonicalId, "8282675");
+  assert.deepEqual(waits, [20_000]);
+  assert.equal(synthetic.calls.length, 2);
 });
 
 test("a more specific robots Allow overrides a broader Disallow", async () => {
