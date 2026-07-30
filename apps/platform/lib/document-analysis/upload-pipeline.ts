@@ -1,0 +1,280 @@
+import { z } from "zod";
+import { sanitizeFileName } from "../document-builder/storage/file-validation";
+
+export const DOCUMENT_ANALYSIS_MAX_FILE_SIZE = 50 * 1024 * 1024;
+export const DOCUMENT_ANALYSIS_MAX_FILES = 20;
+
+const allowedMimeTypes = new Map<string, readonly string[]>([
+  ["application/pdf", ["pdf"]],
+  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", ["docx"]],
+  ["image/jpeg", ["jpg", "jpeg"]],
+  ["image/png", ["png"]],
+  ["application/zip", ["zip"]],
+]);
+
+export const documentAnalysisUploadIntentSchema = z.object({
+  fileName: z.string().trim().min(1).max(240),
+  mimeType: z.string().trim().min(1).max(160),
+  sizeBytes: z.number().int().min(1).max(DOCUMENT_ANALYSIS_MAX_FILE_SIZE),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/i).transform((value) => value.toLowerCase()),
+  locale: z.enum(["ru", "uz"]),
+  mode: z.enum(["quick", "full", "expert"]).default("quick"),
+  consent: z.literal(true),
+}).strict();
+
+export type DocumentAnalysisUploadIntent = z.infer<typeof documentAnalysisUploadIntentSchema>;
+
+export type DocumentAnalysisUploadRecord = {
+  analysisId: string;
+  fileId: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  sha256: string;
+  r2Key: string;
+  fileKind: string;
+  status: string;
+  errorCode: string | null;
+};
+
+export class DocumentAnalysisUploadError extends Error {
+  constructor(
+    public readonly code:
+      | "INVALID_UPLOAD_INTENT"
+      | "INVALID_IDEMPOTENCY_KEY"
+      | "IDEMPOTENCY_CONFLICT"
+      | "UPLOAD_NOT_FOUND"
+      | "UPLOAD_STATE_CONFLICT",
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "DocumentAnalysisUploadError";
+  }
+}
+
+export function parseDocumentAnalysisUploadIntent(value: unknown): DocumentAnalysisUploadIntent {
+  const parsed = documentAnalysisUploadIntentSchema.safeParse(value);
+  if (!parsed.success) {
+    throw new DocumentAnalysisUploadError(
+      "INVALID_UPLOAD_INTENT",
+      "Проверьте имя, формат, размер и контрольную сумму файла.",
+      400,
+    );
+  }
+  const extension = parsed.data.fileName.split(".").pop()?.toLocaleLowerCase() ?? "";
+  const acceptedExtensions = allowedMimeTypes.get(parsed.data.mimeType);
+  if (!acceptedExtensions?.includes(extension)) {
+    throw new DocumentAnalysisUploadError(
+      "INVALID_UPLOAD_INTENT",
+      "Формат, MIME-тип или расширение файла не поддерживается.",
+      400,
+    );
+  }
+  return { ...parsed.data, fileName: sanitizeFileName(parsed.data.fileName) };
+}
+
+export function parseUploadIdempotencyKey(value: string | null): string {
+  const key = value?.trim() ?? "";
+  if (!/^[A-Za-z0-9._:-]{16,128}$/.test(key)) {
+    throw new DocumentAnalysisUploadError(
+      "INVALID_IDEMPOTENCY_KEY",
+      "Для загрузки требуется корректный Idempotency-Key.",
+      400,
+    );
+  }
+  return key;
+}
+
+export async function hashUploadIntent(intent: DocumentAnalysisUploadIntent): Promise<string> {
+  const canonical = JSON.stringify({
+    fileName: intent.fileName,
+    mimeType: intent.mimeType,
+    sizeBytes: intent.sizeBytes,
+    sha256: intent.sha256,
+    locale: intent.locale,
+    mode: intent.mode,
+    consent: intent.consent,
+  });
+  return sha256Hex(new TextEncoder().encode(canonical));
+}
+
+export async function initializeDocumentAnalysisUpload(input: {
+  db: D1Database;
+  workspaceId: string;
+  userId: string;
+  idempotencyKey: string;
+  requestHash: string;
+  intent: DocumentAnalysisUploadIntent;
+}): Promise<{ record: DocumentAnalysisUploadRecord; replay: boolean }> {
+  const registryKey = uploadRegistryKey(input.workspaceId, input.userId, input.idempotencyKey);
+  const analysisId = crypto.randomUUID();
+  const fileId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const inserted = await input.db.prepare(
+    `INSERT OR IGNORE INTO idempotency_keys
+      (key,scope,request_hash,status,result_ref,expires_at,completed_at,created_at,updated_at)
+     VALUES (?,?,?,'started',?,?,NULL,?,?)`,
+  ).bind(
+    registryKey,
+    `document-analysis-upload:${input.workspaceId}:${input.userId}`,
+    input.requestHash,
+    analysisId,
+    expiresAt,
+    now,
+    now,
+  ).run();
+
+  if ((inserted.meta.changes ?? 0) === 0) {
+    const existing = await input.db.prepare(
+      "SELECT request_hash AS requestHash,result_ref AS resultRef FROM idempotency_keys WHERE key=? LIMIT 1",
+    ).bind(registryKey).first<{ requestHash: string; resultRef: string | null }>();
+    if (!existing || existing.requestHash !== input.requestHash) {
+      throw new DocumentAnalysisUploadError(
+        "IDEMPOTENCY_CONFLICT",
+        "Этот Idempotency-Key уже использован для другого файла.",
+        409,
+      );
+    }
+    if (!existing.resultRef) {
+      throw new DocumentAnalysisUploadError(
+        "UPLOAD_STATE_CONFLICT",
+        "Инициализация загрузки ещё выполняется.",
+        409,
+      );
+    }
+    return { record: await documentAnalysisUploadForUser(input.db, existing.resultRef, input.workspaceId, input.userId), replay: true };
+  }
+
+  const r2Key = `quarantine/${input.workspaceId}/${analysisId}/${fileId}`;
+  try {
+    await input.db.batch([
+      input.db.prepare(
+        `INSERT INTO document_files
+         (id,workspace_id,document_id,owner_user_id,kind,r2_key,file_name,mime_type,size_bytes,sha256,archived_at,created_at,updated_at)
+         VALUES (?,?,NULL,?,'analysis_upload_pending',?,?,?,?,?,NULL,?,?)`,
+      ).bind(
+        fileId,
+        input.workspaceId,
+        input.userId,
+        r2Key,
+        input.intent.fileName,
+        input.intent.mimeType,
+        input.intent.sizeBytes,
+        input.intent.sha256,
+        now,
+        now,
+      ),
+      input.db.prepare(
+        `INSERT INTO document_analyses
+         (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,created_at,updated_at)
+         VALUES (?,?,?,?,'initiated',?,NULL,'2026-07-30',?,?)`,
+      ).bind(analysisId, input.workspaceId, input.userId, fileId, JSON.stringify({ mode: input.intent.mode, locale: input.intent.locale }), now, now),
+      input.db.prepare(
+        `INSERT INTO consents (id,user_id,workspace_id,type,version,scope_json,granted_at)
+         VALUES (?,?,?,'document_analysis','2026-07-30',?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        input.userId,
+        input.workspaceId,
+        JSON.stringify({ analysisId, fileId, fileName: input.intent.fileName, mode: input.intent.mode }),
+        now,
+      ),
+      input.db.prepare(
+        `INSERT INTO workspace_audit_events
+         (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+         VALUES (?,?,?,'document_analysis',?,'upload_initiated',?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        input.workspaceId,
+        input.userId,
+        analysisId,
+        JSON.stringify({ mimeType: input.intent.mimeType, sizeBytes: input.intent.sizeBytes, mode: input.intent.mode }),
+        now,
+      ),
+      input.db.prepare(
+        "UPDATE idempotency_keys SET status='completed',completed_at=?,updated_at=? WHERE key=? AND request_hash=?",
+      ).bind(now, now, registryKey, input.requestHash),
+    ]);
+  } catch (error) {
+    await input.db.prepare(
+      "UPDATE idempotency_keys SET status='failed',updated_at=? WHERE key=?",
+    ).bind(new Date().toISOString(), registryKey).run();
+    throw error;
+  }
+  return {
+    replay: false,
+    record: {
+      analysisId,
+      fileId,
+      fileName: input.intent.fileName,
+      mimeType: input.intent.mimeType,
+      sizeBytes: input.intent.sizeBytes,
+      sha256: input.intent.sha256,
+      r2Key,
+      fileKind: "analysis_upload_pending",
+      status: "initiated",
+      errorCode: null,
+    },
+  };
+}
+
+export async function documentAnalysisUploadForUser(
+  db: D1Database,
+  analysisId: string,
+  workspaceId: string,
+  userId: string,
+): Promise<DocumentAnalysisUploadRecord> {
+  const record = await db.prepare(
+    `SELECT a.id AS analysisId,a.status,a.error_code AS errorCode,
+      f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
+      f.sha256,f.r2_key AS r2Key,f.kind AS fileKind
+     FROM document_analyses a
+     JOIN document_files f ON f.id=a.uploaded_file_id
+     WHERE a.id=? AND a.workspace_id=? AND a.owner_user_id=?
+       AND f.workspace_id=? AND f.owner_user_id=? AND f.archived_at IS NULL
+     LIMIT 1`,
+  ).bind(analysisId, workspaceId, userId, workspaceId, userId).first<DocumentAnalysisUploadRecord>();
+  if (!record) {
+    throw new DocumentAnalysisUploadError("UPLOAD_NOT_FOUND", "Загрузка не найдена.", 404);
+  }
+  return record;
+}
+
+export function validateUploadMagicBytes(
+  mimeType: string,
+  prefix: Uint8Array,
+  suffix: Uint8Array,
+): boolean {
+  if (mimeType === "application/pdf") {
+    return new TextDecoder().decode(prefix.slice(0, 5)) === "%PDF-";
+  }
+  if (mimeType === "image/png") {
+    const signature = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+    return signature.every((byte, index) => prefix[index] === byte);
+  }
+  if (mimeType === "image/jpeg") {
+    return prefix[0] === 0xff && prefix[1] === 0xd8 && suffix.at(-2) === 0xff && suffix.at(-1) === 0xd9;
+  }
+  if (mimeType === "application/zip" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    return prefix[0] === 0x50 && prefix[1] === 0x4b && [0x03, 0x05, 0x07].includes(prefix[2]) && [0x04, 0x06, 0x08].includes(prefix[3]);
+  }
+  return false;
+}
+
+export function arrayBufferHex(value: ArrayBuffer | undefined): string | null {
+  if (!value) return null;
+  return Array.from(new Uint8Array(value), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(value: Uint8Array): Promise<string> {
+  const copy = new Uint8Array(value.byteLength);
+  copy.set(value);
+  const digest = await crypto.subtle.digest("SHA-256", copy);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function uploadRegistryKey(workspaceId: string, userId: string, idempotencyKey: string): string {
+  return `document-analysis-upload:${workspaceId}:${userId}:${idempotencyKey}`;
+}

@@ -185,3 +185,15 @@ The deployed Worker version exposes only three secret binding names. A live Open
 - Chat streaming, stop, edit, regenerate, branch history, memory, guest flow, and entitlement service are not implemented.
 - Retrieval is exact lexical retrieval from current verified D1 material; Vectorize hybrid retrieval, reranking, and citation revalidation remain open.
 - Authenticated browser QA is blocked by a local browser-control kernel failure before connection; anonymous Access denial is verified and Access was not bypassed.
+
+## Phase 5 secure-upload open gates — 2026-07-30
+
+- A real malware scanner is not connected; every new document-analysis upload remains quarantined and unavailable to AI/download.
+- The malware queue binding is intentionally not attached and no fake scan result is produced.
+- OCR, page counting, bounding boxes, extraction, Claude analysis, OpenAI fallback, corrections, exports, and multi-file packages are not implemented by this slice.
+- ZIP/DOCX receive only a bounded container-signature check. Path traversal, nested archives, decompression ratios, entry count, time limits, and full DOCX structure remain blocked before extraction.
+- The browser computes SHA-256 from one in-memory `ArrayBuffer`; this does not buffer the upload in the Worker, but a later client-side incremental hash path may improve low-memory devices.
+- Fetch upload progress is not yet surfaced; the UI has a busy state but no byte-level progress indicator.
+- Authenticated staging HTTP and R2 round-trip evidence remains open because the available browser-control kernel fails before connecting to the existing Access session. Access was not bypassed.
+- The separate staging quarantine bucket is not yet used; quarantine is an opaque safe prefix in the primary private staging bucket so existing account-deletion purge remains complete.
+- No Phase 5 production readiness or document-analysis quality threshold is claimed.

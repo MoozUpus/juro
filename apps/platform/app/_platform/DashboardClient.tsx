@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { dashboardCopy } from "../../content/platform-ui";
+import { uploadDocumentForAnalysis } from "../../lib/document-analysis/client-upload";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 type DashboardData = {
@@ -101,17 +102,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       setSubmitting(true);
       setError("");
       try {
-        const form = new FormData();
-        form.set("file", file);
-        form.set("consent", "true");
-        form.set("locale", locale);
-        const response = await fetch("/api/platform/document-review", {
-          method: "POST",
-          headers: { "x-juro-csrf": "1" },
-          body: form,
-        });
-        const body = await response.json() as { analysis?: { id: string }; error?: string };
-        if (!response.ok && response.status !== 202) throw new Error(body.error || copy.uploadError);
+        const body = await uploadDocumentForAnalysis(file, locale);
         const search = body.analysis?.id ? `?analysis=${encodeURIComponent(body.analysis.id)}` : "";
         router.push(`${base}/document-review${search}`);
       } catch (value) {
@@ -125,8 +116,8 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   }
 
   function chooseFile(next: File | null) {
-    if (next && next.size > 10 * 1024 * 1024) {
-      setError(copy.fileTooLarge);
+    if (next && next.size > 50 * 1024 * 1024) {
+      setError(ru ? "Размер файла превышает 50 МБ." : "Fayl hajmi 50 MB dan oshadi.");
       if (fileInputRef.current) fileInputRef.current.value = "";
       return;
     }
@@ -231,7 +222,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,.docx,.jpg,.jpeg,.png,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png"
+              accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip"
               onChange={(event) => chooseFile(event.target.files?.[0] ?? null)}
               hidden
             />

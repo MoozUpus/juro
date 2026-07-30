@@ -1618,3 +1618,16 @@ OpenAI remains the primary legal-chat provider. Anthropic is eligible only for r
 Both providers use the same strict `LegalChatResponse` schema, Zod validator, server-owned verified-source allowlist, no-source clarification rule, idempotency reservation, and usage ledger. Completion overwrites the reserved provider/model with the actual provider/model and records `fallback_from_provider`; this makes cost and reliability evidence reflect execution rather than configuration.
 
 Staging model names are explicit non-secret variables. Keys remain environment-isolated server secrets. Because neither provider secret is present in the inspected staging Worker, the deployed route remains fail-closed and no live AI answer is claimed. Production remains unchanged.
+
+## D-077 — stream untrusted documents into quarantine and fail closed before AI
+
+Status: accepted and locally verified; authenticated staging upload and real scanner pending
+Date: 2026-07-30
+
+Document analysis intake is split into initialization, binary upload, and finalization. Initialization is strict JSON and tenant-scoped idempotency. Binary bytes are streamed directly from the request body to private R2 with an expected byte count and SHA-256, so a 50 MB document is not routed through JSON or buffered by the Worker. Finalization independently checks R2 metadata and bounded magic bytes.
+
+The object key is opaque and contains no source filename. Until a real privacy-approved malware scanner succeeds, the file remains `quarantined`, the normal download route cannot serve it, and no extraction, OCR, OpenAI, or Anthropic call is permitted. The former synchronous multipart analysis endpoint is disabled instead of retaining a second unsafe path.
+
+The quarantine object remains under a safe prefix in the environment primary private bucket for this slice. Existing account-deletion purge inventories that bucket; moving to the separate quarantine bucket before extending purge would create orphan risk. A later expand-contract step may cut over only after cross-bucket purge and restore evidence exists.
+
+ZIP/DOCX magic confirms only a ZIP container, not archive safety. Traversal, bomb ratio, nesting, count, timeout, DOCX structure, malware, OCR, and prompt-injection gates remain explicitly incomplete. Production is unchanged.

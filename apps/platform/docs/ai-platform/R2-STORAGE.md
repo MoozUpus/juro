@@ -80,3 +80,9 @@ Backups use protected manifests and checksums without object keys, filenames, si
 ## Production boundary
 
 `juro-private-documents` is not renamed or replaced. No production object copy, backup/quarantine bucket creation, binding change, signed-URL change, or deletion occurs before staging evidence and the later explicit functional production approval.
+
+## Phase 5 upload prefix
+
+New analysis uploads use `quarantine/{workspaceId}/{analysisId}/{fileId}` in the environment primary private bucket. The key is server-generated and contains no filename. The Worker streams the binary body to R2, supplies the expected SHA-256, then verifies size, stored SHA-256, and format magic during finalize.
+
+The separate quarantine bucket binding is deliberately not used yet because the current account-deletion purge inventories the primary bucket. Cross-bucket cutover requires additive purge inventory, retention, backup, and restore coverage. A safe prefix is not a malware scanner and no object is promoted to `safe` or `ready` until a real scanner produces verified evidence.

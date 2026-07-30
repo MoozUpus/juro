@@ -36,3 +36,9 @@ Malware scanning, OCR/file prompt-injection defenses, SSRF-protected URL fetch, 
 ## Business workspace creation boundary
 
 The deployed staging `POST /api/platform/workspaces` creation path authenticates before body handling, enforces same-origin/CSRF and a strict 2 KiB Zod union, and writes no user-controlled identifier. A client UUID is used only as a bounded idempotency key; workspace, membership, and audit IDs are deterministic opaque derivatives. The D1 batch grants owner access only when creator and request evidence match. Exact replay is safe; cross-user or changed-payload replay returns conflict without disclosing another tenant. Migration `0034`, one synthetic owner workspace, canonical personal/business routing, RU/UZ browser behavior, and D1 audit/FK evidence are verified in owner-only staging; cross-account remote proof remains open.
+
+## Untrusted document intake boundary
+
+Document-analysis initialization requires session, active workspace membership, same-origin/CSRF proof, strict JSON, consent, a 50 MB bound, supported MIME/extension pairing, SHA-256, and a tenant-scoped idempotency key. Binary PUT repeats session/workspace/CSRF checks and requires exact content length, MIME, and checksum before streaming to private R2.
+
+Finalize rechecks the private object and bounded magic bytes. New files are unavailable from the normal download route because their kind remains `analysis_quarantined`. With no real malware scanner attached, the server records `MALWARE_SCANNER_UNAVAILABLE`, returns a recoverable `FILE_SCAN_UNAVAILABLE` state, and never invokes OCR or an AI provider. The deprecated multipart route cannot store or analyze a file. This is a fail-closed foundation, not proof of safe files; archive safety, malware scanning, OCR prompt-injection isolation, async scan/extract jobs, and authenticated staging HTTP proof remain release gates.

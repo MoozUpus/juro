@@ -139,3 +139,17 @@ The feature branch now contains a real authenticated `POST /api/platform/ai` bou
 Local verification passed 301 core/rendered checks and 82 Cloudflare checks. Staging migration `0037`, the OpenAI boundary, and the Anthropic fallback extension are deployed to owner-protected staging as version `fdbce9be-06d6-45ef-bd01-ac49bd7b44a7` at 100% traffic.
 
 Live provider execution remains blocked by absent `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` bindings and is not claimed. Production remains unchanged.
+
+## Phase 5 secure upload foundation
+
+The feature branch implements and locally verifies:
+
+- authenticated, same-origin, tenant-scoped upload initialization;
+- strict 50 MB PDF/DOCX/JPEG/PNG/ZIP intent validation;
+- request-hash-bound idempotency and immutable consent/audit records;
+- direct request-body streaming to private R2 with SHA-256 validation;
+- post-write size/checksum and bounded magic-byte checks;
+- opaque non-PII quarantine keys;
+- a fail-closed `quarantined` state that never invokes AI while the scanner is unavailable;
+- RU/UZ UI integration from both dashboard and document-review surfaces;
+- explicit retirement of the unsafe synchronous multipart AI path.
