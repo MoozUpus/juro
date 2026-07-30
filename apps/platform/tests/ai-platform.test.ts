@@ -93,6 +93,8 @@ test("AI run reservation is idempotent and clarification does not consume a cycl
     workspaceId: "workspace-1", userId: "user-1", idempotencyKey: "request-one",
     conversationId: "conversation-1", requestMessageId: "user-1-message", responseMessageId: "assistant-1",
     providerResponseId: "resp-1", model: "gpt-5.6-sol", inputTokens: 100,
+    provider: "openai",
+    fallbackFromProvider: null,
     outputTokens: 50, cachedInputTokens: 10, attempts: 1, latencyMs: 200,
     chargeable: false,
   });
@@ -107,6 +109,24 @@ test("AI run reservation is idempotent and clarification does not consume a cycl
     .get(first.ledgerId) as { status: string; inputTokens: number };
   assert.equal(ledger.status, "released");
   assert.equal(ledger.inputTokens, 100);
+});
+
+test("AI completion persists the actual fallback provider and model", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "fallback-request", 2));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+  sqlite.prepare("INSERT INTO conversations(id) VALUES (?)").run("conversation-fallback");
+  sqlite.prepare("INSERT INTO conversation_messages(id,conversation_id,structured_json) VALUES (?,?,?)").run("assistant-fallback", "conversation-fallback", JSON.stringify(validLegalResponse));
+  await completeAiRun({ db: d1, runId: reserved.runId, ledgerId: reserved.ledgerId, workspaceId: "workspace-1", userId: "user-1", idempotencyKey: "fallback-request", conversationId: "conversation-fallback", requestMessageId: "user-fallback", responseMessageId: "assistant-fallback", providerResponseId: "msg-fallback", provider: "anthropic", fallbackFromProvider: "openai", model: "claude-sonnet-4-6", inputTokens: 80, outputTokens: 40, cachedInputTokens: 0, attempts: 1, latencyMs: 150, chargeable: true });
+  const run = sqlite.prepare("SELECT provider,model,fallback_from_provider AS fallbackFromProvider FROM ai_runs WHERE id=?").get(reserved.runId) as Record<string, string>;
+  assert.equal(run.provider, "anthropic");
+  assert.equal(run.model, "claude-sonnet-4-6");
+  assert.equal(run.fallbackFromProvider, "openai");
+  const ledger = sqlite.prepare("SELECT provider,model,status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as Record<string, string>;
+  assert.equal(ledger.provider, "anthropic");
+  assert.equal(ledger.model, "claude-sonnet-4-6");
+  assert.equal(ledger.status, "consumed");
 });
 
 test("AI usage reservation enforces a monthly limit and request hash binding", async () => {

@@ -144,6 +144,8 @@ export async function completeAiRun(input: {
   requestMessageId: string;
   responseMessageId: string;
   providerResponseId: string | null;
+  provider: "openai" | "anthropic";
+  fallbackFromProvider: "openai" | "anthropic" | null;
   model: string;
   inputTokens: number;
   outputTokens: number;
@@ -156,19 +158,20 @@ export async function completeAiRun(input: {
   const registryKey = `legal-chat:${input.workspaceId}:${input.userId}:${input.idempotencyKey}`;
   await input.db.batch([
     input.db.prepare(
-      `UPDATE ai_runs SET conversation_id=?,request_message_id=?,response_message_id=?,provider_response_id=?,model=?,status='completed',
+      `UPDATE ai_runs SET conversation_id=?,request_message_id=?,response_message_id=?,provider_response_id=?,provider=?,fallback_from_provider=?,model=?,status='completed',
        input_tokens=?,output_tokens=?,cached_input_tokens=?,attempt_count=?,latency_ms=?,completed_at=?,updated_at=?
        WHERE id=? AND workspace_id=? AND user_id=? AND status='reserved'`,
     ).bind(
-      input.conversationId, input.requestMessageId, input.responseMessageId, input.providerResponseId, input.model,
+      input.conversationId, input.requestMessageId, input.responseMessageId, input.providerResponseId,
+      input.provider, input.fallbackFromProvider, input.model,
       input.inputTokens, input.outputTokens, input.cachedInputTokens, input.attempts, input.latencyMs,
       now, now, input.runId, input.workspaceId, input.userId,
     ),
     input.db.prepare(
-      `UPDATE ai_usage_ledger SET status=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,
+      `UPDATE ai_usage_ledger SET status=?,provider=?,model=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,
        released_at=?,consumed_at=?,updated_at=? WHERE id=? AND ai_run_id=? AND status='reserved'`,
     ).bind(
-      input.chargeable ? "consumed" : "released", input.inputTokens, input.outputTokens,
+      input.chargeable ? "consumed" : "released", input.provider, input.model, input.inputTokens, input.outputTokens,
       input.cachedInputTokens, input.chargeable ? null : now, input.chargeable ? now : null,
       now, input.ledgerId, input.runId,
     ),

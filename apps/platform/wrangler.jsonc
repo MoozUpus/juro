@@ -136,7 +136,10 @@
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
-        "EMAIL_FROM": "JURO <no-reply@juro.uz>"
+        "EMAIL_FROM": "JURO <no-reply@juro.uz>",
+        "OPENAI_CHAT_MODEL": "gpt-5.6-sol",
+        "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
+        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6"
       },
       "d1_databases": [
         {

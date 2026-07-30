@@ -1607,3 +1607,14 @@ The first live source probes exposed two facts that local generic fixtures did n
 The acquisition layer now waits supported crawl delays up to 60 seconds and rejects larger/unusable policies. The legal-source consumer remains serial with maximum concurrency one, so a batch cannot parallelize around the source policy. The parser activates the Lex adapter only when official lx_elem blocks actually exist, uses ACT_TITLE as the authoritative title, excludes surrounding chrome, and keeps the generic semantic parser as fallback.
 
 The live staging proof produced 231 normalized blocks and 59536 plain-text characters, while the pre-fix diagnostic produced only three blocks. The source remains pending human review; no auto-publication or Vectorize indexing was introduced. See STAGING-0036-EVIDENCE.md.
+
+## D-076 — fail over legal chat without bypassing safety or source verification
+
+Status: accepted and locally verified; provider secrets and live staging proof pending
+Date: 2026-07-30
+
+OpenAI remains the primary legal-chat provider. Anthropic is eligible only for retryable availability/timeout failures or invalid structured output. An OpenAI safety refusal is terminal and is never routed to another provider as a bypass.
+
+Both providers use the same strict `LegalChatResponse` schema, Zod validator, server-owned verified-source allowlist, no-source clarification rule, idempotency reservation, and usage ledger. Completion overwrites the reserved provider/model with the actual provider/model and records `fallback_from_provider`; this makes cost and reliability evidence reflect execution rather than configuration.
+
+Staging model names are explicit non-secret variables. Keys remain environment-isolated server secrets. Because neither provider secret is present in the inspected staging Worker, the deployed route remains fail-closed and no live AI answer is claimed. Production remains unchanged.

@@ -1,5 +1,7 @@
-import { callOpenAiStructured, hasAiConfiguration, type AiStructuredResult } from "../document-builder/ai/openai";
+import { hasAnthropicConfiguration } from "../document-builder/ai/anthropic";
+import { AiUnavailableError, callOpenAiStructured, hasAiConfiguration, type AiStructuredResult } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
+import { anthropicModel, runAnthropicLegalChat } from "./anthropic-provider";
 import {
   enforceLegalChatSourceBoundary,
   forceClarificationWithoutVerifiedSources,
@@ -141,18 +143,46 @@ function modelForRequest(reasoningMode: "fast" | "deep"): string {
     : env.OPENAI_CHAT_MODEL || env.OPENAI_MODEL || "gpt-5.6-sol";
 }
 
+export function isAnthropicFallbackEligible(error: unknown): boolean {
+  return error instanceof AiUnavailableError
+    && error.code !== "AI_REFUSED"
+    && (error.retryable || error.code === "INVALID_AI_OUTPUT");
+}
+
+class ResilientLegalProvider implements LegalAiProvider {
+  readonly name: string;
+
+  constructor(private readonly primary: "openai" | "anthropic") {
+    this.name = primary;
+  }
+
+  async runLegalChat(input: LegalChatRequest): Promise<LegalAiRunResult> {
+    if (this.primary === "anthropic") return runAnthropicLegalChat(input);
+    try {
+      return await new OpenAiLegalProvider().runLegalChat(input);
+    } catch (error) {
+      if (!hasAnthropicConfiguration() || !isAnthropicFallbackEligible(error)) throw error;
+      const result = await runAnthropicLegalChat(input);
+      return { ...result, fallbackFromProvider: "openai" };
+    }
+  }
+}
+
 export function aiProviderStatus(): AiProviderStatus {
-  const env = runtimeEnv();
-  const provider = env.AI_PROVIDER || (env.OPENAI_API_KEY ? "openai" : null);
+  const openaiConfigured = hasAiConfiguration();
+  const anthropicConfigured = hasAnthropicConfiguration();
+  const provider = openaiConfigured ? "openai" : anthropicConfigured ? "anthropic" : null;
   return {
-    configured: provider === "openai" && hasAiConfiguration(),
+    configured: Boolean(provider),
     provider,
-    model: provider === "openai" ? modelForRequest("fast") : null,
-    fallbackConfigured: Boolean(env.ANTHROPIC_API_KEY && env.ANTHROPIC_FALLBACK_MODEL),
+    model: provider === "openai" ? modelForRequest("fast") : provider === "anthropic" ? anthropicModel() : null,
+    fallbackConfigured: openaiConfigured && anthropicConfigured,
   };
 }
 
 export function legalAiProvider(): LegalAiProvider | null {
   const status = aiProviderStatus();
-  return status.configured && status.provider === "openai" ? new OpenAiLegalProvider() : null;
+  return status.configured && (status.provider === "openai" || status.provider === "anthropic")
+    ? new ResilientLegalProvider(status.provider)
+    : null;
 }

@@ -176,3 +176,12 @@ The staging Lex acquisition/parse slice is operational, but it is not a producti
 Advice ingestion, RU/UZ corpus coverage, historical revisions, midnight Asia/Tashkent sync, source health alerts, hybrid retrieval, citation verification, legal-editor browser QA, and the 250-scenario evaluation are incomplete. Authenticated browser traversal is also open because the available local browser runtime is unavailable; anonymous Cloudflare Access denial is the only HTTP/browser boundary proven in this checkpoint.
 
 The deployed Worker version exposes only three secret binding names. A live OpenAI/Anthropic Phase 4 call must not be attempted or reported until the exact staging version proves the required provider secret names and server-side model configuration. Secret values must never be requested in chat.
+
+## Phase 4 open gates — 2026-07-30
+
+- `OPENAI_API_KEY` is absent from the inspected staging Worker.
+- `ANTHROPIC_API_KEY` is absent from the inspected staging Worker.
+- No live OpenAI response, Anthropic response, or provider failover is claimed.
+- Chat streaming, stop, edit, regenerate, branch history, memory, guest flow, and entitlement service are not implemented.
+- Retrieval is exact lexical retrieval from current verified D1 material; Vectorize hybrid retrieval, reranking, and citation revalidation remain open.
+- Authenticated browser QA is blocked by a local browser-control kernel failure before connection; anonymous Access denial is verified and Access was not bypassed.

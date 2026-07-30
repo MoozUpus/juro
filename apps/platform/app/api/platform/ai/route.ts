@@ -179,6 +179,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'conversation',?,'ai_chat_completed',?,?)",
     ).bind(crypto.randomUUID(), workspace.id, user.id, conversationId, JSON.stringify({
       runId: reservation.runId, provider: aiResult.provider, model: aiResult.model,
+      fallbackFromProvider: aiResult.fallbackFromProvider,
       sourceCount: result.sources.length, responseKind: result.responseKind,
     }), now),
   ];
@@ -189,6 +190,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
       workspaceId: workspace.id, userId: user.id, idempotencyKey,
       conversationId, requestMessageId: userMessageId, responseMessageId: assistantMessageId,
       providerResponseId: aiResult.providerResponseId, model: aiResult.model,
+      provider: aiResult.provider,
+      fallbackFromProvider: aiResult.fallbackFromProvider,
       inputTokens: aiResult.usage.inputTokens, outputTokens: aiResult.usage.outputTokens,
       cachedInputTokens: aiResult.usage.cachedInputTokens, attempts: aiResult.attempts,
       latencyMs: aiResult.latencyMs, chargeable: result.responseKind === "answer",
@@ -204,6 +207,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
   return response({
     conversationId, messageId: assistantMessageId, runId: reservation.runId,
     correlationId: reservation.correlationId, result, facts, sources: result.sources,
+    technicalDetails: {
+      provider: aiResult.provider,
+      model: aiResult.model,
+      fallbackFromProvider: aiResult.fallbackFromProvider,
+    },
     usage: await usageSummary(db, workspace.id, user.id),
   }, 201);
 });

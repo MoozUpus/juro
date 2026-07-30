@@ -144,3 +144,13 @@ Model names, feature flags, URLs, and email sender identities are server-side va
 protected email-change UI. Email change uses one provider batch request with a
 challenge-derived idempotency key; neither the API key, either code, nor an
 unmasked address may be written to logs or durable audit metadata.
+
+## Phase 4 provider recheck — 2026-07-30
+
+Read-only `wrangler secret list --name juro-platform-staging` evidence contradicts the earlier informal assumption that AI secrets were entered.
+
+- `OPENAI_API_KEY`: absent;
+- `ANTHROPIC_API_KEY`: absent;
+- staging model variables: present in source configuration and contain no credentials.
+
+No secret value was requested or exposed. The owner action, when ready, is to add each provider key directly through protected Cloudflare controls. Live provider and fallback tests must follow before any feature is described as working in staging.

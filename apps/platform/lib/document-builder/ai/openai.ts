@@ -48,12 +48,13 @@ export type AiProviderUsage = {
 
 export type AiStructuredResult<T> = {
   data: T;
-  provider: "openai";
+  provider: "openai" | "anthropic";
   model: string;
   providerResponseId: string | null;
   attempts: number;
   latencyMs: number;
   usage: AiProviderUsage;
+  fallbackFromProvider: "openai" | "anthropic" | null;
 };
 
 export function hasAiConfiguration(): boolean {
@@ -163,6 +164,7 @@ export async function callOpenAiStructured<T>(options: {
           attempts: attempt,
           latencyMs: Date.now() - startedAt,
           usage: totalUsage,
+          fallbackFromProvider: null,
         };
       } catch {
         if (attempt < maxAttempts) continue;

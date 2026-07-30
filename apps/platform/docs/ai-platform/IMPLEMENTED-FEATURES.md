@@ -124,3 +124,14 @@ The following Phase 3 vertical slice is implemented and proven in owner-only sta
 - replay suppression across an additional cron cycle.
 
 The live probe produced one source/version/review and zero published sections/chunks. No source is marked verified and no Vectorize write occurs. STAGING-0036-EVIDENCE.md contains exact IDs, hashes, sizes, tests, restore, and limitations.
+
+## Phase 4 legal chat boundary
+
+The feature branch now contains a real authenticated `POST /api/platform/ai` boundary rather than a fake answer surface.
+
+- strict RU/UZ Uzbekistan-only response schema and Zod validation;
+- verified-source allowlist plus fail-closed no-source clarification;
+- idempotency, monthly reservation, charge/release, provider usage, and audit persistence;
+- OpenAI Responses API primary adapter;
+- Anthropic Messages API structured-output fallback that cannot bypass a safety refusal;
+- real UI rendering for findings, assumptions, risks, actions, documents, deadlines, sources, and usage.

@@ -1,0 +1,132 @@
+import { runtimeEnv } from "../storage/runtime";
+import {
+  AiUnavailableError,
+  type AiProviderUsage,
+  type AiStructuredResult,
+} from "./openai";
+
+interface AnthropicMessagesPayload {
+  id?: string;
+  model?: string;
+  content?: Array<{ type?: string; text?: string }>;
+  stop_reason?: string | null;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+  };
+  error?: { message?: string };
+}
+
+export function hasAnthropicConfiguration(): boolean {
+  return Boolean(runtimeEnv().ANTHROPIC_API_KEY);
+}
+
+export async function callAnthropicStructured<T>(options: {
+  instructions: string;
+  input: unknown;
+  schema: Record<string, unknown>;
+  parse: (value: unknown) => T;
+  timeoutMs?: number;
+  requestId?: string;
+  model?: string;
+  maxAttempts?: 1 | 2;
+}): Promise<AiStructuredResult<T>> {
+  const configuration = runtimeEnv();
+  const apiKey = configuration.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new AiUnavailableError("Резервный AI-провайдер не подключён: отсутствует серверный ключ.");
+  }
+  const model = options.model || configuration.ANTHROPIC_FALLBACK_MODEL || "claude-sonnet-4-6";
+  const startedAt = Date.now();
+  const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
+  const maxAttempts = options.maxAttempts ?? 2;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
+    try {
+      const response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "content-type": "application/json",
+          ...(options.requestId ? { "x-client-request-id": options.requestId } : {}),
+        },
+        body: JSON.stringify({
+          model,
+          max_tokens: 8_192,
+          system: options.instructions,
+          messages: [{
+            role: "user",
+            content: typeof options.input === "string" ? options.input : JSON.stringify(options.input),
+          }],
+          output_config: {
+            format: {
+              type: "json_schema",
+              schema: options.schema,
+            },
+          },
+        }),
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => ({})) as AnthropicMessagesPayload;
+      totalUsage.inputTokens += payload.usage?.input_tokens ?? 0;
+      totalUsage.outputTokens += payload.usage?.output_tokens ?? 0;
+      totalUsage.cachedInputTokens += payload.usage?.cache_read_input_tokens ?? 0;
+
+      if (!response.ok) {
+        const retryable = response.status === 408 || response.status === 409 || response.status === 429 || response.status >= 500;
+        if (retryable && attempt < maxAttempts) continue;
+        throw new AiUnavailableError(
+          `Резервная AI-проверка недоступна: ${payload.error?.message || `HTTP ${response.status}`}`,
+          "PROVIDER_UNAVAILABLE",
+          retryable,
+        );
+      }
+      if (payload.stop_reason === "refusal") {
+        throw new AiUnavailableError("AI-провайдер отказался обрабатывать запрос.", "AI_REFUSED", false);
+      }
+      if (payload.stop_reason === "max_tokens") {
+        if (attempt < maxAttempts) continue;
+        throw new AiUnavailableError("Резервный AI-ответ превысил допустимый размер.", "INVALID_AI_OUTPUT", false);
+      }
+      if (payload.stop_reason && payload.stop_reason !== "end_turn" && payload.stop_reason !== "stop_sequence") {
+        throw new AiUnavailableError(`Резервная AI-проверка не завершена: ${payload.stop_reason}.`, "PROVIDER_UNAVAILABLE", true);
+      }
+      const text = payload.content?.find((item) => item.type === "text" && item.text)?.text;
+      if (!text) {
+        if (attempt < maxAttempts) continue;
+        throw new AiUnavailableError("Резервная AI-проверка не вернула структурированный результат.", "INVALID_AI_OUTPUT", false);
+      }
+      try {
+        return {
+          data: options.parse(JSON.parse(text)),
+          provider: "anthropic",
+          model: payload.model || model,
+          providerResponseId: payload.id || response.headers.get("request-id"),
+          attempts: attempt,
+          latencyMs: Date.now() - startedAt,
+          usage: totalUsage,
+          fallbackFromProvider: null,
+        };
+      } catch {
+        if (attempt < maxAttempts) continue;
+        throw new AiUnavailableError("Резервная AI-проверка вернула результат вне контракта.", "INVALID_AI_OUTPUT", false);
+      }
+    } catch (error) {
+      if (error instanceof AiUnavailableError) throw error;
+      if (error instanceof DOMException && error.name === "AbortError") {
+        if (attempt < maxAttempts) continue;
+        throw new AiUnavailableError("Резервная AI-проверка превысила время ожидания.", "PROVIDER_TIMEOUT", true);
+      }
+      if (attempt >= maxAttempts) {
+        throw new AiUnavailableError("Резервная AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);
+      }
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw new AiUnavailableError("Резервная AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);
+}
