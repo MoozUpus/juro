@@ -1,7 +1,7 @@
 # Cinematic platform prototype route
 
 Updated: 2026-07-30
-Status: isolated route implemented and locally verified; remote staging deployment pending; production UI unchanged.
+Status: isolated route deployed to owner-only staging; production UI unchanged; authenticated visual QA remains open.
 
 ## Required surface
 
@@ -63,6 +63,8 @@ After review, production migration still requires a separate explicit UI-replace
 
 The prototype reuses `WorkspaceShellLayout`, `PlatformShell`, and `DashboardClient`; it therefore reads the authenticated user, active workspace, and `/api/platform/dashboard` rather than demo objects. Its route map opens real AI chat, analysis, builder, cases, plan, consultation, profile, and settings surfaces. Missing avatar voice capability is shown as an explicit disabled static fallback.
 
-Automated local evidence currently covers noindex, exact staging guard, authentication source contracts, production-entry 404, RU/UZ copy, responsive/preference CSS, static Jurobek, no new motion runtime, type-check, lint, core/rendered tests, and staging build route manifests.
+The exact artifact is deployed as Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` at 100% of `juro-platform-staging` traffic. The owner entry URL is `https://staging.app.juro.uz/ru/individual/prototypes/platform/cinematic`; Cloudflare Access and the application session are both required. Anonymous requests prove the Access boundary only.
+
+Automated evidence covers noindex, exact staging guard, authentication source contracts, production-entry 404, RU/UZ copy, responsive/preference CSS, static Jurobek, no new motion runtime, type-check, lint, core/rendered tests, staging/production-profile build manifests, D1 integrity, binding read-back, and protected HTTP boundary.
 
 Authenticated screenshot, keyboard/axe, zoom, console, and performance gates remain open and must not be inferred from source/build checks.

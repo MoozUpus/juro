@@ -232,6 +232,7 @@ No Phase 5 production-readiness claim is made.
 
 ## Phase 8–10 design and release open gates — 2026-07-30
 
+- The exact prototype is deployed to protected staging as Worker version `cfef8153-3322-4ce5-b271-3478a0531b28`; deployment itself does not close the authenticated design gate.
 - The owner-approved rigged Jurobek source is absent; armature, skinning, clips, shirt lettering, facial corrections, gaze, materials, lip sync, and 3D optimization are not implemented or claimed.
 - STT, TTS, realtime voice, audio retention/purge, and voice-with-avatar remain feature-off; text AI remains the honest fallback.
 - Authenticated screenshots, keyboard traversal, axe, NVDA/VoiceOver, 200% zoom, console/hydration, 320–1440+ matrix, and real-device touch checks remain blocked by the recorded browser-control kernel failure. Access was not bypassed.

@@ -1678,11 +1678,24 @@ The consultation flow keeps the existing atomic booking/consent/audit batch, add
 
 ## D-081 — isolate Cinematic Legal Intelligence behind an exact staging boundary
 
-Status: accepted and locally verified; remote staging deployment pending
+Status: accepted, deployed to protected staging, and control-plane verified; authenticated visual gate open
 Date: 2026-07-30
 
 The first cinematic platform slice is an additive authenticated route, not a replacement of canonical UI. It requires exact `APP_ENV=staging`, carries `noindex/nofollow/nocache`, reuses the real shell, tenant, dashboard API, and canonical workflow routes, and has separate personal and business-workspace paths. The unscoped entry returns 404 in a production artifact. No schema, provider, secret, or dependency change is introduced.
 
 The owner-approved Jurobek 3D source is absent. The prototype uses only the existing 60,670-byte WebP, labels it as a static no-WebGL fallback, links to real text chat, and does not simulate microphone, STT, TTS, lip sync, or a live lawyer. Motion is limited to short state feedback and respects reduced motion/transparency/contrast. The Impeccable detector returned no findings; the remaining shared grid/width shell transition is recorded as production migration debt rather than changed before approval.
 
+The exact source is deployed as Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` at 100% traffic. D1 integrity, exact binding inventory, secret names, Access denial, and unchanged production version were re-read. Chrome automation still fails before navigation, so screenshots and interactive accessibility/performance evidence are not inferred from source or control-plane checks.
+
 Production functional deployment and production UI replacement remain two separate owner approvals.
+
+## D-082 — never apply a duplicate environment selector to a flattened staging Worker config
+
+Status: accepted after corrective staging deployment
+Date: 2026-07-30
+
+The generated `dist/server/wrangler.json` already resolves the staging Worker identity. Deployment uses explicit `--name juro-platform-staging`, `--keep-vars`, and `--strict` without a process-level `CLOUDFLARE_ENV=staging`. Adding that environment selector made Wrangler append a second suffix and target `juro-platform-staging-staging`.
+
+The incorrect Worker never received custom-domain traffic and failed while reconciling already-owned Queue consumers. It was deleted by exact name and absence was confirmed by error `10007`. The correct Worker was then deployed and read back at 100% traffic. This correction did not mutate production or shared data resources.
+
+Build/artifact validation may still set `CLOUDFLARE_ENV=staging` in a separate process. The variable must not leak into the flattened-artifact deploy process.

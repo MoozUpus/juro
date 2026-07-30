@@ -201,7 +201,7 @@ Worker version `5feeab28-f23e-4dd6-a95c-88963306bf2a` serves 100% of `juro-platf
 
 ## Phase 8 cinematic staging prototype — 2026-07-30
 
-The current candidate adds a protected, isolated Cinematic Legal Intelligence surface without replacing canonical routes:
+Protected staging now contains an isolated Cinematic Legal Intelligence surface without replacing canonical routes:
 
 - exact staging-only server guard and noindex metadata;
 - personal and business-workspace prototype routes;
@@ -212,4 +212,6 @@ The current candidate adds a protected, isolated Cinematic Legal Intelligence su
 - mobile/tablet/desktop CSS plus reduced-motion, reduced-transparency, increased-contrast, and forced-colors states;
 - no new dependency, schema migration, WebGL, fake provider result, or production UI change.
 
-Local type-check, lint, 41 targeted core tests, 28 rendered Worker tests, staging build, and Impeccable detector pass. Remote deployment and authenticated visual/browser gates remain pending; see `STAGING-PHASE8-CINEMATIC-PROTOTYPE-EVIDENCE.md`.
+Local type-check, lint, 41 targeted core tests, 28 rendered Worker tests, full 416-test regression, staging/production-profile builds, artifact checks, document smokes, secret scan, and Impeccable detector pass. Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` serves 100% of `juro-platform-staging`; D1 integrity and exact binding/Access/production read-backs pass.
+
+Authenticated visual/browser, axe, zoom, real-device, WebGL/GPU/memory, and performance gates remain open; see `STAGING-PHASE8-CINEMATIC-PROTOTYPE-EVIDENCE.md`.

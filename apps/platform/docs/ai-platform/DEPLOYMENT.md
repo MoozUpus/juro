@@ -19,9 +19,11 @@ deployed without the separate production authorization required by the owner.
 
 ## Staging deployment target
 
-The checked-in and deployed target is `juro-platform-staging`. Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` serves 100% from pushed commit `cd24095c8307a4c3b145549f147a823000a438e3`. The exact flattened artifact was built with the staging profile and deployed with `--env staging`, `--keep-vars`, and `--strict`; production was not targeted.
+The checked-in and deployed target is `juro-platform-staging`. Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` serves 100% from local commit `8cb9fea`. The exact flattened artifact was built with the staging profile and deployed from `dist/server/wrangler.json` with explicit `--name juro-platform-staging`, `--keep-vars`, and `--strict`; production was not targeted.
 
 The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route, and the single Access-protected custom domain `staging.app.juro.uz`. It binds only staging D1/R2/Queues/Vectorize/Analytics resources. `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and `ACCOUNT_DELETION_PURGE_ENABLED` are true only in staging. Legal ingestion and the staff API remain false.
+
+Do not combine the already flattened generated staging config with a second `CLOUDFLARE_ENV=staging` deploy selector. That combination produced the unintended name `juro-platform-staging-staging`; its Queue attachment failed, the exact Worker was deleted, and an API read-back returned expected `10007`. The corrected command omits the duplicate environment selector.
 
 Exactly two staging consumers are attached: `staging-email-notifications` (concurrency 2) and `staging-data-retention-cleanup` (concurrency 1), each with five retries and its own zero-consumer DLQ. The only schedule is locked outbox dispatch `*/5 * * * *`. All other consumers remain unattached. Production has no equivalent activation.
 
