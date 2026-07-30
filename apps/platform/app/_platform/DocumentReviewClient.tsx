@@ -110,10 +110,8 @@ function SingleDocumentReview({ locale }: { locale: PlatformLocale }) {
 function AnalysisView({ analysis, ru }: { analysis: Analysis; ru: boolean }) {
   const summary = analysis.summary;
   const canOpen = analysis.status === "completed";
-  const waitingMessage = analysis.status === "quarantined"
-    ? (ru ? "Файл помещён в карантин и не передан AI: staging-сканер вредоносного содержимого ещё не подключён." : "Fayl karantinga joylandi va AI ga yuborilmadi: staging zararli fayl skaneri hali ulanmagan.")
-    : (ru ? "Файл ещё не прошёл обязательную проверку безопасности и не передан AI." : "Fayl majburiy xavfsizlik tekshiruvidan hali o‘tmadi va AI ga yuborilmadi.");
-  return <article className="review-result"><div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div>{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}</div>{analysis.status !== "completed" ? <div className="review-awaiting"><AlertTriangle /><div><h3>{ru ? "Анализ не запущен" : "Tahlil ishga tushirilmadi"}</h3><p>{waitingMessage}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}</article>;
+  const state = analysisState(analysis.status, ru);
+  return <article className="review-result"><div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div>{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}</div>{analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}</article>;
 }
 
 function ListBlock({ title, items }: { title: string; items?: string[] }) {
@@ -125,8 +123,31 @@ function statusLabel(status: string, ru: boolean) {
   if (status === "quarantined") return ru ? "В карантине" : "Karantinda";
   if (status === "uploaded") return ru ? "Проверка файла" : "Fayl tekshirilmoqda";
   if (status === "initiated") return ru ? "Ожидает загрузки" : "Yuklashni kutmoqda";
+  if (status === "ready") return ru ? "Готов к анализу" : "Tahlilga tayyor";
+  if (status === "processing") return ru ? "Анализируется" : "Tahlil qilinmoqda";
+  if (status === "persisting") return ru ? "Сохраняет результат" : "Natija saqlanmoqda";
+  if (status === "awaiting_ocr") return ru ? "Ожидает OCR" : "OCR kutilmoqda";
+  if (status === "awaiting_external_extraction") return ru ? "Ожидает безопасного извлечения" : "Xavfsiz ajratish kutilmoqda";
+  if (status === "awaiting_chunked_analysis") return ru ? "Ожидает пакетного анализа" : "Bo‘lib tahlil qilish kutilmoqda";
   if (status === "awaiting_ai_configuration") return ru ? "Ожидает подключения AI" : "AI ulanishini kutmoqda";
+  if (status === "failed") return ru ? "Ошибка обработки" : "Qayta ishlash xatosi";
   return ru ? "Файл сохранён" : "Fayl saqlandi";
+}
+
+function analysisState(status: string, ru: boolean) {
+  const states: Record<string, [string, string, string, string]> = {
+    quarantined: ["Анализ не запущен", "Tahlil ishga tushirilmadi", "Файл помещён в карантин и не передан AI: staging-сканер вредоносного содержимого ещё не подключён.", "Fayl karantinga joylandi va AI ga yuborilmadi: staging zararli fayl skaneri hali ulanmagan."],
+    processing: ["Идёт анализ", "Tahlil ketmoqda", "JURO извлекает структуру документа и проверяет выводы. Можно покинуть страницу и вернуться позже.", "JURO hujjat tuzilishini ajratmoqda va xulosalarni tekshirmoqda. Sahifadan chiqib, keyin qaytish mumkin."],
+    persisting: ["Результат сохраняется", "Natija saqlanmoqda", "Анализ завершён у провайдера; JURO атомарно сохраняет нормализованный результат.", "Provayder tahlilni yakunladi; JURO normallashtirilgan natijani atomar saqlamoqda."],
+    awaiting_ocr: ["Нужно распознать скан", "Skan matnini tanish kerak", "Текст не извлечён напрямую. Файл не отправлен AI и ожидает подключённого OCR-конвейера.", "Matn to‘g‘ridan-to‘g‘ri ajratilmadi. Fayl AI ga yuborilmadi va OCR jarayonini kutmoqda."],
+    awaiting_external_extraction: ["Нужен безопасный обработчик", "Xavfsiz qayta ishlovchi kerak", "Файл превышает лимит встроенного извлечения и не отправлен AI. Требуется потоковый обработчик.", "Fayl ichki ajratish limitidan katta va AI ga yuborilmadi. Oqimli qayta ishlovchi kerak."],
+    awaiting_chunked_analysis: ["Нужен пакетный анализ", "Bo‘lib tahlil qilish kerak", "Извлечённый текст превышает безопасный контекст одного запроса. JURO ожидает разбивку с итоговой проверкой.", "Ajratilgan matn bitta so‘rov uchun xavfsiz kontekstdan katta. JURO bo‘lib tahlil qilishni kutmoqda."],
+    awaiting_ai_configuration: ["AI пока не подключён", "AI hali ulanmagan", "Безопасно извлечённый документ сохранён, но не отправлен провайдеру: server-side AI secret не настроен.", "Xavfsiz ajratilgan hujjat saqlandi, ammo provayderga yuborilmadi: server-side AI siri sozlanmagan."],
+    failed: ["Обработка остановлена", "Qayta ishlash to‘xtadi", "Результат не создан. JURO сохранил диагностический код без содержимого документа; задачу можно безопасно повторить.", "Natija yaratilmadi. JURO hujjat matnisiz diagnostika kodini saqladi; vazifani xavfsiz qayta boshlash mumkin."],
+  };
+  const fallback: [string, string, string, string] = ["Проверка ещё не завершена", "Tekshiruv hali tugamadi", "Файл ещё не прошёл обязательные этапы безопасности и не передан AI.", "Fayl majburiy xavfsizlik bosqichlaridan hali o‘tmadi va AI ga yuborilmadi."];
+  const [headingRu, headingUz, messageRu, messageUz] = states[status] ?? fallback;
+  return { heading: ru ? headingRu : headingUz, message: ru ? messageRu : messageUz };
 }
 
 function riskLabel(level: string, ru: boolean) {

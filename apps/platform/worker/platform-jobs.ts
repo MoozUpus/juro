@@ -16,6 +16,10 @@ import {
   executeLegalSourceNormalization,
 } from "../lib/legal/source-normalization";
 import {
+  DocumentAnalysisProcessingError,
+  executeDocumentAnalysisJob,
+} from "../lib/document-analysis/processor";
+import {
   isStagingDeletionProbe,
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
@@ -92,6 +96,16 @@ type JobErrorCode =
   | "ACCOUNT_DELETION_REQUEST_INVALID"
   | "ACCOUNT_DELETION_STATE_CONFLICT"
   | "ASYNC_RUNTIME_DISABLED"
+  | "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED"
+  | "DOCUMENT_ANALYSIS_EXTRACTION_FAILED"
+  | "DOCUMENT_ANALYSIS_FILE_UNSAFE"
+  | "DOCUMENT_ANALYSIS_INTEGRITY_FAILED"
+  | "DOCUMENT_ANALYSIS_INVALID_OUTPUT"
+  | "DOCUMENT_ANALYSIS_NOT_FOUND"
+  | "DOCUMENT_ANALYSIS_OBJECT_MISSING"
+  | "DOCUMENT_ANALYSIS_OCR_REQUIRED"
+  | "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED"
+  | "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
   | "EMAIL_CONFIGURATION_UNAVAILABLE"
   | "EMAIL_JOB_INVALID"
   | "EMAIL_PROVIDER_REJECTED"
@@ -507,6 +521,21 @@ async function executeJob(
 ): Promise<void> {
   if (queueName !== expectedQueueName(envelope.kind, env.APP_ENV)) {
     throw new SafeJobError("JOB_QUEUE_MISMATCH", false);
+  }
+  if (envelope.kind === "document.analyze") {
+    try {
+      await executeDocumentAnalysisJob(
+        env,
+        envelope.subjectId,
+        envelope.workspaceId!,
+      );
+      return;
+    } catch (error) {
+      if (error instanceof DocumentAnalysisProcessingError) {
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
   }
   if (envelope.kind === "email.send") {
     try {

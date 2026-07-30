@@ -292,7 +292,7 @@ function mockBatch(
 }
 
 function envelope(
-  kind: JobKind = "document.analyze",
+  kind: JobKind = "document.export",
   overrides: Partial<JobEnvelope> = {},
 ): JobEnvelope {
   const tenantKind = new Set<JobKind>([
@@ -669,7 +669,7 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
   const { sqlite, d1 } = createDatabase();
   try {
     const { env } = createEnv(d1);
-    const mismatchedBody = envelope();
+    const mismatchedBody = envelope("document.analyze");
     const mismatch = mockMessage(mismatchedBody, "mismatch");
     await runBatch(
       env,
@@ -686,10 +686,10 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
       "JOB_QUEUE_MISMATCH",
     );
 
-    const disabledBody = envelope("document.analyze", {
-      jobId: "job_document_analyze_disabled",
-      idempotencyKey: "idem_document_analyze_disabled",
-      correlationId: "corr_document_analyze_disabled",
+    const disabledBody = envelope("ocr.process", {
+      jobId: "job_ocr_disabled",
+      idempotencyKey: "idem_ocr_disabled",
+      correlationId: "corr_ocr_disabled",
     });
     const disabled = mockMessage(disabledBody, "disabled_handler");
     await runBatch(
@@ -706,6 +706,60 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
       ).error_code,
       "JOB_HANDLER_NOT_ENABLED",
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("document analysis queue refuses quarantined tenant rows before R2 or AI access", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    sqlite.exec(`
+      CREATE TABLE document_files (
+        id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+        kind TEXT NOT NULL, r2_key TEXT NOT NULL, file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, sha256 TEXT,
+        archived_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );
+      CREATE TABLE document_analyses (
+        id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
+        uploaded_file_id TEXT NOT NULL, status TEXT NOT NULL, summary_json TEXT,
+        error_code TEXT, consent_version TEXT NOT NULL, created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO document_files VALUES (
+        'file_unsafe','ws_test','user_test','analysis_quarantined','quarantine/ws_test/file_unsafe',
+        'synthetic.pdf','application/pdf',10,'${"0".repeat(64)}',NULL,
+        '2026-07-26T00:00:00.000Z','2026-07-26T00:00:00.000Z'
+      );
+      INSERT INTO document_analyses VALUES (
+        'analysis_unsafe','ws_test','user_test','file_unsafe','quarantined',
+        '{"mode":"quick","locale":"ru"}','MALWARE_SCANNER_UNAVAILABLE','2026-07-30',
+        '2026-07-26T00:00:00.000Z','2026-07-26T00:00:00.000Z'
+      );
+    `);
+    const { env } = createEnv(d1);
+    const body = envelope("document.analyze", {
+      jobId: "job_document_unsafe",
+      idempotencyKey: "idem_document_unsafe",
+      subjectId: "analysis_unsafe",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_unsafe",
+    });
+    const item = mockMessage(body, "document_unsafe");
+    await runBatch(env, expectedQueueName(body.kind, "development"), [item.message]);
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    const job = sqlite.prepare(
+      "SELECT status,error_code AS errorCode FROM job_runs WHERE idempotency_key=?",
+    ).get(body.idempotencyKey) as { status: string; errorCode: string };
+    assert.equal(job.status, "rejected");
+    assert.equal(job.errorCode, "DOCUMENT_ANALYSIS_FILE_UNSAFE");
+    const analysis = sqlite.prepare(
+      "SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis_unsafe'",
+    ).get() as { status: string; errorCode: string };
+    assert.equal(analysis.status, "quarantined");
+    assert.equal(analysis.errorCode, "MALWARE_SCANNER_UNAVAILABLE");
   } finally {
     sqlite.close();
   }
