@@ -206,6 +206,15 @@ The following gates remain open:
 
 - no malware scanner marks files `analysis_safe`, so every user upload remains quarantined before the consumer;
 - `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are absent from the exact staging secret-name inventory;
+
+## Phase 6 case/plan open gates — 2026-07-30
+
+- The deployed slice supports existing case creation, plan-step status/date updates, nearest deadline, and builder linkage; it is not the complete Phase 6 lifecycle.
+- Action-plan version history, proposed-plan diff/confirmation, deadline legal-basis calculation, business-day/holiday rules, reminders, task assignees, and complete case-tab APIs remain open.
+- The action-plan creation endpoint still uses the bounded built-in scenario catalogue; AI-proposed plans and explicit user confirmation before task creation are not yet integrated.
+- A `templateCode` query hint can accompany a plan step, but automatic resolution to a category/template route is not claimed; the user can select the real published template while case/step context is preserved.
+- Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
+- No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.
 - no live provider request/fallback, completed result, token/cost row from a real provider, or authenticated browser flow is proven;
 - scanned/image OCR, ZIP and multi-file packages, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
 - retrieval is exact lexical over current verified D1 rows, not complete hybrid Vectorize/reranking/citation revalidation;

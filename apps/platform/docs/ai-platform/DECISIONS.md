@@ -1349,6 +1349,19 @@ Date: 2026-07-29
 Business workspaces use `/:locale/business/:workspaceId/*`. The route layout
 does not trust the identifier: it joins active membership, returns neutral
 not-found behavior when inaccessible, and idempotently synchronizes the active
+
+## D-079 — preserve case-plan authority through document-builder navigation
+
+Status: accepted, locally verified, and deployed to protected staging  
+Date: 2026-07-30
+
+Case and plan-step identifiers are navigation context, never authorization. The action plan now carries syntactically valid UUID context through the library, category, template, back, and language-switch paths. The configured-draft backend remains the authority that verifies the authenticated workspace, case, and plan-step relationship before persistence.
+
+Plan-step mutation now uses a strict 2 KiB JSON boundary, allowlisted statuses, positive optimistic revision, and a real date-only calendar value. Cross-tenant and nonexistent case/step combinations return the same neutral `404`. An accepted write recalculates both plan progress and the case's nearest active deadline and records a content-free case event.
+
+The UI exposes every persisted status and a labelled date input in RU/UZ, serializes writes per step, and preserves keyboard focus, responsive layout, and reduced motion. No schema migration or new Cloudflare resource was needed.
+
+Worker version `39050d54-2ad8-4145-9779-1c06e5fe8e47` serves 100% of `juro-platform-staging`; D1 integrity and anonymous Access denial pass. Authenticated browser traversal remains open because the browser-control runtime failed before connection. Production Worker `juro` remains unchanged. Evidence: `STAGING-PHASE6-CASE-PLAN-BUILDER-EVIDENCE.md`.
 workspace with an audit event. Shell navigation, builder paths, global search
 results, profile links, invitation acceptance, and workspace switching use one
 workspace-aware base.

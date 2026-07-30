@@ -170,3 +170,17 @@ Protected staging now contains the real, fail-closed processing boundary after s
 Worker version `0ba11fcf-a095-436d-a30b-aeacc1aa9c3c` serves 100% of `juro-platform-staging`; queue inventory proves one producer and one consumer. D1 integrity passes and production is unchanged.
 
 This is not a completed live analysis feature: the scanner and AI secrets are absent, so no staging document can yet reach a provider. See `STAGING-PHASE5-ASYNC-DOCUMENT-ANALYSIS-EVIDENCE.md`.
+
+## Phase 6 case-plan-builder continuity
+
+Protected staging now contains a functional bounded slice connecting cases, plans, deadlines, and the existing document builder:
+
+- strict tenant-scoped plan-step mutation with optimistic revision fencing;
+- real date-only validation and nearest-active-deadline recalculation;
+- neutral inaccessible-object response;
+- RU/UZ date and complete status controls;
+- valid case/step context preserved across library, category, template, back, and locale navigation;
+- existing builder-side tenant validation retained before draft creation;
+- accessible expansion state, touch target, responsive layout, and reduced-motion behavior.
+
+Worker version `39050d54-2ad8-4145-9779-1c06e5fe8e47` serves 100% of `juro-platform-staging`. No migration or new Cloudflare resource was added. D1 integrity and anonymous Access denial pass; production is unchanged. See `STAGING-PHASE6-CASE-PLAN-BUILDER-EVIDENCE.md`.
