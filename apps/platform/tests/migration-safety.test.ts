@@ -57,6 +57,9 @@ const businessWorkspaceIdentityEntry = journal.entries.find(({ idx }) => idx ===
 const legalSourcePublicationLifecycleEntry = journal.entries.find(
   ({ idx }) => idx === 35,
 );
+const legalSourceCurrentUrlGuardEntry = journal.entries.find(
+  ({ idx }) => idx === 36,
+);
 
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
@@ -140,6 +143,10 @@ assert.ok(
 assert.ok(
   legalSourcePublicationLifecycleEntry,
   "Drizzle journal must contain migration 0035",
+);
+assert.ok(
+  legalSourceCurrentUrlGuardEntry,
+  "Drizzle journal must contain migration 0036",
 );
 assert.ok(
   onboardingProfileEntry,
@@ -3986,4 +3993,92 @@ test("0035 adds current legal-source activation and append-only lifecycle eviden
       .length,
     6,
   );
+});
+
+test("0036 accepts current Lex URL shapes without weakening source guards", () => {
+  const sql = migrationSql(legalSourceCurrentUrlGuardEntry);
+  assert.equal(statements(sql).length, 2);
+  assert.match(sql, /DROP TRIGGER `legal_source_fetch_requests_insert_guard`/);
+  assert.match(sql, /CREATE TRIGGER `legal_source_fetch_requests_insert_guard`/);
+  assert.match(sql, /NEW.`canonical_id` <>/);
+
+  const previous = JSON.parse(readFileSync(
+    new URL("meta/0035_snapshot.json", drizzleRoot),
+    "utf8",
+  )) as { id: string; tables: Record<string, unknown> };
+  const snapshot = JSON.parse(readFileSync(
+    new URL("meta/0036_snapshot.json", drizzleRoot),
+    "utf8",
+  )) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, unknown>;
+  };
+  assert.equal(snapshot.prevId, previous.id);
+  assert.deepEqual(snapshot.tables, previous.tables);
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-30T13:45:00.000Z";
+    const insert = db.prepare(`
+      INSERT INTO legal_source_fetch_requests (
+        id, environment, source_kind, locale, requested_url, canonical_id,
+        idempotency_key, status, attempt_count, created_at, updated_at
+      ) VALUES (?, 'staging', 'lex', ?, ?, ?, ?, 'queued', 0, ?, ?)
+    `);
+
+    insert.run(
+      "current-ru-positive",
+      "ru",
+      "https://lex.uz/ru/docs/8282675",
+      "8282675",
+      "current-ru-positive-key",
+      now,
+      now,
+    );
+    insert.run(
+      "current-uz-negative",
+      "uz",
+      "https://lex.uz/uz/docs/-8283652",
+      "-8283652",
+      "current-uz-negative-key",
+      now,
+      now,
+    );
+    assert.equal(
+      db.prepare(`
+        SELECT count(*) AS count
+        FROM legal_source_fetch_requests
+        WHERE id IN ('current-ru-positive','current-uz-negative')
+      `).get()!.count,
+      2,
+    );
+
+    for (const [id, url, canonicalId] of [
+      ["canonical-mismatch", "https://lex.uz/ru/docs/8282675", "-8282675"],
+      ["plus-sign", "https://lex.uz/ru/docs/+42", "+42"],
+      ["double-minus", "https://lex.uz/ru/docs/--42", "--42"],
+      ["trailing-slash", "https://lex.uz/ru/docs/42/", "42/"],
+      ["query", "https://lex.uz/ru/docs/42?download=1", "42"],
+      ["foreign-host", "https://lex.uz.evil.example/ru/docs/42", "42"],
+    ]) {
+      assert.throws(
+        () => insert.run(
+          id,
+          "ru",
+          url,
+          canonicalId,
+          `${id}-key`,
+          now,
+          now,
+        ),
+        /legal source fetch request URL invalid/,
+      );
+    }
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
 });
