@@ -1631,3 +1631,16 @@ The object key is opaque and contains no source filename. Until a real privacy-a
 The quarantine object remains under a safe prefix in the environment primary private bucket for this slice. Existing account-deletion purge inventories that bucket; moving to the separate quarantine bucket before extending purge would create orphan risk. A later expand-contract step may cut over only after cross-bucket purge and restore evidence exists.
 
 ZIP/DOCX magic confirms only a ZIP container, not archive safety. Traversal, bomb ratio, nesting, count, timeout, DOCX structure, malware, OCR, and prompt-injection gates remain explicitly incomplete. Production is unchanged.
+
+## D-078 — consume only safe document-analysis objects and persist verified output
+
+Status: accepted, locally verified, and deployed to protected staging; scanner/provider/browser gates remain open
+Date: 2026-07-30
+
+The staging document-analysis queue now has one reviewed serial consumer and a distinct DLQ. The handler accepts identifiers only, rechecks tenant ownership and `analysis_safe` state, verifies R2 size and SHA-256, and refuses quarantine before any extraction or provider call. Existing job-ledger idempotency is supplemented by a durable `persisting` state so a persistence retry cannot silently create a second provider run.
+
+PDF/DOCX extraction is bounded. Scans, images, oversized binaries, and oversized extracted text move to explicit waiting states instead of being guessed or truncated. Retrieved legal context is limited to activated verified Lex/Advice rows; every provider result passes the same Zod/source boundary and every quoted document excerpt must occur in extracted text.
+
+Anthropic is primary for document analysis and OpenAI is fallback only for retryable availability/timeout/invalid-output failures. Safety refusal is terminal. The current official configuration uses `claude-fable-5` for document analysis and `gpt-5.6-sol` for OpenAI. Actual provider/model, usage, normalized results, and content-free audit metadata are persisted.
+
+The deployed staging Worker has no Anthropic/OpenAI secret binding and the malware scanner is absent. Therefore the end-to-end live provider path remains intentionally unreachable and no completed analysis is claimed. Production remains unchanged. Evidence: `STAGING-PHASE5-ASYNC-DOCUMENT-ANALYSIS-EVIDENCE.md`.

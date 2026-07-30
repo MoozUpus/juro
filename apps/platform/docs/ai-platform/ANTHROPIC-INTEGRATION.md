@@ -26,3 +26,19 @@ The owner must add the secret through protected Cloudflare controls. A live fall
 
 Anthropic document analysis is a separate Phase 5 adapter and is not claimed by this legal-chat fallback.
 
+
+## Document-analysis primary adapter
+
+Phase 5 adds a separate Anthropic-primary document-analysis boundary:
+
+- staging variable: `ANTHROPIC_DOCUMENT_MODEL=claude-fable-5`;
+- the model selection was rechecked against Anthropic's official current model overview on 2026-07-30;
+- the input contains bounded extracted document text and server-selected verified source excerpts, never the R2 object or a client-supplied system instruction;
+- the output uses a dedicated JSON Schema plus Zod, verified-source, and exact-document-excerpt validation;
+- retryable provider availability/timeout/invalid-output failures may use the OpenAI adapter; refusal is terminal;
+- the actual provider/model/response ID, token usage, latency, attempts, normalized result, and cost-ledger metadata are persisted;
+- raw provider output is not persisted by this path.
+
+The deployed Worker has the model variable but does not expose `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. No live analysis or fallback is claimed. The upload boundary also remains quarantined until a real malware scanner is connected.
+
+The default is environment configuration, not a secret. Future model changes must be capability-checked against official provider documentation and replay the contract/evaluation suite rather than silently changing a production route.

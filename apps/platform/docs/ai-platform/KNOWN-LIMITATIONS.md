@@ -197,3 +197,18 @@ The deployed Worker version exposes only three secret binding names. A live Open
 - Authenticated staging HTTP and R2 round-trip evidence remains open because the available browser-control kernel fails before connecting to the existing Access session. Access was not bypassed.
 - The separate staging quarantine bucket is not yet used; quarantine is an opaque safe prefix in the primary private staging bucket so existing account-deletion purge remains complete.
 - No Phase 5 production readiness or document-analysis quality threshold is claimed.
+
+## Phase 5 async-analysis open gates — 2026-07-30
+
+The protected staging Worker now has a real document-analysis consumer, bounded PDF/DOCX extraction, verified-source retrieval, structured Anthropic/OpenAI adapters, normalized persistence, and honest RU/UZ waiting/error states. This supersedes the earlier statement that all extraction and provider adapters were unimplemented.
+
+The following gates remain open:
+
+- no malware scanner marks files `analysis_safe`, so every user upload remains quarantined before the consumer;
+- `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are absent from the exact staging secret-name inventory;
+- no live provider request/fallback, completed result, token/cost row from a real provider, or authenticated browser flow is proven;
+- scanned/image OCR, ZIP and multi-file packages, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
+- retrieval is exact lexical over current verified D1 rows, not complete hybrid Vectorize/reranking/citation revalidation;
+- corrections, redline, exports, the 100-package evaluation, DLQ redrive, and full performance/security/browser gates remain incomplete.
+
+No Phase 5 production-readiness claim is made.

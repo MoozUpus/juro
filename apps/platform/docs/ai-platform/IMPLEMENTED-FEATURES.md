@@ -153,3 +153,20 @@ The feature branch implements and locally verifies:
 - a fail-closed `quarantined` state that never invokes AI while the scanner is unavailable;
 - RU/UZ UI integration from both dashboard and document-review surfaces;
 - explicit retirement of the unsafe synchronous multipart AI path.
+
+## Phase 5 async analysis consumer
+
+Protected staging now contains the real, fail-closed processing boundary after secure upload:
+
+- one serial `staging-document-analysis` consumer plus a distinct DLQ;
+- tenant/object-state validation before R2 or provider access;
+- R2 size/SHA-256 integrity verification;
+- bounded PDF/DOCX extraction and explicit OCR/capacity waiting states;
+- verified allowlisted Lex/Advice retrieval;
+- Anthropic-primary/OpenAI-fallback structured output with Zod, source, and excerpt enforcement;
+- durable normalized result, risk, AI-run, usage-ledger, and audit persistence;
+- replay/idempotency fencing and honest RU/UZ processing/error states.
+
+Worker version `0ba11fcf-a095-436d-a30b-aeacc1aa9c3c` serves 100% of `juro-platform-staging`; queue inventory proves one producer and one consumer. D1 integrity passes and production is unchanged.
+
+This is not a completed live analysis feature: the scanner and AI secrets are absent, so no staging document can yet reach a provider. See `STAGING-PHASE5-ASYNC-DOCUMENT-ANALYSIS-EVIDENCE.md`.

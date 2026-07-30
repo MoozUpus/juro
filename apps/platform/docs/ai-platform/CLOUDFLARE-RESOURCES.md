@@ -299,3 +299,17 @@ juro-platform-staging serves Worker version d65ad586-98ef-47bc-95e2-158e4dfd45cf
 juro-staging is through migration 0036. The legal source probe persisted one raw and one normalized content-addressed object only in private juro-staging-files. The pre/post recovery artifacts are in private juro-staging-backups. No quarantine, production R2, production D1, production Worker, production route, or Sites resource was changed.
 
 Version inspection lists only the names IDENTITY_KEYRING, RESEND_API_KEY, and TURNSTILE_SECRET_KEY. It does not prove broader Phase 4 provider secrets, and no secret value was read. LEGAL_ADVICE_INGESTION_ENABLED, LEGAL_SOURCE_STAFF_API_ENABLED, and STAGING_SYNTHETIC_PROBES_ENABLED remain false.
+
+## Phase 5 async-analysis staging delta — 2026-07-30 UTC
+
+| Evidence | Verified value |
+|---|---|
+| Worker version | `0ba11fcf-a095-436d-a30b-aeacc1aa9c3c` at 100% on `juro-platform-staging` |
+| Source | commit `2456742373ef045328e4d9df09ac6c6ef95bc03a` |
+| Analysis queue | `staging-document-analysis`, ID `5daca3710f954ca49046ff56cfed4176`, one producer + one consumer |
+| DLQ | `staging-document-analysis-dlq`, ID `60b41d382df142edb72be3693c4b61ba` |
+| Database | `juro-staging`; `quick_check=ok`, zero foreign-key violations, zero analysis rows |
+| Secret names | `IDENTITY_KEYRING`, `RESEND_API_KEY`, `TURNSTILE_SECRET_KEY`; AI provider secrets absent |
+| Anonymous HTTP | document-review and canonical document-builder both return `302` at Access |
+
+The new consumer uses serial concurrency, batch size 1, three retries, 30-second retry delay, and the distinct DLQ. No migration was applied in this slice. Production bindings, consumers, traffic, Sites v20, `apps/website`, production D1/R2, and the legacy Worker were not changed.
