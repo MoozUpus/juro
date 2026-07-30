@@ -184,3 +184,17 @@ Protected staging now contains a functional bounded slice connecting cases, plan
 - accessible expansion state, touch target, responsive layout, and reduced-motion behavior.
 
 Worker version `39050d54-2ad8-4145-9779-1c06e5fe8e47` serves 100% of `juro-platform-staging`. No migration or new Cloudflare resource was added. D1 integrity and anonymous Access denial pass; production is unchanged. See `STAGING-PHASE6-CASE-PLAN-BUILDER-EVIDENCE.md`.
+
+## Phase 7 entitlement and specialist-handoff boundary
+
+Protected staging now contains a single server-side entitlement boundary shared by billing and specialist consultations:
+
+- missing or invalid subscription evidence fails closed to Free;
+- only current active/trialing paid evidence enables specialist handoff;
+- Free requests receive typed `PLAN_LIMIT` before any write;
+- case, plan-step, and comparison references receive tenant checks with neutral failures;
+- eligible booking, consent, slot, and audit mutations retain one D1 batch;
+- RU/UZ surfaces show the actual entitlement and do not simulate checkout or assignment;
+- absent payment configuration/adapter returns an honest `503`/`501` response.
+
+Worker version `5feeab28-f23e-4dd6-a95c-88963306bf2a` serves 100% of `juro-platform-staging`. Staging currently has no subscriptions, consultation slots, or bookings, so a live paid handoff is not claimed. Production is unchanged. See `STAGING-PHASE7-ENTITLEMENTS-HANDOFF-EVIDENCE.md`.

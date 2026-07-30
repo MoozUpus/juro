@@ -1657,3 +1657,21 @@ PDF/DOCX extraction is bounded. Scans, images, oversized binaries, and oversized
 Anthropic is primary for document analysis and OpenAI is fallback only for retryable availability/timeout/invalid-output failures. Safety refusal is terminal. The current official configuration uses `claude-fable-5` for document analysis and `gpt-5.6-sol` for OpenAI. Actual provider/model, usage, normalized results, and content-free audit metadata are persisted.
 
 The deployed staging Worker has no Anthropic/OpenAI secret binding and the malware scanner is absent. Therefore the end-to-end live provider path remains intentionally unreachable and no completed analysis is claimed. Production remains unchanged. Evidence: `STAGING-PHASE5-ASYNC-DOCUMENT-ANALYSIS-EVIDENCE.md`.
+
+## D-079 — preserve authoritative case and plan context through the existing builder
+
+Status: accepted, tested, and deployed to protected staging
+Date: 2026-07-30
+
+The existing document builder remains the only builder surface. A valid case and plan-step context is carried through its library, category, template, locale, and back-navigation links, but the query string is never treated as authorization. Draft creation still revalidates the case and step against the authenticated tenant on the server.
+
+Plan-step mutation uses strict bounded JSON, real date-only validation, neutral inaccessible-object responses, and optimistic revision fencing. A successful mutation recalculates plan progress and the nearest active case deadline in the same D1 batch. This avoids parallel lifecycle implementations and preserves the working canonical builder route. Production is unchanged.
+
+## D-080 — derive specialist handoff from one fail-closed entitlement boundary
+
+Status: accepted, tested, and deployed to protected staging
+Date: 2026-07-30
+
+Workspace capability is derived server-side from current D1 subscription evidence. Missing, malformed, unknown, inactive, past-due, or expired evidence resolves to Free. Only current `active` or `trialing` paid evidence enables specialist handoff. The billing and consultation APIs expose the same derived result, and consultation creation checks it before any booking or consent write.
+
+The consultation flow keeps the existing atomic booking/consent/audit batch, adds strict RU/UZ contracts and authoritative case, plan-step, and comparison tenant checks, and returns neutral object errors. Payment remains fail closed until a real configured provider and adapter exist. No subscription, slot, booking, lawyer assignment, or payment was synthesized for evidence. Production is unchanged.
