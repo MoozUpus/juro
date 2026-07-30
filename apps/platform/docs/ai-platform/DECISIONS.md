@@ -52,7 +52,7 @@ Do not modify production schema, data, traffic, domains, secrets, or deployment 
 
 ## D-003 — migration strategy
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Use additive expand-contract migrations:
@@ -65,28 +65,28 @@ An in-D1 table copy is not accepted as a backup. Every remote migration requires
 
 ## D-004 — external collaboration scope
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 An invitation in `invited` state grants no document access. Accepted external collaboration is modeled separately from active-workspace membership, displayed in an explicit shared scope, and always constrained by the more restrictive rule.
 
 ## D-005 — asynchronous infrastructure order
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Implement and test queue consumers, idempotency, DLQ behavior, scheduled locks, and run records before binding live queues or Cron triggers. Do not attach resources to placeholder handlers.
 
 ## D-006 — Vectorize metadata strategy
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Store all required user-document metadata but create at most ten indexed metadata properties per index. Each environment declares a distinct index name intended for a physically separate index; control-plane inventory must prove that separation before `environment` is omitted as a filter. Authorization remains a D1/server check before and after vector search.
 
 ## D-007 — legal source authority
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 LexUZ is the normative source of truth; AdviceUZ supplies practical scenarios; internal JURO materials are always labeled non-official. A citation is not confirmed solely by vector similarity. Exact server-side source/version verification is mandatory.
@@ -95,28 +95,28 @@ The rule governing RU/UZ text divergence remains `pending approval` and must liv
 
 ## D-008 — AI provider configuration
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Provider calls are server-only. Model names are versioned server configuration, not secrets. Structured output is validated with Zod, with bounded repair/retry. Actual provider/model, instruction hash, source index version, and legal database version are recorded for each run.
 
 ## D-009 — personal AI Gateway logging
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 If Cloudflare AI Gateway is used, personal requests disable payload collection while retaining safe cost/latency/error metadata. Semantic cache is disabled for user content. Public non-personal legal-source operations may be cached only after an explicit privacy review.
 
 ## D-010 — deferred provider features
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Realtime audio/video calls and payments use adapter interfaces and disabled feature flags until providers are selected and tested. UI must say “Скоро” and must not simulate calls, charges, or completion.
 
 ## D-011 — Sites binding normalization
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Use `wrangler.jsonc` as the environment-aware source configuration. During Vite build, mutate the resolved Cloudflare config in place. Replace the canonical Sites `DB` and `BUCKET` only for an explicit production build; development and staging retain isolated source bindings. Returning an additional configuration object is prohibited because `defu` concatenates arrays and can produce duplicate binding names.
@@ -125,7 +125,7 @@ Deployable validation targets the flattened `dist/server/wrangler.json`, selecte
 
 ## D-012 — queue content and execution fencing
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Queue envelopes contain opaque identifiers only and reject unknown fields. Tenant-scoped jobs require `workspaceId`; consumers reload and reauthorize state server-side. Job execution and outbox dispatch use separate short leases, owner-token fencing, canonical envelope hashes, and bounded retries.
@@ -138,7 +138,7 @@ namespaced format. No client-supplied key may reach these tables.
 
 ## D-013 — Cron and consumer activation
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Omit `triggers` entirely until the Cloudflare control-plane inventory and reviewed scheduled job exist. `CRON_ENABLED=false` is defense in depth, not a replacement for trigger inventory.
@@ -156,7 +156,7 @@ disabled.
 
 ## D-014 — OTP claim and request atomicity
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 A valid OTP is spent by a guarded `UPDATE ... RETURNING` before account or
@@ -174,7 +174,7 @@ shared `"unknown"` bucket.
 
 ## D-015 — active workspace and external document grants
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Owner authorization requires the document or standalone file to belong to the
@@ -205,7 +205,7 @@ only the original universal 30-day absolute lifetime with the required
 
 ## D-017 — identity key rotation and MFA activation
 
-Status: accepted  
+Status: accepted
 Date: 2026-07-26
 
 Identity encryption uses a versioned server-only key ring: AES-256-GCM with
@@ -1352,7 +1352,7 @@ not-found behavior when inaccessible, and idempotently synchronizes the active
 
 ## D-079 — preserve case-plan authority through document-builder navigation
 
-Status: accepted, locally verified, and deployed to protected staging  
+Status: accepted, locally verified, and deployed to protected staging
 Date: 2026-07-30
 
 Case and plan-step identifiers are navigation context, never authorization. The action plan now carries syntactically valid UUID context through the library, category, template, back, and language-switch paths. The configured-draft backend remains the authority that verifies the authenticated workspace, case, and plan-step relationship before persistence.

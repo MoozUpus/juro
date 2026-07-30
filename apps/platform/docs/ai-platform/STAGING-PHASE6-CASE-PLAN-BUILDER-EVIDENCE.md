@@ -1,7 +1,7 @@
 # Staging Phase 6 — case, deadline, and builder context evidence
 
-Date: 2026-07-30  
-Source commit: `ce09d0e2dca84ed916f1ebd532f282f91c96edc5`  
+Date: 2026-07-30
+Source commit: `ce09d0e2dca84ed916f1ebd532f282f91c96edc5`
 Scope: owner-only `juro-platform-staging`. Production Worker `juro`, the public Sites deployment at `app.juro.uz`, production data, and `apps/website` were not changed.
 
 ## Implemented vertical slice
