@@ -1040,4 +1040,13 @@ test("support tickets are tenant-scoped, validated, and audited", async () => {
   assert.match(support, /assertSafeWrite\(request\)/);
   assert.match(support, /support_ticket_created/);
   assert.match(support, /INSERT INTO support_messages/);
+  const [detail, staffQueue, staffReply] = await Promise.all([
+    readFile(new URL("../app/api/platform/support-tickets/[ticketId]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/admin/support-tickets/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/admin/support-tickets/[ticketId]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(detail, /id=\? AND workspace_id=\? AND requester_user_id=\?/);
+  assert.match(detail, /FROM support_messages WHERE ticket_id=\?/);
+  assert.match(staffQueue, /freshMfaWithinMs: 15 \* 60 \* 1000/);
+  assert.match(staffReply, /support_ticket_replied/);
 });
