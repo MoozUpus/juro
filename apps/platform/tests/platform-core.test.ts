@@ -1031,3 +1031,13 @@ test("assigned lawyer view reveals case metadata only for an active grant", asyn
   assert.match(route, /g\.expires_at IS NULL OR g\.expires_at>\?/);
   assert.match(route, /CASE WHEN g\.id IS NOT NULL THEN cs\.description END/);
 });
+test("support tickets are tenant-scoped, validated, and audited", async () => {
+  const support = await readFile(new URL("../app/api/platform/support-tickets/route.ts", import.meta.url), "utf8");
+  const input = await readFile(new URL("../lib/platform/support.ts", import.meta.url), "utf8");
+  assert.match(input, /supportTicketSchema/);
+  assert.match(input, /technical.*ai_error.*wrong_norm/s);
+  assert.match(support, /WHERE workspace_id=\? AND requester_user_id=\?/);
+  assert.match(support, /assertSafeWrite\(request\)/);
+  assert.match(support, /support_ticket_created/);
+  assert.match(support, /INSERT INTO support_messages/);
+});
