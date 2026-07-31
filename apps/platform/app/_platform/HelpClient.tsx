@@ -2,12 +2,15 @@
 
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import Link from "next/link";
-import { BookOpenCheck, Bot, ExternalLink, FilePenLine, HelpCircle, Scale, ShieldCheck } from "lucide-react";
+import { BookOpenCheck, Bot, ExternalLink, FilePenLine, HelpCircle, LoaderCircle, Scale, ShieldCheck } from "lucide-react";
+import { useState, type FormEvent } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 export function HelpClient({ locale }: { locale: PlatformLocale; accountType: AccountType }) {
   const ru = locale === "ru";
   const base = usePlatformBasePath();
+  const [subject, setSubject] = useState(""); const [message, setMessage] = useState(""); const [sending, setSending] = useState(false); const [supportStatus, setSupportStatus] = useState("");
+  async function submitSupport(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSending(true); setSupportStatus(""); try { const response = await fetch("/api/platform/support-tickets", { method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ category: "technical", severity: "normal", subject, message, locale }) }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || "Ошибка"); setSubject(""); setMessage(""); setSupportStatus(ru ? "Обращение отправлено." : "Murojaat yuborildi."); } catch (value) { setSupportStatus(value instanceof Error ? value.message : String(value)); } finally { setSending(false); } }
   return (
     <section className="help-workspace">
       <header>
@@ -44,7 +47,13 @@ export function HelpClient({ locale }: { locale: PlatformLocale; accountType: Ac
           <Link href={`${base}/settings/privacy`}>{ru ? "Открыть приватность" : "Maxfiylikni ochish"}</Link>
         </article>
       </div>
-      <aside className="help-legal">
+      <form className="help-support" onSubmit={(event) => void submitSupport(event)}>
+        <h2>{ru ? "Написать в поддержку" : "Qo‘llab-quvvatlashga yozish"}</h2>
+        <label>{ru ? "Тема" : "Mavzu"}<input value={subject} minLength={4} maxLength={180} required onChange={(event) => setSubject(event.target.value)} /></label>
+        <label>{ru ? "Сообщение" : "Xabar"}<textarea value={message} minLength={10} maxLength={8000} required onChange={(event) => setMessage(event.target.value)} /></label>
+        {supportStatus && <p role="status">{supportStatus}</p>}
+        <button disabled={sending}>{sending && <LoaderCircle className="spin" />}{ru ? "Отправить" : "Yuborish"}</button>
+      </form>      <aside className="help-legal">
         <BookOpenCheck />
         <div>
           <h2>{ru ? "Правила и ответы" : "Qoidalar va javoblar"}</h2>
