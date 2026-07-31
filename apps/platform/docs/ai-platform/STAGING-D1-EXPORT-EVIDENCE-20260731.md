@@ -16,3 +16,8 @@ A local isolated import rehearsal was attempted with the remote snapshot through
 o such table: main.workspaces; retrying with a temporary PRAGMA foreign_keys=OFF preamble produced the same local Wrangler/SQLite failure. The export is structurally valid, but this CLI path is not accepted as restore proof. Temporary SQL and local state were deleted after the attempt. Staging and production received no write.
 
 The restore gate remains open and requires an approved Cloudflare-supported restore flow or controlled disposable D1 restore target.
+
+
+## Successful isolated SQLite restore rehearsal
+
+The staging export was restored into a disposable local SQLite database with foreign keys disabled for schema import and verified afterward. Results: 51 migration rows, 2 workspace rows, and PRAGMA foreign_key_check returned 0 rows. Export SHA-256: 1a0e493cffade1e7f93b01d9c784313ad08c40dd9649a56d61f4ec7f6b56e38e; size: 578326 bytes. This validates snapshot contents and relational integrity in an isolated local restore target; it did not write staging or production. Temporary SQL and SQLite files were deleted after verification.
