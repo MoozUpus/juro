@@ -235,3 +235,21 @@ Application rollback restores staging traffic to
 `c985f6a3-d7b8-408d-a2dd-8952ece98e47`. Migration `0041` is additive and may remain
 unused. Production functional deployment and production UI replacement remain
 separate, unauthorized actions.
+
+The `0041` sequence completed from exact commit `c8873d3`. Pre/post bookmarks and
+private-R2 portable exports are checksum-verified. Migration `0041` is applied to
+`juro-staging`; Worker version `ffbfe9df-40f8-4442-8080-7eaf1e63fe40` serves 100%
+behind owner-only Access. Rollback is
+`c985f6a3-d7b8-408d-a2dd-8952ece98e47`.
+
+Read-back confirms the existing handler set, one five-minute cron, five reviewed
+consumers, all D1/R2/Vectorize/Queue bindings, and only the three pre-existing
+secret names. `staging-document-export` ID
+`9c7b4a34cf374905961bd0398fd5f13d` retains one staging producer and consumer.
+D1 has 42 migrations, `quick_check=ok`, zero FK violations, zero report rows, and
+zero export outbox rows. Anonymous root, DELETE, and file requests return Access
+`302`; the production builder route retains canonical/auth `307` behavior.
+
+Production Worker `juro` remains
+`91774ed4-72e9-47bb-b93a-a4208d490b24`. Exact evidence is in
+`STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md`.

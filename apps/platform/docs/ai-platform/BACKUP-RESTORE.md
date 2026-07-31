@@ -269,3 +269,20 @@ were retained. Both objects were independently downloaded and matched their loca
 hash. Use Time Travel or the pre export only for demonstrated corruption; normal
 rollback restores Worker version `3bc029a3-8722-4edd-8c05-d615d5ce9a13` and leaves
 the additive empty table unused.
+
+## Migration 0041 staging recovery points — 2026-07-31
+
+Before `0041`, `juro-staging` recorded bookmark
+`00000213-00000000-000050b9-d3188759cc17b15922cc19e3067e435e` and private object
+`d1/juro-staging/20260731-104422/pre-0041.sql`: 458,765 bytes, SHA-256
+`aeafeb5e83aef30a3a3f2af2b4e5a63f0474f6c069696edf3407ef633785aafe`.
+
+After `0041`, the bookmark is
+`00000213-00000002-000050b9-98618a5881cf0c076ff24687e4bae749`; private object
+`d1/juro-staging/20260731-104422/post-0041.sql` is 463,690 bytes with SHA-256
+`99f0357fc665338f53e4a0c6062134ac267cb5fc04dde34f2da12302a5b1d51f`.
+
+Both portable exports were downloaded independently from
+`juro-staging-backups` and matched their local SHA-256. A routine Worker rollback
+does not require D1 restore because `0041` is additive and empty. A Time Travel
+restore is destructive and is reserved for demonstrated D1 corruption.

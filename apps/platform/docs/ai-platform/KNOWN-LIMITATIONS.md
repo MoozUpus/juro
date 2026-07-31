@@ -278,5 +278,7 @@ No Phase 5 production-readiness claim is made.
 - Exports intentionally have no automatic TTL: approved user-content retention is
   explicit per-export deletion or account deletion. A future policy-driven purge
   is not implied by this implementation.
-- Migration `0041` and the exact Worker artifact remain pending protected-staging
-  application at this checkpoint. Production remains separately unauthorized.
+- Migration `0041` and the exact Worker artifact are deployed to protected staging;
+  authenticated provider-generated report completion remains unproven because
+  staging has no completed analysis and no OpenAI/Anthropic secret name.
+  Production remains separately unauthorized.

@@ -826,3 +826,20 @@ foreign-key violations. Contract tests reject cross-tenant source insertion,
 incomplete completion, and invalid transitions. Staging application requires a
 fresh Time Travel bookmark plus checksummed private-R2 pre/post portable exports.
 Application rollback leaves the additive table unused; production is unauthorized.
+
+### Staging `0041` record — 2026-07-31
+
+Preflight proved 41 ledger rows through `0040`, `quick_check=ok`, zero foreign-key
+violations, no report table, zero export/outbox rows, and exactly `0041` pending.
+The pre bookmark was
+`00000213-00000000-000050b9-d3188759cc17b15922cc19e3067e435e`; its 458,765-byte
+private-R2 portable export matched SHA-256
+`aeafeb5e83aef30a3a3f2af2b4e5a63f0474f6c069696edf3407ef633785aafe`.
+
+Wrangler applied only `0041`. Postflight proved 42 ledger rows, 16 columns, five
+explicit indexes, two triggers, zero report rows, `quick_check=ok`, zero FK
+violations, and no pending migration. Post bookmark
+`00000213-00000002-000050b9-98618a5881cf0c076ff24687e4bae749` and the 463,690-byte
+private-R2 export matched SHA-256
+`99f0357fc665338f53e4a0c6062134ac267cb5fc04dde34f2da12302a5b1d51f`.
+Exact evidence is in `STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md`.

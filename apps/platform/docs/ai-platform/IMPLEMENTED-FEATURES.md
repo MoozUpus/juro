@@ -308,3 +308,12 @@ machine-readable JSON and human-readable PDF/DOCX reports:
 The feature is locally implemented and gated for protected staging. It does not
 claim highlighted/redline or comparison-table reports, live provider-generated
 staging artifacts, or production readiness.
+
+Migration `0041` and exact commit `c8873d3` are now deployed only to protected
+staging. Worker version `ffbfe9df-40f8-4442-8080-7eaf1e63fe40` serves 100%; D1,
+Queue, binding, secret-name, Access, backup, and unchanged-production read-backs
+pass. Staging contains zero completed analyses/report rows and no OpenAI/Anthropic
+secret name, so live provider-generated report completion is not claimed.
+
+See `STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md` for exact commands/results
+and rollback evidence.
