@@ -1067,4 +1067,6 @@ test("legal-source health route is staff-gated, same-origin, and no-store", asyn
   assert.match(route, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
   assert.match(route, /cache-control": "private, no-store/);
   assert.match(route, /ACCESS_DENIED/);
+  const page = await readFile(new URL("../app/[locale]/admin/legal-sources/reviews/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
 });

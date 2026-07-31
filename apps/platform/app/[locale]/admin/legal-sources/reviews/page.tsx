@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { LegalSourceHealthPanel } from "../../../../_staff/LegalSourceHealthPanel";
@@ -9,6 +10,7 @@ import { runtimeEnv } from "../../../../../lib/document-builder/storage/runtime"
 import { isLocale } from "../../../../../lib/platform/routing";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = { robots: { index: false, follow: false, nocache: true } };
 
 export default async function LegalSourceReviewsPage({
   params,
