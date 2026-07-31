@@ -3,7 +3,7 @@
 This log records material implementation decisions. Status values are `accepted`, `pending approval`, or `superseded`.
 ## D-084 — legal conclusions require complete corpus freshness and replayable publication evidence
 
-Status: accepted and locally verified; staging deployment pending
+Status: accepted, tested, and deployed to owner-protected staging
 Date: 2026-07-31
 
 A successful single-document fetch or parse is not evidence that the JURO legal database is current. Freshness is established only when both `lex` and `advice` have a successful `initial_corpus`, `scheduled_corpus`, or `manual_corpus` run. The database `asOf` value is the older of the two latest successful run timestamps. A missing, invalid, or future timestamp is `unavailable`; more than seven days is `stale`.
@@ -11,6 +11,8 @@ A successful single-document fetch or parse is not evidence that the JURO legal 
 Before any legal text enters an AI prompt, retrieval revalidates the exact current source/version/publication/lifecycle chain, canonical evidence JSON and SHA-256 values, actor and activation linkage, source/version/raw hashes, effective/expiry dates, and the complete immutable section/chunk reading set. Database status flags alone never establish trust.
 
 `unavailable` removes confirmed legal findings and citations and returns a non-chargeable clarification boundary in chat; document analysis retains only structural findings and marks legal compliance unverified. `stale` moves confirmed findings to assumptions, makes deadlines preliminary, lowers legal-compliance confidence, exposes an RU/UZ warning, and recommends lawyer review. No migration or dependency is required. Until complete Lex and Advice corpus runs exist in staging, the expected runtime state is fail-closed `unavailable`.
+
+The exact code commit `af1b0bf` is deployed only as `juro-platform-staging` version `37687899-f17a-4bdf-9f9c-41c6b509cfb9`. D1 has zero qualifying corpus runs, so runtime freshness truth remains `unavailable`. Rollback is the prior staging version `ffbfe9df-40f8-4442-8080-7eaf1e63fe40`; production remains `91774ed4-72e9-47bb-b93a-a4208d490b24`. Evidence is in `STAGING-PHASE3-TRUST-FRESHNESS-EVIDENCE.md`.
 
 
 ## D-083 — enable Advice only as a reviewed single-document staging boundary

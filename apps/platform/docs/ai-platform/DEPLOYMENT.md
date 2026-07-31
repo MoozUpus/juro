@@ -1,4 +1,6 @@
 # JURO deployment boundary
+> Current staging deployment — 2026-07-31: exact code commit `af1b0bf` is deployed only as `juro-platform-staging` version `37687899-f17a-4bdf-9f9c-41c6b509cfb9`. Rollback is `ffbfe9df-40f8-4442-8080-7eaf1e63fe40`. D1 remains at 42 migrations with `quick_check=ok`, zero FK violations, and zero qualifying Lex/Advice corpus runs. Production Worker `juro` remains `91774ed4-72e9-47bb-b93a-a4208d490b24`. Exact evidence is in `STAGING-PHASE3-TRUST-FRESHNESS-EVIDENCE.md`.
+
 
 > Current staging deployment — 2026-07-31: commit `94fce8e`, Worker version `3bc029a3-8722-4edd-8c05-d615d5ce9a13` at 100%, D1 through additive `0039`, immutable tenant-scoped AI branches, fail-closed ZIP/DOCX structural inspection, Advice/staff flags enabled only in staging, four reviewed Queue consumers, one five-minute cron, and owner-only Access. Application rollback is prior staging version `593e7fd4-1d60-4ba2-accc-c44b1e0a2ba0`; D1 recovery uses the recorded pre-`0039` bookmark only for demonstrated corruption. Production deployment and production UI replacement remain separately unauthorized.
 

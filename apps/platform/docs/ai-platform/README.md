@@ -52,6 +52,7 @@ No document in this directory authorizes or implies a production schema, traffic
 - `DOCUMENT-EVALUATION.md` — implemented document-analysis contract evidence
   and the still unfulfilled 100-package/30-comparison quality gate.
 
+- `STAGING-PHASE3-TRUST-FRESHNESS-EVIDENCE.md` — exact Worker version, rollback, D1 freshness/integrity, Access, CI, and unchanged-production evidence for the fail-closed trust gate.
 ## Cinematic Legal Intelligence
 
 - `VISUAL-DIRECTION.md` — approved product direction and source-audit constraints.
