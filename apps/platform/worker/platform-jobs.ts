@@ -16,6 +16,10 @@ import {
   executeLegalSourceNormalization,
 } from "../lib/legal/source-normalization";
 import {
+  LegalSourceIndexingError,
+  executeLegalSourceIndexing,
+} from "../lib/legal/source-indexing";
+import {
   DocumentAnalysisProcessingError,
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
@@ -45,6 +49,7 @@ export const JOB_KINDS = [
   "email.send",
   "legal.sync",
   "legal.parse",
+  "legal.index",
   "cleanup.run",
   "notification.dispatch",
   "malware.scan",
@@ -145,6 +150,7 @@ type JobErrorCode =
   | "JOB_VALIDATION_FAILED"
   | "LEGAL_SOURCE_SYNC_FAILED"
   | "LEGAL_SOURCE_PARSE_FAILED"
+  | "LEGAL_SOURCE_INDEX_FAILED"
   | "PRIVILEGED_ACCOUNT_REVIEW_REQUIRED"
   | "STAGING_SYNTHETIC_PROBE_DISABLED"
   | "STAGING_SYNTHETIC_PROBE_D1_FAILED"
@@ -174,6 +180,7 @@ const queueStemByKind: Record<JobKind, string> = {
   "email.send": "email-notifications",
   "legal.sync": "legal-sources-sync",
   "legal.parse": "legal-sources-sync",
+  "legal.index": "legal-sources-sync",
   "cleanup.run": "data-retention-cleanup",
   "notification.dispatch": "notifications",
   "malware.scan": "malware-scan",
@@ -186,6 +193,7 @@ export const QUEUE_BINDING_BY_KIND = {
   "email.send": "EMAIL_NOTIFICATIONS_QUEUE",
   "legal.sync": "LEGAL_SOURCES_SYNC_QUEUE",
   "legal.parse": "LEGAL_SOURCES_SYNC_QUEUE",
+  "legal.index": "LEGAL_SOURCES_SYNC_QUEUE",
   "cleanup.run": "DATA_RETENTION_CLEANUP_QUEUE",
   "notification.dispatch": "NOTIFICATIONS_QUEUE",
   "malware.scan": "MALWARE_SCAN_QUEUE",
@@ -237,6 +245,8 @@ export type PlatformJobEnv = Omit<
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   IDENTITY_KEYRING?: string;
+  OPENAI_API_KEY?: string;
+  EMBEDDING_MODEL?: string;
   STAGING_SYNTHETIC_PROBES_ENABLED?: string;
 };
 
@@ -651,6 +661,17 @@ async function executeJob(
           "LEGAL_SOURCE_PARSE_FAILED",
           error.retryable,
         );
+      }
+      throw error;
+    }
+  }
+  if (envelope.kind === "legal.index") {
+    try {
+      await executeLegalSourceIndexing(env, envelope.subjectId);
+      return;
+    } catch (error) {
+      if (error instanceof LegalSourceIndexingError) {
+        throw new SafeJobError("LEGAL_SOURCE_INDEX_FAILED", error.retryable);
       }
       throw error;
     }

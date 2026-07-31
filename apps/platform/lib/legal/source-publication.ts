@@ -496,8 +496,10 @@ async function validatePublicationReplay(
       || stored.section_sha256 !== expected.contentSha256
       || stored.chunk_sha256 !== expected.contentSha256
       || stored.metadata_json !== expected.metadataJson
-      || stored.vector_id !== null
-      || stored.indexed_at !== null
+      || ((stored.vector_id === null || stored.indexed_at === null)
+        && (stored.vector_id !== null || stored.indexed_at !== null))
+      || (stored.vector_id !== null
+        && stored.vector_id !== `vec_${stored.chunk_id}`)
     ) {
       throw new LegalSourcePublicationError(
         "LEGAL_SOURCE_PUBLICATION_EVIDENCE_CONFLICT",
@@ -644,6 +646,9 @@ export async function publishApprovedLegalSource(
     publishedAt,
   }));
   const publicationEvidenceSha256 = await sha256Text(evidence);
+  const indexStableHash = await sha256Text(
+    `${review.versionId}\nlegal.index\ntext-embedding-3-large\n1536`,
+  );
   const activation = await prepareLegalSourceActivation(env.DB, access, {
     sourceId: review.sourceId,
     publicationId,
@@ -782,6 +787,27 @@ export async function publishApprovedLegalSource(
       activePredecessor?.versionId ?? null,
     ),
     ...activation.statements,
+    env.DB.prepare(`
+      INSERT INTO job_outbox (
+        id,queue_binding,job_type,schema_version,idempotency_key,
+        subject_id,workspace_id,correlation_id,enqueued_at,available_at,
+        status,dispatch_attempts,lease_owner,lease_expires_at,next_attempt_at,
+        dispatched_at,error_code,created_at,updated_at
+      ) VALUES (
+        ?,'LEGAL_SOURCES_SYNC_QUEUE','legal.index',1,?,
+        ?,NULL,?,?,?,'pending',0,NULL,NULL,NULL,NULL,NULL,?,?
+      )
+      ON CONFLICT(idempotency_key) DO NOTHING
+    `).bind(
+      `lsindexjob_${indexStableHash.slice(0, 32)}`,
+      `legal_index_${indexStableHash.slice(0, 40)}`,
+      review.versionId,
+      `lsindexcorr_${indexStableHash.slice(0, 32)}`,
+      publishedAt,
+      publishedAt,
+      publishedAt,
+      publishedAt,
+    ),
   );
 
   try {

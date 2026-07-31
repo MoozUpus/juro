@@ -352,5 +352,13 @@
       "tag": "0049_advice_scenario_domain",
       "breakpoints": true
     }
+  ,
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1785534000000,
+      "tag": "0050_legal_source_vector_indexing",
+      "breakpoints": true
+    }
   ]
 }

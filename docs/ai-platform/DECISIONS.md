@@ -10,3 +10,7 @@ A lawyer receives only an anonymized request before a conflict check. A clear co
 ## 2026-07-31 — mobile profile remains a first-class destination
 
 The mobile shell uses the approved five destinations: dashboard, AI lawyer, cases, documents and profile. Secondary navigation remains in the accessible top-bar drawer. This preserves fast access to profile/security settings without overloading the bottom bar.
+
+## 2026-07-31 — verified publication precedes legal-source embedding
+
+Only a current, staff-approved, published and verified Lex/Advice version may enter the Vectorize pipeline. The queue carries only the version identifier; the consumer reloads lifecycle state, uses a deterministic vector id, and records index bookkeeping only after Vectorize accepts the upsert. Published legal text remains immutable: the narrow migration permits only this deterministic index bookkeeping while the version remains current and verified.

@@ -18,6 +18,7 @@
     "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
     "JOB_SCHEMA_VERSION": "1",
+        "EMBEDDING_MODEL": "text-embedding-3-large",
     "EMAIL_FROM": "JURO <no-reply@juro.uz>"
   },
   "d1_databases": [
@@ -139,6 +140,7 @@
         "LEGAL_SOURCE_STAFF_API_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
+        "EMBEDDING_MODEL": "text-embedding-3-large",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
         "OPENAI_CHAT_MODEL": "gpt-5.6-sol",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
@@ -301,6 +303,7 @@
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
+        "EMBEDDING_MODEL": "text-embedding-3-large",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>"
       },
       "d1_databases": [

@@ -24,6 +24,7 @@ import {
   withdrawPublishedLegalSource,
 } from "../lib/legal/source-lifecycle";
 import { retrieveVerifiedLegalSources } from "../lib/legal/verified-retrieval";
+import { executeLegalSourceIndexing } from "../lib/legal/source-indexing";
 import {
   handleLegalSourcePublicationRequest,
   handleLegalSourceReviewClaimRequest,
@@ -33,6 +34,8 @@ import {
   handleLegalSourceWithdrawalRequest,
 } from "../lib/legal/source-staff-http";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
+
+type IndexedVector = { id: string; values: number[]; metadata?: Record<string, unknown> };
 
 type StoredObject = {
   bytes: Uint8Array;
@@ -782,7 +785,37 @@ test("publication atomically creates verified reading rows and immutable evidenc
       input,
       { now: new Date("2026-07-28T01:15:00.000Z") },
     )).changed, false);
-    assert.throws(
+    const originalFetch = globalThis.fetch;
+    const upserted: IndexedVector[] = [];
+    globalThis.fetch = async (_input, init) => {
+      const request = JSON.parse(String(init?.body)) as { input: string[]; dimensions: number };
+      assert.equal(request.dimensions, 1536);
+      return new Response(JSON.stringify({
+        data: request.input.map((_text, index) => ({
+          index, embedding: Array.from({ length: 1536 }, () => 0.01),
+        })),
+      }));
+    };
+    try {
+      const indexed = await executeLegalSourceIndexing({
+        DB: d1, APP_ENV: "development", OPENAI_API_KEY: "synthetic-key",
+        EMBEDDING_MODEL: "text-embedding-3-large",
+        LEX_UZ_INDEX: { upsert: async (vectors: IndexedVector[]) => {
+          upserted.push(...vectors); return { ids: vectors.map((vector: IndexedVector) => vector.id) };
+        } } as unknown as VectorizeIndex,
+        ADVICE_UZ_INDEX: { upsert: async () => ({ ids: [] }) } as unknown as VectorizeIndex,
+      }, result.versionId, { now: new Date("2026-07-28T01:15:30.000Z") });
+      assert.equal(indexed.indexedChunks, result.chunkCount);
+      assert.equal(upserted.length, result.chunkCount);
+      const indexedCount = sqlite.prepare(`SELECT count(*) AS count FROM legal_source_chunks
+        WHERE version_id=? AND vector_id IS NOT NULL AND indexed_at IS NOT NULL`).get(result.versionId) as { count: number };
+      assert.equal(indexedCount.count, result.chunkCount);
+      assert.equal((await publishApprovedLegalSource(env, publisher, input, {
+        now: new Date("2026-07-28T01:15:00.000Z"),
+      })).changed, false);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }    assert.throws(
       () => sqlite.prepare(`
         UPDATE legal_source_publications SET published_at=? WHERE id=?
       `).run("2026-07-28T01:16:00.000Z", result.publicationId),

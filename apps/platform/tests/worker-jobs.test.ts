@@ -346,6 +346,7 @@ test("routes only v2 task kinds and compatibility-blocks legacy kinds", () => {
       ["email.send", "EMAIL_NOTIFICATIONS_QUEUE", "staging-email-notifications"],
       ["legal.sync", "LEGAL_SOURCES_SYNC_QUEUE", "staging-legal-sources-sync"],
       ["legal.parse", "LEGAL_SOURCES_SYNC_QUEUE", "staging-legal-sources-sync"],
+      ["legal.index", "LEGAL_SOURCES_SYNC_QUEUE", "staging-legal-sources-sync"],
       ["cleanup.run", "DATA_RETENTION_CLEANUP_QUEUE", "staging-data-retention-cleanup"],
       ["notification.dispatch", "NOTIFICATIONS_QUEUE", "staging-notifications"],
       ["malware.scan", "MALWARE_SCAN_QUEUE", "staging-malware-scan"],
