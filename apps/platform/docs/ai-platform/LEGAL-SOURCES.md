@@ -1,4 +1,6 @@
 # JURO legal-source foundation
+> Current branch checkpoint — 2026-07-31: verified retrieval now replays publication, lifecycle, activation, effective-date, and complete reading-row evidence before source text can enter AI context. Corpus freshness requires successful full-corpus runs for both Lex and Advice; single-document fetches never qualify. This trust/freshness gate is locally tested and not yet staging-deployed. Current staging has no complete dual-source corpus evidence, so its expected status after deployment is `unavailable`, with legal conclusions withheld or downgraded.
+
 
 > Current checkpoint — 2026-07-31: exact single-document Advice acquisition and normalization are active only in owner-protected staging for RU `/ru/documents/{id}` and Uzbek Latin `/oz/documents/{id}`. Both live probes remain `pending_review`; publications, sections, chunks, and Advice vectors remain zero. Development and production flags remain disabled. `STAGING-0038-ADVICE-EVIDENCE.md` supersedes earlier local-only/disabled status statements below while retaining them as historical evidence.
 
@@ -52,6 +54,31 @@ reviewer authorization; the privileged review service is still required.
 The trust filter is applied to current AI source context, stored conversation
 sources, document-comparison legal analysis, global source search,
 legislation monitoring, and verified-source counts.
+## Retrieval and freshness contract
+
+The AI chat and document-analysis paths share one verified retrieval boundary.
+For every candidate source it rechecks:
+
+- exact official host/type trust and current source/version/publication linkage;
+- canonical publication and lifecycle evidence schemas and their SHA-256 hashes;
+- reviewer/publisher/activation identities and exact timestamps;
+- source, version, raw-publication, section, and chunk content hashes;
+- the complete immutable section/chunk set, including count, sequence, locale,
+  and one-to-one reading-text equality;
+- effective and expiry dates at retrieval time.
+
+The legal database freshness timestamp is the older of the latest successful
+Lex and Advice full-corpus runs. Only `initial_corpus`, `scheduled_corpus`, and
+`manual_corpus` runs qualify. A page fetch, parser run, failed/partial run,
+invalid timestamp, missing source family, or future timestamp cannot make the
+database fresh. More than seven days is `stale`.
+
+An unavailable corpus produces no confirmed legal finding or citation. Chat
+returns a non-chargeable clarification state; document analysis keeps only
+structural findings and marks legal compliance unverified. A stale corpus moves
+confirmed findings into assumptions, marks deadlines preliminary, lowers legal
+compliance confidence, and exposes an RU/UZ warning and lawyer-review path.
+
 
 ## Fetch and sync safety contract
 
@@ -148,10 +175,11 @@ migration is claimed.
 - staff reviewer/publisher UI, legal editor, and any reviewed remote activation
   of the locally present HTTP routes;
 - replacement-version activation and current/historical version switching;
-- lexical search, multilingual embeddings, Vectorize indexing, metadata
-  authorization, reranking, and retrieval evaluation;
-- server-side citation existence/article/version verification;
-- legally approved language-priority and freshness behavior;
+- multilingual embeddings, Vectorize indexing, metadata authorization,
+  reranking, and retrieval evaluation beyond the bounded exact lexical path;
+- article-level citation semantics and external link-health verification beyond
+  the implemented publication/lifecycle/hash replay;
+- legally approved language-priority behavior;
 - source health, daily schedule, alerts, and staging evidence.
 
 Until those gates pass, JURO must not label an answer as verified against the

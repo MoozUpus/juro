@@ -9,6 +9,7 @@ import type { PlatformLocale } from "../../lib/platform/routing";
 
 type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
 type Usage = { used: number; limit: number; periodEnd: string };
+type SourceFreshness = { status: "fresh" | "stale" | "unavailable"; asOf: string; ageDays: number | null; maxAgeDays: number };
 type Conversation = { id: string; title: string; locale: string; status: string; updatedAt: string; lastAnswer: string | null; facts: Fact[] };
 type Fact = { id: string; statement: string; status: string };
 type Source = { sourceId: string; actTitle: string; actIdentifier: string | null; article: string | null; excerpt: string | null; originalUrl: string; status: string; effectiveDate: string | null; verifiedAt: string };
@@ -30,7 +31,7 @@ type LegalResult = {
 };
 type AiMessageOperation = "new" | "follow_up" | "edit" | "regenerate";
 type Branch = { branchId: string; parentBranchId: string | null; requestMessageId: string; responseMessageId: string; operation: AiMessageOperation; versionNumber: number; question: string; createdAt: string };
-type Answer = { conversationId: string; messageId?: string; requestMessageId?: string | null; branchId?: string | null; operation?: AiMessageOperation; question?: string; branches?: Branch[]; result: LegalResult; facts: Fact[]; usage?: Usage };
+type Answer = { conversationId: string; messageId?: string; requestMessageId?: string | null; branchId?: string | null; operation?: AiMessageOperation; question?: string; branches?: Branch[]; result: LegalResult; facts: Fact[]; sourceFreshness?: SourceFreshness; usage?: Usage };
 
 export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const ru = locale === "ru";
@@ -171,7 +172,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           {!answer ? (
             <div className="ai-start"><FileQuestion /><h2>{ru ? "Опишите юридическую ситуацию" : "Yuridik vaziyatni yozing"}</h2><p>{ru ? "Не указывайте лишние персональные данные. JURO отделит подтверждённые нормы от предположений." : "Ortiqcha shaxsiy ma’lumotlarni yozmang. JURO tasdiqlangan normalarni taxminlardan ajratadi."}</p></div>
           ) : <>
-            <LegalAnswer result={answer.result} ru={ru} />
+            <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} />
             <div className="ai-answer-actions">
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
@@ -255,9 +256,19 @@ async function readAiEventStream(
   return terminal;
 }
 
-function LegalAnswer({ result, ru }: { result: LegalResult; ru: boolean }) {
+function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness?: SourceFreshness; ru: boolean }) {
   return <article className="ai-answer">
     <small>JURO · {result.responseKind === "answer" ? (ru ? "структурированный ответ" : "tuzilgan javob") : (ru ? "нужно уточнение · лимит не списан" : "aniqlik kerak · limit yechilmadi")}</small>
+    {freshness && freshness.status !== "fresh" && <div className={`ai-source-freshness ai-source-freshness-${freshness.status}`} role="status">
+      <CircleAlert aria-hidden="true" />
+      <p>{freshness.status === "unavailable"
+        ? (ru
+          ? "Полная синхронизация Lex.uz и Advice.uz не подтверждена. JURO не показывает правовой вывод как подтверждённый."
+          : "Lex.uz va Advice.uz to‘liq sinxronlangani tasdiqlanmagan. JURO huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi.")
+        : (ru
+          ? `Правовая база старше ${freshness.maxAgeDays} дней. Последняя подтверждённая полная синхронизация: ${formatDate(freshness.asOf, true)}.`
+          : `Huquqiy baza ${freshness.maxAgeDays} kundan eski. Oxirgi tasdiqlangan to‘liq sinxronlash: ${formatDate(freshness.asOf, false)}.`)}</p>
+    </div>}
     <h2>{result.summary}</h2>
     <p className="ai-answer-body">{result.answer}</p>
     {result.urgency !== "normal" && <div className="ai-cautions"><ShieldAlert /><p>{result.urgency === "critical" ? (ru ? "Критическая срочность: проверьте ближайший срок и возможность немедленной помощи." : "Juda shoshilinch: yaqin muddat va zudlik bilan yordam olish imkonini tekshiring.") : (ru ? "Вопрос требует приоритетного внимания." : "Masala ustuvor e’tiborni talab qiladi.")}</p></div>}

@@ -1,8 +1,13 @@
 import type { AiStructuredResult } from "../document-builder/ai/openai";
 import { extractDocument } from "../document-comparison/extract";
 import { ComparisonProcessingError, type ExtractedDocument } from "../document-comparison/types";
-import { retrieveVerifiedLegalSources, type VerifiedLegalRetrieval } from "../legal/verified-retrieval";
-import { documentAnalysisResultSchema, type DocumentAnalysisResult } from "./schema";
+import {
+  legalDatabaseFreshnessFromAsOf,
+  retrieveVerifiedLegalSources,
+  type LegalDatabaseFreshness,
+  type VerifiedLegalRetrieval,
+} from "../legal/verified-retrieval";
+import { documentAnalysisResultSchema, enforceDocumentAnalysisFreshness, type DocumentAnalysisResult } from "./schema";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
@@ -28,6 +33,7 @@ type AnalysisRow = {
 };
 
 type PersistedAnalysis = {
+  sourceFreshness: LegalDatabaseFreshness;
   result: DocumentAnalysisResult;
   technical: {
     provider: "openai" | "anthropic";
@@ -190,7 +196,8 @@ async function analyzeObject(
       requestId: `document-analysis-${row.analysisId}`,
     });
     return {
-      result: ai.data,
+      result: enforceDocumentAnalysisFreshness(ai.data, retrieval.freshness),
+      sourceFreshness: retrieval.freshness,
       technical: {
         provider: ai.provider,
         model: ai.model,
@@ -322,6 +329,8 @@ async function persistNormalizedAnalysis(
         fallbackFromProvider: persisted.technical.fallbackFromProvider,
         riskCount: persisted.result.risks.length,
         sourceCount: persisted.result.sources.length,
+        sourceFreshnessStatus: persisted.sourceFreshness.status,
+        sourceFreshnessAsOf: persisted.sourceFreshness.asOf,
       }),
       now,
     ),
@@ -366,7 +375,13 @@ function parseRequestMetadata(value: string | null): {
 function parsePersistedAnalysis(value: string | null): PersistedAnalysis {
   try {
     const parsed = JSON.parse(value || "{}") as PersistedAnalysis;
-    return { ...parsed, result: documentAnalysisResultSchema.parse(parsed.result) };
+    const result = documentAnalysisResultSchema.parse(parsed.result);
+    return {
+      ...parsed,
+      result,
+      sourceFreshness: parsed.sourceFreshness
+        ?? legalDatabaseFreshnessFromAsOf(result.legalDatabaseAsOf),
+    };
   } catch {
     throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PERSISTENCE_FAILED", true);
   }

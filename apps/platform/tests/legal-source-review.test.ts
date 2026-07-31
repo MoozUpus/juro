@@ -23,6 +23,7 @@ import {
   LegalSourceLifecycleError,
   withdrawPublishedLegalSource,
 } from "../lib/legal/source-lifecycle";
+import { retrieveVerifiedLegalSources } from "../lib/legal/verified-retrieval";
 import {
   handleLegalSourcePublicationRequest,
   handleLegalSourceReviewClaimRequest,
@@ -734,6 +735,34 @@ test("publication atomically creates verified reading rows and immutable evidenc
       chunks: result.chunkCount,
       indexed_chunks: 0,
     });
+    const corpusAt = "2026-07-28T01:14:30.000Z";
+    const insertCorpusRun = sqlite.prepare(`
+      INSERT INTO source_sync_runs (
+        id,environment,source_kind,run_type,status,lock_key,
+        started_at,finished_at,created_at,updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?)
+    `);
+    insertCorpusRun.run(
+      "corpus_lex_205", "development", "lex", "manual_corpus",
+      "success", "development:lex:manual-corpus-205",
+      corpusAt, corpusAt, corpusAt, corpusAt,
+    );
+    insertCorpusRun.run(
+      "corpus_advice_205", "development", "advice", "manual_corpus",
+      "success", "development:advice:manual-corpus-205",
+      corpusAt, corpusAt, corpusAt, corpusAt,
+    );
+    const retrieval = await retrieveVerifiedLegalSources(
+      d1,
+      "проверяет документы",
+      "ru",
+      8,
+      { now: new Date("2026-07-28T01:15:00.000Z") },
+    );
+    assert.equal(retrieval.freshness.status, "fresh");
+    assert.equal(retrieval.sources.length, 1);
+    assert.equal(retrieval.sources[0]?.id, result.sourceId);
+    assert.equal(retrieval.evidence[0]?.publicationId, result.publicationId);
     const publication = sqlite.prepare(`
       SELECT publication_evidence_json,publication_evidence_sha256,
         published_by_user_id

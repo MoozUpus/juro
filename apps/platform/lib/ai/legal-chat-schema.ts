@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
 
 const sourceIdList = z.array(z.string().min(1).max(160)).max(12);
 
@@ -132,6 +133,60 @@ export function forceClarificationWithoutVerifiedSources(
     suggestedDocument: null,
     suggestLawyer: result.suggestLawyer || result.urgency !== "normal",
     legalDatabaseAsOf: options.legalDatabaseAsOf,
+  };
+}
+
+export function enforceLegalDatabaseFreshness(
+  result: LegalChatResponse,
+  freshness: LegalDatabaseFreshness,
+  options: {
+    locale: "ru" | "uz";
+    answerMode: "short" | "detailed";
+    reasoningMode: "fast" | "deep";
+  },
+): LegalChatResponse {
+  if (freshness.status === "unavailable") {
+    return forceClarificationWithoutVerifiedSources(result, {
+      ...options,
+      legalDatabaseAsOf: freshness.asOf,
+    });
+  }
+  if (freshness.status === "fresh") {
+    return { ...result, legalDatabaseAsOf: freshness.asOf };
+  }
+
+  const warning = options.locale === "ru"
+    ? `Правовая база JURO не обновлялась более ${freshness.maxAgeDays} дней (последняя полная синхронизация: ${freshness.asOf}). Выводы ниже предварительные и требуют проверки по актуальной редакции или юристом.`
+    : `JURO huquqiy bazasi ${freshness.maxAgeDays} kundan ortiq yangilanmagan (oxirgi to‘liq sinxronlash: ${freshness.asOf}). Quyidagi xulosalar dastlabki bo‘lib, amaldagi tahrir yoki yurist tomonidan tekshirilishi kerak.`;
+  const staleAssumption = {
+    statement: options.locale === "ru"
+      ? "Актуальность правовой базы требует подтверждения"
+      : "Huquqiy bazaning dolzarbligi tasdiqlanishi kerak",
+    impact: warning.slice(0, 2_000),
+  };
+  const formerFindings = result.confirmedFindings.map((finding) => ({
+    statement: finding.title.slice(0, 1_000),
+    impact: (options.locale === "ru"
+      ? `Ранее подтверждённый вывод переведён в предварительный до обновления базы: ${finding.explanation}`
+      : `Oldin tasdiqlangan xulosa baza yangilanguncha dastlabki deb ko‘rsatiladi: ${finding.explanation}`
+    ).slice(0, 2_000),
+  }));
+  return {
+    ...result,
+    answer: `${warning}\n\n${result.answer}`.slice(0, 20_000),
+    confirmedFindings: [],
+    assumptions: [
+      staleAssumption,
+      ...result.assumptions,
+      ...formerFindings,
+    ].slice(0, 16),
+    deadlines: result.deadlines.map((deadline) => ({
+      ...deadline,
+      confidence: "preliminary" as const,
+    })),
+    successOutlook: null,
+    suggestLawyer: true,
+    legalDatabaseAsOf: freshness.asOf,
   };
 }
 

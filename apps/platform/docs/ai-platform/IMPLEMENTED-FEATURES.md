@@ -1,4 +1,6 @@
 # JURO implemented-features checkpoint
+> Current branch delta — 2026-07-31: the AI and document-analysis paths now share an exact publication-evidence retrieval boundary and a dual-corpus freshness gate. Missing full Lex/Advice corpus evidence fails closed; stale evidence is explicitly downgraded in RU/UZ. Tampered publication, lifecycle, section, effective-date, and expiry evidence is rejected. The slice is locally verified, adds no migration/dependency, and is not yet claimed as staging-deployed.
+
 
 > Current Phase 3 staging delta — 2026-07-31: exact Advice RU and Uzbek-Latin source submission, robots-aware serial acquisition, private content-addressed raw/normalized R2 evidence, deterministic Advice-primary parsing, low-confidence manual review, idempotent outbox/Queue execution, and RU/UZ staff submission UI are implemented and deployed only to protected staging. Nothing is automatically verified, published, indexed, or used by AI. Evidence: `STAGING-0038-ADVICE-EVIDENCE.md`.
 
@@ -137,6 +139,9 @@ The feature branch now contains a real authenticated `POST /api/platform/ai` bou
 - OpenAI Responses API primary adapter;
 - Anthropic Messages API structured-output fallback that cannot bypass a safety refusal;
 - real UI rendering for findings, assumptions, risks, actions, documents, deadlines, sources, and usage.
+- exact replay of current publication/lifecycle/reading evidence before prompt inclusion;
+- freshness derived only from complete Lex and Advice corpus runs, with `unavailable` non-chargeable clarification and `stale` assumption/deadline downgrade;
+- RU/UZ accessible source-freshness status in the answer surface and persisted freshness evidence in AI-run audit metadata.
 
 Local verification passed 301 core/rendered checks and 82 Cloudflare checks. Staging migration `0037`, the OpenAI boundary, and the Anthropic fallback extension are deployed to owner-protected staging as version `fdbce9be-06d6-45ef-bd01-ac49bd7b44a7` at 100% traffic.
 

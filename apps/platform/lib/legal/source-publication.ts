@@ -104,7 +104,7 @@ export const legalSourcePublicationInputSchema = z.object({
   reviewId: identifierSchema,
   expectedDecisionEvidenceSha256: sha256Schema,
 }).strict();
-const publicationEvidenceSchema = z.object({
+export const legalSourcePublicationEvidenceSchema = z.object({
   schemaVersion: z.literal(1),
   publicationId: identifierSchema,
   reviewId: identifierSchema,
@@ -393,9 +393,9 @@ async function validatePublicationReplay(
   expectedRows: ReadingRow[],
   publication: PublicationRow,
 ): Promise<LegalSourcePublicationResult> {
-  let evidence: z.infer<typeof publicationEvidenceSchema>;
+  let evidence: z.infer<typeof legalSourcePublicationEvidenceSchema>;
   try {
-    evidence = publicationEvidenceSchema.parse(
+    evidence = legalSourcePublicationEvidenceSchema.parse(
       JSON.parse(publication.publication_evidence_json),
     );
   } catch {
@@ -621,7 +621,7 @@ export async function publishApprovedLegalSource(
   );
   const publicationId = `lspublish_${publicationStableHash.slice(0, 32)}`;
   const publishedAt = now.toISOString();
-  const evidence = JSON.stringify(publicationEvidenceSchema.parse({
+  const evidence = JSON.stringify(legalSourcePublicationEvidenceSchema.parse({
     schemaVersion: 1,
     publicationId,
     reviewId: review.reviewId,

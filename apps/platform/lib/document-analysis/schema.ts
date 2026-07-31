@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { LegalDatabaseFreshness } from "../legal/verified-retrieval";
 
 const sourceIds = z.array(z.string().min(1).max(160)).max(12);
 
@@ -91,6 +92,51 @@ export const documentAnalysisJsonSchema = z.toJSONSchema(documentAnalysisResultS
 
 export function parseDocumentAnalysisResult(value: unknown): DocumentAnalysisResult {
   return documentAnalysisResultSchema.parse(value);
+}
+
+export function enforceDocumentAnalysisFreshness(
+  result: DocumentAnalysisResult,
+  freshness: LegalDatabaseFreshness,
+): DocumentAnalysisResult {
+  if (freshness.status === "fresh") {
+    return { ...result, legalDatabaseAsOf: freshness.asOf };
+  }
+  const unavailable = freshness.status === "unavailable";
+  const warning = result.outputLanguage === "ru"
+    ? unavailable
+      ? "Полная синхронизация правовой базы не подтверждена. Результат не подтверждает соответствие законодательству; учитывайте его только как анализ текста документа."
+      : `Правовая база не обновлялась более ${freshness.maxAgeDays} дней. Правовые выводы предварительные и требуют проверки по актуальной редакции или юристом.`
+    : unavailable
+      ? "Huquqiy bazaning to‘liq sinxronlangani tasdiqlanmagan. Natija qonunchilikka muvofiqlikni tasdiqlamaydi; undan faqat hujjat matni tahlili sifatida foydalaning."
+      : `Huquqiy baza ${freshness.maxAgeDays} kundan ortiq yangilanmagan. Huquqiy xulosalar dastlabki bo‘lib, amaldagi tahrir yoki yurist tomonidan tekshirilishi kerak.`;
+  const warningCode = unavailable
+    ? "LEGAL_DATABASE_UNAVAILABLE"
+    : `LEGAL_DATABASE_STALE:${freshness.asOf}`;
+  return {
+    ...result,
+    legalComplianceStatus: unavailable
+      ? "unverified"
+      : result.legalComplianceStatus === "verified"
+        ? "partial"
+        : result.legalComplianceStatus,
+    risks: unavailable
+      ? result.risks
+        .filter((risk) => risk.riskType === "document_internal")
+        .map((risk) => ({ ...risk, legalBasisSourceIds: [] }))
+      : result.risks.map((risk) => risk.riskType === "legal_compliance"
+        ? { ...risk, confidence: "low" as const }
+        : risk),
+    missingClauses: unavailable ? [] : result.missingClauses,
+    sources: unavailable ? [] : result.sources,
+    recommendations: unavailable
+      ? [warning]
+      : [warning, ...result.recommendations].slice(0, 50),
+    legalDatabaseAsOf: freshness.asOf,
+    extractionWarnings: [
+      warningCode,
+      ...result.extractionWarnings,
+    ].slice(0, 20),
+  };
 }
 
 export function referencedDocumentAnalysisSourceIds(result: DocumentAnalysisResult): Set<string> {

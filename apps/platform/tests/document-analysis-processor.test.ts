@@ -91,7 +91,17 @@ test("safe document analysis persists normalized result, usage, audit and is ide
       text: new TextDecoder().decode(bytes),
       sections: [],
     }),
-    retrieve: async () => ({ sources: [], legalDatabaseAsOf: "unavailable" }),
+    retrieve: async () => ({
+      sources: [],
+      evidence: [],
+      freshness: {
+        status: "unavailable" as const,
+        asOf: "unavailable",
+        ageDays: null,
+        maxAgeDays: 7,
+      },
+      legalDatabaseAsOf: "unavailable",
+    }),
     analyze: async () => {
       aiCalls += 1;
       return {

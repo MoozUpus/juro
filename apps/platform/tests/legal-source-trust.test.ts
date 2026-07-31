@@ -5,6 +5,22 @@ import {
   isTrustedVerifiedLegalSource,
   trustedLegalSourceKind,
 } from "../lib/legal/source-trust";
+import {
+  enforceLegalDatabaseFreshness,
+  type LegalChatResponse,
+} from "../lib/ai/legal-chat-schema";
+import {
+  documentAnalysisResultSchema,
+  enforceDocumentAnalysisFreshness,
+} from "../lib/document-analysis/schema";
+import {
+  legalDatabaseFreshnessFromAsOf,
+  legalDatabaseFreshnessFromCorpusRuns,
+  legalSearchKeywords,
+  validateVerifiedLegalSourceEvidence,
+  type VerifiedLegalSourceEvidenceRow,
+} from "../lib/legal/verified-retrieval";
+
 
 const VERIFIED_AT = "2026-07-28T12:00:00.000Z";
 const CONTENT_SHA256 = "a".repeat(64);
@@ -68,4 +84,379 @@ test("trusted-source filtering preserves only allowlisted verified records", () 
     { id: "draft", officialUrl: "https://lex.uz/docs/2", sourceType: "lex", status: "pending" },
   ]);
   assert.deepEqual(sources.map(({ id }) => id), ["lex", "advice"]);
+});
+
+const NOW = new Date("2026-07-31T12:00:00.000Z");
+
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+}
+
+async function evidenceFixture(): Promise<VerifiedLegalSourceEvidenceRow> {
+  const bodyText = "Трудовой договор прекращается в порядке, установленном законом.";
+  const rawContentSha256 = "b".repeat(64);
+  const parsedContentSha256 = "c".repeat(64);
+  const reviewEvidenceSha256 = "d".repeat(64);
+  const sectionContentSha256 = await sha256Text(bodyText);
+  const publishedAt = "2026-07-30T10:00:00.000Z";
+  const publicationEvidenceJson = JSON.stringify({
+    schemaVersion: 1,
+    publicationId: "publication_1",
+    reviewId: "review_1",
+    sourceId: "source_1",
+    versionId: "version_1",
+    sourceKind: "lex",
+    locale: "ru",
+    canonicalId: "lex_123",
+    canonicalUrl: "https://lex.uz/docs/123",
+    reviewEvidenceSha256,
+    rawContentSha256,
+    parsedContentSha256,
+    parserProfile: "lex-fixture-v1",
+    publishedByUserId: "publisher_1",
+    publisherSessionId: "session_1",
+    publisherAssignmentIds: ["assignment_1"],
+    mfaVerifiedAt: "2026-07-30T09:55:00.000Z",
+    sectionCount: 1,
+    chunkCount: 1,
+    publishedAt,
+  });
+  const lifecycleEvidenceJson = JSON.stringify({
+    schemaVersion: 1,
+    eventId: "lifecycle_1",
+    eventType: "activated_initial",
+    sourceId: "source_1",
+    publicationId: "publication_1",
+    versionId: "version_1",
+    previousPublicationId: null,
+    previousVersionId: null,
+    reasonNotes: null,
+    actedByUserId: "publisher_1",
+    actorSessionId: "session_1",
+    actorAssignmentIds: ["assignment_1"],
+    mfaVerifiedAt: "2026-07-30T09:55:00.000Z",
+    occurredAt: publishedAt,
+  });
+  return {
+    id: "source_1",
+    officialUrl: "https://lex.uz/docs/123",
+    canonicalId: "lex_123",
+    actTitle: "Трудовой кодекс Республики Узбекистан",
+    actIdentifier: "ЗРУ-798",
+    publishedAt: "2022-10-28T00:00:00.000Z",
+    revisionDate: "2026-07-01T00:00:00.000Z",
+    lastCheckedAt: publishedAt,
+    locale: "ru",
+    sourceType: "lex",
+    status: "verified",
+    verificationState: "verified",
+    sourceVerifiedAt: publishedAt,
+    sourceContentSha256: rawContentSha256,
+    sourceVerifiedByUserId: "publisher_1",
+    sourceVerificationNotes: "publication:publication_1",
+    sourceEffectiveAt: "2023-04-30T00:00:00.000Z",
+    sourceExpiresAt: null,
+    versionId: "version_1",
+    versionLanguage: "ru",
+    versionStatus: "verified",
+    versionContentSha256: rawContentSha256,
+    versionVerifiedAt: publishedAt,
+    versionVerifiedByUserId: "publisher_1",
+    versionEffectiveAt: "2023-04-30T00:00:00.000Z",
+    versionExpiresAt: null,
+    publicationId: "publication_1",
+    reviewId: "review_1",
+    reviewEvidenceSha256,
+    publicationRawContentSha256: rawContentSha256,
+    publicationParsedContentSha256: parsedContentSha256,
+    publishedByUserId: "publisher_1",
+    publicationEvidenceJson,
+    publicationEvidenceSha256: await sha256Text(publicationEvidenceJson),
+    publicationPublishedAt: publishedAt,
+    activationActivatedByUserId: "publisher_1",
+    activationActivatedAt: publishedAt,
+    lifecycleEventId: "lifecycle_1",
+    lifecycleEventType: "activated_initial",
+    lifecyclePreviousPublicationId: null,
+    lifecyclePreviousVersionId: null,
+    lifecycleReasonNotes: null,
+    lifecycleActedByUserId: "publisher_1",
+    lifecycleActorSessionId: "session_1",
+    lifecycleActorAssignmentIdsJson: JSON.stringify(["assignment_1"]),
+    lifecycleMfaVerifiedAt: "2026-07-30T09:55:00.000Z",
+    lifecycleEvidenceJson,
+    lifecycleEvidenceSha256: await sha256Text(lifecycleEvidenceJson),
+    lifecycleOccurredAt: publishedAt,
+    sectionId: "section_1",
+    canonicalRef: "article:100",
+    article: "100",
+    heading: "Прекращение трудового договора",
+    bodyText,
+    sequence: 0,
+    sectionContentSha256,
+    chunkId: "chunk_1",
+    chunkIndex: 0,
+    chunkLanguage: "ru",
+    chunkContentText: bodyText,
+    chunkContentSha256: sectionContentSha256,
+    vectorId: null,
+    indexedAt: null,
+    sectionCount: 1,
+    chunkCount: 1,
+  };
+}
+
+function legalResult(): LegalChatResponse {
+  return {
+    responseKind: "answer",
+    summary: "Краткий вывод",
+    answer: "Юридический вывод.",
+    language: "ru",
+    jurisdiction: "UZ",
+    answerMode: "detailed",
+    reasoningMode: "fast",
+    clarificationQuestions: [],
+    confirmedFindings: [{
+      title: "Подтверждённый вывод",
+      explanation: "Вывод основан на действующей норме.",
+      sourceIds: ["source_1"],
+    }],
+    assumptions: [],
+    risks: [],
+    sources: [{
+      sourceId: "source_1",
+      actTitle: "Трудовой кодекс",
+      actIdentifier: "ЗРУ-798",
+      article: "100",
+      excerpt: "Фрагмент нормы",
+      originalUrl: "https://lex.uz/docs/123",
+      status: "current",
+      effectiveDate: "2023-04-30T00:00:00.000Z",
+      verifiedAt: "2026-07-30T10:00:00.000Z",
+    }],
+    requiredDocuments: [],
+    actionPlan: [],
+    deadlines: [{
+      title: "Срок",
+      dueDate: "2026-08-10",
+      sourceDate: "2026-07-31",
+      calculationMethod: "Десять календарных дней",
+      confidence: "confirmed",
+      sourceIds: ["source_1"],
+    }],
+    successOutlook: {
+      level: "medium",
+      positiveFactors: ["Есть документ"],
+      negativeFactors: ["Нужны дополнительные факты"],
+    },
+    urgency: "normal",
+    suggestedDocument: null,
+    suggestLawyer: false,
+    legalDatabaseAsOf: "2026-07-30T10:00:00.000Z",
+  };
+}
+
+test("legal keywords are bounded and locale-aware", () => {
+  assert.deepEqual(
+    legalSearchKeywords("Договор договор Увольнение срок", "ru", 3),
+    ["договор", "увольнение"],
+  );
+});
+
+test("only complete Lex and Advice corpus runs establish database freshness", () => {
+  const onlyLex = legalDatabaseFreshnessFromCorpusRuns([
+    { sourceKind: "lex", finishedAt: "2026-07-31T10:00:00.000Z" },
+  ], NOW);
+  assert.equal(onlyLex.status, "unavailable");
+
+  const fresh = legalDatabaseFreshnessFromCorpusRuns([
+    { sourceKind: "lex", finishedAt: "2026-07-31T10:00:00.000Z" },
+    { sourceKind: "advice", finishedAt: "2026-07-31T09:00:00.000Z" },
+  ], NOW);
+  assert.equal(fresh.status, "fresh");
+  assert.equal(fresh.asOf, "2026-07-31T09:00:00.000Z");
+
+  const stale = legalDatabaseFreshnessFromAsOf(
+    "2026-07-20T09:00:00.000Z",
+    NOW,
+  );
+  assert.equal(stale.status, "stale");
+  assert.equal(stale.ageDays, 11);
+  assert.equal(
+    legalDatabaseFreshnessFromAsOf("not-a-date", NOW).status,
+    "unavailable",
+  );
+});
+
+test("retrieval accepts complete publication evidence and rejects tampering", async () => {
+  const row = await evidenceFixture();
+  const verified = await validateVerifiedLegalSourceEvidence(row, [row], NOW);
+  assert.equal(verified?.source.id, "source_1");
+  const indexedRow = {
+    ...row,
+    vectorId: "lex-source-1-section-1",
+    indexedAt: "2026-07-31T10:00:00.000Z",
+  };
+  assert.ok(await validateVerifiedLegalSourceEvidence(indexedRow, [indexedRow], NOW));
+
+  assert.equal(verified?.evidence.publicationId, "publication_1");
+
+  const tamperedSection = { ...row, bodyText: `${row.bodyText} Подмена.` };
+  assert.equal(
+    await validateVerifiedLegalSourceEvidence(tamperedSection, [tamperedSection], NOW),
+    null,
+  );
+  const tamperedPublication = {
+    ...row,
+    publicationEvidenceJson: row.publicationEvidenceJson.replace(
+      '"parserProfile":"lex-fixture-v1"',
+      '"parserProfile":"tampered"',
+    ),
+  };
+  assert.equal(
+    await validateVerifiedLegalSourceEvidence(tamperedPublication, [row], NOW),
+    null,
+  );
+  const tamperedLifecycle = {
+    ...row,
+    lifecycleEvidenceJson: row.lifecycleEvidenceJson.replace(
+      '"actorSessionId":"session_1"',
+      '"actorSessionId":"session_attacker"',
+    ),
+  };
+  assert.equal(
+    await validateVerifiedLegalSourceEvidence(tamperedLifecycle, [row], NOW),
+    null,
+  );
+  const futureVersion = { ...row, versionEffectiveAt: "2026-08-01T00:00:00.000Z" };
+  assert.equal(
+    await validateVerifiedLegalSourceEvidence(futureVersion, [futureVersion], NOW),
+    null,
+  );
+  const expiredVersion = { ...row, versionExpiresAt: "2026-07-31T11:59:59.000Z" };
+  assert.equal(
+    await validateVerifiedLegalSourceEvidence(expiredVersion, [expiredVersion], NOW),
+    null,
+  );
+});
+
+test("stale and unavailable legal databases cannot retain confirmed conclusions", () => {
+  const stale = enforceLegalDatabaseFreshness(legalResult(), {
+    status: "stale",
+    asOf: "2026-07-20T09:00:00.000Z",
+    ageDays: 11,
+    maxAgeDays: 7,
+  }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast" });
+  assert.equal(stale.confirmedFindings.length, 0);
+  assert.equal(stale.deadlines[0]?.confidence, "preliminary");
+  assert.equal(stale.successOutlook, null);
+  assert.equal(stale.suggestLawyer, true);
+  assert.match(stale.answer, /более 7 дней/);
+
+  const unavailable = enforceLegalDatabaseFreshness(legalResult(), {
+    status: "unavailable",
+    asOf: "unavailable",
+    ageDays: null,
+    maxAgeDays: 7,
+  }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast" });
+  assert.equal(unavailable.responseKind, "clarification_required");
+  assert.deepEqual(unavailable.confirmedFindings, []);
+  assert.deepEqual(unavailable.sources, []);
+});
+
+test("document analysis removes legal-compliance claims when corpus freshness is unavailable", () => {
+  const analysis = documentAnalysisResultSchema.parse({
+    documentType: "Договор",
+    summary: "Документ содержит договорные условия.",
+    language: "ru",
+    outputLanguage: "ru",
+    jurisdiction: "UZ",
+    mode: "full",
+    userSide: null,
+    legalComplianceStatus: "verified",
+    parties: [],
+    amounts: [],
+    dates: [],
+    obligations: [],
+    deadlines: [],
+    risks: [{
+      severity: "high",
+      riskType: "legal_compliance",
+      title: "Правовой риск",
+      clause: null,
+      page: null,
+      exactExcerpt: null,
+      problem: "Условие может не соответствовать норме.",
+      consequence: "Условие может быть оспорено.",
+      legalBasisSourceIds: ["source_1"],
+      recommendation: "Проверить редакцию нормы.",
+      proposedWording: null,
+      confidence: "high",
+    }, {
+      severity: "medium",
+      riskType: "document_internal",
+      title: "Внутреннее противоречие",
+      clause: null,
+      page: null,
+      exactExcerpt: null,
+      problem: "Два условия противоречат друг другу.",
+      consequence: "Неясность исполнения.",
+      legalBasisSourceIds: ["source_1"],
+      recommendation: "Согласовать формулировки.",
+      proposedWording: null,
+      confidence: "high",
+    }],
+    missingClauses: [{
+      title: "Порядок уведомления",
+      reason: "Порядок не описан.",
+      proposedWording: null,
+      legalBasisSourceIds: ["source_1"],
+    }],
+    contradictions: [],
+    questions: [],
+    recommendations: [],
+    overallQuality: { score: 70, explanation: "Требуется уточнение." },
+    sources: [{
+      sourceId: "source_1",
+      actTitle: "Трудовой кодекс",
+      actIdentifier: "ЗРУ-798",
+      article: "100",
+      excerpt: "Фрагмент нормы",
+      originalUrl: "https://lex.uz/docs/123",
+      verifiedAt: "2026-07-30T10:00:00.000Z",
+    }],
+    legalDatabaseAsOf: "2026-07-30T10:00:00.000Z",
+    extractionWarnings: [],
+  });
+  const unavailable = enforceDocumentAnalysisFreshness(analysis, {
+    status: "unavailable",
+    asOf: "unavailable",
+    ageDays: null,
+    maxAgeDays: 7,
+  });
+  assert.equal(unavailable.legalComplianceStatus, "unverified");
+  assert.deepEqual(unavailable.sources, []);
+  assert.deepEqual(unavailable.risks.map((risk) => risk.riskType), ["document_internal"]);
+  assert.deepEqual(unavailable.risks[0]?.legalBasisSourceIds, []);
+  assert.equal(unavailable.missingClauses.length, 0);
+  assert.equal(unavailable.recommendations.length, 1);
+  assert.match(unavailable.recommendations[0] || "", /не подтверждена/);
+  assert.ok(unavailable.extractionWarnings.includes("LEGAL_DATABASE_UNAVAILABLE"));
+
+  const stale = enforceDocumentAnalysisFreshness(analysis, {
+    status: "stale",
+    asOf: "2026-07-20T09:00:00.000Z",
+    ageDays: 11,
+    maxAgeDays: 7,
+  });
+  assert.equal(stale.legalComplianceStatus, "partial");
+  assert.equal(stale.risks[0]?.confidence, "low");
+  assert.equal(stale.sources.length, 1);
+  assert.match(stale.extractionWarnings[0] ?? "", /^LEGAL_DATABASE_STALE:/);
 });

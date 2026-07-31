@@ -27,6 +27,30 @@
   white-space: pre-wrap;
 }
 
+.ai-source-freshness {
+  display: grid;
+  grid-template-columns: 1.125rem minmax(0, 1fr);
+  gap: .625rem;
+  align-items: start;
+  margin-top: .75rem;
+  padding: .75rem .875rem;
+  border: 1px solid #d8b66f;
+  border-radius: .625rem;
+  background: #fff9ed;
+  color: #5d4517;
+}
+
+.ai-source-freshness-unavailable {
+  border-color: #c98680;
+  background: #fff4f2;
+  color: #702e2a;
+}
+
+.ai-source-freshness svg,
+.ai-source-freshness p {
+  margin: 0;
+}
+
 .ai-result-block {
   margin-top: .625rem;
   padding: .75rem .875rem;

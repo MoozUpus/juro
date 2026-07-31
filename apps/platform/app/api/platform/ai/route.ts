@@ -2,7 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { AiUnavailableError } from "../../../../lib/document-builder/ai/openai";
-import { aiProviderStatus, legalAiProvider, type LegalAiProgress, type LegalSourceContext } from "../../../../lib/ai/provider";
+import { aiProviderStatus, legalAiProvider, type LegalAiProgress } from "../../../../lib/ai/provider";
 import {
   AiRunConflictError,
   completeAiRun,
@@ -12,8 +12,14 @@ import {
 } from "../../../../lib/ai/run-store";
 import { AiBranchInputError, listAiBranches, resolveAiBranchInput } from "../../../../lib/ai/branch-store";
 import { selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
-import { parseLegalChatResponse } from "../../../../lib/ai/legal-chat-schema";
-import { filterTrustedVerifiedLegalSources } from "../../../../lib/legal/source-trust";
+import {
+  enforceLegalDatabaseFreshness,
+  parseLegalChatResponse,
+} from "../../../../lib/ai/legal-chat-schema";
+import {
+  legalDatabaseFreshnessFromAsOf,
+  retrieveVerifiedLegalSources,
+} from "../../../../lib/legal/verified-retrieval";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const MONTHLY_CHAT_LIMIT = 20;
@@ -135,11 +141,18 @@ async function executePost(
     }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
   }
   const question = branchInput.question;
-  const { sources, legalDatabaseAsOf } = await retrieveVerifiedSources(db, question, locale);
+  const retrieval = await retrieveVerifiedLegalSources(db, question, locale);
+  const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({ question, locale, answerMode, reasoningMode, conversationId: body?.conversationId || null, caseId: body?.caseId || null, operation: branchInput.operation, sourceMessageId: branchInput.forkedFromMessageId });
   const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
   const instructionHash = await sha256Json({ version: INSTRUCTION_VERSION, jurisdiction: "UZ" });
-  const sourceVersionHash = await sha256Json(sources.map((source) => ({ id: source.id, hash: source.contentSha256, excerpt: source.excerpt || null })));
+  const sourceVersionHash = await sha256Json({
+    freshness,
+    evidence,
+    sources: sources.map((source) => ({
+      id: source.id, hash: source.contentSha256, excerpt: source.excerpt || null,
+    })),
+  });
 
   let reservation;
   try {
@@ -187,7 +200,11 @@ async function executePost(
     }, code === "AI_REFUSED" || code === "INVALID_AI_OUTPUT" ? 422 : 503);
   }
 
-  const result = parseLegalChatResponse(aiResult.data);
+  const result = enforceLegalDatabaseFreshness(
+    parseLegalChatResponse(aiResult.data),
+    freshness,
+    { locale, answerMode, reasoningMode },
+  );
   const now = isoNow();
   const userMessageId = crypto.randomUUID();
   const assistantMessageId = crypto.randomUUID();
@@ -222,6 +239,8 @@ async function executePost(
       runId: reservation.runId, provider: aiResult.provider, model: aiResult.model,
       fallbackFromProvider: aiResult.fallbackFromProvider,
       sourceCount: result.sources.length, responseKind: result.responseKind,
+      sourceFreshnessStatus: freshness.status,
+      sourceFreshnessAsOf: freshness.asOf,
       branchId, operation: branchInput.operation,
       sourceMessageId: branchInput.forkedFromMessageId,
     }), now),
@@ -252,6 +271,7 @@ async function executePost(
     requestMessageId: userMessageId, branchId, operation: branchInput.operation,
     branches: await listAiBranches({ db, conversationId, workspaceId: workspace.id, userId: user.id }),
     correlationId: reservation.correlationId, result, facts, sources: result.sources,
+    sourceFreshness: freshness,
     technicalDetails: {
       provider: aiResult.provider,
       model: aiResult.model,
@@ -333,18 +353,17 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
     { db, conversationId, workspaceId, userId, branchId, responseMessageId },
   );
   if (!conversation?.structuredJson) return null;
-  const [facts, sourceRows] = await db.batch([
-    db.prepare("SELECT id,statement,status FROM confirmed_facts WHERE conversation_id=? ORDER BY created_at").bind(conversationId),
-    db.prepare(
-      `SELECT s.id,s.official_url AS officialUrl,s.act_title AS actTitle,s.act_identifier AS actIdentifier,
-        s.published_at AS publishedAt,s.revision_date AS revisionDate,s.last_checked_at AS lastCheckedAt,
-        s.locale,s.source_type AS sourceType,s.status,s.verification_state AS verificationState,
-        s.verified_at AS verifiedAt,s.content_sha256 AS contentSha256
-       FROM conversation_sources cs JOIN legal_sources s ON s.id=cs.source_id
-       WHERE cs.conversation_id=? AND cs.message_id=? AND s.status='verified'
-         AND s.verification_state='verified' AND s.verified_at IS NOT NULL AND s.content_sha256 IS NOT NULL`,
-    ).bind(conversationId, conversation.messageId),
-  ]);
+  const facts = await db.prepare("SELECT id,statement,status FROM confirmed_facts WHERE conversation_id=? ORDER BY created_at")
+    .bind(conversationId).all();
+  const storedResult = parseLegalChatResponse(
+    parseJson(conversation.structuredJson, null),
+  );
+  const sourceFreshness = legalDatabaseFreshnessFromAsOf(
+    storedResult.legalDatabaseAsOf,
+  );
+  const result = enforceLegalDatabaseFreshness(storedResult, sourceFreshness, {
+    locale: storedResult.language, answerMode: storedResult.answerMode, reasoningMode: storedResult.reasoningMode,
+  });
   return {
     conversationId: conversation.conversationId,
     messageId: conversation.messageId,
@@ -353,40 +372,11 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
     operation: conversation.operation,
     question: conversation.question || "",
     branches: await listAiBranches({ db, conversationId, workspaceId, userId }),
-    result: parseJson(conversation.structuredJson, null),
+    result,
+    sourceFreshness,
     facts: facts.results,
-    sources: filterTrustedVerifiedLegalSources(sourceRows.results as unknown as LegalSourceContext[]),
+    sources: result.sources,
   };
-}
-
-async function retrieveVerifiedSources(db: D1Database, question: string, locale: "ru" | "uz") {
-  const keywords = [...new Set(question.toLocaleLowerCase(locale === "ru" ? "ru" : "uz").match(/[\p{L}\p{N}]{5,}/gu) || [])].slice(0, 4);
-  const freshness = await db.prepare(
-    "SELECT MAX(finished_at) AS asOf FROM source_sync_runs WHERE status='completed'",
-  ).first<{ asOf: string | null }>();
-  const legalDatabaseAsOf = freshness?.asOf || "unavailable";
-  if (!keywords.length) return { sources: [] as LegalSourceContext[], legalDatabaseAsOf };
-  const conditions = keywords.map(() => "lower(ss.body_text) LIKE ?").join(" OR ");
-  const rows = await db.prepare(
-    `SELECT s.id,s.official_url AS officialUrl,s.act_title AS actTitle,s.act_identifier AS actIdentifier,
-      s.published_at AS publishedAt,s.revision_date AS revisionDate,s.last_checked_at AS lastCheckedAt,
-      s.locale,s.source_type AS sourceType,s.status,s.verification_state AS verificationState,
-      s.verified_at AS verifiedAt,s.content_sha256 AS contentSha256,
-      ss.article,substr(ss.body_text,1,1200) AS excerpt,
-      COALESCE(v.effective_at,s.effective_at) AS effectiveDate
-     FROM legal_sources s
-     JOIN legal_source_current_activations a ON a.source_id=s.id
-     JOIN legal_source_versions v ON v.id=a.version_id AND v.status='verified'
-     JOIN legal_source_sections ss ON ss.version_id=a.version_id
-     WHERE s.status='verified' AND s.verification_state='verified'
-       AND s.verified_at IS NOT NULL AND s.content_sha256 IS NOT NULL AND s.locale=?
-       AND (${conditions})
-     ORDER BY s.last_checked_at DESC,ss.sequence ASC LIMIT 12`,
-  ).bind(locale, ...keywords.map((keyword) => `%${keyword}%`)).all();
-  const trusted = filterTrustedVerifiedLegalSources(rows.results as unknown as LegalSourceContext[]);
-  const unique = new Map<string, LegalSourceContext>();
-  for (const source of trusted) if (!unique.has(source.id)) unique.set(source.id, source);
-  return { sources: [...unique.values()].slice(0, 8), legalDatabaseAsOf };
 }
 
 async function usageSummary(db: D1Database, workspaceId: string, userId: string) {

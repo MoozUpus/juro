@@ -45,6 +45,13 @@ No document in this directory authorizes or implies a production schema, traffic
   trust boundary, evidence requirements, and unimplemented ingestion/retrieval
   gates.
 
+- `AI-SAFETY.md` — implemented provider/source/freshness safety boundaries and
+  remaining live-provider gates.
+- `LEGAL-EVALUATION.md` — automated legal-source evidence tests and the still
+  unfulfilled 250+50 human-reviewed release matrix.
+- `DOCUMENT-EVALUATION.md` — implemented document-analysis contract evidence
+  and the still unfulfilled 100-package/30-comparison quality gate.
+
 ## Cinematic Legal Intelligence
 
 - `VISUAL-DIRECTION.md` — approved product direction and source-audit constraints.

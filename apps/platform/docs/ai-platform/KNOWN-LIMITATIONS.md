@@ -1,4 +1,6 @@
 # JURO known limitations checkpoint
+> Current branch delta — 2026-07-31: exact publication/lifecycle/hash replay and dual-corpus freshness enforcement are implemented and locally tested, but not yet staging-deployed. Staging has no successful complete corpus run for both Lex and Advice; therefore the truthful expected state is `unavailable`, not fresh. The system will withhold confirmed chat conclusions and legal-compliance analysis until that evidence exists.
+
 
 > Current checkpoint — 2026-07-31: bounded Advice RU/UZ-Latin fetch and parse are proven in protected staging, not production. The resulting versions are unverified and pending human review; publications, reading rows, and Advice vectors are zero. Broad corpus sync, historical revisions, citation verification, authenticated browser QA, human legal evaluation, and live OpenAI/Anthropic execution remain blockers. `STAGING-0038-ADVICE-EVIDENCE.md` supersedes stale disabled/no-live-fetch statements below.
 
@@ -89,6 +91,14 @@ foundation checkpoint.
 
 ## Legal knowledge gaps
 
+- verified retrieval is now implemented as bounded exact lexical matching plus
+  full publication/lifecycle/reading evidence replay, but hybrid Vectorize
+  retrieval, reranking, article-level semantic citation verification, and the
+  250+50 scenario human-reviewed evaluation remain open;
+- freshness enforcement is implemented, but staging has no qualifying complete
+  Lex-and-Advice corpus run. A successful page fetch does not close this gate;
+  current staging must remain `unavailable` until both source families complete
+  a recorded corpus run;
 - migrations `0025`–`0028` are active in staging and the trust filter remains
   application-local; no legal-source fetch request, raw evidence object,
   source record, published row, vector, or retrieval result was created;
