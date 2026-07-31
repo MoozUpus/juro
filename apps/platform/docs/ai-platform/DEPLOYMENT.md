@@ -1,6 +1,6 @@
 # JURO deployment boundary
 
-> Current staging deployment — 2026-07-31: commit `54237e4`, Worker version `623e591b-f36b-4fc1-9f1e-a86f6e94fe0a` at 100%, D1 through `0038`, Advice/staff flags enabled only in staging, four reviewed Queue consumers, one five-minute cron, and owner-only Access. Application rollback is prior staging version `cfef8153-3322-4ce5-b271-3478a0531b28` or a rebuilt staging artifact with the flags disabled. Production deployment and production UI replacement remain separately unauthorized.
+> Current staging deployment — 2026-07-31: commit `c1871c3`, Worker version `593e7fd4-1d60-4ba2-accc-c44b1e0a2ba0` at 100%, D1 through additive `0039`, immutable tenant-scoped AI edit/regenerate branches, Advice/staff flags enabled only in staging, four reviewed Queue consumers, one five-minute cron, and owner-only Access. Application rollback is prior staging version `1cbc9ea9-6ec8-4ab8-9495-b880b269f423`; D1 recovery uses the recorded pre-`0039` bookmark only for demonstrated corruption. Production deployment and production UI replacement remain separately unauthorized.
 
 Updated: 2026-07-30
 Status: owner-only protected staging is active; production deployment is not authorized.

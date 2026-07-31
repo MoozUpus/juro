@@ -1731,7 +1731,7 @@ Official contract references verified on 2026-07-31:
 
 ## D-084 — keep AI edits and regenerations as immutable tenant-scoped branches
 
-Status: accepted and locally verified; staging migration/deploy evidence pending
+Status: accepted, locally verified, and deployed to protected staging; live-provider proof pending
 Date: 2026-07-31
 
 Editing a question and regenerating an answer never overwrite an existing chat

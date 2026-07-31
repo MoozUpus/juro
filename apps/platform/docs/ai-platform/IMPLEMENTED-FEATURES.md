@@ -159,6 +159,8 @@ The feature branch additionally implements:
 
 The transport is locally verified and deployed to protected staging as Worker version `1cbc9ea9-6ec8-4ab8-9495-b880b269f423` at 100% traffic. Live provider execution is not claimed while protected staging provider secrets remain absent. Production remains unchanged.
 
+Immutable AI edit/regenerate branches are deployed to protected staging as Worker version `593e7fd4-1d60-4ba2-accc-c44b1e0a2ba0` with D1 through `0039`. Exact backup, migration, integrity, Access, rollback, and unchanged-production evidence is recorded in `STAGING-0039-AI-BRANCH-HISTORY-EVIDENCE.md`. Live provider execution remains unclaimed because provider secrets are absent.
+
 ## Phase 5 secure upload foundation
 
 The feature branch implements and locally verifies:
