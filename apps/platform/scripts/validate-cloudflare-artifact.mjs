@@ -124,11 +124,12 @@ if (requestedEnvironment === "staging") {
   );
 }
 
-const usesProductionSitesBindings = requestedEnvironment === "production";
+const isProductionEnvironment = requestedEnvironment === "production";
+const replacesSitesPrimaryBindings = false; // JURO production must retain wrangler.jsonc bindings.
 assert.deepEqual(selected.r2_buckets, [
   {
     binding: "BUCKET",
-    bucket_name: usesProductionSitesBindings
+    bucket_name: isProductionEnvironment
       ? "juro-private-documents"
       : `juro-${requestedEnvironment}-files`,
   },
@@ -144,7 +145,7 @@ assert.deepEqual(selected.r2_buckets, [
 assert.equal(artifact.d1_databases?.length, 1);
 assert.deepEqual(
   artifact.d1_databases[0],
-  usesProductionSitesBindings
+  replacesSitesPrimaryBindings
     ? {
         binding: "DB",
         database_name: "site-creator-d1",
@@ -157,7 +158,7 @@ assert.deepEqual(
 assert.equal(artifact.r2_buckets?.length, 3);
 assert.deepEqual(
   artifact.r2_buckets,
-  usesProductionSitesBindings
+  replacesSitesPrimaryBindings
     ? [
         {
           binding: "BUCKET",

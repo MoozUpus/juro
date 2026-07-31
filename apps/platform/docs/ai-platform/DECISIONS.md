@@ -1998,3 +1998,19 @@ version is `91edb0b9-3758-4959-97d6-27fc52d643ae` with the probe flag restored
 to false. This proves only synthetic Anthropic connectivity and structured-output
 compatibility; it does not prove legal quality, file analysis, or production
 readiness.
+
+## D-095 — production-profile artifacts must preserve JURO primary bindings
+
+Status: accepted, regression-tested; not deployed
+Date: 2026-08-01
+
+The production-profile artifact was found to replace the canonical `DB` and
+`BUCKET` bindings from `wrangler.jsonc` with Sites placeholder resources. This
+contradicted the preserved-resource invariant: production uses
+`juro-production` and `juro-private-documents`.
+
+The Vite configuration now keeps Sites support for assets while passing no
+primary D1/R2 replacement into the binding normalizer. The generated
+production artifact is required to retain the exact canonical primary bindings.
+This is a build-contract correction only: no Worker version, route, D1
+migration, R2 object, secret, or production configuration was deployed.
