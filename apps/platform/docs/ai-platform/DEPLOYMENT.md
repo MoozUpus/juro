@@ -195,3 +195,15 @@ D1 integrity, anonymous Access denial, and unchanged production Worker identity.
 If the route regresses, restore protected-staging traffic to version
 `cfb20e07-d9a9-4b55-a402-e2326c437b4a`; migration `0040` may remain because this
 follow-up does not alter schema.
+
+The export-deletion candidate was committed as `b363916` and deployed only to
+protected staging. Worker version `c985f6a3-d7b8-408d-a2dd-8952ece98e47` serves
+100%. Read-back confirms `fetch`, `queue`, and `scheduled` handlers, the existing
+D1/R2/Vectorize/Queue bindings, and only the three pre-existing secret names.
+`juro-staging` has no pending migration, `quick_check=ok`, zero foreign-key
+violations, zero export rows, and zero document-export outbox rows. The export
+Queue retains one `juro-platform-staging` producer and consumer. Anonymous root,
+DELETE, and file-route requests all receive Access `302`.
+
+Production Worker `juro` remains version
+`91774ed4-72e9-47bb-b93a-a4208d490b24`; no production deployment occurred.

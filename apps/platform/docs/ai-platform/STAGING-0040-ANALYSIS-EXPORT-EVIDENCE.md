@@ -159,3 +159,40 @@ validation, builder/comparison smokes, and commit secret scan passed. No migrati
 was needed. Worker version `cfb20e07-d9a9-4b55-a402-e2326c437b4a` serves 100%.
 Post-deploy D1 remained at 41 migrations with `quick_check=ok`, zero FK violations,
 and zero analysis/export rows. The production Worker identity remained unchanged.
+
+## Standalone terminal-export deletion addendum
+
+Commit `b363916` adds a CSRF-protected, authenticated deletion path without a
+schema or binding change. It permits only an owned terminal export, removes and
+verifies the private R2 object before deleting D1 state, commits a content-free
+audit event with the row deletion, rejects pending/processing state, and supports
+safe tenant-scoped replay. RU/UZ UI confirmation and status feedback call the real
+route; no simulated success is rendered.
+
+Local verification:
+
+- type-check and lint passed;
+- rendered Worker/security tests: 29/29;
+- core tests: 324/324;
+- Cloudflare contract/migration tests: 84/84;
+- exact staging build and artifact/binding validation passed;
+- Cloudflare generated binding types are current;
+- document builder and document comparison smokes passed;
+- staged diff secret-value scan returned zero matches.
+
+Protected-staging read-back:
+
+- Worker version `c985f6a3-d7b8-408d-a2dd-8952ece98e47` serves 100%;
+- handlers remain `fetch`, `queue`, and `scheduled`;
+- only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY` secret
+  names are present; values were not read;
+- D1 has no pending migration, `quick_check=ok`, zero FK violations, zero
+  `analysis_exports`, and zero `document.export` outbox rows;
+- `staging-document-export` retains one staging producer and one staging consumer;
+- anonymous root, DELETE export, and export-file requests each return Access `302`;
+- production Worker `juro` remains
+  `91774ed4-72e9-47bb-b93a-a4208d490b24`.
+
+Because no eligible completed analysis exists, authenticated live deletion of a
+provider-generated artifact is not claimed. The earlier rollback version is
+`cfb20e07-d9a9-4b55-a402-e2326c437b4a`; migration `0040` remains additive.

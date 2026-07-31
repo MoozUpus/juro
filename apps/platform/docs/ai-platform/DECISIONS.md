@@ -1815,7 +1815,7 @@ The fixture proves another user's object remains untouched.
 
 ## D-088 — terminal analysis exports are deleted R2-first with tenant-scoped replay evidence
 
-Status: accepted and locally verified; protected-staging deployment pending
+Status: accepted, fully regression-tested, and deployed to protected staging
 Date: 2026-07-31
 
 A user may delete only an owned terminal (`completed` or `failed`) analysis
