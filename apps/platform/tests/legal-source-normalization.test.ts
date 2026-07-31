@@ -252,6 +252,21 @@ test("Advice normalization persists only the exact document container as untrust
     assert.equal(snapshot.primarySelector, "advice-document");
     assert.equal(snapshot.documentTitle, "Mehnat shartnomasini bekor qilish");
     assert.equal(snapshot.plainText.includes("Boshqa xizmatlar"), false);
+    const scenario = sqlite.prepare(`
+      SELECT scenario.canonical_id,scenario.locale,scenario.status,version.title,
+        version.summary_text AS summaryText,version.status AS versionStatus
+      FROM advice_scenarios AS scenario
+      INNER JOIN scenario_versions AS version ON version.scenario_id=scenario.id
+      WHERE version.legal_source_version_id=?
+    `).get(acquired.versionId) as Record<string, string>;
+    assert.deepEqual({ ...scenario }, {
+      canonical_id: "624",
+      locale: "uz",
+      status: "pending_review",
+      title: "Mehnat shartnomasini bekor qilish",
+      summaryText: snapshot.plainText,
+      versionStatus: "pending_review",
+    });
 
     assert.deepEqual(
       { ...sqlite.prepare(`

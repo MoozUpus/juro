@@ -288,6 +288,55 @@ async function recordNormalizationReview(
   ).run();
 }
 
+async function persistAdviceScenario(
+  db: D1Database,
+  row: VersionRow,
+  snapshot: NormalizedLegalSourceSnapshot,
+  parsedContentSha256: string,
+  now: string,
+): Promise<void> {
+  if (row.source_type !== "advice" || row.canonical_id === null) return;
+  const scenarioDigest = await sha256(new TextEncoder().encode(
+    `${row.source_id}\nadvice-scenario`,
+  ));
+  const scenarioId = `advice_${scenarioDigest.slice(0, 32)}`;
+  const versionDigest = await sha256(new TextEncoder().encode(
+    `${scenarioId}\n${row.id}\n${parsedContentSha256}`,
+  ));
+  const scenarioVersionId = `advicever_${versionDigest.slice(0, 32)}`;
+  const summary = snapshot.plainText.slice(0, 8_000);
+  const writes: D1PreparedStatement[] = [
+    db.prepare(`
+      INSERT INTO advice_scenarios (
+        id,source_id,canonical_id,locale,source_url,title,status,current_version_id,created_at,updated_at
+      ) VALUES (?,?,?,?,?,?,'pending_review',NULL,?,?)
+      ON CONFLICT(source_id) DO UPDATE SET
+        canonical_id=excluded.canonical_id,locale=excluded.locale,source_url=excluded.source_url,
+        title=excluded.title,updated_at=excluded.updated_at
+      WHERE advice_scenarios.status='pending_review'
+    `).bind(
+      scenarioId,row.source_id,row.canonical_id,row.language,row.official_url,
+      snapshot.documentTitle,now,now,
+    ),
+    db.prepare(`
+      INSERT INTO scenario_versions (
+        id,scenario_id,legal_source_version_id,title,summary_text,content_sha256,status,created_at,updated_at
+      ) VALUES (?,?,?,?,?,?,'pending_review',?,?)
+      ON CONFLICT(legal_source_version_id) DO NOTHING
+    `).bind(
+      scenarioVersionId,scenarioId,row.id,snapshot.documentTitle,summary,
+      parsedContentSha256,now,now,
+    ),
+  ];
+  try {
+    await db.batch(writes);
+  } catch {
+    throw new LegalSourceNormalizationError(
+      "LEGAL_SOURCE_NORMALIZED_PERSISTENCE_FAILED",
+      true,
+    );
+  }
+}
 export async function executeLegalSourceNormalization(
   env: LegalSourceNormalizationEnv,
   versionId: string,
@@ -312,10 +361,17 @@ export async function executeLegalSourceNormalization(
         false,
       );
     }
-    await requireStoredSnapshot(env.BUCKET, row.parsed_object_key, {
+    const replaySnapshot = await requireStoredSnapshot(env.BUCKET, row.parsed_object_key, {
       contentSha256: normalization.data.contentSha256,
       row,
     });
+    await persistAdviceScenario(
+      env.DB,
+      row,
+      replaySnapshot,
+      normalization.data.contentSha256,
+      (dependencies.now ?? (() => new Date()))().toISOString(),
+    );
     return {
       versionId: row.id,
       parsedObjectKey: row.parsed_object_key,
@@ -512,6 +568,7 @@ export async function executeLegalSourceNormalization(
     }
   }
 
+  await persistAdviceScenario(env.DB, row, snapshot, parsedContentSha256, now);
   return {
     versionId: row.id,
     parsedObjectKey,
