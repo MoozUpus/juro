@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated analysis data is hydrated after the first browser render */
 
-import { AlertTriangle, CheckCircle2, CircleAlert, Eye, FileCheck2, FileDiff, LoaderCircle, ShieldCheck, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleAlert, Download, Eye, FileCheck2, FileDiff, LoaderCircle, RefreshCw, ShieldCheck, Upload } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { comparisonText } from "../../content/platform-ui";
@@ -11,13 +11,14 @@ import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { DocumentComparisonClient } from "./DocumentComparisonClient";
 
 type Risk = { id?: string; level: string; title: string; description: string; excerpt: string | null; confidencePercent: number | null };
+type AnalysisExport = { id: string; status: string; format: "json"; fileName: string; sizeBytes: number | null; errorCode: string | null; completedAt: string | null; createdAt: string };
 type Summary = {
   summary?: string; parties?: string[]; dates?: string[]; obligations?: string[]; payments?: string[];
   disputedTerms?: string[]; missingItems?: string[]; questions?: string[]; disclaimer?: string;
 };
 type Analysis = {
   id: string; status: string; errorCode?: string | null; createdAt?: string; updatedAt?: string;
-  fileId: string; fileName: string; mimeType: string; sizeBytes: number; summary?: Summary | null; risks?: Risk[];
+  fileId: string; fileName: string; mimeType: string; sizeBytes: number; summary?: Summary | null; risks?: Risk[]; exports?: AnalysisExport[];
 };
 
 export function DocumentReviewClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
@@ -80,6 +81,12 @@ function SingleDocumentReview({ locale }: { locale: PlatformLocale }) {
     finally { setLoading(false); }
   }, [ru]);
   useEffect(() => { void load(); }, [load]);
+  const exportPending = analyses.some(item => item.exports?.some(record => ["queued", "processing", "retrying"].includes(record.status)));
+  useEffect(() => {
+    if (!exportPending) return;
+    const timer = window.setInterval(() => { void load(); }, 5_000);
+    return () => window.clearInterval(timer);
+  }, [exportPending, load]);
 
   async function upload(event: FormEvent) {
     event.preventDefault();
@@ -103,15 +110,45 @@ function SingleDocumentReview({ locale }: { locale: PlatformLocale }) {
     {error && <p className="review-message error" role="alert"><CircleAlert />{error}</p>}
     {notice && <p className="review-message success" role="status"><ShieldCheck />{notice}</p>}
     <form className="review-upload" onSubmit={upload}><div className="review-drop"><Upload /><div><strong>{file?.name || (ru ? "PDF, DOCX, JPG, PNG или ZIP" : "PDF, DOCX, JPG, PNG yoki ZIP")}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : (ru ? "До 50 МБ · потоковая загрузка с SHA-256" : "50 MB gacha · SHA-256 bilan oqimli yuklash")}</span></div><input ref={inputRef} type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></div><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /><span>{ru ? "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла. Понимаю, что результат нужно проверить." : "Tanlangan faylni maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman."}</span></label><button disabled={!file || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Загрузить и проверить" : "Yuklash va tekshirish"}</button></form>
-    {loading ? <div className="review-loading"><LoaderCircle className="spin" /></div> : <div className="review-layout"><aside><h2>{ru ? "Последние файлы" : "So‘nggi fayllar"}</h2>{analyses.length ? analyses.map(item => <button className={selected?.id === item.id ? "active" : ""} key={item.id} onClick={() => setSelected(item)}><FileCheck2 /><span><strong>{item.fileName}</strong><small>{statusLabel(item.status, ru)}</small></span></button>) : <p>{ru ? "Загруженных файлов пока нет." : "Hozircha yuklangan fayllar yo‘q."}</p>}</aside><main>{selected ? <AnalysisView analysis={selected} ru={ru} /> : <div className="review-empty"><FileCheck2 /><h2>{ru ? "Выберите файл для анализа" : "Tahlil uchun faylni tanlang"}</h2></div>}</main></div>}
+    {loading ? <div className="review-loading"><LoaderCircle className="spin" /></div> : <div className="review-layout"><aside><h2>{ru ? "Последние файлы" : "So‘nggi fayllar"}</h2>{analyses.length ? analyses.map(item => <button className={selected?.id === item.id ? "active" : ""} key={item.id} onClick={() => setSelected(item)}><FileCheck2 /><span><strong>{item.fileName}</strong><small>{statusLabel(item.status, ru)}</small></span></button>) : <p>{ru ? "Загруженных файлов пока нет." : "Hozircha yuklangan fayllar yo‘q."}</p>}</aside><main>{selected ? <AnalysisView analysis={selected} ru={ru} onChanged={load} /> : <div className="review-empty"><FileCheck2 /><h2>{ru ? "Выберите файл для анализа" : "Tahlil uchun faylni tanlang"}</h2></div>}</main></div>}
   </>;
 }
 
-function AnalysisView({ analysis, ru }: { analysis: Analysis; ru: boolean }) {
+function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boolean; onChanged: () => Promise<void> }) {
   const summary = analysis.summary;
+  const exportAttemptKeys = useRef(new Map<string, string>());
   const canOpen = analysis.status === "completed";
   const state = analysisState(analysis.status, ru);
-  return <article className="review-result"><div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div>{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}</div>{analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}</article>;
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const latestExport = [...(analysis.exports ?? [])].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+  const exportPending = ["queued", "processing", "retrying"].includes(latestExport?.status ?? "");
+  const exportFailed = latestExport?.status === "failed";
+  async function requestExport() {
+    setExporting(true); setExportError("");
+    if (exportFailed) exportAttemptKeys.current.delete(analysis.id);
+    const existingKey = exportAttemptKeys.current.get(analysis.id);
+    const idempotencyKey = existingKey ?? `analysis-export-${analysis.id}-${crypto.randomUUID()}`;
+    if (!existingKey) exportAttemptKeys.current.set(analysis.id, idempotencyKey);
+    try {
+      const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysis.id)}/exports`, {
+        method: "POST",
+        headers: { "idempotency-key": idempotencyKey },
+      });
+      const body = await response.json() as { code?: string };
+      if (!response.ok) {
+        exportAttemptKeys.current.delete(analysis.id);
+        throw new Error(exportRequestError(body.code, ru));
+      }
+      await onChanged();
+    } catch (value) { setExportError(value instanceof Error ? value.message : String(value)); }
+    finally { setExporting(false); }
+  }
+  return <article className="review-result">
+    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && latestExport?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(latestExport.id)}/file`}><Download />JSON</a> : canOpen && <button type="button" disabled={exporting || exportPending} aria-busy={exporting || exportPending} onClick={() => void requestExport()}>{exporting || exportPending ? <LoaderCircle className="spin" /> : exportFailed ? <RefreshCw /> : <Download />}{exporting || exportPending ? (ru ? "Экспорт готовится" : "Eksport tayyorlanmoqda") : exportFailed ? (ru ? "Повторить экспорт" : "Eksportni takrorlash") : (ru ? "Экспорт JSON" : "JSON eksport")}</button>}</div></div>
+    {exportError && <p className="review-message error" role="alert"><CircleAlert />{exportError}</p>}
+    {analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}
+  </article>;
 }
 
 function ListBlock({ title, items }: { title: string; items?: string[] }) {
@@ -153,4 +190,10 @@ function analysisState(status: string, ru: boolean) {
 function riskLabel(level: string, ru: boolean) {
   const labels: Record<string, [string, string]> = { high: ["Высокий", "Yuqori"], medium: ["Средний", "O‘rta"], low: ["Низкий", "Past"], information: ["Информация", "Ma’lumot"] };
   return labels[level]?.[ru ? 0 : 1] ?? level;
+}
+
+function exportRequestError(code: string | undefined, ru: boolean) {
+  if (code === "ANALYSIS_EXPORT_NOT_READY") return ru ? "Экспорт доступен после завершения анализа." : "Eksport tahlil yakunlangandan keyin mavjud.";
+  if (code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT") return ru ? "Запрос экспорта уже использован. Повторите действие." : "Eksport so‘rovi allaqachon ishlatilgan. Amalni takrorlang.";
+  return ru ? "Экспорт не создан." : "Eksport yaratilmadi.";
 }

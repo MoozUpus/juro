@@ -246,3 +246,16 @@ No Phase 5 production-readiness claim is made.
 - The full phases 3–7 product definition, legal/document evaluation corpus, live provider calls, malware scan, hybrid retrieval, complete lawyer marketplace/admin/support/status, and closed beta remain incomplete.
 - Phase 9 is not a closed beta until authenticated owner test accounts and the full browser/security matrix pass.
 - Phase 10 production readiness is not reached. Production functional deployment and production UI replacement require separate explicit owner approvals.
+
+## Completed-analysis export open gates — 2026-07-31
+
+- The implemented export format is normalized JSON only. Highlighted PDF, clean
+  PDF, DOCX, comparison-table, and case-export formats are not implemented.
+- Local and contract tests prove Queue/R2 behavior, but protected-staging runtime
+  completion cannot be claimed before migration `0040`, Worker deployment, and an
+  eligible synthetic completed analysis exist in staging.
+- Staging currently has no OpenAI or Anthropic secret, so no live provider result
+  is fabricated merely to exercise export. Existing provider limitations remain.
+- Export retention, user-facing deletion, batch export, redline export, and large
+  artifact performance gates remain open.
+- Production is unchanged and remains separately unauthorized.

@@ -775,3 +775,20 @@ Migration 0036_current_lex_url_guard.sql is additive in effect: it drops and rec
 The migration chain passes 53/53 migration tests and the Cloudflare suite passes 82/82. Staging preflight showed 36 ledger rows through 0035, quick_check=ok, and no foreign-key violations. The apply changed only the guard and produced 37 ledger rows through 0036. Postflight again returned quick_check=ok, no foreign-key violations, and no pending migration.
 
 Pre/post bookmarks, portable export hashes, private-R2 round trips, and both remote restore drills are recorded in STAGING-0036-EVIDENCE.md. The post checkpoint restored 753 queries into a disposable EEUR D1 with 115 application tables, 295 indexes, 78 triggers, 37 migrations, exact exported non-empty row counts, quick_check=ok, and zero foreign-key violations. The disposable database was deleted after verification.
+
+## Migration 0040 — analysis export lifecycle
+
+`0040_luxuriant_winter_soldier.sql` additively creates `analysis_exports`, four
+indexes, and four trigger guards. It does not alter or delete existing analysis,
+document-builder, collaboration, invitation, share, signature, or workspace data.
+The guards require a completed same-workspace/same-owner source analysis, immutable
+identity, legal state transitions, and complete R2 artifact evidence before the
+terminal `completed` state. Nonterminal rows cannot carry an artifact key/hash.
+
+The complete local migration chain has 41 ledger entries (`0000`–`0040`), 119
+application tables, and 190 foreign-key references. Clean application,
+`quick_check`, `foreign_key_check`, D1-compatible trigger syntax, illegal transition,
+tenant mismatch, and immutable evidence tests pass. Rollback is application-first:
+roll back the Worker or disable the export consumer and leave the additive empty
+table unused. A D1 Time Travel bookmark plus checksummed private-R2 portable export
+is mandatory before the staging apply; no destructive down migration is planned.

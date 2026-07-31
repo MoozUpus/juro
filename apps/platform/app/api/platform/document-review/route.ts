@@ -14,14 +14,17 @@ export const GET = withApiErrors(async function GET() {
     `SELECT a.id,a.status,a.summary_json AS summaryJson,a.error_code AS errorCode,a.created_at AS createdAt,a.updated_at AS updatedAt,
       f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
       (SELECT json_group_array(json_object('id',r.id,'level',r.level,'title',r.title,'description',r.description,'excerpt',r.excerpt,'confidencePercent',r.confidence_percent))
-       FROM document_risks r WHERE r.analysis_id=a.id) AS risksJson
+       FROM document_risks r WHERE r.analysis_id=a.id) AS risksJson,
+      (SELECT json_group_array(json_object('id',e.id,'status',e.status,'format',e.format,'fileName',e.file_name,'sizeBytes',e.size_bytes,'errorCode',e.error_code,'completedAt',e.completed_at,'createdAt',e.created_at))
+       FROM analysis_exports e WHERE e.analysis_id=a.id AND e.workspace_id=a.workspace_id AND e.owner_user_id=a.owner_user_id) AS exportsJson
      FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
      WHERE a.workspace_id=? AND a.owner_user_id=? ORDER BY a.created_at DESC LIMIT 50`,
   ).bind(workspace.id, user.id).all();
   return response({
     analyses: rows.results.map(row => {
       const item = row as Record<string, unknown>;
-      return { ...item, summary: parseJson(String(item.summaryJson || "{}"), null), risks: parseJson(String(item.risksJson || "[]"), []) };
+      const { summaryJson, risksJson, exportsJson, ...publicItem } = item;
+      return { ...publicItem, summary: parseJson(String(summaryJson || "{}"), null), risks: parseJson(String(risksJson || "[]"), []), exports: parseJson(String(exportsJson || "[]"), []) };
     }),
   });
 });

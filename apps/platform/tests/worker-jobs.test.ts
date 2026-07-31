@@ -292,7 +292,7 @@ function mockBatch(
 }
 
 function envelope(
-  kind: JobKind = "document.export",
+  kind: JobKind = "notification.dispatch",
   overrides: Partial<JobEnvelope> = {},
 ): JobEnvelope {
   const tenantKind = new Set<JobKind>([

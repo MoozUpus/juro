@@ -281,6 +281,13 @@
       "when": 1785481856898,
       "tag": "0039_lame_killer_shrike",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1785486716039,
+      "tag": "0040_luxuriant_winter_soldier",
+      "breakpoints": true
     }
   ]
 }

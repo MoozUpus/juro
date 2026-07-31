@@ -1775,3 +1775,23 @@ not represented as malware clearance and cannot dispatch analysis.
 This bounded preflight does not decompress members or validate local-header/central-
 directory identity and CRC. The future isolated extractor/scanner must repeat path,
 size, ratio, type, local-header, and checksum controls before producing derivatives.
+
+## D-086 — completed analysis JSON export uses D1 outbox and immutable private R2 evidence
+
+Status: accepted and locally verified; protected-staging migration and runtime proof pending
+Date: 2026-07-31
+
+A completed document analysis may be exported only through an authenticated,
+tenant-owned server flow. The request creates one `analysis_exports` record and
+one `document.export` outbox event in the same D1 batch. A dedicated Queue
+consumer validates the normalized analysis schema, writes a deterministic JSON
+object with an immutable `If-None-Match: *` condition, verifies stored size and
+SHA-256, and only then marks the export completed. Downloads repeat tenant and
+owner authorization, verify the object, and append a content-free audit event.
+
+Migration `0040_luxuriant_winter_soldier.sql` is additive and guards source
+ownership, immutable identity, state transitions, and completed artifact evidence.
+Idempotency is scoped to owner and workspace and cannot reveal another tenant's
+request. Failed jobs store only a typed safe error and remain explicitly retryable.
+Only machine-readable JSON is in this slice; PDF, DOCX, marked-up, clean, and
+comparison-table exports remain outside the claim. Production remains unchanged.

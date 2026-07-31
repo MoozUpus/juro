@@ -239,3 +239,22 @@ Protected staging now contains an isolated Cinematic Legal Intelligence surface 
 Local type-check, lint, 41 targeted core tests, 28 rendered Worker tests, full 416-test regression, staging/production-profile builds, artifact checks, document smokes, secret scan, and Impeccable detector pass. Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` serves 100% of `juro-platform-staging`; D1 integrity and exact binding/Access/production read-backs pass.
 
 Authenticated visual/browser, axe, zoom, real-device, WebGL/GPU/memory, and performance gates remain open; see `STAGING-PHASE8-CINEMATIC-PROTOTYPE-EVIDENCE.md`.
+
+## Phase 5 completed-analysis JSON export candidate — 2026-07-31
+
+The current branch contains a real, locally verified export lifecycle for a
+tenant-owned completed document analysis:
+
+- authenticated request/list/download APIs with neutral cross-tenant failures;
+- D1 `analysis_exports` state, tenant/owner/source guards, and append-only audit;
+- transactional `job_outbox` dispatch to a dedicated document-export Queue;
+- schema-validated deterministic JSON written privately to R2 with size and
+  SHA-256 verification;
+- idempotent Queue replay, typed failure persistence, and explicit retry;
+- RU/UZ request, processing, failure, retry, and download UI states;
+- no new runtime dependency and no raw provider JSON exposed by the review API.
+
+Type-check, lint, full tests, staging build/artifact validation, Cloudflare
+binding checks, rendered auth tests, document smokes, and secret scans pass.
+Migration `0040` and the Worker candidate are not described as deployed until the
+protected-staging backup/apply/deploy/read-back sequence is completed.

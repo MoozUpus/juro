@@ -86,3 +86,18 @@ Backups use protected manifests and checksums without object keys, filenames, si
 New analysis uploads use `quarantine/{workspaceId}/{analysisId}/{fileId}` in the environment primary private bucket. The key is server-generated and contains no filename. The Worker streams the binary body to R2, supplies the expected SHA-256, then verifies size, stored SHA-256, and format magic during finalize.
 
 The separate quarantine bucket binding is deliberately not used yet because the current account-deletion purge inventories the primary bucket. Cross-bucket cutover requires additive purge inventory, retention, backup, and restore coverage. A safe prefix is not a malware scanner and no object is promoted to `safe` or `ready` until a real scanner produces verified evidence.
+
+## Completed-analysis export objects
+
+Machine-readable completed-analysis exports use the private primary `BUCKET`
+binding and server-generated keys:
+
+`exports/{workspaceId}/{analysisId}/{exportId}.json`
+
+The key contains no filename or user content. The Queue consumer uses conditional
+create semantics, `application/json; charset=utf-8`, `Cache-Control: private,
+no-store`, and SHA-256 metadata, then verifies size and checksum before D1 becomes
+`completed`. An authorized download is proxied by the Worker only after tenant,
+owner, state, size, and checksum verification; the bucket remains private.
+Idempotent replay cannot overwrite a different object. Export retention and purge
+integration remain an explicit open gate before production readiness.

@@ -132,3 +132,28 @@ checkpoint; deploy commit `cd24095` with `--keep-vars`; control-plane re-read;
 authenticated RU/UZ responsive route QA; synthetic workspace/membership/audit
 verification. The prior `0030`–`0033` record above is retained as historical
 evidence and is not the current deployment identity.
+## Analysis-export protected-staging candidate — 2026-07-31
+
+The exact candidate adds migration `0040`, the `document.export` Queue consumer,
+private-R2 export verification, authenticated APIs, and RU/UZ UI states. Local
+type-check, lint, full regression, staging build, artifact/binding validation,
+rendered authorization tests, document smokes, and strict secret scan pass.
+
+Safe staging order:
+
+1. commit and push the exact tested candidate;
+2. verify Wrangler identity/version, D1 integrity, 40 migrations through `0039`,
+   and that only `0040` is pending;
+3. capture a Time Travel bookmark and checksummed portable D1 export, upload it to
+   the private staging backup bucket, download it, and compare the hash;
+4. apply only `0040`; verify 41 ledger entries, table/index/trigger shape,
+   `quick_check`, and zero foreign-key violations;
+5. capture and round-trip a post-migration checkpoint;
+6. verify the staging document-export Queue/DLQ and deploy the exact staging
+   artifact to `juro-platform-staging` with `--keep-vars`;
+7. re-read version, deployment, bindings, secret names, Access denial, D1/Queue
+   state, and the unchanged production Worker identity.
+
+If runtime gates fail, roll traffic back to staging version
+`3bc029a3-8722-4edd-8c05-d615d5ce9a13`; migration `0040` is additive and may remain
+unused. Production deployment and production UI replacement are not authorized.

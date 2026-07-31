@@ -2030,6 +2030,41 @@ export const documentRisks = sqliteTable("document_risks", {
   createdAt: text("created_at").notNull(),
 }, (table) => [index("document_risks_analysis_idx").on(table.analysisId, table.level)]);
 
+export const analysisExports = sqliteTable("analysis_exports", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  format: text("format").notNull(),
+  status: text("status").notNull(),
+  r2Key: text("r2_key"),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes"),
+  sha256: text("sha256"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  errorCode: text("error_code"),
+  completedAt: text("completed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("analysis_exports_idempotency_uidx").on(table.idempotencyKey),
+  uniqueIndex("analysis_exports_r2_key_uidx").on(table.r2Key),
+  index("analysis_exports_analysis_idx").on(table.analysisId, table.createdAt),
+  index("analysis_exports_workspace_idx").on(table.workspaceId, table.createdAt),
+  index("analysis_exports_status_idx").on(table.status, table.updatedAt),
+  check("analysis_exports_format_check", sql`${table.format} = 'json'`),
+  check("analysis_exports_status_check", sql`${table.status} IN ('queued','processing','retrying','completed','failed')`),
+  check("analysis_exports_size_check", sql`${table.sizeBytes} IS NULL OR ${table.sizeBytes} >= 0`),
+  check("analysis_exports_sha_check", sql`${table.sha256} IS NULL OR length(${table.sha256}) = 64`),
+  check("analysis_exports_completion_check", sql`
+    (${table.status} = 'completed'
+      AND ${table.r2Key} IS NOT NULL AND ${table.sizeBytes} IS NOT NULL
+      AND ${table.sha256} IS NOT NULL AND ${table.completedAt} IS NOT NULL
+      AND ${table.errorCode} IS NULL)
+    OR (${table.status} <> 'completed' AND ${table.completedAt} IS NULL)
+  `),
+]);
+
 export const documentComparisons = sqliteTable("document_comparisons", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

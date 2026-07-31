@@ -20,6 +20,11 @@ import {
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
 import {
+  AnalysisExportError,
+  executeAnalysisExportJob,
+  recordAnalysisExportFailure,
+} from "../lib/document-analysis/exporter";
+import {
   isStagingDeletionProbe,
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
@@ -106,6 +111,10 @@ type JobErrorCode =
   | "DOCUMENT_ANALYSIS_OCR_REQUIRED"
   | "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED"
   | "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
+  | "DOCUMENT_EXPORT_NOT_FOUND"
+  | "DOCUMENT_EXPORT_NOT_READY"
+  | "DOCUMENT_EXPORT_INVALID_SOURCE"
+  | "DOCUMENT_EXPORT_OBJECT_FAILED"
   | "EMAIL_CONFIGURATION_UNAVAILABLE"
   | "EMAIL_JOB_INVALID"
   | "EMAIL_PROVIDER_REJECTED"
@@ -533,6 +542,25 @@ async function executeJob(
     } catch (error) {
       if (error instanceof DocumentAnalysisProcessingError) {
         throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
+  }
+  if (envelope.kind === "document.export") {
+    try {
+      await executeAnalysisExportJob(env, envelope.subjectId, envelope.workspaceId!);
+      return;
+    } catch (error) {
+      if (error instanceof AnalysisExportError) {
+        await recordAnalysisExportFailure(env.DB, envelope.subjectId, envelope.workspaceId!, error);
+        const code = ({
+          ANALYSIS_EXPORT_NOT_FOUND: "DOCUMENT_EXPORT_NOT_FOUND",
+          ANALYSIS_EXPORT_NOT_READY: "DOCUMENT_EXPORT_NOT_READY",
+          ANALYSIS_EXPORT_INVALID_SOURCE: "DOCUMENT_EXPORT_INVALID_SOURCE",
+          ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT: "DOCUMENT_EXPORT_INVALID_SOURCE",
+          ANALYSIS_EXPORT_OBJECT_FAILED: "DOCUMENT_EXPORT_OBJECT_FAILED",
+        } as const)[error.code];
+        throw new SafeJobError(code, error.retryable);
       }
       throw error;
     }
