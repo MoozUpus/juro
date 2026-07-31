@@ -1713,7 +1713,7 @@ Build/artifact validation may still set `CLOUDFLARE_ENV=staging` in a separate p
 
 ## D-083 — stream provider progress without exposing unvalidated legal content
 
-Status: accepted and locally verified; protected staging deployment and live-provider proof pending
+Status: accepted, locally verified, and deployed to protected staging; live-provider proof pending
 Date: 2026-07-31
 
 The OpenAI Responses API is consumed as SSE so the user can see bounded progress and interrupt a long request. Provider deltas contain an incomplete structured legal object, not trustworthy prose. JURO therefore never renders those deltas as an answer. It reports only the stage and bounded character count, then releases the final response after JSON Schema/Zod validation, verified-source enforcement, persistence, and ledger completion.

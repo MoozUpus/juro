@@ -2,7 +2,7 @@
 
 Date: 2026-07-31
 Scope: `POST /api/platform/ai` and the authenticated AI-lawyer client
-Environment: local validation complete; protected staging deployment pending
+Environment: local validation complete; deployed to owner-protected staging
 
 ## Implemented contract
 
@@ -32,11 +32,23 @@ Environment: local validation complete; protected staging deployment pending
 3. Retryable provider errors may retry within the two-attempt bound, while `AI_CANCELLED` stays terminal.
 4. Request abort listeners are removed on every terminal path.
 
+
+## Protected staging postflight
+
+- Commit: `83a673f` (`feat(platform): stream validated AI responses safely`).
+- Worker: `juro-platform-staging`.
+- Version: `1cbc9ea9-6ec8-4ab8-9495-b880b269f423` at 100% traffic.
+- Deployment message: `Phase 4 validated AI streaming 83a673f`.
+- Remote D1 `juro-staging`: `PRAGMA quick_check` returned `ok`; `PRAGMA foreign_key_check` returned no rows; zero writes.
+- Anonymous request to `https://staging.app.juro.uz/ru/individual/ai-chat`: `302` to Cloudflare Access with `no-store`; protection was not bypassed.
+- Staging secret-name inventory remains exactly `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`.
+- Production Worker `juro` latest version remains `91774ed4-72e9-47bb-b93a-a4208d490b24`.
+
 ## Open gates
 
 - `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are absent from the last inspected staging secret-name inventory.
 - No live OpenAI/Anthropic request, token/cost row, provider fallback, or authenticated RU/UZ stop trace is claimed.
-- Staging Worker version, deployment traffic, bindings, Access denial, and unchanged production version must be re-read after deployment and added here.
+- Authenticated browser streaming, cancellation, RU/UZ rendering, and D1 ledger evidence remain open until provider secrets and an authenticated staging session are available.
 - Reconnect/resumable generation remains unimplemented.
 
 Production is unchanged. Functional production deployment and production UI replacement remain separate explicit owner approvals.

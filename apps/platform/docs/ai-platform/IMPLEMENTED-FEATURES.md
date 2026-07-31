@@ -155,7 +155,8 @@ The feature branch additionally implements:
 - `AI_CANCELLED` persistence with reserved usage release and no charged cycle;
 - privacy-preserving `safety_identifier` plus explicit reasoning/verbosity controls.
 
-The transport is locally verified. Live provider execution is not claimed while protected staging provider secrets remain absent.
+The transport is locally verified and deployed to protected staging as Worker version `1cbc9ea9-6ec8-4ab8-9495-b880b269f423` at 100% traffic. Live provider execution is not claimed while protected staging provider secrets remain absent. Production remains unchanged.
+
 ## Phase 5 secure upload foundation
 
 The feature branch implements and locally verifies:

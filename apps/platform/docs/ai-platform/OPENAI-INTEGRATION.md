@@ -35,7 +35,7 @@ The owner must add the key through protected Cloudflare controls; it must never 
 ## Verification and remaining work
 
 - local transport, source-boundary, and usage-ledger tests cover split SSE frames, malformed events, terminal structured JSON, and cancellation without charge;
-- the full platform regression, environment matrix, and staging artifact must pass before deployment;
+- the full platform regression, environment matrix, staging artifact, and protected staging deployment postflight passed;
 - a live authenticated RU/UZ provider stream, stop/disconnect trace, D1 ledger proof, and retry/fallback trace remain blocked until protected provider secrets exist;
 - reconnect and resumable partial recovery are not implemented;
 - edit/regenerate/branch history;
