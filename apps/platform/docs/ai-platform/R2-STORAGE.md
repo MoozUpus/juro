@@ -101,3 +101,11 @@ no-store`, and SHA-256 metadata, then verifies size and checksum before D1 becom
 owner, state, size, and checksum verification; the bucket remains private.
 Idempotent replay cannot overwrite a different object. Export retention and purge
 integration remain an explicit open gate before production readiness.
+
+### Staging 0040 checkpoint
+
+The pre/post `juro-staging` portable exports are stored privately under
+`d1/juro-staging/20260731-141719/pre-0040.sql` and
+`d1/juro-staging/20260731-141949/post-0040.sql` in `juro-staging-backups`.
+Both were downloaded independently and matched their local SHA-256 values. These
+backup objects are recovery evidence, not application export artifacts.

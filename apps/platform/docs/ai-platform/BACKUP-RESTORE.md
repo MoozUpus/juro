@@ -253,3 +253,19 @@ The current post-0036/probe Time Travel bookmark is 00000132-00000000-000050b8-5
 Because the raw Cloudflare export order can violate foreign-key insertion order on remote import, the recovery set includes a deterministic parent-first artifact generated from the actual exported schema's foreign-key graph. That artifact was first restored locally and then imported into disposable remote D1 a4959a8e-a93b-435a-a9d2-4412ee651f89. Aggregate data/schema fingerprints, quick_check, and foreign_key_check passed. The disposable D1 was deleted after the drill; the private R2 recovery set remains available.
 
 This is a verified staging checkpoint, not a production backup authorization or a measured production RTO.
+
+## Migration 0040 staging recovery points — 2026-07-31
+
+Before `0040`, `juro-staging` recorded bookmark
+`00000200-00000000-000050b9-a424c2364078007537608621517e16d6` and private-R2
+portable export `d1/juro-staging/20260731-141719/pre-0040.sql`, 446,306 bytes,
+SHA-256 `e8230a91eb38472666b2333278038d5e75c57153a4f707da2b18b148cdb5fb2b`.
+
+After `0040`, bookmark
+`00000201-00000006-000050b9-0cf0522bce80aeababd50a483ea35489` and private-R2
+portable export `d1/juro-staging/20260731-141949/post-0040.sql`, 450,367 bytes,
+SHA-256 `42d0e9970ca0ef229c09f632d48b211c5135170adf877b5af0896ed1844f0460`
+were retained. Both objects were independently downloaded and matched their local
+hash. Use Time Travel or the pre export only for demonstrated corruption; normal
+rollback restores Worker version `3bc029a3-8722-4edd-8c05-d615d5ce9a13` and leaves
+the additive empty table unused.

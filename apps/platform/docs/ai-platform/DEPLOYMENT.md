@@ -132,7 +132,7 @@ checkpoint; deploy commit `cd24095` with `--keep-vars`; control-plane re-read;
 authenticated RU/UZ responsive route QA; synthetic workspace/membership/audit
 verification. The prior `0030`–`0033` record above is retained as historical
 evidence and is not the current deployment identity.
-## Analysis-export protected-staging candidate — 2026-07-31
+## Analysis-export protected-staging deployment — 2026-07-31
 
 The exact candidate adds migration `0040`, the `document.export` Queue consumer,
 private-R2 export verification, authenticated APIs, and RU/UZ UI states. Local
@@ -157,3 +157,16 @@ Safe staging order:
 If runtime gates fail, roll traffic back to staging version
 `3bc029a3-8722-4edd-8c05-d615d5ce9a13`; migration `0040` is additive and may remain
 unused. Production deployment and production UI replacement are not authorized.
+
+The sequence completed from commit `1488be1`. Migration `0040` is applied to
+`juro-staging`; pre/post Time Travel and private-R2 exports are checksum-verified.
+Worker version `6cf8434d-e94c-406a-9655-02bffdf0e2d2` serves 100%. Queue
+`staging-document-export` has one staging producer and one staging consumer with
+batch size 1, three retries, five-second wait, concurrency 1, 30-second retry
+delay, and dedicated DLQ.
+
+Root and both export API paths return Cloudflare Access `302` anonymously. Secret
+names, bindings, handler set, migration state, Queue policy, and production Worker
+identity were read back. Staging contains no completed analysis and synthetic probes
+are false, so live export completion is not claimed. Exact evidence and rollback are
+in `STAGING-0040-ANALYSIS-EXPORT-EVIDENCE.md`.

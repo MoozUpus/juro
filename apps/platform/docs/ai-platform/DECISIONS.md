@@ -1778,7 +1778,7 @@ size, ratio, type, local-header, and checksum controls before producing derivati
 
 ## D-086 — completed analysis JSON export uses D1 outbox and immutable private R2 evidence
 
-Status: accepted and locally verified; protected-staging migration and runtime proof pending
+Status: accepted, locally verified, and deployed to protected staging; eligible-row runtime proof pending
 Date: 2026-07-31
 
 A completed document analysis may be exported only through an authenticated,

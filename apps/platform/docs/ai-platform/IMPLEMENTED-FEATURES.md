@@ -240,9 +240,9 @@ Local type-check, lint, 41 targeted core tests, 28 rendered Worker tests, full 4
 
 Authenticated visual/browser, axe, zoom, real-device, WebGL/GPU/memory, and performance gates remain open; see `STAGING-PHASE8-CINEMATIC-PROTOTYPE-EVIDENCE.md`.
 
-## Phase 5 completed-analysis JSON export candidate — 2026-07-31
+## Phase 5 completed-analysis JSON export — 2026-07-31
 
-The current branch contains a real, locally verified export lifecycle for a
+Protected staging contains a real, locally verified export lifecycle for a
 tenant-owned completed document analysis:
 
 - authenticated request/list/download APIs with neutral cross-tenant failures;
@@ -254,7 +254,8 @@ tenant-owned completed document analysis:
 - RU/UZ request, processing, failure, retry, and download UI states;
 - no new runtime dependency and no raw provider JSON exposed by the review API.
 
-Type-check, lint, full tests, staging build/artifact validation, Cloudflare
-binding checks, rendered auth tests, document smokes, and secret scans pass.
-Migration `0040` and the Worker candidate are not described as deployed until the
-protected-staging backup/apply/deploy/read-back sequence is completed.
+Type-check, lint, full tests, staging build/artifact validation, Cloudflare binding
+checks, rendered auth tests, document smokes, and secret scans pass. Migration
+`0040` is applied to `juro-staging`; Worker version
+`6cf8434d-e94c-406a-9655-02bffdf0e2d2` serves 100% behind Access. No eligible
+completed analysis exists, so a live staging export is not claimed.

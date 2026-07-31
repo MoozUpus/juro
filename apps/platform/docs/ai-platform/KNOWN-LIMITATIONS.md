@@ -251,9 +251,10 @@ No Phase 5 production-readiness claim is made.
 
 - The implemented export format is normalized JSON only. Highlighted PDF, clean
   PDF, DOCX, comparison-table, and case-export formats are not implemented.
-- Local and contract tests prove Queue/R2 behavior, but protected-staging runtime
-  completion cannot be claimed before migration `0040`, Worker deployment, and an
-  eligible synthetic completed analysis exist in staging.
+- Migration `0040`, the Worker, and the export Queue consumer are deployed to
+  protected staging. Local contract tests prove Queue/R2 behavior, but an
+  authenticated end-to-end staging completion is not claimed because staging has
+  zero completed analyses and synthetic probes are disabled.
 - Staging currently has no OpenAI or Anthropic secret, so no live provider result
   is fabricated merely to exercise export. Existing provider limitations remain.
 - Export retention, user-facing deletion, batch export, redline export, and large

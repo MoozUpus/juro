@@ -778,8 +778,8 @@ Pre/post bookmarks, portable export hashes, private-R2 round trips, and both rem
 
 ## Migration 0040 — analysis export lifecycle
 
-`0040_luxuriant_winter_soldier.sql` additively creates `analysis_exports`, four
-indexes, and four trigger guards. It does not alter or delete existing analysis,
+`0040_luxuriant_winter_soldier.sql` additively creates `analysis_exports`, five
+indexes, and two trigger programs with four source/state guards. It does not alter or delete existing analysis,
 document-builder, collaboration, invitation, share, signature, or workspace data.
 The guards require a completed same-workspace/same-owner source analysis, immutable
 identity, legal state transitions, and complete R2 artifact evidence before the
@@ -792,3 +792,18 @@ tenant mismatch, and immutable evidence tests pass. Rollback is application-firs
 roll back the Worker or disable the export consumer and leave the additive empty
 table unused. A D1 Time Travel bookmark plus checksummed private-R2 portable export
 is mandatory before the staging apply; no destructive down migration is planned.
+
+### Staging `0040` record — 2026-07-31
+
+Preflight proved 40 ledger rows through `0039`, `quick_check=ok`, zero foreign-key
+violations, no export table, and exactly `0040` pending. The pre checkpoint bookmark
+was `00000200-00000000-000050b9-a424c2364078007537608621517e16d6`; its 446,306-byte
+portable export round-tripped through private R2 with SHA-256
+`e8230a91eb38472666b2333278038d5e75c57153a4f707da2b18b148cdb5fb2b`.
+
+Wrangler applied only `0040`. Postflight proved 41 ledger rows, the expected table,
+five explicit indexes, two trigger programs, zero export rows, `quick_check=ok`,
+zero foreign-key violations, and no pending migration. Post bookmark
+`00000201-00000006-000050b9-0cf0522bce80aeababd50a483ea35489` and the 450,367-byte
+private-R2 export matched SHA-256
+`42d0e9970ca0ef229c09f632d48b211c5135170adf877b5af0896ed1844f0460`.
