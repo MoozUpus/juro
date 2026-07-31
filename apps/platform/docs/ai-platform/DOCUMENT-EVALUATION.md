@@ -2,6 +2,11 @@
 
 Updated: 2026-07-31
 
+## Reproducible corpus harness
+
+`evaluation/document-evaluation-corpus.ts` defines a 100-item synthetic test-package manifest and 30 comparison pairs. It covers DOCX, text/scanned PDF, JPG, PNG, ZIP, tables, bilingual content, low-quality scans, annexes, injection payloads, renumbered clauses, hidden risks, dates/sums, and user-side selection.
+
+The manifest is not a claim that binary fixtures have passed OCR or Claude. `scripts/validate-document-evaluation.ts --results <reviewed-results.json>` is deliberately fail-closed: it requires one result per package, expected format, comparison peer, bounded OCR evidence for scans, and a human reviewer identity. A staging quality score must come from real safe-file/provider execution, not this manifest.
 ## Current automated evidence
 
 The document-analysis processor is tested for tenant/object-state checks before
