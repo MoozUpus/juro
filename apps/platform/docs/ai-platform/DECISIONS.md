@@ -1968,7 +1968,7 @@ then a new explicitly versioned probe key; it must never overwrite this evidence
 
 ## D-094 — retire the staging Anthropic model before accepting provider-key evidence
 
-Status: accepted; protected staging validation pending
+Status: accepted and protected-staging provider verified
 Date: 2026-08-01
 
 The secret-name inventory showed the owner had replaced `ANTHROPIC_API_KEY`, but
@@ -1988,3 +1988,13 @@ Official sources verified on 2026-08-01:
 - https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
 - https://platform.claude.com/docs/en/about-claude/models/migration-guide
 - https://platform.claude.com/docs/en/build-with-claude/structured-outputs
+
+### Staging verification
+
+The one-time `staging-anthropic-connectivity-v3` probe completed at
+`2026-07-31T20:00:05.995Z` with `claude-sonnet-4-6`, validated JSON output,
+194 input tokens, 8 output tokens, and 2,262 ms latency. The next safe Worker
+version is `91edb0b9-3758-4959-97d6-27fc52d643ae` with the probe flag restored
+to false. This proves only synthetic Anthropic connectivity and structured-output
+compatibility; it does not prove legal quality, file analysis, or production
+readiness.

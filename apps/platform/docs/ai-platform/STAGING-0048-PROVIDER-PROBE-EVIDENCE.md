@@ -53,3 +53,19 @@ fall back, or claim a successful Claude analysis.
 - final deployed version: `5c574a35-8b5e-4912-be8b-da1aed57369c`;
 - `STAGING_SYNTHETIC_PROBES_ENABLED=false`;
 - production Worker `juro`: unchanged.
+
+## Anthropic model-remediation probe — 2026-08-01 Asia/Tashkent
+
+The owner rotated the staging `ANTHROPIC_API_KEY`; its value was never read.
+The second Anthropic-only probe (`staging-anthropic-connectivity-v2`) still
+ended `PROVIDER_UNAVAILABLE`. Investigation identified the configured
+`claude-sonnet-4-20250514` model as retired by Anthropic on 2026-06-15.
+
+Staging was updated to `claude-sonnet-4-6` for both Anthropic runtime variables,
+then the one-time `staging-anthropic-connectivity-v3` probe ran at
+`2026-07-31T20:00:03.555Z`. It succeeded with validated structured output:
+194 input tokens, 8 output tokens, and 2,262 ms latency. No request or response
+text was persisted. The safe post-probe Worker version
+`91edb0b9-3758-4959-97d6-27fc52d643ae` restored
+`STAGING_SYNTHETIC_PROBES_ENABLED=false` at 100% traffic. Production was not
+queried, deployed, or changed.
