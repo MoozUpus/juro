@@ -1710,3 +1710,21 @@ The generated `dist/server/wrangler.json` already resolves the staging Worker id
 The incorrect Worker never received custom-domain traffic and failed while reconciling already-owned Queue consumers. It was deleted by exact name and absence was confirmed by error `10007`. The correct Worker was then deployed and read back at 100% traffic. This correction did not mutate production or shared data resources.
 
 Build/artifact validation may still set `CLOUDFLARE_ENV=staging` in a separate process. The variable must not leak into the flattened-artifact deploy process.
+
+## D-083 — stream provider progress without exposing unvalidated legal content
+
+Status: accepted and locally verified; protected staging deployment and live-provider proof pending
+Date: 2026-07-31
+
+The OpenAI Responses API is consumed as SSE so the user can see bounded progress and interrupt a long request. Provider deltas contain an incomplete structured legal object, not trustworthy prose. JURO therefore never renders those deltas as an answer. It reports only the stage and bounded character count, then releases the final response after JSON Schema/Zod validation, verified-source enforcement, persistence, and ledger completion.
+
+A browser stop or connection cancellation propagates through the Worker to the provider `AbortSignal`. The failed run records `AI_CANCELLED`, its reserved usage ledger changes to `released`, and the idempotency record is not marked successful. Anthropic fallback receives the same signal and user cancellation is terminal rather than retryable or fallback-eligible.
+
+The OpenAI request also supplies a domain-separated SHA-256 pseudonymous `safety_identifier`, explicit reasoning effort, and explicit text verbosity. No new dependency or database migration is required. Provider secrets remain server-only and absent from the inspected staging binding names, so live provider streaming is not claimed.
+
+Official contract references verified on 2026-07-31:
+
+- https://developers.openai.com/api/docs/guides/streaming-responses
+- https://developers.openai.com/api/docs/guides/structured-outputs
+- https://developers.openai.com/api/docs/guides/latest-model
+- https://developers.openai.com/api/docs/models/gpt-5.6-sol

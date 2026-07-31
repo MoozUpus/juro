@@ -9,9 +9,11 @@ import {
 } from "../lib/ai/legal-chat-schema";
 import {
   AiRunConflictError,
+  failAiRun,
   completeAiRun,
   reserveAiRun,
 } from "../lib/ai/run-store";
+import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
 
 const validLegalResponse = {
   responseKind: "clarification_required" as const,
@@ -73,6 +75,91 @@ test("no-source output is canonicalized to a non-chargeable clarification withou
   assert.deepEqual(result.deadlines, []);
   assert.equal(result.suggestedDocument, null);
 });
+
+test("OpenAI Responses SSE parser handles split structured-output frames and reports bounded progress", async () => {
+  const serialized = JSON.stringify(validLegalResponse);
+  const stream = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: serialized.slice(0, 180) })}\r\n\r\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: serialized.slice(180) })}\n\n`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        id: "resp-stream",
+        model: "gpt-5.6-sol",
+        status: "completed",
+        output: [],
+        usage: { input_tokens: 11, output_tokens: 22, input_tokens_details: { cached_tokens: 3 } },
+      },
+    })}\n\n`,
+  ].join("");
+  const bytes = new TextEncoder().encode(stream);
+  const response = chunkedResponse(bytes, [7, 31, 89, 211]);
+  const progress: number[] = [];
+  const payload = await readResponsesSse(response, (event) => {
+    if (event.stage === "provider_delta") progress.push(event.receivedCharacters);
+  });
+  const text = payload.output?.flatMap((item) => item.content ?? [])
+    .find((item) => item.type === "output_text")?.text;
+  assert.equal(text, serialized);
+  assert.deepEqual(JSON.parse(text || "{}"), validLegalResponse);
+  assert.ok(progress.length >= 1);
+  assert.equal(progress.at(-1), serialized.length);
+});
+
+test("OpenAI Responses SSE parser fails closed on malformed provider events", async () => {
+  const response = chunkedResponse(new TextEncoder().encode("event: response.output_text.delta\ndata: {not-json}\n\n"), [9]);
+  await assert.rejects(
+    readResponsesSse(response, () => undefined),
+    (error: unknown) => error instanceof ResponsesSseError && error.code === "INVALID_AI_OUTPUT",
+  );
+});
+test("cancelled AI run releases reserved usage and records no charge", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "cancelled-request", 1));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  await failAiRun({
+    db: d1,
+    runId: reserved.runId,
+    ledgerId: reserved.ledgerId,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "cancelled-request",
+    errorCode: "AI_CANCELLED",
+  });
+
+  const run = sqlite.prepare("SELECT status,error_code AS errorCode FROM ai_runs WHERE id=?")
+    .get(reserved.runId) as { status: string; errorCode: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?")
+    .get(reserved.ledgerId) as { status: string };
+  const idempotency = sqlite.prepare("SELECT status FROM idempotency_keys WHERE key=?")
+    .get("legal-chat:workspace-1:user-1:cancelled-request") as { status: string };
+  assert.equal(run.status, "failed");
+  assert.equal(run.errorCode, "AI_CANCELLED");
+  assert.equal(ledger.status, "released");
+  assert.equal(idempotency.status, "failed");
+});
+
+
+function chunkedResponse(bytes: Uint8Array, boundaries: number[]): Response {
+  const chunks: Uint8Array[] = [];
+  let offset = 0;
+  for (const boundary of boundaries) {
+    const end = Math.min(boundary, bytes.length);
+    if (end > offset) chunks.push(bytes.slice(offset, end));
+    offset = end;
+  }
+  if (offset < bytes.length) chunks.push(bytes.slice(offset));
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  }), {
+    headers: { "content-type": "text/event-stream" },
+  });
+}
 
 test("AI run reservation is idempotent and clarification does not consume a cycle", async () => {
   const { sqlite, d1 } = aiDatabase();

@@ -2,7 +2,7 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { AiUnavailableError } from "../../../../lib/document-builder/ai/openai";
-import { aiProviderStatus, legalAiProvider, type LegalSourceContext } from "../../../../lib/ai/provider";
+import { aiProviderStatus, legalAiProvider, type LegalAiProgress, type LegalSourceContext } from "../../../../lib/ai/provider";
 import {
   AiRunConflictError,
   completeAiRun,
@@ -49,7 +49,11 @@ export const GET = withApiErrors(async function GET(request: Request) {
   });
 });
 
-export const POST = withApiErrors(async function POST(request: Request) {
+async function executePost(
+  request: Request,
+  onProgress?: (event: LegalAiProgress) => void | Promise<void>,
+  signal: AbortSignal = request.signal,
+) {
   assertSafeWrite(request);
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
@@ -106,6 +110,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const { sources, legalDatabaseAsOf } = await retrieveVerifiedSources(db, question, locale);
   const requestHash = await sha256Json({ question, locale, answerMode, reasoningMode, conversationId: body?.conversationId || null, caseId: body?.caseId || null });
+  const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
   const instructionHash = await sha256Json({ version: INSTRUCTION_VERSION, jurisdiction: "UZ" });
   const sourceVersionHash = await sha256Json(sources.map((source) => ({ id: source.id, hash: source.contentSha256, excerpt: source.excerpt || null })));
 
@@ -140,8 +145,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
   try {
     aiResult = await provider.runLegalChat({
       question, locale, answerMode, reasoningMode, sources, legalDatabaseAsOf,
-      requestId: reservation.correlationId,
-    });
+      requestId: reservation.correlationId, safetyIdentifier,
+    }, { signal, onProgress });
   } catch (error) {
     const code = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";
     await failAiRun({
@@ -214,7 +219,74 @@ export const POST = withApiErrors(async function POST(request: Request) {
     },
     usage: await usageSummary(db, workspace.id, user.id),
   }, 201);
-});
+}
+
+
+const guardedExecutePost = withApiErrors(executePost);
+
+export async function POST(request: Request) {
+  if (!request.headers.get("accept")?.includes("text/event-stream")) {
+    return guardedExecutePost(request);
+  }
+  const abortController = new AbortController();
+  const encoder = new TextEncoder();
+  const abortFromRequest = () => abortController.abort();
+  if (request.signal.aborted) abortController.abort();
+  else request.signal.addEventListener("abort", abortFromRequest, { once: true });
+  let cancelled = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const emit = (event: string, data: unknown) => {
+        if (cancelled) return;
+        try {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        } catch {
+          cancelled = true;
+          abortController.abort();
+        }
+      };
+      emit("status", { stage: "accepted" });
+      void (async () => {
+        try {
+          const result = await guardedExecutePost(
+            request,
+            (progress) => emit("status", progress),
+            abortController.signal,
+          );
+          const body = await result.json().catch(() => ({
+            code: "STREAM_RESPONSE_INVALID",
+            error: "AI stream returned a non-JSON terminal response.",
+          }));
+          emit(result.ok ? "complete" : "error", { status: result.status, body });
+        } catch {
+          emit("error", {
+            status: 500,
+            body: { code: "STREAM_FAILED", error: "AI stream failed before completion." },
+          });
+        } finally {
+          request.signal.removeEventListener("abort", abortFromRequest);
+          if (!cancelled) {
+            try { controller.close(); } catch { /* client disconnected */ }
+          }
+        }
+      })();
+    },
+    cancel() {
+      cancelled = true;
+      abortController.abort();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "cache-control": "private, no-store, no-transform",
+      "content-type": "text/event-stream; charset=utf-8",
+      connection: "keep-alive",
+      pragma: "no-cache",
+      "x-accel-buffering": "no",
+    },
+  });
+}
 
 async function loadConversationResult(db: D1Database, conversationId: string, workspaceId: string, userId: string) {
   const conversation = await db.prepare(
@@ -291,12 +363,14 @@ function localizedProviderError(locale: "ru" | "uz", code: string) {
     INVALID_AI_OUTPUT: "AI вернул результат, который не прошёл проверку структуры. Лимит не списан.",
     AI_REFUSED: "Запрос не был обработан AI. Лимит не списан.",
     PROVIDER_UNAVAILABLE: "AI-провайдер временно недоступен. Лимит не списан.",
+    AI_CANCELLED: "Генерация остановлена. Лимит не списан.",
   };
   const uz: Record<string, string> = {
     PROVIDER_TIMEOUT: "AI javobni vaqtida yakunlamadi. Limit yechilmadi; qayta urinib ko‘ring.",
     INVALID_AI_OUTPUT: "AI natijasi tuzilma tekshiruvidan o‘tmadi. Limit yechilmadi.",
     AI_REFUSED: "So‘rov AI tomonidan qayta ishlanmadi. Limit yechilmadi.",
     PROVIDER_UNAVAILABLE: "AI-provayder vaqtincha ishlamayapti. Limit yechilmadi.",
+    AI_CANCELLED: "Javob yaratish to‘xtatildi. Limit yechilmadi.",
   };
   return (locale === "ru" ? ru : uz)[code] || (locale === "ru" ? ru.PROVIDER_UNAVAILABLE : uz.PROVIDER_UNAVAILABLE);
 }

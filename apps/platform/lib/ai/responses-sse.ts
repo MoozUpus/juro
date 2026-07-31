@@ -1,0 +1,106 @@
+export type ResponsesSsePayload = {
+  id?: string;
+  model?: string;
+  status?: string;
+  incomplete_details?: { reason?: string } | null;
+  output?: Array<{
+    type?: string;
+    content?: Array<{ type?: string; text?: string; refusal?: string }>;
+  }>;
+  usage?: {
+    input_tokens?: number;
+    output_tokens?: number;
+    total_tokens?: number;
+    input_tokens_details?: { cached_tokens?: number };
+  };
+  error?: { message?: string };
+};
+
+export class ResponsesSseError extends Error {
+  constructor(
+    message: string,
+    readonly code: "PROVIDER_UNAVAILABLE" | "INVALID_AI_OUTPUT" | "AI_REFUSED",
+    readonly retryable: boolean,
+  ) {
+    super(message);
+    this.name = "ResponsesSseError";
+  }
+}
+
+export async function readResponsesSse(
+  response: Response,
+  onProgress: (event: { stage: "provider_delta"; receivedCharacters: number }) => void | Promise<void>,
+): Promise<ResponsesSsePayload> {
+  if (!response.body) {
+    throw new ResponsesSseError("AI-провайдер не вернул поток ответа.", "PROVIDER_UNAVAILABLE", true);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let outputText = "";
+  let refusal = "";
+  let finalResponse: ResponsesSsePayload | null = null;
+  let lastReported = 0;
+
+  const processFrame = async (frame: string) => {
+    const data = frame.split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n");
+    if (!data || data === "[DONE]") return;
+    let event: {
+      type?: string;
+      delta?: string;
+      response?: ResponsesSsePayload;
+      error?: { message?: string };
+    };
+    try {
+      event = JSON.parse(data) as typeof event;
+    } catch {
+      throw new ResponsesSseError("AI-провайдер вернул некорректное событие потока.", "INVALID_AI_OUTPUT", false);
+    }
+    if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+      outputText += event.delta;
+      if (outputText.length - lastReported >= 128) {
+        lastReported = outputText.length;
+        await onProgress({ stage: "provider_delta", receivedCharacters: outputText.length });
+      }
+      if (outputText.length > 512_000) {
+        throw new ResponsesSseError("AI-ответ превысил допустимый размер.", "INVALID_AI_OUTPUT", false);
+      }
+    } else if (event.type === "response.refusal.delta" && typeof event.delta === "string") {
+      refusal += event.delta;
+    } else if (event.type === "response.completed" && event.response) {
+      finalResponse = event.response;
+    } else if (event.type === "response.failed") {
+      finalResponse = event.response ?? null;
+    } else if (event.type === "error" || event.type === "response.error") {
+      throw new ResponsesSseError(event.error?.message || "AI-поток завершился ошибкой.", "PROVIDER_UNAVAILABLE", true);
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    buffer = (buffer + decoder.decode(value, { stream: !done })).replace(/\r\n/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      await processFrame(frame);
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (done) break;
+  }
+  if (buffer.trim()) await processFrame(buffer);
+  if (refusal) {
+    throw new ResponsesSseError("AI-провайдер отказался обрабатывать запрос.", "AI_REFUSED", false);
+  }
+  const completed = finalResponse as ResponsesSsePayload | null;
+  if (!completed) {
+    throw new ResponsesSseError("AI-поток завершился без финального ответа.", "INVALID_AI_OUTPUT", false);
+  }
+  if (outputText && !(completed.output?.flatMap((item) => item.content ?? []) ?? []).some((item) => item.type === "output_text" && item.text)) {
+    completed.output = [{ type: "message", content: [{ type: "output_text", text: outputText }] }];
+  }
+  return completed;
+}

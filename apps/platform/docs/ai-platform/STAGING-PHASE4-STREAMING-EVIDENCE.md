@@ -1,0 +1,42 @@
+# Phase 4 validated streaming — evidence
+
+Date: 2026-07-31
+Scope: `POST /api/platform/ai` and the authenticated AI-lawyer client
+Environment: local validation complete; protected staging deployment pending
+
+## Implemented contract
+
+- OpenAI Responses API is requested with `stream: true` for the authenticated browser flow.
+- The Worker parses semantic SSE events across arbitrary byte boundaries and both CRLF/LF framing.
+- The browser receives only `accepted`, `provider_started`, `provider_delta`, and `fallback` status metadata before completion.
+- Provider-generated legal content is released only as a terminal response after JSON Schema, Zod, verified-source, persistence, and usage-ledger checks.
+- Stop/disconnect propagates an `AbortSignal` to both the primary provider and any eligible fallback.
+- A cancelled run stores `AI_CANCELLED`, releases its reservation, and leaves no consumed usage cycle.
+- No database migration, Cloudflare resource, runtime dependency, or production route was added.
+
+## Local evidence
+
+- `npx tsx --test tests/ai-platform.test.ts`: 9 passed, 0 failed.
+- `npm run type-check`: passed.
+- `npm run lint`: passed after abort-listener review.
+- `npm test`: 313 core tests and 84 Cloudflare tests passed; bounded development build passed.
+- `npm run build:staging`: passed and validated the staging artifact.
+- `npm run cf:types:check`: generated bindings are current.
+- `npm run validate:cloudflare:matrix`: development, staging, and production-profile build/dry-run matrix passed when run sequentially.
+- `git diff --check`: passed.
+
+## Review findings fixed before staging
+
+1. SSE CRLF delimiters split between network chunks are normalized after concatenation.
+2. Caller cancellation is checked before timeout retry in the Anthropic fallback.
+3. Retryable provider errors may retry within the two-attempt bound, while `AI_CANCELLED` stays terminal.
+4. Request abort listeners are removed on every terminal path.
+
+## Open gates
+
+- `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` are absent from the last inspected staging secret-name inventory.
+- No live OpenAI/Anthropic request, token/cost row, provider fallback, or authenticated RU/UZ stop trace is claimed.
+- Staging Worker version, deployment traffic, bindings, Access denial, and unchanged production version must be re-read after deployment and added here.
+- Reconnect/resumable generation remains unimplemented.
+
+Production is unchanged. Functional production deployment and production UI replacement remain separate explicit owner approvals.

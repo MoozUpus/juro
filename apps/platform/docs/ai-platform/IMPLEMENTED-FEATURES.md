@@ -142,6 +142,20 @@ Local verification passed 301 core/rendered checks and 82 Cloudflare checks. Sta
 
 Live provider execution remains blocked by absent `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` bindings and is not claimed. Production remains unchanged.
 
+
+### Phase 4 validated streaming transport — 2026-07-31
+
+The feature branch additionally implements:
+
+- real upstream OpenAI Responses SSE parsing across split CRLF/LF frames;
+- safe progress events without exposing incomplete structured legal text;
+- final-answer gating behind schema, source, persistence, and ledger checks;
+- visible RU/UZ progress and an accessible stop control;
+- end-to-end AbortSignal propagation through OpenAI and Anthropic fallback;
+- `AI_CANCELLED` persistence with reserved usage release and no charged cycle;
+- privacy-preserving `safety_identifier` plus explicit reasoning/verbosity controls.
+
+The transport is locally verified. Live provider execution is not claimed while protected staging provider secrets remain absent.
 ## Phase 5 secure upload foundation
 
 The feature branch implements and locally verifies:

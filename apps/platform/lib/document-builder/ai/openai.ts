@@ -1,10 +1,12 @@
 import { runtimeEnv } from "../storage/runtime";
+import { readResponsesSse, ResponsesSseError } from "../../ai/responses-sse";
 
 export type AiProviderErrorCode =
   | "PROVIDER_UNAVAILABLE"
   | "PROVIDER_TIMEOUT"
   | "INVALID_AI_OUTPUT"
-  | "AI_REFUSED";
+  | "AI_REFUSED"
+  | "AI_CANCELLED";
 
 export class AiUnavailableError extends Error {
   readonly code: AiProviderErrorCode;
@@ -56,6 +58,10 @@ export type AiStructuredResult<T> = {
   usage: AiProviderUsage;
   fallbackFromProvider: "openai" | "anthropic" | null;
 };
+export type AiStructuredProgress =
+  | { stage: "provider_started"; provider: "openai"; model: string }
+  | { stage: "provider_delta"; receivedCharacters: number };
+
 
 export function hasAiConfiguration(): boolean {
   const configuration = runtimeEnv();
@@ -88,6 +94,11 @@ export async function callOpenAiStructured<T>(options: {
   requestId?: string;
   model?: string;
   maxAttempts?: 1 | 2;
+  signal?: AbortSignal;
+  onProgress?: (event: AiStructuredProgress) => void | Promise<void>;
+  safetyIdentifier?: string;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
+  textVerbosity?: "low" | "medium" | "high";
 }): Promise<AiStructuredResult<T>> {
   const configuration = runtimeEnv();
   const apiKey = configuration.OPENAI_API_KEY || (configuration.AI_PROVIDER === "openai" ? configuration.AI_PROVIDER_API_KEY : undefined);
@@ -101,8 +112,14 @@ export async function callOpenAiStructured<T>(options: {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
+    const cancelFromCaller = () => controller.abort();
+    if (options.signal?.aborted) {
+      throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
+    }
+    options.signal?.addEventListener("abort", cancelFromCaller, { once: true });
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
     try {
+      await options.onProgress?.({ stage: "provider_started", provider: "openai", model });
       const response = await fetch("https://api.openai.com/v1/responses", {
         method: "POST",
         headers: {
@@ -114,7 +131,11 @@ export async function callOpenAiStructured<T>(options: {
           model,
           instructions: options.instructions,
           input: options.rawInput ? options.input : typeof options.input === "string" ? options.input : JSON.stringify(options.input),
+          ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
+          ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort } } : {}),
+          stream: Boolean(options.onProgress),
           text: {
+            ...(options.textVerbosity ? { verbosity: options.textVerbosity } : {}),
             format: {
               type: "json_schema",
               name: options.schemaName,
@@ -125,7 +146,9 @@ export async function callOpenAiStructured<T>(options: {
         }),
         signal: controller.signal,
       });
-      const payload = await response.json().catch(() => ({})) as ResponsesApiPayload;
+      const payload = options.onProgress && response.ok
+        ? await readOpenAiEventStream(response, options.onProgress)
+        : await response.json().catch(() => ({})) as ResponsesApiPayload;
       totalUsage.inputTokens += payload.usage?.input_tokens ?? 0;
       totalUsage.outputTokens += payload.usage?.output_tokens ?? 0;
       totalUsage.cachedInputTokens += payload.usage?.input_tokens_details?.cached_tokens ?? 0;
@@ -171,8 +194,14 @@ export async function callOpenAiStructured<T>(options: {
         throw new AiUnavailableError("AI-проверка вернула результат, не соответствующий контракту.", "INVALID_AI_OUTPUT", false);
       }
     } catch (error) {
-      if (error instanceof AiUnavailableError) throw error;
+      if (error instanceof AiUnavailableError) {
+        if (error.retryable && attempt < maxAttempts) continue;
+        throw error;
+      }
       if (error instanceof DOMException && error.name === "AbortError") {
+        if (options.signal?.aborted) {
+          throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
+        }
         if (attempt < maxAttempts) continue;
         throw new AiUnavailableError("AI-проверка превысила допустимое время ожидания.", "PROVIDER_TIMEOUT", true);
       }
@@ -181,6 +210,7 @@ export async function callOpenAiStructured<T>(options: {
       }
     } finally {
       clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", cancelFromCaller);
     }
   }
   throw new AiUnavailableError("AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);
@@ -192,6 +222,20 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const chunk = 0x8000;
   for (let offset = 0; offset < bytes.length; offset += chunk) {
     binary += String.fromCharCode(...bytes.subarray(offset, Math.min(offset + chunk, bytes.length)));
+
   }
   return btoa(binary);
+}
+async function readOpenAiEventStream(
+  response: Response,
+  onProgress: (event: AiStructuredProgress) => void | Promise<void>,
+): Promise<ResponsesApiPayload> {
+  try {
+    return await readResponsesSse(response, onProgress) as ResponsesApiPayload;
+  } catch (error) {
+    if (error instanceof ResponsesSseError) {
+      throw new AiUnavailableError(error.message, error.code, error.retryable);
+    }
+    throw error;
+  }
 }

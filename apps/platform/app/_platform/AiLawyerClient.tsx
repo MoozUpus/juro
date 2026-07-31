@@ -2,9 +2,9 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, LoaderCircle, Send, ShieldAlert, X } from "lucide-react";
+import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, LoaderCircle, Send, ShieldAlert, Square, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, KeyboardEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
@@ -46,6 +46,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [streamStatus, setStreamStatus] = useState("");
+  const streamAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -68,12 +70,16 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   async function submit(event?: FormEvent) {
     event?.preventDefault();
     if (!question.trim() || sending || !status?.configured) return;
+    const controller = new AbortController();
+    streamAbortRef.current = controller;
     setSending(true);
     setError("");
+    setStreamStatus(ru ? "JURO принимает запрос…" : "JURO so‘rovni qabul qilmoqda…");
     try {
       const response = await fetch("/api/platform/ai", {
         method: "POST",
         headers: {
+          accept: "text/event-stream",
           "content-type": "application/json",
           "x-juro-csrf": "1",
           "idempotency-key": crypto.randomUUID(),
@@ -85,18 +91,35 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           reasoningMode,
           conversationId: answer?.conversationId || selectedConversationId || undefined,
         }),
+        signal: controller.signal,
       });
-      const body = await response.json() as Answer & { error?: string; code?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Не удалось получить ответ." : "Javob olinmadi."));
-      if (response.status === 202) throw new Error(ru ? "Запрос уже обрабатывается. Откройте диалог через несколько секунд." : "So‘rov qayta ishlanmoqda. Suhbatni bir necha soniyadan so‘ng oching.");
+      if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
+        throw new Error(ru ? "Не удалось открыть защищённый поток ответа." : "Himoyalangan javob oqimini ochib bo‘lmadi.");
+      }
+      const terminal = await readAiEventStream(response, (progress) => {
+        if (progress.stage === "provider_started") {
+          setStreamStatus(ru ? "AI формирует структурированный ответ…" : "AI tuzilgan javobni tayyorlamoqda…");
+        } else if (progress.stage === "provider_delta") {
+          setStreamStatus(ru ? "JURO проверяет структуру и источники…" : "JURO tuzilma va manbalarni tekshirmoqda…");
+        } else if (progress.stage === "fallback") {
+          setStreamStatus(ru ? "Основной провайдер недоступен — включён резервный…" : "Asosiy provayder ishlamayapti — zaxira yoqildi…");
+        }
+      });
+      const body = terminal.body as Answer & { error?: string; code?: string };
+      if (terminal.status < 200 || terminal.status >= 300) throw new Error(body.error || (ru ? "Не удалось получить ответ." : "Javob olinmadi."));
+      if (terminal.status === 202) throw new Error(ru ? "Запрос уже обрабатывается. Откройте диалог через несколько секунд." : "So‘rov qayta ishlanmoqda. Suhbatni bir necha soniyadan so‘ng oching.");
       setAnswer(body);
       if (body.usage) setUsage(body.usage);
       setQuestion("");
       router.replace(`${pathname}?conversationId=${encodeURIComponent(body.conversationId)}`, { scroll: false });
       await load();
     } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
+      setError(value instanceof DOMException && value.name === "AbortError"
+        ? (ru ? "Генерация остановлена. Лимит не списан." : "Javob yaratish to‘xtatildi. Limit yechilmadi.")
+        : value instanceof Error ? value.message : String(value));
     } finally {
+      streamAbortRef.current = null;
+      setStreamStatus("");
       setSending(false);
     }
   }
@@ -143,8 +166,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           </div>
           <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
           <textarea id="ai-question" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Что произошло? Enter — отправить" : "Nima bo‘ldi? Enter — yuborish"} />
-          <button disabled={!status?.configured || !question.trim() || sending} aria-label={ru ? "Отправить" : "Yuborish"}>{sending ? <LoaderCircle className="spin" /> : <Send />}</button>
-          <small>{ru ? "Подтверждённые выводы строятся только на опубликованных источниках JURO." : "Tasdiqlangan xulosalar faqat JUROda e’lon qilingan manbalarga asoslanadi."}</small>
+          {sending
+            ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={ru ? "Остановить генерацию" : "Javob yaratishni to‘xtatish"}><Square /></button>
+            : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}
+          <small role={sending ? "status" : undefined}>{streamStatus || (ru ? "Подтверждённые выводы строятся только на опубликованных источниках JURO." : "Tasdiqlangan xulosalar faqat JUROda e’lon qilingan manbalarga asoslanadi.")}</small>
         </form>
       </main>
       <aside className="ai-context">
@@ -154,6 +179,56 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       </aside>
     </section>
   );
+}
+
+type AiStreamStatus = {
+  stage?: "accepted" | "provider_started" | "provider_delta" | "fallback";
+  provider?: string;
+  model?: string;
+  receivedCharacters?: number;
+};
+
+async function readAiEventStream(
+  response: Response,
+  onStatus: (status: AiStreamStatus) => void,
+): Promise<{ status: number; body: unknown }> {
+  if (!response.body) throw new Error("STREAM_BODY_MISSING");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let terminal: { status: number; body: unknown } | null = null;
+
+  const processFrame = (frame: string) => {
+    const event = frame.split("\n").find((line) => line.startsWith("event:"))?.slice(6).trim();
+    const data = frame.split("\n")
+      .filter((line) => line.startsWith("data:"))
+      .map((line) => line.slice(5).trimStart())
+      .join("\n");
+    if (!event || !data) return;
+    let parsed: unknown;
+    try { parsed = JSON.parse(data); } catch { throw new Error("STREAM_EVENT_INVALID"); }
+    if (event === "status") onStatus(parsed as AiStreamStatus);
+    if (event === "complete" || event === "error") {
+      const value = parsed as { status?: number; body?: unknown };
+      terminal = { status: value.status ?? 500, body: value.body ?? {} };
+    }
+  };
+
+  while (!terminal) {
+    const { done, value } = await reader.read();
+    buffer = (buffer + decoder.decode(value, { stream: !done })).replace(/\r\n/g, "\n");
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary >= 0) {
+      const frame = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      processFrame(frame);
+      boundary = buffer.indexOf("\n\n");
+    }
+    if (done) break;
+  }
+  if (!terminal && buffer.trim()) processFrame(buffer);
+  if (!terminal) throw new Error("STREAM_TERMINAL_EVENT_MISSING");
+  return terminal;
 }
 
 function LegalAnswer({ result, ru }: { result: LegalResult; ru: boolean }) {

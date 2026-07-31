@@ -31,6 +31,7 @@ export async function callAnthropicStructured<T>(options: {
   requestId?: string;
   model?: string;
   maxAttempts?: 1 | 2;
+  signal?: AbortSignal;
 }): Promise<AiStructuredResult<T>> {
   const configuration = runtimeEnv();
   const apiKey = configuration.ANTHROPIC_API_KEY;
@@ -44,6 +45,11 @@ export async function callAnthropicStructured<T>(options: {
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
+    const cancelFromCaller = () => controller.abort();
+    if (options.signal?.aborted) {
+      throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
+    }
+    options.signal?.addEventListener("abort", cancelFromCaller, { once: true });
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
     try {
       const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -116,8 +122,14 @@ export async function callAnthropicStructured<T>(options: {
         throw new AiUnavailableError("Резервная AI-проверка вернула результат вне контракта.", "INVALID_AI_OUTPUT", false);
       }
     } catch (error) {
-      if (error instanceof AiUnavailableError) throw error;
+      if (error instanceof AiUnavailableError) {
+        if (error.retryable && attempt < maxAttempts) continue;
+        throw error;
+      }
       if (error instanceof DOMException && error.name === "AbortError") {
+        if (options.signal?.aborted) {
+          throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
+        }
         if (attempt < maxAttempts) continue;
         throw new AiUnavailableError("Резервная AI-проверка превысила время ожидания.", "PROVIDER_TIMEOUT", true);
       }
@@ -126,6 +138,7 @@ export async function callAnthropicStructured<T>(options: {
       }
     } finally {
       clearTimeout(timeout);
+      options.signal?.removeEventListener("abort", cancelFromCaller);
     }
   }
   throw new AiUnavailableError("Резервная AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);
