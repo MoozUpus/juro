@@ -6,9 +6,9 @@ Scope: owner-only `juro-platform-staging`. Production Worker `juro`, the public 
 
 ## Source and deployment identity
 
-- Source commit: `aa713e6` (provider validation) plus `6027e06` (current Anthropic model).
+- Source commit: `5ffdd23` (post-key-update Anthropic v4 validation) plus `6027e06` (current Anthropic model).
 - Worker: `juro-platform-staging`.
-- Worker version: `91edb0b9-3758-4959-97d6-27fc52d643ae` at 100% traffic.
+- Worker version: `4bdc83fd-45dd-41d5-b464-8a7154ef7a07` at 100% traffic.
 - Protected hostname: `https://staging.app.juro.uz`.
 - Anonymous `document-review` and canonical `document-builder` requests both returned HTTP `302` at the Cloudflare Access boundary; no Access bypass was used.
 
@@ -39,7 +39,7 @@ The exact post-deploy secret-name inventory contains:
 - `RESEND_API_KEY`;
 - `TURNSTILE_SECRET_KEY`.
 
-Secret values were not read or logged. A one-time synthetic Anthropic structured-output connectivity probe completed successfully on `claude-sonnet-4-6`; the probe flag was then returned to `false`. No live document-analysis run, provider fallback, or completed analysis is claimed because the malware gate prevents any uploaded file from becoming `analysis_safe`.
+Secret values were not read or logged. A one-time post-key-update Anthropic v4 structured-output connectivity probe completed successfully on `claude-sonnet-4-6` (194 input tokens, 8 output tokens, 1,894 ms); the probe flag was then returned to `false`. No live document-analysis run, provider fallback, or completed analysis is claimed because the malware gate prevents any uploaded file from becoming `analysis_safe`.
 
 ## Verification evidence
 

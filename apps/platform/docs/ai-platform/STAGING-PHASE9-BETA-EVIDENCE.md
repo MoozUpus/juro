@@ -7,8 +7,8 @@ Status: technical staging checkpoint deployed; closed-beta gate not passed.
 
 - URL: `https://staging.app.juro.uz/ru/individual/prototypes/platform/cinematic`;
 - Worker: `juro-platform-staging`;
-- version: `91edb0b9-3758-4959-97d6-27fc52d643ae` at 100% traffic;
-- source: `6027e06` for the retired-model remediation and provider-probe runtime (following current Phase 8 shell hardening);
+- version: `4bdc83fd-45dd-41d5-b464-8a7154ef7a07` at 100% traffic;
+- source: `5ffdd23` for the post-key-update Anthropic v4 probe (following current Phase 8 shell hardening);
 - Access: owner-only Cloudflare Access, followed by the normal application session;
 - production UI: unchanged.
 
@@ -18,7 +18,7 @@ The route uses real staging session, tenant, dashboard API, and canonical applic
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Exact deployment | Pass | staging deployment version `91edb0b9-3758-4959-97d6-27fc52d643ae` |
+| Exact deployment | Pass | staging deployment version `4bdc83fd-45dd-41d5-b464-8a7154ef7a07` |
 | Staging-only resources | Pass | D1/R2/Queue/Vectorize/Analytics binding read-back |
 | D1 integrity | Pass | `quick_check=ok`; zero FK rows; zero writes |
 | Anonymous isolation | Pass | 2026-07-31 HTTP `HEAD`: root, RU/UZ prototype and canonical builder each return Access `302` with `no-store` |
@@ -32,7 +32,7 @@ The route uses real staging session, tenant, dashboard API, and canonical applic
 | Performance/device | Open | LCP/INP/CLS, touch, slow mobile, GPU/memory not measured |
 | Avatar/voice fallbacks | Partial | Static fallback is implemented; real 3D/STT/TTS is absent and feature-off |
 | OpenAI provider | Pass (limited) | one fixed staging-only structured-output probe passed; no user content involved |
-| Anthropic provider | Pass (limited) | v3 fixed staging-only structured-output probe passed with `claude-sonnet-4-6`; no user content involved |
+| Anthropic provider | Pass (limited) | v4 fixed staging-only structured-output probe passed with `claude-sonnet-4-6` in 1,894 ms; no user content involved |
 | Real document analysis | Blocked | Malware scanner is absent; provider secret names are present but no authenticated provider run is verified |
 
 ## Closed-beta matrix not yet executable
@@ -63,4 +63,4 @@ No production approval is requested at this checkpoint.
 
 ## Phase 9 provider checkpoint
 
-Migration `0048` and one controlled cron probe are recorded in `STAGING-0048-PROVIDER-PROBE-EVIDENCE.md`. The flag is again `false`; the staging database passed `quick_check`, foreign-key validation, and no-pending-migration postflight. OpenAI and Anthropic transport/structured output are verified only for fixed synthetic requests. Anthropic v1/v2 failures remain immutable evidence; v3 passed after replacing the officially retired model with `claude-sonnet-4-6`. This is not document-analysis or legal-quality evidence.
+Migration `0048` and one controlled cron probe are recorded in `STAGING-0048-PROVIDER-PROBE-EVIDENCE.md`. The flag is again `false`; the staging database passed `quick_check`, foreign-key validation, and no-pending-migration postflight. OpenAI and Anthropic transport/structured output are verified only for fixed synthetic requests. Anthropic v1/v2 failures remain immutable evidence; v3 passed after replacing the officially retired model with `claude-sonnet-4-6`, and v4 revalidated the subsequently updated staging key (194 input tokens, 8 output tokens, 1,894 ms). This is not document-analysis or legal-quality evidence.
