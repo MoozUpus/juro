@@ -11,5 +11,5 @@ export default async function BusinessCasePage({ params }: { params: Promise<{ l
   if (!isLocale(locale) || !isWorkspaceId(workspaceId)) notFound();
   const base = platformBasePath(locale, "business", workspaceId);
   await requireChatGPTUser(`${base}/cases/${encodeURIComponent(caseId)}`);
-  return <ActionPlanClient locale={locale} accountType="business" />;
+  return <ActionPlanClient locale={locale} accountType="business" initialCaseId={caseId} />;
 }

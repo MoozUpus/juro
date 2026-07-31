@@ -974,3 +974,19 @@ test("Jurobek is a static optimized image without animation handlers or 3D depen
   assert.doesNotMatch(styles, /@keyframes[^}]*jurobek|animation[^;]*jurobek/i);
   assert.doesNotMatch(packageSource, /three|react-three|lottie|framer-motion/);
 });
+
+test("case-detail routes remain tenant-scoped and do not render the workspace-wide plan", async () => {
+  const [api, client, personalPage, businessPage] = await Promise.all([
+    readFile(new URL("../app/api/platform/cases/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/ActionPlanClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/[locale]/[accountType]/cases/[caseId]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/[locale]/business/[workspaceId]/cases/[caseId]/page.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(api, /new URL\(request\.url\)\.searchParams\.get\("caseId"\)/);
+  assert.match(api, /WHERE c\.workspace_id=\?\$\{caseScope\}/);
+  assert.match(api, /bind\(workspace\.id,caseId\)/);
+  assert.match(client, /initialCaseId \? `\/api\/platform\/cases\?caseId=\$\{encodeURIComponent\(initialCaseId\)\}`/);
+  assert.match(client, /!initialCaseId && <form className="plan-create"/);
+  assert.match(personalPage, /initialCaseId=\{caseId\}/);
+  assert.match(businessPage, /initialCaseId=\{caseId\}/);
+});

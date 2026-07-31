@@ -67,9 +67,11 @@ const catalog = {
 export function ActionPlanClient({
   locale,
   accountType,
+  initialCaseId,
 }: {
   locale: PlatformLocale;
   accountType: AccountType;
+  initialCaseId?: string;
 }) {
   const ru = locale === "ru";
   const base = usePlatformBasePath();
@@ -82,12 +84,12 @@ export function ActionPlanClient({
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
   const [savingStepId, setSavingStepId] = useState<string | null>(null);
-  const [openCase, setOpenCase] = useState<string | null>(null);
+  const [openCase, setOpenCase] = useState<string | null>(initialCaseId ?? null);
 
   const load = useCallback(async () => {
     setError("");
     try {
-      const response = await fetch("/api/platform/cases", { cache: "no-store" });
+      const response = await fetch(initialCaseId ? `/api/platform/cases?caseId=${encodeURIComponent(initialCaseId)}` : "/api/platform/cases", { cache: "no-store" });
       const data = await response.json() as { cases?: Case[]; error?: string };
       if (!response.ok) throw new Error(data.error || "Ошибка загрузки");
       setCases(data.cases || []);
@@ -96,7 +98,7 @@ export function ActionPlanClient({
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialCaseId]);
 
   useEffect(() => {
     void load();
@@ -177,7 +179,7 @@ export function ActionPlanClient({
     </section>
     <div className="plan-layout">
       <section className="plan-main">
-        <form className="plan-create" onSubmit={create}>
+        {!initialCaseId && <form className="plan-create" onSubmit={create}>
           <h2>{ru ? "Создать план из сценария" : "Ssenariydan reja yaratish"}</h2>
           <div className="scenario-pills">
             {scenarioCatalog.map((item) => <button
@@ -203,7 +205,7 @@ export function ActionPlanClient({
             {creating ? <LoaderCircle className="spin" /> : <Plus />}
             {ru ? "Создать дело и план" : "Ish va reja yaratish"}
           </button>
-        </form>
+        </form>}
         {error && <p className="plan-error" role="alert"><CircleAlert />{error}</p>}
         <section className="plan-list">
           <div className="plan-section-title">
