@@ -1404,6 +1404,17 @@ export const actionPlanSteps = sqliteTable("action_plan_steps", {
   revision: integer("revision").notNull().default(1), ...timestamps,
 }, (table) => [uniqueIndex("action_plan_steps_order_uidx").on(table.planId, table.ordinal), index("action_plan_steps_due_idx").on(table.dueAt, table.status)]);
 
+export const tasks = sqliteTable("tasks", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), planStepId: text("plan_step_id").references(() => actionPlanSteps.id, { onDelete: "set null" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), title: text("title").notNull(), description: text("description"), legalBasis: text("legal_basis"), sourceDate: text("source_date"),
+  dueAt: text("due_at"), safeDueAt: text("safe_due_at"), calculationMethod: text("calculation_method"), deadlineType: text("deadline_type").notNull().default("calendar_days"), status: text("status").notNull().default("planned"),
+  createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(), completedAt: text("completed_at"),
+}, (table) => [uniqueIndex("tasks_plan_step_uidx").on(table.planStepId), index("tasks_workspace_due_idx").on(table.workspaceId, table.dueAt, table.status), index("tasks_case_idx").on(table.caseId, table.updatedAt)]);
+
+export const taskReminders = sqliteTable("task_reminders", {
+  id: text("id").primaryKey(), taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }), channel: text("channel").notNull().default("in_app"), reminderAt: text("reminder_at").notNull(),
+  status: text("status").notNull().default("pending"), idempotencyKey: text("idempotency_key").notNull(), sentAt: text("sent_at"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("task_reminders_idempotency_uidx").on(table.idempotencyKey), index("task_reminders_due_idx").on(table.status, table.reminderAt)]);
 export const consultationSlots = sqliteTable("consultation_slots", {
   id: text("id").primaryKey(), specialistType: text("specialist_type").notNull(), startsAt: text("starts_at").notNull(), endsAt: text("ends_at").notNull(), timezone: text("timezone").notNull().default("Asia/Tashkent"),
   status: text("status").notNull().default("available"), ...timestamps,
