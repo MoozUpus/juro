@@ -176,6 +176,8 @@ The feature branch implements and locally verifies:
 - explicit retirement of the unsafe synchronous multipart AI path.
 - fail-closed ZIP/DOCX central-directory inspection for traversal, nesting, encryption, symlinks, active content, member type/count/depth, expanded size, and compression-ratio limits before malware scanning.
 
+The archive gate is deployed to protected staging as Worker version `3bc029a3-8722-4edd-8c05-d615d5ce9a13`. It does not mark a file safe or bypass the absent malware scanner. Exact verification and rollback evidence is in `STAGING-PHASE5-ARCHIVE-SAFETY-EVIDENCE.md`.
+
 ## Phase 5 async analysis consumer
 
 Protected staging now contains the real, fail-closed processing boundary after secure upload:

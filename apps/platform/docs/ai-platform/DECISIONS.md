@@ -1755,7 +1755,7 @@ route, or website code is changed.
 
 ## D-085 — reject structurally unsafe ZIP/DOCX before malware scanning
 
-Status: accepted and locally verified; staging deploy pending
+Status: accepted, locally verified, and deployed to protected staging; scanner/extractor proof pending
 Date: 2026-07-31
 
 A ZIP signature is not sufficient evidence that an archive is safe to retain for
