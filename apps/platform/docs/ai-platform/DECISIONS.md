@@ -1926,3 +1926,24 @@ claim exact bounding boxes, page geometry, or the 95% OCR release threshold. The
 account-deletion purge inventories the derivative key before cascading D1 rows.
 No scanner is simulated: new uploads remain quarantined while the malware binding
 is absent. Production stays unchanged, and the complete 100-package/30-comparison
+
+## D-092 — align server-only Anthropic fallback with the staged model configuration
+
+Status: accepted, regression-tested, and deployed to protected staging
+Date: 2026-07-31
+
+The checked-in staging configuration explicitly selects
+`claude-sonnet-4-20250514` for document analysis and legal-chat fallback. The
+previous code still embedded a different fallback string in three server-only
+paths. This did not alter the configured staging request, but it made a missing
+optional model variable route to an inconsistent provider model.
+
+`DEFAULT_ANTHROPIC_MODEL` is now the single conservative fallback for the
+Anthropic transport, legal-chat fallback, and document-analysis adapter. Explicit
+runtime variables still take precedence. The change does not choose a model at the
+client, expose a key, send a provider request, or change a production binding.
+
+A read-only staging secret inventory now confirms the `OPENAI_API_KEY` and
+`ANTHROPIC_API_KEY` names. Their values were not read. Secret presence is not
+provider evidence: an authenticated synthetic RU/UZ provider and ledger flow is
+still required before the platform can claim live AI execution.
