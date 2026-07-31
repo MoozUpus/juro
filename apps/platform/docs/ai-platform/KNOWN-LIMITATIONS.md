@@ -196,7 +196,7 @@ The deployed Worker version exposes only three secret binding names. A live Open
 - A real malware scanner is not connected; every new document-analysis upload remains quarantined and unavailable to AI/download.
 - The malware queue binding is intentionally not attached and no fake scan result is produced.
 - OCR, page counting, bounding boxes, extraction, Claude analysis, OpenAI fallback, corrections, exports, and multi-file packages are not implemented by this slice.
-- ZIP/DOCX receive only a bounded container-signature check. Path traversal, nested archives, decompression ratios, entry count, time limits, and full DOCX structure remain blocked before extraction.
+- ZIP/DOCX now receive bounded central-directory, path, nesting, encryption, symlink, member, expansion-ratio/size, and OOXML structure checks. Local-header identity, CRC verification, decompression timeout, and the real isolated scanner/extractor must still revalidate before any derivative or AI access.
 - The browser computes SHA-256 from one in-memory `ArrayBuffer`; this does not buffer the upload in the Worker, but a later client-side incremental hash path may improve low-memory devices.
 - Fetch upload progress is not yet surfaced; the UI has a busy state but no byte-level progress indicator.
 - Authenticated staging HTTP and R2 round-trip evidence remains open because the available browser-control kernel fails before connecting to the existing Access session. Access was not bypassed.
@@ -221,7 +221,7 @@ The following gates remain open:
 - Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
 - No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.
 - no live provider request/fallback, completed result, token/cost row from a real provider, or authenticated browser flow is proven;
-- scanned/image OCR, ZIP and multi-file packages, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
+- scanned/image OCR, actual ZIP/multi-file package extraction and relationship analysis, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
 - retrieval is exact lexical over current verified D1 rows, not complete hybrid Vectorize/reranking/citation revalidation;
 - corrections, redline, exports, the 100-package evaluation, DLQ redrive, and full performance/security/browser gates remain incomplete.
 

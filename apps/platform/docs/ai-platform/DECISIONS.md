@@ -1752,3 +1752,26 @@ cross-tenant source messages, incoherent parent/fork relationships, invalid
 version chains, and invalid SHA-256 evidence; update triggers make accepted
 branch/version evidence immutable. No provider secret, dependency, production
 route, or website code is changed.
+
+## D-085 — reject structurally unsafe ZIP/DOCX before malware scanning
+
+Status: accepted and locally verified; staging deploy pending
+Date: 2026-07-31
+
+A ZIP signature is not sufficient evidence that an archive is safe to retain for
+processing. After R2 size/SHA-256 and magic-byte verification, the finalize route
+now reads the quarantined archive once and validates its central directory without
+extracting or executing a member. It rejects split archives, ZIP64 ambiguity,
+encryption, unsupported compression, symbolic links, unsafe/duplicate paths,
+excessive depth, nested archives, unsupported package members, more than 20 package
+files, expansion ratios above 100:1, and more than 200 MB expanded size. DOCX must
+contain the required OOXML parts and cannot include VBA or executable content.
+
+A rejected object is deleted from private R2, its D1 lifecycle becomes failed, and
+the content-free audit event records the exact reason. A structurally accepted file
+still remains quarantined with `MALWARE_SCANNER_UNAVAILABLE`; archive inspection is
+not represented as malware clearance and cannot dispatch analysis.
+
+This bounded preflight does not decompress members or validate local-header/central-
+directory identity and CRC. The future isolated extractor/scanner must repeat path,
+size, ratio, type, local-header, and checksum controls before producing derivatives.

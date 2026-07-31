@@ -174,6 +174,7 @@ The feature branch implements and locally verifies:
 - a fail-closed `quarantined` state that never invokes AI while the scanner is unavailable;
 - RU/UZ UI integration from both dashboard and document-review surfaces;
 - explicit retirement of the unsafe synchronous multipart AI path.
+- fail-closed ZIP/DOCX central-directory inspection for traversal, nesting, encryption, symlinks, active content, member type/count/depth, expanded size, and compression-ratio limits before malware scanning.
 
 ## Phase 5 async analysis consumer
 

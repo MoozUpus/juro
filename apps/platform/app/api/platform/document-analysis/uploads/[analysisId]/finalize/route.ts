@@ -1,5 +1,6 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
 import { requireD1, requireR2 } from "../../../../../../../lib/document-builder/storage/runtime";
+import { ArchiveInspectionError, inspectArchiveBytes, type ArchiveInspection } from "../../../../../../../lib/document-analysis/archive-inspector";
 import {
   arrayBufferHex,
   documentAnalysisUploadForUser,
@@ -51,6 +52,26 @@ export const POST = withApiErrors(async function POST(
       return response({ code: "CONTENT_TYPE_MISMATCH", error: "Содержимое файла не соответствует заявленному формату." }, 422);
     }
 
+    let archiveInspection: ArchiveInspection | null = null;
+    if (record.mimeType === "application/zip" || record.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+      const archiveObject = await bucket.get(record.r2Key);
+      if (!archiveObject || !("body" in archiveObject)) {
+        await rejectFile(db, bucket, record, workspace.id, user.id, "UPLOAD_INTEGRITY_FAILED");
+        return response({ code: "UPLOAD_INTEGRITY_FAILED", error: "Архив не удалось прочитать после загрузки." }, 422);
+      }
+      try {
+        archiveInspection = inspectArchiveBytes(new Uint8Array(await archiveObject.arrayBuffer()), record.mimeType);
+      } catch (error) {
+        if (!(error instanceof ArchiveInspectionError)) throw error;
+        await rejectFile(db, bucket, record, workspace.id, user.id, error.code);
+        return response({
+          code: "FILE_UNSAFE",
+          reason: error.code,
+          error: "Архив отклонён проверкой структуры и безопасных ограничений.",
+        }, 422);
+      }
+    }
+
     const now = new Date().toISOString();
     await db.batch([
       db.prepare(
@@ -63,7 +84,14 @@ export const POST = withApiErrors(async function POST(
         `INSERT INTO workspace_audit_events
          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
          VALUES (?,?,?,'document_analysis',?,'upload_quarantined',?,?)`,
-      ).bind(crypto.randomUUID(), workspace.id, user.id, analysisId, JSON.stringify({ magicBytesVerified: true, scannerDispatched: false }), now),
+      ).bind(crypto.randomUUID(), workspace.id, user.id, analysisId, JSON.stringify({
+        magicBytesVerified: true,
+        archiveInspected: Boolean(archiveInspection),
+        archiveEntryCount: archiveInspection?.entryCount ?? null,
+        archiveFileCount: archiveInspection?.fileCount ?? null,
+        archiveUncompressedBytes: archiveInspection?.uncompressedBytes ?? null,
+        scannerDispatched: false,
+      }), now),
     ]);
     return quarantinedResponse({ ...record, status: "quarantined", errorCode: "MALWARE_SCANNER_UNAVAILABLE" }, false);
   } catch (error) {
