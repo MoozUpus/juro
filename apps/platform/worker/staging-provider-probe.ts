@@ -3,8 +3,8 @@ import type { PlatformJobEnv } from "./platform-jobs";
 
 // v1 completed for OpenAI and terminally failed for Anthropic before the
 // owner rotated the staging Anthropic key. Keep that record immutable and use
-// a fresh logical key for the explicit post-rotation Anthropic verification.
-const PROBE_KEY = "staging-anthropic-connectivity-v3";
+// a fresh logical key for the explicit post-rotation Anthropic verification. v4 rechecks the subsequently updated staging key.
+const PROBE_KEY = "staging-anthropic-connectivity-v4";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 
