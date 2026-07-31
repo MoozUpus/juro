@@ -151,14 +151,41 @@ export function enforceDocumentAnalysisSourceBoundary(
   result: DocumentAnalysisResult,
   allowedSourceIds: ReadonlySet<string>,
 ): DocumentAnalysisResult {
+  const declaredSourceIds = new Set<string>();
+  for (const source of result.sources) {
+    if (declaredSourceIds.has(source.sourceId)) {
+      throw new Error(`AI_SOURCE_DUPLICATED:${source.sourceId}`);
+    }
+    declaredSourceIds.add(source.sourceId);
+  }
   for (const sourceId of referencedDocumentAnalysisSourceIds(result)) {
     if (!allowedSourceIds.has(sourceId)) throw new Error(`AI_SOURCE_NOT_ALLOWED:${sourceId}`);
+  }
+  const citedSourceIds = new Set([
+    ...result.risks.flatMap((risk) => risk.legalBasisSourceIds),
+    ...result.missingClauses.flatMap((clause) => clause.legalBasisSourceIds),
+  ]);
+  for (const sourceId of citedSourceIds) {
+    if (!declaredSourceIds.has(sourceId)) {
+      throw new Error(`AI_CITATION_REFERENCE_MISSING:${sourceId}`);
+    }
   }
   if (allowedSourceIds.size === 0) {
     if (result.legalComplianceStatus !== "unverified") throw new Error("LEGAL_COMPLIANCE_REQUIRES_VERIFIED_SOURCE");
     if (result.risks.some((risk) => risk.riskType === "legal_compliance")) {
       throw new Error("LEGAL_COMPLIANCE_RISK_REQUIRES_VERIFIED_SOURCE");
     }
+  }
+  if (result.legalComplianceStatus === "verified" && declaredSourceIds.size === 0) {
+    throw new Error("LEGAL_COMPLIANCE_REQUIRES_CITATION");
+  }
+  if (result.risks.some((risk) =>
+    risk.riskType === "legal_compliance" && risk.legalBasisSourceIds.length === 0
+  )) {
+    throw new Error("LEGAL_COMPLIANCE_RISK_REQUIRES_CITATION");
+  }
+  if (result.missingClauses.some((clause) => clause.legalBasisSourceIds.length === 0)) {
+    throw new Error("LEGAL_MISSING_CLAUSE_REQUIRES_CITATION");
   }
   return result;
 }

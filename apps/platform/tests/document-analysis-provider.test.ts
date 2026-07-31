@@ -77,6 +77,78 @@ test("document analysis rejects provider-invented source ids", () => {
   );
 });
 
+test("document analysis requires complete and unique legal citation references", () => {
+  const source = {
+    sourceId: "verified",
+    actTitle: "Проверенный акт",
+    actIdentifier: "№ 1",
+    article: "Статья 1",
+    excerpt: "Проверенный фрагмент",
+    originalUrl: "https://lex.uz/ru/docs/1",
+    verifiedAt: "2026-07-31T00:00:00.000Z",
+  };
+  assert.throws(
+    () => enforceDocumentAnalysisSourceBoundary({
+      ...base,
+      legalComplianceStatus: "verified",
+      risks: [{
+        ...base.risks[0],
+        riskType: "legal_compliance",
+        legalBasisSourceIds: [source.sourceId],
+      }],
+    }, new Set([source.sourceId])),
+    /AI_CITATION_REFERENCE_MISSING:verified/,
+  );
+  assert.throws(
+    () => enforceDocumentAnalysisSourceBoundary({
+      ...base,
+      legalComplianceStatus: "verified",
+      sources: [source],
+      risks: [{
+        ...base.risks[0],
+        riskType: "legal_compliance",
+        legalBasisSourceIds: [],
+      }],
+    }, new Set([source.sourceId])),
+    /LEGAL_COMPLIANCE_RISK_REQUIRES_CITATION/,
+  );
+  assert.throws(
+    () => enforceDocumentAnalysisSourceBoundary({
+      ...base,
+      legalComplianceStatus: "partial",
+      sources: [source],
+      missingClauses: [{
+        title: "Обязательное условие",
+        reason: "Требует правового основания.",
+        proposedWording: null,
+        legalBasisSourceIds: [],
+      }],
+    }, new Set([source.sourceId])),
+    /LEGAL_MISSING_CLAUSE_REQUIRES_CITATION/,
+  );
+  assert.throws(
+    () => enforceDocumentAnalysisSourceBoundary({
+      ...base,
+      sources: [source, source],
+    }, new Set([source.sourceId])),
+    /AI_SOURCE_DUPLICATED:verified/,
+  );
+  const valid = {
+    ...base,
+    legalComplianceStatus: "verified" as const,
+    sources: [source],
+    risks: [{
+      ...base.risks[0],
+      riskType: "legal_compliance" as const,
+      legalBasisSourceIds: [source.sourceId],
+    }],
+  };
+  assert.deepEqual(
+    enforceDocumentAnalysisSourceBoundary(valid, new Set([source.sourceId])),
+    valid,
+  );
+});
+
 test("document analysis rejects excerpts not present in the uploaded document", () => {
   assert.equal(
     enforceDocumentExcerptBoundary(base, "Текст: срок определяется дополнительно."),

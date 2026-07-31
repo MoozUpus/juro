@@ -12,6 +12,13 @@ OpenAI or Anthropic execution in staging while their secret bindings are absent.
 - Legal source text enters a prompt only after exact official-host trust,
   current publication/lifecycle activation, content-hash, effective-date, and
   complete reading-row replay validation.
+- Legal-chat and document-analysis citations must use an allowed retrieved ID,
+  be unique, and form a complete reference from every legal claim to a source
+  exposed in the response. Confirmed findings/deadlines and legal-compliance
+  findings cannot be citation-free.
+- Provider-authored citation titles, excerpts, URLs, dates, and verification
+  metadata are discarded and rebuilt from the server-retrieved source before
+  persistence. Any mismatch or incomplete citation is `INVALID_AI_OUTPUT`.
 - Full database freshness requires successful corpus runs for both Lex and
   Advice. Page-level acquisition never establishes freshness.
 - `unavailable` sources cannot produce confirmed legal findings or citations.
@@ -31,6 +38,7 @@ OpenAI or Anthropic execution in staging while their secret bindings are absent.
   `unavailable` by design.
 - Live OpenAI/Anthropic execution and fallback are not proven because the exact
   staging provider secret bindings are absent.
+- Claim-to-fragment semantic entailment is not yet independently verified.
 - Hybrid Vectorize retrieval, citation semantic validation, 250+50 legal
   scenarios, 100 document packages, 30 comparisons, and human legal review
   thresholds remain incomplete.

@@ -58,6 +58,70 @@ test("source boundary rejects a provider-invented source id", () => {
   );
 });
 
+test("source boundary requires replayable citation references and unique sources", () => {
+  const source = {
+    sourceId: "verified-source",
+    actTitle: "Проверенный акт",
+    actIdentifier: "№ 1",
+    article: "Статья 1",
+    excerpt: "Проверенный фрагмент",
+    originalUrl: "https://lex.uz/ru/docs/1",
+    status: "current" as const,
+    effectiveDate: "2026-01-01",
+    verifiedAt: "2026-07-31T00:00:00.000Z",
+  };
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      responseKind: "answer",
+      confirmedFindings: [{
+        title: "Подтверждённый вывод",
+        explanation: "Основан на проверенном фрагменте.",
+        sourceIds: [source.sourceId],
+      }],
+    }, new Set([source.sourceId])),
+    /AI_CITATION_REFERENCE_MISSING:verified-source/,
+  );
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      responseKind: "answer",
+      confirmedFindings: [{
+        title: "Вывод без основания",
+        explanation: "Не должен пройти.",
+        sourceIds: [],
+      }],
+    }, new Set([source.sourceId])),
+    /AI_CONFIRMED_FINDING_REQUIRES_CITATION/,
+  );
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      sources: [source, source],
+    }, new Set([source.sourceId])),
+    /AI_SOURCE_DUPLICATED:verified-source/,
+  );
+  const valid = {
+    ...validLegalResponse,
+    responseKind: "answer" as const,
+    confirmedFindings: [{
+      title: "Подтверждённый вывод",
+      explanation: "Основан на проверенном фрагменте.",
+      sourceIds: [source.sourceId],
+    }],
+    deadlines: [{
+      ...validLegalResponse.deadlines[0],
+      confidence: "confirmed" as const,
+      sourceIds: [source.sourceId],
+    }],
+    sources: [source],
+  };
+  assert.deepEqual(
+    enforceLegalChatSourceBoundary(valid, new Set([source.sourceId])),
+    valid,
+  );
+});
+
 test("no-source output is canonicalized to a non-chargeable clarification without legal claims", () => {
   const result = forceClarificationWithoutVerifiedSources({
     ...validLegalResponse,

@@ -7,7 +7,13 @@ import {
   type LegalDatabaseFreshness,
   type VerifiedLegalRetrieval,
 } from "../legal/verified-retrieval";
-import { documentAnalysisResultSchema, enforceDocumentAnalysisFreshness, type DocumentAnalysisResult } from "./schema";
+import {
+  documentAnalysisResultSchema,
+  enforceDocumentAnalysisFreshness,
+  enforceDocumentAnalysisSourceBoundary,
+  enforceDocumentExcerptBoundary,
+  type DocumentAnalysisResult,
+} from "./schema";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
@@ -195,8 +201,37 @@ async function analyzeObject(
       legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
       requestId: `document-analysis-${row.analysisId}`,
     });
+    const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
+    let boundedResult: DocumentAnalysisResult;
+    try {
+      const validatedResult = enforceDocumentExcerptBoundary(
+        enforceDocumentAnalysisSourceBoundary(
+          documentAnalysisResultSchema.parse(ai.data),
+          new Set(retrieval.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
+        ),
+        extracted.text,
+      );
+      boundedResult = {
+        ...validatedResult,
+        sources: validatedResult.sources.map((reference) => {
+          const source = sourceById.get(reference.sourceId)!;
+          return {
+            sourceId: source.id,
+            actTitle: source.actTitle,
+            actIdentifier: source.actIdentifier,
+            article: source.article ?? null,
+            excerpt: source.excerpt ?? null,
+            originalUrl: source.officialUrl,
+            verifiedAt: source.verifiedAt,
+          };
+        }),
+      };
+    } catch {
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT");
+      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_INVALID_OUTPUT", false);
+    }
     return {
-      result: enforceDocumentAnalysisFreshness(ai.data, retrieval.freshness),
+      result: enforceDocumentAnalysisFreshness(boundedResult, retrieval.freshness),
       sourceFreshness: retrieval.freshness,
       technical: {
         provider: ai.provider,

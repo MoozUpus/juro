@@ -204,10 +204,36 @@ export function enforceLegalChatSourceBoundary(
   result: LegalChatResponse,
   allowedSourceIds: ReadonlySet<string>,
 ): LegalChatResponse {
+  const declaredSourceIds = new Set<string>();
+  for (const source of result.sources) {
+    if (declaredSourceIds.has(source.sourceId)) {
+      throw new Error(`AI_SOURCE_DUPLICATED:${source.sourceId}`);
+    }
+    declaredSourceIds.add(source.sourceId);
+  }
   for (const sourceId of referencedSourceIds(result)) {
     if (!allowedSourceIds.has(sourceId)) {
       throw new Error(`AI_SOURCE_NOT_ALLOWED:${sourceId}`);
     }
+  }
+  const citedSourceIds = new Set([
+    ...result.confirmedFindings.flatMap((finding) => finding.sourceIds),
+    ...result.risks.flatMap((risk) => risk.sourceIds),
+    ...result.actionPlan.flatMap((step) => step.sourceIds),
+    ...result.deadlines.flatMap((deadline) => deadline.sourceIds),
+  ]);
+  for (const sourceId of citedSourceIds) {
+    if (!declaredSourceIds.has(sourceId)) {
+      throw new Error(`AI_CITATION_REFERENCE_MISSING:${sourceId}`);
+    }
+  }
+  if (result.confirmedFindings.some((finding) => finding.sourceIds.length === 0)) {
+    throw new Error("AI_CONFIRMED_FINDING_REQUIRES_CITATION");
+  }
+  if (result.deadlines.some((deadline) =>
+    deadline.confidence === "confirmed" && deadline.sourceIds.length === 0
+  )) {
+    throw new Error("AI_CONFIRMED_DEADLINE_REQUIRES_CITATION");
   }
   return result;
 }

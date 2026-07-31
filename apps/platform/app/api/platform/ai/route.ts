@@ -14,6 +14,7 @@ import { AiBranchInputError, listAiBranches, resolveAiBranchInput } from "../../
 import { selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
 import {
   enforceLegalDatabaseFreshness,
+  enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../../../../lib/ai/legal-chat-schema";
 import {
@@ -200,11 +201,47 @@ async function executePost(
     }, code === "AI_REFUSED" || code === "INVALID_AI_OUTPUT" ? 422 : 503);
   }
 
-  const result = enforceLegalDatabaseFreshness(
-    parseLegalChatResponse(aiResult.data),
-    freshness,
-    { locale, answerMode, reasoningMode },
-  );
+  let result;
+  try {
+    const boundedResult = enforceLegalChatSourceBoundary(
+      parseLegalChatResponse(aiResult.data),
+      new Set(sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
+    );
+    const sourceById = new Map(sources.map((source) => [source.id, source]));
+    const canonicalResult = {
+      ...boundedResult,
+      sources: boundedResult.sources.map((reference) => {
+        const source = sourceById.get(reference.sourceId)!;
+        return {
+          sourceId: source.id,
+          actTitle: source.actTitle,
+          actIdentifier: source.actIdentifier,
+          article: source.article ?? null,
+          excerpt: source.excerpt ?? null,
+          originalUrl: source.officialUrl,
+          status: "current" as const,
+          effectiveDate: source.effectiveDate ?? null,
+          verifiedAt: source.verifiedAt,
+        };
+      }),
+    };
+    result = enforceLegalDatabaseFreshness(
+      canonicalResult,
+      freshness,
+      { locale, answerMode, reasoningMode },
+    );
+  } catch {
+    await failAiRun({
+      db, runId: reservation.runId, ledgerId: reservation.ledgerId,
+      workspaceId: workspace.id, userId: user.id, idempotencyKey,
+      errorCode: "INVALID_AI_OUTPUT",
+    });
+    return response({
+      code: "INVALID_AI_OUTPUT",
+      correlationId: reservation.correlationId,
+      error: localizedProviderError(locale, "INVALID_AI_OUTPUT"),
+    }, 422);
+  }
   const now = isoNow();
   const userMessageId = crypto.randomUUID();
   const assistantMessageId = crypto.randomUUID();

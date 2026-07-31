@@ -127,7 +127,16 @@ class OpenAiLegalProvider implements LegalAiProvider {
         reasoningMode: input.reasoningMode,
         legalDatabaseAsOf: input.legalDatabaseAsOf,
       };
-    let data = enforceLegalChatSourceBoundary(constrainedData, usableSourceIds);
+    let data: LegalChatResponse;
+    try {
+      data = enforceLegalChatSourceBoundary(constrainedData, usableSourceIds);
+    } catch {
+      throw new AiUnavailableError(
+        "AI-ответ содержит неподтверждённую или неполную ссылку на правовой источник.",
+        "INVALID_AI_OUTPUT",
+        false,
+      );
+    }
     const sourceById = new Map(input.sources.map((source) => [source.id, source]));
     data = {
       ...data,

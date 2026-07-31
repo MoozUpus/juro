@@ -37,3 +37,19 @@ test("dashboard and review surfaces use the secure upload client", () => {
   assert.match(review, /uploadDocumentForAnalysis\(file, locale\)/);
   assert.doesNotMatch(`${dashboard}\n${review}`, /new FormData\(\)/);
 });
+
+test("AI and document processors revalidate provider citations before persistence", () => {
+  const aiRoute = source("app/api/platform/ai/route.ts");
+  const processor = source("lib/document-analysis/processor.ts");
+  assert.match(aiRoute, /enforceLegalChatSourceBoundary\(/);
+  assert.match(aiRoute, /errorCode: "INVALID_AI_OUTPUT"/);
+  assert.match(aiRoute, /return response\(\{[\s\S]*code: "INVALID_AI_OUTPUT"[\s\S]*\}, 422\)/);
+  assert.match(aiRoute, /originalUrl: source\.officialUrl/);
+  assert.match(processor, /enforceDocumentAnalysisSourceBoundary\(/);
+  assert.match(processor, /enforceDocumentExcerptBoundary\(/);
+  assert.match(processor, /originalUrl: source\.officialUrl/);
+  assert.match(
+    processor,
+    /setAnalysisState\(env\.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT"\)/,
+  );
+});

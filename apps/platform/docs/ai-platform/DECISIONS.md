@@ -1,6 +1,19 @@
 # JURO AI platform decision log
 
 This log records material implementation decisions. Status values are `accepted`, `pending approval`, or `superseded`.
+## D-085 — provider citations are closed referential records, not model-authored metadata
+
+Status: accepted and locally verified; staging deployment pending
+Date: 2026-07-31
+
+An allowed source ID alone is insufficient citation evidence. Legal chat now rejects duplicate source records, citations missing from the response source panel, confirmed findings without source IDs, and confirmed deadlines without source IDs. Document analysis applies the same duplicate/referential checks, requires citations for legal-compliance risks and missing-clause claims, and cannot mark compliance verified without a declared verified source.
+
+OpenAI, Anthropic fallback, the AI HTTP route, and the asynchronous document processor all enforce the boundary. The route and processor then overwrite every provider-authored title, article, excerpt, URL, effective date, and verification time with the server-retrieved canonical record before persistence. Invalid output becomes `INVALID_AI_OUTPUT`; it is not saved, charged, or shown as a successful analysis.
+
+This is defense in depth around the existing publication/lifecycle/hash replay. It does not establish semantic entailment between a cited fragment and an AI claim, and it does not make the absent staging corpus or provider secrets available. No migration or dependency is required.
+
+
+
 ## D-084 — legal conclusions require complete corpus freshness and replayable publication evidence
 
 Status: accepted, tested, and deployed to owner-protected staging
