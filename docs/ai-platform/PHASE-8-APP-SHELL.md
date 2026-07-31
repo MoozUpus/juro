@@ -24,6 +24,6 @@ Jurobek remains an optimized static image in the staging prototype. The applicat
 
 ## Deliberate limitations
 
-`workers_dev` and preview URLs are disabled for staging and no staging route is configured in `wrangler.jsonc`. Consequently there is no browser-accessible staging URL to run protected visual, keyboard and Core Web Vitals checks. The source-level checks above are not a substitute for that runtime QA.
+The protected staging hostname is `https://staging.app.juro.uz`. Anonymous requests correctly receive Cloudflare Access `302` responses with `no-store`; direct browser visual, keyboard and Core Web Vitals checks still require an owner Access session. The source-level checks above are not a substitute for that authenticated runtime QA.
 
 No production Worker, production D1 database, public platform UI route or production visual replacement was changed.
