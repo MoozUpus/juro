@@ -5,7 +5,7 @@ Date: 2026-08-01 (Asia/Tashkent)
 ## Deployed boundary
 
 - Worker: `juro-platform-staging` only.
-- Worker version: `29c02046-45a5-4b13-a040-9863ec6debac` (version number 74).
+- Worker version: `7717d55d-43ea-47db-8475-1df8402b29d0` (latest verified deployment).
 - D1: `juro-staging` / `bb716a96-b2fb-4823-90d6-6c228fed181a`.
 - No production worker, database, bucket, or route was changed.
 
