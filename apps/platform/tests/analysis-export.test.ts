@@ -331,6 +331,10 @@ test("document export queue completes the private R2 artifact and acknowledges e
     assert.equal((sqlite.prepare("SELECT status FROM analysis_exports WHERE id=?").get(requested.record.id) as { status: string }).status, "completed");
     assert.equal(bucket.putCalls, 1);
   } finally {
+    sqlite.close();
+  }
+});
+
 test("invalid normalized analysis fails closed and records safe audit evidence", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
@@ -369,10 +373,6 @@ test("invalid normalized analysis fails closed and records safe audit evidence",
     assert.equal(auditCount(sqlite, "export_failed"), 1);
     assert.equal(bucket.putCalls, 0);
   } finally {
-    sqlite.close();
-  }
-});
-
     sqlite.close();
   }
 });
