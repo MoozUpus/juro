@@ -2,6 +2,11 @@
 
 Updated: 2026-07-31
 
+## Reproducible corpus harness
+
+`evaluation/legal-evaluation-corpus.ts` defines 314 synthetic **inputs** for release evaluation: 132 base Russian scenarios, 132 Uzbek-Latin base scenarios, and 50 additional intentionally ambiguous scenarios (25 per language). Each priority legal area is represented in both languages. The corpus covers historical applicability, deadlines, urgent situations, missing Advice scenarios, Advice/Lex conflicts, unofficial-source attempts, and incomplete facts.
+
+These records intentionally contain no invented legal answer, act, article, link, or success score. `scripts/validate-legal-evaluation.ts --results <reviewed-results.json>` accepts only one result per scenario, rejects citations outside `lex.uz`/`advice.uz`, and rejects every set without a human reviewer ID. Therefore a passing report still requires real reviewed output and cannot be fabricated by the test corpus.
 ## Current automated evidence
 
 The current integration branch tests exact Lex/Advice host and type trust,
