@@ -1834,3 +1834,44 @@ The RU/UZ review UI exposes the action only for terminal exports, confirms the
 destructive action, preserves keyboard and busy-state feedback, and refreshes the
 real export list after success. No migration, dependency, binding, provider call,
 production route, or website code changes in this slice.
+
+## D-089 — analysis exports follow user-content retention, not a hidden TTL
+
+Status: accepted and locally verified
+Date: 2026-07-31
+
+An analysis export is derived user content. The approved retention rule is therefore
+the same as the source analysis: retain it until the user deletes the individual
+terminal export or the owning account is purged, subject to later approved legal
+retention policy. No automatic age-based export TTL is introduced. A Cron must not
+silently remove a user's report merely because it is old.
+
+This preserves explicit user control and keeps the object and D1 record lifecycle
+coherent. Account deletion inventories the private object before the D1 cascade;
+individual deletion is R2-first, tenant-scoped, audited, retryable, and idempotent.
+A future retention schedule requires an explicit policy decision, dry-run inventory,
+user-visible behavior, backup implications, and staging evidence.
+
+## D-090 — PDF and DOCX analysis reports reuse the reviewed document generators
+
+Status: accepted and locally verified; protected-staging migration/deploy pending
+Date: 2026-07-31
+
+PDF and DOCX are separate report artifacts rather than overloading the immutable
+JSON export contract. Additive migration `0041_analysis_report_exports.sql` creates
+`analysis_report_exports` with tenant/owner/source guards, legal state transitions,
+format-specific MIME/key evidence, and immutable identity. It does not rebuild or
+alter `analysis_exports` or any document-builder table.
+
+The existing `document.export` outbox and Queue are reused. The consumer resolves
+the subject identifier against the report table, validates the normalized analysis,
+and invokes the already reviewed JURO PDF/DOCX generators and bundled licensed
+assets. It writes an immutable private R2 object, verifies bytes and SHA-256, and
+only then commits the terminal state and content-free audit evidence. Downloads
+repeat authorization and object verification; per-export and account-deletion paths
+cover the new objects.
+
+The collection API remains backward-compatible: an empty request still means JSON;
+an explicit strict format may request `json`, `pdf`, or `docx`. Highlighted PDF,
+clean/redline document mutation, comparison-table export, and provider-generated
+staging evidence are outside this decision. Production remains unchanged.

@@ -2065,6 +2065,45 @@ export const analysisExports = sqliteTable("analysis_exports", {
   `),
 ]);
 
+export const analysisReportExports = sqliteTable("analysis_report_exports", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  format: text("format").notNull(),
+  status: text("status").notNull(),
+  r2Key: text("r2_key"),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes"),
+  sha256: text("sha256"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  errorCode: text("error_code"),
+  completedAt: text("completed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("analysis_report_exports_idempotency_uidx").on(table.idempotencyKey),
+  uniqueIndex("analysis_report_exports_r2_key_uidx").on(table.r2Key),
+  index("analysis_report_exports_analysis_idx").on(table.analysisId, table.createdAt),
+  index("analysis_report_exports_workspace_idx").on(table.workspaceId, table.createdAt),
+  index("analysis_report_exports_status_idx").on(table.status, table.updatedAt),
+  check("analysis_report_exports_format_check", sql`${table.format} IN ('pdf','docx')`),
+  check("analysis_report_exports_status_check", sql`${table.status} IN ('queued','processing','retrying','completed','failed')`),
+  check("analysis_report_exports_mime_check", sql`
+    (${table.format} = 'pdf' AND ${table.mimeType} = 'application/pdf')
+    OR (${table.format} = 'docx' AND ${table.mimeType} = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+  `),
+  check("analysis_report_exports_size_check", sql`${table.sizeBytes} IS NULL OR ${table.sizeBytes} >= 0`),
+  check("analysis_report_exports_sha_check", sql`${table.sha256} IS NULL OR length(${table.sha256}) = 64`),
+  check("analysis_report_exports_completion_check", sql`
+    (${table.status} = 'completed'
+      AND ${table.r2Key} IS NOT NULL AND ${table.sizeBytes} IS NOT NULL
+      AND ${table.sha256} IS NOT NULL AND ${table.completedAt} IS NOT NULL
+      AND ${table.errorCode} IS NULL)
+    OR (${table.status} <> 'completed' AND ${table.completedAt} IS NULL)
+  `),
+]);
+
 export const documentComparisons = sqliteTable("document_comparisons", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

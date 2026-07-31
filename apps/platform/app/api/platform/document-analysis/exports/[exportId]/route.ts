@@ -1,6 +1,7 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError, deleteAnalysisExport } from "../../../../../../lib/document-analysis/exporter";
+import { deleteAnalysisReportExport } from "../../../../../../lib/document-analysis/report-exporter";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 const response = (body: unknown, status = 200) => Response.json(body, {
@@ -17,10 +18,15 @@ export const DELETE = withApiErrors(async function DELETE(
   const workspace = await workspaceForUser(user);
   const { exportId } = await context.params;
   try {
-    const result = await deleteAnalysisExport(
-      { DB: requireD1(), BUCKET: requireR2() },
-      { exportId, workspaceId: workspace.id, userId: user.id },
-    );
+    const env = { DB: requireD1(), BUCKET: requireR2() };
+    const report = await env.DB.prepare(
+      `SELECT 1 AS found FROM analysis_report_exports
+       WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
+    ).bind(exportId, workspace.id, user.id).first<{ found: number }>();
+    const input = { exportId, workspaceId: workspace.id, userId: user.id };
+    const result = report?.found
+      ? await deleteAnalysisReportExport(env, input)
+      : await deleteAnalysisExport(env, input);
     return response(result);
   } catch (error) {
     if (error instanceof AnalysisExportError) {

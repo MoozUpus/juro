@@ -23,7 +23,8 @@ export class AnalysisExportError extends Error {
       | "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT"
       | "ANALYSIS_EXPORT_OBJECT_FAILED"
       | "ANALYSIS_EXPORT_NOT_TERMINAL"
-      | "ANALYSIS_EXPORT_DELETE_FAILED",
+      | "ANALYSIS_EXPORT_DELETE_FAILED"
+      | "ANALYSIS_EXPORT_FORMAT_INVALID",
     readonly retryable: boolean,
     readonly status = 422,
   ) {

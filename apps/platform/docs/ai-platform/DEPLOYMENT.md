@@ -207,3 +207,31 @@ DELETE, and file-route requests all receive Access `302`.
 
 Production Worker `juro` remains version
 `91774ed4-72e9-47bb-b93a-a4208d490b24`; no production deployment occurred.
+
+### Migration 0041 PDF/DOCX report-export candidate
+
+The candidate adds only `analysis_report_exports` and reuses the existing private
+R2 binding, `DOCUMENT_EXPORT_QUEUE`, outbox dispatcher, PDF/DOCX assets, and API
+routes. Deploy the new Worker only after migration `0041` is applied; otherwise the
+Queue subject lookup and account-deletion inventory correctly fail closed on the
+missing table.
+
+Safe staging order:
+
+1. pass type-check, lint, full rendered/core/Cloudflare suites, staging build,
+   artifact/binding validation, builder/comparison smokes, diff check, and secret scan;
+2. commit and push the exact candidate; verify current protected-staging and
+   production Worker versions plus `quick_check`, FK integrity, and exact pending list;
+3. capture a Time Travel bookmark and portable D1 export, upload/download it through
+   private `juro-staging-backups`, and compare SHA-256;
+4. apply only `0041`; verify 42 ledger entries, 16 columns, five explicit indexes,
+   two triggers, zero report rows, `quick_check=ok`, zero FK violations, and no pending migration;
+5. repeat the private post-migration backup round trip;
+6. deploy the exact commit only as `juro-platform-staging` with `--keep-vars`;
+7. read back handlers, bindings, Queue topology, secret names, Access denial, D1
+   integrity, and unchanged production Worker identity.
+
+Application rollback restores staging traffic to
+`c985f6a3-d7b8-408d-a2dd-8952ece98e47`. Migration `0041` is additive and may remain
+unused. Production functional deployment and production UI replacement remain
+separate, unauthorized actions.

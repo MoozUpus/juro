@@ -109,3 +109,26 @@ The pre/post `juro-staging` portable exports are stored privately under
 `d1/juro-staging/20260731-141949/post-0040.sql` in `juro-staging-backups`.
 Both were downloaded independently and matched their local SHA-256 values. These
 backup objects are recovery evidence, not application export artifacts.
+
+## Completed-analysis PDF/DOCX report objects
+
+Human-readable reports use the same private environment `BUCKET` with immutable,
+server-generated keys:
+
+`exports/{workspaceId}/{analysisId}/{reportExportId}.{pdf|docx}`
+
+The key includes no email, filename, title, document text, or other direct PII.
+The Queue consumer uses `If-None-Match: *`, writes exact MIME and `private,
+no-store` metadata, and verifies byte count plus SHA-256 before D1 becomes
+`completed`. A pre-existing key is accepted only when its size and checksum match
+the freshly generated deterministic artifact.
+
+Authorized downloads are proxied only after session, active workspace, owner,
+terminal state, size, and SHA-256 verification. Terminal deletion removes and
+verifies absence in R2 before deleting the D1 row; account deletion inventories
+report keys before crossing its irreversible boundary. Another tenant's object is
+never disclosed or deleted by identifier substitution.
+
+There is no automatic report TTL. Reports follow user-content retention and are
+removed only by explicit terminal-export deletion or the reviewed account-deletion
+purge. Migration and staging pre/post backup evidence are recorded separately.

@@ -1,6 +1,7 @@
 import { requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
 import { requireD1, requireR2 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { AnalysisExportError, exportForDownload, recordAnalysisExportDownload, verifyExportObject } from "../../../../../../../lib/document-analysis/exporter";
+import { recordAnalysisReportDownload, reportExportForDownload, verifyReportObject } from "../../../../../../../lib/document-analysis/report-exporter";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
 
 export const GET = withApiErrors(async function GET(_request: Request, context: { params: Promise<{ exportId: string }> }) {
@@ -9,11 +10,23 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
   const { exportId } = await context.params;
   try {
     const db = requireD1();
-    const record = await exportForDownload(db, { exportId, workspaceId: workspace.id, userId: user.id });
-    const object = await verifyExportObject(requireR2(), record);
-    await recordAnalysisExportDownload(db, record, user.id);
+    const report = await db.prepare(
+      `SELECT 1 AS found FROM analysis_report_exports
+       WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
+    ).bind(exportId, workspace.id, user.id).first<{ found: number }>();
+    const record = report?.found
+      ? await reportExportForDownload(db, { exportId, workspaceId: workspace.id, userId: user.id })
+      : await exportForDownload(db, { exportId, workspaceId: workspace.id, userId: user.id });
+    const object = report?.found
+      ? await verifyReportObject(requireR2(), record as Awaited<ReturnType<typeof reportExportForDownload>>)
+      : await verifyExportObject(requireR2(), record as Awaited<ReturnType<typeof exportForDownload>>);
+    if (report?.found) {
+      await recordAnalysisReportDownload(db, record as Awaited<ReturnType<typeof reportExportForDownload>>, user.id);
+    } else {
+      await recordAnalysisExportDownload(db, record as Awaited<ReturnType<typeof exportForDownload>>, user.id);
+    }
     return new Response(object.body, { headers: {
-      "content-type": "application/json; charset=utf-8",
+      "content-type": record.mimeType,
       "content-length": String(record.sizeBytes),
       "content-disposition": `attachment; filename="${record.fileName.replace(/[^A-Za-z0-9._-]/g, "_")}"`,
       "cache-control": "private, no-store",

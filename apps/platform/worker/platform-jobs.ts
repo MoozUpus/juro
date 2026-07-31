@@ -25,6 +25,10 @@ import {
   recordAnalysisExportFailure,
 } from "../lib/document-analysis/exporter";
 import {
+  executeAnalysisReportExportJob,
+  recordAnalysisReportExportFailure,
+} from "../lib/document-analysis/report-exporter";
+import {
   isStagingDeletionProbe,
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
@@ -547,12 +551,24 @@ async function executeJob(
     }
   }
   if (envelope.kind === "document.export") {
+    const reportExport = await env.DB.prepare(
+      `SELECT 1 AS found FROM analysis_report_exports
+       WHERE id=? AND workspace_id=? LIMIT 1`,
+    ).bind(envelope.subjectId, envelope.workspaceId!).first<{ found: number }>();
     try {
-      await executeAnalysisExportJob(env, envelope.subjectId, envelope.workspaceId!);
+      if (reportExport?.found) {
+        await executeAnalysisReportExportJob(env, envelope.subjectId, envelope.workspaceId!);
+      } else {
+        await executeAnalysisExportJob(env, envelope.subjectId, envelope.workspaceId!);
+      }
       return;
     } catch (error) {
       if (error instanceof AnalysisExportError) {
-        await recordAnalysisExportFailure(env.DB, envelope.subjectId, envelope.workspaceId!, error);
+        if (reportExport?.found) {
+          await recordAnalysisReportExportFailure(env.DB, envelope.subjectId, envelope.workspaceId!, error);
+        } else {
+          await recordAnalysisExportFailure(env.DB, envelope.subjectId, envelope.workspaceId!, error);
+        }
         const code = ({
           ANALYSIS_EXPORT_NOT_FOUND: "DOCUMENT_EXPORT_NOT_FOUND",
           ANALYSIS_EXPORT_NOT_READY: "DOCUMENT_EXPORT_NOT_READY",
@@ -560,6 +576,7 @@ async function executeJob(
           ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT: "DOCUMENT_EXPORT_INVALID_SOURCE",
           ANALYSIS_EXPORT_OBJECT_FAILED: "DOCUMENT_EXPORT_OBJECT_FAILED",
           ANALYSIS_EXPORT_NOT_TERMINAL: "DOCUMENT_EXPORT_NOT_READY",
+          ANALYSIS_EXPORT_FORMAT_INVALID: "DOCUMENT_EXPORT_INVALID_SOURCE",
           ANALYSIS_EXPORT_DELETE_FAILED: "DOCUMENT_EXPORT_OBJECT_FAILED",
         } as const)[error.code];
         throw new SafeJobError(code, error.retryable);

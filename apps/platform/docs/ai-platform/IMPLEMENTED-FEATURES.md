@@ -286,3 +286,25 @@ path:
 
 This does not claim retention scheduling, batch deletion, additional export
 formats, or an authenticated live staging export from a provider result.
+
+## Phase 5 completed-analysis PDF/DOCX reports — 2026-07-31
+
+The completed-analysis surface now has one backward-compatible export API for
+machine-readable JSON and human-readable PDF/DOCX reports:
+
+- strict `json | pdf | docx` format selection; an omitted format remains JSON;
+- real RU/UZ report composition from the validated normalized analysis result;
+- the existing JURO PDF and DOCX generators, fonts, template, and footer asset;
+- one additive report table and the existing identifiers-only outbox/Queue;
+- immutable private R2 keys with conditional create, byte count, and SHA-256 proof;
+- tenant/owner authorization, neutral cross-tenant failures, and download audit;
+- terminal per-export R2-first deletion plus account-deletion purge continuity;
+- real PDF signature and OOXML package/content tests;
+- Queue routing, one-ack behavior, replay, failure, migration-guard, and mobile
+  touch-target coverage;
+- no new runtime dependency, provider call, public bucket, website change, or
+  production deployment.
+
+The feature is locally implemented and gated for protected staging. It does not
+claim highlighted/redline or comparison-table reports, live provider-generated
+staging artifacts, or production readiness.

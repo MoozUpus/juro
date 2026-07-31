@@ -807,3 +807,22 @@ zero foreign-key violations, and no pending migration. Post bookmark
 `00000201-00000006-000050b9-0cf0522bce80aeababd50a483ea35489` and the 450,367-byte
 private-R2 export matched SHA-256
 `42d0e9970ca0ef229c09f632d48b211c5135170adf877b5af0896ed1844f0460`.
+
+## Migration 0041 — PDF/DOCX analysis report exports
+
+`0041_analysis_report_exports.sql` additively creates one table, five explicit
+indexes, and two trigger programs. The table has three tenant/source foreign keys
+and stores only report lifecycle and private-object evidence. The migration contains
+no table rebuild, destructive `DROP`, data backfill, or mutation of existing rows.
+
+Insert guards require an already completed analysis with the same workspace and
+owner. Update guards freeze identity, allow only the reviewed queue lifecycle, and
+require format-specific `.pdf`/`.docx` keys, MIME type, minimum bytes, SHA-256, and
+completion time before `completed`. Nonterminal rows cannot carry artifact evidence.
+
+The complete local chain applies cleanly with 42 ledger entries (`0000`–`0041`),
+120 application tables, 193 foreign-key references, `quick_check=ok`, and zero
+foreign-key violations. Contract tests reject cross-tenant source insertion,
+incomplete completion, and invalid transitions. Staging application requires a
+fresh Time Travel bookmark plus checksummed private-R2 pre/post portable exports.
+Application rollback leaves the additive table unused; production is unauthorized.

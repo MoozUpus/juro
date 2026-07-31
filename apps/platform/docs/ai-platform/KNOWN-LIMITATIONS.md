@@ -262,3 +262,21 @@ No Phase 5 production-readiness claim is made.
   Time-based retention, batch export, redline export, and large-artifact
   performance gates remain open.
 - Production is unchanged and remains separately unauthorized.
+
+### PDF/DOCX report-export update
+
+- Normalized JSON plus human-readable PDF and DOCX analysis reports are now
+  implemented locally; the prior JSON-only limitation is superseded.
+- The PDF/DOCX report summarizes the completed normalized analysis. It is not a
+  highlighted copy of the uploaded document, a clean corrected document, redline,
+  comparison table, or case bundle; those formats remain open.
+- Staging still has no completed provider-generated analysis and no OpenAI or
+  Anthropic secret names, so no live provider artifact is claimed or fabricated.
+- The generator is covered with representative bounded synthetic content. Large
+  reports, complex typography, page overflow, browser download, and authenticated
+  mobile/zoom visual checks remain release gates.
+- Exports intentionally have no automatic TTL: approved user-content retention is
+  explicit per-export deletion or account deletion. A future policy-driven purge
+  is not implied by this implementation.
+- Migration `0041` and the exact Worker artifact remain pending protected-staging
+  application at this checkpoint. Production remains separately unauthorized.

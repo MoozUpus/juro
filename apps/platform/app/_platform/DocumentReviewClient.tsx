@@ -11,7 +11,8 @@ import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { DocumentComparisonClient } from "./DocumentComparisonClient";
 
 type Risk = { id?: string; level: string; title: string; description: string; excerpt: string | null; confidencePercent: number | null };
-type AnalysisExport = { id: string; status: string; format: "json"; fileName: string; sizeBytes: number | null; errorCode: string | null; completedAt: string | null; createdAt: string };
+type AnalysisExportFormat = "json" | "pdf" | "docx";
+type AnalysisExport = { id: string; status: string; format: AnalysisExportFormat; fileName: string; sizeBytes: number | null; errorCode: string | null; completedAt: string | null; createdAt: string };
 type Summary = {
   summary?: string; parties?: string[]; dates?: string[]; obligations?: string[]; payments?: string[];
   disputedTerms?: string[]; missingItems?: string[]; questions?: string[]; disclaimer?: string;
@@ -116,53 +117,57 @@ function SingleDocumentReview({ locale }: { locale: PlatformLocale }) {
 
 function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boolean; onChanged: () => Promise<void> }) {
   const summary = analysis.summary;
-  const exportAttemptKeys = useRef(new Map<string, string>());
+  const [exportAttemptKeys, setExportAttemptKeys] = useState<Record<string, string>>({});
   const canOpen = analysis.status === "completed";
   const state = analysisState(analysis.status, ru);
-  const [exporting, setExporting] = useState(false);
-  const [deletingExport, setDeletingExport] = useState(false);
+  const [exportingFormat, setExportingFormat] = useState<AnalysisExportFormat | null>(null);
+  const [deletingExportId, setDeletingExportId] = useState<string | null>(null);
   const [exportError, setExportError] = useState("");
   const [exportNotice, setExportNotice] = useState("");
-  const latestExport = [...(analysis.exports ?? [])].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
-  const exportPending = ["queued", "processing", "retrying"].includes(latestExport?.status ?? "");
-  const exportFailed = latestExport?.status === "failed";
-  async function requestExport() {
-    setExporting(true); setExportError(""); setExportNotice("");
-    if (exportFailed) exportAttemptKeys.current.delete(analysis.id);
-    const existingKey = exportAttemptKeys.current.get(analysis.id);
-    const idempotencyKey = existingKey ?? `analysis-export-${analysis.id}-${crypto.randomUUID()}`;
-    if (!existingKey) exportAttemptKeys.current.set(analysis.id, idempotencyKey);
+  const formats: AnalysisExportFormat[] = ["json", "pdf", "docx"];
+  const exportsByFormat = new Map<AnalysisExportFormat, AnalysisExport>();
+  for (const record of [...(analysis.exports ?? [])].sort((left, right) => right.createdAt.localeCompare(left.createdAt))) {
+    if (!exportsByFormat.has(record.format)) exportsByFormat.set(record.format, record);
+  }
+  async function requestExport(format: AnalysisExportFormat) {
+    const current = exportsByFormat.get(format);
+    setExportingFormat(format); setExportError(""); setExportNotice("");
+    const keyName = `${analysis.id}:${format}`;
+    const existingKey = current?.status === "failed" ? undefined : exportAttemptKeys[keyName];
+    const idempotencyKey = existingKey ?? `analysis-export-${format}-${analysis.id}-${crypto.randomUUID()}`;
+    if (!existingKey) setExportAttemptKeys(keys => ({ ...keys, [keyName]: idempotencyKey }));
     try {
       const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysis.id)}/exports`, {
         method: "POST",
-        headers: { "idempotency-key": idempotencyKey },
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify({ format }),
       });
       const body = await response.json() as { code?: string };
       if (!response.ok) {
-        exportAttemptKeys.current.delete(analysis.id);
+        setExportAttemptKeys(keys => withoutKey(keys, keyName));
         throw new Error(exportRequestError(body.code, ru));
       }
       await onChanged();
     } catch (value) { setExportError(value instanceof Error ? value.message : String(value)); }
-    finally { setExporting(false); }
+    finally { setExportingFormat(null); }
   }
-  async function removeExport() {
-    if (!latestExport || !window.confirm(ru ? "Удалить этот экспорт?" : "Bu eksport o‘chirilsinmi?")) return;
-    setDeletingExport(true); setExportError(""); setExportNotice("");
+  async function removeExport(record: AnalysisExport) {
+    if (!window.confirm(ru ? `Удалить экспорт ${record.format.toUpperCase()}?` : `${record.format.toUpperCase()} eksporti o‘chirilsinmi?`)) return;
+    setDeletingExportId(record.id); setExportError(""); setExportNotice("");
     try {
-      const response = await fetch(`/api/platform/document-analysis/exports/${encodeURIComponent(latestExport.id)}`, {
+      const response = await fetch(`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}`, {
         method: "DELETE",
       });
       const body = await response.json() as { code?: string };
       if (!response.ok) throw new Error(exportDeleteError(body.code, ru));
-      exportAttemptKeys.current.delete(analysis.id);
+      setExportAttemptKeys(keys => withoutKey(keys, `${analysis.id}:${record.format}`));
       await onChanged();
       setExportNotice(ru ? "Экспорт удалён." : "Eksport o‘chirildi.");
     } catch (value) { setExportError(value instanceof Error ? value.message : String(value)); }
-    finally { setDeletingExport(false); }
+    finally { setDeletingExportId(null); }
   }
   return <article className="review-result">
-    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && latestExport?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(latestExport.id)}/file`}><Download />JSON</a> : canOpen && <button type="button" disabled={exporting || exportPending || deletingExport} aria-busy={exporting || exportPending} onClick={() => void requestExport()}>{exporting || exportPending ? <LoaderCircle className="spin" /> : exportFailed ? <RefreshCw /> : <Download />}{exporting || exportPending ? (ru ? "Экспорт готовится" : "Eksport tayyorlanmoqda") : exportFailed ? (ru ? "Повторить экспорт" : "Eksportni takrorlash") : (ru ? "Экспорт JSON" : "JSON eksport")}</button>}{canOpen && latestExport && ["completed", "failed"].includes(latestExport.status) && <button type="button" disabled={deletingExport || exporting} aria-busy={deletingExport} onClick={() => void removeExport()}>{deletingExport ? <LoaderCircle className="spin" /> : <Trash2 />}{deletingExport ? (ru ? "Удаляется" : "O‘chirilmoqda") : (ru ? "Удалить экспорт" : "Eksportni o‘chirish")}</button>}</div></div>
+    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && formats.map(format => { const record = exportsByFormat.get(format); const pending = ["queued", "processing", "retrying"].includes(record?.status ?? ""); const failed = record?.status === "failed"; const busy = exportingFormat === format || pending; return <span className="review-export-action" key={format}>{record?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}/file`}><Download />{format.toUpperCase()}</a> : <button type="button" disabled={busy || deletingExportId !== null} aria-busy={busy} onClick={() => void requestExport(format)}>{busy ? <LoaderCircle className="spin" /> : failed ? <RefreshCw /> : <Download />}{busy ? (ru ? `${format.toUpperCase()} готовится` : `${format.toUpperCase()} tayyorlanmoqda`) : failed ? (ru ? `Повторить ${format.toUpperCase()}` : `${format.toUpperCase()}ni takrorlash`) : (ru ? `Экспорт ${format.toUpperCase()}` : `${format.toUpperCase()} eksport`)}</button>}{record && ["completed", "failed"].includes(record.status) && <button type="button" aria-label={ru ? `Удалить ${format.toUpperCase()}` : `${format.toUpperCase()}ni o‘chirish`} disabled={deletingExportId !== null || exportingFormat !== null} aria-busy={deletingExportId === record.id} onClick={() => void removeExport(record)}>{deletingExportId === record.id ? <LoaderCircle className="spin" /> : <Trash2 />}</button>}</span>; })}</div></div>
     {exportError && <p className="review-message error" role="alert"><CircleAlert />{exportError}</p>}
     {exportNotice && <p className="review-message success" role="status"><ShieldCheck />{exportNotice}</p>}
     {analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}
@@ -214,6 +219,13 @@ function exportRequestError(code: string | undefined, ru: boolean) {
   if (code === "ANALYSIS_EXPORT_NOT_READY") return ru ? "Экспорт доступен после завершения анализа." : "Eksport tahlil yakunlangandan keyin mavjud.";
   if (code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT") return ru ? "Запрос экспорта уже использован. Повторите действие." : "Eksport so‘rovi allaqachon ishlatilgan. Amalni takrorlang.";
   return ru ? "Экспорт не создан." : "Eksport yaratilmadi.";
+}
+
+function withoutKey(values: Record<string, string>, key: string): Record<string, string> {
+  if (!(key in values)) return values;
+  const next = { ...values };
+  delete next[key];
+  return next;
 }
 
 function exportDeleteError(code: string | undefined, ru: boolean) {
