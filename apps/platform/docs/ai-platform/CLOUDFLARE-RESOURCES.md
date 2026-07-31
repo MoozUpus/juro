@@ -1,5 +1,7 @@
 # JURO Cloudflare resources
 
+> Current checkpoint — 2026-07-31: `juro-staging` has 39 migrations through `0038`; `juro-platform-staging` version `623e591b-f36b-4fc1-9f1e-a86f6e94fe0a` serves 100% behind Access with four consumers (document analysis, legal sources, email, retention) and one five-minute cron. Advice/staff flags are true only in staging. Production Worker `juro` remains `91774ed4-72e9-47bb-b93a-a4208d490b24`. This supersedes older current-state summaries below; their historical resource IDs remain evidence of earlier checkpoints.
+
 Updated: 2026-07-30
 Status: owner-approved Wrangler OAuth was used for staging only. `juro-staging` is through `0034` with verified pre/post Time Travel/private-R2 exports and a pre-change isolated restore. Worker version `2ebc2ea8-6216-4f39-af96-d1b600973b74` serves 100% from commit `cd24095` behind owner-only Access. Exactly two staging consumers and one five-minute cron are active; legal ingestion and staff APIs remain disabled. Production resources, traffic, Sites v20, and legacy Worker `juro` were not changed.
 

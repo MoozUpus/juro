@@ -1,5 +1,7 @@
 # JURO implemented-features checkpoint
 
+> Current Phase 3 staging delta — 2026-07-31: exact Advice RU and Uzbek-Latin source submission, robots-aware serial acquisition, private content-addressed raw/normalized R2 evidence, deterministic Advice-primary parsing, low-confidence manual review, idempotent outbox/Queue execution, and RU/UZ staff submission UI are implemented and deployed only to protected staging. Nothing is automatically verified, published, indexed, or used by AI. Evidence: `STAGING-0038-ADVICE-EVIDENCE.md`.
+
 Updated: 2026-07-30
 Scope: verified local source/tests plus the protected staging deployment described below. Production remains separate and unchanged.
 

@@ -1,5 +1,7 @@
 # JURO known limitations checkpoint
 
+> Current checkpoint — 2026-07-31: bounded Advice RU/UZ-Latin fetch and parse are proven in protected staging, not production. The resulting versions are unverified and pending human review; publications, reading rows, and Advice vectors are zero. Broad corpus sync, historical revisions, citation verification, authenticated browser QA, human legal evaluation, and live OpenAI/Anthropic execution remain blockers. `STAGING-0038-ADVICE-EVIDENCE.md` supersedes stale disabled/no-live-fetch statements below.
+
 Updated: 2026-07-30
 Scope: current integration branch after the first local Phase 3 legal-source
 foundation checkpoint.

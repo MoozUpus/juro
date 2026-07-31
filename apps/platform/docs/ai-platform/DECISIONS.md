@@ -2,6 +2,17 @@
 
 This log records material implementation decisions. Status values are `accepted`, `pending approval`, or `superseded`.
 
+## D-083 — enable Advice only as a reviewed single-document staging boundary
+
+Status: accepted, tested, and deployed to owner-protected staging
+Date: 2026-07-31
+
+Advice acquisition is enabled only for exact current public document URLs: Russian `/ru/documents/{positiveId}` and Uzbek Latin `/oz/documents/{positiveId}`. The old `/questions` shape and Cyrillic `/uz/documents` are rejected. `www` canonicalizes away, the database trigger independently matches host/path/locale/ID, robots is re-read for every acquisition, and a minimum one-second Advice delay applies even without a declared Crawl-delay. There is no discovery crawler.
+
+The Advice parser is fail-closed to `.page-document-content`; it cannot fall back to page chrome or the whole body. Acquisition and parsing create only private content-addressed R2 evidence, a fetched/pending-review version, and a low-confidence manual review. They never create publications, reading rows, embeddings, citations, or AI context.
+
+Owner-only staging enables both Advice ingestion and staff source submission. Development and production remain disabled. Live RU and Uzbek-Latin probes completed once each; exact replays wrote zero rows; D1 integrity passed; publications/sections/chunks and `staging-advice-uz` vectors remained zero. Production Worker, Sites, and `apps/website` were unchanged. Exact evidence and rollback are in `STAGING-0038-ADVICE-EVIDENCE.md`.
+
 ## D-076 — create business workspaces as idempotent tenant transactions
 
 Status: accepted and verified in owner-only staging

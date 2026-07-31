@@ -1,5 +1,7 @@
 # JURO legal-source foundation
 
+> Current checkpoint — 2026-07-31: exact single-document Advice acquisition and normalization are active only in owner-protected staging for RU `/ru/documents/{id}` and Uzbek Latin `/oz/documents/{id}`. Both live probes remain `pending_review`; publications, sections, chunks, and Advice vectors remain zero. Development and production flags remain disabled. `STAGING-0038-ADVICE-EVIDENCE.md` supersedes earlier local-only/disabled status statements below while retaining them as historical evidence.
+
 Updated: 2026-07-28
 Scope: local integration branch only. This document is not evidence of a
 working crawler, synchronized legislation database, verified legal corpus, or

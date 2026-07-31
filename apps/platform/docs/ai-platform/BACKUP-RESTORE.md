@@ -1,5 +1,7 @@
 # JURO backup and restore boundary
 
+> Current `0038` recovery checkpoint — 2026-07-31: pre-change bookmark `000001cb-00000000-000050b9-33ca6e2205d62bf7a5d39a773b0f4344`; private R2 export `d1/juro-staging/20260731T050713Z/pre-0038-full.sql`, 399,627 bytes, SHA-256 `db727653fc02f0d1f1a7dab15848ea23be46db8217e67b833309aa4e9879259e`, exact round trip; final post-probe bookmark `000001d5-00000008-000050b9-14ad566220bf7432803d38b87be08bd8`. Direct import of this raw export is not claimed because Cloudflare's row order violates the local FK graph; exact Time Travel plus the previously verified parent-first through-`0037` restore are the recovery evidence. See `STAGING-0038-ADVICE-EVIDENCE.md`.
+
 Updated: 2026-07-30
 Status: empty-staging Time Travel restore/undo, portable SQL exports, private staging R2 upload/download checksum verification, isolated local SQL restore, and disposable remote-D1 import drills are verified; protected staging is through migration `0034` with migration-specific pre/post private-R2 checkpoints and a pre-change isolated restore. Scheduled backup automation, production protection, and an operational RTO remain unverified.
 
