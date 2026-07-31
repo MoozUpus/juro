@@ -1058,3 +1058,13 @@ test("support tickets are tenant-scoped, validated, and audited", async () => {
   assert.match(staffQueue, /freshMfaWithinMs: 15 \* 60 \* 1000/);
   assert.match(staffReply, /support_ticket_replied/);
 });
+test("legal-source health route is staff-gated, same-origin, and no-store", async () => {
+  const route = await readFile(new URL("../app/api/platform/legal-sources/health/route.ts", import.meta.url), "utf8");
+  assert.match(route, /LEGAL_SOURCE_STAFF_API_ENABLED !== "true"/);
+  assert.match(route, /x-juro-csrf/);
+  assert.match(route, /sec-fetch-site/);
+  assert.match(route, /legal\.sources\.review/);
+  assert.match(route, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(route, /cache-control": "private, no-store/);
+  assert.match(route, /ACCESS_DENIED/);
+});
