@@ -1,9 +1,12 @@
 import { z } from "zod";
 import type { PlatformJobEnv } from "./platform-jobs";
 
-const PROBE_KEY = "staging-provider-connectivity-v1";
-const providers = ["openai", "anthropic"] as const;
-type Provider = (typeof providers)[number];
+// v1 completed for OpenAI and terminally failed for Anthropic before the
+// owner rotated the staging Anthropic key. Keep that record immutable and use
+// a fresh logical key for the explicit post-rotation Anthropic verification.
+const PROBE_KEY = "staging-anthropic-connectivity-v2";
+type Provider = "openai" | "anthropic";
+const providers = ["anthropic"] as const satisfies readonly Provider[];
 
 export const providerProbeOutputSchema = z.object({
   status: z.literal("ok"),
