@@ -10,6 +10,7 @@ export type LegalSourceHealth = {
   freshness: LegalDatabaseFreshness;
   latestRuns: Array<{ sourceKind: "lex" | "advice"; status: string; finishedAt: string | null; errorCount: number }>;
   pendingReviewCount: number;
+  approvedPendingPublicationCount: number;
   pendingFetchCount: number;
 };
 
@@ -17,7 +18,7 @@ export async function legalSourceHealth(
   db: D1Database,
   now = new Date(),
 ): Promise<LegalSourceHealth> {
-  const [runs, review, fetches] = await Promise.all([
+  const [runs, review, approved, fetches] = await Promise.all([
     db.prepare(`
       SELECT source_kind AS sourceKind,status,finished_at AS finishedAt,error_count AS errorCount
       FROM source_sync_runs
@@ -25,7 +26,9 @@ export async function legalSourceHealth(
         AND source_kind IN ('lex','advice')
       ORDER BY started_at DESC LIMIT 24
     `).all<CorpusRun>(),
-    db.prepare("SELECT count(*) AS total FROM legal_review_queue WHERE status IN ('pending','in_review','approved')")
+    db.prepare("SELECT count(*) AS total FROM legal_review_queue WHERE status IN ('pending','in_review')")
+      .first<Count>(),
+    db.prepare("SELECT count(*) AS total FROM legal_review_queue WHERE status='approved'")
       .first<Count>(),
     db.prepare("SELECT count(*) AS total FROM legal_source_fetch_requests WHERE status IN ('queued','retrying','running')")
       .first<Count>(),
@@ -46,6 +49,7 @@ export async function legalSourceHealth(
     freshness: legalDatabaseFreshnessFromCorpusRuns(successful, now),
     latestRuns,
     pendingReviewCount: Number(review?.total ?? 0),
+    approvedPendingPublicationCount: Number(approved?.total ?? 0),
     pendingFetchCount: Number(fetches?.total ?? 0),
   };
 }
