@@ -17,7 +17,7 @@ function dayKey(now: Date): string {
 }
 
 function sourceRunId(kind: SourceKind, now: Date): string {
-  return `lscorpus_${kind}_${dayKey(now).replaceAll("-", "")}_${crypto.randomUUID().replaceAll("-", "")}`;
+  return `lscorpus_${kind}_${dayKey(now).replaceAll("-", "")}`;
 }
 
 export async function startScheduledCorpusSync(
