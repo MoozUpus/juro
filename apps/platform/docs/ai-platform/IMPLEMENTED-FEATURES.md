@@ -350,6 +350,7 @@ and one staging consumer with a distinct DLQ; D1 integrity and private pre/post
 backup round trips pass.
 
 This is not a scanner: new uploads remain quarantined. The remote secret-name
-inventory has no OpenAI or Anthropic key, so provider-generated staging analysis
-is not claimed. The release corpus remains pending. Exact evidence is in
+inventory confirms the OpenAI and Anthropic secret names, but no safe file can
+reach either provider while the malware gate is closed. Provider-generated staging
+analysis is therefore not claimed. The release corpus remains pending. Exact evidence is in
 `STAGING-0042-OCR-EXTRACTION-EVIDENCE.md`.

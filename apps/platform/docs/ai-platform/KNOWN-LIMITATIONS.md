@@ -201,7 +201,7 @@ The deployed Worker now exposes both provider secret names and server-side model
 ## Phase 4 open gates — 2026-07-31
 
 - `OPENAI_API_KEY` is present by name in the inspected staging Worker; only a fixed synthetic structured-output probe is verified, not a user/legal chat.
-- `ANTHROPIC_API_KEY` is present by name in the inspected staging Worker; Anthropic v4 passed a fixed synthetic structured-output probe, not a document analysis.
+- `ANTHROPIC_API_KEY` is present by name in the inspected staging Worker; Anthropic v5 (`claude-sonnet-4-6`) passed a fixed synthetic structured-output probe, not a document analysis.
 - No live user/legal OpenAI response, Anthropic document result, or provider failover is claimed.
 - Upstream Responses SSE, bounded browser progress, stop, and no-charge cancellation are implemented and locally tested, but no live provider stream is claimed beyond fixed synthetic probes.
 - Edit, regenerate, and immutable branch history are deployed to protected staging, but live provider-backed branch creation and authenticated browser evidence remain open because only fixed synthetic provider probes are verified.
@@ -303,7 +303,7 @@ No Phase 5 production-readiness claim is made.
 ## Phase 5 OCR extraction open gates — 2026-07-31
 
 - No real malware scanner is attached; new uploads remain quarantined.
-- The remote staging secret-name inventory has no OpenAI or Anthropic key.
+- The remote staging secret-name inventory confirms `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` by name; values were neither read nor exported.
 - Workers AI OCR is deployed, but no scanner-approved user file exists for a
   truthful live end-to-end provider run.
 - Coordinate-level OCR, multi-file ZIP packages, corrected/redline artifacts,
