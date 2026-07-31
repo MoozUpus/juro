@@ -350,8 +350,12 @@ async function userObjectKeys(
        owner_user_id=?
        OR version_one_file_id IN (SELECT id FROM targeted_files)
        OR version_two_file_id IN (SELECT id FROM targeted_files)
-     ) AND version_two_json_key IS NOT NULL`,
-  ).bind(userId, userId, userId, userId).all<ObjectKeyRow>();
+      ) AND version_two_json_key IS NOT NULL
+      UNION
+      SELECT r2_key AS objectKey
+      FROM analysis_exports
+      WHERE owner_user_id=? AND r2_key IS NOT NULL`,
+  ).bind(userId, userId, userId, userId, userId).all<ObjectKeyRow>();
   return [...new Set(
     rows.results
       .map(row => row.objectKey)
@@ -384,6 +388,7 @@ async function inventory(
          (SELECT count(*) FROM documents WHERE owner_user_id=?) +
          (SELECT count(*) FROM document_files WHERE owner_user_id=?) +
          (SELECT count(*) FROM document_analyses WHERE owner_user_id=?) +
+         (SELECT count(*) FROM analysis_exports WHERE owner_user_id=?) +
          (SELECT count(*) FROM document_comparisons WHERE owner_user_id=?) +
          (SELECT count(*) FROM document_suggestions WHERE author_user_id=?) +
          (SELECT count(*) FROM document_change_proposals WHERE author_user_id=?) +
@@ -413,7 +418,7 @@ async function inventory(
          )
        ) AS retainedFinancialRecords`,
   ).bind(
-    ...Array.from({ length: 25 }, () => userId),
+    ...Array.from({ length: 26 }, () => userId),
   ).first<Record<keyof PurgeInventory, number>>();
   if (!row) {
     throw new AccountDeletionPurgeError(
