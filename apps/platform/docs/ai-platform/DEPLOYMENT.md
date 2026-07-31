@@ -170,3 +170,13 @@ names, bindings, handler set, migration state, Queue policy, and production Work
 identity were read back. Staging contains no completed analysis and synthetic probes
 are false, so live export completion is not claimed. Exact evidence and rollback are
 in `STAGING-0040-ANALYSIS-EXPORT-EVIDENCE.md`.
+
+### Export-object account-deletion follow-up
+
+Commit `08367fa` adds no schema or binding change. It extends the existing
+account-deletion R2 inventory and D1 evidence count to cover `analysis_exports`.
+Type-check, lint, 9/9 purge tests, the full 28/323/84 regression, exact staging
+build/artifact/binding checks, builder/comparison smokes, and commit secret scan
+passed. Worker version `cfb20e07-d9a9-4b55-a402-e2326c437b4a` serves 100%; D1
+remains at 41 migrations with `quick_check=ok` and zero FK violations. Anonymous
+deletion API access returns Access `302`; production remains unchanged.

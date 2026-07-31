@@ -1795,3 +1795,20 @@ Idempotency is scoped to owner and workspace and cannot reveal another tenant's
 request. Failed jobs store only a typed safe error and remain explicitly retryable.
 Only machine-readable JSON is in this slice; PDF, DOCX, marked-up, clean, and
 comparison-table exports remain outside the claim. Production remains unchanged.
+
+## D-087 — account deletion inventories analysis export objects before D1 cascade
+
+Status: accepted, fully regression-tested, and deployed to protected staging
+Date: 2026-07-31
+
+`analysis_exports` is deleted from D1 when its owned source analysis is removed,
+but that cascade cannot remove its private R2 object. The account-deletion purge
+therefore inventories every non-null export key owned by the closing user before
+crossing the irreversible boundary, deletes those keys together with the existing
+file/comparison objects, and includes export rows in deletion evidence counts.
+
+R2 deletion remains first and idempotent. An R2 failure leaves D1 content intact,
+releases the purge lease, and records a retryable failure; only a successful object
+phase permits the existing atomic D1 purge to cascade the export row. The change
+adds no migration, queue, dependency, production write, or broader bucket access.
+The fixture proves another user's object remains untouched.

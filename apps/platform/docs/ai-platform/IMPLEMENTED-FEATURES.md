@@ -259,3 +259,13 @@ checks, rendered auth tests, document smokes, and secret scans pass. Migration
 `0040` is applied to `juro-staging`; Worker version
 `6cf8434d-e94c-406a-9655-02bffdf0e2d2` serves 100% behind Access. No eligible
 completed analysis exists, so a live staging export is not claimed.
+
+### Analysis-export account-deletion continuity
+
+Account closure now includes owned analysis-export keys in the pre-delete R2
+inventory and includes export rows in immutable deletion evidence counts. R2
+failure remains retryable without deleting D1; after successful object deletion,
+the existing analysis cascade removes the export row atomically with the rest of
+the user's content. The dedicated purge suite passes 9/9 and the full regression
+remains 28 rendered, 323 core, and 84 Cloudflare tests. Worker version
+`cfb20e07-d9a9-4b55-a402-e2326c437b4a` serves 100% in protected staging.

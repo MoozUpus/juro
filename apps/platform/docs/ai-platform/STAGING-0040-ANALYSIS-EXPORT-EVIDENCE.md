@@ -139,3 +139,23 @@ consumer. Migration `0040` is additive and its empty table may remain unused.
 Use the pre-migration Time Travel bookmark or verified private-R2 portable export
 only for demonstrated D1 corruption. Production rollback is not applicable
 because production did not change.
+
+## Account-deletion continuity addendum
+
+Commit `08367fa` closes the export-object orphan risk in the existing deletion
+workflow. The purge fixture contains an owned completed analysis, completed export,
+and private export object. It proves:
+
+- the export key is present in the pre-delete R2 inventory;
+- an R2 failure preserves the analysis/export rows and releases the lease;
+- a successful retry deletes the object exactly through the existing bounded batch;
+- the D1 analysis deletion then cascades the export row;
+- the immutable purge evidence count includes the export row/object;
+- another user's object remains untouched.
+
+Targeted purge tests passed 9/9; full type-check, lint, rendered 28/28, core
+323/323, and Cloudflare 84/84 tests passed. Exact staging build/artifact/type
+validation, builder/comparison smokes, and commit secret scan passed. No migration
+was needed. Worker version `cfb20e07-d9a9-4b55-a402-e2326c437b4a` serves 100%.
+Post-deploy D1 remained at 41 migrations with `quick_check=ok`, zero FK violations,
+and zero analysis/export rows. The production Worker identity remained unchanged.
