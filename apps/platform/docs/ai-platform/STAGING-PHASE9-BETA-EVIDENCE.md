@@ -24,7 +24,8 @@ The route uses real staging session, tenant, dashboard API, and canonical applic
 | Anonymous isolation | Pass | 2026-07-31 HTTP `HEAD`: root, RU/UZ prototype and canonical builder each return Access `302` with `no-store` |
 | Production Worker invariant | Pass | `juro` remains `91774ed4-72e9-47bb-b93a-a4208d490b24` |
 | Local regression | Pass | full test, builder/comparison artifact smokes, type/lint, Cloudflare matrix and type contract check |
-| Secret-name inventory | Pass | read-only staging inventory lists `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` with no values read |`n| Secret exposure | Pass for changed scope | Zero high-confidence matches; only secret names read remotely |
+| Secret-name inventory | Pass | read-only staging inventory lists `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` with no values read |
+| Secret exposure | Pass for changed scope | Zero high-confidence matches; only secret names read remotely |
 | Authenticated functional UI | Open | Browser-control kernel exits before navigation |
 | RU/UZ visual matrix | Open | No authenticated screenshots for exact deployed version |
 | Accessibility interaction | Open | Keyboard, axe, zoom, screen reader, focus restoration not run remotely |
