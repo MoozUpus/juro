@@ -147,7 +147,7 @@ The feature branch now contains a real authenticated `POST /api/platform/ai` bou
 
 Local verification passed 301 core/rendered checks and 82 Cloudflare checks. Staging migration `0037`, the OpenAI boundary, and the Anthropic fallback extension are deployed to owner-protected staging as version `fdbce9be-06d6-45ef-bd01-ac49bd7b44a7` at 100% traffic.
 
-Live provider execution remains blocked by absent `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` bindings and is not claimed. Production remains unchanged.
+Live provider execution for product data is not claimed: both secret names now exist, but only fixed synthetic probes are verified. Production remains unchanged.
 
 
 ### Phase 4 validated streaming transport — 2026-07-31
@@ -164,9 +164,9 @@ The feature branch additionally implements:
 - question edits and answer regenerations create immutable, tenant-scoped branches instead of overwriting prior messages;
 - exact branch URLs, branch navigation, server-authoritative regeneration, append-only version hashes, and idempotent replay are locally tested.
 
-The transport is locally verified and deployed to protected staging as Worker version `1cbc9ea9-6ec8-4ab8-9495-b880b269f423` at 100% traffic. Live provider execution is not claimed while protected staging provider secrets remain absent. Production remains unchanged.
+The transport is locally verified and deployed to protected staging as Worker version `1cbc9ea9-6ec8-4ab8-9495-b880b269f423` at 100% traffic. Live user/legal provider execution is not claimed beyond fixed synthetic provider probes. Production remains unchanged.
 
-Immutable AI edit/regenerate branches are deployed to protected staging as Worker version `593e7fd4-1d60-4ba2-accc-c44b1e0a2ba0` with D1 through `0039`. Exact backup, migration, integrity, Access, rollback, and unchanged-production evidence is recorded in `STAGING-0039-AI-BRANCH-HISTORY-EVIDENCE.md`. Live provider execution remains unclaimed because provider secrets are absent.
+Immutable AI edit/regenerate branches are deployed to protected staging as Worker version `593e7fd4-1d60-4ba2-accc-c44b1e0a2ba0` with D1 through `0039`. Exact backup, migration, integrity, Access, rollback, and unchanged-production evidence is recorded in `STAGING-0039-AI-BRANCH-HISTORY-EVIDENCE.md`. Live provider-backed branch creation remains unclaimed: fixed synthetic provider probes are verified, but legal retrieval and authenticated product-flow evidence are not.
 
 ## Phase 5 secure upload foundation
 
@@ -319,8 +319,7 @@ staging artifacts, or production readiness.
 Migration `0041` and exact commit `c8873d3` are now deployed only to protected
 staging. Worker version `ffbfe9df-40f8-4442-8080-7eaf1e63fe40` serves 100%; D1,
 Queue, binding, secret-name, Access, backup, and unchanged-production read-backs
-pass. Staging contains zero completed analyses/report rows and no OpenAI/Anthropic
-secret name, so live provider-generated report completion is not claimed.
+pass. Staging contains zero completed analyses/report rows, so live provider-generated report completion is not claimed despite provider secret names being present.
 
 See `STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md` for exact commands/results
 and rollback evidence.

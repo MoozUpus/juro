@@ -8,7 +8,7 @@
 > but no current control-plane readback or eligible safe-file provider run has
 > been captured. The 100-package/30-comparison review, page coordinates,
 > multi-file packages, corrected versions, and redline release gates remain open.
-> Current staging delta — 2026-07-31: exact publication/lifecycle/hash replay and dual-corpus freshness enforcement are deployed only to owner-protected staging. Staging has zero successful complete corpus runs for both Lex and Advice; therefore the truthful state is `unavailable`, not fresh. The system withholds confirmed chat conclusions and legal-compliance analysis until that evidence exists. Live provider behavior remains unclaimed because provider secret bindings are absent.
+> Current staging delta — 2026-07-31: exact publication/lifecycle/hash replay and dual-corpus freshness enforcement are deployed only to owner-protected staging. Staging has zero successful complete corpus runs for both Lex and Advice; therefore the truthful state is `unavailable`, not fresh. The system withholds confirmed chat conclusions and legal-compliance analysis until that evidence exists. Live legal/provider behavior remains unclaimed because only fixed synthetic provider probes are verified.
 
 
 > Current checkpoint — 2026-07-31: bounded Advice RU/UZ-Latin fetch and parse are proven in protected staging, not production. The resulting versions are unverified and pending human review; publications, reading rows, and Advice vectors are zero. Broad corpus sync, historical revisions, citation verification, authenticated browser QA, human legal evaluation, and live OpenAI/Anthropic execution remain blockers. `STAGING-0038-ADVICE-EVIDENCE.md` supersedes stale disabled/no-live-fetch statements below.
@@ -196,15 +196,15 @@ The staging Lex acquisition/parse slice is operational, but it is not a producti
 
 Advice ingestion, RU/UZ corpus coverage, historical revisions, midnight Asia/Tashkent sync, source health alerts, hybrid retrieval, citation verification, legal-editor browser QA, and the 250-scenario evaluation are incomplete. Authenticated browser traversal is also open because the available local browser runtime is unavailable; anonymous Cloudflare Access denial is the only HTTP/browser boundary proven in this checkpoint.
 
-The deployed Worker version exposes only three secret binding names. A live OpenAI/Anthropic Phase 4 call must not be attempted or reported until the exact staging version proves the required provider secret names and server-side model configuration. Secret values must never be requested in chat.
+The deployed Worker now exposes both provider secret names and server-side model configuration. Fixed synthetic OpenAI and Anthropic structured-output probes pass; a live legal response must still not be claimed until retrieval, policy, and authenticated-flow gates pass. Secret values must never be requested in chat.
 
 ## Phase 4 open gates — 2026-07-31
 
-- `OPENAI_API_KEY` is absent from the inspected staging Worker.
-- `ANTHROPIC_API_KEY` is absent from the inspected staging Worker.
-- No live OpenAI response, Anthropic response, or provider failover is claimed.
-- Upstream Responses SSE, bounded browser progress, stop, and no-charge cancellation are implemented and locally tested, but no live provider stream is claimed without protected provider secrets.
-- Edit, regenerate, and immutable branch history are deployed to protected staging, but live provider-backed branch creation and authenticated browser evidence remain open because provider secrets are absent.
+- `OPENAI_API_KEY` is present by name in the inspected staging Worker; only a fixed synthetic structured-output probe is verified, not a user/legal chat.
+- `ANTHROPIC_API_KEY` is present by name in the inspected staging Worker; Anthropic v4 passed a fixed synthetic structured-output probe, not a document analysis.
+- No live user/legal OpenAI response, Anthropic document result, or provider failover is claimed.
+- Upstream Responses SSE, bounded browser progress, stop, and no-charge cancellation are implemented and locally tested, but no live provider stream is claimed beyond fixed synthetic probes.
+- Edit, regenerate, and immutable branch history are deployed to protected staging, but live provider-backed branch creation and authenticated browser evidence remain open because only fixed synthetic provider probes are verified.
 - Reconnect/resume, durable partial-stream recovery, memory, guest flow, and full entitlement integration remain open.
 - Conversation facts remain conversation-scoped rather than branch-scoped; source evidence remains attached to the exact answer message.
 - Retrieval is exact lexical retrieval from current verified D1 material; Vectorize hybrid retrieval, reranking, and citation revalidation remain open.
@@ -229,7 +229,7 @@ The protected staging Worker now has a real document-analysis consumer, bounded 
 The following gates remain open:
 
 - no malware scanner marks files `analysis_safe`, so every user upload remains quarantined before the consumer;
-- `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are absent from the exact staging secret-name inventory;
+- `ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are present by name, but no safe file can reach either provider while the malware gate remains closed;
 
 ## Phase 6 case/plan open gates — 2026-07-30
 
@@ -274,8 +274,7 @@ No Phase 5 production-readiness claim is made.
   protected staging. Local contract tests prove Queue/R2 behavior, but an
   authenticated end-to-end staging completion is not claimed because staging has
   zero completed analyses and synthetic probes are disabled.
-- Staging currently has no OpenAI or Anthropic secret, so no live provider result
-  is fabricated merely to exercise export. Existing provider limitations remain.
+- Staging has both provider secret names, but no completed analysis and no safe-file path; no live provider result is fabricated merely to exercise export.
 - Account deletion removes owned export objects before the D1 cascade, and a
   CSRF-protected tenant-scoped action deletes individual terminal exports R2-first.
   Time-based retention, batch export, redline export, and large-artifact
@@ -289,8 +288,7 @@ No Phase 5 production-readiness claim is made.
 - The PDF/DOCX report summarizes the completed normalized analysis. It is not a
   highlighted copy of the uploaded document, a clean corrected document, redline,
   comparison table, or case bundle; those formats remain open.
-- Staging still has no completed provider-generated analysis and no OpenAI or
-  Anthropic secret names, so no live provider artifact is claimed or fabricated.
+- Staging still has no completed provider-generated analysis; provider secret names exist, but no live provider artifact is claimed or fabricated.
 - The generator is covered with representative bounded synthetic content. Large
   reports, complex typography, page overflow, browser download, and authenticated
   mobile/zoom visual checks remain release gates.
@@ -299,7 +297,7 @@ No Phase 5 production-readiness claim is made.
   is not implied by this implementation.
 - Migration `0041` and the exact Worker artifact are deployed to protected staging;
   authenticated provider-generated report completion remains unproven because
-  staging has no completed analysis and no OpenAI/Anthropic secret name.
+  staging has no completed analysis; provider secret names are present but the malware gate prevents a provider run.
   Production remains separately unauthorized.
 
 ## Phase 5 OCR extraction open gates — 2026-07-31
