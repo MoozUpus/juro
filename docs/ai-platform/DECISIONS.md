@@ -7,3 +7,6 @@ A lawyer receives only an anonymized request before a conflict check. A clear co
 ## 2026-07-31 — one durable grant per request
 
 `lawyer_access_grants.lawyer_request_id` is unique. The current product policy does not re-open a revoked request: a new grant requires a new request and a new conflict check. This favors a clear audit chain over implicit reactivation.
+## 2026-07-31 — mobile profile remains a first-class destination
+
+The mobile shell uses the approved five destinations: dashboard, AI lawyer, cases, documents and profile. Secondary navigation remains in the accessible top-bar drawer. This preserves fast access to profile/security settings without overloading the bottom bar.
