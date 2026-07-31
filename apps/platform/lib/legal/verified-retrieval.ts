@@ -2,6 +2,10 @@ import type { LegalSourceContext } from "../ai/provider";
 import { legalSourceLifecycleEvidenceSchema } from "./source-lifecycle";
 import { legalSourcePublicationEvidenceSchema } from "./source-publication";
 import { filterTrustedVerifiedLegalSources } from "./source-trust";
+import {
+  semanticLegalChunkRanks,
+  type LegalSemanticSearchEnv,
+} from "./semantic-retrieval";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_FRESHNESS_AGE_DAYS = 7;
@@ -32,6 +36,8 @@ export type VerifiedLegalRetrieval = {
   evidence: VerifiedLegalSourceEvidence[];
   freshness: LegalDatabaseFreshness;
   legalDatabaseAsOf: string;
+  retrievalMode: "hybrid" | "lexical";
+  semanticStatus: "used" | "unavailable" | "failed";
 };
 
 export type CorpusSyncRow = {
@@ -383,6 +389,24 @@ async function loadPublishedReadingRows(
   return rows.results;
 }
 
+async function hasIndexedVerifiedSource(
+  db: D1Database,
+  locale: "ru" | "uz",
+): Promise<boolean> {
+  const row = await db.prepare(`
+    SELECT 1 AS found
+    FROM legal_source_current_activations activation
+    INNER JOIN legal_sources source ON source.id=activation.source_id
+    INNER JOIN legal_source_versions version
+      ON version.id=activation.version_id AND version.source_id=source.id
+    INNER JOIN legal_source_chunks chunk ON chunk.version_id=version.id
+    WHERE source.status='verified' AND source.verification_state='verified'
+      AND version.status='verified' AND source.locale=?
+      AND chunk.vector_id IS NOT NULL AND chunk.indexed_at IS NOT NULL
+    LIMIT 1
+  `).bind(locale).first<{ found: number }>();
+  return Boolean(row?.found);
+}
 /**
  * Exact lexical retrieval over only current, activated official publications.
  * Every result is revalidated against publication/lifecycle evidence and the
@@ -393,21 +417,31 @@ export async function retrieveVerifiedLegalSources(
   query: string,
   locale: "ru" | "uz",
   limit = 8,
-  options: { now?: Date } = {},
+  options: { now?: Date; semantic?: LegalSemanticSearchEnv } = {},
 ): Promise<VerifiedLegalRetrieval> {
   const now = options.now ?? new Date();
   const freshness = await retrieveCorpusFreshness(db, now);
   const keywords = legalSearchKeywords(query, locale);
-  if (!keywords.length) {
+  const semantic = await hasIndexedVerifiedSource(db, locale)
+    ? await semanticLegalChunkRanks(options.semantic, query, locale)
+    : { status: "unavailable" as const, vectorRanks: new Map<string, number>() };
+  const semanticVectorIds = [...semantic.vectorRanks.keys()];
+  if (!keywords.length && !semanticVectorIds.length) {
     return {
       sources: [],
       evidence: [],
       freshness,
       legalDatabaseAsOf: freshness.asOf,
+      retrievalMode: "lexical",
+      semanticStatus: semantic.status,
     };
   }
 
-  const conditions = keywords.map(() => "lower(section.body_text) LIKE ?").join(" OR ");
+  const lexicalConditions = keywords.map(() => "lower(section.body_text) LIKE ?");
+  const semanticCondition = semanticVectorIds.length
+    ? `chunk.vector_id IN (${semanticVectorIds.map(() => "?").join(",")})`
+    : null;
+  const conditions = [...lexicalConditions, semanticCondition].filter(Boolean).join(" OR ");
   const rows = await db.prepare(`
     SELECT source.id,source.official_url AS officialUrl,
       source.canonical_id AS canonicalId,source.act_title AS actTitle,
@@ -477,8 +511,22 @@ export async function retrieveVerifiedLegalSources(
       AND (${conditions})
     ORDER BY source.last_checked_at DESC,section.sequence ASC
     LIMIT 48
-  `).bind(locale, ...keywords.map((keyword) => `%${keyword}%`))
-    .all<VerifiedLegalSourceEvidenceRow>();
+  `).bind(
+    locale,
+    ...keywords.map((keyword) => `%${keyword}%`),
+    ...semanticVectorIds,
+  ).all<VerifiedLegalSourceEvidenceRow>();
+
+  if (semantic.vectorRanks.size > 0) {
+    rows.results.sort((left, right) => {
+      const leftRank = left.vectorId ? semantic.vectorRanks.get(left.vectorId) : undefined;
+      const rightRank = right.vectorId ? semantic.vectorRanks.get(right.vectorId) : undefined;
+      if (leftRank === undefined && rightRank === undefined) return 0;
+      if (leftRank === undefined) return 1;
+      if (rightRank === undefined) return -1;
+      return leftRank - rightRank;
+    });
+  }
 
   const maxResults = Math.max(1, Math.min(12, limit));
   const attempted = new Set<string>();
@@ -499,5 +547,7 @@ export async function retrieveVerifiedLegalSources(
     evidence: validated.map(({ evidence }) => evidence),
     freshness,
     legalDatabaseAsOf: freshness.asOf,
+    retrievalMode: semantic.status === "used" ? "hybrid" : "lexical",
+    semanticStatus: semantic.status,
   };
 }

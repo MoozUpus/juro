@@ -1,6 +1,6 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
-import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { AiUnavailableError } from "../../../../lib/document-builder/ai/openai";
 import { aiProviderStatus, legalAiProvider, type LegalAiProgress } from "../../../../lib/ai/provider";
 import {
@@ -142,7 +142,7 @@ async function executePost(
     }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
   }
   const question = branchInput.question;
-  const retrieval = await retrieveVerifiedLegalSources(db, question, locale);
+  const retrieval = await retrieveVerifiedLegalSources(db, question, locale, 8, { semantic: runtimeEnv() });
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({ question, locale, answerMode, reasoningMode, conversationId: body?.conversationId || null, caseId: body?.caseId || null, operation: branchInput.operation, sourceMessageId: branchInput.forkedFromMessageId });
   const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });

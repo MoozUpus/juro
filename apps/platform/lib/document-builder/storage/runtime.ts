@@ -5,6 +5,9 @@ export interface BuilderRuntimeEnv {
   ASSETS?: Fetcher;
   DB?: D1Database;
   BUCKET?: R2Bucket;
+  LEX_UZ_INDEX?: VectorizeIndex;
+  ADVICE_UZ_INDEX?: VectorizeIndex;
+  EMBEDDING_MODEL?: string;
   LEGAL_ADVICE_INGESTION_ENABLED?: string;
   LEGAL_SOURCE_STAFF_API_ENABLED?: string;
   OPENAI_API_KEY?: string;

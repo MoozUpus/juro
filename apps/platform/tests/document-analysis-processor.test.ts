@@ -101,6 +101,8 @@ test("safe document analysis persists normalized result, usage, audit and is ide
         maxAgeDays: 7,
       },
       legalDatabaseAsOf: "unavailable",
+      retrievalMode: "lexical" as const,
+      semanticStatus: "unavailable" as const,
     }),
     analyze: async () => {
       aiCalls += 1;

@@ -1,6 +1,7 @@
 import type { AiStructuredResult } from "../document-builder/ai/openai";
 import { extractDocument } from "../document-comparison/extract";
 import { ComparisonProcessingError, type ExtractedDocument } from "../document-comparison/types";
+import type { LegalSemanticSearchEnv } from "../legal/semantic-retrieval";
 import {
   legalDatabaseFreshnessFromAsOf,
   retrieveVerifiedLegalSources,
@@ -23,7 +24,7 @@ import {
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
 
-export type DocumentAnalysisProcessorEnv = {
+export type DocumentAnalysisProcessorEnv = LegalSemanticSearchEnv & {
   DB: D1Database;
   BUCKET: R2Bucket;
 };
@@ -96,6 +97,7 @@ export type DocumentAnalysisProcessorDependencies = {
     query: string,
     locale: "ru" | "uz",
     limit?: number,
+    options?: { semantic?: LegalSemanticSearchEnv },
   ) => Promise<VerifiedLegalRetrieval>;
   analyze: (input: {
     fileName: string;
@@ -226,7 +228,7 @@ async function analyzeObject(
     }
 
     const request = parseRequestMetadata(row.summaryJson);
-    const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8);
+    const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8, { semantic: env });
     const ai = await deps.analyze({
       fileName: row.fileName,
       mimeType: row.mimeType,
