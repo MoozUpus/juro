@@ -20,6 +20,10 @@ import {
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
 import {
+  executeOcrProcessingJob,
+  OcrProcessingError,
+} from "../lib/document-analysis/ocr-processor";
+import {
   AnalysisExportError,
   executeAnalysisExportJob,
   recordAnalysisExportFailure,
@@ -115,6 +119,15 @@ type JobErrorCode =
   | "DOCUMENT_ANALYSIS_OCR_REQUIRED"
   | "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED"
   | "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
+  | "OCR_ANALYSIS_NOT_FOUND"
+  | "OCR_DERIVATIVE_INVALID"
+  | "OCR_FILE_UNSAFE"
+  | "OCR_INTEGRITY_FAILED"
+  | "OCR_NO_READABLE_TEXT"
+  | "OCR_OBJECT_MISSING"
+  | "OCR_PERSISTENCE_FAILED"
+  | "OCR_PROVIDER_REJECTED"
+  | "OCR_PROVIDER_UNAVAILABLE"
   | "DOCUMENT_EXPORT_NOT_FOUND"
   | "DOCUMENT_EXPORT_NOT_READY"
   | "DOCUMENT_EXPORT_INVALID_SOURCE"
@@ -220,6 +233,7 @@ export type PlatformJobEnv = Omit<
   CRON_ENABLED: string;
   LEGAL_ADVICE_INGESTION_ENABLED: string;
   ACCOUNT_DELETION_PURGE_ENABLED: string;
+  AI?: Ai;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   IDENTITY_KEYRING?: string;
@@ -545,6 +559,24 @@ async function executeJob(
       return;
     } catch (error) {
       if (error instanceof DocumentAnalysisProcessingError) {
+        if (error.code === "DOCUMENT_ANALYSIS_OCR_REQUIRED") {
+          return;
+        }
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
+  }
+  if (envelope.kind === "ocr.process") {
+    try {
+      await executeOcrProcessingJob(
+        env,
+        envelope.subjectId,
+        envelope.workspaceId!,
+      );
+      return;
+    } catch (error) {
+      if (error instanceof OcrProcessingError) {
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;

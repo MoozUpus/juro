@@ -1,7 +1,7 @@
 # Secure document upload pipeline
 
-Updated: 2026-07-30
-Status: Phase 5 fail-closed upload slice implemented locally; real malware scanner and downstream OCR/AI remain disabled.
+Updated: 2026-07-31
+Status: fail-closed upload and post-safe OCR/analysis pipeline implemented locally; real malware promotion remains disabled.
 
 ## Implemented lifecycle
 
@@ -21,6 +21,19 @@ The previous multipart `POST /api/platform/document-review` no longer stores a f
 
 The quarantine object currently uses a safe prefix in the environment primary private bucket rather than the separate quarantine binding. This preserves the existing account-deletion R2 inventory/purge path. Moving quarantine to its dedicated bucket requires a cross-bucket purge manifest and restore test first.
 
+## Post-safe extraction and OCR
+
+An existing server-verified `analysis_safe` object first uses the bounded local
+PDF/DOCX extractor. Images, unreadable scans, and files above the 20 MB inline
+boundary create an identifiers-only `ocr.process` outbox event. The attached OCR
+Queue consumer rechecks tenant ownership, safe state, R2 size, and source SHA-256,
+then calls the Workers AI `toMarkdown` binding.
+
+The normalized result is written to an immutable private R2 derivative and
+recorded in `file_extractions`; successful replay verifies the same bytes without
+a second provider call. The consumer then returns the analysis to `ready` and
+enqueues the existing Anthropic-primary/OpenAI-fallback analysis. Image-derived
+
 ## Supported intake formats
 
 - PDF;
@@ -33,18 +46,19 @@ MIME and extension must agree at initialization. Finalization checks PDF, PNG, J
 
 ## Evidence
 
-- TypeScript and lint pass.
-- Targeted validation/idempotency/tenant tests: 3/3.
-- Full platform tests, staging build, and staging artifact validation pass.
-- The build manifest includes all three new API routes.
-- The R2 implementation follows the current official Workers API contract for streaming `put`, SHA-256 put validation, strong read-after-write consistency, and `head` checks.
+- TypeScript and generated Cloudflare types pass.
+- Targeted processor/provider/upload/OCR/export tests: 18/18.
+- Cloudflare config/migration/Queue regression tests: 84/84.
+- OCR tests prove tenant denial before R2/provider access, source-integrity
+  failure, retryable provider absence, immutable derivative creation, and replay.
+- Account deletion proves the private derivative is deleted R2-first and its D1
+  row cascades without touching another user's object.
 
-Authenticated staging HTTP/R2 evidence is not claimed until the Access-protected browser or an approved service-token flow is available. Anonymous Access denial is a boundary check, not an upload success test.
+Authenticated staging OCR/provider execution is not claimed until migration
 
 ## Next gates
 
-1. Select and connect a privacy-approved real malware scanner; production must fail closed if it is required but unavailable.
-2. Add scan-result and extraction/OCR evidence, Queue consumer/DLQ, idempotent status transitions, and quarantined-object retention.
-3. Implement archive safety limits before extraction.
-4. Permit download/AI only from a server-verified `safe`/`ready` state.
-5. Add multi-file package and 500-page accounting without weakening the per-file boundary.
+1. Connect a privacy-approved real malware scanner; production must fail closed while it is unavailable.
+2. Apply `0042`, deploy protected staging, and execute an eligible safe-file OCR/provider smoke test.
+3. Run the complete 100-package/30-comparison reviewed evaluation, including clean-scan OCR quality.
+4. Add multi-file/ZIP package extraction, 500-page accounting, coordinates, corrections, and redline artifacts.

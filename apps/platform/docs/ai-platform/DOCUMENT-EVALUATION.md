@@ -5,16 +5,24 @@ Updated: 2026-07-31
 ## Current automated evidence
 
 The document-analysis processor is tested for tenant/object-state checks before
-R2 or AI access, quarantine refusal, R2 size/SHA-256 integrity, bounded
+R2 or AI access, quarantine refusal, R2 size/SHA-256 integrity, bounded local
 PDF/DOCX extraction, structured provider-output validation, idempotent durable
 persistence, usage/audit records, and legal-source freshness enforcement.
+
+The OCR/extraction extension adds four passing integration cases: successful
+Workers AI conversion and analysis chaining, idempotent replay, cross-tenant
+denial before R2/provider access, retryable missing-provider behavior, and
+fail-closed source-integrity rejection. The generated D1 migration applies with
+zero foreign-key violations, the Cloudflare contract suite passes 84/84, and the
+targeted Phase 5 processor/provider/upload/OCR/export set passes 18/18.
+
 When corpus freshness is unavailable, legal-compliance risks and citations are
 removed while structural findings remain; stale compliance findings are marked
-low confidence with an explicit RU/UZ warning.
+low confidence with an explicit RU/UZ warning. Image-derived text is explicitly
+marked for human review and does not count toward the 95% OCR quality threshold.
 
-These tests verify processing and safety contracts. A live staging analysis is
-not claimed because no malware scanner can mark a file safe and provider secret
-bindings are absent.
+A live staging analysis is not claimed: no real malware scanner can promote a new
+upload to `analysis_safe`. The owner reports staging provider secrets entered, but
 
 ## Required release matrix — not yet achieved
 

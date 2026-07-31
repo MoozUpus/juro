@@ -14,6 +14,11 @@ import {
   enforceDocumentExcerptBoundary,
   type DocumentAnalysisResult,
 } from "./schema";
+import {
+  loadCompletedOcrExtraction,
+  OcrProcessingError,
+  scheduleOcrProcessing,
+} from "./ocr-processor";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
@@ -161,26 +166,60 @@ async function analyzeObject(
   deps: DocumentAnalysisProcessorDependencies,
 ): Promise<PersistedAnalysis> {
   try {
-    if (row.sizeBytes > DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT) {
-      await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
-      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
-    }
-    const object = await env.BUCKET.get(row.r2Key);
-    if (!object) {
-      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_OBJECT_MISSING", false);
-    }
-    const bytes = new Uint8Array(await object.arrayBuffer());
-    if (bytes.byteLength !== row.sizeBytes || !row.sha256 || await sha256Hex(bytes) !== row.sha256.toLowerCase()) {
+    if (!row.sha256 || !/^[a-f0-9]{64}$/i.test(row.sha256)) {
       await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INTEGRITY_FAILED");
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_INTEGRITY_FAILED", false);
     }
-
-    const extracted = await deps.extract({
-      bytes,
-      fileName: row.fileName,
-      mimeType: row.mimeType,
-      sizeBytes: row.sizeBytes,
+    let extracted = await loadCompletedOcrExtraction(env, {
+      analysisId: row.analysisId,
+      workspaceId: row.workspaceId,
+      fileId: row.fileId,
+      sourceSha256: row.sha256.toLowerCase(),
     });
+    if (!extracted) {
+      if (row.sizeBytes > DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT) {
+        await scheduleOcrProcessing(env.DB, {
+          analysisId: row.analysisId,
+          fileId: row.fileId,
+          workspaceId: row.workspaceId,
+          ownerUserId: row.ownerUserId,
+          sourceSha256: row.sha256.toLowerCase(),
+        });
+        throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_OCR_REQUIRED", false);
+      }
+      const object = await env.BUCKET.get(row.r2Key);
+      if (!object) {
+        throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_OBJECT_MISSING", false);
+      }
+      const bytes = new Uint8Array(await object.arrayBuffer());
+      if (bytes.byteLength !== row.sizeBytes || await sha256Hex(bytes) !== row.sha256.toLowerCase()) {
+        await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INTEGRITY_FAILED");
+        throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_INTEGRITY_FAILED", false);
+      }
+      try {
+        extracted = await deps.extract({
+          bytes,
+          fileName: row.fileName,
+          mimeType: row.mimeType,
+          sizeBytes: row.sizeBytes,
+        });
+      } catch (error) {
+        if (
+          error instanceof ComparisonProcessingError &&
+          (error.code === "OCR_REQUIRED" || error.code === "NO_READABLE_TEXT")
+        ) {
+          await scheduleOcrProcessing(env.DB, {
+            analysisId: row.analysisId,
+            fileId: row.fileId,
+            workspaceId: row.workspaceId,
+            ownerUserId: row.ownerUserId,
+            sourceSha256: row.sha256.toLowerCase(),
+          });
+          throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_OCR_REQUIRED", false);
+        }
+        throw error;
+      }
+    }
     if (extracted.text.length > DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT) {
       await setAnalysisState(env.DB, row, "awaiting_chunked_analysis", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
@@ -252,6 +291,11 @@ async function analyzeObject(
     };
   } catch (error) {
     if (error instanceof DocumentAnalysisProcessingError) throw error;
+    if (error instanceof OcrProcessingError) {
+      const status = error.retryable ? "retrying" : "failed";
+      await setAnalysisState(env.DB, row, status, error.code);
+      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_EXTRACTION_FAILED", error.retryable);
+    }
     if (error instanceof ComparisonProcessingError) {
       const waiting = error.code === "OCR_REQUIRED" ? "awaiting_ocr" : "failed";
       const code = error.code === "OCR_REQUIRED"

@@ -93,6 +93,12 @@ const coreTestFiles = [
   "tests/document-comparison.test.ts",
   "tests/document-registry.test.ts",
   "tests/document-access.test.ts",
+  "tests/document-analysis-upload.test.ts",
+  "tests/document-analysis-route-boundary.test.ts",
+  "tests/document-analysis-provider.test.ts",
+  "tests/document-analysis-processor.test.ts",
+  "tests/document-ocr-processor.test.ts",
+  "tests/analysis-report-export.test.ts",
   "tests/auth-otp.test.ts",
   "tests/auth-turnstile.test.ts",
   "tests/auth-sessions.test.ts",
@@ -129,6 +135,7 @@ const coreTestFiles = [
 const cloudflareTestFiles = [
   "tests/cloudflare-config.test.ts",
   "tests/migration-safety.test.ts",
+  "tests/migration-0042-file-extractions.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 

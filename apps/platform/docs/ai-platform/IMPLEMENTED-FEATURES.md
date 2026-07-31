@@ -324,3 +324,25 @@ secret name, so live provider-generated report completion is not claimed.
 
 See `STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md` for exact commands/results
 and rollback evidence.
+
+## Phase 5 post-safe OCR/extraction — 2026-07-31
+
+Locally implemented and verified:
+
+- additive `file_extractions` lifecycle in migration `0042`;
+- environment-isolated Workers AI `AI` binding;
+- identifiers-only `ocr.process` outbox and attached OCR Queue consumer;
+- tenant/safe-state checks before R2 or provider access;
+- source size and SHA-256 verification;
+- Cloudflare `toMarkdown` conversion for supported PDF/DOCX/image inputs;
+- normalized `ExtractedDocument` persistence as an immutable private R2 object;
+- image-review warning without false OCR accuracy or coordinate claims;
+- verified derivative replay without a second provider call;
+- durable chain back to the existing Anthropic-primary analysis consumer;
+- retryable provider absence and fail-closed integrity/provider rejection;
+- R2-first account-deletion coverage for the derived object.
+
+Targeted Phase 5 tests pass 18/18, Cloudflare config/migration/Queue tests pass
+84/84, account-purge tests pass 9/9, TypeScript passes, and generated Wrangler
+types are current. This is not a scanner: new uploads remain quarantined. Remote
+staging migration/deploy/provider evidence and the release corpus remain pending;

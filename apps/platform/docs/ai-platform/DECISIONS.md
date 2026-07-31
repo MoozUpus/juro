@@ -1901,3 +1901,28 @@ The collection API remains backward-compatible: an empty request still means JSO
 an explicit strict format may request `json`, `pdf`, or `docx`. Highlighted PDF,
 clean/redline document mutation, comparison-table export, and provider-generated
 staging evidence are outside this decision. Production remains unchanged.
+
+## D-091 — OCR/extraction uses an idempotent Workers AI derivative pipeline
+
+Status: accepted and locally verified; protected-staging migration/deploy pending
+Date: 2026-07-31
+
+Files that are already server-verified as `analysis_safe`, but cannot be read by
+the bounded local PDF/DOCX extractor, are handed off through the existing
+`OCR_PROCESSING_QUEUE`. The queue envelope contains opaque identifiers only. The
+consumer reloads the tenant, file lifecycle, object size, and source SHA-256 from
+D1/R2 before invoking the Cloudflare Workers AI `toMarkdown` binding.
+
+The conversion result is normalized into the existing `ExtractedDocument`
+contract and stored as an immutable private R2 JSON derivative. Additive migration
+`0042_sleepy_callisto.sql` records provider, method, source hash, derivative hash,
+quality, warnings, and lifecycle in `file_extractions`. Only after the derivative
+is written and verified does D1 return the analysis to `ready` and enqueue the
+existing Anthropic-primary analysis consumer. Replay verifies the same derivative
+and never calls the provider or charges analysis twice.
+
+Image conversion is marked `AI_OCR_REVIEW_REQUIRED`; the implementation does not
+claim exact bounding boxes, page geometry, or the 95% OCR release threshold. The
+account-deletion purge inventories the derivative key before cascading D1 rows.
+No scanner is simulated: new uploads remain quarantined while the malware binding
+is absent. Production stays unchanged, and the complete 100-package/30-comparison

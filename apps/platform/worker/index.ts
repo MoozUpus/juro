@@ -8,6 +8,7 @@ import {
 import { handleScheduled } from "./platform-scheduled";
 
 type FrameworkEnv = PlatformJobEnv & {
+  AI?: Ai;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_CHAT_MODEL?: string;

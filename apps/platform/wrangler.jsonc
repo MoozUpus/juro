@@ -102,6 +102,9 @@
   "images": {
     "binding": "IMAGES"
   },
+  "ai": {
+    "binding": "AI"
+  },
   "observability": {
     "enabled": true,
     "logs": {
@@ -269,6 +272,9 @@
       ],
       "images": {
         "binding": "IMAGES"
+      },
+      "ai": {
+        "binding": "AI"
       }
     },
     "production": {
@@ -368,6 +374,9 @@
       ],
       "images": {
         "binding": "IMAGES"
+      },
+      "ai": {
+        "binding": "AI"
       }
     }
   }

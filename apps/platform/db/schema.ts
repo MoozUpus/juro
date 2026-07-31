@@ -2019,6 +2019,41 @@ export const documentAnalyses = sqliteTable("document_analyses", {
   ...timestamps,
 }, (table) => [index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt), uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId)]);
 
+export const fileExtractions = sqliteTable("file_extractions", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  fileId: text("file_id").notNull().references(() => documentFiles.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  method: text("method").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model"),
+  sourceSha256: text("source_sha256").notNull(),
+  r2Key: text("r2_key"),
+  textSha256: text("text_sha256"),
+  sizeBytes: integer("size_bytes"),
+  tokenEstimate: integer("token_estimate"),
+  detectedMimeType: text("detected_mime_type"),
+  detectedLanguage: text("detected_language"),
+  textQuality: text("text_quality"),
+  warningsJson: text("warnings_json").notNull().default("[]"),
+  errorCode: text("error_code"),
+  completedAt: text("completed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("file_extractions_analysis_uidx").on(table.analysisId),
+  uniqueIndex("file_extractions_r2_key_uidx").on(table.r2Key),
+  index("file_extractions_workspace_idx").on(table.workspaceId, table.createdAt),
+  index("file_extractions_status_idx").on(table.status, table.updatedAt),
+  check("file_extractions_status_check", sql`${table.status} IN ('queued','processing','retrying','completed','failed')`),
+  check("file_extractions_method_check", sql`${table.method} = 'workers_ai_markdown'`),
+  check("file_extractions_source_sha_check", sql`length(${table.sourceSha256}) = 64`),
+  check("file_extractions_text_sha_check", sql`${table.textSha256} IS NULL OR length(${table.textSha256}) = 64`),
+  check("file_extractions_size_check", sql`${table.sizeBytes} IS NULL OR ${table.sizeBytes} >= 0`),
+  check("file_extractions_token_check", sql`${table.tokenEstimate} IS NULL OR ${table.tokenEstimate} >= 0`),
+]);
+
 export const documentRisks = sqliteTable("document_risks", {
   id: text("id").primaryKey(),
   analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),

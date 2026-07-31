@@ -36,6 +36,7 @@ type EnvironmentConfig = {
   };
   vectorize: NamedBinding[];
   analytics_engine_datasets: NamedBinding[];
+  ai: NamedBinding;
   images: NamedBinding;
   observability?: unknown;
   triggers?: unknown;
@@ -118,6 +119,7 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
       environment === "staging" ? { crons: ["*/5 * * * *"] } : undefined,
     );
     assert.deepEqual(config.assets, { binding: "ASSETS" });
+    assert.deepEqual(config.ai, { binding: "AI" });
 
     assert.deepEqual(
       config.d1_databases.map(({ binding }) => binding),
@@ -234,6 +236,7 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
       ...config.queues.producers,
       ...config.vectorize,
       ...config.analytics_engine_datasets,
+      config.ai,
       config.images,
       config.assets,
     ].map(({ binding }) => binding);

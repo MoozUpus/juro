@@ -686,10 +686,10 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
       "JOB_QUEUE_MISMATCH",
     );
 
-    const disabledBody = envelope("ocr.process", {
-      jobId: "job_ocr_disabled",
-      idempotencyKey: "idem_ocr_disabled",
-      correlationId: "corr_ocr_disabled",
+    const disabledBody = envelope("notification.dispatch", {
+      jobId: "job_notification_disabled",
+      idempotencyKey: "idem_notification_disabled",
+      correlationId: "corr_notification_disabled",
     });
     const disabled = mockMessage(disabledBody, "disabled_handler");
     await runBatch(

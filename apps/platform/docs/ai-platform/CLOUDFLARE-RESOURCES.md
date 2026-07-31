@@ -1,5 +1,13 @@
 # JURO Cloudflare resources
 
+> Phase 5 OCR candidate — 2026-07-31: source now declares the Workers AI binding
+> `AI` in development, staging, and production profiles and attaches the already
+> provisioned `OCR_PROCESSING_QUEUE` to a real identifiers-only consumer.
+> Migration `0042` adds `file_extractions`. Local config/type/migration/Queue tests
+> pass. No remote binding, migration, version, or traffic claim is made at this
+> checkpoint: Cloudflare version readback returned HTTP 522, and staging deploy is
+> still pending. Production resources and traffic remain unchanged.
+
 > Current checkpoint — 2026-07-31: `juro-staging` has 42 migrations through additive `0041`; `juro-platform-staging` version `ffbfe9df-40f8-4442-8080-7eaf1e63fe40` serves 100% behind Access with five consumers and one five-minute cron. Completed analyses support private JSON/PDF/DOCX export lifecycles, R2-first terminal deletion, and account-deletion continuity. Staging has no eligible completed analysis. Production Worker `juro` remains `91774ed4-72e9-47bb-b93a-a4208d490b24`. This supersedes older current-state summaries below; their historical resource IDs remain evidence of earlier checkpoints.
 
 Updated: 2026-07-30

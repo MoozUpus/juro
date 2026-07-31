@@ -84,7 +84,7 @@ export function structureDocument(text: string): ExtractedSection[] {
   });
 }
 
-function detectLanguage(text: string): ExtractedDocument["detectedLanguage"] {
+export function detectDocumentLanguage(text: string): ExtractedDocument["detectedLanguage"] {
   const sample = text.slice(0, 30_000).toLocaleLowerCase();
   const cyrillic = (sample.match(/[\u0400-\u04ff]/g) ?? []).length;
   const latin = (sample.match(/[a-z]/g) ?? []).length;
@@ -204,7 +204,7 @@ export async function extractDocument(input: {
     mimeType: input.mimeType,
     sizeBytes: input.sizeBytes,
     pageCount,
-    detectedLanguage: detectLanguage(text),
+    detectedLanguage: detectDocumentLanguage(text),
     textQuality: pageCount && textDensity < 80 ? "limited" : "good",
     warningCode: pageCount && textDensity < 80 ? "LOW_TEXT_DENSITY" : null,
     text,

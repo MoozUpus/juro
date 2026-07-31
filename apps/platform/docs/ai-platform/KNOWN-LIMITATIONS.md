@@ -1,4 +1,13 @@
 # JURO known limitations checkpoint
+
+> Phase 5 OCR checkpoint — 2026-07-31: migration `0042` and the Workers AI
+> `toMarkdown` OCR/extraction consumer pass locally, including tenant isolation,
+> integrity, retry, replay, R2 derivative, outbox chaining, and account-purge
+> tests. This does not open uploads: the real malware scanner remains absent, so
+> new files stay quarantined. The owner reports staging provider secrets entered,
+> but no current control-plane readback or eligible safe-file provider run has
+> been captured. The 100-package/30-comparison review, page coordinates,
+> multi-file packages, corrected versions, and redline release gates remain open.
 > Current staging delta — 2026-07-31: exact publication/lifecycle/hash replay and dual-corpus freshness enforcement are deployed only to owner-protected staging. Staging has zero successful complete corpus runs for both Lex and Advice; therefore the truthful state is `unavailable`, not fresh. The system withholds confirmed chat conclusions and legal-compliance analysis until that evidence exists. Live provider behavior remains unclaimed because provider secret bindings are absent.
 
 
