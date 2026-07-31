@@ -1,14 +1,14 @@
 # Phase 5 async document-analysis staging evidence
 
-Date: 2026-07-30 UTC
+Date: 2026-07-30 UTC; reconciled 2026-08-01 UTC
 
 Scope: owner-only `juro-platform-staging`. Production Worker `juro`, the public Sites deployment at `app.juro.uz`, production D1/R2, and `apps/website` were not changed.
 
 ## Source and deployment identity
 
-- Source commit: `2456742373ef045328e4d9df09ac6c6ef95bc03a`.
+- Source commit: `aa713e6` (provider validation) plus `6027e06` (current Anthropic model).
 - Worker: `juro-platform-staging`.
-- Worker version: `0ba11fcf-a095-436d-a30b-aeacc1aa9c3c` at 100% traffic.
+- Worker version: `91edb0b9-3758-4959-97d6-27fc52d643ae` at 100% traffic.
 - Protected hostname: `https://staging.app.juro.uz`.
 - Anonymous `document-review` and canonical `document-builder` requests both returned HTTP `302` at the Cloudflare Access boundary; no Access bypass was used.
 
@@ -29,15 +29,17 @@ The consumer:
 
 ## Model and secret evidence
 
-The official OpenAI resolver returned `gpt-5.6-sol`. Anthropic's current official model overview identified `claude-fable-5` as its most capable widely released model, so staging uses `ANTHROPIC_DOCUMENT_MODEL=claude-fable-5`; the independent legal-chat fallback remains `claude-sonnet-4-6`.
+The configured OpenAI resolver remains `gpt-5.6-sol`. The Anthropic configuration uses `claude-sonnet-4-6` for document and fallback paths; the retired `claude-sonnet-4-20250514` is not configured.
 
-The exact post-deploy secret-name inventory contains only:
+The exact post-deploy secret-name inventory contains:
 
+- `ANTHROPIC_API_KEY`;
 - `IDENTITY_KEYRING`;
+- `OPENAI_API_KEY`;
 - `RESEND_API_KEY`;
 - `TURNSTILE_SECRET_KEY`.
 
-`ANTHROPIC_API_KEY` and `OPENAI_API_KEY` are absent. No live provider request, provider fallback, or completed staging analysis is claimed. A safe document would enter `awaiting_ai_configuration` rather than receiving a fabricated result.
+Secret values were not read or logged. A one-time synthetic Anthropic structured-output connectivity probe completed successfully on `claude-sonnet-4-6`; the probe flag was then returned to `false`. No live document-analysis run, provider fallback, or completed analysis is claimed because the malware gate prevents any uploaded file from becoming `analysis_safe`.
 
 ## Verification evidence
 
@@ -56,7 +58,7 @@ The exact post-deploy secret-name inventory contains only:
 ## Open gates
 
 - The malware scanner is not connected. Upload finalization therefore remains fail-closed in quarantine and cannot feed this consumer.
-- Provider secrets are absent, so no real Anthropic/OpenAI result is proven.
+- A real malware-scanning service is unavailable in this Cloudflare account: the current account is not entitled to Cloudflare Containers (Workers Paid is required). No fake scanner has been added; upload finalization remains fail-closed in quarantine.
 - Image/scanned-PDF OCR, ZIP/package extraction, documents above the inline extraction limit, and chunked long-document synthesis remain explicit waiting states.
 - Retrieval is verified exact lexical D1 retrieval, not complete Vectorize hybrid retrieval/reranking.
 - Corrections, redline, exports, multi-file package analysis, and the 100-document quality gate remain incomplete.
