@@ -312,9 +312,9 @@ const triggers = artifact.triggers;
 assert.deepEqual(
   triggers,
   requestedEnvironment === "staging"
-    ? { crons: ["*/5 * * * *"] }
+    ? { crons: ["*/5 * * * *", "0 19 * * *"] }
     : {},
-  "Only the reviewed staging outbox cron may be attached",
+  "Only the reviewed staging scheduler crons may be attached",
 );
 
 async function filesBelow(root) {

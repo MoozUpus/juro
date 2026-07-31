@@ -1,4 +1,9 @@
 import { dispatchOutbox } from "./platform-outbox";
+import {
+  LEGAL_CORPUS_SYNC_CRON,
+  reconcileScheduledCorpusSyncRuns,
+  startScheduledCorpusSync,
+} from "../lib/legal/scheduled-corpus-sync";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -124,13 +129,26 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
-  if (controller.cron !== OUTBOX_CRON) {
+  if (controller.cron !== OUTBOX_CRON && controller.cron !== LEGAL_CORPUS_SYNC_CRON) {
     logScheduled("error", {
       event: "scheduled.unknown_cron",
       environment: env.APP_ENV,
       cron: controller.cron,
     });
     controller.noRetry();
+    return;
+  }
+
+  if (controller.cron === LEGAL_CORPUS_SYNC_CRON) {
+    const summary = await startScheduledCorpusSync(env);
+    logScheduled("info", {
+      event: "scheduled.legal_corpus_started",
+      environment: env.APP_ENV,
+      cron: controller.cron,
+      started: summary.started,
+      busy: summary.busy,
+      empty: summary.empty,
+    });
     return;
   }
 
@@ -147,6 +165,10 @@ export async function handleScheduled(
   try {
     const summary = await dispatchOutbox(env, 100);
     const providerProbe = await maybeRunStagingProviderProbes(env);
+    const corpusRunsCompleted =
+      env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+        ? await reconcileScheduledCorpusSyncRuns(env)
+        : 0;
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {
       event: "scheduled.outbox_completed",
@@ -160,6 +182,7 @@ export async function handleScheduled(
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,
       providerProbeSkipped: providerProbe?.skipped ?? 0,
+      corpusRunsCompleted,
     });
   } catch {
     try {

@@ -116,7 +116,9 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
     assert.equal(config.vars.JOB_SCHEMA_VERSION, "1");
     assert.deepEqual(
       config.triggers,
-      environment === "staging" ? { crons: ["*/5 * * * *"] } : undefined,
+      environment === "staging"
+        ? { crons: ["*/5 * * * *", "0 19 * * *"] }
+        : undefined,
     );
     assert.deepEqual(config.assets, { binding: "ASSETS" });
     assert.deepEqual(config.ai, { binding: "AI" });

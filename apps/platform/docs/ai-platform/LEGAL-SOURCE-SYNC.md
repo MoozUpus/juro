@@ -52,7 +52,7 @@ AI routes filter for exact verified source state, verified timestamp, and conten
 - broader Advice corpus discovery only after a separate legal/policy and load review;
 - lexical plus semantic retrieval with tenant-independent public-source filters;
 - server-side citation existence/status/effective-date verification;
-- scheduled midnight Asia/Tashkent synchronization and source-health alerts;
+- staging midnight Asia/Tashkent synchronization is deployed and recorded in `STAGING-0053-SCHEDULED-CORPUS-SYNC-EVIDENCE.md`; source-health alerts remain pending;
 - reproducible 250-scenario RU/UZ legal evaluation with human-reviewed ground truth.
 
 None of these remaining items is represented as working until its own staging evidence passes.

@@ -115,6 +115,7 @@ const coreTestFiles = [
   "tests/legal-source-trust.test.ts",
   "tests/legal-source-fetch.test.ts",
   "tests/legal-source-acquisition.test.ts",
+  "tests/legal-scheduled-corpus-sync.test.ts",
   "tests/legal-source-parser.test.ts",
   "tests/legal-source-normalization.test.ts",
   "tests/legal-source-review.test.ts",
