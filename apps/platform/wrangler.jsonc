@@ -142,8 +142,8 @@
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
         "OPENAI_CHAT_MODEL": "gpt-5.6-sol",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
-        "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-20250514",
-        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-20250514"
+        "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-6",
+        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6"
       },
       "d1_databases": [
         {

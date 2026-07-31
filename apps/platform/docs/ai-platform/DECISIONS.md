@@ -1965,3 +1965,26 @@ terminal code `PROVIDER_UNAVAILABLE`; no Claude/document-analysis success is
 claimed. The flag was immediately redeployed as false. Further Anthropic
 verification requires a diagnosed provider-account, key, or model correction,
 then a new explicitly versioned probe key; it must never overwrite this evidence.
+
+## D-094 — retire the staging Anthropic model before accepting provider-key evidence
+
+Status: accepted; protected staging validation pending
+Date: 2026-08-01
+
+The secret-name inventory showed the owner had replaced `ANTHROPIC_API_KEY`, but
+an isolated Anthropic-only connectivity probe still returned the safe terminal
+code `PROVIDER_UNAVAILABLE`. The configured model
+`claude-sonnet-4-20250514` was officially retired on 2026-06-15. This is a
+configuration defect distinct from secret presence or credential validity.
+
+Staging now selects `claude-sonnet-4-6` for both document analysis and fallback.
+Anthropic identifies it as the replacement and lists it among models supporting
+JSON Schema structured outputs, which JURO requires. D-092 is superseded only
+for the model identifier; its server-only and fail-closed boundaries remain in
+force. Production has not been deployed or changed.
+
+Official sources verified on 2026-08-01:
+
+- https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
+- https://platform.claude.com/docs/en/about-claude/models/migration-guide
+- https://platform.claude.com/docs/en/build-with-claude/structured-outputs

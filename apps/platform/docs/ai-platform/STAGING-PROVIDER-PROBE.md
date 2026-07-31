@@ -14,7 +14,7 @@ development and production.
 Each release of a probe has an immutable logical key. Initial provider evidence
 used `staging-provider-connectivity-v1`; after the owner rotated the staging
 Anthropic credential, Anthropic-only verification uses
-`staging-anthropic-connectivity-v2`. The unique D1 index means a completed or
+`staging-anthropic-connectivity-v3`. The unique D1 index means a completed or
 failed attempt under either key is never automatically retried. The fixed input
 contains no legal question, document, account identifier, or other user
 content. D1 retains only provider/model, provider response identifier, token

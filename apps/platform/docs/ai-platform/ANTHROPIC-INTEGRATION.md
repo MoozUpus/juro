@@ -6,7 +6,7 @@ Updated: 2026-07-31
 
 Anthropic Messages API is implemented as a server-only legal-chat fallback. It uses `output_config.format` with the same server-owned JSON Schema and the same Zod/source boundary as OpenAI.
 
-- staging model variable: `ANTHROPIC_FALLBACK_MODEL=claude-sonnet-4-20250514`;
+- staging model variable: `ANTHROPIC_FALLBACK_MODEL=claude-sonnet-4-6`;
 - secret name: `ANTHROPIC_API_KEY`;
 - API: `POST https://api.anthropic.com/v1/messages` with `anthropic-version: 2023-06-01`;
 - structured output: `output_config.format.type=json_schema`;
@@ -30,7 +30,7 @@ Anthropic document analysis is a separate Phase 5 adapter and is not claimed by 
 
 Phase 5 adds a separate Anthropic-primary document-analysis boundary:
 
-- staging variable: `ANTHROPIC_DOCUMENT_MODEL=claude-sonnet-4-20250514`;
+- staging variable: `ANTHROPIC_DOCUMENT_MODEL=claude-sonnet-4-6`;
 - this explicit environment selection is shared by the production-safe fallback constant and must be changed only after provider capability review and replay of contract/evaluation tests;
 - the input contains bounded extracted document text and server-selected verified source excerpts, never the R2 object or a client-supplied system instruction;
 - the output uses a dedicated JSON Schema plus Zod, verified-source, and exact-document-excerpt validation;

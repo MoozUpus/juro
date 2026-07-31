@@ -5,4 +5,4 @@
  * the checked-in staging configuration and change it only with provider
  * capability review plus the contract/evaluation suite.
  */
-export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-20250514";
+export const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-4-6";
