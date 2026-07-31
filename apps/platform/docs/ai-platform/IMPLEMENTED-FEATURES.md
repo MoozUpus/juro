@@ -343,6 +343,14 @@ Locally implemented and verified:
 - R2-first account-deletion coverage for the derived object.
 
 Targeted Phase 5 tests pass 18/18, Cloudflare config/migration/Queue tests pass
-84/84, account-purge tests pass 9/9, TypeScript passes, and generated Wrangler
-types are current. This is not a scanner: new uploads remain quarantined. Remote
-staging migration/deploy/provider evidence and the release corpus remain pending;
+85/85, account-purge tests pass 9/9, TypeScript/lint pass, and generated Wrangler
+types are current. Migration `0042` and commits `9a6a9c9`/`48861a1` are deployed
+only to protected staging as Worker version
+`85151979-ba7d-4fc0-a2dc-fccf4f1e4da3`. The OCR Queue has one staging producer
+and one staging consumer with a distinct DLQ; D1 integrity and private pre/post
+backup round trips pass.
+
+This is not a scanner: new uploads remain quarantined. The remote secret-name
+inventory has no OpenAI or Anthropic key, so provider-generated staging analysis
+is not claimed. The release corpus remains pending. Exact evidence is in
+`STAGING-0042-OCR-EXTRACTION-EVIDENCE.md`.

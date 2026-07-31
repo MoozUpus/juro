@@ -301,3 +301,12 @@ No Phase 5 production-readiness claim is made.
   authenticated provider-generated report completion remains unproven because
   staging has no completed analysis and no OpenAI/Anthropic secret name.
   Production remains separately unauthorized.
+
+## Phase 5 OCR extraction open gates — 2026-07-31
+
+- No real malware scanner is attached; new uploads remain quarantined.
+- The remote staging secret-name inventory has no OpenAI or Anthropic key.
+- Workers AI OCR is deployed, but no scanner-approved user file exists for a
+  truthful live end-to-end provider run.
+- Coordinate-level OCR, multi-file ZIP packages, corrected/redline artifacts,
+  100 document packages, and 30 comparisons have not passed release gates.

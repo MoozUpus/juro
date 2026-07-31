@@ -22,7 +22,12 @@ low confidence with an explicit RU/UZ warning. Image-derived text is explicitly
 marked for human review and does not count toward the 95% OCR quality threshold.
 
 A live staging analysis is not claimed: no real malware scanner can promote a new
-upload to `analysis_safe`. The owner reports staging provider secrets entered, but
+upload to `analysis_safe`. The authoritative Worker secret-name read-back after
+deployment lists only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and
+`TURNSTILE_SECRET_KEY`; it does not list `OPENAI_API_KEY` or
+`ANTHROPIC_API_KEY`. No secret value was read. The deployed Workers AI binding and
+OCR consumer are therefore real infrastructure evidence, but not evidence of a
+completed safe-file/provider analysis.
 
 ## Required release matrix — not yet achieved
 

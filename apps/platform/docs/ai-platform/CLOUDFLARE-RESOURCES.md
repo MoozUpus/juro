@@ -323,3 +323,19 @@ Version inspection lists only the names IDENTITY_KEYRING, RESEND_API_KEY, and TU
 | Anonymous HTTP | document-review and canonical document-builder both return `302` at Access |
 
 The new consumer uses serial concurrency, batch size 1, three retries, 30-second retry delay, and the distinct DLQ. No migration was applied in this slice. Production bindings, consumers, traffic, Sites v20, `apps/website`, production D1/R2, and the legacy Worker were not changed.
+
+## Phase 5 OCR staging resource state — 2026-07-31 UTC
+
+`juro-platform-staging` now serves version
+`85151979-ba7d-4fc0-a2dc-fccf4f1e4da3` at 100% from commits
+`9a6a9c9` and `48861a1`. Migration `0042` is applied only to `juro-staging`;
+integrity, foreign keys, pending migrations, and private pre/post backup round
+trips pass.
+
+Queue `staging-ocr-processing` (`e050407874d741c5beb36c762b9e83fc`) has
+one `juro-platform-staging` producer and one consumer. Its distinct DLQ is
+`staging-ocr-processing-dlq` (`67b273da1950422b92d12757b6a946b0`). The Worker
+has the Workers AI `AI` binding.
+
+The authoritative secret-name list still contains only the three established
+identity/email secrets; OpenAI and Anthropic key names are absent. Production
