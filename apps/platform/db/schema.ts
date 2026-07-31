@@ -1415,6 +1415,21 @@ export const taskReminders = sqliteTable("task_reminders", {
   id: text("id").primaryKey(), taskId: text("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }), channel: text("channel").notNull().default("in_app"), reminderAt: text("reminder_at").notNull(),
   status: text("status").notNull().default("pending"), idempotencyKey: text("idempotency_key").notNull(), sentAt: text("sent_at"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("task_reminders_idempotency_uidx").on(table.idempotencyKey), index("task_reminders_due_idx").on(table.status, table.reminderAt)]);
+export const lawyerProfiles = sqliteTable("lawyer_profiles", {
+  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), displayName: text("display_name").notNull(), specialtiesJson: text("specialties_json").notNull().default("[]"), languagesJson: text("languages_json").notNull().default("[]"), status: text("status").notNull().default("pending"), publicApprovedAt: text("public_approved_at"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("lawyer_profiles_user_uidx").on(table.userId), index("lawyer_profiles_status_idx").on(table.status, table.updatedAt)]);
+
+export const lawyerRequests = sqliteTable("lawyer_requests", {
+  id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").references(() => lawyerProfiles.id, { onDelete: "set null" }), status: text("status").notNull().default("requested"), anonymizedSummary: text("anonymized_summary").notNull(), requestedScopeJson: text("requested_scope_json").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [index("lawyer_requests_workspace_idx").on(table.workspaceId, table.updatedAt), index("lawyer_requests_lawyer_idx").on(table.lawyerProfileId, table.status)]);
+
+export const conflictChecks = sqliteTable("conflict_checks", {
+  id: text("id").primaryKey(), lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }), status: text("status").notNull().default("pending"), reviewedAt: text("reviewed_at"), reviewedByUserId: text("reviewed_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }), createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("conflict_checks_request_lawyer_uidx").on(table.lawyerRequestId, table.lawyerProfileId)]);
+
+export const lawyerAccessGrants = sqliteTable("lawyer_access_grants", {
+  id: text("id").primaryKey(), lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), lawyerUserId: text("lawyer_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), grantedByUserId: text("granted_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), expiresAt: text("expires_at"), revokedAt: text("revoked_at"), revokeReason: text("revoke_reason"), createdAt: text("created_at").notNull(),
+}, (table) => [uniqueIndex("lawyer_access_grants_request_uidx").on(table.lawyerRequestId), index("lawyer_access_grants_case_idx").on(table.caseId, table.revokedAt), index("lawyer_access_grants_lawyer_idx").on(table.lawyerUserId, table.revokedAt)]);
 export const consultationSlots = sqliteTable("consultation_slots", {
   id: text("id").primaryKey(), specialistType: text("specialist_type").notNull(), startsAt: text("starts_at").notNull(), endsAt: text("ends_at").notNull(), timezone: text("timezone").notNull().default("Asia/Tashkent"),
   status: text("status").notNull().default("available"), ...timestamps,

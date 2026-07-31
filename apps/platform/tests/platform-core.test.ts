@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { entitlementsForSubscription } from "../lib/billing/entitlements";
 import { billingPlanSelectionSchema } from "../lib/billing/input";
 import { consultationBookingSchema } from "../lib/platform/consultation";
+import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSchema } from "../lib/platform/lawyer-request";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -989,4 +990,37 @@ test("case-detail routes remain tenant-scoped and do not render the workspace-wi
   assert.match(client, /!initialCaseId && <form className="plan-create"/);
   assert.match(personalPage, /initialCaseId=\{caseId\}/);
   assert.match(businessPage, /initialCaseId=\{caseId\}/);
+});
+
+test("lawyer handoff keeps conflict review anonymized and access explicitly consented", async () => {
+  const caseId = "11111111-1111-4111-8111-111111111111";
+  const lawyerProfileId = "22222222-2222-4222-8222-222222222222";
+  assert.equal(lawyerRequestSchema.safeParse({
+    caseId,
+    lawyerProfileId,
+    anonymizedSummary: "Нужна проверка договорного спора без раскрытия персональных данных.",
+    consent: true,
+    locale: "ru",
+  }).success, true);
+  assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "слишком коротко", consent: true, locale: "ru" }).success, false);
+  assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "Достаточно длинное нейтральное описание ситуации для проверки конфликта.", consent: false, locale: "ru" }).success, false);
+  assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "clear", locale: "uz" }).success, true);
+  assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "approve", locale: "uz" }).success, false);
+  assert.equal(lawyerAccessGrantSchema.safeParse({ consent: true, locale: "ru" }).success, true);
+  assert.equal(lawyerAccessGrantSchema.safeParse({ consent: false, locale: "ru" }).success, false);
+
+  const [requestRoute, conflictRoute, grantRoute] = await Promise.all([
+    readFile(new URL("../app/api/platform/lawyer-requests/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/conflict-check/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(requestRoute, /workspaceEntitlements\(db, workspace\.id\)/);
+  assert.match(requestRoute, /WHERE id=\? AND workspace_id=\? AND archived_at IS NULL/);
+  assert.match(requestRoute, /anonymized_summary/);
+  assert.match(conflictRoute, /anonymized summary/);
+  assert.match(conflictRoute, /p\.user_id=\? AND p\.status='public_approved'/);
+  assert.match(grantRoute, /c\.status='clear'/);
+  assert.match(grantRoute, /requester_user_id=\?/);
+  assert.match(grantRoute, /lawyer_case_access_granted/);
+  assert.match(grantRoute, /lawyer_case_access_revoked/);
 });

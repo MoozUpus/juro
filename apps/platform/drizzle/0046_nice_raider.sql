@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `lawyer_access_grants_request_uidx` ON `lawyer_access_grants` (`lawyer_request_id`);
