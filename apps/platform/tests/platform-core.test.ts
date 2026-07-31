@@ -1024,3 +1024,10 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
   assert.match(grantRoute, /lawyer_case_access_granted/);
   assert.match(grantRoute, /lawyer_case_access_revoked/);
 });
+test("assigned lawyer view reveals case metadata only for an active grant", async () => {
+  const route = await readFile(new URL("../app/api/platform/lawyer-requests/assigned/route.ts", import.meta.url), "utf8");
+  assert.match(route, /p\.user_id=\? AND p\.status='public_approved'/);
+  assert.match(route, /g\.revoked_at IS NULL/);
+  assert.match(route, /g\.expires_at IS NULL OR g\.expires_at>\?/);
+  assert.match(route, /CASE WHEN g\.id IS NOT NULL THEN cs\.description END/);
+});
