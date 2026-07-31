@@ -18,9 +18,7 @@ import {
   History,
   Home,
   Languages,
-  Menu,
-  MoreHorizontal,
-  PanelLeftClose,
+  Menu,  PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
   Scale,
@@ -190,7 +188,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
           const NavIcon = Icon as typeof Home;
           return <Link href={href} key={slug as string} className={active ? "active" : ""} aria-current={active ? "page" : undefined}><NavIcon/><span>{label as string}</span></Link>;
         })}
-        <button onClick={()=>setOpen(true)} aria-expanded={open} aria-controls="platform-navigation"><MoreHorizontal/><span>{locale === "ru" ? "Ещё" : "Yana"}</span></button>
+        <Link href={`${base}/profile`} aria-label={locale === "ru" ? "Профиль" : "Profil"}><UserRound/><span>{locale === "ru" ? "Профиль" : "Profil"}</span></Link>
       </nav>
     </div>
   </div></PlatformRouteProvider>;

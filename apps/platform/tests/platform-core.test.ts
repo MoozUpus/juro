@@ -936,9 +936,10 @@ test("JURO motion tokens are bounded and reduced motion resolves to a static rou
 });
 
 test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards", async () => {
-  const [globals, shell, dashboard, comparison, monitoring, readability] = await Promise.all([
+  const [globals, shell, shellComponent, dashboard, comparison, monitoring, readability] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/platform-shell.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/dashboard.css", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/document-comparison.css", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/monitoring.css", import.meta.url), "utf8"),
@@ -949,6 +950,13 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(globals, /outline:3px solid/);
   assert.match(shell, /min-height:44px/);
   assert.match(shell, /max-width:800px/);
+  assert.match(shell, /prefers-reduced-transparency:reduce/);
+  assert.match(shellComponent, /\["dashboard", Home/);
+  assert.match(shellComponent, /\["ai-chat", Bot/);
+  assert.match(shellComponent, /\["documents", Files/);
+  assert.match(shellComponent, /\["cases", BriefcaseBusiness/);
+  assert.match(shellComponent, /href=\{`\$\{base\}\/profile`\}/);
+  assert.doesNotMatch(shellComponent, /MoreHorizontal/);
   assert.match(dashboard, /max-width:820px/);
   assert.match(dashboard, /max-width:460px/);
   assert.match(comparison, /max-width:820px/);
