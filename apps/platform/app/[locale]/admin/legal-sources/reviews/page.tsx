@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
+import { LegalSourceHealthPanel } from "../../../../_staff/LegalSourceHealthPanel";
 import { LegalSourceReviewInbox } from "../../../../_staff/LegalSourceReviewInbox";
 import "../../../../_staff/legal-source-reviews.css";
 import { requirePlatformStaffAccess } from "../../../../../lib/auth/staff-access";
@@ -38,5 +39,5 @@ export default async function LegalSourceReviewsPage({
   } catch {
     notFound();
   }
-  return <LegalSourceReviewInbox locale={locale} reviewerName={reviewerName}/>;
+  return <><LegalSourceHealthPanel locale={locale}/><LegalSourceReviewInbox locale={locale} reviewerName={reviewerName}/></>;
 }
