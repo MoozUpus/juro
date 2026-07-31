@@ -103,8 +103,14 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
       config.vars.ACCOUNT_DELETION_PURGE_ENABLED,
       environment === "staging" ? "true" : "false",
     );
-    assert.equal(config.vars.LEGAL_ADVICE_INGESTION_ENABLED, "false");
-    assert.equal(config.vars.LEGAL_SOURCE_STAFF_API_ENABLED, "false");
+    assert.equal(
+      config.vars.LEGAL_ADVICE_INGESTION_ENABLED,
+      environment === "staging" ? "true" : "false",
+    );
+    assert.equal(
+      config.vars.LEGAL_SOURCE_STAFF_API_ENABLED,
+      environment === "staging" ? "true" : "false",
+    );
     assert.equal(config.vars.IDENTITY_PROTECTION_MODE, "legacy");
     assert.equal(config.vars.JOB_SCHEMA_VERSION, "1");
     assert.deepEqual(

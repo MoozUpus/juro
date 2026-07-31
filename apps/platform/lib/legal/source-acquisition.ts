@@ -55,8 +55,8 @@ type FetchLike = (
 type AcquisitionDependencies = {
   fetchImpl?: FetchLike;
   now?: () => Date;
+  wait?: (delayMs: number) => Promise<void>;
 };
-
 type FetchRequestRow = {
   id: string;
   environment: "development" | "staging" | "production";
@@ -311,7 +311,7 @@ async function persistFetchedSource(
   const proposedSourceId = `lsource_${sourceStableHash.slice(0, 32)}`;
   const title = input.fetched.sourceKind === "lex"
     ? `Lex.uz — document ${input.fetched.canonicalId}`
-    : `Advice.uz — question ${input.fetched.canonicalId}`;
+    : `Advice.uz — scenario ${input.fetched.canonicalId}`;
 
   const existingSource = await env.DB.prepare(`
     SELECT id, canonical_id, source_type
@@ -763,6 +763,7 @@ export async function executeLegalSourceFetchRequest(
       adviceEnabled: adviceEnabled(env.LEGAL_ADVICE_INGESTION_ENABLED),
       fetchImpl: dependencies.fetchImpl,
       now: dependencies.now,
+      ...(dependencies.wait ? { wait: dependencies.wait } : {}),
     });
     if (
       fetched.sourceKind !== request.source_kind

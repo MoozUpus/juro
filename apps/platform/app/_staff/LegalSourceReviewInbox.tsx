@@ -11,7 +11,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 type Locale = "ru" | "uz";
 type ReviewStatus = "pending" | "in_review" | "approved" | "rejected" | "closed";
@@ -95,6 +95,12 @@ const labels = {
     withdrawalNotes: "Причина отзыва", withdrawalCancel: "Отмена",
     withdrawalConfirm: "Подтвердить отзыв",
     withdrawalDone: "Публикация отозвана и исключена из текущих источников.",
+    syncTitle: "Добавить официальный источник",
+    syncHint: "Только точный URL документа lex.uz или сценария advice.uz. Снимок попадёт в очередь и не будет опубликован автоматически.",
+    syncUrl: "URL официального документа",
+    syncPlaceholder: "https://advice.uz/ru/documents/1744",
+    syncSubmit: "Поставить в очередь",
+    syncQueued: "Запрос поставлен в очередь. После загрузки снимок появится на ручной проверке.",
     error: "Не удалось выполнить запрос.", count: "заданий",
   },
   uz: {
@@ -122,6 +128,12 @@ const labels = {
     withdrawalNotes: "Qaytarib olish sababi", withdrawalCancel: "Bekor qilish",
     withdrawalConfirm: "Qaytarib olishni tasdiqlash",
     withdrawalDone: "Nashr qaytarib olindi va joriy manbalardan chiqarildi.",
+    syncTitle: "Rasmiy manbani qo‘shish",
+    syncHint: "Faqat lex.uz hujjati yoki advice.uz ssenariysining aniq URL manzili. Nusxa navbatga tushadi va avtomatik nashr qilinmaydi.",
+    syncUrl: "Rasmiy hujjat URL manzili",
+    syncPlaceholder: "https://advice.uz/oz/documents/624",
+    syncSubmit: "Navbatga qo‘yish",
+    syncQueued: "So‘rov navbatga qo‘yildi. Yuklangach, nusxa qo‘lda tekshirish uchun paydo bo‘ladi.",
     error: "So‘rovni bajarib bo‘lmadi.", count: "topshiriq",
   },
 } as const;
@@ -152,8 +164,12 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
   const [visibleBlocks, setVisibleBlocks] = useState(80);
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState("");
+  const [syncConfirmation, setSyncConfirmation] = useState("");
   const [withdrawing, setWithdrawing] = useState<ReviewItem | null>(null);
   const [withdrawalNotes, setWithdrawalNotes] = useState("");
+  const [syncUrl, setSyncUrl] = useState("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState("");
   const requestSequence = useRef(0);
 
   const query = useMemo(() => new URLSearchParams({
@@ -278,6 +294,40 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
     } finally { setBusy(""); }
   };
 
+  const enqueueSource = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const url = syncUrl.trim();
+    if (!url || syncing) return;
+    setSyncing(true);
+    setSyncError("");
+    setSyncConfirmation("");
+    try {
+      const response = await fetch(`/api/platform/legal-sources/sync?lang=${locale}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({
+          url,
+          idempotencyKey: `staff_ui_${crypto.randomUUID().replaceAll("-", "")}`,
+        }),
+      });
+      await responseJson<{
+        ok: true;
+        request: {
+          requestId: string;
+          canonicalUrl: string;
+          status: "queued";
+        };
+      }>(response);
+      setSyncUrl("");
+      setSyncConfirmation(l.syncQueued);
+      setAnnouncement(l.syncQueued);
+    } catch (value) {
+      setSyncError(value instanceof Error ? value.message : l.error);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const date = (value: string) => new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", {
     dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent",
   }).format(new Date(value));
@@ -319,6 +369,22 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
         </section>
       </section> : <>
         <section className="staff-heading"><div><span>JURO · LEGAL SOURCES</span><h1>{l.title}</h1><p>{l.subtitle}</p></div><button type="button" onClick={() => void load()} disabled={loading}><RefreshCw aria-hidden="true" className={loading ? "is-spinning" : ""}/>{l.refresh}</button></section>
+        <form className="staff-sync" onSubmit={(event) => void enqueueSource(event)}>
+          <div>
+            <h2>{l.syncTitle}</h2>
+            <p id="staff-sync-hint">{l.syncHint}</p>
+          </div>
+          <label htmlFor="staff-source-url">{l.syncUrl}</label>
+          <div className="staff-sync-controls">
+            <input id="staff-source-url" name="sourceUrl" type="url" inputMode="url" autoComplete="url" required maxLength={2048} aria-describedby="staff-sync-hint" placeholder={l.syncPlaceholder} value={syncUrl} onChange={(event) => setSyncUrl(event.target.value)}/>
+            <button type="submit" disabled={syncing || syncUrl.trim() === ""}>
+              {syncing ? <LoaderCircle className="is-spinning" aria-hidden="true"/> : <RefreshCw aria-hidden="true"/>}
+              {l.syncSubmit}
+            </button>
+          </div>
+          {syncError && <p className="staff-sync-error" role="alert">{syncError}</p>}
+          {syncConfirmation && <p className="staff-sync-confirmation" role="status">{syncConfirmation}</p>}
+        </form>
         <section className="staff-filters" aria-label={locale === "ru" ? "Фильтры очереди" : "Navbat filtrlari"}>
           <label>{l.status}<select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatus)}><option value="pending">{l.pending}</option><option value="in_review">{l.inReview}</option><option value="approved">{l.approved}</option><option value="rejected">{l.rejected}</option><option value="closed">{l.closed}</option></select></label>
           <label>{l.scope}<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="workable">{l.workable}</option><option value="mine">{l.mine}</option><option value="unassigned">{l.unassigned}</option><option value="all">{l.all}</option></select></label>

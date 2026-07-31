@@ -181,7 +181,7 @@ test("Advice policy gate creates neither request nor outbox row", async () => {
   try {
     await assert.rejects(
       () => createLegalSourceFetchRequest(env, {
-        url: "https://advice.uz/ru/questions/21",
+        url: "https://advice.uz/ru/documents/21",
         idempotencyKey: "advice_disabled_21",
       }),
       (error: unknown) =>
@@ -205,6 +205,67 @@ test("Advice policy gate creates neither request nor outbox row", async () => {
         }
       ).count,
       0,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("enabled Advice acquisition persists an unverified Uzbek Latin snapshot request", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = envFixture(d1, bucket, "true");
+  try {
+    const request = await createLegalSourceFetchRequest(env, {
+      url: "https://www.advice.uz/oz/documents/624/",
+      idempotencyKey: "advice_enabled_624",
+    });
+    const waits: number[] = [];
+    const result = await executeLegalSourceFetchRequest(env, request.id, {
+      fetchImpl: sourceFetch([robots(), sourceHtml()]),
+      wait: async (delayMs) => { waits.push(delayMs); },
+      now: () => new Date("2026-07-31T01:00:00.000Z"),
+    });
+
+    assert.deepEqual(waits, [1_000]);
+    assert.match(result.rawObjectKey, /^legal-sources\/raw\/advice\/uz\//);
+    assert.equal(bucket.objects.has(result.rawObjectKey), true);
+    assert.deepEqual(
+      { ...sqlite.prepare(`
+        SELECT canonical_id, official_url, act_title, locale, source_type,
+               status, verification_state, verified_at
+        FROM legal_sources WHERE id = ?
+      `).get(result.sourceId) as Record<string, unknown> },
+      {
+        canonical_id: "624",
+        official_url: "https://advice.uz/oz/documents/624",
+        act_title: "Advice.uz — scenario 624",
+        locale: "uz",
+        source_type: "advice",
+        status: "pending_review",
+        verification_state: "fetched",
+        verified_at: null,
+      },
+    );
+    assert.deepEqual(
+      sqlite.prepare(`
+        SELECT job_type FROM job_outbox WHERE subject_id IN (?, ?)
+        ORDER BY job_type
+      `).all(request.id, result.versionId).map((row) =>
+        (row as { job_type: string }).job_type
+      ),
+      ["legal.parse", "legal.sync"],
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(`
+        SELECT status, confidence, reason_code
+        FROM legal_review_queue WHERE version_id = ?
+      `).get(result.versionId) as Record<string, unknown> },
+      {
+        status: "pending",
+        confidence: "low",
+        reason_code: "new_source_version",
+      },
     );
   } finally {
     sqlite.close();

@@ -61,6 +61,9 @@ const legalSourceCurrentUrlGuardEntry = journal.entries.find(
   ({ idx }) => idx === 36,
 );
 
+const legalSourceAdviceUrlGuardEntry = journal.entries.find(
+  ({ idx }) => idx === 38,
+);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -152,6 +155,11 @@ assert.ok(
   onboardingProfileEntry,
   "Drizzle journal must contain migration 0024",
 );
+assert.ok(
+  legalSourceAdviceUrlGuardEntry,
+  "Drizzle journal must contain migration 0038",
+);
+
 
 function migrationSql(entry: JournalEntry): string {
   return readFileSync(new URL(`${entry.tag}.sql`, drizzleRoot), "utf8");
@@ -4068,6 +4076,97 @@ test("0036 accepts current Lex URL shapes without weakening source guards", () =
         () => insert.run(
           id,
           "ru",
+          url,
+          canonicalId,
+          `${id}-key`,
+          now,
+          now,
+        ),
+        /legal source fetch request URL invalid/,
+      );
+    }
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0038 accepts only current Advice RU and Uzbek Latin document URLs", () => {
+  const sql = migrationSql(legalSourceAdviceUrlGuardEntry);
+  assert.equal(statements(sql).length, 2);
+  assert.match(sql, /DROP TRIGGER `legal_source_fetch_requests_insert_guard`/);
+  assert.match(sql, /https:\/\/advice\.uz\/ru\/documents\//);
+  assert.match(sql, /https:\/\/advice\.uz\/oz\/documents\//);
+  assert.doesNotMatch(sql, /advice\.uz\/.*\/questions\//);
+
+  const previous = JSON.parse(readFileSync(
+    new URL("meta/0037_snapshot.json", drizzleRoot),
+    "utf8",
+  )) as { id: string; tables: Record<string, unknown> };
+  const snapshot = JSON.parse(readFileSync(
+    new URL("meta/0038_snapshot.json", drizzleRoot),
+    "utf8",
+  )) as {
+    id: string;
+    prevId: string;
+    tables: Record<string, unknown>;
+  };
+  assert.equal(snapshot.prevId, previous.id);
+  assert.deepEqual(snapshot.tables, previous.tables);
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    const now = "2026-07-31T01:15:00.000Z";
+    const insert = db.prepare(`
+      INSERT INTO legal_source_fetch_requests (
+        id, environment, source_kind, locale, requested_url, canonical_id,
+        idempotency_key, status, attempt_count, created_at, updated_at
+      ) VALUES (?, 'staging', 'advice', ?, ?, ?, ?, 'queued', 0, ?, ?)
+    `);
+
+    insert.run(
+      "advice-current-ru",
+      "ru",
+      "https://advice.uz/ru/documents/1744",
+      "1744",
+      "advice-current-ru-key",
+      now,
+      now,
+    );
+    insert.run(
+      "advice-current-uz-latin",
+      "uz",
+      "https://advice.uz/oz/documents/624",
+      "624",
+      "advice-current-uz-key",
+      now,
+      now,
+    );
+    assert.equal(
+      db.prepare(`
+        SELECT count(*) AS count
+        FROM legal_source_fetch_requests
+        WHERE id IN ('advice-current-ru','advice-current-uz-latin')
+      `).get()!.count,
+      2,
+    );
+
+    for (const [id, locale, url, canonicalId] of [
+      ["legacy-question", "ru", "https://advice.uz/ru/questions/1744", "1744"],
+      ["cyrillic-route", "uz", "https://advice.uz/uz/documents/624", "624"],
+      ["locale-mismatch", "uz", "https://advice.uz/ru/documents/624", "624"],
+      ["canonical-mismatch", "ru", "https://advice.uz/ru/documents/1744", "1745"],
+      ["trailing-slash", "ru", "https://advice.uz/ru/documents/1744/", "1744"],
+      ["query", "ru", "https://advice.uz/ru/documents/1744?print=1", "1744"],
+      ["non-digits", "ru", "https://advice.uz/ru/documents/17a44", "17a44"],
+      ["foreign-host", "ru", "https://advice.uz.evil.example/ru/documents/1744", "1744"],
+    ]) {
+      assert.throws(
+        () => insert.run(
+          id,
+          locale,
           url,
           canonicalId,
           `${id}-key`,

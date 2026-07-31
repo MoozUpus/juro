@@ -1775,7 +1775,7 @@ test("advice sync request is blocked when advice ingestion policy is off", async
       staffRequest(
         "/api/platform/legal-sources/sync?lang=uz",
         {
-          url: "https://advice.uz/ru/questions/99",
+          url: "https://advice.uz/ru/documents/99",
           idempotencyKey: "advice_sync_disabled_99",
         },
       ),
@@ -1790,6 +1790,58 @@ test("advice sync request is blocked when advice ingestion policy is off", async
     assert.equal(
       ((await response.json()) as { code: string }).code,
       "LEGAL_SOURCE_POLICY_DISABLED",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+test("enabled advice sync route queues canonical Uzbek Latin document URLs", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = {
+    ...reviewEnv(d1, bucket),
+    LEGAL_ADVICE_INGESTION_ENABLED: "true",
+  };
+  try {
+    const reviewer = insertStaff(sqlite, "sync-advice-enabled", "legal_reviewer");
+    const response = await handleLegalSourceSyncRequest(
+      staffRequest(
+        "/api/platform/legal-sources/sync?lang=uz",
+        {
+          url: "https://www.advice.uz/oz/documents/624/",
+          idempotencyKey: "advice_sync_enabled_624",
+        },
+      ),
+      {
+        enabled: "true",
+        env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json() as {
+      ok: boolean;
+      request: {
+        requestId: string;
+        sourceKind: string;
+        locale: string;
+        canonicalUrl: string;
+        status: string;
+      };
+    };
+    assert.equal(body.ok, true);
+    assert.deepEqual(body.request, {
+      requestId: body.request.requestId,
+      sourceKind: "advice",
+      locale: "uz",
+      canonicalUrl: "https://advice.uz/oz/documents/624",
+      status: "queued",
+    });
+    assert.equal(
+      (sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox WHERE subject_id = ?")
+        .get(body.request.requestId) as { count: number }).count,
+      1,
     );
   } finally {
     sqlite.close();

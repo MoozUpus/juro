@@ -92,12 +92,13 @@ class FakeR2Bucket {
 function envFixture(
   d1: D1Database,
   bucket: FakeR2Bucket,
+  advice = "false",
 ): LegalSourceAcquisitionEnv {
   return {
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
     APP_ENV: "development",
-    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_ADVICE_INGESTION_ENABLED: advice,
   };
 }
 
@@ -130,6 +131,17 @@ function legalDocument(title: string): string {
   </main></body></html>`;
 }
 
+function adviceDocument(title: string): string {
+  return `<html lang="uz"><head><title>${title}</title></head><body><main>
+    <aside>${"Boshqa xizmatlar. ".repeat(40)}</aside>
+    <div class="page-document-content">
+      <h1>${title}</h1>
+      <p>${"Ushbu tavsiya huquqiy vaziyatni tushuntiradi va tekshirilishi lozim bo‘lgan amaliy qadamlarni ko‘rsatadi. ".repeat(4)}</p>
+      <h2>Harakatlar tartibi</h2>
+      <p>${"Hujjatlar, sanalar va amaldagi norma rasmiy manba bo‘yicha alohida tekshiriladi. ".repeat(4)}</p>
+    </div></main></body></html>`;
+}
+
 async function acquire(
   env: LegalSourceAcquisitionEnv,
   url: string,
@@ -143,6 +155,7 @@ async function acquire(
   const result = await executeLegalSourceFetchRequest(env, request.id, {
     fetchImpl: sourceFetch([robots(), html(body)]),
     now: () => new Date("2026-07-28T01:00:00.000Z"),
+    wait: async () => undefined,
   });
   return { versionId: result.versionId, rawObjectKey: result.rawObjectKey };
 }
@@ -204,6 +217,57 @@ test("normalization persists deterministic untrusted JSON and never creates trus
       verified_sources: 0,
       verified_versions: 0,
     });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("Advice normalization persists only the exact document container as untrusted evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = envFixture(d1, bucket, "true");
+  try {
+    const acquired = await acquire(
+      env,
+      "https://advice.uz/oz/documents/624",
+      "normalize_advice_624",
+      adviceDocument("Mehnat shartnomasini bekor qilish"),
+    );
+    const result = await executeLegalSourceNormalization(
+      env,
+      acquired.versionId,
+      { now: () => new Date("2026-07-31T01:01:00.000Z") },
+    );
+
+    assert.match(result.parsedObjectKey, /^legal-sources\/parsed\/advice\/uz\//);
+    const parsedObject = bucket.objects.get(result.parsedObjectKey);
+    assert.ok(parsedObject);
+    const snapshot = normalizedLegalSourceSnapshotSchema.parse(
+      JSON.parse(new TextDecoder().decode(parsedObject.bytes)),
+    );
+    assert.equal(snapshot.source.sourceKind, "advice");
+    assert.equal(snapshot.source.locale, "uz");
+    assert.equal(snapshot.source.canonicalId, "624");
+    assert.equal(snapshot.source.canonicalUrl, "https://advice.uz/oz/documents/624");
+    assert.equal(snapshot.primarySelector, "advice-document");
+    assert.equal(snapshot.documentTitle, "Mehnat shartnomasini bekor qilish");
+    assert.equal(snapshot.plainText.includes("Boshqa xizmatlar"), false);
+
+    assert.deepEqual(
+      { ...sqlite.prepare(`
+        SELECT
+          (SELECT COUNT(*) FROM legal_source_sections) AS sections,
+          (SELECT COUNT(*) FROM legal_source_chunks) AS chunks,
+          (SELECT COUNT(*) FROM legal_sources WHERE verification_state='verified') AS verified_sources,
+          (SELECT COUNT(*) FROM legal_source_versions WHERE status='verified') AS verified_versions
+      `).get() as Record<string, number> },
+      {
+        sections: 0,
+        chunks: 0,
+        verified_sources: 0,
+        verified_versions: 0,
+      },
+    );
   } finally {
     sqlite.close();
   }

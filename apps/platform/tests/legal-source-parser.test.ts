@@ -150,6 +150,50 @@ test("parser extracts the current Lex div-based document structure without wrapp
   assert.equal(snapshot.plainText.includes("Скрытая служебная команда"), false);
 });
 
+test("Advice parser extracts only the current document container", () => {
+  const snapshot = normalizeLegalSourceHtml({
+    html: `<html lang="uz"><head><title>Mehnat shartnomasini bekor qilish</title></head><body>
+      <main>
+        <aside><p>${"Yon menyu va boshqa tavsiyalar. ".repeat(30)}</p></aside>
+        <div class="page-document-content extra-class">
+          <p>${"Xodim va ish beruvchi qonunda belgilangan tartibga rioya qilishi kerak. ".repeat(4)}</p>
+          <h2>Amaliy harakatlar</h2>
+          <ol>
+            <li>Hujjatlar va tegishli sanalarni tekshiring.</li>
+            <li>Yozma xabarnoma va dalillarni saqlang.</li>
+          </ol>
+          <p>${"Har bir holatning faktlari alohida baholanadi va huquqiy asos tekshiriladi. ".repeat(4)}</p>
+        </div>
+      </main>
+      <footer>Sayt bo‘limlari</footer>
+    </body></html>`,
+    reference: {
+      sourceKind: "advice",
+      locale: "uz",
+      canonicalId: "624",
+      canonicalUrl: "https://advice.uz/oz/documents/624",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.primarySelector, "advice-document");
+  assert.equal(snapshot.documentTitle, "Amaliy harakatlar");
+  assert.equal(snapshot.plainText.includes("Yon menyu"), false);
+  assert.equal(snapshot.plainText.includes("Sayt bo‘limlari"), false);
+  assert.match(snapshot.plainText, /Yozma xabarnoma/);
+  assert.deepEqual(normalizedLegalSourceSnapshotSchema.parse(snapshot), snapshot);
+
+  assert.throws(
+    () => normalizeLegalSourceHtml({
+      html: `<html><body><main><p>${"Generic content. ".repeat(40)}</p></main></body></html>`,
+      reference: { sourceKind: "advice", locale: "ru", canonicalId: "1", canonicalUrl: "https://advice.uz/ru/documents/1" },
+      rawContentSha256,
+    }),
+    (error: unknown) => error instanceof LegalSourceParserError
+      && error.code === "LEGAL_SOURCE_PRIMARY_CONTENT_MISSING",
+  );
+});
+
 test("parser rejects a primary container without enough legal content", () => {
   assert.throws(
     () => normalizeLegalSourceHtml({

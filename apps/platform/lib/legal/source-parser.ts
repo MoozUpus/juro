@@ -51,7 +51,12 @@ export const normalizedLegalSourceSnapshotSchema = z.object({
     canonicalUrl: z.url(),
     rawContentSha256: z.string().regex(/^[0-9a-f]{64}$/),
   }).strict(),
-  primarySelector: z.enum(["main", "article", "role-main"]),
+  primarySelector: z.enum([
+    "main",
+    "article",
+    "role-main",
+    "advice-document",
+  ]),
   documentTitle: z.string().min(1).max(2_000),
   blocks: z.array(normalizedBlockSchema).min(1).max(5_000),
   plainText: z.string().min(200).max(1_000_000),
@@ -163,17 +168,28 @@ function walkElements(
 
 function candidates(
   document: DefaultTreeAdapterTypes.Document,
-): { selector: "main" | "article" | "role-main"; elements: Element[] } {
+  sourceKind: LegalSourceKind,
+): {
+  selector: "main" | "article" | "role-main" | "advice-document";
+  elements: Element[];
+} {
+  const adviceDocuments: Element[] = [];
   const mains: Element[] = [];
   const articles: Element[] = [];
   const roleMains: Element[] = [];
   walkElements(document, (element) => {
+    if (classTokens(element).has("page-document-content")) {
+      adviceDocuments.push(element);
+    }
     if (element.tagName === "main") mains.push(element);
     if (element.tagName === "article") articles.push(element);
     if (attribute(element, "role")?.toLowerCase() === "main") {
       roleMains.push(element);
     }
   }, { value: 0 });
+  if (sourceKind === "advice") {
+    return { selector: "advice-document", elements: adviceDocuments };
+  }
   if (mains.length > 0) return { selector: "main", elements: mains };
   if (articles.length > 0) return { selector: "article", elements: articles };
   return { selector: "role-main", elements: roleMains };
@@ -327,7 +343,10 @@ export function normalizeLegalSourceHtml(input: {
   rawContentSha256: string;
 }): NormalizedLegalSourceSnapshot {
   const document = parse(input.html);
-  const primaryCandidates = candidates(document);
+  const primaryCandidates = candidates(
+    document,
+    input.reference.sourceKind,
+  );
   const primary = pickPrimary(primaryCandidates.elements);
   if (!primary) {
     throw new LegalSourceParserError(

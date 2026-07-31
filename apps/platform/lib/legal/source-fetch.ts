@@ -79,8 +79,8 @@ type RobotsGroup = {
 };
 
 const SOURCE_USER_AGENT =
-  "JURO-LegalSourceBot/0.1 (+https://juro.uz/legal-sources)";
-const SOURCE_USER_AGENT_TOKEN = "juro-legalsourcebot";
+  "JURO-LegalSourceSync/1.0 (+https://juro.uz)";
+const SOURCE_USER_AGENT_TOKEN = "juro-legalsourcesync";
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const ROBOTS_MAX_BYTES = 128 * 1024;
@@ -99,14 +99,20 @@ function parseSourcePath(url: URL, sourceKind: LegalSourceKind): {
   locale: LegalSourceLocale;
   canonicalId: string;
 } | null {
-  const pattern = sourceKind === "lex"
-    ? /^\/(ru|uz)\/docs\/(-?\d+)\/?$/
-    : /^\/(ru|uz)\/questions\/(\d+)\/?$/;
-  const match = pattern.exec(url.pathname);
-  if (!match) return null;
-  const locale = localeSchema.safeParse(match[1]);
-  if (!locale.success || !match[2]) return null;
-  return { locale: locale.data, canonicalId: match[2] };
+  if (sourceKind === "lex") {
+    const match = /^\/(ru|uz)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
+    if (!match) return null;
+    const locale = localeSchema.safeParse(match[1]);
+    if (!locale.success || !match[2]) return null;
+    return { locale: locale.data, canonicalId: match[2] };
+  }
+
+  const match = /^\/(ru|oz)\/documents\/(\d+)\/?$/.exec(url.pathname);
+  if (!match?.[2]) return null;
+  return {
+    locale: match[1] === "ru" ? "ru" : "uz",
+    canonicalId: match[2],
+  };
 }
 
 export function classifyLegalSourceUrl(value: string): LegalSourceReference {
@@ -140,7 +146,7 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
   const canonicalHost = sourceKind === "lex" ? "lex.uz" : "advice.uz";
   const canonicalPath = sourceKind === "lex"
     ? `/${path.locale}/docs/${path.canonicalId}`
-    : `/${path.locale}/questions/${path.canonicalId}`;
+    : `/${path.locale === "ru" ? "ru" : "oz"}/documents/${path.canonicalId}`;
   return {
     sourceKind,
     locale: path.locale,
@@ -156,7 +162,8 @@ function sameSourceReference(
 ): boolean {
   return expected.sourceKind === candidate.sourceKind
     && expected.locale === candidate.locale
-    && expected.canonicalId === candidate.canonicalId;
+    && expected.canonicalId === candidate.canonicalId
+    && expected.canonicalUrl === candidate.canonicalUrl;
 }
 
 async function cancelBody(response: Response): Promise<void> {
@@ -519,10 +526,14 @@ export async function fetchLegalSource(
   if (robots.crawlDelay > MAX_ROBOTS_CRAWL_DELAY_SECONDS) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_RATE_POLICY", false);
   }
-  if (robots.crawlDelay > 0) {
+  const requestedDelaySeconds = Math.max(
+    robots.crawlDelay,
+    reference.sourceKind === "advice" ? 1 : 0,
+  );
+  if (requestedDelaySeconds > 0) {
     const wait = options.wait ?? ((delayMs: number) =>
       new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
-    await wait(Math.ceil(robots.crawlDelay * 1_000));
+    await wait(Math.ceil(requestedDelaySeconds * 1_000));
   }
 
   const contentResult = await fetchFollowingRedirects(

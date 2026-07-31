@@ -79,12 +79,22 @@ test("legal source URL classifier accepts only exact HTTPS document routes", () 
     },
   );
   assert.deepEqual(
-    classifyLegalSourceUrl("https://advice.uz/uz/questions/21"),
+    classifyLegalSourceUrl("https://advice.uz/oz/documents/21/"),
     {
       sourceKind: "advice",
       locale: "uz",
       canonicalId: "21",
-      canonicalUrl: "https://advice.uz/uz/questions/21",
+      canonicalUrl: "https://advice.uz/oz/documents/21",
+      host: "advice.uz",
+    },
+  );
+  assert.deepEqual(
+    classifyLegalSourceUrl("https://www.advice.uz/ru/documents/1744"),
+    {
+      sourceKind: "advice",
+      locale: "ru",
+      canonicalId: "1744",
+      canonicalUrl: "https://advice.uz/ru/documents/1744",
       host: "advice.uz",
     },
   );
@@ -96,7 +106,10 @@ test("legal source URL classifier accepts only exact HTTPS document routes", () 
     "https://lex.uz.evil.example/ru/docs/-42",
     "https://user:password@lex.uz/ru/docs/-42",
     "https://advice.uz/ru/page/how-it-works",
-    "https://advice.uz/ru/questions/not-a-number",
+    "https://advice.uz/ru/documents/not-a-number",
+    "https://advice.uz/ru/questions/21",
+    "https://advice.uz/uz/documents/21",
+    "https://advice.uz/oz/documents/21?print=1",
   ]) {
     assert.throws(
       () => classifyLegalSourceUrl(value),
@@ -110,13 +123,44 @@ test("legal source URL classifier accepts only exact HTTPS document routes", () 
 test("Advice acquisition is disabled before any network request", async () => {
   const synthetic = sequenceFetch([]);
   await rejectsCode(
-    () => fetchLegalSource("https://advice.uz/ru/questions/21", {
+    () => fetchLegalSource("https://advice.uz/ru/documents/21", {
       adviceEnabled: false,
       fetchImpl: synthetic.fetchImpl,
     }),
     "LEGAL_SOURCE_POLICY_DISABLED",
   );
   assert.equal(synthetic.calls.length, 0);
+});
+
+test("bounded Advice fetch uses current routes and a respectful minimum delay", async () => {
+  const synthetic = sequenceFetch([robots(), html()]);
+  const waits: number[] = [];
+  const result = await fetchLegalSource(
+    "https://www.advice.uz/oz/documents/624/",
+    {
+      adviceEnabled: true,
+      fetchImpl: synthetic.fetchImpl,
+      wait: async (delayMs) => {
+        assert.equal(synthetic.calls.length, 1);
+        waits.push(delayMs);
+      },
+      now: () => new Date("2026-07-31T00:00:00.000Z"),
+    },
+  );
+
+  assert.equal(result.sourceKind, "advice");
+  assert.equal(result.locale, "uz");
+  assert.equal(result.canonicalId, "624");
+  assert.equal(result.canonicalUrl, "https://advice.uz/oz/documents/624");
+  assert.equal(result.fetchedAt, "2026-07-31T00:00:00.000Z");
+  assert.deepEqual(waits, [1_000]);
+  assert.deepEqual(
+    synthetic.calls.map((call) => call.url),
+    [
+      "https://advice.uz/robots.txt",
+      "https://advice.uz/oz/documents/624",
+    ],
+  );
 });
 
 test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", async () => {
@@ -151,7 +195,7 @@ test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", 
     assert.equal(call.init?.credentials, "omit");
     assert.match(
       new Headers(call.init?.headers).get("user-agent") ?? "",
-      /^JURO-LegalSourceBot\//,
+      /^JURO-LegalSourceSync\//,
     );
   }
 });
