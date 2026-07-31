@@ -13,6 +13,14 @@ function scheduledFor(controller: ScheduledController): string {
   return new Date(controller.scheduledTime).toISOString();
 }
 
+async function maybeRunStagingProviderProbes(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "staging"
+    || (env as Record<string, unknown>).STAGING_SYNTHETIC_PROBES_ENABLED !== "true"
+  ) return null;
+  const { runStagingProviderProbes } = await import("./staging-provider-probe");
+  return runStagingProviderProbes(env);
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -138,6 +146,7 @@ export async function handleScheduled(
   }
   try {
     const summary = await dispatchOutbox(env, 100);
+    const providerProbe = await maybeRunStagingProviderProbes(env);
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {
       event: "scheduled.outbox_completed",
@@ -147,6 +156,10 @@ export async function handleScheduled(
       dispatched: summary.dispatched,
       retrying: summary.retrying,
       rejected: summary.rejected,
+      providerProbeAttempted: providerProbe?.attempted ?? 0,
+      providerProbeSucceeded: providerProbe?.succeeded ?? 0,
+      providerProbeFailed: providerProbe?.failed ?? 0,
+      providerProbeSkipped: providerProbe?.skipped ?? 0,
     });
   } catch {
     try {
