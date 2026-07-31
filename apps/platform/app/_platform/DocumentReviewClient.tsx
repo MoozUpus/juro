@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated analysis data is hydrated after the first browser render */
 
-import { AlertTriangle, CheckCircle2, CircleAlert, Download, Eye, FileCheck2, FileDiff, LoaderCircle, RefreshCw, ShieldCheck, Upload } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleAlert, Download, Eye, FileCheck2, FileDiff, LoaderCircle, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { comparisonText } from "../../content/platform-ui";
@@ -120,12 +120,14 @@ function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boo
   const canOpen = analysis.status === "completed";
   const state = analysisState(analysis.status, ru);
   const [exporting, setExporting] = useState(false);
+  const [deletingExport, setDeletingExport] = useState(false);
   const [exportError, setExportError] = useState("");
+  const [exportNotice, setExportNotice] = useState("");
   const latestExport = [...(analysis.exports ?? [])].sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
   const exportPending = ["queued", "processing", "retrying"].includes(latestExport?.status ?? "");
   const exportFailed = latestExport?.status === "failed";
   async function requestExport() {
-    setExporting(true); setExportError("");
+    setExporting(true); setExportError(""); setExportNotice("");
     if (exportFailed) exportAttemptKeys.current.delete(analysis.id);
     const existingKey = exportAttemptKeys.current.get(analysis.id);
     const idempotencyKey = existingKey ?? `analysis-export-${analysis.id}-${crypto.randomUUID()}`;
@@ -144,9 +146,25 @@ function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boo
     } catch (value) { setExportError(value instanceof Error ? value.message : String(value)); }
     finally { setExporting(false); }
   }
+  async function removeExport() {
+    if (!latestExport || !window.confirm(ru ? "Удалить этот экспорт?" : "Bu eksport o‘chirilsinmi?")) return;
+    setDeletingExport(true); setExportError(""); setExportNotice("");
+    try {
+      const response = await fetch(`/api/platform/document-analysis/exports/${encodeURIComponent(latestExport.id)}`, {
+        method: "DELETE",
+      });
+      const body = await response.json() as { code?: string };
+      if (!response.ok) throw new Error(exportDeleteError(body.code, ru));
+      exportAttemptKeys.current.delete(analysis.id);
+      await onChanged();
+      setExportNotice(ru ? "Экспорт удалён." : "Eksport o‘chirildi.");
+    } catch (value) { setExportError(value instanceof Error ? value.message : String(value)); }
+    finally { setDeletingExport(false); }
+  }
   return <article className="review-result">
-    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && latestExport?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(latestExport.id)}/file`}><Download />JSON</a> : canOpen && <button type="button" disabled={exporting || exportPending} aria-busy={exporting || exportPending} onClick={() => void requestExport()}>{exporting || exportPending ? <LoaderCircle className="spin" /> : exportFailed ? <RefreshCw /> : <Download />}{exporting || exportPending ? (ru ? "Экспорт готовится" : "Eksport tayyorlanmoqda") : exportFailed ? (ru ? "Повторить экспорт" : "Eksportni takrorlash") : (ru ? "Экспорт JSON" : "JSON eksport")}</button>}</div></div>
+    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && latestExport?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(latestExport.id)}/file`}><Download />JSON</a> : canOpen && <button type="button" disabled={exporting || exportPending || deletingExport} aria-busy={exporting || exportPending} onClick={() => void requestExport()}>{exporting || exportPending ? <LoaderCircle className="spin" /> : exportFailed ? <RefreshCw /> : <Download />}{exporting || exportPending ? (ru ? "Экспорт готовится" : "Eksport tayyorlanmoqda") : exportFailed ? (ru ? "Повторить экспорт" : "Eksportni takrorlash") : (ru ? "Экспорт JSON" : "JSON eksport")}</button>}{canOpen && latestExport && ["completed", "failed"].includes(latestExport.status) && <button type="button" disabled={deletingExport || exporting} aria-busy={deletingExport} onClick={() => void removeExport()}>{deletingExport ? <LoaderCircle className="spin" /> : <Trash2 />}{deletingExport ? (ru ? "Удаляется" : "O‘chirilmoqda") : (ru ? "Удалить экспорт" : "Eksportni o‘chirish")}</button>}</div></div>
     {exportError && <p className="review-message error" role="alert"><CircleAlert />{exportError}</p>}
+    {exportNotice && <p className="review-message success" role="status"><ShieldCheck />{exportNotice}</p>}
     {analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}
   </article>;
 }
@@ -196,4 +214,10 @@ function exportRequestError(code: string | undefined, ru: boolean) {
   if (code === "ANALYSIS_EXPORT_NOT_READY") return ru ? "Экспорт доступен после завершения анализа." : "Eksport tahlil yakunlangandan keyin mavjud.";
   if (code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT") return ru ? "Запрос экспорта уже использован. Повторите действие." : "Eksport so‘rovi allaqachon ishlatilgan. Amalni takrorlang.";
   return ru ? "Экспорт не создан." : "Eksport yaratilmadi.";
+}
+
+function exportDeleteError(code: string | undefined, ru: boolean) {
+  if (code === "ANALYSIS_EXPORT_NOT_TERMINAL") return ru ? "Дождитесь завершения экспорта." : "Eksport yakunlanishini kuting.";
+  if (code === "ANALYSIS_EXPORT_DELETE_FAILED") return ru ? "Экспорт не удалён. Повторите действие." : "Eksport o‘chirilmadi. Amalni takrorlang.";
+  return ru ? "Экспорт не найден." : "Eksport topilmadi.";
 }

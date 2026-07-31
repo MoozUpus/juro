@@ -320,6 +320,35 @@ test("protected writes require a canonical same-origin browser context", async (
   }
 });
 
+test("analysis export deletion enforces CSRF before authentication", async () => {
+  const worker = await createWorker();
+  const route = "http://localhost/api/platform/document-analysis/exports/export-test";
+  const missingProof = await worker.fetch(new Request(route, { method: "DELETE" }), runtime, context);
+  assert.equal(missingProof.status, 403);
+  assert.match(missingProof.headers.get("cache-control") ?? "", /no-store/);
+
+  const foreignOrigin = await worker.fetch(new Request(route, {
+    method: "DELETE",
+    headers: {
+      origin: "https://attacker.example",
+      "x-juro-csrf": "1",
+    },
+  }), runtime, context);
+  assert.equal(foreignOrigin.status, 403);
+  assert.match(foreignOrigin.headers.get("cache-control") ?? "", /no-store/);
+
+  const unauthenticated = await worker.fetch(new Request(route, {
+    method: "DELETE",
+    headers: {
+      origin: "http://localhost",
+      "sec-fetch-site": "same-origin",
+      "x-juro-csrf": "1",
+    },
+  }), runtime, context);
+  assert.equal(unauthenticated.status, 401);
+  assert.match(unauthenticated.headers.get("cache-control") ?? "", /no-store/);
+});
+
 test("built auth routes reject missing and cross-origin CSRF writes", async () => {
   const worker = await createWorker();
   for (const route of [

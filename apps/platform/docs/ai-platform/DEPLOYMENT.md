@@ -180,3 +180,18 @@ build/artifact/binding checks, builder/comparison smokes, and commit secret scan
 passed. Worker version `cfb20e07-d9a9-4b55-a402-e2326c437b4a` serves 100%; D1
 remains at 41 migrations with `quick_check=ok` and zero FK violations. Anonymous
 deletion API access returns Access `302`; production remains unchanged.
+
+### Standalone export-deletion candidate
+
+The no-migration follow-up adds an authenticated per-export DELETE route and an
+R2-first terminal deletion service. Local gates pass: type-check, lint, 29 rendered
+security tests, 324 core tests, 84 Cloudflare tests, exact staging build/artifact
+validation, current Cloudflare binding types, and document builder/comparison
+smokes. No dependency, binding, Queue policy, secret name, or migration changes.
+
+Deploy the exact committed staging artifact with `--keep-vars`, then re-read the
+Worker version, handler set, bindings, secret names, Queue topology, 41-migration
+D1 integrity, anonymous Access denial, and unchanged production Worker identity.
+If the route regresses, restore protected-staging traffic to version
+`cfb20e07-d9a9-4b55-a402-e2326c437b4a`; migration `0040` may remain because this
+follow-up does not alter schema.

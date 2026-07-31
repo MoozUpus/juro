@@ -3,6 +3,7 @@ import test from "node:test";
 import type { DocumentAnalysisResult } from "../lib/document-analysis/schema";
 import {
   AnalysisExportError,
+  deleteAnalysisExport,
   executeAnalysisExportJob,
   exportForDownload,
   recordAnalysisExportFailure,
@@ -55,6 +56,8 @@ const result: DocumentAnalysisResult = {
 class FakeR2Bucket {
   readonly objects = new Map<string, { bytes: Uint8Array; sha256: string }>();
   putCalls = 0;
+  deleteCalls = 0;
+  failDelete = false;
 
   async head(key: string) {
     const value = this.objects.get(key);
@@ -91,6 +94,12 @@ class FakeR2Bucket {
     const stored = { bytes, sha256 };
     this.objects.set(key, stored);
     return this.metadata(key, stored);
+  }
+
+  async delete(key: string) {
+    this.deleteCalls += 1;
+    if (this.failDelete) throw new Error("synthetic R2 delete failure");
+    this.objects.delete(key);
   }
 
   async tamper(key: string) {
@@ -197,6 +206,68 @@ test("analysis JSON export is atomic, tenant-scoped, idempotent and integrity ch
       (error: unknown) => error instanceof AnalysisExportError
         && error.code === "ANALYSIS_EXPORT_OBJECT_FAILED",
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("analysis export deletion is tenant-scoped, R2-first, retryable and idempotently audited", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    seedCompletedAnalysis(sqlite);
+    const requested = await requestAnalysisExport({
+      db: d1,
+      analysisId: "analysis-a",
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      idempotencyKey: "analysis-export-delete-0001",
+    });
+    await executeAnalysisExportJob(
+      { DB: d1, BUCKET: bucket as unknown as R2Bucket },
+      requested.record.id,
+      "workspace-a",
+    );
+    const own = await exportForDownload(d1, {
+      exportId: requested.record.id,
+      workspaceId: "workspace-a",
+      userId: "user-a",
+    });
+    await assert.rejects(
+      deleteAnalysisExport(
+        { DB: d1, BUCKET: bucket as unknown as R2Bucket },
+        { exportId: own.id, workspaceId: "workspace-b", userId: "user-b" },
+      ),
+      (error: unknown) => error instanceof AnalysisExportError
+        && error.code === "ANALYSIS_EXPORT_NOT_FOUND",
+    );
+    assert.equal(bucket.objects.has(own.r2Key!), true);
+
+    bucket.failDelete = true;
+    await assert.rejects(
+      deleteAnalysisExport(
+        { DB: d1, BUCKET: bucket as unknown as R2Bucket },
+        { exportId: own.id, workspaceId: "workspace-a", userId: "user-a" },
+      ),
+      (error: unknown) => error instanceof AnalysisExportError
+        && error.code === "ANALYSIS_EXPORT_DELETE_FAILED"
+        && error.retryable,
+    );
+    assert.equal((sqlite.prepare("SELECT count(*) AS total FROM analysis_exports WHERE id=?").get(own.id) as { total: number }).total, 1);
+
+    bucket.failDelete = false;
+    assert.deepEqual(await deleteAnalysisExport(
+      { DB: d1, BUCKET: bucket as unknown as R2Bucket },
+      { exportId: own.id, workspaceId: "workspace-a", userId: "user-a" },
+    ), { status: "deleted", exportId: own.id });
+    assert.equal(bucket.objects.has(own.r2Key!), false);
+    assert.equal((sqlite.prepare("SELECT count(*) AS total FROM analysis_exports WHERE id=?").get(own.id) as { total: number }).total, 0);
+    assert.equal(auditCount(sqlite, "export_deleted"), 1);
+    assert.deepEqual(await deleteAnalysisExport(
+      { DB: d1, BUCKET: bucket as unknown as R2Bucket },
+      { exportId: own.id, workspaceId: "workspace-a", userId: "user-a" },
+    ), { status: "already_deleted", exportId: own.id });
+    assert.equal(auditCount(sqlite, "export_deleted"), 1);
   } finally {
     sqlite.close();
   }

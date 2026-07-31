@@ -21,7 +21,9 @@ export class AnalysisExportError extends Error {
       | "ANALYSIS_EXPORT_NOT_READY"
       | "ANALYSIS_EXPORT_INVALID_SOURCE"
       | "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT"
-      | "ANALYSIS_EXPORT_OBJECT_FAILED",
+      | "ANALYSIS_EXPORT_OBJECT_FAILED"
+      | "ANALYSIS_EXPORT_NOT_TERMINAL"
+      | "ANALYSIS_EXPORT_DELETE_FAILED",
     readonly retryable: boolean,
     readonly status = 422,
   ) {
@@ -195,6 +197,77 @@ export async function recordAnalysisExportDownload(db: D1Database, record: Downl
   ).run();
 }
 
+export async function deleteAnalysisExport(
+  env: { DB: D1Database; BUCKET: R2Bucket },
+  input: { exportId: string; workspaceId: string; userId: string },
+): Promise<{ status: "deleted" | "already_deleted"; exportId: string }> {
+  const auditId = `analysis-export-deleted:${input.exportId}`;
+  const row = await env.DB.prepare(
+    `SELECT id,analysis_id AS analysisId,workspace_id AS workspaceId,
+       owner_user_id AS ownerUserId,status,r2_key AS r2Key
+     FROM analysis_exports
+     WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
+  ).bind(input.exportId, input.workspaceId, input.userId).first<DeleteRow>();
+  if (!row) {
+    if (await deletionAuditExists(env.DB, auditId, input)) {
+      return { status: "already_deleted", exportId: input.exportId };
+    }
+    throw new AnalysisExportError("ANALYSIS_EXPORT_NOT_FOUND", false, 404);
+  }
+  if (!['completed', 'failed'].includes(row.status)) {
+    throw new AnalysisExportError("ANALYSIS_EXPORT_NOT_TERMINAL", false, 409);
+  }
+  if (row.r2Key) {
+    try {
+      await env.BUCKET.delete(row.r2Key);
+      if (await env.BUCKET.head(row.r2Key)) {
+        throw new Error("R2_DELETE_NOT_VISIBLE");
+      }
+    } catch {
+      throw new AnalysisExportError("ANALYSIS_EXPORT_DELETE_FAILED", true, 503);
+    }
+  }
+
+  const now = new Date().toISOString();
+  try {
+    const results = await env.DB.batch([
+      env.DB.prepare(
+        `DELETE FROM analysis_exports
+         WHERE id=? AND workspace_id=? AND owner_user_id=? AND status=?
+           AND ((? IS NULL AND r2_key IS NULL) OR r2_key=?)`,
+      ).bind(
+        row.id,
+        row.workspaceId,
+        row.ownerUserId,
+        row.status,
+        row.r2Key,
+        row.r2Key,
+      ),
+      env.DB.prepare(
+        `INSERT INTO workspace_audit_events
+         (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+         VALUES (?,?,?,'analysis_export',?,'export_deleted',?,?)`,
+      ).bind(
+        auditId,
+        row.workspaceId,
+        row.ownerUserId,
+        row.id,
+        JSON.stringify({ analysisId: row.analysisId, format: "json", priorStatus: row.status }),
+        now,
+      ),
+    ]);
+    if (Number(results[0]?.meta?.changes ?? 0) !== 1) {
+      throw new Error("EXPORT_DELETE_STATE_CONFLICT");
+    }
+  } catch {
+    if (await deletionAuditExists(env.DB, auditId, input)) {
+      return { status: "already_deleted", exportId: input.exportId };
+    }
+    throw new AnalysisExportError("ANALYSIS_EXPORT_DELETE_FAILED", true, 503);
+  }
+  return { status: "deleted", exportId: row.id };
+}
+
 
 export async function verifyExportObject(bucket: R2Bucket, record: DownloadRow): Promise<R2ObjectBody> {
   const object = await bucket.get(record.r2Key!);
@@ -206,6 +279,8 @@ export async function verifyExportObject(bucket: R2Bucket, record: DownloadRow):
 
 type ExportSourceRow = DownloadRow & { analysisStatus: string; summaryJson: string; createdAt: string; sourceFileName: string };
 type DownloadRow = { id: string; analysisId: string; workspaceId: string; ownerUserId: string; status: string; r2Key: string | null; fileName: string; mimeType: string; sizeBytes: number | null; sha256: string | null };
+type DeleteRow = Pick<DownloadRow, "id" | "analysisId" | "workspaceId" | "ownerUserId" | "status" | "r2Key">;
+
 
 async function loadExportSource(db: D1Database, exportId: string, workspaceId: string): Promise<ExportSourceRow | null> {
   return db.prepare(
@@ -262,6 +337,20 @@ async function exportByIdempotency(
       size_bytes AS sizeBytes,sha256,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
      FROM analysis_exports WHERE idempotency_key=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
   ).bind(key, workspaceId, userId).first<AnalysisExportRecord>();
+}
+
+async function deletionAuditExists(
+  db: D1Database,
+  auditId: string,
+  input: { exportId: string; workspaceId: string; userId: string },
+): Promise<boolean> {
+  const row = await db.prepare(
+    `SELECT 1 AS found FROM workspace_audit_events
+     WHERE id=? AND workspace_id=? AND actor_user_id=?
+       AND entity_type='analysis_export' AND entity_id=?
+       AND action='export_deleted' LIMIT 1`,
+  ).bind(auditId, input.workspaceId, input.userId, input.exportId).first<{ found: number }>();
+  return Boolean(row?.found);
 }
 
 function isUniqueConstraintError(error: unknown): boolean {

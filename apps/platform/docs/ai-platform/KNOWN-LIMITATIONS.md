@@ -257,7 +257,8 @@ No Phase 5 production-readiness claim is made.
   zero completed analyses and synthetic probes are disabled.
 - Staging currently has no OpenAI or Anthropic secret, so no live provider result
   is fabricated merely to exercise export. Existing provider limitations remain.
-- Account deletion now removes owned export objects before the D1 cascade.
-  Standalone per-export deletion, time-based retention, batch export, redline
-  export, and large-artifact performance gates remain open.
+- Account deletion removes owned export objects before the D1 cascade, and a
+  CSRF-protected tenant-scoped action deletes individual terminal exports R2-first.
+  Time-based retention, batch export, redline export, and large-artifact
+  performance gates remain open.
 - Production is unchanged and remains separately unauthorized.

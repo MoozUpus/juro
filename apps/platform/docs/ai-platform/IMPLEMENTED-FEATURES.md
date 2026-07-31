@@ -269,3 +269,20 @@ the existing analysis cascade removes the export row atomically with the rest of
 the user's content. The dedicated purge suite passes 9/9 and the full regression
 remains 28 rendered, 323 core, and 84 Cloudflare tests. Worker version
 `cfb20e07-d9a9-4b55-a402-e2326c437b4a` serves 100% in protected staging.
+
+### Standalone analysis-export deletion
+
+The completed-analysis export lifecycle now includes a real terminal deletion
+path:
+
+- authenticated, CSRF-protected `DELETE /api/platform/document-analysis/exports/:exportId`;
+- neutral tenant/workspace/user authorization;
+- rejection of pending and processing exports;
+- private R2 deletion and absence verification before D1 deletion;
+- atomic export-row removal plus immutable content-free audit evidence;
+- retryable R2/D1 failure handling and idempotent replay;
+- RU/UZ confirmation, busy, success, retry, and error UI states;
+- cross-tenant, ordering, failure, replay, and rendered-route tests.
+
+This does not claim retention scheduling, batch deletion, additional export
+formats, or an authenticated live staging export from a provider result.

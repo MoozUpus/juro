@@ -1812,3 +1812,25 @@ releases the purge lease, and records a retryable failure; only a successful obj
 phase permits the existing atomic D1 purge to cascade the export row. The change
 adds no migration, queue, dependency, production write, or broader bucket access.
 The fixture proves another user's object remains untouched.
+
+## D-088 — terminal analysis exports are deleted R2-first with tenant-scoped replay evidence
+
+Status: accepted and locally verified; protected-staging deployment pending
+Date: 2026-07-31
+
+A user may delete only an owned terminal (`completed` or `failed`) analysis
+export. The authenticated DELETE route checks the current workspace, user, and
+source analysis without disclosing cross-tenant existence. Pending or processing
+exports remain immutable so a Queue consumer cannot race a user deletion.
+
+For a completed export, private R2 deletion and absence verification happen before
+the D1 mutation. The export row and deterministic, content-free audit event are
+then committed in one D1 batch. If R2 fails, D1 remains intact and the API returns
+a typed retryable error. If D1 fails after R2 succeeds, a retry safely completes
+the remaining database phase. A scoped audit lookup makes successful replay
+idempotent without accepting an export identifier from another tenant.
+
+The RU/UZ review UI exposes the action only for terminal exports, confirms the
+destructive action, preserves keyboard and busy-state feedback, and refreshes the
+real export list after success. No migration, dependency, binding, provider call,
+production route, or website code changes in this slice.
