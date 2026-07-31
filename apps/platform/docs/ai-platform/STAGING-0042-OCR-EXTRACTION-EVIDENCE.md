@@ -81,6 +81,39 @@ The final staging deployment is `85151979-ba7d-4fc0-a2dc-fccf4f1e4da3` at
 - `staging-ocr-processing-dlq`, ID
   `67b273da1950422b92d12757b6a946b0`: zero consumers.
 
+
+## 0043 document-risk findings checkpoint — 2026-07-31 UTC
+
+Scope: this additive persistence/UI checkpoint was deployed only to
+`juro-platform-staging`. Production, `apps/website`, and the production D1/R2
+resources were not changed.
+
+- application commit: `4762655` (`feat(platform): persist document risk findings`);
+- staging Worker: `b8673cb6-36e0-4afd-8ec7-3ab265f943c4` at 100%;
+- production Worker remains `91774ed4-72e9-47bb-b93a-a4208d490b24`;
+- staging D1: `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`).
+
+## Migration and backup
+
+- pre-migration Time Travel bookmark:
+  `00000257-00000000-000050b9-9f7bab2c24a916fffc7cdec45dfb8b0b`;
+- private R2 backup: `d1/juro-staging/20260731T210724Z/pre-0043.sql` in
+  `juro-staging-backups`;
+- 501,735 bytes, SHA-256
+  `7ea336428d58c238a19e7dc6d991952deddc6129996799c5452eeafdb0b44578`,
+  verified by an independent R2 download and checksum match.
+
+## Verification
+
+- `0043_rainy_eternals.sql` is applied as migration id 44; no migrations remain;
+- `quick_check=ok` and `foreign_key_check` returned no rows;
+- `document_risks` has the six new risk-finding columns and both JSON/type guards;
+- the review API now returns proposed wording, recommendation, page/clause, type,
+  and verified-source IDs; the existing review UI renders proposed wording without
+  automatically applying changes to a document;
+- full platform suite: 352/352; Cloudflare suite: 85/85; staging artifact build:
+  pass.
+
 The exact deployed artifact includes `fetch`, `queue`, and `scheduled` handlers,
 the `AI` binding, staging D1/R2/Queue/Vectorize/Analytics bindings, and the
 five-minute outbox schedule. Anonymous staging access returns Cloudflare Access
