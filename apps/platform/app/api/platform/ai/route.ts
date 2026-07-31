@@ -10,6 +10,8 @@ import {
   reserveAiRun,
   sha256Json,
 } from "../../../../lib/ai/run-store";
+import { AiBranchInputError, listAiBranches, resolveAiBranchInput } from "../../../../lib/ai/branch-store";
+import { selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
 import { parseLegalChatResponse } from "../../../../lib/ai/legal-chat-schema";
 import { filterTrustedVerifiedLegalSources } from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
@@ -28,7 +30,9 @@ export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const db = requireD1();
-  const selectedId = new URL(request.url).searchParams.get("conversationId");
+  const url = new URL(request.url);
+  const selectedId = url.searchParams.get("conversationId");
+  const selectedBranchId = url.searchParams.get("branchId");
   const conversations = await db.prepare(
     `SELECT c.id,c.title,c.locale,c.status,c.case_id AS caseId,c.created_at AS createdAt,c.updated_at AS updatedAt,
       (SELECT content FROM conversation_messages WHERE conversation_id=c.id AND author_type='assistant' ORDER BY created_at DESC LIMIT 1) AS lastAnswer,
@@ -36,7 +40,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
      FROM conversations c WHERE c.workspace_id=? AND c.owner_user_id=? ORDER BY c.updated_at DESC LIMIT 40`,
   ).bind(workspace.id, user.id).all();
   const selected = selectedId
-    ? await loadConversationResult(db, selectedId, workspace.id, user.id)
+    ? await loadConversationResult(db, selectedId, workspace.id, user.id, selectedBranchId)
     : null;
   return response({
     status: aiProviderStatus(),
@@ -61,12 +65,14 @@ async function executePost(
     question?: string;
     locale?: string;
     conversationId?: string;
+    operation?: string;
+    sourceMessageId?: string;
     caseId?: string;
     answerMode?: string;
     reasoningMode?: string;
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
-  const question = body?.question?.trim();
+  const submittedQuestion = body?.question?.trim();
   const answerMode = body?.answerMode === "short" ? "short" : "detailed";
   const reasoningMode = body?.reasoningMode === "deep" ? "deep" : "fast";
   const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
@@ -76,10 +82,10 @@ async function executePost(
       error: locale === "ru" ? "Повторите отправку: идентификатор запроса отсутствует или некорректен." : "Qayta yuboring: so‘rov identifikatori yo‘q yoki noto‘g‘ri.",
     }, 400);
   }
-  if (!question || question.length < 5) {
+  if (body?.operation !== "regenerate" && (!submittedQuestion || submittedQuestion.length < 5)) {
     return response({ error: locale === "ru" ? "Опишите ситуацию чуть подробнее." : "Vaziyatni biroz batafsil yozing." }, 400);
   }
-  if (question.length > 8_000) {
+  if (submittedQuestion && submittedQuestion.length > 8_000) {
     return response({ error: locale === "ru" ? "Сообщение слишком длинное. Сократите его до 8 000 символов." : "Xabar juda uzun. Uni 8 000 belgigacha qisqartiring." }, 413);
   }
 
@@ -108,8 +114,29 @@ async function executePost(
     if (!accessible) return response({ code: "ACCESS_DENIED", error: locale === "ru" ? "Диалог не найден." : "Suhbat topilmadi." }, 404);
   }
 
+  let branchInput: Awaited<ReturnType<typeof resolveAiBranchInput>>;
+  try {
+    branchInput = await resolveAiBranchInput({
+      db,
+      workspaceId: workspace.id,
+      userId: user.id,
+      conversationId: existingConversation ? conversationId : null,
+      requestedOperation: body?.operation,
+      sourceMessageId: body?.sourceMessageId,
+      question: submittedQuestion,
+    });
+  } catch (error) {
+    if (!(error instanceof AiBranchInputError)) throw error;
+    return response({
+      code: error.code,
+      error: error.code === "SOURCE_MESSAGE_NOT_FOUND"
+        ? (locale === "ru" ? "Исходное сообщение не найдено в этом диалоге." : "Boshlang‘ich xabar bu suhbatda topilmadi.")
+        : (locale === "ru" ? "Некорректная операция с версией ответа." : "Javob versiyasi bilan amal noto‘g‘ri."),
+    }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
+  }
+  const question = branchInput.question;
   const { sources, legalDatabaseAsOf } = await retrieveVerifiedSources(db, question, locale);
-  const requestHash = await sha256Json({ question, locale, answerMode, reasoningMode, conversationId: body?.conversationId || null, caseId: body?.caseId || null });
+  const requestHash = await sha256Json({ question, locale, answerMode, reasoningMode, conversationId: body?.conversationId || null, caseId: body?.caseId || null, operation: branchInput.operation, sourceMessageId: branchInput.forkedFromMessageId });
   const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
   const instructionHash = await sha256Json({ version: INSTRUCTION_VERSION, jurisdiction: "UZ" });
   const sourceVersionHash = await sha256Json(sources.map((source) => ({ id: source.id, hash: source.contentSha256, excerpt: source.excerpt || null })));
@@ -134,7 +161,7 @@ async function executePost(
     throw error;
   }
   if (reservation.kind === "completed") {
-    const replay = await loadConversationResult(db, reservation.conversationId, workspace.id, user.id);
+    const replay = await loadConversationResult(db, reservation.conversationId, workspace.id, user.id, null, reservation.responseMessageId);
     return response({ ...replay, idempotentReplay: true }, 200);
   }
   if (reservation.kind === "processing") {
@@ -164,6 +191,9 @@ async function executePost(
   const now = isoNow();
   const userMessageId = crypto.randomUUID();
   const assistantMessageId = crypto.randomUUID();
+  const branchId = crypto.randomUUID();
+  const messageVersionId = crypto.randomUUID();
+  const contentSha256 = await sha256Json(question);
   const facts = result.assumptions.map((assumption) => ({ id: crypto.randomUUID(), statement: assumption.statement, status: "proposed" as const }));
   const statements = [
     ...(existingConversation ? [] : [db.prepare(
@@ -173,6 +203,12 @@ async function executePost(
       .bind(userMessageId, conversationId, question, now),
     db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,'assistant',?,?,?)")
       .bind(assistantMessageId, conversationId, result.answer, JSON.stringify(result), now),
+    db.prepare(
+      "INSERT INTO message_branches (id,conversation_id,workspace_id,owner_user_id,parent_branch_id,forked_from_message_id,request_message_id,response_message_id,operation,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    ).bind(branchId, conversationId, workspace.id, user.id, branchInput.parentBranchId, branchInput.forkedFromMessageId, userMessageId, assistantMessageId, branchInput.operation, now),
+    db.prepare(
+      "INSERT INTO message_versions (id,conversation_id,branch_id,message_id,source_message_id,created_by_user_id,operation,version_number,content_sha256,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    ).bind(messageVersionId, conversationId, branchId, userMessageId, branchInput.sourceMessageId, user.id, branchInput.operation, branchInput.versionNumber, contentSha256, now),
     db.prepare("UPDATE conversations SET updated_at=? WHERE id=? AND workspace_id=?").bind(now, conversationId, workspace.id),
     ...facts.map((fact) => db.prepare(
       "INSERT INTO confirmed_facts (id,conversation_id,case_id,statement,status,created_at,updated_at) VALUES (?,?,?,?,'proposed',?,?)",
@@ -186,6 +222,8 @@ async function executePost(
       runId: reservation.runId, provider: aiResult.provider, model: aiResult.model,
       fallbackFromProvider: aiResult.fallbackFromProvider,
       sourceCount: result.sources.length, responseKind: result.responseKind,
+      branchId, operation: branchInput.operation,
+      sourceMessageId: branchInput.forkedFromMessageId,
     }), now),
   ];
   try {
@@ -211,6 +249,8 @@ async function executePost(
 
   return response({
     conversationId, messageId: assistantMessageId, runId: reservation.runId,
+    requestMessageId: userMessageId, branchId, operation: branchInput.operation,
+    branches: await listAiBranches({ db, conversationId, workspaceId: workspace.id, userId: user.id }),
     correlationId: reservation.correlationId, result, facts, sources: result.sources,
     technicalDetails: {
       provider: aiResult.provider,
@@ -288,13 +328,10 @@ export async function POST(request: Request) {
   });
 }
 
-async function loadConversationResult(db: D1Database, conversationId: string, workspaceId: string, userId: string) {
-  const conversation = await db.prepare(
-    `SELECT c.id AS conversationId,m.id AS messageId,m.structured_json AS structuredJson
-     FROM conversations c JOIN conversation_messages m ON m.conversation_id=c.id
-     WHERE c.id=? AND c.workspace_id=? AND c.owner_user_id=? AND m.author_type='assistant'
-     ORDER BY m.created_at DESC LIMIT 1`,
-  ).bind(conversationId, workspaceId, userId).first<{ conversationId: string; messageId: string; structuredJson: string | null }>();
+async function loadConversationResult(db: D1Database, conversationId: string, workspaceId: string, userId: string, branchId?: string | null, responseMessageId?: string | null) {
+  const conversation = await selectAiConversationMessage(
+    { db, conversationId, workspaceId, userId, branchId, responseMessageId },
+  );
   if (!conversation?.structuredJson) return null;
   const [facts, sourceRows] = await db.batch([
     db.prepare("SELECT id,statement,status FROM confirmed_facts WHERE conversation_id=? ORDER BY created_at").bind(conversationId),
@@ -311,6 +348,11 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
   return {
     conversationId: conversation.conversationId,
     messageId: conversation.messageId,
+    branchId: conversation.branchId,
+    requestMessageId: conversation.requestMessageId,
+    operation: conversation.operation,
+    question: conversation.question || "",
+    branches: await listAiBranches({ db, conversationId, workspaceId, userId }),
     result: parseJson(conversation.structuredJson, null),
     facts: facts.results,
     sources: filterTrustedVerifiedLegalSources(sourceRows.results as unknown as LegalSourceContext[]),

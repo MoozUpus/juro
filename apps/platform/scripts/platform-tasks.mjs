@@ -113,6 +113,7 @@ const coreTestFiles = [
   "tests/legal-source-normalization.test.ts",
   "tests/legal-source-review.test.ts",
   "tests/ai-platform.test.ts",
+  "tests/ai-branch-history.test.ts",
   "tests/staff-access.test.ts",
   "tests/staff-role-management.test.ts",
   "tests/policy-acceptance.test.ts",

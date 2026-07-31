@@ -1728,3 +1728,27 @@ Official contract references verified on 2026-07-31:
 - https://developers.openai.com/api/docs/guides/structured-outputs
 - https://developers.openai.com/api/docs/guides/latest-model
 - https://developers.openai.com/api/docs/models/gpt-5.6-sol
+
+## D-084 — keep AI edits and regenerations as immutable tenant-scoped branches
+
+Status: accepted and locally verified; staging migration/deploy evidence pending
+Date: 2026-07-31
+
+Editing a question and regenerating an answer never overwrite an existing chat
+message. Each action creates a new branch plus append-only message-version
+evidence. The server resolves the original question for regeneration and checks
+the source message, conversation, workspace, owner, and parent branch before one
+atomic D1 batch persists the request, response, branch, versions, AI-run result,
+and usage outcome. Client-supplied text cannot replace the authoritative source
+for regeneration.
+
+Branch reads require the same authenticated tenant and select an exact response
+message. The UI exposes the original and alternate answers as direct-linkable
+history without hiding the prior version. A new edit or regeneration consumes a
+new answer cycle; idempotent replay does not create or charge a duplicate.
+
+Migration `0039_lame_killer_shrike.sql` is additive. Its insert guards reject
+cross-tenant source messages, incoherent parent/fork relationships, invalid
+version chains, and invalid SHA-256 evidence; update triggers make accepted
+branch/version evidence immutable. No provider secret, dependency, production
+route, or website code is changed.

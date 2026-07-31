@@ -185,7 +185,9 @@ The deployed Worker version exposes only three secret binding names. A live Open
 - `ANTHROPIC_API_KEY` is absent from the inspected staging Worker.
 - No live OpenAI response, Anthropic response, or provider failover is claimed.
 - Upstream Responses SSE, bounded browser progress, stop, and no-charge cancellation are implemented and locally tested, but no live provider stream is claimed without protected provider secrets.
-- Reconnect/resume, edit, regenerate, branch history, memory, guest flow, and full entitlement integration remain open.
+- Edit, regenerate, and immutable branch history are implemented locally; their staging migration/deploy proof is pending this checkpoint.
+- Reconnect/resume, durable partial-stream recovery, memory, guest flow, and full entitlement integration remain open.
+- Conversation facts remain conversation-scoped rather than branch-scoped; source evidence remains attached to the exact answer message.
 - Retrieval is exact lexical retrieval from current verified D1 material; Vectorize hybrid retrieval, reranking, and citation revalidation remain open.
 - Authenticated browser QA is blocked by a local browser-control kernel failure before connection; anonymous Access denial is verified and Access was not bypassed.
 

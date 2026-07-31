@@ -1435,6 +1435,43 @@ export const conversationMessages = sqliteTable("conversation_messages", {
   createdAt: text("created_at").notNull(),
 }, (table) => [index("conversation_messages_conversation_idx").on(table.conversationId, table.createdAt)]);
 
+export const messageBranches = sqliteTable("message_branches", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  parentBranchId: text("parent_branch_id"),
+  forkedFromMessageId: text("forked_from_message_id").references(() => conversationMessages.id, { onDelete: "set null" }),
+  requestMessageId: text("request_message_id").notNull().references(() => conversationMessages.id, { onDelete: "cascade" }),
+  responseMessageId: text("response_message_id").notNull().references(() => conversationMessages.id, { onDelete: "cascade" }),
+  operation: text("operation").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check("message_branches_operation_check", sql`${table.operation} IN ('new','follow_up','edit','regenerate')`),
+  uniqueIndex("message_branches_request_uidx").on(table.requestMessageId),
+  uniqueIndex("message_branches_response_uidx").on(table.responseMessageId),
+  index("message_branches_conversation_idx").on(table.conversationId, table.createdAt),
+  index("message_branches_parent_idx").on(table.parentBranchId),
+]);
+
+export const messageVersions = sqliteTable("message_versions", {
+  id: text("id").primaryKey(),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  branchId: text("branch_id").notNull().references(() => messageBranches.id, { onDelete: "cascade" }),
+  messageId: text("message_id").notNull().references(() => conversationMessages.id, { onDelete: "cascade" }),
+  sourceMessageId: text("source_message_id").references(() => conversationMessages.id, { onDelete: "set null" }),
+  createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  operation: text("operation").notNull(),
+  versionNumber: integer("version_number").notNull().default(1),
+  contentSha256: text("content_sha256").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check("message_versions_operation_check", sql`${table.operation} IN ('new','follow_up','edit','regenerate')`),
+  check("message_versions_number_check", sql`${table.versionNumber} >= 1`),
+  uniqueIndex("message_versions_message_uidx").on(table.messageId),
+  index("message_versions_conversation_idx").on(table.conversationId, table.createdAt),
+  index("message_versions_source_idx").on(table.sourceMessageId, table.versionNumber),
+]);
 export const aiRuns = sqliteTable("ai_runs", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),

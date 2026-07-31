@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, LoaderCircle, Send, ShieldAlert, Square, X } from "lucide-react";
+import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, History, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
@@ -28,7 +28,9 @@ type LegalResult = {
   suggestLawyer: boolean;
   legalDatabaseAsOf: string;
 };
-type Answer = { conversationId: string; messageId?: string; result: LegalResult; facts: Fact[]; usage?: Usage };
+type AiMessageOperation = "new" | "follow_up" | "edit" | "regenerate";
+type Branch = { branchId: string; parentBranchId: string | null; requestMessageId: string; responseMessageId: string; operation: AiMessageOperation; versionNumber: number; question: string; createdAt: string };
+type Answer = { conversationId: string; messageId?: string; requestMessageId?: string | null; branchId?: string | null; operation?: AiMessageOperation; question?: string; branches?: Branch[]; result: LegalResult; facts: Fact[]; usage?: Usage };
 
 export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const ru = locale === "ru";
@@ -36,6 +38,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const pathname = usePathname();
   const router = useRouter();
   const selectedConversationId = searchParams.get("conversationId") || "";
+  const selectedBranchId = searchParams.get("branchId") || "";
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -45,13 +48,17 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
+  const [editSourceMessageId, setEditSourceMessageId] = useState("");
   const [error, setError] = useState("");
   const [streamStatus, setStreamStatus] = useState("");
   const streamAbortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/platform/ai${selectedConversationId ? `?conversationId=${encodeURIComponent(selectedConversationId)}` : ""}`, { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (selectedConversationId) params.set("conversationId", selectedConversationId);
+      if (selectedBranchId) params.set("branchId", selectedBranchId);
+      const response = await fetch(`/api/platform/ai${params.size ? `?${params}` : ""}`, { cache: "no-store" });
       const body = await response.json() as { status?: ProviderStatus; usage?: Usage; conversations?: Conversation[]; selected?: Answer | null; error?: string };
       if (!response.ok) throw new Error(body.error || (ru ? "AI-модуль не загрузился." : "AI moduli yuklanmadi."));
       setStatus(body.status ?? null);
@@ -63,13 +70,15 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     } finally {
       setLoading(false);
     }
-  }, [ru, selectedConversationId]);
+  }, [ru, selectedBranchId, selectedConversationId]);
 
   useEffect(() => { void load(); }, [load]);
 
-  async function submit(event?: FormEvent) {
+  async function submit(event?: FormEvent, override?: { operation: "regenerate"; sourceMessageId: string }) {
     event?.preventDefault();
-    if (!question.trim() || sending || !status?.configured) return;
+    const operation: AiMessageOperation = override?.operation || (editSourceMessageId ? "edit" : (answer?.conversationId || selectedConversationId ? "follow_up" : "new"));
+    const sourceMessageId = override?.sourceMessageId || editSourceMessageId || undefined;
+    if ((operation !== "regenerate" && !question.trim()) || sending || !status?.configured) return;
     const controller = new AbortController();
     streamAbortRef.current = controller;
     setSending(true);
@@ -85,11 +94,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           "idempotency-key": crypto.randomUUID(),
         },
         body: JSON.stringify({
-          question,
+          question: operation === "regenerate" ? undefined : question,
           locale,
           answerMode,
           reasoningMode,
           conversationId: answer?.conversationId || selectedConversationId || undefined,
+          operation,
+          sourceMessageId,
         }),
         signal: controller.signal,
       });
@@ -111,8 +122,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setAnswer(body);
       if (body.usage) setUsage(body.usage);
       setQuestion("");
-      router.replace(`${pathname}?conversationId=${encodeURIComponent(body.conversationId)}`, { scroll: false });
-      await load();
+      setEditSourceMessageId("");
+      const nextParams = new URLSearchParams({ conversationId: body.conversationId });
+      if (body.branchId) nextParams.set("branchId", body.branchId);
+      router.replace(`${pathname}?${nextParams}`, { scroll: false });
     } catch (value) {
       setError(value instanceof DOMException && value.name === "AbortError"
         ? (ru ? "Генерация остановлена. Лимит не списан." : "Javob yaratish to‘xtatildi. Limit yechilmadi.")
@@ -147,8 +160,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     <section className="ai-workspace">
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { setAnswer(null); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
-        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false })}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
+        <button className="ai-new" onClick={() => { setAnswer(null); setQuestion(""); setEditSourceMessageId(""); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
+        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => { setEditSourceMessageId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false }); }}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
       </aside>
       <main className="ai-dialog">
         <header><span><Bot /></span><div><h1>{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div></header>
@@ -157,9 +170,20 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         <div className="ai-answer-stream" aria-live="polite" aria-busy={sending}>
           {!answer ? (
             <div className="ai-start"><FileQuestion /><h2>{ru ? "Опишите юридическую ситуацию" : "Yuridik vaziyatni yozing"}</h2><p>{ru ? "Не указывайте лишние персональные данные. JURO отделит подтверждённые нормы от предположений." : "Ortiqcha shaxsiy ma’lumotlarni yozmang. JURO tasdiqlangan normalarni taxminlardan ajratadi."}</p></div>
-          ) : <LegalAnswer result={answer.result} ru={ru} />}
+          ) : <>
+            <LegalAnswer result={answer.result} ru={ru} />
+            <div className="ai-answer-actions">
+              <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
+              <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
+            </div>
+            {answer.branches && answer.branches.length > 1 && <nav className="ai-branch-history" aria-label={ru ? "Версии ответа" : "Javob versiyalari"}>
+              <span><History />{ru ? "Версии" : "Versiyalar"}</span>
+              {answer.branches.map((branch) => <button type="button" aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} onClick={() => { setEditSourceMessageId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(answer.conversationId)}&branchId=${encodeURIComponent(branch.branchId)}`, { scroll: false }); }}>{branch.versionNumber} · {branch.operation}</button>)}
+            </nav>}
+          </>}
         </div>
         <form className="ai-composer" onSubmit={submit}>
+          {editSourceMessageId && <div className="ai-edit-notice" role="status"><span>{ru ? "Редактирование создаст новую версию; исходный ответ сохранится." : "Tahrirlash yangi versiya yaratadi; oldingi javob saqlanadi."}</span><button type="button" onClick={() => { setEditSourceMessageId(""); setQuestion(""); }}>{ru ? "Отменить" : "Bekor qilish"}</button></div>}
           <div className="ai-modes">
             <label>{ru ? "Ответ" : "Javob"}<select value={answerMode} onChange={(event) => setAnswerMode(event.target.value as "short" | "detailed")}><option value="short">{ru ? "Кратко" : "Qisqa"}</option><option value="detailed">{ru ? "Подробно" : "Batafsil"}</option></select></label>
             <label>{ru ? "Режим" : "Rejim"}<select value={reasoningMode} onChange={(event) => setReasoningMode(event.target.value as "fast" | "deep")}><option value="fast">{ru ? "Быстро" : "Tez"}</option><option value="deep">{ru ? "Глубоко" : "Chuqur"}</option></select></label>

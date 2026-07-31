@@ -154,6 +154,8 @@ The feature branch additionally implements:
 - end-to-end AbortSignal propagation through OpenAI and Anthropic fallback;
 - `AI_CANCELLED` persistence with reserved usage release and no charged cycle;
 - privacy-preserving `safety_identifier` plus explicit reasoning/verbosity controls.
+- question edits and answer regenerations create immutable, tenant-scoped branches instead of overwriting prior messages;
+- exact branch URLs, branch navigation, server-authoritative regeneration, append-only version hashes, and idempotent replay are locally tested.
 
 The transport is locally verified and deployed to protected staging as Worker version `1cbc9ea9-6ec8-4ab8-9495-b880b269f423` at 100% traffic. Live provider execution is not claimed while protected staging provider secrets remain absent. Production remains unchanged.
 
