@@ -2063,7 +2063,17 @@ export const documentRisks = sqliteTable("document_risks", {
   excerpt: text("excerpt"),
   confidencePercent: integer("confidence_percent"),
   createdAt: text("created_at").notNull(),
-}, (table) => [index("document_risks_analysis_idx").on(table.analysisId, table.level)]);
+  riskType: text("risk_type").notNull().default("document_internal"),
+  clause: text("clause"),
+  page: integer("page"),
+  recommendation: text("recommendation"),
+  proposedWording: text("proposed_wording"),
+  legalBasisSourceIdsJson: text("legal_basis_source_ids_json").notNull().default("[]"),
+}, (table) => [
+  index("document_risks_analysis_idx").on(table.analysisId, table.level),
+  check("document_risks_type_check", sql`${table.riskType} IN ('document_internal','legal_compliance')`),
+  check("document_risks_page_check", sql`${table.page} IS NULL OR ${table.page} > 0`),
+]);
 
 export const analysisExports = sqliteTable("analysis_exports", {
   id: text("id").primaryKey(),

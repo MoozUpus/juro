@@ -302,6 +302,13 @@
       "when": 1785501576074,
       "tag": "0042_sleepy_callisto",
       "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "6",
+      "when": 1785513246580,
+      "tag": "0043_rainy_eternals",
+      "breakpoints": true
     }
   ]
 }

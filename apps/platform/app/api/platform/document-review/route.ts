@@ -13,7 +13,7 @@ export const GET = withApiErrors(async function GET() {
   const rows = await requireD1().prepare(
     `SELECT a.id,a.status,a.summary_json AS summaryJson,a.error_code AS errorCode,a.created_at AS createdAt,a.updated_at AS updatedAt,
       f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
-      (SELECT json_group_array(json_object('id',r.id,'level',r.level,'title',r.title,'description',r.description,'excerpt',r.excerpt,'confidencePercent',r.confidence_percent))
+      (SELECT json_group_array(json_object('id',r.id,'level',r.level,'title',r.title,'description',r.description,'excerpt',r.excerpt,'confidencePercent',r.confidence_percent,'riskType',r.risk_type,'clause',r.clause,'page',r.page,'recommendation',r.recommendation,'proposedWording',r.proposed_wording,'legalBasisSourceIds',json(r.legal_basis_source_ids_json)))
        FROM document_risks r WHERE r.analysis_id=a.id) AS risksJson,
       (SELECT json_group_array(json_object('id',e.id,'status',e.status,'format',e.format,'fileName',e.file_name,'sizeBytes',e.size_bytes,'errorCode',e.error_code,'completedAt',e.completed_at,'createdAt',e.created_at))
        FROM analysis_exports e WHERE e.analysis_id=a.id AND e.workspace_id=a.workspace_id AND e.owner_user_id=a.owner_user_id) AS exportsJson

@@ -330,8 +330,8 @@ async function persistNormalizedAnalysis(
   for (let offset = 0; offset < persisted.result.risks.length; offset += 20) {
     await db.batch(persisted.result.risks.slice(offset, offset + 20).map((risk) => db.prepare(
       `INSERT INTO document_risks
-       (id,analysis_id,level,title,description,excerpt,confidence_percent,created_at)
-       VALUES (?,?,?,?,?,?,?,?)`,
+       (id,analysis_id,level,title,description,excerpt,confidence_percent,risk_type,clause,page,recommendation,proposed_wording,legal_basis_source_ids_json,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     ).bind(
       crypto.randomUUID(),
       row.analysisId,
@@ -340,6 +340,12 @@ async function persistNormalizedAnalysis(
       [risk.problem, risk.consequence, risk.recommendation].join("\n\n"),
       risk.exactExcerpt,
       risk.confidence === "high" ? 90 : risk.confidence === "medium" ? 70 : 45,
+      risk.riskType,
+      risk.clause,
+      risk.page,
+      risk.recommendation,
+      risk.proposedWording,
+      JSON.stringify(risk.legalBasisSourceIds),
       now,
     )));
   }

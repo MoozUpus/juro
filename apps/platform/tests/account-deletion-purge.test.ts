@@ -213,6 +213,8 @@ function seedContent(
     ).run(file[0], WORKSPACE_ID, file[1], file[2], file[3], NOW, NOW);
     bucket.objects.add(String(file[3]));
   }
+  sqlite.prepare("UPDATE document_files SET kind='analysis_safe',sha256=? WHERE id='purge-file'")
+    .run("e".repeat(64));
   sqlite.prepare(
     `INSERT INTO document_comparisons (
        id,workspace_id,owner_user_id,version_one_file_id,
