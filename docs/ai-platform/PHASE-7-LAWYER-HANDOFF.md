@@ -17,6 +17,7 @@ Status: implemented locally and validated in the staging build artifact; not dep
 - `GET|POST /api/platform/lawyer-requests`
 - `GET|POST /api/platform/lawyer-requests/:requestId/conflict-check`
 - `POST|DELETE /api/platform/lawyer-requests/:requestId/access-grant`
+- `GET /api/platform/lawyer-requests/assigned` — case metadata is returned only while an active grant exists.
 - Customer surface: `/:locale/:accountType/consultations` and the equivalent business workspace route.
 
 ## Validation
