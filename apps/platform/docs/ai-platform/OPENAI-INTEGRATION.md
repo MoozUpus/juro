@@ -28,15 +28,14 @@ The implementation does not send a user-provided URL as legislation. User text a
 
 ## Current staging evidence
 
-The deployed staging Worker did not expose an `OPENAI_API_KEY` binding when inspected by `wrangler secret list` on 2026-07-31. Therefore no live OpenAI answer or live provider stream is claimed. Without a provider key, the API intentionally returns a localized, no-store `503 AI_PROVIDER_UNAVAILABLE` before reserving or persisting a successful answer.
+On 2026-07-31, `wrangler secret list --env staging` confirmed the presence of the `OPENAI_API_KEY` secret name on `juro-platform-staging`; the value was not read, logged, or exported. Secret presence is not evidence of a successful provider call. No live OpenAI answer or stream is claimed until an authenticated synthetic RU/UZ flow proves structured output, safe persistence, and release of failed runs.
 
-The owner must add the key through protected Cloudflare controls; it must never be pasted into chat, Git, logs, screenshots, or client configuration. After the binding exists, the required gate is an authenticated RU and UZ request, D1 run/ledger verification, a no-source clarification test, a verified-source citation test, an invalid-output test, and a provider-outage fallback test.
-
+The required gate is an authenticated RU and UZ request, D1 run/ledger verification, a no-source clarification test, a verified-source citation test, an invalid-output test, and a provider-outage fallback test. The key must never be pasted into chat, Git, logs, screenshots, or client configuration.
 ## Verification and remaining work
 
 - local transport, source-boundary, and usage-ledger tests cover split SSE frames, malformed events, terminal structured JSON, and cancellation without charge;
 - the full platform regression, environment matrix, staging artifact, and protected staging deployment postflight passed;
-- a live authenticated RU/UZ provider stream, stop/disconnect trace, D1 ledger proof, and retry/fallback trace remain blocked until protected provider secrets exist;
+- a live authenticated RU/UZ provider stream, stop/disconnect trace, D1 ledger proof, and retry/fallback trace remain unverified; the staging secret is present but no synthetic provider flow has been run;
 - reconnect and resumable partial recovery are not implemented;
 - edit/regenerate/branch history;
 - hybrid Vectorize retrieval and reranking;

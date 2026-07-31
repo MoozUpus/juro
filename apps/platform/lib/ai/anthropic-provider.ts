@@ -1,3 +1,4 @@
+import { DEFAULT_ANTHROPIC_MODEL } from "./provider-models";
 import { callAnthropicStructured } from "../document-builder/ai/anthropic";
 import { AiUnavailableError } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
@@ -11,7 +12,7 @@ import {
 import type { LegalAiRunOptions, LegalAiRunResult, LegalChatRequest } from "./provider";
 
 export function anthropicModel(): string {
-  return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || "claude-sonnet-4-6";
+  return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
 }
 
 export async function runAnthropicLegalChat(input: LegalChatRequest, options: LegalAiRunOptions = {}): Promise<LegalAiRunResult> {

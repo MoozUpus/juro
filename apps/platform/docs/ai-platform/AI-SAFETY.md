@@ -2,8 +2,7 @@
 
 Updated: 2026-07-31
 
-Scope: implemented integration-branch controls. This file does not claim live
-OpenAI or Anthropic execution in staging while their secret bindings are absent.
+Scope: implemented integration-branch controls. This file does not claim live OpenAI or Anthropic execution in staging: both secret names are present, but no authenticated synthetic provider run has been verified.
 
 ## Implemented boundaries
 
@@ -36,8 +35,7 @@ OpenAI or Anthropic execution in staging while their secret bindings are absent.
 
 - Staging has no complete dual-source corpus run and therefore remains
   `unavailable` by design.
-- Live OpenAI/Anthropic execution and fallback are not proven because the exact
-  staging provider secret bindings are absent.
+- Live OpenAI/Anthropic execution and fallback are not proven. The staging secret names are present, but an authenticated synthetic provider/ledger test has not run.
 - Claim-to-fragment semantic entailment is not yet independently verified.
 - Hybrid Vectorize retrieval, citation semantic validation, 250+50 legal
   scenarios, 100 document packages, 30 comparisons, and human legal review

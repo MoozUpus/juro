@@ -1,3 +1,4 @@
+import { DEFAULT_ANTHROPIC_MODEL } from "../ai/provider-models";
 import { callAnthropicStructured, hasAnthropicConfiguration } from "../document-builder/ai/anthropic";
 import {
   AiUnavailableError,
@@ -39,7 +40,7 @@ export function documentAnalysisProviderStatus() {
     configured: anthropicConfigured || openAiConfigured,
     provider: anthropicConfigured ? "anthropic" : openAiConfigured ? "openai" : null,
     model: anthropicConfigured
-      ? env.ANTHROPIC_DOCUMENT_MODEL || env.ANTHROPIC_FALLBACK_MODEL || "claude-sonnet-4-6"
+      ? env.ANTHROPIC_DOCUMENT_MODEL || env.ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL
       : openAiConfigured
         ? env.OPENAI_DEEP_MODEL || env.OPENAI_CHAT_MODEL || env.OPENAI_MODEL || "gpt-5.6-sol"
         : null,
@@ -77,7 +78,7 @@ async function runAnthropicDocumentAnalysis(input: DocumentAnalysisProviderReque
     parse: parseDocumentAnalysisResult,
     timeoutMs: input.mode === "expert" ? 90_000 : 60_000,
     requestId: input.requestId,
-    model: env.ANTHROPIC_DOCUMENT_MODEL || env.ANTHROPIC_FALLBACK_MODEL || "claude-sonnet-4-6",
+    model: env.ANTHROPIC_DOCUMENT_MODEL || env.ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL,
     instructions: documentAnalysisInstructions(input.locale),
     input: providerInput(input),
   });

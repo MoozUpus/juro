@@ -339,3 +339,8 @@ has the Workers AI `AI` binding.
 
 The authoritative secret-name list still contains only the three established
 identity/email secrets; OpenAI and Anthropic key names are absent. Production
+
+
+## Current staging secret-name checkpoint — 2026-07-31 UTC
+
+A fresh read-only `wrangler secret list --env staging` on `juro-platform-staging` returned the secret names `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `IDENTITY_KEYRING`, `RESEND_API_KEY`, and `TURNSTILE_SECRET_KEY`. No secret value was read, written, logged, or exported. This supersedes only earlier statements about the *current* absence of provider secret names; historical deployment records retain the secret inventory observed at their own timestamps. Presence of these names does not prove a provider call, a legal result, or a document-analysis completion.

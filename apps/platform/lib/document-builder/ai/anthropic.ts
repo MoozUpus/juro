@@ -1,3 +1,4 @@
+import { DEFAULT_ANTHROPIC_MODEL } from "../../ai/provider-models";
 import { runtimeEnv } from "../storage/runtime";
 import {
   AiUnavailableError,
@@ -38,7 +39,7 @@ export async function callAnthropicStructured<T>(options: {
   if (!apiKey) {
     throw new AiUnavailableError("Резервный AI-провайдер не подключён: отсутствует серверный ключ.");
   }
-  const model = options.model || configuration.ANTHROPIC_FALLBACK_MODEL || "claude-sonnet-4-6";
+  const model = options.model || configuration.ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
   const startedAt = Date.now();
   const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const maxAttempts = options.maxAttempts ?? 2;

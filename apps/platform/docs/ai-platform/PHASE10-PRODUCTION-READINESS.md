@@ -1,6 +1,6 @@
 # Phase 10 production readiness
 
-Updated: 2026-07-30
+Updated: 2026-07-31
 Status: not production-ready; no production approval requested.
 
 ## Preserved production state
@@ -14,7 +14,7 @@ Status: not production-ready; no production approval requested.
 
 ## Current production blockers
 
-1. Staging lacks `OPENAI_API_KEY` and `ANTHROPIC_API_KEY`; live AI chat, fallback, and document-analysis provider evidence do not exist.
+1. Staging now has `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` secret names, but live AI chat/fallback evidence is not yet verified through an authenticated synthetic flow. Document analysis additionally remains blocked fail-closed by the missing malware scanner.
 2. No real malware scanner can promote quarantined uploads to safe; analysis remains fail-closed.
 3. Legal-source coverage, Advice ingestion, historical revisions, hybrid retrieval, citation revalidation, and the 250+50 legal evaluation gate are incomplete.
 4. The 100-package/30-comparison document evaluation and required quality thresholds are incomplete.
