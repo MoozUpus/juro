@@ -1947,3 +1947,21 @@ A read-only staging secret inventory now confirms the `OPENAI_API_KEY` and
 `ANTHROPIC_API_KEY` names. Their values were not read. Secret presence is not
 provider evidence: an authenticated synthetic RU/UZ provider and ledger flow is
 still required before the platform can claim live AI execution.
+## D-093 — real provider probes are one-time staging evidence, not a retry loop
+
+Status: accepted, deployed to protected staging, and partially verified
+Date: 2026-07-31
+
+A provider key listed by Cloudflare is not evidence that a provider request can
+execute. The Phase 9 probe therefore uses a fixed, non-legal, non-user
+structured-output request behind an explicit staging-only flag. It has no HTTP
+route and records technical metadata only. The unique provider/probe key makes
+success and failure terminal: provider outages or configuration errors cannot
+create an unbounded retry/cost loop.
+
+The first controlled execution verified the OpenAI transport and structured
+output path with the configured `gpt-5.6-sol` model. Anthropic returned the safe
+terminal code `PROVIDER_UNAVAILABLE`; no Claude/document-analysis success is
+claimed. The flag was immediately redeployed as false. Further Anthropic
+verification requires a diagnosed provider-account, key, or model correction,
+then a new explicitly versioned probe key; it must never overwrite this evidence.

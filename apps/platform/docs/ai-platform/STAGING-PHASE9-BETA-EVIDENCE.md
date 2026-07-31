@@ -7,8 +7,8 @@ Status: technical staging checkpoint deployed; closed-beta gate not passed.
 
 - URL: `https://staging.app.juro.uz/ru/individual/prototypes/platform/cinematic`;
 - Worker: `juro-platform-staging`;
-- version: `78fbd7fa-d7b8-4520-bb51-e7dcdd5c5a7a` at 100% traffic;
-- source: `b2d40fd` for deployed runtime (following current Phase 8 shell hardening);
+- version: `5c574a35-8b5e-4912-be8b-da1aed57369c` at 100% traffic;
+- source: `f78d389` for the provider-probe runtime (following current Phase 8 shell hardening);
 - Access: owner-only Cloudflare Access, followed by the normal application session;
 - production UI: unchanged.
 
@@ -18,7 +18,7 @@ The route uses real staging session, tenant, dashboard API, and canonical applic
 
 | Gate | Result | Evidence |
 |---|---|---|
-| Exact deployment | Pass | staging deployment version `78fbd7fa-d7b8-4520-bb51-e7dcdd5c5a7a` |
+| Exact deployment | Pass | staging deployment version `5c574a35-8b5e-4912-be8b-da1aed57369c` |
 | Staging-only resources | Pass | D1/R2/Queue/Vectorize/Analytics binding read-back |
 | D1 integrity | Pass | `quick_check=ok`; zero FK rows; zero writes |
 | Anonymous isolation | Pass | 2026-07-31 HTTP `HEAD`: root, RU/UZ prototype and canonical builder each return Access `302` with `no-store` |
@@ -31,7 +31,8 @@ The route uses real staging session, tenant, dashboard API, and canonical applic
 | Accessibility interaction | Open | Keyboard, axe, zoom, screen reader, focus restoration not run remotely |
 | Performance/device | Open | LCP/INP/CLS, touch, slow mobile, GPU/memory not measured |
 | Avatar/voice fallbacks | Partial | Static fallback is implemented; real 3D/STT/TTS is absent and feature-off |
-| Real AI providers | Open | secret names are present; provider execution remains unverified through an authenticated synthetic flow |
+| OpenAI provider | Pass (limited) | one fixed staging-only structured-output probe passed; no user content involved |
+| Anthropic provider | Blocked | one fixed staging-only attempt ended `PROVIDER_UNAVAILABLE`; no automatic retry |
 | Real document analysis | Blocked | Malware scanner is absent; provider secret names are present but no authenticated provider run is verified |
 
 ## Closed-beta matrix not yet executable
@@ -42,7 +43,7 @@ The browser-control attempt failed before connection with `require is not define
 
 ## Release judgment
 
-This is not a closed beta and Phase 9 is not complete. It is a protected owner-review checkpoint suitable for manual inspection after Access login. The remaining work is product/provider/security completion and authenticated QA, not a deployment retry.
+This is not a closed beta and Phase 9 is not complete. It is a protected owner-review checkpoint suitable for manual inspection after Access login. The remaining work is Anthropic staging remediation, product/security completion, and authenticated QA, not a production deployment.
 
 ## Owner review route
 
@@ -59,3 +60,7 @@ https://staging.app.juro.uz/uz/individual/prototypes/platform/cinematic
 ```
 
 No production approval is requested at this checkpoint.
+
+## Phase 9 provider checkpoint
+
+Migration `0048` and one controlled cron probe are recorded in `STAGING-0048-PROVIDER-PROBE-EVIDENCE.md`. The flag is again `false`; the staging database passed `quick_check`, foreign-key validation, and no-pending-migration postflight. OpenAI transport/structured output is verified for the fixed synthetic request only. Anthropic is not release-ready: the current staging call returns `PROVIDER_UNAVAILABLE` and requires provider-account/key/model remediation before a new, separately keyed probe.

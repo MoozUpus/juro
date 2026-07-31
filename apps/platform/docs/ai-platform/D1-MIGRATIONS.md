@@ -843,3 +843,23 @@ violations, and no pending migration. Post bookmark
 private-R2 export matched SHA-256
 `99f0357fc665338f53e4a0c6062134ac267cb5fc04dde34f2da12302a5b1d51f`.
 Exact evidence is in `STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md`.
+
+## Migration 0048 — protected staging provider connectivity evidence
+
+`0048_staging_provider_probe.sql` additively creates only the
+`staging_provider_probes` technical-evidence table and two indexes. It contains
+no user content, no foreign keys, no destructive DDL, and no data backfill. The
+unique `(probe_key, provider)` index ensures that a provider cannot be retried
+implicitly. This table is a protected Phase 9 diagnostic, not an application
+feature or a production schema authorization.
+
+### Staging `0048` record — 2026-07-31
+
+Before apply, `juro-staging` passed `quick_check`, had zero foreign-key
+violations, and listed exactly `0048` as pending. The pre Time Travel bookmark
+and a 529,404-byte SHA-256-verified private-R2 export are recorded in
+`STAGING-0048-PROVIDER-PROBE-EVIDENCE.md`. Wrangler applied only `0048`.
+Postflight proved no pending migrations, `quick_check=ok`, no foreign-key rows,
+and a 532,542-byte private-R2 export that passed an independent round trip.
+Rollback is application-first: leave the additive table unused and deploy the
+prior Worker or disable the synthetic flag. No production migration was applied.

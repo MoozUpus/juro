@@ -286,3 +286,20 @@ Both portable exports were downloaded independently from
 `juro-staging-backups` and matched their local SHA-256. A routine Worker rollback
 does not require D1 restore because `0041` is additive and empty. A Time Travel
 restore is destructive and is reserved for demonstrated D1 corruption.
+
+## Migration 0048 staging recovery points — 2026-07-31
+
+Before `0048`, `juro-staging` recorded bookmark
+`0000027f-00000000-000050b9-568547b6791b8ebf3181ddc4feec38c2` and private object
+`d1/juro-staging/20260731-phase9/pre-0048.sql`: 529,404 bytes, SHA-256
+`a17a152eea9fc16dcd95f3a61a6ca6093dcb201a5392b8014314abbbffb853fd`.
+
+After `0048`, the bookmark is
+`00000282-00000000-000050b9-4bd7353de17021bcc16033ffcda9b598`; private object
+`d1/juro-staging/20260731-phase9/post-0048.sql` is 532,542 bytes with SHA-256
+`d3337083b48abb922b7d66ac3b2178f4ff3c9239acdbe55e9182025c4880df0e`.
+
+Both private exports were independently downloaded and matched their local
+hash. A routine Worker rollback leaves the additive diagnostic table unused;
+Time Travel is reserved for demonstrated database corruption. Production is out
+of scope.
