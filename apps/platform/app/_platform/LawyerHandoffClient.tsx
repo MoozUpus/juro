@@ -9,11 +9,14 @@ import type { PlatformLocale } from "../../lib/platform/routing";
 
 type CaseOption = { id: string; title: string };
 type HandoffRequest = { id: string; caseId: string; status: string; createdAt: string; lawyerName?: string | null; conflictStatus?: string | null; activeGrantId?: string | null };
+type PublicLawyer = { id: string; displayName: string; specialties: string[]; languages: string[] };
 
 export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
   const ru = locale === "ru";
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [requests, setRequests] = useState<HandoffRequest[]>([]);
+  const [lawyers, setLawyers] = useState<PublicLawyer[]>([]);
+  const [lawyerProfileId, setLawyerProfileId] = useState("");
   const [entitlements, setEntitlements] = useState<WorkspaceEntitlements | null>(null);
   const [caseId, setCaseId] = useState("");
   const [summary, setSummary] = useState("");
@@ -23,20 +26,23 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
   const [message, setMessage] = useState("");
 
   const load = useCallback(async () => {
-    const [requestResponse, caseResponse, consultationResponse] = await Promise.all([
+    const [requestResponse, caseResponse, consultationResponse, lawyerResponse] = await Promise.all([
       fetch("/api/platform/lawyer-requests", { cache: "no-store" }),
       fetch("/api/platform/cases", { cache: "no-store" }),
       fetch("/api/platform/consultations", { cache: "no-store" }),
+      fetch("/api/platform/lawyers", { cache: "no-store" }),
     ]);
     const requestBody = await requestResponse.json() as { requests?: HandoffRequest[]; error?: string };
     const caseBody = await caseResponse.json() as { cases?: CaseOption[]; error?: string };
     const consultationBody = await consultationResponse.json() as { entitlements?: WorkspaceEntitlements; error?: string };
-    if (!requestResponse.ok || !caseResponse.ok || !consultationResponse.ok) throw new Error(requestBody.error || caseBody.error || consultationBody.error || "Ошибка");
+    const lawyerBody = await lawyerResponse.json() as { lawyers?: PublicLawyer[]; error?: string };
+    if (!requestResponse.ok || !caseResponse.ok || !consultationResponse.ok || !lawyerResponse.ok) throw new Error(requestBody.error || caseBody.error || consultationBody.error || lawyerBody.error || "Ошибка");
     const nextCases = caseBody.cases || [];
     setCases(nextCases);
     setCaseId((current) => current || nextCases[0]?.id || "");
     setRequests(requestBody.requests || []);
     setEntitlements(consultationBody.entitlements || null);
+    setLawyers(lawyerBody.lawyers || []);
   }, []);
 
   useEffect(() => { void load().catch((value) => setError(value instanceof Error ? value.message : String(value))); }, [load]);
@@ -49,7 +55,7 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
       const response = await fetch("/api/platform/lawyer-requests", {
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ caseId, anonymizedSummary: summary, consent: true, locale }),
+        body: JSON.stringify({ caseId, lawyerProfileId: lawyerProfileId || undefined, anonymizedSummary: summary, consent: true, locale }),
       });
       const body = await response.json() as { error?: string };
       if (!response.ok) throw new Error(body.error || "Ошибка");
@@ -69,6 +75,7 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
     {message && <p className="lawyer-handoff-success" role="status"><ShieldCheck aria-hidden="true" />{message}</p>}
     <form onSubmit={(event) => void submit(event)}>
       <label>{ru ? "Дело" : "Ish"}<select value={caseId} onChange={(event) => setCaseId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}>{cases.length ? cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>) : <option value="">{ru ? "Нет доступных дел" : "Mavjud ish yo‘q"}</option>}</select></label>
+      <label>{ru ? "Юрист" : "Yurist"}<select value={lawyerProfileId} onChange={(event) => setLawyerProfileId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}><option value="">{ru ? "Назначить через JURO" : "JURO orqali tayinlash"}</option>{lawyers.map((lawyer) => <option key={lawyer.id} value={lawyer.id}>{lawyer.displayName}{lawyer.specialties.length ? ` — ${lawyer.specialties.join(", ")}` : ""}</option>)}</select></label>
       <label>{ru ? "Анонимизированное описание для conflict check" : "Manfaatlar to‘qnashuvi tekshiruvi uchun anonimlashtirilgan tavsif"}<textarea value={summary} minLength={20} maxLength={2000} required disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setSummary(event.target.value)} placeholder={ru ? "Без имён, реквизитов и содержания документов" : "Ismlar, rekvizitlar va hujjat mazmunisiz"} /></label>
       <label className="consult-consent"><input type="checkbox" checked={consent} disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setConsent(event.target.checked)} /><span>{ru ? "Подтверждаю создание анонимизированной заявки; доступ к делу пока не предоставляется." : "Anonimlashtirilgan so‘rov yaratilishini tasdiqlayman; ishga ruxsat hozircha berilmaydi."}</span></label>
       <button type="submit" disabled={!entitlements?.lawyerHandoff || !cases.length || summary.trim().length < 20 || !consent || busy}>{busy ? <LoaderCircle className="spin" /> : null}{ru ? "Создать заявку" : "So‘rov yaratish"}</button>
