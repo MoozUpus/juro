@@ -94,3 +94,37 @@
 .lawyer-handoff-list > div { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr) auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #e2ddd4; color: #4f5660; }
 .lawyer-handoff-list strong { color: #172633; }
 @media (max-width: 620px) { .lawyer-handoff { padding: 18px; } .lawyer-handoff button { width: 100%; } .lawyer-handoff-list > div { grid-template-columns: 1fr; gap: 4px; } }
+.lawyer-access-action {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.lawyer-access-action .consult-consent {
+  flex: 1 1 520px;
+}
+
+.lawyer-access-action p {
+  margin: 0;
+  color: #174b35;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.lawyer-handoff button.secondary {
+  border: 1px solid #7d2f2f;
+  background: #fff;
+  color: #7d2f2f;
+}
+
+.lawyer-handoff button.secondary:hover {
+  background: #fff4f2;
+}
+
+@media (max-width: 620px) {
+  .lawyer-access-action { align-items: stretch; }
+  .lawyer-access-action .consult-consent { flex-basis: 100%; }
+}

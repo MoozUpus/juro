@@ -1032,6 +1032,15 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
   assert.match(grantRoute, /lawyer_case_access_granted/);
   assert.match(grantRoute, /lawyer_case_access_revoked/);
 });
+test("handoff UI requires a fresh owner consent before grant and exposes revoke", async () => {
+  const client = await readFile(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8");
+  assert.match(client, /accessConsents/);
+  assert.match(client, /action === "grant" && !accessConsents\[item\.id\]/);
+  assert.match(client, /access-grant/);
+  assert.match(client, /method: action === "grant" \? "POST" : "DELETE"/);
+  assert.match(client, /Подтверждаю передачу выбранному юристу материалов этого дела/);
+  assert.match(client, /Отозвать доступ/);
+});
 test("assigned lawyer view reveals case metadata only for an active grant", async () => {
   const route = await readFile(new URL("../app/api/platform/lawyer-requests/assigned/route.ts", import.meta.url), "utf8");
   assert.match(route, /p\.user_id=\? AND p\.status='public_approved'/);

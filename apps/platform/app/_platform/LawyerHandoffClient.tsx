@@ -22,6 +22,8 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
   const [summary, setSummary] = useState("");
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [accessActionId, setAccessActionId] = useState("");
+  const [accessConsents, setAccessConsents] = useState<Record<string, boolean>>({});
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -66,6 +68,26 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
     finally { setBusy(false); }
   }
 
+  async function updateCaseAccess(item: HandoffRequest, action: "grant" | "revoke") {
+    if (action === "grant" && !accessConsents[item.id]) return;
+    setAccessActionId(item.id); setError(""); setMessage("");
+    try {
+      const response = await fetch(`/api/platform/lawyer-requests/${encodeURIComponent(item.id)}/access-grant`, {
+        method: action === "grant" ? "POST" : "DELETE",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        ...(action === "grant" ? { body: JSON.stringify({ consent: true, locale }) } : {}),
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Ошибка");
+      setAccessConsents((current) => ({ ...current, [item.id]: false }));
+      setMessage(action === "grant"
+        ? (ru ? "Доступ юристу предоставлен. Это действие зафиксировано в журнале дела." : "Yuristga ruxsat berildi. Bu harakat ish jurnalida qayd etildi.")
+        : (ru ? "Доступ юриста к делу отозван. Это действие зафиксировано в журнале дела." : "Yuristning ishga ruxsati bekor qilindi. Bu harakat ish jurnalida qayd etildi."));
+      await load();
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setAccessActionId(""); }
+  }
+
   return <section className="lawyer-handoff" aria-labelledby="lawyer-handoff-heading">
     <div className="lawyer-handoff-heading">
       <UserRoundCheck aria-hidden="true" />
@@ -80,7 +102,7 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
       <label className="consult-consent"><input type="checkbox" checked={consent} disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setConsent(event.target.checked)} /><span>{ru ? "Подтверждаю создание анонимизированной заявки; доступ к делу пока не предоставляется." : "Anonimlashtirilgan so‘rov yaratilishini tasdiqlayman; ishga ruxsat hozircha berilmaydi."}</span></label>
       <button type="submit" disabled={!entitlements?.lawyerHandoff || !cases.length || summary.trim().length < 20 || !consent || busy}>{busy ? <LoaderCircle className="spin" /> : null}{ru ? "Создать заявку" : "So‘rov yaratish"}</button>
     </form>
-    {requests.length > 0 && <div className="lawyer-handoff-list"><h3>{ru ? "Мои заявки к юристу" : "Yuristga yuborgan so‘rovlarim"}</h3>{requests.map((item) => <div key={item.id}><strong>{handoffStatus(item.status, ru)}</strong><span>{item.lawyerName || (ru ? "Ожидается назначение JURO" : "JURO tayinlashi kutilmoqda")}</span><time dateTime={item.createdAt}>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(item.createdAt))}</time></div>)}</div>}
+    {requests.length > 0 && <div className="lawyer-handoff-list"><h3>{ru ? "Мои заявки к юристу" : "Yuristga yuborgan so‘rovlarim"}</h3>{requests.map((item) => <div key={item.id}><strong>{handoffStatus(item.status, ru)}</strong><span>{item.lawyerName || (ru ? "Ожидается назначение JURO" : "JURO tayinlashi kutilmoqda")}</span><time dateTime={item.createdAt}>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(item.createdAt))}</time>{item.status === "awaiting_user_consent" && <div className="lawyer-access-action"><label className="consult-consent"><input type="checkbox" checked={Boolean(accessConsents[item.id])} disabled={accessActionId === item.id} onChange={(event) => setAccessConsents((current) => ({ ...current, [item.id]: event.target.checked }))} /><span>{ru ? "Подтверждаю передачу выбранному юристу материалов этого дела. Доступ можно отозвать в любой момент." : "Tanlangan yuristga ushbu ish materiallariga ruxsat berilishini tasdiqlayman. Ruxsatni istalgan paytda bekor qilish mumkin."}</span></label><button type="button" disabled={!accessConsents[item.id] || accessActionId === item.id} onClick={() => void updateCaseAccess(item, "grant")}>{accessActionId === item.id ? <LoaderCircle className="spin" /> : null}{ru ? "Предоставить доступ" : "Ruxsat berish"}</button></div>}{item.activeGrantId && <div className="lawyer-access-action"><p>{ru ? "У юриста есть доступ к материалам этого дела." : "Yurist ushbu ish materiallariga ruxsatga ega."}</p><button type="button" className="secondary" disabled={accessActionId === item.id} onClick={() => void updateCaseAccess(item, "revoke")}>{accessActionId === item.id ? <LoaderCircle className="spin" /> : null}{ru ? "Отозвать доступ" : "Ruxsatni bekor qilish"}</button></div>}</div>)}</div>}
   </section>;
 }
 
