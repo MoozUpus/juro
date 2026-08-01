@@ -132,3 +132,16 @@ never disclosed or deleted by identifier substitution.
 There is no automatic report TTL. Reports follow user-content retention and are
 removed only by explicit terminal-export deletion or the reviewed account-deletion
 purge. Migration and staging pre/post backup evidence are recorded separately.
+
+## Staging private-bucket lifecycle smoke — 2026-08-01
+
+A single synthetic, non-personal text object was written to the private
+`juro-staging-files` bucket under a random temporary `smoke/` key, downloaded,
+and compared using SHA-256. The verified digest was
+`acfd416c93db50da78b6bd6340ab9f95cbfc812b81dd03143ac5d680614f0141`.
+The exact object was then deleted and a fresh remote read returned not-found. The
+temporary key and local fixture were removed after the check.
+
+This proves only staging R2 write/read/integrity/delete behavior for an isolated
+synthetic object. It does not prove application authorization, file promotion,
+malware scanning, or a completed document analysis.
