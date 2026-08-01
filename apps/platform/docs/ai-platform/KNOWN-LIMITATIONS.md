@@ -234,7 +234,7 @@ The following gates remain open:
 ## Phase 6 case/plan open gates — 2026-07-30
 
 - The deployed slice supports existing case creation, plan-step status/date updates, nearest deadline, and builder linkage; it is not the complete Phase 6 lifecycle.
-- Action-plan version history, proposed-plan diff/confirmation, deadline legal-basis calculation, business-day/holiday rules, reminders, task assignees, and complete case-tab APIs remain open.
+- Immutable action-plan version history is deployed to protected staging; proposed-plan diff/confirmation UI, deadline legal-basis calculation, business-day/holiday rules, reminders, task assignees, and complete case-tab APIs remain open.
 - The action-plan creation endpoint still uses the bounded built-in scenario catalogue; AI-proposed plans and explicit user confirmation before task creation are not yet integrated.
 - A `templateCode` query hint can accompany a plan step, but automatic resolution to a category/template route is not claimed; the user can select the real published template while case/step context is preserved.
 - Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
