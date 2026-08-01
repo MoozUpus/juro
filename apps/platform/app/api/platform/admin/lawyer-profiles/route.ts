@@ -1,8 +1,10 @@
 import { requirePlatformStaffRequest } from "../../../../../lib/auth/staff-http";
-import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import { lawyerProfileModerationListSchema } from "../../../../../lib/platform/lawyer-profile";
 
 export async function GET(request: Request) {
+  const runtime = runtimeEnv();
+  if (runtime.APP_ENV !== "staging" || runtime.LAWYER_PROFILE_DIRECTORY_ENABLED !== "true" || !runtime.DB) return Response.json({ code: "NOT_AVAILABLE" }, { status: 404, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
   await requirePlatformStaffRequest(request, "lawyer.profiles.moderate", { freshMfaWithinMs: 15 * 60 * 1000 });
   const url = new URL(request.url);
   const parsed = lawyerProfileModerationListSchema.safeParse({ status: url.searchParams.get("status") ?? undefined, limit: url.searchParams.get("limit") ?? undefined });

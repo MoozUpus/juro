@@ -1,7 +1,7 @@
 import { parseJsonRequest } from "../../../../lib/auth/input";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
-import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { lawyerProfileCreateSchema, lawyerProfileError, lawyerProfileUpdateSchema } from "../../../../lib/platform/lawyer-profile";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
@@ -13,6 +13,11 @@ type LawyerProfile = {
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
+}
+
+function profileDirectoryPreviewEnabled() {
+  const runtime = runtimeEnv();
+  return runtime.APP_ENV === "staging" && runtime.LAWYER_PROFILE_DIRECTORY_ENABLED === "true" && Boolean(runtime.DB);
 }
 
 function serialize(profile: LawyerProfile) {
@@ -33,6 +38,7 @@ async function ownProfile(userId: string) {
 }
 
 export const GET = withApiErrors(async function GET() {
+  if (!profileDirectoryPreviewEnabled()) return response({ code: "NOT_AVAILABLE" }, 404);
   const user = await requireApiUser();
   if (!await accountIsLawyer(user.id)) return response({ code: "PROFILE_FORBIDDEN", error: lawyerProfileError("ru", "PROFILE_FORBIDDEN") }, 403);
   const profile = await ownProfile(user.id);
@@ -40,6 +46,7 @@ export const GET = withApiErrors(async function GET() {
 });
 
 export const POST = withApiErrors(async function POST(request: Request) {
+  if (!profileDirectoryPreviewEnabled()) return response({ code: "NOT_AVAILABLE" }, 404);
   assertSafeWrite(request);
   const user = await requireApiUser();
   const parsed = await parseJsonRequest(request, lawyerProfileCreateSchema, 8_192);
@@ -57,6 +64,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
 });
 
 export const PATCH = withApiErrors(async function PATCH(request: Request) {
+  if (!profileDirectoryPreviewEnabled()) return response({ code: "NOT_AVAILABLE" }, 404);
   assertSafeWrite(request);
   const user = await requireApiUser();
   const parsed = await parseJsonRequest(request, lawyerProfileUpdateSchema, 8_192);

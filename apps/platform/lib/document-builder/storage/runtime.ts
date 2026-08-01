@@ -11,6 +11,7 @@ export interface BuilderRuntimeEnv {
   EMBEDDING_MODEL?: string;
   LEGAL_ADVICE_INGESTION_ENABLED?: string;
   LEGAL_SOURCE_STAFF_API_ENABLED?: string;
+  LAWYER_PROFILE_DIRECTORY_ENABLED?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_CHAT_MODEL?: string;

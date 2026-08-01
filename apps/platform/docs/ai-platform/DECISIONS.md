@@ -2135,3 +2135,9 @@ migration chain and API/UI contract are test-covered.
 Staging application requires one new checksum-verified private backup and an
 explicit authorization for *both* pending additive migrations 0058 and 0059.
 Production remains unchanged.
+
+The preview is controlled independently by
+`LAWYER_PROFILE_DIRECTORY_ENABLED`: it is `true` only for staging and false in
+development and production. A disabled route returns a non-descriptive 404
+before session processing, preserving a feature-flag rollback path without
+coupling lawyer publication to legal-source operations.
