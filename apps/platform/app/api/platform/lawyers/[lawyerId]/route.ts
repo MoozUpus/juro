@@ -1,0 +1,18 @@
+import { z } from "zod";
+import { requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
+import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import { projectPublicLawyerDirectory } from "../../../../../lib/platform/lawyer-directory-reviews";
+
+type Context = { params: Promise<{ lawyerId: string }> };
+
+export const GET = withApiErrors(async function GET(_request: Request, context: Context) {
+  await requireApiUser();
+  const parsedId = z.string().uuid().safeParse((await context.params).lawyerId);
+  if (!parsedId.success) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
+  const db = requireD1();
+  const lawyer = await db.prepare(`SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson FROM lawyer_profiles WHERE id=? AND status='public_approved' AND public_approved_at IS NOT NULL LIMIT 1`).bind(parsedId.data).all<{id:string;displayName:string;specialtiesJson:unknown;languagesJson:unknown}>();
+  if (!lawyer.results.length) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
+  const aggregates = await db.prepare(`SELECT r.lawyer_profile_id AS lawyerProfileId,COUNT(*) AS reviewCount,AVG(r.overall_rating) AS overallAverage,AVG(r.speed_rating) AS speedAverage,AVG(r.quality_rating) AS qualityAverage,AVG(r.communication_rating) AS communicationAverage FROM lawyer_reviews r JOIN lawyer_review_moderation m ON m.review_id=r.id AND m.decision='approved' WHERE r.lawyer_profile_id=? AND r.status='approved' GROUP BY r.lawyer_profile_id`).bind(parsedId.data).all<{lawyerProfileId:string;reviewCount:number;overallAverage:number;speedAverage:number;qualityAverage:number;communicationAverage:number}>();
+  const reviews = await db.prepare(`SELECT r.lawyer_profile_id AS lawyerProfileId,r.overall_rating AS overallRating,COALESCE(m.moderated_body,r.body) AS body,r.created_at AS createdAt FROM lawyer_reviews r JOIN lawyer_review_moderation m ON m.review_id=r.id AND m.decision='approved' WHERE r.lawyer_profile_id=? AND r.status='approved' ORDER BY m.created_at DESC,r.id DESC LIMIT 3`).bind(parsedId.data).all<{lawyerProfileId:string;overallRating:number;body:string|null;createdAt:string}>();
+  return Response.json({ lawyer: projectPublicLawyerDirectory(lawyer.results, aggregates.results, reviews.results)[0] }, { headers: { "cache-control": "private, no-store" } });
+});
