@@ -162,3 +162,12 @@
 .lawyer-offer-actions button.secondary { border: 1px solid #7d2f2f; background: #fff; color: #7d2f2f; }
 .lawyer-offer-form input:focus-visible,.lawyer-offer-form textarea:focus-visible,.lawyer-offer-form button:focus-visible,.lawyer-offer-actions button:focus-visible { outline: 3px solid #87631f; outline-offset: 3px; }
 @media (max-width: 620px) { .lawyer-offer-form button,.lawyer-offer-actions button { width: 100%; } }
+
+.lawyer-request-messages { border-top: 1px solid var(--border-default, #d7dde4); margin-top: 1rem; padding-top: 1rem; }
+.lawyer-request-messages h3 { font-size: .95rem; margin: 0 0 .5rem; }
+.lawyer-message-list { display: grid; gap: .5rem; max-height: 18rem; overflow-y: auto; }
+.lawyer-message-list article { border-inline-start: 3px solid var(--brand-gold, #be974f); padding: .4rem .65rem; background: var(--surface-secondary, #f8f6f2); }
+.lawyer-message-list p { margin: .2rem 0; white-space: pre-wrap; }
+.lawyer-message-list time { color: var(--text-muted, #52616f); font-size: .78rem; }
+.lawyer-request-messages form { display: grid; gap: .5rem; margin-top: .75rem; }
+.lawyer-request-messages textarea { min-height: 4.5rem; width: 100%; }

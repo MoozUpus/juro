@@ -7,6 +7,7 @@ import { billingPlanSelectionSchema } from "../lib/billing/input";
 import { consultationBookingSchema } from "../lib/platform/consultation";
 import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSchema } from "../lib/platform/lawyer-request";
 import { lawyerOfferCreateSchema, lawyerOfferResponseSchema } from "../lib/platform/lawyer-offer";
+import { lawyerRequestMessageSchema } from "../lib/platform/lawyer-request-message";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -1147,4 +1148,20 @@ test("lawyer offers are validated, access-bound, auditable, and owner-resolved",
   assert.match(ownerClient, /Оплата в платформе пока не выполняется/);
   assert.match(migration, /CREATE TABLE `lawyer_offers`/);
   assert.match(migration, /lawyer_offers_request_version_uidx/);
+});
+test("lawyer request messages require active participant access and are workspace-audited", async () => {
+  assert.equal(lawyerRequestMessageSchema.safeParse({ body: "Подтверждаю, что ознакомился с документами дела.", locale: "ru" }).success, true);
+  assert.equal(lawyerRequestMessageSchema.safeParse({ body: "", locale: "ru" }).success, false);
+  const [route, client, migration] = await Promise.all([
+    readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/messages/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerRequestMessages.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0053_dashing_eddie_brock.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /requester_user_id=\?/);
+  assert.match(route, /p\.user_id=\? AND p\.status='public_approved'/);
+  assert.match(route, /g\.revoked_at IS NULL/);
+  assert.match(route, /lawyer_request_message_sent/);
+  assert.match(route, /ORDER BY created_at ASC,id ASC LIMIT 200/);
+  assert.match(client, /x-juro-csrf/);
+  assert.match(migration, /CREATE TABLE `lawyer_request_messages`/);
 });
