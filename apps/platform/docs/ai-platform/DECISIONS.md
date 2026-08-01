@@ -2074,3 +2074,10 @@ Status: accepted (staging)
 Date: 2026-08-01
 
 A lawyer may create a scope, price description, and duration only after the existing server-side checks confirm a public-approved profile and active, non-revoked case grant. The case owner sees and responds to the latest offer only from the owning workspace. Declining permits a replacement; accepting makes the current workflow terminal so an accepted proposal cannot be silently overwritten. Proposal and response events are appended to workspace audit evidence. The route deliberately does not create payment obligations, invoices, or collect payment data. Migration `0052_narrow_christian_walker.sql` is additive, was backed up to private staging R2 with checksum round-trip, and was applied only to `juro-staging`. Evidence: `STAGING-0057-LAWYER-OFFERS-EVIDENCE.md`.
+
+## D-103 — Lawyer-review moderation is staged before any public presentation
+
+Status: accepted (staging)
+Date: 2026-08-02
+
+Migrations `0055_lowly_shadow_king.sql` and `0056_zippy_winter_soldier.sql` were applied only to `juro-staging` after a fresh private R2 export and checksum-verified remote round trip. The additive schema provides an immutable moderation journal, a one-decision fence, and a trigger that applies the parent review’s terminal state only after journal insertion. Worker version `eeddad25-04ab-4cae-a205-71b87f03904f` serves the protected staff route and endpoints on `juro-platform-staging`. Approval remains private: it does not publish a review or update public rating aggregates. Cloudflare Access prevented anonymous or authenticated browser traversal in this run, so neither is claimed. Production remains unchanged. Evidence: `STAGING-0059-LAWYER-REVIEW-MODERATION-EVIDENCE.md`.
