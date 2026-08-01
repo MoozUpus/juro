@@ -312,3 +312,6 @@ No Phase 5 production-readiness claim is made.
 ### Advice sitemap discovery (2026-08-01)
 
 A bounded implementation exists but is disabled in development, staging, and production through `LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED=false`. It follows only public robots-declared `advice.uz` sitemap files, submits no more than 20 exact canonical document URLs per run, and remains review-only. There is no live staging sitemap-run evidence, policy/load approval, or claim that this has indexed the Advice corpus.
+## Lawyer review moderation — pending staging migration
+
+Migrations `0055` and `0056` are locally verified but are not applied to `juro-staging`. The new staff route cannot be considered staging-ready until a fresh private D1 backup is verified, both migrations are applied, and the guarded staging deployment plus Access/MFA smoke test succeeds. Review approval remains non-public: lawyer-profile rating aggregation, reviewer reply, comprehensive PII review, and public rendering are intentionally not claimed.

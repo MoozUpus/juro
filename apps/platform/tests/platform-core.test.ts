@@ -9,6 +9,7 @@ import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSche
 import { lawyerOfferCreateSchema, lawyerOfferResponseSchema } from "../lib/platform/lawyer-offer";
 import { lawyerRequestMessageSchema } from "../lib/platform/lawyer-request-message";
 import { lawyerReviewSchema } from "../lib/platform/lawyer-review";
+import { hasLikelyPersonalData, lawyerReviewModerationSchema } from "../lib/platform/lawyer-review-moderation";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -1169,6 +1170,10 @@ test("lawyer request messages require active participant access and are workspac
 test("completed lawyer services gate private owner reviews and moderation", async () => {
   assert.equal(lawyerReviewSchema.safeParse({ overallRating: 5, speedRating: 4, qualityRating: 5, communicationRating: 5, locale: "ru" }).success, true);
   assert.equal(lawyerReviewSchema.safeParse({ overallRating: 6, speedRating: 4, qualityRating: 5, communicationRating: 5, locale: "ru" }).success, false);
+  assert.equal(lawyerReviewModerationSchema.safeParse({ decision: "approved", reason: "Проверен текст без персональных данных.", locale: "ru" }).success, true);
+  assert.equal(lawyerReviewModerationSchema.safeParse({ decision: "other", reason: "x", locale: "ru" }).success, false);
+  assert.equal(hasLikelyPersonalData("Связь: +998 90 123 45 67"), true);
+  assert.equal(hasLikelyPersonalData("Нейтральный отзыв без контактов"), false);
   const [completion, review, lawyerClient, ownerClient, migration] = await Promise.all([
     readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/completion/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/review/route.ts", import.meta.url), "utf8"),
@@ -1179,4 +1184,23 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   assert.match(completion, /r\.status='offer_accepted'/); assert.match(completion, /g\.revoked_at IS NULL/); assert.match(completion, /lawyer_request_completed/);
   assert.match(review, /workspace_id=\? AND requester_user_id=\? AND status='completed'/); assert.match(review, /lawyer_review_submitted/); assert.match(review, /'pending'/);
   assert.match(lawyerClient, /completion/); assert.match(ownerClient, /\/review/); assert.match(migration, /CREATE TABLE `lawyer_reviews`/);
+  const [moderation, moderationRoutes, moderationMigration] = await Promise.all([
+    readFile(new URL("../lib/platform/lawyer-review-moderation.ts", import.meta.url), "utf8"),
+    Promise.all([
+      readFile(new URL("../app/api/platform/admin/lawyer-reviews/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/platform/admin/lawyer-reviews/[reviewId]/route.ts", import.meta.url), "utf8"),
+    ]),
+    Promise.all([
+      readFile(new URL("../drizzle/0055_lowly_shadow_king.sql", import.meta.url), "utf8"),
+      readFile(new URL("../drizzle/0056_zippy_winter_soldier.sql", import.meta.url), "utf8"),
+    ]),
+  ]);
+  assert.match(moderation, /hasLikelyPersonalData/);
+  assert.match(moderationRoutes[0], /lawyer\.reviews\.moderate/);
+  assert.match(moderationRoutes[1], /originalBodySha256/);
+  assert.match(moderationRoutes[1], /LIKELY_PERSONAL_DATA/);
+  assert.match(moderationRoutes[1], /assertSafeWrite/);
+  assert.match(moderationMigration[0], /CREATE TABLE `lawyer_review_moderation`/);
+  assert.match(moderationMigration[0], /append-only/);
+  assert.match(moderationMigration[1], /lawyer_review_moderation_applies_terminal_status/);
 });

@@ -30,3 +30,9 @@ Status: accepted and staging-observed
 Date: 2026-08-01
 
 Single-source ingestion runs demonstrate bounded acquisition but do not prove that the legal corpus is current. Source-health therefore reports freshness only from successful `scheduled_corpus` or `manual_corpus` runs. The five-minute outbox scheduler is running successfully in staging; the first daily `0 19 * * *` corpus schedule is still pending its next UTC execution after deployment. The UI must show unknown rather than infer freshness from individual fetches.
+## D-097 — lawyer reviews remain private until an MFA-gated moderation decision
+
+Status: locally implemented; awaiting staging migration
+Date: 2026-08-02
+
+A completed service can create one private owner review. A `legal_reviewer` with a fresh local MFA session receives a separate `lawyer.reviews.moderate` capability. Each terminal decision is appended to `lawyer_review_moderation`, records a SHA-256 fingerprint of the original review text, and cannot be changed or deleted. A unique review fence prevents two decisions. Database-triggered status progression happens only after a decision record is inserted. Approval is not publication: no public lawyer profile consumes these reviews yet. A conservative contact-pattern screen prevents approving a review with a likely email, phone number, or PINFL-like value until a moderated text removes it.

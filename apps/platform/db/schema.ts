@@ -1481,6 +1481,22 @@ export const lawyerReviews = sqliteTable("lawyer_reviews", {
   overallRating: integer("overall_rating").notNull(), speedRating: integer("speed_rating").notNull(), qualityRating: integer("quality_rating").notNull(), communicationRating: integer("communication_rating").notNull(),
   body: text("body"), status: text("status").notNull().default("pending"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("lawyer_reviews_request_uidx").on(table.lawyerRequestId), index("lawyer_reviews_lawyer_status_idx").on(table.lawyerProfileId, table.status, table.createdAt)]);
+export const lawyerReviewModeration = sqliteTable("lawyer_review_moderation", {
+  id: text("id").primaryKey(),
+  reviewId: text("review_id").notNull().references(() => lawyerReviews.id, { onDelete: "cascade" }),
+  moderatorUserId: text("moderator_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  decision: text("decision").notNull(),
+  moderatedBody: text("moderated_body"),
+  reason: text("reason").notNull(),
+  originalBodySha256: text("original_body_sha256").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("lawyer_review_moderation_review_uidx").on(table.reviewId),
+  index("lawyer_review_moderation_review_idx").on(table.reviewId, table.createdAt),
+  index("lawyer_review_moderation_moderator_idx").on(table.moderatorUserId, table.createdAt),
+  check("lawyer_review_moderation_decision_check", sql`${table.decision} IN ('approved','rejected')`),
+  check("lawyer_review_moderation_sha_check", sql`length(${table.originalBodySha256}) = 64`),
+]);
 export const supportTickets = sqliteTable("support_tickets", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), category: text("category").notNull(), severity: text("severity").notNull().default("normal"), status: text("status").notNull().default("open"), subject: text("subject").notNull(), linkedEntityType: text("linked_entity_type"), linkedEntityId: text("linked_entity_id"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(), closedAt: text("closed_at"),
 }, (table) => [index("support_tickets_workspace_idx").on(table.workspaceId, table.updatedAt), index("support_tickets_status_idx").on(table.status, table.updatedAt), index("support_tickets_requester_idx").on(table.requesterUserId, table.updatedAt)]);

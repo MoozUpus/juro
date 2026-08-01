@@ -16,6 +16,7 @@ export const platformStaffCapabilities = [
   "support.tickets.manage",
   "legal.sources.review",
   "legal.sources.publish",
+  "lawyer.reviews.moderate",
 ] as const;
 
 export type PlatformStaffCapability =
@@ -38,6 +39,7 @@ const roleCapabilities: Readonly<
     "staff.console.view",
     "legal.sources.review",
     "legal.sources.publish",
+  "lawyer.reviews.moderate",
   ]),
 };
 
