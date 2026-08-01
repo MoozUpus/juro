@@ -171,3 +171,6 @@
 .lawyer-message-list time { color: var(--text-muted, #52616f); font-size: .78rem; }
 .lawyer-request-messages form { display: grid; gap: .5rem; margin-top: .75rem; }
 .lawyer-request-messages textarea { min-height: 4.5rem; width: 100%; }
+
+.lawyer-review-form { display:grid; gap:.5rem; margin-top:1rem; padding-top:1rem; border-top:1px solid var(--border-default,#d7dde4); }
+.lawyer-review-form textarea { min-height:4rem; width:100%; }

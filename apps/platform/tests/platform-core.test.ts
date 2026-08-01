@@ -8,6 +8,7 @@ import { consultationBookingSchema } from "../lib/platform/consultation";
 import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSchema } from "../lib/platform/lawyer-request";
 import { lawyerOfferCreateSchema, lawyerOfferResponseSchema } from "../lib/platform/lawyer-offer";
 import { lawyerRequestMessageSchema } from "../lib/platform/lawyer-request-message";
+import { lawyerReviewSchema } from "../lib/platform/lawyer-review";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -1164,4 +1165,18 @@ test("lawyer request messages require active participant access and are workspac
   assert.match(route, /ORDER BY created_at ASC,id ASC LIMIT 200/);
   assert.match(client, /x-juro-csrf/);
   assert.match(migration, /CREATE TABLE `lawyer_request_messages`/);
+});
+test("completed lawyer services gate private owner reviews and moderation", async () => {
+  assert.equal(lawyerReviewSchema.safeParse({ overallRating: 5, speedRating: 4, qualityRating: 5, communicationRating: 5, locale: "ru" }).success, true);
+  assert.equal(lawyerReviewSchema.safeParse({ overallRating: 6, speedRating: 4, qualityRating: 5, communicationRating: 5, locale: "ru" }).success, false);
+  const [completion, review, lawyerClient, ownerClient, migration] = await Promise.all([
+    readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/completion/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/review/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerReviewForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0054_same_spencer_smythe.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(completion, /r\.status='offer_accepted'/); assert.match(completion, /g\.revoked_at IS NULL/); assert.match(completion, /lawyer_request_completed/);
+  assert.match(review, /workspace_id=\? AND requester_user_id=\? AND status='completed'/); assert.match(review, /lawyer_review_submitted/); assert.match(review, /'pending'/);
+  assert.match(lawyerClient, /completion/); assert.match(ownerClient, /\/review/); assert.match(migration, /CREATE TABLE `lawyer_reviews`/);
 });
