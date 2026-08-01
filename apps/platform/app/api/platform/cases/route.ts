@@ -30,13 +30,20 @@ export const POST = withApiErrors(async function POST(request:Request){
   assertSafeWrite(request); const user=await requireApiUser(); const body=await request.json().catch(()=>null) as {title?:string;description?:string;legalArea?:string;locale?:string;accountType?:string}|null;
   const title=body?.title?.trim().slice(0,180); const legalArea=body?.legalArea&&scenarios[body.legalArea]?body.legalArea:"debt"; const locale=body?.locale==="uz"?"uz":"ru"; const accountType=body?.accountType==="business"?"business":"individual";
   if(!title)return response({error:locale==="ru"?"Укажите название ситуации.":"Vaziyat nomini kiriting."},400);
-  const now=isoNow(); const caseId=crypto.randomUUID(); const planId=crypto.randomUUID(); const steps=scenarios[legalArea][locale]; const db=requireD1();
+  const now=isoNow(); const caseId=crypto.randomUUID(); const planId=crypto.randomUUID();
+  const steps=scenarios[legalArea][locale].map((stepTitle,ordinal)=>({id:crypto.randomUUID(),title:stepTitle,ordinal:ordinal+1,status:"not_started"}));
+  const planTitle=locale==="ru" ? "План: "+title : "Reja: "+title;
+  const initialSnapshot=JSON.stringify({version:1,title:planTitle,status:"in_progress",progressPercent:0,steps});
+  const db=requireD1();
   const workspace=await workspaceForUser(user);
   await db.batch([
     db.prepare("INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'open',1,?,?)").bind(caseId,workspace.id,user.id,accountType,locale,title,body?.description?.trim().slice(0,2000)||null,legalArea,now,now),
-    db.prepare("INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,?,'in_progress',0,1,?,?)").bind(planId,caseId,user.id,locale==="ru"?`План: ${title}`:`Reja: ${title}`,now,now),
-    ...steps.map((step,index)=>db.prepare("INSERT INTO action_plan_steps (id,plan_id,ordinal,title,status,deadline_type,revision,created_at,updated_at) VALUES (?,?,?,?,'not_started','calendar_days',1,?,?)").bind(crypto.randomUUID(),planId,index+1,step,now,now)),
-    db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'case_created',?,?)").bind(crypto.randomUUID(),caseId,user.id,JSON.stringify({legalArea}),now),
+    db.prepare("INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,'in_progress',0,1,?,?)")
+      .bind(planId,caseId,user.id,planTitle,now,now),
+    ...steps.map((step)=>db.prepare("INSERT INTO action_plan_steps (id,plan_id,ordinal,title,status,deadline_type,revision,created_at,updated_at) VALUES (?,?,?,?,'not_started','calendar_days',1,?,?)")
+      .bind(step.id,planId,step.ordinal,step.title,now,now)),
+    db.prepare("INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) VALUES (?,?,1,?,'plan_created',?,?)")
+      .bind(crypto.randomUUID(),planId,user.id,initialSnapshot,now),    db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'case_created',?,?)").bind(crypto.randomUUID(),caseId,user.id,JSON.stringify({legalArea}),now),
   ]);
   return response({ok:true,caseId,planId},201);
 });

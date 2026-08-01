@@ -1397,6 +1397,20 @@ export const actionPlans = sqliteTable("action_plans", {
   title: text("title").notNull(), status: text("status").notNull().default("in_progress"), progressPercent: integer("progress_percent").notNull().default(0), currentRevision: integer("current_revision").notNull().default(1), ...timestamps,
 }, (table) => [uniqueIndex("action_plans_case_uidx").on(table.caseId)]);
 
+// Append-only evidence of user-confirmed action-plan changes. Current editable
+// state remains in action_plans/action_plan_steps; history reads this table.
+export const actionPlanVersions = sqliteTable("action_plan_versions", {
+  id: text("id").primaryKey(),
+  planId: text("plan_id").notNull().references(() => actionPlans.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  createdByUserId: text("created_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  reason: text("reason").notNull(),
+  snapshotJson: text("snapshot_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("action_plan_versions_plan_version_uidx").on(table.planId, table.version),
+  index("action_plan_versions_plan_created_idx").on(table.planId, table.createdAt),
+]);
 export const actionPlanSteps = sqliteTable("action_plan_steps", {
   id: text("id").primaryKey(), planId: text("plan_id").notNull().references(() => actionPlans.id, { onDelete: "cascade" }), ordinal: integer("ordinal").notNull(), title: text("title").notNull(),
   description: text("description"), status: text("status").notNull().default("not_started"), deadlineType: text("deadline_type").notNull().default("calendar_days"), dueAt: text("due_at"),

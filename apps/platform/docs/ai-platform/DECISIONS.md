@@ -2048,3 +2048,7 @@ The existing exact-document acquisition path remains the authority for every Adv
 New document-analysis uploads use `QUARANTINE_BUCKET` with a `quarantine-v2/` key. The regular `BUCKET` is no longer used for those bytes. Existing pre-change `quarantine/` object keys remain in the primary bucket and account deletion preserves that legacy routing; it deletes `quarantine-v2/` keys from the dedicated bucket. If a deletion encounters a new quarantine key without the binding, it fails recoverably rather than silently orphaning data.
 
 This separation does not imply a malware verdict. Finalization still records `MALWARE_SCANNER_UNAVAILABLE`, and no file reaches OCR or an AI provider without a real scanner marking it safe.
+## D-099 — Immutable action-plan snapshots
+Status: accepted (staging)
+
+An action-plan step edit changes the live plan only through the existing optimistic revision path. The server now records version 1 at plan creation and one append-only full snapshot for every successful step edit. D1 enforces that snapshot records cannot be updated or independently deleted; tenant-scoped history is exposed only through the owning case workspace. Migration 0051_noisy_nuke.sql is additive, was preceded by a private checksum-verified staging export, and was applied only to juro-staging. Evidence: STAGING-0056-ACTION-PLAN-VERSIONS-EVIDENCE.md.
