@@ -68,6 +68,12 @@ test("scheduled corpus keeps a two-source run open until the aggregate reconcili
 
     const started = await startScheduledCorpusSync(env, { now });
     assert.deepEqual(started, { started: 1, busy: 0, empty: 1 });
+    const emptyAdviceRun = sqlite.prepare(`
+      SELECT status,error_summary FROM source_sync_runs
+      WHERE id='lscorpus_advice_20260801'
+    `).get() as { status: string; error_summary: string };
+    assert.equal(emptyAdviceRun.status, "failed");
+    assert.equal(emptyAdviceRun.error_summary, "LEGAL_SOURCE_CORPUS_EMPTY");
     const requestRows = sqlite.prepare(`
       SELECT request.id
       FROM legal_source_fetch_requests AS request
