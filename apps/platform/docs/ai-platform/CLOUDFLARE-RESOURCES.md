@@ -64,7 +64,7 @@ The owner-approved target names differ from the older source/runtime names:
 | Staging primary files | `juro-staging-files` | absent | isolated target is bound only to the protected staging Worker; upload/scanning remains feature-gated |
 | Production primary files | `juro-private-documents` | same | preserve; no replacement |
 | Backups | `juro-{environment}-backups` | dev uses `juro-private-backups-development` | staging contains 26 checksum-verified D1 checkpoint artifacts including the `0034` pre/post sets; development remains empty and production remains absent |
-| Quarantine | `juro-{environment}-quarantine` | dev uses `juro-quarantine-development` | empty dev/staging targets exist; they are not scanners and remain unbound until a real fail-closed workflow; production remains absent |
+| Quarantine | `juro-{environment}-quarantine` | private dedicated dev/staging/prod bindings exist; new document-analysis uploads use the staging binding with `quarantine-v2/` keys | a bucket is not a scanner; files remain quarantined until a real fail-closed scanner marks them safe |
 
 ### Queues
 
