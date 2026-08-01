@@ -11,7 +11,14 @@ import type { PlatformLocale } from "../../lib/platform/routing";
 
 type CaseOption = { id: string; title: string };
 type HandoffRequest = { id: string; caseId: string; status: string; createdAt: string; lawyerName?: string | null; conflictStatus?: string | null; activeGrantId?: string | null; offerId?: string | null; offerStatus?: string | null; offerScopeDescription?: string | null; offerPriceDescription?: string | null; offerDurationDescription?: string | null };
-type PublicLawyer = { id: string; displayName: string; specialties: string[]; languages: string[] };
+type PublicLawyer = {
+  id: string;
+  displayName: string;
+  specialties: string[];
+  languages: string[];
+  rating: { reviewCount: number; overallAverage: number | null; speedAverage: number | null; qualityAverage: number | null; communicationAverage: number | null };
+  reviews: Array<{ overallRating: number; body: string | null; createdAt: string }>;
+};
 
 export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
   const ru = locale === "ru";
@@ -115,7 +122,7 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
     {message && <p className="lawyer-handoff-success" role="status"><ShieldCheck aria-hidden="true" />{message}</p>}
     <form onSubmit={(event) => void submit(event)}>
       <label>{ru ? "Дело" : "Ish"}<select value={caseId} onChange={(event) => setCaseId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}>{cases.length ? cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>) : <option value="">{ru ? "Нет доступных дел" : "Mavjud ish yo‘q"}</option>}</select></label>
-      <label>{ru ? "Юрист" : "Yurist"}<select value={lawyerProfileId} onChange={(event) => setLawyerProfileId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}><option value="">{ru ? "Назначить через JURO" : "JURO orqali tayinlash"}</option>{lawyers.map((lawyer) => <option key={lawyer.id} value={lawyer.id}>{lawyer.displayName}{lawyer.specialties.length ? ` — ${lawyer.specialties.join(", ")}` : ""}</option>)}</select></label>
+      <label>{ru ? "Юрист" : "Yurist"}<select value={lawyerProfileId} onChange={(event) => setLawyerProfileId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}><option value="">{ru ? "Назначить через JURO" : "JURO orqali tayinlash"}</option>{lawyers.map((lawyer) => <option key={lawyer.id} value={lawyer.id}>{lawyer.displayName}{lawyer.specialties.length ? ` — ${lawyer.specialties.join(", ")}` : ""}{lawyer.rating.reviewCount ? ` · ${lawyer.rating.overallAverage?.toFixed(1)}/5 (${lawyer.rating.reviewCount})` : ""}</option>)}</select></label>
       <label>{ru ? "Анонимизированное описание для conflict check" : "Manfaatlar to‘qnashuvi tekshiruvi uchun anonimlashtirilgan tavsif"}<textarea value={summary} minLength={20} maxLength={2000} required disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setSummary(event.target.value)} placeholder={ru ? "Без имён, реквизитов и содержания документов" : "Ismlar, rekvizitlar va hujjat mazmunisiz"} /></label>
       <label className="consult-consent"><input type="checkbox" checked={consent} disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setConsent(event.target.checked)} /><span>{ru ? "Подтверждаю создание анонимизированной заявки; доступ к делу пока не предоставляется." : "Anonimlashtirilgan so‘rov yaratilishini tasdiqlayman; ishga ruxsat hozircha berilmaydi."}</span></label>
       <button type="submit" disabled={!entitlements?.lawyerHandoff || !cases.length || summary.trim().length < 20 || !consent || busy}>{busy ? <LoaderCircle className="spin" /> : null}{ru ? "Создать заявку" : "So‘rov yaratish"}</button>

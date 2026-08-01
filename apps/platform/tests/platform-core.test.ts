@@ -10,6 +10,7 @@ import { lawyerOfferCreateSchema, lawyerOfferResponseSchema } from "../lib/platf
 import { lawyerRequestMessageSchema } from "../lib/platform/lawyer-request-message";
 import { lawyerReviewSchema } from "../lib/platform/lawyer-review";
 import { hasLikelyPersonalData, lawyerReviewModerationSchema } from "../lib/platform/lawyer-review-moderation";
+import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -19,6 +20,20 @@ import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 import { isCinematicPrototypeEnvironment } from "../lib/platform/cinematic-prototype";
+
+test("lawyer directory projects only moderation-approved review aggregates", () => {
+  const directory = projectPublicLawyerDirectory(
+    [{ id: "lawyer-1", displayName: "Юрист JURO", specialtiesJson: '["contracts"]', languagesJson: '["ru","uz"]' }],
+    [{ lawyerProfileId: "lawyer-1", reviewCount: 2, overallAverage: 4.666, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 }],
+    [{ lawyerProfileId: "lawyer-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" }],
+  );
+  assert.deepEqual(directory, [{
+    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"],
+    rating: { reviewCount: 2, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
+    reviews: [{ overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" }],
+  }]);
+  assert.equal(projectPublicLawyerDirectory([{ id: "lawyer-2", displayName: "Без отзывов", specialtiesJson: "[]", languagesJson: "[]" }], [], [])[0]?.rating.reviewCount, 0);
+});
 
 test("cinematic prototype is fail-closed outside staging", async () => {
   assert.equal(isCinematicPrototypeEnvironment("staging"), true);
@@ -1174,12 +1189,13 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   assert.equal(lawyerReviewModerationSchema.safeParse({ decision: "other", reason: "x", locale: "ru" }).success, false);
   assert.equal(hasLikelyPersonalData("Связь: +998 90 123 45 67"), true);
   assert.equal(hasLikelyPersonalData("Нейтральный отзыв без контактов"), false);
-  const [completion, review, lawyerClient, ownerClient, migration] = await Promise.all([
+  const [completion, review, lawyerClient, ownerClient, migration, directoryRoute] = await Promise.all([
     readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/completion/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/review/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/LawyerReviewForm.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0054_same_spencer_smythe.sql", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(completion, /r\.status='offer_accepted'/); assert.match(completion, /g\.revoked_at IS NULL/); assert.match(completion, /lawyer_request_completed/);
   assert.match(review, /workspace_id=\? AND requester_user_id=\? AND status='completed'/); assert.match(review, /lawyer_review_submitted/); assert.match(review, /'pending'/);
@@ -1204,4 +1220,8 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   assert.match(moderationMigration[0], /CREATE TABLE `lawyer_review_moderation`/);
   assert.match(moderationMigration[0], /append-only/);
   assert.match(moderationMigration[1], /lawyer_review_moderation_applies_terminal_status/);
+  assert.match(directoryRoute, /m\.decision='approved'/);
+  assert.match(directoryRoute, /r\.status='approved'/);
+  assert.match(directoryRoute, /ROW_NUMBER\(\) OVER/);
+  assert.match(directoryRoute, /projectPublicLawyerDirectory/);
 });

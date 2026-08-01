@@ -1,27 +1,44 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { projectPublicLawyerDirectory } from "../../../../lib/platform/lawyer-directory-reviews";
 
 export const GET = withApiErrors(async function GET() {
   await requireApiUser();
-  const rows = await requireD1().prepare(
+  const db = requireD1();
+  const lawyers = await db.prepare(
     `SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson
      FROM lawyer_profiles
      WHERE status='public_approved' AND public_approved_at IS NOT NULL
      ORDER BY display_name COLLATE NOCASE LIMIT 100`,
-  ).all<Record<string, unknown>>();
+  ).all<{ id: string; displayName: string; specialtiesJson: unknown; languagesJson: unknown }>();
+  const aggregates = await db.prepare(
+    `SELECT r.lawyer_profile_id AS lawyerProfileId,
+      COUNT(*) AS reviewCount,
+      AVG(r.overall_rating) AS overallAverage,
+      AVG(r.speed_rating) AS speedAverage,
+      AVG(r.quality_rating) AS qualityAverage,
+      AVG(r.communication_rating) AS communicationAverage
+     FROM lawyer_reviews r
+     JOIN lawyer_review_moderation m ON m.review_id=r.id AND m.decision='approved'
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+     WHERE r.status='approved' AND p.status='public_approved' AND p.public_approved_at IS NOT NULL
+     GROUP BY r.lawyer_profile_id`,
+  ).all<{ lawyerProfileId: string; reviewCount: number; overallAverage: number; speedAverage: number; qualityAverage: number; communicationAverage: number }>();
+  const reviews = await db.prepare(
+    `WITH ranked_reviews AS (
+      SELECT r.lawyer_profile_id AS lawyerProfileId,r.overall_rating AS overallRating,
+        COALESCE(m.moderated_body,r.body) AS body,r.created_at AS createdAt,
+        ROW_NUMBER() OVER (PARTITION BY r.lawyer_profile_id ORDER BY m.created_at DESC,r.id DESC) AS reviewRank
+      FROM lawyer_reviews r
+      JOIN lawyer_review_moderation m ON m.review_id=r.id AND m.decision='approved'
+      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+      WHERE r.status='approved' AND p.status='public_approved' AND p.public_approved_at IS NOT NULL
+    )
+    SELECT lawyerProfileId,overallRating,body,createdAt
+    FROM ranked_reviews WHERE reviewRank <= 3
+    ORDER BY lawyerProfileId ASC,createdAt DESC`,
+  ).all<{ lawyerProfileId: string; overallRating: number; body: string | null; createdAt: string }>();
   return Response.json({
-    lawyers: rows.results.map((row) => ({
-      id: String(row.id),
-      displayName: String(row.displayName),
-      specialties: safeStringList(row.specialtiesJson),
-      languages: safeStringList(row.languagesJson),
-    })),
+    lawyers: projectPublicLawyerDirectory(lawyers.results, aggregates.results, reviews.results),
   }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 });
-
-function safeStringList(value: unknown) {
-  try {
-    const parsed = JSON.parse(String(value ?? "[]"));
-    return Array.isArray(parsed) ? parsed.filter((entry): entry is string => typeof entry === "string").slice(0, 20) : [];
-  } catch { return []; }
-}

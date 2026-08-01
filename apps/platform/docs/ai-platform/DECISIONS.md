@@ -2081,3 +2081,10 @@ Status: accepted (staging)
 Date: 2026-08-02
 
 Migrations `0055_lowly_shadow_king.sql` and `0056_zippy_winter_soldier.sql` were applied only to `juro-staging` after a fresh private R2 export and checksum-verified remote round trip. The additive schema provides an immutable moderation journal, a one-decision fence, and a trigger that applies the parent review’s terminal state only after journal insertion. Worker version `eeddad25-04ab-4cae-a205-71b87f03904f` serves the protected staff route and endpoints on `juro-platform-staging`. Approval remains private: it does not publish a review or update public rating aggregates. Cloudflare Access prevented anonymous or authenticated browser traversal in this run, so neither is claimed. Production remains unchanged. Evidence: `STAGING-0059-LAWYER-REVIEW-MODERATION-EVIDENCE.md`.
+
+## D-104 — Public review output is a read projection, never a client aggregate
+
+Status: accepted (staging)
+Date: 2026-08-02
+
+The authenticated lawyer picker receives rating aggregates and no more than three texts only from public-approved lawyer profiles with reviews whose parent status and immutable moderation decision are both `approved`. The server calculates all averages and never returns requester, workspace, moderator, or moderation-reason fields. A new migration is not required because it reads the staged 0055/0056 boundary. Worker version `164db8bf-877e-45a3-b0f1-f54f4a45bf03` is deployed only to `juro-platform-staging`; staging has no approved review records, so a live public projection is not claimed. Production is unchanged.
