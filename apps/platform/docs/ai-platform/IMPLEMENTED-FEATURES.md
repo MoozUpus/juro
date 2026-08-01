@@ -357,4 +357,4 @@ analysis is therefore not claimed. The release corpus remains pending. Exact evi
 
 ### Phase 6 — immutable action-plan history (staging)
 
-Case-plan creation now persists a version-1 snapshot. Each successful optimistic step update creates the next immutable snapshot, while GET /api/platform/cases/:caseId/plan-versions returns history only after active-session and workspace checks. action_plan_versions is protected in D1 against update/delete mutation. Staging evidence: STAGING-0056-ACTION-PLAN-VERSIONS-EVIDENCE.md.
+Case-plan creation now persists a version-1 snapshot. Each successful optimistic step update creates the next immutable snapshot, while GET /api/platform/cases/:caseId/plan-versions returns history only after active-session and workspace checks. The case workspace exposes this history as a read-only timeline with version time and saved progress. action_plan_versions is protected in D1 against update/delete mutation. Staging evidence: STAGING-0056-ACTION-PLAN-VERSIONS-EVIDENCE.md.

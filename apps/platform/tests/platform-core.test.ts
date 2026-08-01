@@ -1071,10 +1071,11 @@ test("legal-source health route is staff-gated, same-origin, and no-store", asyn
   assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
 });
 test("action-plan history snapshots are tenant-scoped and immutable", async () => {
-  const [createRoute, updateRoute, historyRoute, migration] = await Promise.all([
+  const [createRoute, updateRoute, historyRoute, client, migration] = await Promise.all([
     readFile(new URL("../app/api/platform/cases/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/cases/[caseId]/steps/[stepId]/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/cases/[caseId]/plan-versions/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/ActionPlanClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0051_noisy_nuke.sql", import.meta.url), "utf8"),
   ]);
   assert.match(createRoute, /INSERT INTO action_plan_versions/);
@@ -1086,6 +1087,8 @@ test("action-plan history snapshots are tenant-scoped and immutable", async () =
   assert.match(updateRoute, /WHERE id=\? AND revision=\?/);
   assert.match(historyRoute, /c\.workspace_id=\?/);
   assert.match(historyRoute, /WHERE plan_id=\? ORDER BY version DESC/);
+  assert.match(client, /loadVersionHistory/);
+  assert.match(client, /plan-history/);
   assert.match(migration, /action_plan_versions_plan_version_uidx/);
   assert.match(migration, /action_plan_versions_no_update/);
   assert.match(migration, /action_plan_versions_no_delete/);

@@ -52,6 +52,20 @@ type Case = {
   steps: Step[];
 };
 
+type PlanSnapshot = {
+  version: number;
+  status: string;
+  progressPercent: number;
+  steps: Array<{ id: string; title: string; status: string; dueAt: string | null }>;
+};
+
+type PlanVersion = {
+  id: string;
+  version: number;
+  reason: string;
+  createdAt: string;
+  snapshot: PlanSnapshot | null;
+};
 const catalog = {
   individual: [
     { id: "unpaid-salary", ru: "Невыплата заработной платы", uz: "Ish haqi to‘lanmasligi" },
@@ -85,6 +99,8 @@ export function ActionPlanClient({
   const [creating, setCreating] = useState(false);
   const [savingStepId, setSavingStepId] = useState<string | null>(null);
   const [openCase, setOpenCase] = useState<string | null>(initialCaseId ?? null);
+  const [versionsByCase, setVersionsByCase] = useState<Record<string, PlanVersion[]>>({});
+  const [loadingVersionsFor, setLoadingVersionsFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -104,6 +120,21 @@ export function ActionPlanClient({
     void load();
   }, [load]);
 
+  async function loadVersionHistory(item: Case) {
+    if (loadingVersionsFor === item.id) return;
+    setLoadingVersionsFor(item.id);
+    setError("");
+    try {
+      const response = await fetch("/api/platform/cases/" + item.id + "/plan-versions", { cache: "no-store" });
+      const data = await response.json() as { versions?: PlanVersion[]; error?: string };
+      if (!response.ok) throw new Error(data.error || (ru ? "Не удалось загрузить историю." : "Tarixni yuklab bo‘lmadi."));
+      setVersionsByCase((current) => ({ ...current, [item.id]: data.versions || [] }));
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setLoadingVersionsFor(null);
+    }
+  }
   async function create(event: FormEvent) {
     event.preventDefault();
     setCreating(true);
@@ -235,6 +266,23 @@ export function ActionPlanClient({
                     <ChevronDown className={expanded ? "rotated" : ""} />
                   </button>
                   {expanded && <div className="plan-steps" id={panelId}>
+                    <section className="plan-history" aria-label={ru ? "История версий плана" : "Reja versiyalari tarixi"}>
+                      <button
+                        type="button"
+                        onClick={() => void loadVersionHistory(item)}
+                        disabled={loadingVersionsFor === item.id}
+                      >
+                        {loadingVersionsFor === item.id ? <LoaderCircle className="spin" /> : <RotateCcw />}
+                        {ru ? "Показать историю версий" : "Versiyalar tarixini ko‘rsatish"}
+                      </button>
+                      {versionsByCase[item.id]?.length ? <ol>
+                        {versionsByCase[item.id].map((entry) => <li key={entry.id}>
+                          <strong>{ru ? "Версия " + entry.version : entry.version + "-versiya"}</strong>
+                          <span>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(entry.createdAt))}</span>
+                          <small>{entry.snapshot ? entry.snapshot.progressPercent + "% · " + entry.snapshot.steps.filter((step) => step.status === "completed").length + "/" + entry.snapshot.steps.length : (ru ? "Снимок недоступен" : "Snapshot mavjud emas")}</small>
+                        </li>)}
+                      </ol> : null}
+                    </section>
                     {item.steps.map((step) => {
                       const saving = savingStepId === step.id;
                       const builderQuery = new URLSearchParams({ caseId: item.id, stepId: step.id });
