@@ -2014,3 +2014,27 @@ primary D1/R2 replacement into the binding normalizer. The generated
 production artifact is required to retain the exact canonical primary bindings.
 This is a build-contract correction only: no Worker version, route, D1
 migration, R2 object, secret, or production configuration was deployed.
+
+## D-096 — scheduled corpus runs are aggregate-only lifecycle records
+
+Status: accepted and regression-tested locally; staging deployment pending
+Date: 2026-08-01
+
+A `scheduled_corpus` run represents a bounded batch, not an individual source
+request. Every queued request remains connected to that batch by
+`job_outbox.correlation_id`; the individual fetch path must therefore not create
+a competing `single_source_fetch` run or complete/fail the batch after its first
+item. The periodic reconciler remains the sole component that closes the batch
+when all linked requests reach terminal states.
+
+The regression test uses the real local D1 migrations and verifies two Lex
+requests: both become completed, no `single_source_fetch` runs are created, and
+the scheduled batch remains running until reconciliation records `success` with
+two fetched items. The test also exposed and corrected two existing D1-invariant
+violations in the scheduled start path: an extra bind parameter, and an empty
+corpus initially written as `failed` without completion evidence. Empty corpus
+runs now transition `running -> failed` atomically with
+`LEGAL_SOURCE_CORPUS_EMPTY`.
+
+This change does not discover a broader corpus, declare any source verified, or
+change production. Legal publication and AI retrieval remain fail-closed.

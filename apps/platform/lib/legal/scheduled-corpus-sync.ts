@@ -45,11 +45,11 @@ export async function startScheduledCorpusSync(
         id,environment,source_kind,run_type,status,lock_key,
         discovered_count,fetched_count,changed_count,verified_count,error_count,
         started_at,finished_at,error_summary,created_at,updated_at
-      ) VALUES (?,?,?,'scheduled_corpus',?,?,0,0,0,0,0,?,NULL,NULL,?,?)
+      ) VALUES (?,?,?,'scheduled_corpus',?,?,?,0,0,0,0,?,NULL,NULL,?,?)
       ON CONFLICT DO NOTHING
     `).bind(
       runId, env.APP_ENV, kind,
-      candidates.results.length === 0 ? "failed" : "running",
+      "running",
       lockKey, candidates.results.length, timestamp, timestamp, timestamp,
     ).run();
     if (Number(created.meta.changes ?? 0) !== 1) {
@@ -59,8 +59,8 @@ export async function startScheduledCorpusSync(
     if (candidates.results.length === 0) {
       await env.DB.prepare(`
         UPDATE source_sync_runs
-        SET finished_at=?,error_count=1,error_summary='LEGAL_SOURCE_CORPUS_EMPTY',updated_at=?
-        WHERE id=? AND status='failed'
+        SET status='failed',finished_at=?,error_count=1,error_summary='LEGAL_SOURCE_CORPUS_EMPTY',updated_at=?
+        WHERE id=? AND status='running'
       `).bind(timestamp, timestamp, runId).run();
       empty += 1;
       continue;

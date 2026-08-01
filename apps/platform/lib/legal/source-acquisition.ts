@@ -132,6 +132,29 @@ async function requestRow(
   `).bind(requestId, environment).first<FetchRequestRow>();
 }
 
+type ScheduledCorpusRunRow = { id: string };
+
+async function scheduledCorpusRunId(
+  db: D1Database,
+  requestId: string,
+  environment: string,
+): Promise<string | null> {
+  const row = await db.prepare(`
+    SELECT run.id
+    FROM job_outbox AS outbox
+    INNER JOIN source_sync_runs AS run ON run.id = outbox.correlation_id
+    WHERE outbox.subject_id = ?
+      AND outbox.job_type = 'legal.sync'
+      AND run.environment = ?
+      AND run.run_type = 'scheduled_corpus'
+      AND run.status = 'running'
+    ORDER BY outbox.created_at DESC
+    LIMIT 1
+  `).bind(requestId, environment).first<ScheduledCorpusRunRow>();
+  return row?.id ?? null;
+}
+
+
 export async function createLegalSourceFetchRequest(
   env: LegalSourceAcquisitionEnv,
   input: z.input<typeof createRequestSchema>,
@@ -300,6 +323,7 @@ async function persistFetchedSource(
   input: {
     request: FetchRequestRow;
     runId: string;
+    scheduledCorpus: boolean;
     fetched: FetchedLegalSource;
     rawObjectKey: string;
     now: string;
@@ -522,25 +546,26 @@ async function persistFetchedSource(
     ));
   }
   const requestResultIndex = finalStatements.length;
-  finalStatements.push(
-    env.DB.prepare(`
-      UPDATE legal_source_fetch_requests
-      SET status = 'completed',
-          source_id = ?,
-          version_id = ?,
-          error_code = NULL,
-          finished_at = ?,
-          updated_at = ?
-      WHERE id = ? AND environment = ? AND status = 'running'
-    `).bind(
-      storedSource.id,
-      storedVersion.id,
-      input.now,
-      input.now,
-      input.request.id,
-      env.APP_ENV,
-    ),
-    env.DB.prepare(`
+  finalStatements.push(env.DB.prepare(`
+    UPDATE legal_source_fetch_requests
+    SET status = 'completed',
+        source_id = ?,
+        version_id = ?,
+        error_code = NULL,
+        finished_at = ?,
+        updated_at = ?
+    WHERE id = ? AND environment = ? AND status = 'running'
+  `).bind(
+    storedSource.id,
+    storedVersion.id,
+    input.now,
+    input.now,
+    input.request.id,
+    env.APP_ENV,
+  ));
+  const runResultIndex = input.scheduledCorpus ? null : finalStatements.length;
+  if (!input.scheduledCorpus) {
+    finalStatements.push(env.DB.prepare(`
       UPDATE source_sync_runs
       SET status = 'success',
           discovered_count = 1,
@@ -557,12 +582,13 @@ async function persistFetchedSource(
       input.now,
       input.now,
       input.runId,
-    ),
-  );
+    ));
+  }
   const finalResults = await env.DB.batch(finalStatements);
   if (
     Number(finalResults[requestResultIndex]?.meta.changes ?? 0) !== 1
-    || Number(finalResults[requestResultIndex + 1]?.meta.changes ?? 0) !== 1
+    || (runResultIndex !== null
+      && Number(finalResults[runResultIndex]?.meta.changes ?? 0) !== 1)
   ) {
     throw new LegalSourceAcquisitionError(
       "LEGAL_SOURCE_PERSISTENCE_FAILED",
@@ -585,6 +611,7 @@ async function recordFailure(
   input: {
     request: FetchRequestRow;
     runId: string;
+    scheduledCorpus: boolean;
     error: LegalSourceAcquisitionError;
     now: string;
   },
@@ -606,7 +633,7 @@ async function recordFailure(
       input.error.code,
       input.now,
     ),
-    env.DB.prepare(`
+    ...(input.scheduledCorpus ? [] : [env.DB.prepare(`
       UPDATE source_sync_runs
       SET status = 'failed',
           discovered_count = 1,
@@ -623,7 +650,7 @@ async function recordFailure(
       input.error.code,
       input.now,
       input.runId,
-    ),
+    )]),
     env.DB.prepare(`
       UPDATE legal_source_fetch_requests
       SET status = ?,
@@ -706,21 +733,23 @@ export async function executeLegalSourceFetchRequest(
   }
 
   const startedAt = nowIso(dependencies.now);
-  const runId = `lsrun_${crypto.randomUUID().replaceAll("-", "")}`;
+  const scheduledRunId = await scheduledCorpusRunId(env.DB, request.id, environment);
+  const scheduledCorpus = scheduledRunId !== null;
+  const runId = scheduledRunId ?? `lsrun_${crypto.randomUUID().replaceAll("-", "")}`;
   try {
-    const startResults = await env.DB.batch([
-      env.DB.prepare(`
-        UPDATE legal_source_fetch_requests
-        SET status = 'running',
-            attempt_count = attempt_count + 1,
-            error_code = NULL,
-            started_at = ?,
-            finished_at = NULL,
-            updated_at = ?
-        WHERE id = ? AND environment = ?
-          AND status IN ('queued','retrying','running')
-      `).bind(startedAt, startedAt, request.id, environment),
-      env.DB.prepare(`
+    const startStatements: D1PreparedStatement[] = [env.DB.prepare(`
+      UPDATE legal_source_fetch_requests
+      SET status = 'running',
+          attempt_count = attempt_count + 1,
+          error_code = NULL,
+          started_at = ?,
+          finished_at = NULL,
+          updated_at = ?
+      WHERE id = ? AND environment = ?
+        AND status IN ('queued','retrying','running')
+    `).bind(startedAt, startedAt, request.id, environment)];
+    if (!scheduledCorpus) {
+      startStatements.push(env.DB.prepare(`
         INSERT INTO source_sync_runs (
           id, environment, source_kind, run_type, status, lock_key,
           discovered_count, fetched_count, changed_count, verified_count,
@@ -738,16 +767,19 @@ export async function executeLegalSourceFetchRequest(
         startedAt,
         startedAt,
         startedAt,
-      ),
-    ]);
+      ));
+    }
+    const startResults = await env.DB.batch(startStatements);
     if (Number(startResults[0]?.meta.changes ?? 0) !== 1) {
-      const failedAt = nowIso(dependencies.now);
-      await env.DB.prepare(`
-        UPDATE source_sync_runs
-        SET status = 'failed', finished_at = ?, error_count = 1,
-            error_summary = 'LEGAL_SOURCE_REQUEST_TERMINAL', updated_at = ?
-        WHERE id = ? AND status = 'running'
-      `).bind(failedAt, failedAt, runId).run();
+      if (!scheduledCorpus) {
+        const failedAt = nowIso(dependencies.now);
+        await env.DB.prepare(`
+          UPDATE source_sync_runs
+          SET status = 'failed', finished_at = ?, error_count = 1,
+              error_summary = 'LEGAL_SOURCE_REQUEST_TERMINAL', updated_at = ?
+          WHERE id = ? AND status = 'running'
+        `).bind(failedAt, failedAt, runId).run();
+      }
       throw new LegalSourceAcquisitionError(
         "LEGAL_SOURCE_REQUEST_TERMINAL",
         false,
@@ -779,6 +811,7 @@ export async function executeLegalSourceFetchRequest(
     return await persistFetchedSource(env, {
       request,
       runId,
+      scheduledCorpus,
       fetched,
       rawObjectKey,
       now: nowIso(dependencies.now),
@@ -789,6 +822,7 @@ export async function executeLegalSourceFetchRequest(
       await recordFailure(env, {
         request,
         runId,
+        scheduledCorpus,
         error: safeError,
         now: nowIso(dependencies.now),
       });
