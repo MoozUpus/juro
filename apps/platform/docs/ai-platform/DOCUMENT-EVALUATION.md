@@ -1,6 +1,6 @@
 # JURO document evaluation
 
-Updated: 2026-07-31
+Updated: 2026-08-01
 
 ## Reproducible corpus harness
 
@@ -18,7 +18,7 @@ The OCR/extraction extension adds four passing integration cases: successful
 Workers AI conversion and analysis chaining, idempotent replay, cross-tenant
 denial before R2/provider access, retryable missing-provider behavior, and
 fail-closed source-integrity rejection. The generated D1 migration applies with
-zero foreign-key violations, the Cloudflare contract suite passes 84/84, and the
+zero foreign-key violations, the Cloudflare contract suite passes 87/87, and the
 targeted Phase 5 processor/provider/upload/OCR/export set passes 18/18.
 
 When corpus freshness is unavailable, legal-compliance risks and citations are
@@ -27,12 +27,13 @@ low confidence with an explicit RU/UZ warning. Image-derived text is explicitly
 marked for human review and does not count toward the 95% OCR quality threshold.
 
 A live staging analysis is not claimed: no real malware scanner can promote a new
-upload to `analysis_safe`. The authoritative Worker secret-name read-back after
-deployment lists only `IDENTITY_KEYRING`, `RESEND_API_KEY`, and
-`TURNSTILE_SECRET_KEY`; it does not list `OPENAI_API_KEY` or
-`ANTHROPIC_API_KEY`. No secret value was read. The deployed Workers AI binding and
-OCR consumer are therefore real infrastructure evidence, but not evidence of a
-completed safe-file/provider analysis.
+upload to `analysis_safe`. The current read-only staging secret-name inventory
+contains `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` alongside the existing
+security secrets; no value was read, logged, or exported. Separate fixed synthetic
+probes completed successfully with `gpt-5.6-sol` and `claude-sonnet-4-6` and
+record only technical metadata in D1. This is connectivity evidence, not evidence
+of a user/legal response, safe-file promotion, or completed document analysis.
+The deployed Workers AI binding and OCR consumer remain infrastructure evidence only.
 
 ## Required release matrix — not yet achieved
 
