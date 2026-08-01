@@ -4,6 +4,7 @@ import { requirePlatformStaffRequest } from "../../../../../../lib/auth/staff-ht
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import { lawyerProfileModerationSchema } from "../../../../../../lib/platform/lawyer-profile";
+import { isLawyerProfileDirectoryPreviewEnabled } from "../../../../../../lib/platform/lawyer-profile-preview";
 import { z } from "zod";
 
 type Context = { params: Promise<{ profileId: string }> };
@@ -16,7 +17,7 @@ async function sha256(value: string) {
 
 export async function PATCH(request: Request, context: Context) {
   const runtime = runtimeEnv();
-  if (runtime.APP_ENV !== "staging" || runtime.LAWYER_PROFILE_DIRECTORY_ENABLED !== "true" || !runtime.DB) return Response.json({ code: "NOT_AVAILABLE" }, { status: 404, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
+  if (!isLawyerProfileDirectoryPreviewEnabled(runtime)) return Response.json({ code: "NOT_AVAILABLE" }, { status: 404, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
   assertSafeWrite(request);
   const staff = await requirePlatformStaffRequest(request, "lawyer.profiles.moderate", { freshMfaWithinMs: 15 * 60 * 1000 });
   const parsed = await parseJsonRequest(request, lawyerProfileModerationSchema, 4_096);

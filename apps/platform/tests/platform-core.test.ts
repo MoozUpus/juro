@@ -21,6 +21,7 @@ import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 import { isCinematicPrototypeEnvironment } from "../lib/platform/cinematic-prototype";
+import { isLawyerProfileDirectoryPreviewEnabled } from "../lib/platform/lawyer-profile-preview";
 
 test("lawyer directory projects only moderation-approved review aggregates", () => {
   const directory = projectPublicLawyerDirectory(
@@ -58,7 +59,11 @@ test("lawyer professional profile accepts only bounded self-declared directory d
     readFile(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0058_innocent_ben_grimm.sql", import.meta.url), "utf8"),
   ]);
-  assert.match(route, /account_type='lawyer'/); assert.match(route, /profileDirectoryPreviewEnabled/); assert.match(route, /APP_ENV === "staging"/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_reapproval_requested/); assert.match(route, /meta\.changes/); assert.match(route, /WHERE EXISTS/);
+  assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
+  for (const environment of [undefined, "development", "production", "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
+  assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "false", DB: {} }), false);
+  assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true" }), false);
+  assert.match(route, /account_type='lawyer'/); assert.match(route, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_reapproval_requested/); assert.match(route, /meta\.changes/); assert.match(route, /WHERE EXISTS/);
   assert.match(client, /Статус адвоката «подтверждён» нельзя установить самостоятельно/);
   for (const filter of ["specialtyFilter", "languageFilter", "minimumExperience", "minimumRating", "availabilityFilter", "advocateFilter", "firmFilter"]) assert.match(handoffClient, new RegExp(filter));
   assert.match(migration, /lawyer_profiles_directory_values_insert/); assert.match(migration, /lawyer_profiles_directory_filter_idx/);
@@ -73,8 +78,8 @@ test("lawyer-profile approval is staff-capability and revision gated", async () 
     readFile(new URL("../drizzle/0059_pretty_punisher.sql", import.meta.url), "utf8"),
   ]);
   assert.match(capabilities, /lawyer\.profiles\.moderate/);
-  assert.match(listRoute, /APP_ENV !== "staging"/); assert.match(listRoute, /freshMfaWithinMs/); assert.match(listRoute, /profile_revision/);
-  assert.match(decisionRoute, /APP_ENV !== "staging"/); assert.match(decisionRoute, /lawyer_profile_moderation/); assert.match(decisionRoute, /profileSha256/); assert.match(decisionRoute, /lawyer_profile_moderated/); assert.match(decisionRoute, /meta\.changes/); assert.match(decisionRoute, /WHERE EXISTS/);
+  assert.match(listRoute, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(listRoute, /freshMfaWithinMs/); assert.match(listRoute, /profile_revision/);
+  assert.match(decisionRoute, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(decisionRoute, /lawyer_profile_moderation/); assert.match(decisionRoute, /profileSha256/); assert.match(decisionRoute, /lawyer_profile_moderated/); assert.match(decisionRoute, /meta\.changes/); assert.match(decisionRoute, /WHERE EXISTS/);
   assert.match(page, /lawyer\.profiles\.moderate/);
   assert.match(migration, /lawyer_profile_moderation_revision_uidx/); assert.match(migration, /lawyer_profiles_status_requires_moderation/); assert.match(migration, /append-only/);
 });
