@@ -308,3 +308,7 @@ No Phase 5 production-readiness claim is made.
   truthful live end-to-end provider run.
 - Coordinate-level OCR, multi-file ZIP packages, corrected/redline artifacts,
   100 document packages, and 30 comparisons have not passed release gates.
+
+### Advice sitemap discovery (2026-08-01)
+
+A bounded implementation exists but is disabled in development, staging, and production through `LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED=false`. It follows only public robots-declared `advice.uz` sitemap files, submits no more than 20 exact canonical document URLs per run, and remains review-only. There is no live staging sitemap-run evidence, policy/load approval, or claim that this has indexed the Advice corpus.

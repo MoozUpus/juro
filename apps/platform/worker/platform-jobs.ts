@@ -240,6 +240,7 @@ export type PlatformJobEnv = Omit<
   ASYNC_RUNTIME_ENABLED: string;
   CRON_ENABLED: string;
   LEGAL_ADVICE_INGESTION_ENABLED: string;
+  LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED?: string;
   ACCOUNT_DELETION_PURGE_ENABLED: string;
   AI?: Ai;
   RESEND_API_KEY?: string;

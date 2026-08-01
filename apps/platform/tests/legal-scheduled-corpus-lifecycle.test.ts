@@ -115,3 +115,57 @@ test("scheduled corpus keeps a two-source run open until the aggregate reconcili
     sqlite.close();
   }
 });
+
+test("scheduled Advice sitemap candidates enter the normal review-only acquisition pipeline", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env: LegalSourceAcquisitionEnv & { LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED: string } = {
+    APP_ENV: "development",
+    DB: d1,
+    BUCKET: bucket as unknown as R2Bucket,
+    LEGAL_ADVICE_INGESTION_ENABLED: "true",
+    LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED: "true",
+  };
+  const now = new Date("2026-08-02T19:00:00.000Z");
+  try {
+    const started = await startScheduledCorpusSync(env, {
+      now,
+      discoverAdvice: async () => [{
+        officialUrl: "https://advice.uz/ru/documents/1744",
+        locale: "ru",
+        canonicalId: "1744",
+      }],
+    });
+    assert.deepEqual(started, { started: 1, busy: 0, empty: 1 });
+    const request = sqlite.prepare(`
+      SELECT id FROM legal_source_fetch_requests
+      WHERE source_kind='advice' AND canonical_id='1744'
+    `).get() as { id: string };
+    await executeLegalSourceFetchRequest(env, request.id, {
+      now: () => now,
+      wait: async () => undefined,
+      fetchImpl: sourceFetch([
+        new Response("User-agent: *\\nAllow: /\\n", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        }),
+        new Response(documentHtml("1744"), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      ]),
+    });
+    assert.equal(await reconcileScheduledCorpusSyncRuns(env, { now }), 1);
+    const run = sqlite.prepare(`
+      SELECT status,fetched_count,error_count FROM source_sync_runs
+      WHERE id='lscorpus_advice_20260802'
+    `).get() as { status: string; fetched_count: number; error_count: number };
+    assert.equal(run.status, "success");
+    assert.equal(run.fetched_count, 1);
+    assert.equal(run.error_count, 0);
+    const review = sqlite.prepare(`
+      SELECT status FROM legal_review_queue
+    `).get() as { status: string };
+    assert.equal(review.status, "pending");
+  } finally {
+    sqlite.close();
+  }
+});

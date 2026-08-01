@@ -26,7 +26,7 @@ Before retrieving a document the worker:
 6. validates content type, content encoding, byte limit, and canonical identity;
 7. hashes the exact bytes and persists the raw object to private R2 under a content-addressed key.
 
-Current supported Crawl-delay maximum is 60 seconds. Lex currently declares 20 seconds. Advice currently permits the selected public document routes without a positive Crawl-delay; JURO still applies a minimum one-second wait before every Advice document request. Queue execution is serial so one batch does not bypass the delay. There is no discovery crawler or sitemap traversal.
+Current supported Crawl-delay maximum is 60 seconds. Lex currently declares 20 seconds. Advice currently permits the selected public document routes without a positive Crawl-delay; JURO still applies a minimum one-second wait before every Advice document request. Queue execution is serial so one batch does not bypass the delay. A separate default-off Advice sitemap discovery capability may submit at most 20 canonical document URLs from the public robots-declared sitemap; it does not fetch arbitrary links and each candidate returns through this exact acquisition boundary. It is disabled in every environment pending policy/load review and live staging evidence.
 
 ## Normalization
 
@@ -49,7 +49,7 @@ AI routes filter for exact verified source state, verified timestamp, and conten
 - authenticated reviewer browser QA with an owner-approved reviewer identity;
 - approved publication to immutable sections/chunks;
 - multilingual RU/UZ source version model;
-- broader Advice corpus discovery only after a separate legal/policy and load review;
+- explicit policy/load approval and a controlled live staging run before enabling the implemented bounded Advice sitemap discovery flag;
 - lexical plus semantic retrieval with tenant-independent public-source filters;
 - server-side citation existence/status/effective-date verification;
 - staging midnight Asia/Tashkent synchronization is deployed and recorded in `STAGING-0053-SCHEDULED-CORPUS-SYNC-EVIDENCE.md`; source-health alerts remain pending;

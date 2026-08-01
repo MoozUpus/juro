@@ -2038,3 +2038,8 @@ runs now transition `running -> failed` atomically with
 
 This change does not discover a broader corpus, declare any source verified, or
 change production. Legal publication and AI retrieval remain fail-closed.
+## D-097 — Advice sitemap discovery is bounded, review-only, and default-off
+
+The existing exact-document acquisition path remains the authority for every Advice fetch. A separate scheduler capability may discover at most 20 candidate URLs from `Sitemap:` declarations in the current public `https://advice.uz/robots.txt`. It accepts only HTTPS `advice.uz` sitemap index/document files, follows no redirects, makes no arbitrary link traversal, and discards everything outside the existing canonical Advice document allowlist. Every accepted candidate is sent back through the same robots gate, one-second Advice pacing, private R2 evidence, pending-review state, and publication boundary.
+
+`LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED` is false in development, staging, and production. Turning it on requires an explicit policy/load review and separate staging evidence; this commit does not claim a live sitemap run or legal verification.
