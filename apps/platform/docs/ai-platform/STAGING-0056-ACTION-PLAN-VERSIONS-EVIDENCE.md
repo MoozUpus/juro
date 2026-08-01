@@ -1,9 +1,9 @@
 # STAGING-0056 — action-plan version history
 
-Date: 2026-08-01  
-Environment: protected staging only  
-Worker: juro-platform-staging, version febbfe45-1713-4e39-8ced-38d7e8b75b59  
-D1: juro-staging (bb716a96-b2fb-4823-90d6-6c228fed181a)  
+Date: 2026-08-01
+Environment: protected staging only
+Worker: juro-platform-staging, version febbfe45-1713-4e39-8ced-38d7e8b75b59
+D1: juro-staging (bb716a96-b2fb-4823-90d6-6c228fed181a)
 Migration: 0051_noisy_nuke.sql
 
 ## Implemented behavior
