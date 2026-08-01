@@ -25,12 +25,21 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
   const directory = projectPublicLawyerDirectory(
     [{ id: "lawyer-1", displayName: "Юрист JURO", specialtiesJson: '["contracts"]', languagesJson: '["ru","uz"]' }],
     [{ lawyerProfileId: "lawyer-1", reviewCount: 2, overallAverage: 4.666, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 }],
-    [{ lawyerProfileId: "lawyer-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" }],
+    [
+      { lawyerProfileId: "lawyer-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" },
+      { lawyerProfileId: "lawyer-1", overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z" },
+      { lawyerProfileId: "lawyer-1", overallRating: 4, body: "Третий", createdAt: "2026-07-31T00:00:00.000Z" },
+      { lawyerProfileId: "lawyer-1", overallRating: 3, body: "Скрытый четвёртый", createdAt: "2026-07-30T00:00:00.000Z" },
+    ],
   );
   assert.deepEqual(directory, [{
     id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"],
     rating: { reviewCount: 2, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
-    reviews: [{ overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" }],
+    reviews: [
+      { overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" },
+      { overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z" },
+      { overallRating: 4, body: "Третий", createdAt: "2026-07-31T00:00:00.000Z" },
+    ],
   }]);
   assert.equal(projectPublicLawyerDirectory([{ id: "lawyer-2", displayName: "Без отзывов", specialtiesJson: "[]", languagesJson: "[]" }], [], [])[0]?.rating.reviewCount, 0);
 });

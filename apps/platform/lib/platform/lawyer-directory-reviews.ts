@@ -62,7 +62,7 @@ export function projectPublicLawyerDirectory(
         qualityAverage: rounded(aggregate.qualityAverage),
         communicationAverage: rounded(aggregate.communicationAverage),
       } : { reviewCount: 0, overallAverage: null, speedAverage: null, qualityAverage: null, communicationAverage: null },
-      reviews: (reviewsByLawyer.get(lawyer.id) ?? []).map((review) => ({
+      reviews: (reviewsByLawyer.get(lawyer.id) ?? []).slice(0, 3).map((review) => ({
         overallRating: review.overallRating,
         body: review.body,
         createdAt: review.createdAt,
