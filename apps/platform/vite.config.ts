@@ -48,13 +48,7 @@ export default defineConfig(async ({ command }) => {
           }
           normalizeSitesPrimaryBindings(
             userConfig,
-            {
-              d1Binding: undefined,
-              r2Binding: undefined,
-              databaseId: "unused-without-sites-override",
-              databaseName: "unused-without-sites-override",
-              bucketName: "unused-without-sites-override",
-            },
+            {},
             localVars,
           );
         },

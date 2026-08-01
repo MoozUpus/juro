@@ -474,6 +474,31 @@ test("rejects duplicate primary binding declarations", () => {
   );
 });
 
+test("preserves resolved bindings when Sites does not explicitly override them", () => {
+  const config: CloudflareBindingConfig = {
+    d1_databases: [{ binding: "DB", database_name: "juro-production" }],
+    r2_buckets: [{ binding: "BUCKET", bucket_name: "juro-private-documents" }],
+  };
+
+  normalizeSitesPrimaryBindings(config, {}, {});
+
+  assert.deepEqual(config.d1_databases, [
+    { binding: "DB", database_name: "juro-production" },
+  ]);
+  assert.deepEqual(config.r2_buckets, [
+    { binding: "BUCKET", bucket_name: "juro-private-documents" }]);
+});
+
+test("rejects incomplete Sites binding metadata", () => {
+  assert.throws(
+    () => normalizeSitesPrimaryBindings({}, { d1Binding: "DB" }, {}),
+    /requires both databaseId and databaseName/,
+  );
+  assert.throws(
+    () => normalizeSitesPrimaryBindings({}, { r2Binding: "BUCKET" }, {}),
+    /requires bucketName/,
+  );
+});
 test("ignores every supported local secret-file convention", () => {
   const candidates = [
     ".env",

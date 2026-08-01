@@ -21,9 +21,9 @@ export type CloudflareBindingConfig = {
 export type SitesPrimaryBindings = {
   d1Binding?: string;
   r2Binding?: string;
-  databaseId: string;
-  databaseName: string;
-  bucketName: string;
+  databaseId?: string;
+  databaseName?: string;
+  bucketName?: string;
 };
 
 function replaceByBinding<T extends Binding>(
@@ -62,6 +62,15 @@ export function normalizeSitesPrimaryBindings(
   sites: SitesPrimaryBindings,
   localVars: Record<string, string>,
 ): void {
+  if (sites.d1Binding && (!sites.databaseId || !sites.databaseName)) {
+    throw new Error(
+      "Sites D1 binding override requires both databaseId and databaseName.",
+    );
+  }
+  if (sites.r2Binding && !sites.bucketName) {
+    throw new Error("Sites R2 binding override requires bucketName.");
+  }
+
   config.d1_databases = replaceByBinding(
     config.d1_databases,
     sites.d1Binding
