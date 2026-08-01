@@ -675,6 +675,8 @@ async function validateCloudflareMatrix() {
       await safelyRemoveDryRunDirectory(dryRunDirectory, paths.temporary);
     }
   }
+  // Matrix validation ends with production. Restore a harmless local artifact so later manual commands cannot reuse production configuration.
+  await build("development");
 }
 
 async function runInteractiveTask(packageName, binaryName, args, overrides) {
