@@ -2,7 +2,7 @@
 
 Date: 2026-08-01
 Environment: protected staging only
-Worker: juro-platform-staging, version febbfe45-1713-4e39-8ced-38d7e8b75b59
+Worker: juro-platform-staging, current version d66014b5-55de-46c1-94a5-7411c2032f38
 D1: juro-staging (bb716a96-b2fb-4823-90d6-6c228fed181a)
 Migration: 0051_noisy_nuke.sql
 
@@ -44,3 +44,10 @@ The export URL is deliberately not recorded.
 ## Limits
 
 Authenticated browser E2E of creating and editing a staging case remains pending because the staging site is owner-only Cloudflare Access and no synthetic test session was provisioned in this run. The route is nevertheless in the deployed server artifact and its server authorization, migration, static contract, and D1 integrity are verified.
+## Concurrency correction
+
+The initial deployment was followed by a staging-only correction: a plan-step update, progress/deadline recalculation, immutable version insertion, and case event are now sent in one atomic D1 batch. The snapshot insert deliberately fails its non-null guard when a step or plan revision did not advance as expected, rolling back the whole batch rather than leaving a changed step without a matching immutable snapshot.
+
+- Worker version: d66014b5-55de-46c1-94a5-7411c2032f38
+- npm test: 87/87 pass
+- npm run build:staging: pass

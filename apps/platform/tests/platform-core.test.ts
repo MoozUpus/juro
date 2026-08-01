@@ -1079,7 +1079,9 @@ test("action-plan history snapshots are tenant-scoped and immutable", async () =
   ]);
   assert.match(createRoute, /INSERT INTO action_plan_versions/);
   assert.match(createRoute, /plan_created/);
+  assert.match(updateRoute, /await db.batch/);
   assert.match(updateRoute, /INSERT INTO action_plan_versions/);
+  assert.match(updateRoute, /NOT NULL constraint failed/);
   assert.match(updateRoute, /planVersion: version/);
   assert.match(updateRoute, /WHERE id=\? AND revision=\?/);
   assert.match(historyRoute, /c\.workspace_id=\?/);
