@@ -26,6 +26,17 @@ export const lawyerProfileUpdateSchema = z.object({ ...editableFields, locale: z
   "At least one editable field is required",
 );
 
+export const lawyerProfileModerationListSchema = z.object({
+  status: z.enum(["pending", "public_approved", "rejected"]).default("pending"),
+  limit: z.coerce.number().int().min(1).max(100).default(50),
+}).strict();
+
+export const lawyerProfileModerationSchema = z.object({
+  decision: z.enum(["approved", "rejected"]),
+  reason: compactText(2_000),
+  locale: z.enum(["ru", "uz"]),
+}).strict();
+
 export function lawyerProfileError(locale: "ru" | "uz", code: "PROFILE_UNAVAILABLE" | "PROFILE_FORBIDDEN" | "INVALID_INPUT") {
   const ru = locale === "ru";
   const messages = {

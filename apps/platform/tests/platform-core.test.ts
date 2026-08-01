@@ -8,7 +8,7 @@ import { consultationBookingSchema } from "../lib/platform/consultation";
 import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSchema } from "../lib/platform/lawyer-request";
 import { lawyerOfferCreateSchema, lawyerOfferResponseSchema } from "../lib/platform/lawyer-offer";
 import { lawyerRequestMessageSchema } from "../lib/platform/lawyer-request-message";
-import { lawyerProfileCreateSchema, lawyerProfileUpdateSchema } from "../lib/platform/lawyer-profile";
+import { lawyerProfileCreateSchema, lawyerProfileModerationSchema, lawyerProfileUpdateSchema } from "../lib/platform/lawyer-profile";
 import { lawyerReviewSchema } from "../lib/platform/lawyer-review";
 import { hasLikelyPersonalData, lawyerReviewModerationSchema } from "../lib/platform/lawyer-review-moderation";
 import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
@@ -51,16 +51,32 @@ test("lawyer professional profile accepts only bounded self-declared directory d
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, advocateStatus: "verified" }).success, false);
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, experienceYears: 100 }).success, false);
   assert.equal(lawyerProfileUpdateSchema.safeParse({ locale: "ru" }).success, false);
+  assert.equal(lawyerProfileModerationSchema.safeParse({ decision: "approved", reason: "Checked current revision.", locale: "ru" }).success, true);
   const [route, client, handoffClient, migration] = await Promise.all([
     readFile(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0058_innocent_ben_grimm.sql", import.meta.url), "utf8"),
   ]);
-  assert.match(route, /account_type='lawyer'/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_updated/);
+  assert.match(route, /account_type='lawyer'/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_reapproval_requested/);
   assert.match(client, /Статус адвоката «подтверждён» нельзя установить самостоятельно/);
   for (const filter of ["specialtyFilter", "languageFilter", "minimumExperience", "minimumRating", "availabilityFilter", "advocateFilter", "firmFilter"]) assert.match(handoffClient, new RegExp(filter));
   assert.match(migration, /lawyer_profiles_directory_values_insert/); assert.match(migration, /lawyer_profiles_directory_filter_idx/);
+});
+
+test("lawyer-profile approval is staff-capability and revision gated", async () => {
+  const [capabilities, listRoute, decisionRoute, page, migration] = await Promise.all([
+    readFile(new URL("../lib/auth/staff-access.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/admin/lawyer-profiles/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/[locale]/admin/lawyer-profiles/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0059_pretty_punisher.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(capabilities, /lawyer\.profiles\.moderate/);
+  assert.match(listRoute, /freshMfaWithinMs/); assert.match(listRoute, /profile_revision/);
+  assert.match(decisionRoute, /lawyer_profile_moderation/); assert.match(decisionRoute, /profileSha256/); assert.match(decisionRoute, /lawyer_profile_moderated/);
+  assert.match(page, /lawyer\.profiles\.moderate/);
+  assert.match(migration, /lawyer_profile_moderation_revision_uidx/); assert.match(migration, /lawyer_profiles_status_requires_moderation/); assert.match(migration, /append-only/);
 });
 
 test("cinematic prototype is fail-closed outside staging", async () => {

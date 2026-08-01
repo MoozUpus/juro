@@ -8,7 +8,7 @@ import { workspaceForUser } from "../../../../lib/platform/workspace";
 type LawyerProfile = {
   id: string; displayName: string; specialtiesJson: string; languagesJson: string; status: string; publicApprovedAt: string | null;
   experienceYears: number | null; priceDescription: string | null; availabilityStatus: string; nextAvailableAt: string | null;
-  advocateStatus: string; firmName: string | null; bio: string | null;
+  advocateStatus: string; firmName: string | null; bio: string | null; profileRevision: number;
 };
 
 function response(body: unknown, status = 200) {
@@ -20,7 +20,7 @@ function serialize(profile: LawyerProfile) {
     id: profile.id, displayName: profile.displayName, specialties: JSON.parse(profile.specialtiesJson) as string[],
     languages: JSON.parse(profile.languagesJson) as string[], status: profile.status, publicApprovedAt: profile.publicApprovedAt,
     experienceYears: profile.experienceYears, priceDescription: profile.priceDescription, availabilityStatus: profile.availabilityStatus,
-    nextAvailableAt: profile.nextAvailableAt, advocateStatus: profile.advocateStatus, firmName: profile.firmName, bio: profile.bio,
+    nextAvailableAt: profile.nextAvailableAt, advocateStatus: profile.advocateStatus, firmName: profile.firmName, bio: profile.bio, profileRevision: profile.profileRevision,
   };
 }
 
@@ -29,7 +29,7 @@ async function accountIsLawyer(userId: string) {
 }
 
 async function ownProfile(userId: string) {
-  return requireD1().prepare(`SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson,status,public_approved_at AS publicApprovedAt,experience_years AS experienceYears,price_description AS priceDescription,availability_status AS availabilityStatus,next_available_at AS nextAvailableAt,advocate_status AS advocateStatus,firm_name AS firmName,bio FROM lawyer_profiles WHERE user_id=? LIMIT 1`).bind(userId).first<LawyerProfile>();
+  return requireD1().prepare(`SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson,status,public_approved_at AS publicApprovedAt,experience_years AS experienceYears,price_description AS priceDescription,availability_status AS availabilityStatus,next_available_at AS nextAvailableAt,advocate_status AS advocateStatus,firm_name AS firmName,bio,profile_revision AS profileRevision FROM lawyer_profiles WHERE user_id=? LIMIT 1`).bind(userId).first<LawyerProfile>();
 }
 
 export const GET = withApiErrors(async function GET() {
@@ -69,8 +69,8 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     displayName: value.displayName ?? profile.displayName, specialties: value.specialties ?? (JSON.parse(profile.specialtiesJson) as string[]), languages: value.languages ?? (JSON.parse(profile.languagesJson) as string[]), experienceYears: value.experienceYears === undefined ? profile.experienceYears : value.experienceYears, priceDescription: value.priceDescription === undefined ? profile.priceDescription : value.priceDescription, availabilityStatus: value.availabilityStatus ?? profile.availabilityStatus, nextAvailableAt: value.nextAvailableAt === undefined ? profile.nextAvailableAt : value.nextAvailableAt, advocateStatus: profile.advocateStatus === "verified" ? "verified" : (value.advocateStatus ?? profile.advocateStatus), firmName: value.firmName === undefined ? profile.firmName : value.firmName, bio: value.bio === undefined ? profile.bio : value.bio,
   }; const workspace = await workspaceForUser(user); const now = isoNow(); const db = requireD1();
   await db.batch([
-    db.prepare("UPDATE lawyer_profiles SET display_name=?,specialties_json=?,languages_json=?,experience_years=?,price_description=?,availability_status=?,next_available_at=?,advocate_status=?,firm_name=?,bio=?,updated_at=? WHERE id=? AND user_id=?").bind(next.displayName, JSON.stringify(next.specialties), JSON.stringify(next.languages), next.experienceYears, next.priceDescription, next.availabilityStatus, next.nextAvailableAt, next.advocateStatus, next.firmName, next.bio, now, profile.id, user.id),
-    db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_profile',?,'lawyer_profile_updated','{}',?)").bind(crypto.randomUUID(), workspace.id, user.id, profile.id, now),
+    db.prepare("UPDATE lawyer_profiles SET display_name=?,specialties_json=?,languages_json=?,experience_years=?,price_description=?,availability_status=?,next_available_at=?,advocate_status=?,firm_name=?,bio=?,profile_revision=profile_revision+1,status='pending',public_approved_at=NULL,updated_at=? WHERE id=? AND user_id=? AND profile_revision=?").bind(next.displayName, JSON.stringify(next.specialties), JSON.stringify(next.languages), next.experienceYears, next.priceDescription, next.availabilityStatus, next.nextAvailableAt, next.advocateStatus, next.firmName, next.bio, now, profile.id, user.id, profile.profileRevision),
+    db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_profile',?,'lawyer_profile_reapproval_requested',?,?)").bind(crypto.randomUUID(), workspace.id, user.id, profile.id, JSON.stringify({ previousRevision: profile.profileRevision }), now),
   ]);
   const updated = await ownProfile(user.id);
   return response({ profile: updated ? serialize(updated) : null });

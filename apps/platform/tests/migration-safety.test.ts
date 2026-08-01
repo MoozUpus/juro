@@ -349,6 +349,32 @@ test("0058 preserves lawyer profiles and rejects invalid public-directory states
   }
 });
 
+test("0059 requires immutable per-revision moderation before profile publication", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    db.exec("PRAGMA foreign_keys = OFF");
+    db.prepare("INSERT INTO lawyer_profiles (id,user_id,display_name,specialties_json,languages_json,status,availability_status,advocate_status,created_at,updated_at) VALUES ('profile-moderation','user','Profile','[]','[]','pending','unknown','not_declared','2026-08-02T00:00:00.000Z','2026-08-02T00:00:00.000Z')").run();
+    assert.throws(() => db.prepare("UPDATE lawyer_profiles SET status='public_approved',public_approved_at='2026-08-02T00:00:00.000Z' WHERE id='profile-moderation'").run(), /moderation evidence required/);
+    db.prepare("INSERT INTO lawyer_profile_moderation (id,lawyer_profile_id,profile_revision,moderator_user_id,decision,reason,profile_sha256,created_at) VALUES (?,?,?,?,?,?,?,?)").run(
+      "moderation",
+      "profile-moderation",
+      1,
+      "staff",
+      "approved",
+      "checked",
+      "a".repeat(64),
+      "2026-08-02T00:00:00.000Z",
+    );
+    assert.equal((db.prepare("SELECT status FROM lawyer_profiles WHERE id='profile-moderation'").get() as { status: string }).status, "public_approved");
+    assert.throws(() => db.prepare("UPDATE lawyer_profile_moderation SET reason='changed' WHERE id='moderation'").run(), /append-only/);
+    assert.throws(() => db.prepare("DELETE FROM lawyer_profile_moderation WHERE id='moderation'").run(), /append-only/);
+  } finally {
+    db.close();
+  }
+});
+
 test("0011 preserves existing schema and workspace data", () => {
   const db = new DatabaseSync(":memory:");
   try {
@@ -2814,8 +2840,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 137);
-    assert.equal(foreignKeyCount(db), 234);
+    assert.equal(tableDefinitions(db).size, 138);
+    assert.equal(foreignKeyCount(db), 236);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3317,8 +3343,8 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 137);
-    assert.equal(foreignKeyCount(db), 234);
+    assert.equal(tableDefinitions(db).size, 138);
+    assert.equal(foreignKeyCount(db), 236);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3881,8 +3907,8 @@ test("0033 prevents lifecycle forks, evidence mutation, cancellation after purge
       `).run(),
       /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
     );
-    assert.equal(tableDefinitions(db).size, 137);
-    assert.equal(foreignKeyCount(db), 234);
+    assert.equal(tableDefinitions(db).size, 138);
+    assert.equal(foreignKeyCount(db), 236);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

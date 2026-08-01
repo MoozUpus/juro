@@ -2108,3 +2108,26 @@ continues to return data only after the separate public-approval boundary. Its
 filters operate only on already-authorized directory rows and do not disclose
 unapproved profiles. Staging application requires a fresh private D1 backup and
 explicit owner authorization. Production remains unchanged.
+
+## D-106 — Lawyer-profile publication is revision-bound and staff-moderated
+
+Status: accepted and locally regression-tested; staging migrations pending
+Date: 2026-08-02
+
+Migration `0059_pretty_punisher.sql` adds a monotonic `profile_revision` to the
+existing `lawyer_profiles` record and an append-only
+`lawyer_profile_moderation` journal. A profile cannot be published by directly
+setting a status: a D1 trigger requires a matching immutable approved moderation
+record for the exact revision. Creating a moderation record is the only path
+which may move a pending profile to `public_approved`; rejection is equally
+durable. Any self-service profile edit clears public approval, increments the
+revision, and returns the profile to pending review.
+
+The protected staff inbox and API require an active `legal_reviewer` platform
+role plus fresh MFA. They expose only pending profiles and append a workspace
+audit event alongside the D1 moderation evidence. A declaration is never
+relabelled as `verified`, and no public directory write occurs from the client.
+The locally applied migration chain and API/UI contract are test-covered.
+Staging application requires one new checksum-verified private backup and an
+explicit authorization for *both* pending additive migrations 0058 and 0059.
+Production remains unchanged.

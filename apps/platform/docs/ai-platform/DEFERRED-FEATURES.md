@@ -25,10 +25,13 @@ This register distinguishes real implementation from planned scope. A database t
 
 ### Lawyer-directory staging gate
 
-The next additive migration (`0058`) and the real bilingual self-service
-professional-profile UI are locally implemented and tested, but no staging D1
-change, Worker deployment, public profile publication, or browser flow is
-claimed until a new private-backup and migration authorization is executed.
+The additive migrations `0058` and `0059`, the bilingual self-service
+professional-profile UI, and the fresh-MFA staff moderation inbox are locally
+implemented and tested. No staging D1 change, Worker deployment, public profile
+publication, or browser flow is claimed until a new private backup and an
+explicit authorization for both migrations are executed. Advocate verification
+and formal credential checking remain deliberately deferred; profiles can carry
+only a self-declared advocate state.
 
 ## Current account-deletion limitations
 
