@@ -317,3 +317,8 @@ A bounded implementation exists but is disabled in development, staging, and pro
 Migrations `0055` and `0056` are applied to `juro-staging` after a checksum-verified private R2 checkpoint. The authenticated lawyer picker now projects approved aggregates and at most three approved texts, but staging contains no approved review rows and no authenticated browser traversal is claimed. Reviewer reply, comprehensive PII review beyond the conservative contact/PINFL screen, public unauthenticated directory rendering, and rating moderation appeal remain open.
 
 Migration `0057_calm_rating_guard.sql` is applied to `juro-staging` after a checksum-verified private R2 checkpoint. Both rating triggers exist remotely. Authenticated browser verification of review submission and moderation remains open because Cloudflare Access is not bypassed.
+
+The authenticated lawyer-detail route is deployed to protected staging, but its
+Access-authorized browser traversal, RU/UZ visual review, and a real approved
+review record check remain open. The route does not make the public directory
+unauthenticated and does not change production.

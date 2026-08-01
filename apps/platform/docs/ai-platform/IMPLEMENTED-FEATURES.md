@@ -384,3 +384,14 @@ Local evidence: staging build, lint, type-check, and the full 87-test suite pass
 ### Approved lawyer-review directory projection (staging)
 
 The authenticated lawyer picker now returns public-profile ratings and up to three review texts only when the profile is `public_approved`, the review status is `approved`, and the immutable moderation journal records an `approved` decision. The response never includes the requester, workspace, moderation reason, or moderator identity. Rating values are computed server-side from those approved rows; a lawyer with no approved review receives no synthetic rating. Staging Worker version `164db8bf-877e-45a3-b0f1-f54f4a45bf03` contains the projection.
+
+### Authenticated lawyer detail route (staging)
+
+The directory now links to a bilingual authenticated detail route at
+`/:locale/:accountType/lawyers/:lawyerId`. The API requires a UUID and an active
+session, returns only a public-approved profile, and independently recomputes
+the approved rating/review projection on the server. It limits the review text
+to three safe approved excerpts and never serializes requester, workspace,
+moderator, or moderation-reason fields. Protected staging version
+`0ecee8c7-af31-46a7-8c1b-1aa903986e8c` receives 100% traffic. Evidence:
+`STAGING-0062-AUTHENTICATED-LAWYER-DETAIL-EVIDENCE.md`.
