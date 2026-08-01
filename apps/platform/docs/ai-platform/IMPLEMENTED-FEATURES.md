@@ -361,3 +361,7 @@ Case-plan creation now persists a version-1 snapshot. Each successful optimistic
 ## Phase 7 — owner-controlled lawyer case access
 
 The protected handoff UI now completes the existing persisted server flow. After a lawyer records a clear conflict check, the requester sees a distinct consent control before `POST /api/platform/lawyer-requests/:requestId/access-grant` can execute. An active grant displays an explicit revocation action using the same authenticated, CSRF-protected endpoint. The API continues to enforce workspace ownership, entitlement, clear conflict status, one active grant, consent/audit evidence, and immediate revocation. The browser UI is a client for these real D1-backed routes, not a simulated state. Local type-check, lint, and 87/87 targeted platform tests pass; protected staging deployment and authenticated browser verification are still pending for this UI delta.
+
+### Protected staging evidence — 2026-08-01
+
+The owner-controlled lawyer-access UI is deployed to `juro-platform-staging` as Worker version `29b75251-511d-4a0f-ac7d-c1b61214eada`. The deployment lists only staging D1, R2, Queue, Vectorize, and analytics bindings. The `deploy:staging` guard performed a clean staging rebuild before deployment. Anonymous/Access-protected and authenticated browser traversal are not claimed by this evidence.

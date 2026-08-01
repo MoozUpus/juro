@@ -2058,3 +2058,12 @@ Status: accepted and locally regression-tested; protected-staging deployment pen
 Date: 2026-08-01
 
 The consent used to create an anonymized handoff request never grants the selected lawyer access to the underlying case. The UI now keeps this distinction visible: only an `awaiting_user_consent` request with a cleared conflict check shows a second, request-specific checkbox and grant action. The client sends `consent: true` only after that action; the server independently rechecks workspace ownership, entitlement, public-approved lawyer, clear conflict state, and the absence of an active grant before one D1 batch writes the grant, consent, status, and append-only audit evidence. The owner can later revoke the same access through the protected DELETE endpoint. No new migration, provider call, production change, or client-side authorization was introduced.
+
+## D-101 — Staging deployment may only use a freshly validated staging artifact
+
+Status: accepted and dry-run verified
+Date: 2026-08-01
+
+`validate:cloudflare:matrix` intentionally builds every environment, but its prior behavior left the last generated production artifact in `dist`. A subsequent direct `wrangler deploy --config dist/server/wrangler.json` therefore attempted a production deployment. Cloudflare stopped that deployment because `production-document-analysis` does not exist; no production Worker version, D1 migration, or queue attachment was applied. Wrangler did provision two empty, requested-by-config R2 buckets: `juro-production-backups` at 01:46:41Z and `juro-production-quarantine` at 01:46:43Z. They are retained pending owner direction rather than being deleted automatically.
+
+The matrix task now restores a development artifact on completion. `npm run deploy:staging` always rebuilds staging, validates the generated name, target environment, and `APP_ENV`, then invokes Wrangler. Its staging dry-run and the following protected staging deployment succeeded. Production deployment remains forbidden without separate owner approval.
