@@ -1041,6 +1041,17 @@ test("handoff UI requires a fresh owner consent before grant and exposes revoke"
   assert.match(client, /Подтверждаю передачу выбранному юристу материалов этого дела/);
   assert.match(client, /Отозвать доступ/);
 });
+test("lawyer consultation surface uses assigned requests and the guarded conflict check", async () => {
+  const [moduleContent, client] = await Promise.all([
+    readFile(new URL("../app/_platform/ModuleContent.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(moduleContent, /accountType===\"lawyer\" \? <LawyerRequestsClient/);
+  assert.match(client, /lawyer-requests\/assigned/);
+  assert.match(client, /conflict-check/);
+  assert.match(client, /decision, locale/);
+  assert.match(client, /Материалы дела недоступны, пока владелец не предоставит доступ/);
+});
 test("assigned lawyer view reveals case metadata only for an active grant", async () => {
   const route = await readFile(new URL("../app/api/platform/lawyer-requests/assigned/route.ts", import.meta.url), "utf8");
   assert.match(route, /p\.user_id=\? AND p\.status='public_approved'/);

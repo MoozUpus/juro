@@ -249,7 +249,7 @@ No Phase 5 production-readiness claim is made.
 ## Phase 7 entitlement and handoff open gates — 2026-07-30
 
 - The deployed entitlement boundary and booking contract are real, but staging has no active subscription, consultation slot, or booking evidence; a successful paid handoff is not claimed.
-- Checkout, webhooks, add-on packs, provider reconciliation, offers, lawyer messaging, reviews, and operator management remain incomplete. The D1-backed public-approved directory list, anonymized conflict check, owner grant/revocation, and audit evidence are implemented; protected staging browser traversal of the new owner-control UI is still pending.
+- Checkout, webhooks, add-on packs, provider reconciliation, offers, lawyer messaging, reviews, and operator management remain incomplete. The D1-backed public-approved directory list, anonymized conflict check, lawyer conflict-check workspace, owner grant/revocation, and audit evidence are implemented; protected staging browser traversal of the new owner-control UI is still pending.
 - Audio/video calls remain feature-off and are not simulated; no provider has been selected.
 - Authenticated RU/UZ browser traversal remains blocked by the recorded browser-control runtime failure before connection. Cloudflare Access was not bypassed.
 - Phase 7 is not production-ready. Functional deployment and replacement of the production UI remain separate owner approvals.

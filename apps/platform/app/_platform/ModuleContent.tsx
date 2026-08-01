@@ -3,6 +3,7 @@ import type { AccountType, PlatformLocale, PlatformModule } from "../../lib/plat
 import { ActionPlanClient } from "./ActionPlanClient";
 import { ConsultationsClient } from "./ConsultationsClient";
 import { LawyerHandoffClient } from "./LawyerHandoffClient";
+import { LawyerRequestsClient } from "./LawyerRequestsClient";
 import { DashboardClient } from "./DashboardClient";
 import { CasesClient } from "./CasesClient";
 import { TeamClient } from "./TeamClient";
@@ -22,7 +23,7 @@ const titles: Record<PlatformModule, { ru: string; uz: string }> = {
 export function ModuleContent({ locale, accountType, module, userName }: { locale: PlatformLocale; accountType: AccountType; module: PlatformModule; userName: string }) {
   const ru=locale==="ru";
   if(module==="action-plan") return <ActionPlanClient locale={locale} accountType={accountType}/>;
-  if(module==="consultations") return <><ConsultationsClient locale={locale}/><LawyerHandoffClient locale={locale}/></>;
+  if(module==="consultations") return accountType==="lawyer" ? <LawyerRequestsClient locale={locale}/> : <><ConsultationsClient locale={locale}/><LawyerHandoffClient locale={locale}/></>;
   if(module==="dashboard") return <DashboardClient locale={locale} accountType={accountType} userName={userName}/>;
   if(module==="cases") return <CasesClient locale={locale} accountType={accountType}/>;
   if(module==="team") return <TeamClient locale={locale}/>;

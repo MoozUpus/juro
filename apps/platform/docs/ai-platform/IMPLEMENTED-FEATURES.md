@@ -365,3 +365,7 @@ The protected handoff UI now completes the existing persisted server flow. After
 ### Protected staging evidence — 2026-08-01
 
 The owner-controlled lawyer-access UI is deployed to `juro-platform-staging` as Worker version `29b75251-511d-4a0f-ac7d-c1b61214eada`. The deployment lists only staging D1, R2, Queue, Vectorize, and analytics bindings. The `deploy:staging` guard performed a clean staging rebuild before deployment. Anonymous/Access-protected and authenticated browser traversal are not claimed by this evidence.
+
+## Phase 7 — lawyer conflict-check workspace
+
+For a `/:locale/lawyer/consultations` route, the platform now shows only real assigned request records from `GET /api/platform/lawyer-requests/assigned`. A lawyer can record `clear` or `conflict` through the pre-existing authenticated, CSRF-protected conflict-check route. The request owner alone retains the separate grant/revoke controls; the lawyer UI renders case details only when the server reports an active grant. No lawyer assignment, case data, or decision is manufactured by the client.

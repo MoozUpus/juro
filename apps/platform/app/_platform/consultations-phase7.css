@@ -128,3 +128,24 @@
   .lawyer-access-action { align-items: stretch; }
   .lawyer-access-action .consult-consent { flex-basis: 100%; }
 }
+
+.lawyer-requests { display: grid; gap: 18px; max-width: 980px; margin: 0 auto; }
+.lawyer-requests > header { display: flex; gap: 14px; align-items: flex-start; padding: 22px; border-radius: 18px; background: #062844; color: #fff; }
+.lawyer-requests > header > svg { flex: none; color: #d1aa61; }
+.lawyer-requests h1 { margin: 3px 0 6px; font-size: clamp(1.4rem, 3vw, 2rem); }
+.lawyer-requests header p { max-width: 740px; margin: 0; color: #d9e3eb; line-height: 1.55; }
+.lawyer-request-list { display: grid; gap: 12px; }
+.lawyer-request-list article { display: grid; gap: 13px; padding: 18px; border: 1px solid #d9dfe3; border-radius: 16px; background: #fff; }
+.lawyer-request-summary { display: grid; gap: 6px; }
+.lawyer-request-summary strong { color: #172633; }
+.lawyer-request-summary time { color: #62707c; font-size: 12px; }
+.lawyer-request-summary p { margin: 0; color: #354555; line-height: 1.55; white-space: pre-wrap; }
+.lawyer-conflict-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.lawyer-conflict-actions button { display: inline-flex; min-height: 44px; align-items: center; gap: 8px; padding: 0 15px; border: 0; border-radius: 10px; background: #062844; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.lawyer-conflict-actions button.secondary { border: 1px solid #7d2f2f; background: #fff; color: #7d2f2f; }
+.lawyer-conflict-actions button:disabled { opacity: .58; cursor: not-allowed; }
+.lawyer-conflict-actions button:focus-visible { outline: 3px solid #87631f; outline-offset: 3px; }
+.lawyer-case-access { padding: 13px; border: 1px solid #b9d7c1; border-radius: 11px; background: #edf8f1; color: #174b35; }
+.lawyer-case-access p { margin: 5px 0 0; line-height: 1.5; }
+.lawyer-request-privacy { margin: 0; color: #5d4d2d; font-size: 13px; line-height: 1.5; }
+@media (max-width: 620px) { .lawyer-requests > header { padding: 18px; } .lawyer-conflict-actions button { width: 100%; justify-content: center; } }
