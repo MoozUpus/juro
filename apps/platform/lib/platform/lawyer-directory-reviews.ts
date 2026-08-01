@@ -3,6 +3,13 @@ export type PublicLawyerDirectoryRow = {
   displayName: string;
   specialtiesJson: unknown;
   languagesJson: unknown;
+  experienceYears: number | null;
+  priceDescription: string | null;
+  availabilityStatus: string;
+  nextAvailableAt: string | null;
+  advocateStatus: string;
+  firmName: string | null;
+  bio: string | null;
 };
 
 export type ApprovedReviewAggregateRow = {
@@ -55,6 +62,13 @@ export function projectPublicLawyerDirectory(
       displayName: lawyer.displayName,
       specialties: stringList(lawyer.specialtiesJson),
       languages: stringList(lawyer.languagesJson),
+      experienceYears: lawyer.experienceYears,
+      priceDescription: lawyer.priceDescription,
+      availabilityStatus: lawyer.availabilityStatus,
+      nextAvailableAt: lawyer.nextAvailableAt,
+      advocateStatus: lawyer.advocateStatus,
+      firmName: lawyer.firmName,
+      bio: lawyer.bio,
       rating: aggregate ? {
         reviewCount: aggregate.reviewCount,
         overallAverage: rounded(aggregate.overallAverage),

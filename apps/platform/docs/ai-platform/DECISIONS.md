@@ -2088,3 +2088,23 @@ Status: accepted (staging)
 Date: 2026-08-02
 
 The authenticated lawyer picker receives rating aggregates and no more than three texts only from public-approved lawyer profiles with reviews whose parent status and immutable moderation decision are both `approved`. The server calculates all averages and never returns requester, workspace, moderator, or moderation-reason fields. A new migration is not required because it reads the staged 0055/0056 boundary. Worker version `164db8bf-877e-45a3-b0f1-f54f4a45bf03` is deployed only to `juro-platform-staging`; staging has no approved review records, so a live public projection is not claimed. Production is unchanged.
+
+## D-105 — Lawyer directory facts are self-declared until separately verified
+
+Status: accepted and locally regression-tested; staging migration pending
+Date: 2026-08-02
+
+Migration `0058_innocent_ben_grimm.sql` expands the existing `lawyer_profiles`
+table rather than creating a competing profile domain. It adds only optional
+professional facts: experience, price description, availability, next
+availability, advocate declaration, firm, and biography. It also adds a bounded
+index and D1 triggers which reject invalid experience, availability, or advocate
+states.
+
+Only an account whose server-side `account_type` is `lawyer` may create or edit
+its own profile. Creation starts at `pending`; neither the self-service API nor
+the UI can set `verified` advocate status or public approval. The directory
+continues to return data only after the separate public-approval boundary. Its
+filters operate only on already-authorized directory rows and do not disclose
+unapproved profiles. Staging application requires a fresh private D1 backup and
+explicit owner authorization. Production remains unchanged.

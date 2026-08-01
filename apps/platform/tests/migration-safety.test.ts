@@ -333,6 +333,22 @@ test("0057 rejects invalid lawyer review ratings at the D1 boundary", () => {
   }
 });
 
+test("0058 preserves lawyer profiles and rejects invalid public-directory states", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    db.exec("PRAGMA foreign_keys = OFF");
+    const before = db.prepare("PRAGMA table_info(lawyer_profiles)").all() as Array<{ name: string }>;
+    for (const column of ["experience_years", "price_description", "availability_status", "next_available_at", "advocate_status", "firm_name", "bio"]) assert.ok(before.some((item) => item.name === column));
+    db.prepare("INSERT INTO lawyer_profiles (id,user_id,display_name,specialties_json,languages_json,status,experience_years,availability_status,advocate_status,created_at,updated_at) VALUES ('profile-guard','user','Profile','[]','[]','pending',8,'available','declared','2026-08-02T00:00:00.000Z','2026-08-02T00:00:00.000Z')").run();
+    assert.throws(() => db.prepare("UPDATE lawyer_profiles SET experience_years=100 WHERE id='profile-guard'").run(), /invalid lawyer directory profile values/);
+    assert.throws(() => db.prepare("UPDATE lawyer_profiles SET advocate_status='pretend_verified' WHERE id='profile-guard'").run(), /invalid lawyer directory profile values/);
+  } finally {
+    db.close();
+  }
+});
+
 test("0011 preserves existing schema and workspace data", () => {
   const db = new DatabaseSync(":memory:");
   try {

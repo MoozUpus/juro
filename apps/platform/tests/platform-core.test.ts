@@ -8,6 +8,7 @@ import { consultationBookingSchema } from "../lib/platform/consultation";
 import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSchema } from "../lib/platform/lawyer-request";
 import { lawyerOfferCreateSchema, lawyerOfferResponseSchema } from "../lib/platform/lawyer-offer";
 import { lawyerRequestMessageSchema } from "../lib/platform/lawyer-request-message";
+import { lawyerProfileCreateSchema, lawyerProfileUpdateSchema } from "../lib/platform/lawyer-profile";
 import { lawyerReviewSchema } from "../lib/platform/lawyer-review";
 import { hasLikelyPersonalData, lawyerReviewModerationSchema } from "../lib/platform/lawyer-review-moderation";
 import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
@@ -23,7 +24,7 @@ import { isCinematicPrototypeEnvironment } from "../lib/platform/cinematic-proto
 
 test("lawyer directory projects only moderation-approved review aggregates", () => {
   const directory = projectPublicLawyerDirectory(
-    [{ id: "lawyer-1", displayName: "Юрист JURO", specialtiesJson: '["contracts"]', languagesJson: '["ru","uz"]' }],
+    [{ id: "lawyer-1", displayName: "Юрист JURO", specialtiesJson: '["contracts"]', languagesJson: '["ru","uz"]', experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика" }],
     [{ lawyerProfileId: "lawyer-1", reviewCount: 2, overallAverage: 4.666, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 }],
     [
       { lawyerProfileId: "lawyer-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" },
@@ -33,7 +34,7 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
     ],
   );
   assert.deepEqual(directory, [{
-    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"],
+    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
     rating: { reviewCount: 2, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
     reviews: [
       { overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" },
@@ -41,7 +42,25 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
       { overallRating: 4, body: "Третий", createdAt: "2026-07-31T00:00:00.000Z" },
     ],
   }]);
-  assert.equal(projectPublicLawyerDirectory([{ id: "lawyer-2", displayName: "Без отзывов", specialtiesJson: "[]", languagesJson: "[]" }], [], [])[0]?.rating.reviewCount, 0);
+  assert.equal(projectPublicLawyerDirectory([{ id: "lawyer-2", displayName: "Без отзывов", specialtiesJson: "[]", languagesJson: "[]", experienceYears: null, priceDescription: null, availabilityStatus: "unknown", nextAvailableAt: null, advocateStatus: "not_declared", firmName: null, bio: null }], [], [])[0]?.rating.reviewCount, 0);
+});
+
+test("lawyer professional profile accepts only bounded self-declared directory data", async () => {
+  const valid = { displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика", locale: "ru" };
+  assert.equal(lawyerProfileCreateSchema.safeParse(valid).success, true);
+  assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, advocateStatus: "verified" }).success, false);
+  assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, experienceYears: 100 }).success, false);
+  assert.equal(lawyerProfileUpdateSchema.safeParse({ locale: "ru" }).success, false);
+  const [route, client, handoffClient, migration] = await Promise.all([
+    readFile(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0058_innocent_ben_grimm.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /account_type='lawyer'/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_updated/);
+  assert.match(client, /Статус адвоката «подтверждён» нельзя установить самостоятельно/);
+  for (const filter of ["specialtyFilter", "languageFilter", "minimumExperience", "minimumRating", "availabilityFilter", "advocateFilter", "firmFilter"]) assert.match(handoffClient, new RegExp(filter));
+  assert.match(migration, /lawyer_profiles_directory_values_insert/); assert.match(migration, /lawyer_profiles_directory_filter_idx/);
 });
 
 test("cinematic prototype is fail-closed outside staging", async () => {

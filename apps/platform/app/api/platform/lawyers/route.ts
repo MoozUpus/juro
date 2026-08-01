@@ -6,11 +6,13 @@ export const GET = withApiErrors(async function GET() {
   await requireApiUser();
   const db = requireD1();
   const lawyers = await db.prepare(
-    `SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson
+    `SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson,
+       experience_years AS experienceYears,price_description AS priceDescription,availability_status AS availabilityStatus,
+       next_available_at AS nextAvailableAt,advocate_status AS advocateStatus,firm_name AS firmName,bio
      FROM lawyer_profiles
      WHERE status='public_approved' AND public_approved_at IS NOT NULL
      ORDER BY display_name COLLATE NOCASE LIMIT 100`,
-  ).all<{ id: string; displayName: string; specialtiesJson: unknown; languagesJson: unknown }>();
+  ).all<{ id: string; displayName: string; specialtiesJson: unknown; languagesJson: unknown; experienceYears: number | null; priceDescription: string | null; availabilityStatus: string; nextAvailableAt: string | null; advocateStatus: string; firmName: string | null; bio: string | null }>();
   const aggregates = await db.prepare(
     `SELECT r.lawyer_profile_id AS lawyerProfileId,
       COUNT(*) AS reviewCount,

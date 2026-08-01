@@ -16,6 +16,13 @@ type PublicLawyer = {
   displayName: string;
   specialties: string[];
   languages: string[];
+  experienceYears: number | null;
+  priceDescription: string | null;
+  availabilityStatus: "unknown" | "available" | "limited" | "unavailable";
+  nextAvailableAt: string | null;
+  advocateStatus: "not_declared" | "declared" | "verified";
+  firmName: string | null;
+  bio: string | null;
   rating: { reviewCount: number; overallAverage: number | null; speedAverage: number | null; qualityAverage: number | null; communicationAverage: number | null };
   reviews: Array<{ overallRating: number; body: string | null; createdAt: string }>;
 };
@@ -26,6 +33,13 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
   const [requests, setRequests] = useState<HandoffRequest[]>([]);
   const [lawyers, setLawyers] = useState<PublicLawyer[]>([]);
   const [lawyerProfileId, setLawyerProfileId] = useState("");
+  const [specialtyFilter, setSpecialtyFilter] = useState("");
+  const [languageFilter, setLanguageFilter] = useState("");
+  const [minimumExperience, setMinimumExperience] = useState("");
+  const [minimumRating, setMinimumRating] = useState("");
+  const [availabilityFilter, setAvailabilityFilter] = useState("");
+  const [advocateFilter, setAdvocateFilter] = useState("");
+  const [firmFilter, setFirmFilter] = useState("");
   const [entitlements, setEntitlements] = useState<WorkspaceEntitlements | null>(null);
   const [caseId, setCaseId] = useState("");
   const [summary, setSummary] = useState("");
@@ -113,6 +127,18 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
     finally { setAccessActionId(""); }
   }
 
+  const specialties = [...new Set(lawyers.flatMap((lawyer) => lawyer.specialties))].sort();
+  const languages = [...new Set(lawyers.flatMap((lawyer) => lawyer.languages))].sort();
+  const filteredLawyers = lawyers.filter((lawyer) =>
+    (!specialtyFilter || lawyer.specialties.includes(specialtyFilter))
+    && (!languageFilter || lawyer.languages.includes(languageFilter))
+    && (!minimumExperience || (lawyer.experienceYears ?? -1) >= Number(minimumExperience))
+    && (!minimumRating || (lawyer.rating.overallAverage ?? 0) >= Number(minimumRating))
+    && (!availabilityFilter || lawyer.availabilityStatus === availabilityFilter)
+    && (!advocateFilter || lawyer.advocateStatus === advocateFilter)
+    && (!firmFilter || lawyer.firmName?.toLocaleLowerCase().includes(firmFilter.toLocaleLowerCase()))
+  );
+
   return <section className="lawyer-handoff" aria-labelledby="lawyer-handoff-heading">
     <div className="lawyer-handoff-heading">
       <UserRoundCheck aria-hidden="true" />
@@ -122,7 +148,8 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
     {message && <p className="lawyer-handoff-success" role="status"><ShieldCheck aria-hidden="true" />{message}</p>}
     <form onSubmit={(event) => void submit(event)}>
       <label>{ru ? "Дело" : "Ish"}<select value={caseId} onChange={(event) => setCaseId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}>{cases.length ? cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>) : <option value="">{ru ? "Нет доступных дел" : "Mavjud ish yo‘q"}</option>}</select></label>
-      <label>{ru ? "Юрист" : "Yurist"}<select value={lawyerProfileId} onChange={(event) => setLawyerProfileId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}><option value="">{ru ? "Назначить через JURO" : "JURO orqali tayinlash"}</option>{lawyers.map((lawyer) => <option key={lawyer.id} value={lawyer.id}>{lawyer.displayName}{lawyer.specialties.length ? ` — ${lawyer.specialties.join(", ")}` : ""}{lawyer.rating.reviewCount ? ` · ${lawyer.rating.overallAverage?.toFixed(1)}/5 (${lawyer.rating.reviewCount})` : ""}</option>)}</select></label>
+      <fieldset className="lawyer-directory-filters"><legend>{ru ? "Фильтры каталога юристов" : "Yuristlar katalogi filtrlari"}</legend><label>{ru ? "Специализация" : "Mutaxassislik"}<select value={specialtyFilter} onChange={(event) => setSpecialtyFilter(event.target.value)}><option value="">{ru ? "Все" : "Barchasi"}</option>{specialties.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label>{ru ? "Язык" : "Til"}<select value={languageFilter} onChange={(event) => setLanguageFilter(event.target.value)}><option value="">{ru ? "Все" : "Barchasi"}</option>{languages.map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label>{ru ? "Стаж от" : "Tajriba, kamida"}<select value={minimumExperience} onChange={(event) => setMinimumExperience(event.target.value)}><option value="">{ru ? "Любой" : "Istalgan"}</option><option value="1">1</option><option value="3">3</option><option value="5">5</option><option value="10">10</option></select></label><label>{ru ? "Рейтинг от" : "Reyting, kamida"}<select value={minimumRating} onChange={(event) => setMinimumRating(event.target.value)}><option value="">{ru ? "Любой" : "Istalgan"}</option><option value="4">4/5</option><option value="4.5">4.5/5</option></select></label><label>{ru ? "Доступность" : "Mavjudlik"}<select value={availabilityFilter} onChange={(event) => setAvailabilityFilter(event.target.value)}><option value="">{ru ? "Любая" : "Istalgan"}</option><option value="available">{ru ? "Доступен" : "Mavjud"}</option><option value="limited">{ru ? "Ограниченная" : "Cheklangan"}</option><option value="unavailable">{ru ? "Недоступен" : "Mavjud emas"}</option></select></label><label>{ru ? "Статус адвоката" : "Advokat maqomi"}<select value={advocateFilter} onChange={(event) => setAdvocateFilter(event.target.value)}><option value="">{ru ? "Любой" : "Istalgan"}</option><option value="verified">{ru ? "Подтверждён JURO" : "JURO tasdiqlagan"}</option><option value="declared">{ru ? "Заявлен" : "Bildirilgan"}</option></select></label><label>{ru ? "Фирма" : "Firma"}<input value={firmFilter} maxLength={180} onChange={(event) => setFirmFilter(event.target.value)} /></label></fieldset>
+      <label>{ru ? "Юрист" : "Yurist"}<select value={lawyerProfileId} onChange={(event) => setLawyerProfileId(event.target.value)} disabled={!entitlements?.lawyerHandoff || busy}><option value="">{ru ? "Назначить через JURO" : "JURO orqali tayinlash"}</option>{filteredLawyers.map((lawyer) => <option key={lawyer.id} value={lawyer.id}>{lawyer.displayName}{lawyer.specialties.length ? ` — ${lawyer.specialties.join(", ")}` : ""}{lawyer.rating.reviewCount ? ` · ${lawyer.rating.overallAverage?.toFixed(1)}/5 (${lawyer.rating.reviewCount})` : ""}</option>)}</select><small>{ru ? `Найдено: ${filteredLawyers.length}` : `Topildi: ${filteredLawyers.length}`}</small></label>
       <label>{ru ? "Анонимизированное описание для conflict check" : "Manfaatlar to‘qnashuvi tekshiruvi uchun anonimlashtirilgan tavsif"}<textarea value={summary} minLength={20} maxLength={2000} required disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setSummary(event.target.value)} placeholder={ru ? "Без имён, реквизитов и содержания документов" : "Ismlar, rekvizitlar va hujjat mazmunisiz"} /></label>
       <label className="consult-consent"><input type="checkbox" checked={consent} disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setConsent(event.target.checked)} /><span>{ru ? "Подтверждаю создание анонимизированной заявки; доступ к делу пока не предоставляется." : "Anonimlashtirilgan so‘rov yaratilishini tasdiqlayman; ishga ruxsat hozircha berilmaydi."}</span></label>
       <button type="submit" disabled={!entitlements?.lawyerHandoff || !cases.length || summary.trim().length < 20 || !consent || busy}>{busy ? <LoaderCircle className="spin" /> : null}{ru ? "Создать заявку" : "So‘rov yaratish"}</button>

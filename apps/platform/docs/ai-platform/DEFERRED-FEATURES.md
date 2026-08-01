@@ -23,6 +23,13 @@ This register distinguishes real implementation from planned scope. A database t
 - Production backup/quarantine targets, operational RTO/RPO, scheduled backup automation, alert delivery, DLQ redrive UI, and full incident rehearsal remain open.
 - Policies are drafts until final RU/UZ legal approval. Production deployment and production UI replacement require separate owner confirmations.
 
+### Lawyer-directory staging gate
+
+The next additive migration (`0058`) and the real bilingual self-service
+professional-profile UI are locally implemented and tested, but no staging D1
+change, Worker deployment, public profile publication, or browser flow is
+claimed until a new private-backup and migration authorization is executed.
+
 ## Current account-deletion limitations
 
 The local deletion slice covers D1/R2 operational content present in the current schema, cancellation, blockers, retry, tombstoning, retained evidence, queue/cron execution, and RU/UZ settings UI. It does not yet delete user-document Vectorize entries because tenant document indexing is not active. It also does not claim provider-side AI retention deletion, guest purge, voice-audio purge, or legal-hold adjudication.
