@@ -25,12 +25,15 @@ export async function PATCH(request: Request, context: Context) {
   const profile = await db.prepare(`SELECT p.id,u.default_workspace_id AS workspaceId,p.profile_revision AS profileRevision,p.display_name AS displayName,p.specialties_json AS specialtiesJson,p.languages_json AS languagesJson,p.experience_years AS experienceYears,p.price_description AS priceDescription,p.availability_status AS availabilityStatus,p.next_available_at AS nextAvailableAt,p.advocate_status AS advocateStatus,p.firm_name AS firmName,p.bio FROM lawyer_profiles p JOIN user_profiles u ON u.id=p.user_id WHERE p.id=? AND p.status='pending' LIMIT 1`).bind(profileId.data).first<PendingProfile>();
   if (!profile?.workspaceId) return Response.json({ code: "PROFILE_UNAVAILABLE" }, { status: 409 });
   const now = isoNow();
+  const moderationId = crypto.randomUUID();
+  const auditId = crypto.randomUUID();
   const profileSha256 = await sha256(JSON.stringify({ id: profile.id, revision: profile.profileRevision, displayName: profile.displayName, specialtiesJson: profile.specialtiesJson, languagesJson: profile.languagesJson, experienceYears: profile.experienceYears, priceDescription: profile.priceDescription, availabilityStatus: profile.availabilityStatus, nextAvailableAt: profile.nextAvailableAt, advocateStatus: profile.advocateStatus, firmName: profile.firmName, bio: profile.bio }));
   try {
-    await db.batch([
-      db.prepare("INSERT INTO lawyer_profile_moderation (id,lawyer_profile_id,profile_revision,moderator_user_id,decision,reason,profile_sha256,created_at) VALUES (?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(), profile.id, profile.profileRevision, staff.userId, parsed.data.decision, parsed.data.reason, profileSha256, now),
-      db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_profile',?,'lawyer_profile_moderated',?,?)").bind(crypto.randomUUID(), profile.workspaceId, staff.userId, profile.id, JSON.stringify({ decision: parsed.data.decision, profileRevision: profile.profileRevision, profileSha256 }), now),
+    const results = await db.batch([
+      db.prepare("INSERT INTO lawyer_profile_moderation (id,lawyer_profile_id,profile_revision,moderator_user_id,decision,reason,profile_sha256,created_at) SELECT ?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM lawyer_profiles WHERE id=? AND profile_revision=? AND status='pending')").bind(moderationId, profile.id, profile.profileRevision, staff.userId, parsed.data.decision, parsed.data.reason, profileSha256, now, profile.id, profile.profileRevision),
+      db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) SELECT ?,?,?,'lawyer_profile',?,'lawyer_profile_moderated',?,? WHERE EXISTS (SELECT 1 FROM lawyer_profile_moderation WHERE id=? AND lawyer_profile_id=? AND profile_revision=? AND moderator_user_id=? AND decision=?)").bind(auditId, profile.workspaceId, staff.userId, profile.id, JSON.stringify({ decision: parsed.data.decision, profileRevision: profile.profileRevision, profileSha256 }), now, moderationId, profile.id, profile.profileRevision, staff.userId, parsed.data.decision),
     ]);
+    if (Number(results[0]?.meta.changes ?? 0) !== 1 || Number(results[1]?.meta.changes ?? 0) !== 1) return Response.json({ code: "PROFILE_UNAVAILABLE" }, { status: 409 });
   } catch {
     return Response.json({ code: "PROFILE_UNAVAILABLE" }, { status: 409 });
   }

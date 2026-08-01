@@ -2127,7 +2127,11 @@ The protected staff inbox and API require an active `legal_reviewer` platform
 role plus fresh MFA. They expose only pending profiles and append a workspace
 audit event alongside the D1 moderation evidence. A declaration is never
 relabelled as `verified`, and no public directory write occurs from the client.
-The locally applied migration chain and API/UI contract are test-covered.
+Both the self-service edit and the staff decision use D1 batch guards: the
+state change and its audit event must each affect exactly one row, otherwise the
+request fails closed. An empty self-service PATCH is a no-op, so it cannot
+accidentally invalidate an already-approved profile. The locally applied
+migration chain and API/UI contract are test-covered.
 Staging application requires one new checksum-verified private backup and an
 explicit authorization for *both* pending additive migrations 0058 and 0059.
 Production remains unchanged.
