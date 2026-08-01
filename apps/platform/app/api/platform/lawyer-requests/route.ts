@@ -17,7 +17,12 @@ export const GET = withApiErrors(async function GET() {
   const results = await db.prepare(
     `SELECT r.id,r.case_id AS caseId,r.lawyer_profile_id AS lawyerProfileId,r.status,r.anonymized_summary AS anonymizedSummary,
       r.created_at AS createdAt,r.updated_at AS updatedAt,p.display_name AS lawyerName,
-      c.status AS conflictStatus,g.id AS activeGrantId,g.created_at AS grantedAt
+      c.status AS conflictStatus,g.id AS activeGrantId,g.created_at AS grantedAt,
+      (SELECT o.id FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) AS offerId,
+      (SELECT o.status FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) AS offerStatus,
+      (SELECT o.scope_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) AS offerScopeDescription,
+      (SELECT o.price_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) AS offerPriceDescription,
+      (SELECT o.duration_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) AS offerDurationDescription
      FROM lawyer_requests r
      LEFT JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
      LEFT JOIN conflict_checks c ON c.lawyer_request_id=r.id

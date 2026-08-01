@@ -1444,6 +1444,23 @@ export const conflictChecks = sqliteTable("conflict_checks", {
 export const lawyerAccessGrants = sqliteTable("lawyer_access_grants", {
   id: text("id").primaryKey(), lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), lawyerUserId: text("lawyer_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), grantedByUserId: text("granted_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), expiresAt: text("expires_at"), revokedAt: text("revoked_at"), revokeReason: text("revoke_reason"), createdAt: text("created_at").notNull(),
 }, (table) => [uniqueIndex("lawyer_access_grants_request_uidx").on(table.lawyerRequestId), index("lawyer_access_grants_case_idx").on(table.caseId, table.revokedAt), index("lawyer_access_grants_lawyer_idx").on(table.lawyerUserId, table.revokedAt)]);
+export const lawyerOffers = sqliteTable("lawyer_offers", {
+  id: text("id").primaryKey(),
+  lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  status: text("status").notNull().default("proposed"),
+  scopeDescription: text("scope_description").notNull(),
+  priceDescription: text("price_description").notNull(),
+  durationDescription: text("duration_description").notNull(),
+  createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  respondedByUserId: text("responded_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  respondedAt: text("responded_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("lawyer_offers_request_version_uidx").on(table.lawyerRequestId, table.version),
+  index("lawyer_offers_request_status_idx").on(table.lawyerRequestId, table.status, table.updatedAt),
+]);
 export const supportTickets = sqliteTable("support_tickets", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), category: text("category").notNull(), severity: text("severity").notNull().default("normal"), status: text("status").notNull().default("open"), subject: text("subject").notNull(), linkedEntityType: text("linked_entity_type"), linkedEntityId: text("linked_entity_id"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(), closedAt: text("closed_at"),
 }, (table) => [index("support_tickets_workspace_idx").on(table.workspaceId, table.updatedAt), index("support_tickets_status_idx").on(table.status, table.updatedAt), index("support_tickets_requester_idx").on(table.requesterUserId, table.updatedAt)]);

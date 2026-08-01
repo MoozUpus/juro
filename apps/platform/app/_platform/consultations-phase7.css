@@ -149,3 +149,16 @@
 .lawyer-case-access p { margin: 5px 0 0; line-height: 1.5; }
 .lawyer-request-privacy { margin: 0; color: #5d4d2d; font-size: 13px; line-height: 1.5; }
 @media (max-width: 620px) { .lawyer-requests > header { padding: 18px; } .lawyer-conflict-actions button { width: 100%; justify-content: center; } }
+
+.lawyer-offer-card { display: grid; gap: 5px; width: min(100%, 680px); padding: 14px; border: 1px solid #d8c497; border-radius: 12px; background: #fff8e9; color: #4e3e21; }
+.lawyer-offer-card p { margin: 0; line-height: 1.5; }
+.lawyer-offer-form { display: grid; gap: 10px; padding: 14px; border: 1px solid #d9dfe3; border-radius: 12px; background: #fbfcfd; }
+.lawyer-offer-form h2 { margin: 0; font-size: 16px; color: #172633; }
+.lawyer-offer-form label { display: grid; gap: 5px; color: #263746; font-size: 13px; font-weight: 750; }
+.lawyer-offer-form input,.lawyer-offer-form textarea { width: 100%; min-height: 40px; padding: 9px 10px; border: 1px solid #abb4bc; border-radius: 9px; background: #fff; color: #172633; font: inherit; }
+.lawyer-offer-form textarea { min-height: 96px; resize: vertical; }
+.lawyer-offer-form button,.lawyer-offer-actions button { display: inline-flex; width: fit-content; min-height: 42px; align-items: center; justify-content: center; gap: 8px; padding: 0 14px; border: 0; border-radius: 9px; background: #062844; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.lawyer-offer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; }
+.lawyer-offer-actions button.secondary { border: 1px solid #7d2f2f; background: #fff; color: #7d2f2f; }
+.lawyer-offer-form input:focus-visible,.lawyer-offer-form textarea:focus-visible,.lawyer-offer-form button:focus-visible,.lawyer-offer-actions button:focus-visible { outline: 3px solid #87631f; outline-offset: 3px; }
+@media (max-width: 620px) { .lawyer-offer-form button,.lawyer-offer-actions button { width: 100%; } }

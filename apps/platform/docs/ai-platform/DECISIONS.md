@@ -2067,3 +2067,10 @@ Date: 2026-08-01
 `validate:cloudflare:matrix` intentionally builds every environment, but its prior behavior left the last generated production artifact in `dist`. A subsequent direct `wrangler deploy --config dist/server/wrangler.json` therefore attempted a production deployment. Cloudflare stopped that deployment because `production-document-analysis` does not exist; no production Worker version, D1 migration, or queue attachment was applied. Wrangler did provision two empty, requested-by-config R2 buckets: `juro-production-backups` at 01:46:41Z and `juro-production-quarantine` at 01:46:43Z. They are retained pending owner direction rather than being deleted automatically.
 
 The matrix task now restores a development artifact on completion. `npm run deploy:staging` always rebuilds staging, validates the generated name, target environment, and `APP_ENV`, then invokes Wrangler. Its staging dry-run and the following protected staging deployment succeeded. Production deployment remains forbidden without separate owner approval.
+
+## D-102 — Lawyer terms are persisted only after active, revocable case access
+
+Status: accepted (staging)
+Date: 2026-08-01
+
+A lawyer may create a scope, price description, and duration only after the existing server-side checks confirm a public-approved profile and active, non-revoked case grant. The case owner sees and responds to the latest offer only from the owning workspace. Declining permits a replacement; accepting makes the current workflow terminal so an accepted proposal cannot be silently overwritten. Proposal and response events are appended to workspace audit evidence. The route deliberately does not create payment obligations, invoices, or collect payment data. Migration `0052_narrow_christian_walker.sql` is additive, was backed up to private staging R2 with checksum round-trip, and was applied only to `juro-staging`. Evidence: `STAGING-0057-LAWYER-OFFERS-EVIDENCE.md`.

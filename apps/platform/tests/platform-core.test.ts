@@ -6,6 +6,7 @@ import { entitlementsForSubscription } from "../lib/billing/entitlements";
 import { billingPlanSelectionSchema } from "../lib/billing/input";
 import { consultationBookingSchema } from "../lib/platform/consultation";
 import { conflictCheckDecisionSchema, lawyerAccessGrantSchema, lawyerRequestSchema } from "../lib/platform/lawyer-request";
+import { lawyerOfferCreateSchema, lawyerOfferResponseSchema } from "../lib/platform/lawyer-offer";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -1112,4 +1113,38 @@ test("action-plan history snapshots are tenant-scoped and immutable", async () =
   assert.match(migration, /action_plan_versions_plan_version_uidx/);
   assert.match(migration, /action_plan_versions_no_update/);
   assert.match(migration, /action_plan_versions_no_delete/);
+});
+test("lawyer offers are validated, access-bound, auditable, and owner-resolved", async () => {
+  assert.equal(lawyerOfferCreateSchema.safeParse({
+    scopeDescription: "Проверить договор, подготовить замечания и согласовать безопасную редакцию.",
+    priceDescription: "По согласованию вне платформы",
+    durationDescription: "До трёх рабочих дней",
+    locale: "ru",
+  }).success, true);
+  assert.equal(lawyerOfferCreateSchema.safeParse({ scopeDescription: "short", priceDescription: "x", durationDescription: "x", locale: "ru" }).success, false);
+  assert.equal(lawyerOfferResponseSchema.safeParse({ decision: "accepted", locale: "uz" }).success, true);
+  assert.equal(lawyerOfferResponseSchema.safeParse({ decision: "other", locale: "uz" }).success, false);
+
+  const [route, ownerRoute, assignedRoute, lawyerClient, ownerClient, migration] = await Promise.all([
+    readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/offer/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/lawyer-requests/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/lawyer-requests/assigned/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0052_narrow_christian_walker.sql", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /p\.user_id=\? AND p\.status='public_approved'/);
+  assert.match(route, /g\.revoked_at IS NULL/);
+  assert.match(route, /r\.workspace_id=\? AND r\.requester_user_id=\?/);
+  assert.match(route, /lawyer_offer_proposed/);
+  assert.match(route, /lawyer_offer_accepted/);
+  assert.match(route, /lawyer_offer_declined/);
+  assert.match(route, /WHERE id=\? AND status='proposed'/);
+  assert.match(ownerRoute, /lawyer_offers o WHERE o\.lawyer_request_id=r\.id/);
+  assert.match(assignedRoute, /CASE WHEN g\.id IS NOT NULL THEN \(SELECT o\.id/);
+  assert.match(lawyerClient, /lawyer-requests\/\$\{encodeURIComponent\(item\.id\)\}\/offer/);
+  assert.match(ownerClient, /respondToOffer/);
+  assert.match(ownerClient, /Оплата в платформе пока не выполняется/);
+  assert.match(migration, /CREATE TABLE `lawyer_offers`/);
+  assert.match(migration, /lawyer_offers_request_version_uidx/);
 });

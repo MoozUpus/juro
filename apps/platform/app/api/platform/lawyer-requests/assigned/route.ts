@@ -15,7 +15,12 @@ export const GET = withApiErrors(async function GET() {
       CASE WHEN g.id IS NOT NULL THEN cs.title END AS caseTitle,
       CASE WHEN g.id IS NOT NULL THEN cs.description END AS caseDescription,
       CASE WHEN g.id IS NOT NULL THEN cs.legal_area END AS legalArea,
-      CASE WHEN g.id IS NOT NULL THEN cs.status END AS caseStatus
+      CASE WHEN g.id IS NOT NULL THEN cs.status END AS caseStatus,
+      CASE WHEN g.id IS NOT NULL THEN (SELECT o.id FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerId,
+      CASE WHEN g.id IS NOT NULL THEN (SELECT o.status FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerStatus,
+      CASE WHEN g.id IS NOT NULL THEN (SELECT o.scope_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerScopeDescription,
+      CASE WHEN g.id IS NOT NULL THEN (SELECT o.price_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerPriceDescription,
+      CASE WHEN g.id IS NOT NULL THEN (SELECT o.duration_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerDurationDescription
      FROM lawyer_requests r
      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
      JOIN conflict_checks c ON c.lawyer_request_id=r.id AND c.lawyer_profile_id=p.id

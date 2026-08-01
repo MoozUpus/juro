@@ -369,3 +369,9 @@ The owner-controlled lawyer-access UI is deployed to `juro-platform-staging` as 
 ## Phase 7 — lawyer conflict-check workspace
 
 For a `/:locale/lawyer/consultations` route, the platform now shows only real assigned request records from `GET /api/platform/lawyer-requests/assigned`. A lawyer can record `clear` or `conflict` through the pre-existing authenticated, CSRF-protected conflict-check route. The request owner alone retains the separate grant/revoke controls; the lawyer UI renders case details only when the server reports an active grant. No lawyer assignment, case data, or decision is manufactured by the client.
+
+## Phase 7 — persisted lawyer offer terms
+
+Protected staging now supports an end-to-end lawyer offer boundary: an assigned public-approved lawyer with an active grant can persist work scope, price description, and duration; the workspace owner can accept or decline the latest proposal. The API rechecks the active grant and public profile on the server, scopes owner reads and decisions to the requester workspace, hides the offer from a lawyer without an active grant, and writes proposal/decision audit events. An accepted proposal is not replaceable through this route. Payment is explicitly outside the platform at this stage.
+
+Migration `0052_narrow_christian_walker.sql` added only the `lawyer_offers` table and its indexes after a private remote staging checkpoint. `quick_check` is `ok` and `foreign_key_check` is empty. Worker version `ad482923-41bc-4a59-a846-54b16e4dcbb1` serves 100% of `juro-platform-staging`; production is unchanged. See `STAGING-0057-LAWYER-OFFERS-EVIDENCE.md`.

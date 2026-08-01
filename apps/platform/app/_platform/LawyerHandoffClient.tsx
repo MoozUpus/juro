@@ -8,7 +8,7 @@ import type { WorkspaceEntitlements } from "../../lib/billing/entitlements";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 type CaseOption = { id: string; title: string };
-type HandoffRequest = { id: string; caseId: string; status: string; createdAt: string; lawyerName?: string | null; conflictStatus?: string | null; activeGrantId?: string | null };
+type HandoffRequest = { id: string; caseId: string; status: string; createdAt: string; lawyerName?: string | null; conflictStatus?: string | null; activeGrantId?: string | null; offerId?: string | null; offerStatus?: string | null; offerScopeDescription?: string | null; offerPriceDescription?: string | null; offerDurationDescription?: string | null };
 type PublicLawyer = { id: string; displayName: string; specialties: string[]; languages: string[] };
 
 export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
@@ -68,6 +68,22 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
     finally { setBusy(false); }
   }
 
+  async function respondToOffer(item: HandoffRequest, decision: "accepted" | "declined") {
+    if (!item.offerId || item.offerStatus !== "proposed") return;
+    setAccessActionId(item.id); setError(""); setMessage("");
+    try {
+      const response = await fetch(`/api/platform/lawyer-requests/${encodeURIComponent(item.id)}/offer`, {
+        method: "PATCH", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ decision, locale }),
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "Ошибка");
+      setMessage(decision === "accepted"
+        ? (ru ? "Условия юриста приняты. Оплата в платформе пока не выполняется." : "Yurist shartlari qabul qilindi. Platformada to‘lov hozircha amalga oshirilmaydi.")
+        : (ru ? "Условия отклонены. Юрист сможет направить обновлённое предложение." : "Shartlar rad etildi. Yurist yangilangan taklif yuborishi mumkin."));
+      await load();
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setAccessActionId(""); }
+  }
   async function updateCaseAccess(item: HandoffRequest, action: "grant" | "revoke") {
     if (action === "grant" && !accessConsents[item.id]) return;
     setAccessActionId(item.id); setError(""); setMessage("");
@@ -102,9 +118,11 @@ export function LawyerHandoffClient({ locale }: { locale: PlatformLocale }) {
       <label className="consult-consent"><input type="checkbox" checked={consent} disabled={!entitlements?.lawyerHandoff || busy} onChange={(event) => setConsent(event.target.checked)} /><span>{ru ? "Подтверждаю создание анонимизированной заявки; доступ к делу пока не предоставляется." : "Anonimlashtirilgan so‘rov yaratilishini tasdiqlayman; ishga ruxsat hozircha berilmaydi."}</span></label>
       <button type="submit" disabled={!entitlements?.lawyerHandoff || !cases.length || summary.trim().length < 20 || !consent || busy}>{busy ? <LoaderCircle className="spin" /> : null}{ru ? "Создать заявку" : "So‘rov yaratish"}</button>
     </form>
-    {requests.length > 0 && <div className="lawyer-handoff-list"><h3>{ru ? "Мои заявки к юристу" : "Yuristga yuborgan so‘rovlarim"}</h3>{requests.map((item) => <div key={item.id}><strong>{handoffStatus(item.status, ru)}</strong><span>{item.lawyerName || (ru ? "Ожидается назначение JURO" : "JURO tayinlashi kutilmoqda")}</span><time dateTime={item.createdAt}>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(item.createdAt))}</time>{item.status === "awaiting_user_consent" && <div className="lawyer-access-action"><label className="consult-consent"><input type="checkbox" checked={Boolean(accessConsents[item.id])} disabled={accessActionId === item.id} onChange={(event) => setAccessConsents((current) => ({ ...current, [item.id]: event.target.checked }))} /><span>{ru ? "Подтверждаю передачу выбранному юристу материалов этого дела. Доступ можно отозвать в любой момент." : "Tanlangan yuristga ushbu ish materiallariga ruxsat berilishini tasdiqlayman. Ruxsatni istalgan paytda bekor qilish mumkin."}</span></label><button type="button" disabled={!accessConsents[item.id] || accessActionId === item.id} onClick={() => void updateCaseAccess(item, "grant")}>{accessActionId === item.id ? <LoaderCircle className="spin" /> : null}{ru ? "Предоставить доступ" : "Ruxsat berish"}</button></div>}{item.activeGrantId && <div className="lawyer-access-action"><p>{ru ? "У юриста есть доступ к материалам этого дела." : "Yurist ushbu ish materiallariga ruxsatga ega."}</p><button type="button" className="secondary" disabled={accessActionId === item.id} onClick={() => void updateCaseAccess(item, "revoke")}>{accessActionId === item.id ? <LoaderCircle className="spin" /> : null}{ru ? "Отозвать доступ" : "Ruxsatni bekor qilish"}</button></div>}</div>)}</div>}
+    {requests.length > 0 && <div className="lawyer-handoff-list"><h3>{ru ? "Мои заявки к юристу" : "Yuristga yuborgan so‘rovlarim"}</h3>{requests.map((item) => <div key={item.id}><strong>{handoffStatus(item.status, ru)}</strong><span>{item.lawyerName || (ru ? "Ожидается назначение JURO" : "JURO tayinlashi kutilmoqda")}</span><time dateTime={item.createdAt}>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(item.createdAt))}</time>{item.status === "awaiting_user_consent" && <div className="lawyer-access-action"><label className="consult-consent"><input type="checkbox" checked={Boolean(accessConsents[item.id])} disabled={accessActionId === item.id} onChange={(event) => setAccessConsents((current) => ({ ...current, [item.id]: event.target.checked }))} /><span>{ru ? "Подтверждаю передачу выбранному юристу материалов этого дела. Доступ можно отозвать в любой момент." : "Tanlangan yuristga ushbu ish materiallariga ruxsat berilishini tasdiqlayman. Ruxsatni istalgan paytda bekor qilish mumkin."}</span></label><button type="button" disabled={!accessConsents[item.id] || accessActionId === item.id} onClick={() => void updateCaseAccess(item, "grant")}>{accessActionId === item.id ? <LoaderCircle className="spin" /> : null}{ru ? "Предоставить доступ" : "Ruxsat berish"}</button></div>}{item.activeGrantId && <div className="lawyer-access-action"><p>{ru ? "У юриста есть доступ к материалам этого дела." : "Yurist ushbu ish materiallariga ruxsatga ega."}</p>{item.offerId && <div className="lawyer-offer-card"><strong>{offerLabel(item.offerStatus, ru)}</strong><p>{item.offerScopeDescription}</p><p>{ru ? "Стоимость: " : "Narx: "}{item.offerPriceDescription}</p><p>{ru ? "Срок: " : "Muddat: "}{item.offerDurationDescription}</p>{item.offerStatus === "proposed" && <div className="lawyer-offer-actions"><button type="button" disabled={accessActionId === item.id} onClick={() => void respondToOffer(item, "accepted")}>{ru ? "Принять условия" : "Shartlarni qabul qilish"}</button><button type="button" className="secondary" disabled={accessActionId === item.id} onClick={() => void respondToOffer(item, "declined")}>{ru ? "Отклонить" : "Rad etish"}</button></div>}</div>}<button type="button" className="secondary" disabled={accessActionId === item.id} onClick={() => void updateCaseAccess(item, "revoke")}>{accessActionId === item.id ? <LoaderCircle className="spin" /> : null}{ru ? "Отозвать доступ" : "Ruxsatni bekor qilish"}</button></div>}</div>)}</div>}
   </section>;
 }
+
+function offerLabel(status: string | null | undefined, ru: boolean) { const labels: Record<string, [string, string]> = { proposed: ["Предложение ожидает решения", "Taklif qarorni kutmoqda"], accepted: ["Условия приняты", "Shartlar qabul qilindi"], declined: ["Условия отклонены", "Shartlar rad etildi"] }; return labels[status || ""]?.[ru ? 0 : 1] || status || ""; }
 
 function handoffStatus(status: string, ru: boolean) {
   const labels: Record<string, [string, string]> = { unassigned: ["Ожидается назначение", "Tayinlash kutilmoqda"], conflict_check_pending: ["Проверка конфликта", "Manfaatlar to‘qnashuvi tekshirilmoqda"], awaiting_user_consent: ["Нужно ваше подтверждение", "Sizning tasdig‘ingiz kerak"], access_granted: ["Доступ предоставлен", "Ruxsat berildi"], access_revoked: ["Доступ отозван", "Ruxsat bekor qilindi"], conflict_declined: ["Конфликт интересов", "Manfaatlar to‘qnashuvi"] };
