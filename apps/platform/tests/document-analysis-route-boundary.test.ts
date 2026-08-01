@@ -27,6 +27,8 @@ test("secure upload routes enforce streaming, checksum, tenant, and quarantine b
   assert.match(upload, /content-length/);
   assert.match(finalize, /validateUploadMagicBytes/);
   assert.match(finalize, /MALWARE_SCANNER_UNAVAILABLE/);
+  assert.match(`${upload}\n${finalize}`, /requireQuarantineR2/);
+  assert.doesNotMatch(`${upload}\n${finalize}`, /requireR2\(\)/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic|status='safe'|status='ready'/);
 });
 

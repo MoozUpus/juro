@@ -882,3 +882,35 @@ test("a corrected blocker can be retried once without forking durable evidence",
     sqlite.close();
   }
 });
+
+test("account deletion purges dedicated quarantine objects from the quarantine bucket", async () => {
+  const { sqlite, d1 } = await seedRequest();
+  const primary = new FakeR2Bucket();
+  const quarantine = new FakeR2Bucket();
+  const quarantineKey = "quarantine-v2/purge-workspace/purge-analysis/purge-file";
+  try {
+    sqlite.prepare(`
+      INSERT INTO document_files (
+        id,workspace_id,document_id,owner_user_id,kind,r2_key,
+        file_name,mime_type,size_bytes,sha256,created_at,updated_at
+      ) VALUES (?,?,NULL,?,'analysis_quarantined',?,'upload.pdf','application/pdf',10,?,?,?)
+    `).run(
+      "purge-quarantine-file", WORKSPACE_ID, USER_ID, quarantineKey,
+      "a".repeat(64), NOW, NOW,
+    );
+    quarantine.objects.add(quarantineKey);
+    const result = await executeAccountDeletionPurge({
+      DB: d1,
+      BUCKET: primary as unknown as R2Bucket,
+      QUARANTINE_BUCKET: quarantine as unknown as R2Bucket,
+      ACCOUNT_DELETION_PURGE_ENABLED: "true",
+      IDENTITY_KEYRING: RAW_IDENTITY_KEYRING,
+    }, REQUEST_ID, { now: () => new Date(NOW) });
+    assert.equal(result.status, "completed");
+    assert.equal(result.r2DeletedCount, 1);
+    assert.deepEqual(quarantine.deleted, [quarantineKey]);
+    assert.equal(quarantine.objects.has(quarantineKey), false);
+  } finally {
+    sqlite.close();
+  }
+});

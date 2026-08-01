@@ -219,7 +219,7 @@ The deployed Worker now exposes both provider secret names and server-side model
 - The browser computes SHA-256 from one in-memory `ArrayBuffer`; this does not buffer the upload in the Worker, but a later client-side incremental hash path may improve low-memory devices.
 - Fetch upload progress is not yet surfaced; the UI has a busy state but no byte-level progress indicator.
 - Authenticated staging HTTP and R2 round-trip evidence remains open because the available browser-control kernel fails before connecting to the existing Access session. Access was not bypassed.
-- The separate staging quarantine bucket is not yet used; quarantine is an opaque safe prefix in the primary private staging bucket so existing account-deletion purge remains complete.
+- New document-analysis quarantine uploads use the separate private staging quarantine bucket with `quarantine-v2/` keys. Existing legacy `quarantine/` keys remain in the primary bucket for backward-compatible deletion; no automatic migration is claimed.
 - No Phase 5 production readiness or document-analysis quality threshold is claimed.
 
 ## Phase 5 async-analysis open gates — 2026-07-30

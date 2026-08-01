@@ -5,6 +5,7 @@ export interface BuilderRuntimeEnv {
   ASSETS?: Fetcher;
   DB?: D1Database;
   BUCKET?: R2Bucket;
+  QUARANTINE_BUCKET?: R2Bucket;
   LEX_UZ_INDEX?: VectorizeIndex;
   ADVICE_UZ_INDEX?: VectorizeIndex;
   EMBEDDING_MODEL?: string;
@@ -67,6 +68,17 @@ export function requireR2(): R2Bucket {
     throw new ServiceUnavailableError(
       "R2_UNAVAILABLE",
       "Файловое хранилище временно недоступно: отсутствует Cloudflare R2 binding BUCKET.",
+    );
+  }
+  return bucket;
+}
+
+export function requireQuarantineR2(): R2Bucket {
+  const bucket = runtimeEnv().QUARANTINE_BUCKET;
+  if (!bucket) {
+    throw new ServiceUnavailableError(
+      "R2_UNAVAILABLE",
+      "Карантинное файловое хранилище временно недоступно: отсутствует Cloudflare R2 binding QUARANTINE_BUCKET.",
     );
   }
   return bucket;

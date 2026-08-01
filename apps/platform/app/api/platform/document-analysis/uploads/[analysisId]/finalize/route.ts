@@ -1,5 +1,5 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
-import { requireD1, requireR2 } from "../../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireQuarantineR2 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { ArchiveInspectionError, inspectArchiveBytes, type ArchiveInspection } from "../../../../../../../lib/document-analysis/archive-inspector";
 import {
   arrayBufferHex,
@@ -31,7 +31,7 @@ export const POST = withApiErrors(async function POST(
     if (record.status !== "uploaded") {
       return response({ code: "UPLOAD_STATE_CONFLICT", error: "Сначала завершите загрузку файла." }, 409);
     }
-    const bucket = requireR2();
+    const bucket = requireQuarantineR2();
     const object = await bucket.head(record.r2Key);
     if (!object || object.size !== record.sizeBytes || arrayBufferHex(object.checksums.sha256) !== record.sha256) {
       await rejectFile(db, bucket, record, workspace.id, user.id, "UPLOAD_INTEGRITY_FAILED");

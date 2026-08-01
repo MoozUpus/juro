@@ -15,6 +15,7 @@ const R2_DELETE_BATCH = 1_000;
 type PurgeEnv = {
   DB: D1Database;
   BUCKET: R2Bucket;
+  QUARANTINE_BUCKET?: R2Bucket;
   ACCOUNT_DELETION_PURGE_ENABLED?: string;
   IDENTITY_KEYRING?: string;
 };
@@ -36,6 +37,7 @@ type DeletionRequestRow = {
 };
 
 type ObjectKeyRow = { objectKey: string | null };
+type ObjectKeyBuckets = { primary: string[]; quarantine: string[] };
 
 type PurgeInventory = {
   d1DeleteCount: number;
@@ -323,7 +325,7 @@ async function markPurgeIrreversible(
 async function userObjectKeys(
   db: D1Database,
   userId: string,
-): Promise<string[]> {
+): Promise<ObjectKeyBuckets> {
   const rows = await db.prepare(
     `WITH targeted_files AS (
        SELECT file.id,file.r2_key
@@ -364,11 +366,15 @@ async function userObjectKeys(
       FROM analysis_report_exports
       WHERE owner_user_id=? AND r2_key IS NOT NULL`,
   ).bind(userId, userId, userId, userId, userId, userId, userId).all<ObjectKeyRow>();
-  return [...new Set(
+  const keys = [...new Set(
     rows.results
       .map(row => row.objectKey)
       .filter((key): key is string => Boolean(key && key.length <= 1_024)),
   )].sort();
+  return {
+    primary: keys.filter((key) => !key.startsWith("quarantine-v2/")),
+    quarantine: keys.filter((key) => key.startsWith("quarantine-v2/")),
+  };
 }
 async function deleteR2Objects(
   bucket: R2Bucket,
@@ -650,7 +656,13 @@ export async function executeAccountDeletionPurge(
   const objectKeys = await userObjectKeys(env.DB, request.userId);
   const purgeInventory = await inventory(env.DB, request.userId);
   try {
-    await deleteR2Objects(env.BUCKET, objectKeys);
+    await deleteR2Objects(env.BUCKET, objectKeys.primary);
+    if (objectKeys.quarantine.length > 0) {
+      if (!env.QUARANTINE_BUCKET) {
+        throw new AccountDeletionPurgeError("ACCOUNT_DELETION_R2_FAILED", true);
+      }
+      await deleteR2Objects(env.QUARANTINE_BUCKET, objectKeys.quarantine);
+    }
   } catch (error) {
     if (error instanceof AccountDeletionPurgeError) {
       try {
@@ -682,7 +694,7 @@ export async function executeAccountDeletionPurge(
     deletionMode: request.deletionMode,
     requestedAt: request.requestedAt,
     completedAt: now,
-    r2DeletedCount: objectKeys.length,
+    r2DeletedCount: objectKeys.primary.length + objectKeys.quarantine.length,
     d1DeletedCount: purgeInventory.d1DeleteCount,
     redactedCount: purgeInventory.redactedCount,
     retainedEvidenceJson,
@@ -695,7 +707,7 @@ export async function executeAccountDeletionPurge(
     deletionMode: request.deletionMode,
     summary: {
       d1DeletedCount: purgeInventory.d1DeleteCount,
-      r2DeletedCount: objectKeys.length,
+      r2DeletedCount: objectKeys.primary.length + objectKeys.quarantine.length,
       redactedCount: purgeInventory.redactedCount,
       retainedKinds: retainedEvidence.map(item => item.kind),
     },
@@ -728,7 +740,7 @@ export async function executeAccountDeletionPurge(
       ACCOUNT_DELETION_POLICY_VERSION,
       request.requestedAt,
       now,
-      objectKeys.length,
+      objectKeys.primary.length + objectKeys.quarantine.length,
       purgeInventory.d1DeleteCount,
       purgeInventory.redactedCount,
       retainedEvidenceJson,
@@ -778,6 +790,6 @@ export async function executeAccountDeletionPurge(
   return {
     status: "completed",
     requestId,
-    r2DeletedCount: objectKeys.length,
+    r2DeletedCount: objectKeys.primary.length + objectKeys.quarantine.length,
   };
 }

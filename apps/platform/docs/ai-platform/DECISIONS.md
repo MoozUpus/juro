@@ -2043,3 +2043,8 @@ change production. Legal publication and AI retrieval remain fail-closed.
 The existing exact-document acquisition path remains the authority for every Advice fetch. A separate scheduler capability may discover at most 20 candidate URLs from `Sitemap:` declarations in the current public `https://advice.uz/robots.txt`. It accepts only HTTPS `advice.uz` sitemap index/document files, follows no redirects, makes no arbitrary link traversal, and discards everything outside the existing canonical Advice document allowlist. Every accepted candidate is sent back through the same robots gate, one-second Advice pacing, private R2 evidence, pending-review state, and publication boundary.
 
 `LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED` is false in development, staging, and production. Turning it on requires an explicit policy/load review and separate staging evidence; this commit does not claim a live sitemap run or legal verification.
+## D-098 — new analysis uploads use the dedicated quarantine bucket
+
+New document-analysis uploads use `QUARANTINE_BUCKET` with a `quarantine-v2/` key. The regular `BUCKET` is no longer used for those bytes. Existing pre-change `quarantine/` object keys remain in the primary bucket and account deletion preserves that legacy routing; it deletes `quarantine-v2/` keys from the dedicated bucket. If a deletion encounters a new quarantine key without the binding, it fails recoverably rather than silently orphaning data.
+
+This separation does not imply a malware verdict. Finalization still records `MALWARE_SCANNER_UNAVAILABLE`, and no file reaches OCR or an AI provider without a real scanner marking it safe.
