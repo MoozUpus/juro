@@ -312,6 +312,27 @@ test("all migrations apply cleanly with foreign-key integrity", () => {
   }
 });
 
+test("0057 rejects invalid lawyer review ratings at the D1 boundary", () => {
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    db.exec("PRAGMA foreign_keys = OFF");
+    const insert = db.prepare(`
+      INSERT INTO lawyer_reviews (
+        id,lawyer_request_id,workspace_id,lawyer_profile_id,requester_user_id,
+        overall_rating,speed_rating,quality_rating,communication_rating,status,created_at,updated_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,'pending',?,?)
+    `);
+    const values = ["review-rating-guard", "request", "workspace", "lawyer", "user", 5, 4, 5, 4, "2026-08-02T00:00:00.000Z", "2026-08-02T00:00:00.000Z"];
+    insert.run(...values);
+    assert.throws(() => insert.run("invalid-review", "request", "workspace", "lawyer", "user", 0, 4, 5, 4, "2026-08-02T00:00:00.000Z", "2026-08-02T00:00:00.000Z"), /between 1 and 5/);
+    assert.throws(() => db.prepare("UPDATE lawyer_reviews SET communication_rating=6 WHERE id='review-rating-guard'").run(), /between 1 and 5/);
+  } finally {
+    db.close();
+  }
+});
+
 test("0011 preserves existing schema and workspace data", () => {
   const db = new DatabaseSync(":memory:");
   try {

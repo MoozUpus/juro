@@ -315,3 +315,5 @@ A bounded implementation exists but is disabled in development, staging, and pro
 ## Lawyer review moderation — protected staging limits
 
 Migrations `0055` and `0056` are applied to `juro-staging` after a checksum-verified private R2 checkpoint. The authenticated lawyer picker now projects approved aggregates and at most three approved texts, but staging contains no approved review rows and no authenticated browser traversal is claimed. Reviewer reply, comprehensive PII review beyond the conservative contact/PINFL screen, public unauthenticated directory rendering, and rating moderation appeal remain open.
+
+Migration `0057_calm_rating_guard.sql` is locally verified but not yet applied to staging. It adds database triggers that reject any direct insert or update with a lawyer review rating outside 1–5; current API validation alone is not treated as the final integrity boundary.

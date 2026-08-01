@@ -400,6 +400,13 @@
       "when": 1785615988128,
       "tag": "0056_zippy_winter_soldier",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "6",
+      "when": 1785617100000,
+      "tag": "0057_calm_rating_guard",
+      "breakpoints": true
     }
   ]
 }

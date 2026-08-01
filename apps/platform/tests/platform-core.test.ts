@@ -1210,6 +1210,7 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
     Promise.all([
       readFile(new URL("../drizzle/0055_lowly_shadow_king.sql", import.meta.url), "utf8"),
       readFile(new URL("../drizzle/0056_zippy_winter_soldier.sql", import.meta.url), "utf8"),
+      readFile(new URL("../drizzle/0057_calm_rating_guard.sql", import.meta.url), "utf8"),
     ]),
   ]);
   assert.match(moderation, /hasLikelyPersonalData/);
@@ -1220,6 +1221,8 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   assert.match(moderationMigration[0], /CREATE TABLE `lawyer_review_moderation`/);
   assert.match(moderationMigration[0], /append-only/);
   assert.match(moderationMigration[1], /lawyer_review_moderation_applies_terminal_status/);
+  assert.match(moderationMigration[2], /lawyer_reviews_rating_range_insert/);
+  assert.match(moderationMigration[2], /BETWEEN 1 AND 5/);
   assert.match(directoryRoute, /m\.decision='approved'/);
   assert.match(directoryRoute, /r\.status='approved'/);
   assert.match(directoryRoute, /ROW_NUMBER\(\) OVER/);
