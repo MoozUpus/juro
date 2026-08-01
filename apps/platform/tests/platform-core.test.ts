@@ -1199,6 +1199,8 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   ]);
   assert.match(completion, /r\.status='offer_accepted'/); assert.match(completion, /g\.revoked_at IS NULL/); assert.match(completion, /lawyer_request_completed/);
   assert.match(review, /workspace_id=\? AND requester_user_id=\? AND status='completed'/); assert.match(review, /lawyer_review_submitted/); assert.match(review, /'pending'/);
+  assert.match(review, /SELECT id,status FROM lawyer_reviews WHERE lawyer_request_id=\? AND workspace_id=\? AND requester_user_id=\?/);
+  assert.match(review, /replayed:true/);
   assert.match(lawyerClient, /completion/); assert.match(ownerClient, /\/review/); assert.match(migration, /CREATE TABLE `lawyer_reviews`/);
   assert.match(ownerClient, /speedRating/); assert.match(ownerClient, /qualityRating/); assert.match(ownerClient, /communicationRating/);
   const [moderation, moderationRoutes, moderationMigration] = await Promise.all([
