@@ -33,3 +33,26 @@ The coordinator enumerates only already-known allowlisted Lex/Advice records, cr
 ## Remaining evidence boundary
 
 The midnight trigger has been attached but had not yet occurred when this record was written. The first live run must be inspected in Worker logs and `source_sync_runs`; until then this is deployment/configuration evidence, not an assertion that corpus fetching has completed. Legal publication and answer eligibility remain staff-reviewed and fail closed.
+
+## Lifecycle correction deployment — 2026-08-01
+
+Worker version `0ef5444a-e5c2-4ca5-a8c2-b339cb49cd44` deployed to
+`juro-platform-staging` after the scheduled-corpus lifecycle correction.
+Wrangler confirmed only the staging bindings during deployment: `juro-staging`,
+`juro-staging-files`, the staging backup/quarantine buckets, four staging
+Vectorize indexes, and staging queues. The two configured triggers remained
+`*/5 * * * *` and `0 19 * * *`; production was not deployed.
+
+Validation before deploy:
+
+- `npx tsx --test tests/legal-scheduled-corpus-lifecycle.test.ts` — pass;
+- `npm run type-check` — pass;
+- `npm run lint` — pass;
+- `npm test` — pass;
+- `npm run build:staging` — pass, including staging artifact validation.
+
+The new regression executes against the full local D1 migration set. It proves
+two queued Lex fetches attached to one `scheduled_corpus` correlation stay under
+the shared run until reconciliation. It does not claim a future midnight cron
+execution has already run; the production-equivalent staging trigger is left at
+its specified schedule rather than modified for a test.
