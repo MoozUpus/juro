@@ -29,7 +29,15 @@ The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route
 
 Do not combine the already flattened generated staging config with a second `CLOUDFLARE_ENV=staging` deploy selector. That combination produced the unintended name `juro-platform-staging-staging`; its Queue attachment failed, the exact Worker was deleted, and an API read-back returned expected `10007`. The corrected command omits the duplicate environment selector.
 
-Exactly two staging consumers are attached: `staging-email-notifications` (concurrency 2) and `staging-data-retention-cleanup` (concurrency 1), each with five retries and its own zero-consumer DLQ. The only schedule is locked outbox dispatch `*/5 * * * *`. All other consumers remain unattached. Production has no equivalent activation.
+Six staging consumers are attached: `staging-document-analysis`,
+`staging-ocr-processing`, and `staging-document-export` (each concurrency 1,
+three retries); `staging-legal-sources-sync` (concurrency 1, five retries);
+`staging-email-notifications` (concurrency 2, five retries); and
+`staging-data-retention-cleanup` (concurrency 1, five retries). Each has its
+own DLQ and a 30-second retry delay. The `staging-notifications` queue remains
+producer-only. The deployed triggers are locked outbox dispatch `*/5 * * * *`
+and the legal-source schedule `0 19 * * *` (00:00 Asia/Tashkent). Production
+has no attached consumers or active cron.
 
 ## Required sequence
 
