@@ -1101,6 +1101,19 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
   assert.match(grantRoute, /lawyer_case_access_granted/);
   assert.match(grantRoute, /lawyer_case_access_revoked/);
 });
+
+test("notification reads and read acknowledgements remain workspace-scoped", async () => {
+  const [notificationRoute, dashboardRoute] = await Promise.all([
+    readFile(new URL("../app/api/document-builder/notifications/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/dashboard/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(notificationRoute, /workspaceForUser\(user\)/);
+  assert.match(notificationRoute, /WHERE user_id = \? AND workspace_id = \?/);
+  assert.match(notificationRoute, /id = \? AND user_id = \? AND workspace_id = \?/);
+  assert.match(dashboardRoute, /notifications WHERE user_id = \? AND workspace_id = \? AND read_at IS NULL/);
+  assert.match(dashboardRoute, /WHERE user_id=\? AND workspace_id=\? ORDER BY created_at DESC LIMIT 4/);
+  assert.doesNotMatch(notificationRoute, /WHERE user_id = \? ORDER BY created_at DESC/);
+});
 test("handoff UI requires a fresh owner consent before grant and exposes revoke", async () => {
   const client = await readFile(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8");
   assert.match(client, /accessConsents/);

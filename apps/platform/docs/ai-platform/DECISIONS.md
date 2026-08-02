@@ -2200,3 +2200,22 @@ content. This scope implements the already-configured in-app channel only:
 email delivery is not represented as complete until its separate provider-backed
 outbox contract is connected to task reminders. No migration, provider call, or
 production change is required.
+
+## D-110 — Notification visibility and acknowledgement are workspace-scoped
+
+Status: accepted and deployed to staging
+Date: 2026-08-02
+
+The legacy notification surface is reused by canonical personal and business
+routes. It previously scoped records only by `user_id`, which allowed a user
+with more than one workspace to see and acknowledge notifications outside the
+active workspace. The existing `workspaceForUser` server-side context is now
+required by notification list and acknowledgement routes, and every query binds
+both user and workspace. Dashboard notification count and preview use the same
+two-key scope.
+
+The workspace is selected only after active membership verification by the
+existing authenticated shell. A notification from another workspace is therefore
+neither returned nor marked read. No migration is needed because
+`notifications.workspace_id` already exists and the scheduler writes it. The
+route remains private/no-store and preserves the existing CSRF guard for writes.

@@ -16,8 +16,8 @@ export const GET = withApiErrors(async function GET() {
         (SELECT count(*) FROM cases WHERE workspace_id = ? AND archived_at IS NULL) AS activeCases,
         (SELECT count(*) FROM documents WHERE workspace_id = ? AND archived_at IS NULL) AS documents,
         (SELECT count(*) FROM consultation_bookings WHERE workspace_id = ? AND status NOT IN ('completed','cancelled')) AS consultations,
-        (SELECT count(*) FROM notifications WHERE user_id = ? AND read_at IS NULL) AS unreadNotifications`,
-    ).bind(workspace.id, workspace.id, workspace.id, user.id),
+        (SELECT count(*) FROM notifications WHERE user_id = ? AND workspace_id = ? AND read_at IS NULL) AS unreadNotifications`,
+    ).bind(workspace.id, workspace.id, workspace.id, user.id, workspace.id),
     db.prepare(
       `SELECT c.id,c.title,c.status,c.updated_at AS updatedAt,p.progress_percent AS progressPercent
        FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id
@@ -42,8 +42,8 @@ export const GET = withApiErrors(async function GET() {
     ).bind(workspace.id),
     db.prepare(
       `SELECT id,title,body,created_at AS createdAt FROM notifications
-       WHERE user_id=? ORDER BY created_at DESC LIMIT 4`,
-    ).bind(user.id),
+       WHERE user_id=? AND workspace_id=? ORDER BY created_at DESC LIMIT 4`,
+    ).bind(user.id, workspace.id),
     db.prepare(
       `SELECT a.id,a.status,a.error_code AS errorCode,a.updated_at AS updatedAt,f.file_name AS fileName
        FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
