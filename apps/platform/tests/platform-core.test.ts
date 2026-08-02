@@ -23,6 +23,7 @@ import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 import { isCinematicPrototypeEnvironment } from "../lib/platform/cinematic-prototype";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../lib/platform/lawyer-profile-preview";
+import { notificationPreferencesSchema, optionalEmailPreferenceKeys } from "../lib/platform/notification-preferences";
 
 test("lawyer directory projects only moderation-approved review aggregates", () => {
   const directory = projectPublicLawyerDirectory(
@@ -1123,6 +1124,28 @@ test("notification reads use strict bounded input and expose resilient UI states
   assert.match(client, /aria-live="polite"/);
   assert.match(client, /disabled=\{loading \|\| marking !== null\}/);
   assert.match(client, /Не удалось загрузить уведомления/);
+});
+
+test("optional email preferences are strict, consent-backed, audited, and localized", async () => {
+  assert.deepEqual(optionalEmailPreferenceKeys, ["marketing_email", "weekly_case_summary", "unfinished_document", "comments", "lawyer_request_updates"]);
+  assert.equal(notificationPreferencesSchema.safeParse({ preferences: { marketing_email: true, weekly_case_summary: false, unfinished_document: true, comments: false, lawyer_request_updates: true } }).success, true);
+  assert.equal(notificationPreferencesSchema.safeParse({ preferences: { marketing_email: true } }).success, false);
+  assert.equal(notificationPreferencesSchema.safeParse({ preferences: { marketing_email: true, weekly_case_summary: false, unfinished_document: false, comments: false, lawyer_request_updates: false, otp: true } }).success, false);
+
+  const [route, client] = await Promise.all([
+    readFile(new URL("../app/api/platform/notification-preferences/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/NotificationPreferencesPanel.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspace_audit_events/);
+  assert.match(route, /revoked_at/);
+  assert.match(route, /cache-control": "private, no-store/);
+  assert.match(client, /x-juro-csrf/);
+  assert.match(client, /role="alert"/);
+  assert.match(client, /Email-уведомления/);
+  assert.match(client, /Email bildirishnomalari/);
+  assert.match(client, /Коды входа/);
 });
 
 test("active sessions expose only privacy-safe approximate region evidence", async () => {

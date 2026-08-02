@@ -478,14 +478,92 @@
   opacity: .45;
 }
 
+.notification-preferences-panel {
+  display: grid;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid rgba(6, 40, 68, .13);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.notification-preferences-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 19px;
+}
+
+.notification-preferences-panel h2 svg { width: 20px; color: #8a6728; }
+
+.notification-preferences-panel > p {
+  max-width: 760px;
+  margin: 0;
+  color: #64737d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.notification-preferences-list { display: grid; gap: 8px; padding: 0; border: 0; }
+
+.notification-preferences-list label {
+  display: grid;
+  min-height: 54px;
+  padding: 10px 12px;
+  border: 1px solid rgba(6, 40, 68, .13);
+  border-radius: 10px;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: start;
+  cursor: pointer;
+}
+
+.notification-preferences-list label:has(input:checked) { border-color: #b58a38; background: #fffaf0; }
+.notification-preferences-list label:focus-within { outline: 3px solid rgba(6, 40, 68, .28); outline-offset: 2px; }
+.notification-preferences-list input { width: 20px; height: 20px; margin: 1px 0 0; accent-color: #8a6728; }
+.notification-preferences-list span { display: grid; gap: 3px; }
+.notification-preferences-list strong { color: #173042; font-size: 12px; }
+.notification-preferences-list small { color: #64737d; font-size: 11px; line-height: 1.45; }
+
+.notification-preferences-state { display: flex; align-items: center; gap: 8px; }
+.notification-preferences-state.error { color: #923531; }
+.notification-preferences-state.success { color: #28603d; }
+
+.notification-preferences-panel > button {
+  display: inline-flex;
+  width: max-content;
+  min-height: 44px;
+  padding: 0 14px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 9px;
+  background: #062844;
+  color: #fff;
+  font-weight: 820;
+  transition: transform 140ms var(--ease-out);
+}
+
+.notification-preferences-panel > button:active { transform: scale(.98); }
+.notification-preferences-panel > button:disabled { cursor: not-allowed; opacity: .45; }
+.notification-preferences-panel > button svg { width: 17px; }
+
 @media (max-width: 900px) {
   .business-workspace-panel form {
     grid-template-columns: 1fr;
   }
 }
 
+@media (max-width: 720px) {
+  .notification-preferences-panel { padding: 17px; }
+  .notification-preferences-panel > button { width: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .business-workspace-panel button {
+  .business-workspace-panel button,
+  .notification-preferences-panel > button {
     transition: none;
   }
 }
