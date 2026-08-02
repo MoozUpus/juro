@@ -106,6 +106,48 @@ function nowIso(now: (() => Date) | undefined): string {
   return (now ?? (() => new Date()))().toISOString();
 }
 
+function crawlWindowName(environment: string, requestedUrl: string): string {
+  return `legal-source-crawl:${environment}:${new URL(requestedUrl).hostname.toLowerCase()}`;
+}
+
+/**
+ * Reserves the next robots.txt crawl window without sleeping in a Worker.
+ * The lock expiry is deliberately retained after a completed or failed fetch:
+ * it represents the source host's minimum interval, not a work lease.
+ */
+async function reserveCrawlWindow(
+  db: D1Database,
+  environment: string,
+  requestedUrl: string,
+  delayMs: number,
+  now: string,
+): Promise<void> {
+  const acquiredAt = Date.parse(now);
+  if (!Number.isFinite(acquiredAt) || delayMs < 1) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED", true);
+  }
+  const holderId = crypto.randomUUID();
+  const result = await db.prepare(`
+    INSERT INTO scheduled_locks (name,holder_id,acquired_at,expires_at,updated_at)
+    VALUES (?,?,?,?,?)
+    ON CONFLICT(name) DO UPDATE SET
+      holder_id=excluded.holder_id,
+      acquired_at=excluded.acquired_at,
+      expires_at=excluded.expires_at,
+      updated_at=excluded.updated_at
+    WHERE scheduled_locks.expires_at<=excluded.acquired_at
+  `).bind(
+    crawlWindowName(environment, requestedUrl),
+    holderId,
+    now,
+    new Date(acquiredAt + Math.ceil(delayMs)).toISOString(),
+    now,
+  ).run();
+  if (Number(result.meta.changes ?? 0) !== 1) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_CRAWL_WINDOW_BUSY", true);
+  }
+}
+
 function acquisitionError(error: unknown): LegalSourceAcquisitionError {
   if (error instanceof LegalSourceAcquisitionError) return error;
   if (error instanceof LegalSourceFetchError) {
@@ -791,11 +833,18 @@ export async function executeLegalSourceFetchRequest(
   }
 
   try {
+    const reserve = dependencies.wait ?? ((delayMs: number) => reserveCrawlWindow(
+      env.DB,
+      environment,
+      request.requested_url,
+      delayMs,
+      nowIso(dependencies.now),
+    ));
     const fetched = await fetchLegalSource(request.requested_url, {
       adviceEnabled: adviceEnabled(env.LEGAL_ADVICE_INGESTION_ENABLED),
       fetchImpl: dependencies.fetchImpl,
       now: dependencies.now,
-      ...(dependencies.wait ? { wait: dependencies.wait } : {}),
+      wait: reserve,
     });
     if (
       fetched.sourceKind !== request.source_kind

@@ -2,7 +2,7 @@
 
 > Current authoritative checkpoint — 2026-08-02: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`
-> is deployed as Worker version `97745a0a-f0c6-416b-9049-f756a66403a6`, with
+> is deployed as Worker version `fc2e5248-9e6f-414e-9180-bc046883f798`, with
 > isolated `juro-staging` D1, staging R2/Queues/Vectorize, and no production
 > mutation. Read-only secret inventory confirms names for OpenAI, Anthropic,
 > Resend, Turnstile and the identity keyring; it does not prove provider calls.
@@ -71,8 +71,9 @@ foundation checkpoint.
   binding under a content-addressed `legal-sources/raw/` prefix. A dedicated
   source bucket is not claimed and would require an inventoried Cloudflare
   resource plus binding/deployment review;
-- the fetcher intentionally rejects any positive `Crawl-delay` directive
-  until durable host-rate scheduling exists; it does not sleep inside a Worker;
+- positive `Crawl-delay` directives use a D1-fenced per-environment/per-host
+  window; a busy window retries through the existing queue path and never makes
+  a Worker sleep. Live source-fetch evidence remains an external staging gate;
 - stored HTML remains untrusted. A deterministic bounded parser now creates a
   separate private normalized JSON snapshot. A reviewed snapshot can now be
   published locally as immutable reading rows, but nothing is remotely active,

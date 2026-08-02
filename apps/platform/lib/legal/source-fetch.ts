@@ -14,6 +14,8 @@ export const LEGAL_SOURCE_FETCH_ERROR_CODES = [
   "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
   "LEGAL_SOURCE_ROBOTS_DISALLOWED",
   "LEGAL_SOURCE_ROBOTS_RATE_POLICY",
+  "LEGAL_SOURCE_CRAWL_WINDOW_BUSY",
+  "LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED",
   "LEGAL_SOURCE_CONTENT_TYPE_REJECTED",
   "LEGAL_SOURCE_EMPTY_CONTENT",
   "LEGAL_SOURCE_TOO_LARGE",
@@ -531,9 +533,13 @@ export async function fetchLegalSource(
     reference.sourceKind === "advice" ? 1 : 0,
   );
   if (requestedDelaySeconds > 0) {
-    const wait = options.wait ?? ((delayMs: number) =>
-      new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
-    await wait(Math.ceil(requestedDelaySeconds * 1_000));
+    if (!options.wait) {
+      throw new LegalSourceFetchError(
+        "LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED",
+        true,
+      );
+    }
+    await options.wait(Math.ceil(requestedDelaySeconds * 1_000));
   }
 
   const contentResult = await fetchFollowingRedirects(

@@ -237,6 +237,21 @@ test("supported robots crawl-delay is awaited before source fetch", async () => 
   assert.equal(synthetic.calls.length, 2);
 });
 
+test("crawl-delay requires a durable caller window and never sleeps by default", async () => {
+  const synthetic = sequenceFetch([
+    robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),
+  ]);
+
+  await rejectsCode(
+    () => fetchLegalSource("https://lex.uz/ru/docs/8282675", {
+      adviceEnabled: false,
+      fetchImpl: synthetic.fetchImpl,
+    }),
+    "LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED",
+  );
+  assert.equal(synthetic.calls.length, 1);
+});
+
 test("a more specific robots Allow overrides a broader Disallow", async () => {
   const synthetic = sequenceFetch([
     robots([

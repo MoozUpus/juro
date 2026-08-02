@@ -211,6 +211,55 @@ test("Advice policy gate creates neither request nor outbox row", async () => {
   }
 });
 
+test("Crawl-delay uses a fenced D1 window instead of sleeping in the Worker", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = envFixture(d1, new FakeR2Bucket());
+  let clock = "2026-08-02T10:00:00.000Z";
+  const now = () => new Date(clock);
+  try {
+    const first = await createLegalSourceFetchRequest(env, {
+      url: "https://lex.uz/ru/docs/8282675",
+      idempotencyKey: "crawl_window_first",
+    }, { now });
+    const second = await createLegalSourceFetchRequest(env, {
+      url: "https://lex.uz/ru/docs/8282676",
+      idempotencyKey: "crawl_window_second",
+    }, { now });
+
+    const firstFetch = sourceFetch([
+      robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),
+      sourceHtml(),
+    ]);
+    await executeLegalSourceFetchRequest(env, first.id, { fetchImpl: firstFetch, now });
+
+    // This separates the existing per-run unique key from the host crawl window.
+    // The 20-second crawl window remains active, so the second request must retry.
+    clock = "2026-08-02T10:00:01.000Z";
+
+    const blockedFetch = sourceFetch([
+      robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),
+    ]);
+    await assert.rejects(
+      () => executeLegalSourceFetchRequest(env, second.id, { fetchImpl: blockedFetch, now }),
+      (error: unknown) => error instanceof LegalSourceAcquisitionError
+        && error.code === "LEGAL_SOURCE_CRAWL_WINDOW_BUSY"
+        && error.retryable,
+    );
+    const state = sqlite.prepare(`
+      SELECT status,error_code FROM legal_source_fetch_requests WHERE id=?
+    `).get(second.id) as { status: string; error_code: string | null };
+    assert.equal(state.status, "retrying");
+    assert.equal(state.error_code, "LEGAL_SOURCE_CRAWL_WINDOW_BUSY");
+    assert.equal(
+      (sqlite.prepare(`SELECT count(*) AS count FROM scheduled_locks
+        WHERE name='legal-source-crawl:development:lex.uz'`).get() as { count: number }).count,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("enabled Advice acquisition persists an unverified Uzbek Latin snapshot request", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();

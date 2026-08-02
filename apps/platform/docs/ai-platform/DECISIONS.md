@@ -2367,3 +2367,27 @@ unchanged, and reduced-motion handling remains in place. Staging evidence:
 Worker `juro-platform-staging` version
 `97745a0a-f0c6-416b-9049-f756a66403a6`; authenticated visual verification
 remains open.
+
+## D-121 — Robots crawl delays reserve a D1 window, never a Worker timer
+
+Status: accepted, tested, and deployed to protected staging
+Date: 2026-08-02
+
+The original legal-source fetch boundary implemented a supported robots
+`Crawl-delay` with `setTimeout`. That unnecessarily holds a Worker execution
+open and makes source throughput dependent on timer lifetime. Positive delays
+now atomically claim the existing `scheduled_locks` row named
+`legal-source-crawl:{environment}:{host}` until `now + delay`. A request that
+cannot claim that window fails with retryable `LEGAL_SOURCE_CRAWL_WINDOW_BUSY`;
+the established outbox/queue retry path schedules the next attempt without
+sleeping. Fetches that receive a positive delay without the acquisition-layer
+reservation are rejected, so direct callers cannot silently reintroduce a
+Worker wait. The reservation is retained after a failed document request to
+continue honoring the source host's requested interval.
+
+Staging evidence: Worker `juro-platform-staging` version
+`fc2e5248-9e6f-414e-9180-bc046883f798`; full platform suite 91/91, focused
+legal-source suite 17/17, staging build, artifact validation, and generated
+Cloudflare binding type check passed before deployment. The unauthenticated
+staging endpoint correctly remains behind Cloudflare Access; authenticated
+source-operation proof remains an external gate.

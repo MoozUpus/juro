@@ -21,12 +21,13 @@ Before retrieving a document the worker:
 1. fetches the source host robots.txt with a bounded text/plain-compatible Accept header;
 2. parses user-agent, Allow, Disallow, and Crawl-delay rules;
 3. fails closed on unavailable, invalid, disallowed, or excessive-delay policy;
-4. waits a supported Crawl-delay before the document request;
+4. atomically reserves a D1 host crawl window for a supported Crawl-delay; a busy
+   window becomes a retryable queue result rather than a Worker timer;
 5. follows only bounded same-source HTTPS redirects;
 6. validates content type, content encoding, byte limit, and canonical identity;
 7. hashes the exact bytes and persists the raw object to private R2 under a content-addressed key.
 
-Current supported Crawl-delay maximum is 60 seconds. Lex currently declares 20 seconds. Advice currently permits the selected public document routes without a positive Crawl-delay; JURO still applies a minimum one-second wait before every Advice document request. Queue execution is serial so one batch does not bypass the delay. A separate default-off Advice sitemap discovery capability may submit at most 20 canonical document URLs from the public robots-declared sitemap; it does not fetch arbitrary links and each candidate returns through this exact acquisition boundary. It is disabled in every environment pending policy/load review and live staging evidence.
+Current supported Crawl-delay maximum is 60 seconds. Lex currently declares 20 seconds. Advice currently permits the selected public document routes without a positive Crawl-delay; JURO still applies a minimum one-second host window before every Advice document request. The window key is scoped to environment and host, so a serial queue batch cannot bypass the policy and a Worker never waits/sleeps for it. A separate default-off Advice sitemap discovery capability may submit at most 20 canonical document URLs from the public robots-declared sitemap; it does not fetch arbitrary links and each candidate returns through this exact acquisition boundary. It is disabled in every environment pending policy/load review and live staging evidence.
 
 ## Normalization
 
