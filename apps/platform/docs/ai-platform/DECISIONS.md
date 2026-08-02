@@ -2237,3 +2237,15 @@ private/no-store data. Terminal plan steps and terminal tasks are excluded. The
 new UI is available on canonical personal and business routes and preserves the
 legacy business redirect; no D1 schema change, migration, or provider call is
 necessary.
+
+## D-112 — Case detail is a workspace projection, not an alias for a global plan
+
+Status: accepted and deployed to staging
+Date: 2026-08-02
+
+Canonical case-detail routes now render a dedicated workspace surface. It reads
+the single selected case and its confirmed task records through the existing
+tenant-scoped APIs, treats an absent case as a neutral unavailable result, and
+links only to the existing case-specific plan and current-workspace calendar.
+It intentionally does not invent document, chat, source, or lawyer tabs whose
+backends are not part of this slice. No migration or new resource is needed.
