@@ -1,5 +1,5 @@
 # JURO deployment boundary
-> Current staging deployment — 2026-07-31: exact code commit `af1b0bf` is deployed only as `juro-platform-staging` version `37687899-f17a-4bdf-9f9c-41c6b509cfb9`. Rollback is `ffbfe9df-40f8-4442-8080-7eaf1e63fe40`. D1 remains at 42 migrations with `quick_check=ok`, zero FK violations, and zero qualifying Lex/Advice corpus runs. Production Worker `juro` remains `91774ed4-72e9-47bb-b93a-a4208d490b24`. Exact evidence is in `STAGING-PHASE3-TRUST-FRESHNESS-EVIDENCE.md`.
+> Current staging deployment — 2026-08-02: commit `8be6945` is deployed only as `juro-platform-staging` version `436fdea3-a5d9-41cd-9beb-24b43630bf57`. D1 is through additive migrations `0058`/`0059`, with `quick_check=ok`, no foreign-key violations, and no pending migration. Production Worker, production D1, production R2, Sites, and `apps/website` remain unchanged. Exact evidence is in `STAGING-0063-LAWYER-PROFILE-DIRECTORY-PREVIEW.md`.
 
 
 > Current staging deployment — 2026-07-31: commit `94fce8e`, Worker version `3bc029a3-8722-4edd-8c05-d615d5ce9a13` at 100%, D1 through additive `0039`, immutable tenant-scoped AI branches, fail-closed ZIP/DOCX structural inspection, Advice/staff flags enabled only in staging, four reviewed Queue consumers, one five-minute cron, and owner-only Access. Application rollback is prior staging version `593e7fd4-1d60-4ba2-accc-c44b1e0a2ba0`; D1 recovery uses the recorded pre-`0039` bookmark only for demonstrated corruption. Production deployment and production UI replacement remain separately unauthorized.
@@ -23,9 +23,9 @@ deployed without the separate production authorization required by the owner.
 
 ## Staging deployment target
 
-The checked-in and deployed target is `juro-platform-staging`. Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` serves 100% from local commit `8cb9fea`. The exact flattened artifact was built with the staging profile and deployed from `dist/server/wrangler.json` with explicit `--name juro-platform-staging`, `--keep-vars`, and `--strict`; production was not targeted.
+The checked-in and deployed target is `juro-platform-staging`. Worker version `436fdea3-a5d9-41cd-9beb-24b43630bf57` serves 100% from commit `8be6945`. The exact flattened artifact was built with the staging profile and deployed from `dist/server/wrangler.json` with `--keep-vars`; production was not targeted.
 
-The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route, and the single Access-protected custom domain `staging.app.juro.uz`. It binds only staging D1/R2/Queues/Vectorize/Analytics resources. `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, and `ACCOUNT_DELETION_PURGE_ENABLED` are true only in staging. Legal ingestion and the staff API remain false.
+The runtime preserves `workers_dev=false`, `preview_urls=false`, no Worker route, and the single Access-protected custom domain `staging.app.juro.uz`. It binds only staging D1/R2/Queues/Vectorize/Analytics resources. `ASYNC_RUNTIME_ENABLED`, `CRON_ENABLED`, `ACCOUNT_DELETION_PURGE_ENABLED`, legal-source ingestion, staff API, and the lawyer-profile directory preview are enabled only in staging.
 
 Do not combine the already flattened generated staging config with a second `CLOUDFLARE_ENV=staging` deploy selector. That combination produced the unintended name `juro-platform-staging-staging`; its Queue attachment failed, the exact Worker was deleted, and an API read-back returned expected `10007`. The corrected command omits the duplicate environment selector.
 

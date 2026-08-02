@@ -2091,7 +2091,7 @@ The authenticated lawyer picker receives rating aggregates and no more than thre
 
 ## D-105 — Lawyer directory facts are self-declared until separately verified
 
-Status: accepted and locally regression-tested; staging migration pending
+Status: accepted and deployed to staging
 Date: 2026-08-02
 
 Migration `0058_innocent_ben_grimm.sql` expands the existing `lawyer_profiles`
@@ -2106,12 +2106,13 @@ its own profile. Creation starts at `pending`; neither the self-service API nor
 the UI can set `verified` advocate status or public approval. The directory
 continues to return data only after the separate public-approval boundary. Its
 filters operate only on already-authorized directory rows and do not disclose
-unapproved profiles. Staging application requires a fresh private D1 backup and
-explicit owner authorization. Production remains unchanged.
+unapproved profiles. On 2026-08-02 the owner authorized the migrations; a full
+private D1 export was uploaded and checksum-verified before application.
+Production remains unchanged.
 
 ## D-106 — Lawyer-profile publication is revision-bound and staff-moderated
 
-Status: accepted and locally regression-tested; staging migrations pending
+Status: accepted and deployed to staging
 Date: 2026-08-02
 
 Migration `0059_pretty_punisher.sql` adds a monotonic `profile_revision` to the
@@ -2130,10 +2131,10 @@ relabelled as `verified`, and no public directory write occurs from the client.
 Both the self-service edit and the staff decision use D1 batch guards: the
 state change and its audit event must each affect exactly one row, otherwise the
 request fails closed. An empty self-service PATCH is a no-op, so it cannot
-accidentally invalidate an already-approved profile. The locally applied
-migration chain and API/UI contract are test-covered.
-Staging application requires one new checksum-verified private backup and an
-explicit authorization for *both* pending additive migrations 0058 and 0059.
+accidentally invalidate an already-approved profile. The migration chain and
+API/UI contract are test-covered. Migrations 0058 and 0059 were applied only to
+`juro-staging` after one checksum-verified private backup, then the exact
+artifact was deployed as Worker version `436fdea3-a5d9-41cd-9beb-24b43630bf57`.
 Production remains unchanged.
 
 The preview is controlled independently by

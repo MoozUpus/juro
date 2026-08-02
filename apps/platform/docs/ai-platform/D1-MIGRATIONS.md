@@ -1,9 +1,9 @@
 # JURO D1 migrations
 
-> Current migration checkpoint — 2026-07-31: `juro-staging` has 39 ledger rows through `0038_current_advice_url_guard.sql`. `0038` replaces only the legal-source fetch-request insert trigger and enforces exact current Advice RU `/ru/documents/{id}` and Uzbek Latin `/oz/documents/{id}` URLs while rejecting stale/mismatched paths. Postflight `quick_check=ok`, `foreign_key_check` empty, and no pending migration. Production is unchanged.
+> Current migration checkpoint — 2026-08-02: isolated `juro-staging` is through additive `0059_pretty_punisher.sql`; `0058_innocent_ben_grimm.sql` and `0059_pretty_punisher.sql` were applied after a checksum-verified private remote export. Postflight `quick_check=ok`, `foreign_key_check` is empty, and Wrangler reports no pending migration. Production is unchanged.
 
-Updated: 2026-07-30
-Latest source migration: `0034_business_workspace_identity.sql` (applied only to isolated staging)
+Updated: 2026-08-02
+Latest source migration: `0059_pretty_punisher.sql` (applied only to isolated staging)
 Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0034` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 35-entry `0000`–`0034` ledger. Migration `0034` was applied only after a new Time Travel bookmark, full/schema/data/manifest export, private-R2 checksum round trip, and isolated pre-change restore. Postflight reports 113 application tables (114 including `d1_migrations`), 72 triggers, 199 non-internal indexes, no pending migration, and zero foreign-key violations. No production or development migration was run.
 
 ## Staging-applied `0034` — business workspace identity
