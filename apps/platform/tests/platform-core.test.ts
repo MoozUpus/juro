@@ -1117,6 +1117,19 @@ test("notification reads use strict bounded input and expose resilient UI states
   assert.match(client, /Не удалось загрузить уведомления/);
 });
 
+test("active sessions expose only privacy-safe approximate region evidence", async () => {
+  const [route, client] = await Promise.all([
+    readFile(new URL("../app/api/platform/security/sessions/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/ProfileSettingsClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /continuity\.last_country_code AS countryCode/);
+  assert.match(route, /continuity\.last_region_code AS regionCode/);
+  assert.match(route, /LEFT JOIN auth_device_continuities continuity/);
+  assert.doesNotMatch(route, /raw_ip|user_agent/i);
+  assert.match(client, /countryCode: string \| null/);
+  assert.match(client, /Примерный регион/);
+});
+
 test("notification reads and read acknowledgements remain workspace-scoped", async () => {
   const [notificationRoute, dashboardRoute] = await Promise.all([
     readFile(new URL("../app/api/document-builder/notifications/route.ts", import.meta.url), "utf8"),

@@ -29,9 +29,12 @@ export const GET = withApiErrors(async function GET(request: Request) {
        s.idle_expires_at AS idleExpiresAt,s.auth_method AS authMethod,
        s.assurance_level AS assuranceLevel,
        coalesce(d.display_name,'Unknown device') AS deviceName,
+       continuity.last_country_code AS countryCode,
+       continuity.last_region_code AS regionCode,
        CASE WHEN s.id=? THEN 1 ELSE 0 END AS isCurrent
      FROM auth_sessions s
      LEFT JOIN auth_devices d ON d.id=s.device_id
+     LEFT JOIN auth_device_continuities continuity ON continuity.id=d.continuity_id
      WHERE s.user_id=?
        AND s.revoked_at IS NULL
        AND s.expires_at>?

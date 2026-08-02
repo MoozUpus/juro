@@ -51,6 +51,8 @@ type Session = {
   authMethod: string;
   assuranceLevel: string;
   deviceName: string;
+  countryCode: string | null;
+  regionCode: string | null;
   isCurrent: number | boolean;
 };
 type MfaStatus = {
@@ -833,6 +835,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
               <strong>{session.deviceName}{Boolean(session.isCurrent) && <em>{ru ? "Текущая" : "Joriy"}</em>}</strong>
               <small>{ru ? "Последняя активность" : "Oxirgi faollik"}: {formatDateTime(session.lastSeenAt, ru)}</small>
               <small>{ru ? "Вход" : "Kirish"}: {formatDateTime(session.authenticatedAt || session.createdAt, ru)} · {session.authMethod === "email_otp" ? "Email OTP" : session.authMethod}</small>
+              <small>{ru ? "Примерный регион" : "Taxminiy hudud"}: {[session.regionCode, session.countryCode].filter(Boolean).join(", ") || (ru ? "не определён" : "aniqlanmadi")}</small>
             </span>
             <div className="session-actions">
               <time>{ru ? "до" : "gacha"} {formatDateTime(session.idleExpiresAt || session.expiresAt, ru)}</time>
