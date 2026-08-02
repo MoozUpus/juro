@@ -6,6 +6,7 @@ export interface BuilderRuntimeEnv {
   DB?: D1Database;
   BUCKET?: R2Bucket;
   QUARANTINE_BUCKET?: R2Bucket;
+  PLATFORM_ANALYTICS?: AnalyticsEngineDataset;
   LEX_UZ_INDEX?: VectorizeIndex;
   ADVICE_UZ_INDEX?: VectorizeIndex;
   EMBEDDING_MODEL?: string;

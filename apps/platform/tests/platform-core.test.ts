@@ -1274,6 +1274,14 @@ test("user support form exposes only validated categories, localized status, and
   assert.match(client, /window\.setTimeout\(\(\) => void loadTickets\(\), 0\)/); assert.match(client, /support\[ticket\.status\]/); assert.match(client, /aria-live="polite"/);
   assert.match(support, /wrong_norm.*document.*ocr.*tariff.*lawyer.*privacy.*security.*deletion.*workspace.*feedback/s);
 });
+test("support analytics records only allowlisted aggregate metadata", async () => {
+  const [route, analytics] = await Promise.all([
+    readFile(new URL("../app/api/platform/support-tickets/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/analytics.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /trackSupportTicketCreated/); assert.match(analytics, /user_support_ticket_created/); assert.match(analytics, /supportCategories\.has/); assert.match(analytics, /supportSeverities\.has/);
+  assert.doesNotMatch(analytics, /userId|workspaceId|subject|message|request\.url/i);
+});
 test("lawyer offers are validated, access-bound, auditable, and owner-resolved", async () => {
   assert.equal(lawyerOfferCreateSchema.safeParse({
     scopeDescription: "Проверить договор, подготовить замечания и согласовать безопасную редакцию.",
