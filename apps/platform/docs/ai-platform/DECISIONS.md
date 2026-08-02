@@ -2249,3 +2249,21 @@ tenant-scoped APIs, treats an absent case as a neutral unavailable result, and
 links only to the existing case-specific plan and current-workspace calendar.
 It intentionally does not invent document, chat, source, or lawyer tabs whose
 backends are not part of this slice. No migration or new resource is needed.
+
+## D-113 — Staff support content views are MFA-gated and audit-recorded
+
+Status: accepted and deployed to staging
+Date: 2026-08-02
+
+The staff support inbox reuses the existing `support.tickets.manage` capability
+and requires a fresh MFA assertion no older than 15 minutes. Its ticket-detail
+handler now writes an append-only `support_ticket_viewed` workspace audit event
+only after it has found the ticket, and before it returns message content. The
+event identifies the staff actor and ticket but stores neither the user message
+text nor a copy of the support content.
+
+An audit write failure also prevents the detail response, avoiding an
+unaudited content disclosure. User-facing detail routes remain requester and
+workspace scoped; this staff-only route follows the explicit owner policy that
+technical support may access support content, with every view and reply
+traceable. No schema migration or production change is required.
