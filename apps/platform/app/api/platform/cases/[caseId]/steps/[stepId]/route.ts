@@ -7,6 +7,7 @@ import {
 import { isoNow } from "../../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { actionPlanStepPatchSchema } from "../../../../../../../lib/platform/action-plan";
+import { taskStatusForPlanStep, taskStatusIsTerminal } from "../../../../../../../lib/platform/task-status";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -14,6 +15,12 @@ function response(body: unknown, status = 200) {
     status,
     headers: { "cache-control": "private, no-store" },
   });
+}
+
+function defaultReminderAt(dueAt: string, now: string): string {
+  const due = new Date(`${dueAt.slice(0, 10)}T09:00:00.000Z`);
+  due.setUTCDate(due.getUTCDate() - 3);
+  return due.getTime() < Date.parse(now) ? now : due.toISOString();
 }
 
 export const PATCH = withApiErrors(async function PATCH(
@@ -48,6 +55,10 @@ export const PATCH = withApiErrors(async function PATCH(
 
   const now = isoNow();
   const version = owned.planRevision + 1;
+  const taskStatus = taskStatusForPlanStep(parsed.data.status);
+  const reminderAt = parsed.data.dueAt && !taskStatusIsTerminal(taskStatus)
+    ? defaultReminderAt(parsed.data.dueAt, now)
+    : null;
   try {
     await db.batch([
       db.prepare(
@@ -63,6 +74,15 @@ export const PATCH = withApiErrors(async function PATCH(
       db.prepare(
         "UPDATE action_plans SET progress_percent=(SELECT CASE WHEN count(*)=0 THEN 0 ELSE round(100.0*sum(CASE WHEN status='completed' THEN 1 ELSE 0 END)/count(*)) END FROM action_plan_steps WHERE plan_id=?),status=CASE WHEN (SELECT count(*) FROM action_plan_steps WHERE plan_id=? AND status<>'completed')=0 THEN 'completed' ELSE 'in_progress' END,current_revision=current_revision+1,updated_at=? WHERE id=? AND current_revision=?",
       ).bind(owned.planId, owned.planId, now, owned.planId, owned.planRevision),
+      db.prepare(
+        "UPDATE tasks SET status=?,due_at=?,completed_at=?,updated_at=? WHERE plan_step_id=? AND case_id=? AND workspace_id=?",
+      ).bind(taskStatus, parsed.data.dueAt, taskStatus === "completed" ? now : null, now, stepId, caseId, workspace.id),
+      db.prepare(
+        "UPDATE task_reminders SET status=CASE WHEN ? THEN 'pending' ELSE 'cancelled' END,reminder_at=CASE WHEN ? IS NULL THEN reminder_at ELSE ? END,updated_at=? WHERE task_id=? AND status IN ('pending','cancelled')",
+      ).bind(reminderAt !== null, reminderAt, reminderAt, now, stepId),
+      db.prepare(
+        "INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) SELECT ?,id,'in_app',?,'pending',?,?,? FROM tasks WHERE id=? AND workspace_id=? AND case_id=? AND ? IS NOT NULL",
+      ).bind(`${stepId}:default`, reminderAt, `${stepId}:in_app:default`, now, now, stepId, workspace.id, caseId, reminderAt),
       db.prepare(
         "INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) SELECT ?,p.id,?,?,'step_updated',CASE WHEN (SELECT revision FROM action_plan_steps WHERE id=?)=? AND p.current_revision=? THEN json_object('version',p.current_revision,'title',p.title,'status',p.status,'progressPercent',p.progress_percent,'steps',(SELECT json_group_array(json_object('id',s.id,'ordinal',s.ordinal,'title',s.title,'description',s.description,'status',s.status,'dueAt',s.due_at,'deadlineType',s.deadline_type,'actionType',s.action_type,'templateCode',s.template_code,'revision',s.revision)) FROM (SELECT id,ordinal,title,description,status,due_at,deadline_type,action_type,template_code,revision FROM action_plan_steps WHERE plan_id=p.id ORDER BY ordinal) s)) ELSE NULL END,? FROM action_plans p WHERE p.id=?",
       ).bind(

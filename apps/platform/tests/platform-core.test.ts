@@ -18,6 +18,7 @@ import { appLegalContent } from "../content/app-legal";
 import { canEditWorkspaceContent, canManageTeam, isWorkspaceRole } from "../lib/platform/role-policy";
 import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformBasePath, platformPath, workspaceForAccountRoute } from "../lib/platform/routing";
 import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
+import { taskStatusForPlanStep, taskStatusIsTerminal } from "../lib/platform/task-status";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
 import { isCinematicPrototypeEnvironment } from "../lib/platform/cinematic-prototype";
@@ -1190,6 +1191,24 @@ test("action-plan task confirmation is tenant-scoped and idempotent per plan rev
   assert.match(route, /INSERT OR IGNORE INTO case_events/);
   assert.match(route, /action-plan-tasks:\$\{caseId\}:\$\{plan\.planId\}:\$\{plan\.planRevision\}/);
   assert.match(route, /planRevision: plan\.planRevision/);
+});
+
+test("action-plan steps and confirmed tasks share a bounded server-side status vocabulary", async () => {
+  assert.equal(taskStatusForPlanStep("not_started"), "planned");
+  assert.equal(taskStatusForPlanStep("waiting_user"), "waiting_information");
+  assert.equal(taskStatusForPlanStep("waiting_response"), "waiting_counterparty");
+  assert.equal(taskStatusForPlanStep("completed"), "completed");
+  assert.equal(taskStatusIsTerminal("completed"), true);
+  assert.equal(taskStatusIsTerminal("in_progress"), false);
+  const [createTasks, updateStep] = await Promise.all([
+    readFile(new URL("../app/api/platform/cases/[caseId]/tasks/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/cases/[caseId]/steps/[stepId]/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(createTasks, /taskStatusForPlanStep\(step\.status\)/);
+  assert.match(createTasks, /taskStatusIsTerminal\(taskStatus\)/);
+  assert.match(updateStep, /UPDATE tasks SET status=\?,due_at=\?,completed_at=\?,updated_at=\?/);
+  assert.match(updateStep, /UPDATE task_reminders SET status=CASE WHEN \? THEN 'pending' ELSE 'cancelled' END/);
+  assert.match(updateStep, /INSERT OR IGNORE INTO task_reminders/);
 });
 test("lawyer offers are validated, access-bound, auditable, and owner-resolved", async () => {
   assert.equal(lawyerOfferCreateSchema.safeParse({

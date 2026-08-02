@@ -1,6 +1,7 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { taskStatusForPlanStep, taskStatusIsTerminal } from "../../../../../../lib/platform/task-status";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -37,13 +38,14 @@ export const POST = withApiErrors(async function POST(
   const db = requireD1();
   const owned = await db.prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1").bind(caseId, workspace.id).first();
   if (!owned) return response({ error: "Дело недоступно.", code: "CASE_UNAVAILABLE" }, 404);
-  const steps = await db.prepare("SELECT s.id,s.title,s.description,s.due_at AS dueAt,s.deadline_type AS deadlineType,p.id AS planId,p.current_revision AS planRevision FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id WHERE p.case_id=? ORDER BY s.ordinal").bind(caseId).all<{ id: string; title: string; description: string | null; dueAt: string | null; deadlineType: string; planId: string; planRevision: number }>();
+  const steps = await db.prepare("SELECT s.id,s.title,s.description,s.status,s.due_at AS dueAt,s.deadline_type AS deadlineType,p.id AS planId,p.current_revision AS planRevision FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id WHERE p.case_id=? ORDER BY s.ordinal").bind(caseId).all<{ id: string; title: string; description: string | null; status: Parameters<typeof taskStatusForPlanStep>[0]; dueAt: string | null; deadlineType: string; planId: string; planRevision: number }>();
   const now = isoNow();
   const statements = steps.results.flatMap((step) => {
     const taskId = step.id;
-    const reminderAt = step.dueAt ? defaultReminderAt(step.dueAt, now) : null;
+    const taskStatus = taskStatusForPlanStep(step.status);
+    const reminderAt = step.dueAt && !taskStatusIsTerminal(taskStatus) ? defaultReminderAt(step.dueAt, now) : null;
     return [
-      db.prepare("INSERT OR IGNORE INTO tasks (id,workspace_id,case_id,plan_step_id,owner_user_id,title,description,due_at,deadline_type,status,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,'planned',?,?)").bind(taskId, workspace.id, caseId, step.id, user.id, step.title, step.description, step.dueAt, step.deadlineType, now, now),
+      db.prepare("INSERT OR IGNORE INTO tasks (id,workspace_id,case_id,plan_step_id,owner_user_id,title,description,due_at,deadline_type,status,created_at,updated_at,completed_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(taskId, workspace.id, caseId, step.id, user.id, step.title, step.description, step.dueAt, step.deadlineType, taskStatus, now, now, taskStatus === "completed" ? now : null),
       ...(reminderAt ? [db.prepare("INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) VALUES (?,?,'in_app',?,'pending',?,?,?)").bind(`${taskId}:default`, taskId, reminderAt, `${taskId}:in_app:default`, now, now)] : []),
     ];
   });

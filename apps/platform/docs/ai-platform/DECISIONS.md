@@ -2160,3 +2160,21 @@ per step, one default reminder per due task, and one audit event are retained fo
 that plan revision. A later user-confirmed plan revision receives its own event,
 preserving the append-only case history. No D1 migration, provider call, or
 production change is required.
+
+## D-108 — Confirmed action-plan tasks remain synchronized with their plan step
+
+Status: accepted and locally regression-tested; staging deployment pending
+Date: 2026-08-02
+
+The action plan and the persisted task share an explicit mapping rather than an
+implicit display convention: `not_started` becomes `planned`, `waiting_user`
+becomes `waiting_information`, and `waiting_response` becomes
+`waiting_counterparty`; all other terminal and active statuses retain their
+meaning. Initial task creation uses that mapping and does not schedule a
+reminder for a completed or cancelled step.
+
+Every successful optimistic plan-step update now updates an already-confirmed
+tenant-owned task in the same D1 batch. The deterministic default reminder is
+rescheduled when it remains pending, cancelled for terminal/no-date states, and
+recreated only when an active dated task needs one. Sent reminders are never
+reopened. No migration or client-side authorization is introduced.
