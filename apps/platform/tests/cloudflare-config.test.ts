@@ -326,6 +326,10 @@ test("pins only verified non-production D1 identifiers and excludes secrets", ()
     "TOTP_ENCRYPTION_KEY",
     "SIGNED_URL_SECRET",
     "IDENTITY_KEYRING",
+    "AI_PROVIDER_API_KEY",
+    "LEGISLATION_FEED_API_KEY",
+    "PAYMENT_API_KEY",
+    "PAYMENT_WEBHOOK_SECRET",
   ]) {
     assert.equal(
       serialized.includes(`\"${secretBinding}\"`),

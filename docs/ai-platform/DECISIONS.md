@@ -98,3 +98,14 @@ evidence but are labelled untrusted for the model. The system instruction makes
 their non-instructional status explicit. This is defense in depth: the safe-file
 gate, server-only providers, no document tools, strict output schema, excerpt
 validation and verified-citation replay remain mandatory.
+
+## D-103 — every provider credential is rejected from deployable vars
+
+Status: accepted and locally verified
+Date: 2026-08-02
+
+The Cloudflare artifact validator and its source-config test reject both
+required and optional credential bindings from generated Wrangler `vars`.
+This includes the legacy generic AI binding and future legislation/payment
+credentials. Runtime values must remain Cloudflare secrets; model names and
+other non-sensitive configuration remain ordinary environment variables.
