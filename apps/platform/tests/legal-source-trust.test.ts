@@ -17,6 +17,7 @@ import {
   legalDatabaseFreshnessFromAsOf,
   legalDatabaseFreshnessFromCorpusRuns,
   legalSearchKeywords,
+  legalSearchPatterns,
   validateVerifiedLegalSourceEvidence,
   type VerifiedLegalSourceEvidenceRow,
 } from "../lib/legal/verified-retrieval";
@@ -271,6 +272,11 @@ test("legal keywords are bounded and locale-aware", () => {
     legalSearchKeywords("Закон 205, статья 1", "ru", 8),
     ["закон", "205", "статья", "1"],
   );
+  assert.deepEqual(
+    legalSearchPatterns("договор", "ru"),
+    ["договор", "Договор", "ДОГОВОР"],
+  );
+  assert.deepEqual(legalSearchPatterns("205", "uz"), ["205"]);
 });
 
 test("only complete Lex and Advice corpus runs establish database freshness", () => {

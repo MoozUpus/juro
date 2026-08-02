@@ -1004,6 +1004,8 @@ test("verified legal retrieval includes official metadata in exact lexical match
   }
   assert.match(source, /\\p\{N\}\{1,10\}/);
   assert.match(source, /lexicalBindings/);
+  assert.match(source, /legalSearchPatterns/);
+  assert.doesNotMatch(source, /lower\(\$\{field\}\) LIKE/);
 });
 
 test("billing never advertises credentials as an implemented checkout", async () => {

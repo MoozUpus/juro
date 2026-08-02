@@ -186,6 +186,27 @@ export function legalSearchKeywords(
   )].slice(0, Math.max(1, Math.min(12, limit)));
 }
 
+/**
+ * SQLite's built-in lower()/NOCASE handling is ASCII-only. Source titles and
+ * headings are official RU/UZ text, so bind a small set of Unicode case
+ * variants instead of treating lower(column) as a case-folding guarantee.
+ */
+export function legalSearchPatterns(
+  keyword: string,
+  locale: "ru" | "uz",
+): string[] {
+  const language = locale === "ru" ? "ru" : "uz";
+  const characters = Array.from(keyword);
+  const titleCase = characters.length
+    ? `${characters[0]!.toLocaleUpperCase(language)}${characters.slice(1).join("")}`
+    : keyword;
+  return [...new Set([
+    keyword,
+    titleCase,
+    keyword.toLocaleUpperCase(language),
+  ])];
+}
+
 async function sha256Text(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -447,12 +468,16 @@ export async function retrieveVerifiedLegalSources(
     "COALESCE(section.heading,'')",
     "section.body_text",
   ];
-  const lexicalConditions = keywords.flatMap(() =>
-    lexicalFields.map((field) => `lower(${field}) LIKE ?`),
-  );
-  const lexicalBindings = keywords.flatMap((keyword) =>
-    lexicalFields.map(() => `%${keyword}%`),
-  );
+  const lexicalConditions = keywords.flatMap((keyword) => {
+    const patterns = legalSearchPatterns(keyword, locale);
+    return lexicalFields.map((field) =>
+      `(${patterns.map(() => `${field} LIKE ?`).join(" OR ")})`,
+    );
+  });
+  const lexicalBindings = keywords.flatMap((keyword) => {
+    const patterns = legalSearchPatterns(keyword, locale);
+    return lexicalFields.flatMap(() => patterns.map((pattern) => `%${pattern}%`));
+  });
   const semanticCondition = semanticVectorIds.length
     ? `chunk.vector_id IN (${semanticVectorIds.map(() => "?").join(",")})`
     : null;

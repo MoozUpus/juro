@@ -62,3 +62,15 @@ bounded act/article/clause identifiers (up to ten digits) and remain subject to 
 existing source-lifecycle, jurisdiction, locale and citation-validation gates. This
 improves direct official-reference queries without permitting an unverified source to
 be cited as law.
+
+## D-100 — legal lexical matching must not rely on SQLite ASCII case folding
+
+Status: accepted and locally verified
+Date: 2026-08-02
+
+SQLite's built-in `lower()` and `NOCASE` behaviour do not provide dependable
+Unicode case folding for Russian official text. Verified retrieval therefore binds
+the bounded lower-case, title-case and upper-case variants of each legal keyword
+to the existing official-metadata and section fields. This is a candidate-match
+improvement only: source lifecycle, locale, verification, publication, current
+activation and server-side citation checks remain mandatory.
