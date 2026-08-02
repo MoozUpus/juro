@@ -9,6 +9,7 @@ import {
 } from "../lib/ai/legal-chat-schema";
 import {
   AiRunConflictError,
+  beginAiRunFinalization,
   failAiRun,
   completeAiRun,
   completeAiRunStatements,
@@ -331,6 +332,27 @@ test("a genuinely stale AI reservation releases its cycle and requires a fresh i
   assert.equal(run.errorCode, "AI_RUN_EXPIRED");
   assert.equal(ledger.status, "released");
   assert.equal(idempotency.status, "failed");
+});
+
+test("a finalizing AI run cannot be expired by an old idempotency timestamp", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const input = reservationInput(d1, "finalizing-reservation-request", 2);
+  const reserved = await reserveAiRun(input);
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+  assert.equal(await beginAiRunFinalization({
+    db: d1, runId: reserved.runId, workspaceId: "workspace-1", userId: "user-1",
+  }), true);
+  const staleAt = new Date(Date.now() - 16 * 60 * 1_000).toISOString();
+  sqlite.prepare("UPDATE idempotency_keys SET updated_at=? WHERE key=?")
+    .run(staleAt, "legal-chat:workspace-1:user-1:finalizing-reservation-request");
+
+  const replay = await reserveAiRun(input);
+  assert.equal(replay.kind, "processing");
+  const run = sqlite.prepare("SELECT status FROM ai_runs WHERE id=?").get(reserved.runId) as { status: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  assert.equal(run.status, "finalizing");
+  assert.equal(ledger.status, "reserved");
 });
 
 test("AI usage reservation enforces a monthly limit and request hash binding", async () => {
