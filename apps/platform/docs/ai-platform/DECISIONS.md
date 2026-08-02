@@ -2391,3 +2391,29 @@ legal-source suite 17/17, staging build, artifact validation, and generated
 Cloudflare binding type check passed before deployment. The unauthenticated
 staging endpoint correctly remains behind Cloudflare Access; authenticated
 source-operation proof remains an external gate.
+
+## D-122 — AI plans are converted from persisted structured answers only
+
+Status: accepted and deployed to protected staging
+Date: 2026-08-03
+
+The chat client cannot submit plan text, citations, deadlines, or a target case
+to create an executable plan. After an explicit confirmation, it submits only
+the persisted assistant-message UUID. The server authenticates the request,
+resolves the active workspace, reads that assistant message only through the
+conversation owner/workspace boundary, validates the stored structured output,
+and creates a deterministic new case, initial immutable plan version, steps,
+tasks, case event, and workspace audit event in one D1 batch.
+
+The deterministic identifiers make transport retries replay-safe: subsequent
+requests return the same case and task count rather than creating a second
+case. This first slice intentionally creates a new case; it does not append to
+an existing case or infer legal deadline calculations. No schema migration or
+provider call is required.
+
+Staging evidence: Worker `juro-platform-staging`, version
+`9643b769-210a-48c7-a26d-5c64ae74037c`, deployed after type-check, lint, full
+test suite (91/91), staging build, artifact validation, generated Cloudflare
+binding check, and environment matrix validation. A non-authenticated request
+is correctly intercepted by Cloudflare Access. An authenticated browser run is
+still required to prove the end-to-end click path. Production is unchanged.

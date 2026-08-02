@@ -2,11 +2,12 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, History, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, X } from "lucide-react";
+import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, History, ListPlus, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRetryableRequestError, createAiRetryRequest, isUserCancelledAiRequest, shouldOfferAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import { usePlatformBasePath } from "./PlatformRouteContext";
 
 type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
 type Usage = { used: number; limit: number; periodEnd: string };
@@ -50,6 +51,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const router = useRouter();
   const selectedConversationId = searchParams.get("conversationId") || "";
   const selectedBranchId = searchParams.get("branchId") || "";
+  const base = usePlatformBasePath();
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -65,6 +67,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const streamAbortRef = useRef<AbortController | null>(null);
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
   const [canRetry, setCanRetry] = useState(false);
+  const [savingPlan, setSavingPlan] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -188,6 +191,30 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     setAnswer((current) => current ? { ...current, facts: current.facts.map((fact) => fact.id === factId ? { ...fact, status: nextStatus } : fact) } : current);
   }
 
+  async function savePlanToCase() {
+    if (!answer?.messageId || answer.result.responseKind !== "answer" || !answer.result.actionPlan.length || savingPlan) return;
+    const confirmed = window.confirm(ru
+      ? "Создать новое дело и задачи по показанному плану? Исходный AI-ответ сохранится без изменений."
+      : "Ko‘rsatilgan reja bo‘yicha yangi ish va vazifalar yaratilsinmi? Asl AI javobi o‘zgarmaydi.");
+    if (!confirmed) return;
+    setSavingPlan(true);
+    setError("");
+    try {
+      const response = await fetch("/api/platform/ai/action-plan", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ assistantMessageId: answer.messageId, locale }),
+      });
+      const body = await response.json() as { caseId?: string; error?: string };
+      if (!response.ok || !body.caseId) throw new Error(body.error || (ru ? "План не сохранён в дело." : "Reja ishga saqlanmadi."));
+      router.push(`${base}/cases/${encodeURIComponent(body.caseId)}`);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setSavingPlan(false);
+    }
+  }
+
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
     <section className="ai-workspace">
@@ -206,6 +233,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           ) : <>
             <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} />
             <div className="ai-answer-actions">
+              {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => void savePlanToCase()}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : (ru ? "Добавить план в новое дело" : "Rejani yangi ishga qo‘shish")}</button>}
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
             </div>

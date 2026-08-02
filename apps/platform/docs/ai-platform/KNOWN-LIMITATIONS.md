@@ -1,8 +1,8 @@
 # JURO known limitations checkpoint
 
-> Current authoritative checkpoint — 2026-08-02: this section supersedes an
+> Current authoritative checkpoint — 2026-08-03: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`
-> is deployed as Worker version `fc2e5248-9e6f-414e-9180-bc046883f798`, with
+> is deployed as Worker version `9643b769-210a-48c7-a26d-5c64ae74037c`, with
 > isolated `juro-staging` D1, staging R2/Queues/Vectorize, and no production
 > mutation. Read-only secret inventory confirms names for OpenAI, Anthropic,
 > Resend, Turnstile and the identity keyring; it does not prove provider calls.
@@ -264,7 +264,7 @@ The following gates remain open:
 
 - The deployed slice supports existing case creation, plan-step status/date updates, nearest deadline, and builder linkage; it is not the complete Phase 6 lifecycle.
 - Immutable action-plan version history and the proposed-plan diff/confirmation UI are deployed to protected staging. Legal-basis calculation, business-day/holiday rules, and complete case-tab APIs remain open. Reminders are created only after the user confirms task creation; task ownership is the current user in this first-stage model.
-- The action-plan creation endpoint still uses the bounded built-in scenario catalogue; AI-proposed plans and explicit user confirmation before task creation are not yet integrated.
+- A persisted structured AI answer can now create one new tenant-owned case, immutable plan version, plan steps, and tasks only after the user explicitly confirms the action. The browser submits only the assistant message ID; the server re-reads the workspace-owned structured response and makes retries idempotent. Appending an AI plan to an existing case, deadline calculation from legal rules, business-day/holiday rules, and complete case-tab APIs remain open.
 - A `templateCode` query hint can accompany a plan step, but automatic resolution to a category/template route is not claimed; the user can select the real published template while case/step context is preserved.
 - Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
 - No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.
