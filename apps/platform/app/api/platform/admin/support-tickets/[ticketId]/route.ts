@@ -8,12 +8,13 @@ const replySchema = z.object({ body: z.string().trim().min(1).max(8_000), status
 type Context = { params: Promise<{ ticketId: string }> };
 
 export async function GET(request: Request, context: Context) {
-  await requirePlatformStaffRequest(request, "support.tickets.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
+  const staff = await requirePlatformStaffRequest(request, "support.tickets.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   const { ticketId } = await context.params;
   const db = requireD1();
-  const ticket = await db.prepare("SELECT id,category,severity,status,subject,created_at AS createdAt,updated_at AS updatedAt FROM support_tickets WHERE id=? LIMIT 1").bind(ticketId).first();
+  const ticket = await db.prepare("SELECT id,workspace_id AS workspaceId,category,severity,status,subject,created_at AS createdAt,updated_at AS updatedAt FROM support_tickets WHERE id=? LIMIT 1").bind(ticketId).first<{ id: string; workspaceId: string; category: string; severity: string; status: string; subject: string; createdAt: string; updatedAt: string }>();
   if (!ticket) return Response.json({ code: "NOT_FOUND" }, { status: 404, headers: { "cache-control": "private, no-store" } });
   const messages = await db.prepare("SELECT id,author_type AS authorType,body,created_at AS createdAt FROM support_messages WHERE ticket_id=? ORDER BY created_at ASC,id ASC LIMIT 200").bind(ticketId).all();
+  await db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'support_ticket',?,'support_ticket_viewed',?,?)").bind(crypto.randomUUID(), ticket.workspaceId, staff.userId, ticketId, JSON.stringify({ source: "staff_support_inbox" }), isoNow()).run();
   return Response.json({ ticket, messages: messages.results }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
