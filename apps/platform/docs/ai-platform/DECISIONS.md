@@ -2267,3 +2267,16 @@ unaudited content disclosure. User-facing detail routes remain requester and
 workspace scoped; this staff-only route follows the explicit owner policy that
 technical support may access support content, with every view and reply
 traceable. No schema migration or production change is required.
+## D-114 — AI stream recovery reuses the original idempotency record
+
+Status: accepted and deployed to staging (Worker version `74c35dac-6c14-452f-8a75-faf70e876f86`)
+Date: 2026-08-02
+
+An SSE disconnection does not prove whether a run completed server-side. The
+client therefore retains an immutable request payload and the original
+idempotency key, and retries only transport/stream uncertainty or a `202`
+processing result. Reusing the key lets the server return the completed answer
+or the existing run without opening a second usage ledger entry. Terminal
+provider, validation, authorization and plan errors are not offered as retries:
+the current idempotency contract marks failed runs final, so presenting that
+button would be misleading.

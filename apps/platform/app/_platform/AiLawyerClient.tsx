@@ -5,6 +5,7 @@
 import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, History, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
+import { AiRetryableRequestError, createAiRetryRequest, isUserCancelledAiRequest, shouldOfferAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
@@ -32,6 +33,15 @@ type LegalResult = {
 type AiMessageOperation = "new" | "follow_up" | "edit" | "regenerate";
 type Branch = { branchId: string; parentBranchId: string | null; requestMessageId: string; responseMessageId: string; operation: AiMessageOperation; versionNumber: number; question: string; createdAt: string };
 type Answer = { conversationId: string; messageId?: string; requestMessageId?: string | null; branchId?: string | null; operation?: AiMessageOperation; question?: string; branches?: Branch[]; result: LegalResult; facts: Fact[]; sourceFreshness?: SourceFreshness; usage?: Usage };
+type AiRequestPayload = {
+  question?: string;
+  locale: PlatformLocale;
+  answerMode: "short" | "detailed";
+  reasoningMode: "fast" | "deep";
+  conversationId?: string;
+  operation: AiMessageOperation;
+  sourceMessageId?: string;
+};
 
 export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const ru = locale === "ru";
@@ -53,6 +63,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [error, setError] = useState("");
   const [streamStatus, setStreamStatus] = useState("");
   const streamAbortRef = useRef<AbortController | null>(null);
+  const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
+  const [canRetry, setCanRetry] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -75,15 +87,29 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   useEffect(() => { void load(); }, [load]);
 
-  async function submit(event?: FormEvent, override?: { operation: "regenerate"; sourceMessageId: string }) {
+  async function submit(
+    event?: FormEvent,
+    override?: { operation: "regenerate"; sourceMessageId: string },
+    retry?: AiRetryRequest<AiRequestPayload>,
+  ) {
     event?.preventDefault();
-    const operation: AiMessageOperation = override?.operation || (editSourceMessageId ? "edit" : (answer?.conversationId || selectedConversationId ? "follow_up" : "new"));
-    const sourceMessageId = override?.sourceMessageId || editSourceMessageId || undefined;
-    if ((operation !== "regenerate" && !question.trim()) || sending || !status?.configured) return;
+    const operation: AiMessageOperation = retry?.payload.operation || override?.operation || (editSourceMessageId ? "edit" : (answer?.conversationId || selectedConversationId ? "follow_up" : "new"));
+    const sourceMessageId = retry?.payload.sourceMessageId || override?.sourceMessageId || editSourceMessageId || undefined;
+    if ((operation !== "regenerate" && !(retry?.payload.question || question.trim())) || sending || !status?.configured) return;
+    const pending = retry || createAiRetryRequest<AiRequestPayload>({
+      question: operation === "regenerate" ? undefined : question,
+      locale,
+      answerMode,
+      reasoningMode,
+      conversationId: answer?.conversationId || selectedConversationId || undefined,
+      operation,
+      sourceMessageId,
+    }, () => crypto.randomUUID());
     const controller = new AbortController();
     streamAbortRef.current = controller;
     setSending(true);
     setError("");
+    setCanRetry(false);
     setStreamStatus(ru ? "JURO принимает запрос…" : "JURO so‘rovni qabul qilmoqda…");
     try {
       const response = await fetch("/api/platform/ai", {
@@ -92,43 +118,49 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           accept: "text/event-stream",
           "content-type": "application/json",
           "x-juro-csrf": "1",
-          "idempotency-key": crypto.randomUUID(),
+          "idempotency-key": pending.idempotencyKey,
         },
-        body: JSON.stringify({
-          question: operation === "regenerate" ? undefined : question,
-          locale,
-          answerMode,
-          reasoningMode,
-          conversationId: answer?.conversationId || selectedConversationId || undefined,
-          operation,
-          sourceMessageId,
-        }),
+        body: JSON.stringify(pending.payload),
         signal: controller.signal,
       });
       if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
         throw new Error(ru ? "Не удалось открыть защищённый поток ответа." : "Himoyalangan javob oqimini ochib bo‘lmadi.");
       }
-      const terminal = await readAiEventStream(response, (progress) => {
-        if (progress.stage === "provider_started") {
-          setStreamStatus(ru ? "AI формирует структурированный ответ…" : "AI tuzilgan javobni tayyorlamoqda…");
-        } else if (progress.stage === "provider_delta") {
-          setStreamStatus(ru ? "JURO проверяет структуру и источники…" : "JURO tuzilma va manbalarni tekshirmoqda…");
-        } else if (progress.stage === "fallback") {
-          setStreamStatus(ru ? "Основной провайдер недоступен — включён резервный…" : "Asosiy provayder ishlamayapti — zaxira yoqildi…");
-        }
-      });
+      let terminal;
+      try {
+        terminal = await readAiEventStream(response, (progress) => {
+          if (progress.stage === "provider_started") {
+            setStreamStatus(ru ? "AI формирует структурированный ответ…" : "AI tuzilgan javobni tayyorlamoqda…");
+          } else if (progress.stage === "provider_delta") {
+            setStreamStatus(ru ? "JURO проверяет структуру и источники…" : "JURO tuzilma va manbalarni tekshirmoqda…");
+          } else if (progress.stage === "fallback") {
+            setStreamStatus(ru ? "Основной провайдер недоступен — включён резервный…" : "Asosiy provayder ishlamayapti — zaxira yoqildi…");
+          }
+        });
+      } catch (streamError) {
+        throw new AiRetryableRequestError(
+          streamError instanceof Error ? streamError.message : "STREAM_TERMINAL_EVENT_MISSING",
+        );
+      }
       const body = terminal.body as Answer & { error?: string; code?: string };
       if (terminal.status < 200 || terminal.status >= 300) throw new Error(body.error || (ru ? "Не удалось получить ответ." : "Javob olinmadi."));
-      if (terminal.status === 202) throw new Error(ru ? "Запрос уже обрабатывается. Откройте диалог через несколько секунд." : "So‘rov qayta ishlanmoqda. Suhbatni bir necha soniyadan so‘ng oching.");
+      if (terminal.status === 202) throw new AiRetryableRequestError(ru ? "Запрос уже обрабатывается. Повторите проверку через несколько секунд." : "So‘rov qayta ishlanmoqda. Bir necha soniyadan so‘ng qayta tekshiring.");
       setAnswer(body);
       if (body.usage) setUsage(body.usage);
       setQuestion("");
       setEditSourceMessageId("");
+      pendingAiRequestRef.current = null;
+      setCanRetry(false);
       const nextParams = new URLSearchParams({ conversationId: body.conversationId });
       if (body.branchId) nextParams.set("branchId", body.branchId);
       router.replace(`${pathname}?${nextParams}`, { scroll: false });
     } catch (value) {
-      setError(value instanceof DOMException && value.name === "AbortError"
+      const cancelled = isUserCancelledAiRequest(value);
+      if (!cancelled && shouldOfferAiRetry(value)) {
+        pendingAiRequestRef.current = pending;
+        setCanRetry(true);
+      }
+      setError(cancelled
         ? (ru ? "Генерация остановлена. Лимит не списан." : "Javob yaratish to‘xtatildi. Limit yechilmadi.")
         : value instanceof Error ? value.message : String(value));
     } finally {
@@ -161,13 +193,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     <section className="ai-workspace">
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { setAnswer(null); setQuestion(""); setEditSourceMessageId(""); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
+        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setEditSourceMessageId(""); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
         <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => { setEditSourceMessageId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false }); }}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
       </aside>
       <main className="ai-dialog">
         <header><span><Bot /></span><div><h1>{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div></header>
         {!status?.configured && <div className="ai-unavailable" role="status"><ShieldAlert /><div><strong>{ru ? "AI пока недоступен" : "AI hozircha ishlamaydi"}</strong><p>{ru ? "Сервер не подтвердил ключ AI-провайдера. JURO не имитирует ответ и не показывает ложный success." : "Server AI-provayder kalitini tasdiqlamadi. JURO javobni taqlid qilmaydi va soxta muvaffaqiyatni ko‘rsatmaydi."}</p></div></div>}
-        {error && <div className="ai-error" role="alert"><CircleAlert />{error}</div>}
+        {error && <div className="ai-error" role="alert"><CircleAlert /><div><p>{error}</p>{canRetry && <button type="button" disabled={sending} onClick={() => { const pending = pendingAiRequestRef.current; if (pending) void submit(undefined, undefined, pending); }}>{ru ? "Безопасно повторить запрос" : "So‘rovni xavfsiz qaytarish"}</button>}</div></div>}
         <div className="ai-answer-stream" aria-live="polite" aria-busy={sending}>
           {!answer ? (
             <div className="ai-start"><FileQuestion /><h2>{ru ? "Опишите юридическую ситуацию" : "Yuridik vaziyatni yozing"}</h2><p>{ru ? "Не указывайте лишние персональные данные. JURO отделит подтверждённые нормы от предположений." : "Ortiqcha shaxsiy ma’lumotlarni yozmang. JURO tasdiqlangan normalarni taxminlardan ajratadi."}</p></div>
@@ -190,7 +222,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             <label>{ru ? "Режим" : "Rejim"}<select value={reasoningMode} onChange={(event) => setReasoningMode(event.target.value as "fast" | "deep")}><option value="fast">{ru ? "Быстро" : "Tez"}</option><option value="deep">{ru ? "Глубоко" : "Chuqur"}</option></select></label>
           </div>
           <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
-          <textarea id="ai-question" value={question} onChange={(event) => setQuestion(event.target.value)} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Что произошло? Enter — отправить" : "Nima bo‘ldi? Enter — yuborish"} />
+          <textarea id="ai-question" value={question} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Что произошло? Enter — отправить" : "Nima bo‘ldi? Enter — yuborish"} />
           {sending
             ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={ru ? "Остановить генерацию" : "Javob yaratishni to‘xtatish"}><Square /></button>
             : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}

@@ -32,6 +32,11 @@ Scope: implemented integration-branch controls. This file does not claim live Op
   change system instructions, source policy, authorization, or tool behavior.
 - Actual provider/model, instruction hash, source-evidence hash, freshness, and
   safe usage metadata are persisted without logging document or chat bodies.
+- If an SSE connection breaks after request submission, the UI retains the
+  exact idempotency key and immutable payload. It offers a retry only for an
+  uncertain network/stream failure or an existing processing run; provider and
+  validation failures remain ordinary errors, so the UI never presents a retry
+  that would be stuck on a failed idempotency record.
 
 ## Open release gates
 
