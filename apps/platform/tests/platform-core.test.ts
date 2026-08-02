@@ -1102,6 +1102,21 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
   assert.match(grantRoute, /lawyer_case_access_revoked/);
 });
 
+test("notification reads use strict bounded input and expose resilient UI states", async () => {
+  const [route, client] = await Promise.all([
+    readFile(new URL("../app/api/document-builder/notifications/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_document-builder/notifications/NotificationsClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /notificationReadSchema/);
+  assert.match(route, /z\.string\(\)\.uuid\(\)/);
+  assert.match(route, /parseJsonRequest\(request, notificationReadSchema, 1_024\)/);
+  assert.match(route, /Boolean\(value\.id\) !== Boolean\(value\.all\)/);
+  assert.match(client, /aria-busy=\{loading \|\| marking !== null\}/);
+  assert.match(client, /aria-live="polite"/);
+  assert.match(client, /disabled=\{loading \|\| marking !== null\}/);
+  assert.match(client, /Не удалось загрузить уведомления/);
+});
+
 test("notification reads and read acknowledgements remain workspace-scoped", async () => {
   const [notificationRoute, dashboardRoute] = await Promise.all([
     readFile(new URL("../app/api/document-builder/notifications/route.ts", import.meta.url), "utf8"),

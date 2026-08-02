@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { parseJsonRequest } from "../../../../lib/auth/input";
 import { assertSafeWrite, requireApiUser } from "../../../../lib/document-builder/auth/api";
 import { apiError, badRequest, jsonResponse } from "../../../../lib/document-builder/auth/responses";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
@@ -5,6 +7,13 @@ import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 export const dynamic = "force-dynamic";
+
+const notificationReadSchema = z.object({
+  id: z.string().uuid().optional(),
+  all: z.literal(true).optional(),
+}).strict().refine(
+  (value) => Boolean(value.id) !== Boolean(value.all),
+);
 
 export async function GET(): Promise<Response> {
   try {
@@ -24,7 +33,9 @@ export async function PATCH(request: Request): Promise<Response> {
     assertSafeWrite(request);
     const user = await requireApiUser();
     const workspace = await workspaceForUser(user);
-    const body = await request.json() as { id?: string; all?: boolean };
+    const parsed = await parseJsonRequest(request, notificationReadSchema, 1_024);
+    if (!parsed.ok) return badRequest("Некорректное уведомление.", "INVALID_INPUT");
+    const body = parsed.data;
     const db = requireD1();
     if (body.all) {
       await db.prepare("UPDATE notifications SET read_at = ? WHERE user_id = ? AND workspace_id = ? AND read_at IS NULL").bind(isoNow(), user.id, workspace.id).run();
