@@ -7,3 +7,7 @@ export const supportTicketSchema = z.object({
   message: z.string().trim().min(10).max(8_000),
   locale: z.enum(["ru", "uz"]),
 }).strict();
+
+export const supportTicketReplySchema = z.object({
+  message: z.string().trim().min(1).max(8_000),
+}).strict();

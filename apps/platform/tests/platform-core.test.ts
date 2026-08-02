@@ -1233,6 +1233,10 @@ test("support tickets are tenant-scoped, validated, and audited", async () => {
   ]);
   assert.match(detail, /id=\? AND workspace_id=\? AND requester_user_id=\?/);
   assert.match(detail, /FROM support_messages WHERE ticket_id=\?/);
+  assert.match(detail, /supportTicketReplySchema/);
+  assert.match(detail, /TICKET_RESOLVED/);
+  assert.match(detail, /support_ticket_replied/);
+  assert.match(detail, /status='open',updated_at=\?,closed_at=NULL/);
   assert.match(staffQueue, /freshMfaWithinMs: 15 \* 60 \* 1000/);
   assert.match(staffReply, /support_ticket_replied/);
 });
