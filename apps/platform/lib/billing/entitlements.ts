@@ -1,11 +1,20 @@
 export type WorkspaceEntitlements = {
   planCode: "free" | "individual" | "business" | "legal_team";
   subscriptionStatus: string | null;
+  /** Server-enforced answer cycles per user for the current UTC month. */
+  aiAnswerCyclesMonthly: number;
   lawyerHandoff: boolean;
   fullDocumentAnalysis: boolean;
   expertDocumentAnalysis: boolean;
   documentComparison: boolean;
 };
+
+const AI_ANSWER_CYCLE_LIMITS = {
+  free: 20,
+  individual: 120,
+  business: 300,
+  legal_team: 600,
+} as const;
 
 type SubscriptionEvidence = {
   planCode: string;
@@ -16,6 +25,7 @@ type SubscriptionEvidence = {
 const FREE_ENTITLEMENTS: WorkspaceEntitlements = {
   planCode: "free",
   subscriptionStatus: null,
+  aiAnswerCyclesMonthly: AI_ANSWER_CYCLE_LIMITS.free,
   lawyerHandoff: false,
   fullDocumentAnalysis: false,
   expertDocumentAnalysis: false,
@@ -46,6 +56,7 @@ export function entitlementsForSubscription(
   return {
     planCode,
     subscriptionStatus: subscription.status,
+    aiAnswerCyclesMonthly: AI_ANSWER_CYCLE_LIMITS[planCode],
     lawyerHandoff: true,
     fullDocumentAnalysis: true,
     expertDocumentAnalysis: true,

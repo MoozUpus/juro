@@ -182,6 +182,7 @@ test("workspace entitlements fail closed without current paid evidence", () => {
   assert.deepEqual(entitlementsForSubscription(null, now), {
     planCode: "free",
     subscriptionStatus: null,
+    aiAnswerCyclesMonthly: 20,
     lawyerHandoff: false,
     fullDocumentAnalysis: false,
     expertDocumentAnalysis: false,
@@ -194,6 +195,7 @@ test("workspace entitlements fail closed without current paid evidence", () => {
   }, now);
   assert.equal(active.lawyerHandoff, true);
   assert.equal(active.planCode, "individual");
+  assert.equal(active.aiAnswerCyclesMonthly, 120);
   for (const evidence of [
     { planCode: "individual", status: "past_due", currentPeriodEndsAt: "2026-08-30T12:00:00.000Z" },
     { planCode: "individual", status: "active", currentPeriodEndsAt: "invalid" },
@@ -985,6 +987,14 @@ test("global search is tenant-scoped, escapes LIKE input and avoids document-tex
   assert.match(client, /triggerRef = useRef<HTMLButtonElement>/);
   assert.match(client, /triggerRef\.current\?\.focus\(\)/);
   assert.match(client, /wasOpenRef\.current = open/);
+});
+
+test("AI chat obtains its cycle limit from server-side workspace entitlements", async () => {
+  const route = await readFile(new URL("../app/api/platform/ai/route.ts", import.meta.url), "utf8");
+  assert.match(route, /workspaceEntitlements\(db, workspace\.id\)/);
+  assert.match(route, /monthlyLimit: entitlements\.aiAnswerCyclesMonthly/);
+  assert.match(route, /usageSummary\(db, workspace\.id, user\.id, entitlements\.aiAnswerCyclesMonthly\)/);
+  assert.doesNotMatch(route, /MONTHLY_CHAT_LIMIT/);
 });
 
 test("legislation monitoring never auto-publishes or invents feed entries", async () => {

@@ -36,3 +36,15 @@ Status: locally implemented; awaiting staging migration
 Date: 2026-08-02
 
 A completed service can create one private owner review. A `legal_reviewer` with a fresh local MFA session receives a separate `lawyer.reviews.moderate` capability. Each terminal decision is appended to `lawyer_review_moderation`, records a SHA-256 fingerprint of the original review text, and cannot be changed or deleted. A unique review fence prevents two decisions. Database-triggered status progression happens only after a decision record is inserted. Approval is not publication: no public lawyer profile consumes these reviews yet. A conservative contact-pattern screen prevents approving a review with a likely email, phone number, or PINFL-like value until a moderated text removes it.
+
+## D-098 — AI cycles are a workspace entitlement, never a route constant
+
+Status: accepted and locally verified
+Date: 2026-08-02
+
+The AI-chat route resolves the active, server-side workspace subscription before
+reserving a chargeable answer cycle. Free workspaces retain the approved 20
+cycles/month; verified active paid plans receive their explicit higher server policy
+limits. The same resolved entitlement is returned in the private usage summary.
+This prevents a paid workspace from being silently limited by a route-level free-plan
+constant and prevents the browser from being the source of entitlement truth.

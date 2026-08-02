@@ -21,9 +21,9 @@ import {
   legalDatabaseFreshnessFromAsOf,
   retrieveVerifiedLegalSources,
 } from "../../../../lib/legal/verified-retrieval";
+import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
-const MONTHLY_CHAT_LIMIT = 20;
 const INSTRUCTION_VERSION = "juro-legal-chat-v1";
 
 function response(body: unknown, status = 200) {
@@ -37,6 +37,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const db = requireD1();
+  const entitlements = await workspaceEntitlements(db, workspace.id);
   const url = new URL(request.url);
   const selectedId = url.searchParams.get("conversationId");
   const selectedBranchId = url.searchParams.get("branchId");
@@ -51,7 +52,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
     : null;
   return response({
     status: aiProviderStatus(),
-    usage: await usageSummary(db, workspace.id, user.id),
+    usage: await usageSummary(db, workspace.id, user.id, entitlements.aiAnswerCyclesMonthly),
     conversations: conversations.results.map((row) => ({
       ...row,
       facts: parseJson(String((row as Record<string, unknown>).factsJson || "[]"), []),
@@ -108,6 +109,7 @@ async function executePost(
   }
 
   const db = requireD1();
+  const entitlements = await workspaceEntitlements(db, workspace.id);
   if (body?.caseId) {
     const accessible = await db.prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? LIMIT 1").bind(body.caseId, workspace.id).first();
     if (!accessible) return response({ code: "ACCESS_DENIED", error: locale === "ru" ? "Дело не найдено в этом пространстве." : "Bu makonda ish topilmadi." }, 404);
@@ -161,7 +163,8 @@ async function executePost(
       db, workspaceId: workspace.id, userId: user.id, idempotencyKey, requestHash,
       conversationId: existingConversation ? conversationId : null,
       provider: provider.name, model: providerStatus.model, answerMode, reasoningMode,
-      legalDatabaseAsOf, instructionHash, sourceVersionHash, monthlyLimit: MONTHLY_CHAT_LIMIT,
+      legalDatabaseAsOf, instructionHash, sourceVersionHash,
+      monthlyLimit: entitlements.aiAnswerCyclesMonthly,
     });
   } catch (error) {
     if (error instanceof AiRunConflictError) {
@@ -314,7 +317,7 @@ async function executePost(
       model: aiResult.model,
       fallbackFromProvider: aiResult.fallbackFromProvider,
     },
-    usage: await usageSummary(db, workspace.id, user.id),
+    usage: await usageSummary(db, workspace.id, user.id, entitlements.aiAnswerCyclesMonthly),
   }, 201);
 }
 
@@ -416,14 +419,14 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
   };
 }
 
-async function usageSummary(db: D1Database, workspaceId: string, userId: string) {
+async function usageSummary(db: D1Database, workspaceId: string, userId: string, limit: number) {
   const now = new Date();
   const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const periodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
   const row = await db.prepare(
     "SELECT COALESCE(SUM(units),0) AS used FROM ai_usage_ledger WHERE workspace_id=? AND user_id=? AND feature='legal_chat' AND period_start=? AND status='consumed'",
   ).bind(workspaceId, userId, periodStart).first<{ used: number }>();
-  return { used: row?.used ?? 0, limit: MONTHLY_CHAT_LIMIT, periodEnd };
+  return { used: row?.used ?? 0, limit, periodEnd };
 }
 
 function localizedProviderError(locale: "ru" | "uz", code: string) {
