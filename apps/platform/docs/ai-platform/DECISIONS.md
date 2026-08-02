@@ -2407,12 +2407,14 @@ tasks, case event, and workspace audit event in one D1 batch.
 
 The deterministic identifiers make transport retries replay-safe: subsequent
 requests return the same case and task count rather than creating a second
-case. This first slice intentionally creates a new case; it does not append to
+case. New case IDs are UUID-shaped so the existing builder-context validator
+can preserve the case when the user moves to a document flow; legacy IDs from
+the initial staging slice remain replay-safe. This first slice intentionally creates a new case; it does not append to
 an existing case or infer legal deadline calculations. No schema migration or
 provider call is required.
 
 Staging evidence: Worker `juro-platform-staging`, version
-`9643b769-210a-48c7-a26d-5c64ae74037c`, deployed after type-check, lint, full
+`579cfa2c-7651-4c03-97eb-49c8aedc4ac1`, deployed after type-check, lint, full
 test suite (91/91), staging build, artifact validation, generated Cloudflare
 binding check, and environment matrix validation. A non-authenticated request
 is correctly intercepted by Cloudflare Access. An authenticated browser run is

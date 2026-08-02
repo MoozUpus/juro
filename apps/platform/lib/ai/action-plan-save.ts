@@ -26,6 +26,14 @@ function stableId(prefix: string, assistantMessageId: string): string {
   return `${prefix}_${assistantMessageId.replaceAll("-", "")}`;
 }
 
+/**
+ * Derive a deterministic UUIDv5-shaped case ID from the persisted UUIDv4
+ * message identity. Existing builder context links only accept UUIDs.
+ */
+function stableCaseId(assistantMessageId: string): string {
+  return `${assistantMessageId.slice(0, 14)}5${assistantMessageId.slice(15)}`.toLowerCase();
+}
+
 function caseAccountType(value: string): "individual" | "entrepreneur" | "lawyer" | "business" {
   return value === "business" || value === "entrepreneur" || value === "lawyer"
     ? value
@@ -71,16 +79,20 @@ export async function saveAiActionPlanToCase(input: {
   `).bind(input.assistantMessageId, input.workspaceId, input.userId).first<StoredPlanMessage>();
   if (!stored) throw new AiActionPlanSaveError("AI_ACTION_PLAN_NOT_FOUND");
   const result = parseStoredPlan(stored.structuredJson);
-  const caseId = stableId("case_ai_plan", input.assistantMessageId);
+  const caseId = stableCaseId(input.assistantMessageId);
   const planId = stableId("plan_ai", input.assistantMessageId);
+  const legacyCaseId = stableId("case_ai_plan", input.assistantMessageId);
   const existing = await input.db.prepare(
-    "SELECT id FROM cases WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1",
-  ).bind(caseId, input.workspaceId, input.userId).first<{ id: string }>();
+    "SELECT id FROM cases WHERE id IN (?,?) AND workspace_id=? AND owner_user_id=? LIMIT 1",
+  ).bind(caseId, legacyCaseId, input.workspaceId, input.userId).first<{ id: string }>();
   if (existing) {
+    const existingPlan = await input.db.prepare(
+      "SELECT id FROM action_plans WHERE case_id=? LIMIT 1",
+    ).bind(existing.id).first<{ id: string }>();
     const tasks = await input.db.prepare(
       "SELECT count(*) AS count FROM tasks WHERE case_id=? AND workspace_id=?",
-    ).bind(caseId, input.workspaceId).first<{ count: number }>();
-    return { caseId, planId, taskCount: tasks?.count ?? 0, replay: true };
+    ).bind(existing.id, input.workspaceId).first<{ count: number }>();
+    return { caseId: existing.id, planId: existingPlan?.id ?? planId, taskCount: tasks?.count ?? 0, replay: true };
   }
 
   const now = input.now ?? new Date().toISOString();

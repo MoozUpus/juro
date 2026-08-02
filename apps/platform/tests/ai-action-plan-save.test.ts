@@ -64,6 +64,7 @@ test("explicit AI-plan confirmation persists a tenant-scoped case, immutable pla
     });
     assert.equal(first.replay, false);
     assert.equal(first.taskCount, 2);
+    assert.match(first.caseId, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS count FROM action_plan_steps WHERE plan_id=?").get(first.planId) as { count: number }).count,
       2,
@@ -81,6 +82,30 @@ test("explicit AI-plan confirmation persists a tenant-scoped case, immutable pla
       assistantMessageId: ASSISTANT_MESSAGE_ID, now: "2026-08-03T08:01:00.000Z",
     });
     assert.deepEqual(replay, { ...first, replay: true });
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS count FROM cases WHERE workspace_id=?").get(WORKSPACE_ID) as { count: number }).count,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("legacy non-UUID plan cases retain replay safety after the builder-compatible ID migration", async () => {
+  const { sqlite, d1 } = seed();
+  try {
+    const legacyCaseId = `case_ai_plan_${ASSISTANT_MESSAGE_ID.replaceAll("-", "")}`;
+    const legacyPlanId = `plan_ai_${ASSISTANT_MESSAGE_ID.replaceAll("-", "")}`;
+    sqlite.prepare(
+      "INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(legacyCaseId, WORKSPACE_ID, USER_ID, "individual", "ru", "Legacy", null, "ai_proposed", "open", 1, NOW, NOW);
+    sqlite.prepare(
+      "INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+    ).run(legacyPlanId, legacyCaseId, USER_ID, "Legacy", "in_progress", 0, 1, NOW, NOW);
+    const replay = await saveAiActionPlanToCase({
+      db: d1, workspaceId: WORKSPACE_ID, userId: USER_ID, assistantMessageId: ASSISTANT_MESSAGE_ID, now: NOW,
+    });
+    assert.deepEqual(replay, { caseId: legacyCaseId, planId: legacyPlanId, taskCount: 0, replay: true });
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS count FROM cases WHERE workspace_id=?").get(WORKSPACE_ID) as { count: number }).count,
       1,
