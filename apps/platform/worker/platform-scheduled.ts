@@ -9,6 +9,17 @@ import type { PlatformJobEnv } from "./platform-jobs";
 const OUTBOX_CRON = "*/5 * * * *";
 const LOCK_NAME = "outbox-dispatch";
 const LOCK_MS = 4 * 60 * 1_000;
+const TASK_REMINDER_BATCH_SIZE = 100;
+
+type DueTaskReminder = {
+  reminderId: string;
+  taskId: string;
+  workspaceId: string;
+  userId: string;
+  taskTitle: string;
+  dueAt: string | null;
+  locale: "ru" | "uz";
+};
 
 function isoAfter(value: string, milliseconds: number): string {
   return new Date(Date.parse(value) + milliseconds).toISOString();
@@ -33,6 +44,124 @@ function logScheduled(
   const entry = JSON.stringify(fields);
   if (level === "error") console.error(entry);
   else console.log(entry);
+}
+
+function taskReminderCopy(
+  reminder: Pick<DueTaskReminder, "locale" | "taskTitle">,
+): { title: string; body: string } {
+  if (reminder.locale === "uz") {
+    return {
+      title: "Vazifa muddati",
+      body: `Vazifa muddati yaqinlashmoqda: ${reminder.taskTitle}.`,
+    };
+  }
+  return {
+    title: "Срок по задаче",
+    body: `Приближается срок по задаче: ${reminder.taskTitle}.`,
+  };
+}
+
+/**
+ * Delivers due in-app task reminders directly to the existing notifications
+ * inbox. The deterministic notification id and conditional state transition
+ * make a retry safe even after a Worker interruption.
+ */
+export async function dispatchDueTaskReminders(
+  env: PlatformJobEnv,
+  now: string,
+): Promise<{ due: number; sent: number }> {
+  const due = await env.DB.prepare(
+    `SELECT
+       tr.id AS reminderId,
+       tr.task_id AS taskId,
+       t.workspace_id AS workspaceId,
+       t.owner_user_id AS userId,
+       t.title AS taskTitle,
+       t.due_at AS dueAt,
+       c.locale AS locale
+     FROM task_reminders tr
+     JOIN tasks t ON t.id=tr.task_id
+     JOIN cases c ON c.id=t.case_id
+     WHERE tr.channel='in_app'
+       AND tr.status='pending'
+       AND tr.reminder_at<=?
+       AND t.status NOT IN ('completed','cancelled')
+       AND c.archived_at IS NULL
+     ORDER BY tr.reminder_at ASC, tr.id ASC
+     LIMIT ?`,
+  ).bind(now, TASK_REMINDER_BATCH_SIZE).all<DueTaskReminder>();
+
+  let sent = 0;
+  for (const reminder of due.results) {
+    const copy = taskReminderCopy(reminder);
+    const notificationId = `task-reminder:${reminder.reminderId}`;
+    const results = await env.DB.batch([
+      env.DB.prepare(
+        `INSERT OR IGNORE INTO notifications (
+           id,workspace_id,user_id,document_id,type,title,body,read_at,created_at
+         )
+         SELECT ?,?,?,?,?,?,?,NULL,?
+         WHERE EXISTS (
+           SELECT 1
+           FROM task_reminders tr
+           JOIN tasks t ON t.id=tr.task_id
+           JOIN cases c ON c.id=t.case_id
+           WHERE tr.id=?
+             AND tr.channel='in_app'
+             AND tr.status='pending'
+             AND tr.reminder_at<=?
+             AND t.id=?
+             AND t.workspace_id=?
+             AND t.owner_user_id=?
+             AND t.status NOT IN ('completed','cancelled')
+             AND c.archived_at IS NULL
+         )`,
+      ).bind(
+        notificationId,
+        reminder.workspaceId,
+        reminder.userId,
+        null,
+        "deadline_reminder",
+        copy.title,
+        copy.body,
+        now,
+        reminder.reminderId,
+        now,
+        reminder.taskId,
+        reminder.workspaceId,
+        reminder.userId,
+      ),
+      env.DB.prepare(
+        `UPDATE task_reminders
+         SET status='sent',sent_at=?,updated_at=?
+         WHERE id=?
+           AND channel='in_app'
+           AND status='pending'
+           AND reminder_at<=?
+           AND EXISTS (
+             SELECT 1
+             FROM tasks t
+             JOIN cases c ON c.id=t.case_id
+             WHERE t.id=task_reminders.task_id
+               AND t.id=?
+               AND t.workspace_id=?
+               AND t.owner_user_id=?
+               AND t.status NOT IN ('completed','cancelled')
+               AND c.archived_at IS NULL
+           )`,
+      ).bind(
+        now,
+        now,
+        reminder.reminderId,
+        now,
+        reminder.taskId,
+        reminder.workspaceId,
+        reminder.userId,
+      ),
+    ]);
+    sent += Number(results[1]?.meta?.changes ?? 0);
+  }
+  return { due: due.results.length, sent };
 }
 
 async function claimSchedule(
@@ -164,6 +293,10 @@ export async function handleScheduled(
   }
   try {
     const summary = await dispatchOutbox(env, 100);
+    const taskReminders = await dispatchDueTaskReminders(
+      env,
+      new Date().toISOString(),
+    );
     const providerProbe = await maybeRunStagingProviderProbes(env);
     const corpusRunsCompleted =
       env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
@@ -178,6 +311,8 @@ export async function handleScheduled(
       dispatched: summary.dispatched,
       retrying: summary.retrying,
       rejected: summary.rejected,
+      taskRemindersDue: taskReminders.due,
+      taskRemindersSent: taskReminders.sent,
       providerProbeAttempted: providerProbe?.attempted ?? 0,
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,

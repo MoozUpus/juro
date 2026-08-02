@@ -2145,7 +2145,7 @@ coupling lawyer publication to legal-source operations.
 
 ## D-107 — Confirming plan steps creates one audit record per immutable plan revision
 
-Status: accepted and locally regression-tested; staging deployment pending
+Status: accepted and deployed to staging
 Date: 2026-08-02
 
 The action-plan confirmation endpoint already used the plan-step identifier as
@@ -2163,7 +2163,7 @@ production change is required.
 
 ## D-108 — Confirmed action-plan tasks remain synchronized with their plan step
 
-Status: accepted and locally regression-tested; staging deployment pending
+Status: accepted and deployed to staging
 Date: 2026-08-02
 
 The action plan and the persisted task share an explicit mapping rather than an
@@ -2178,3 +2178,25 @@ tenant-owned task in the same D1 batch. The deterministic default reminder is
 rescheduled when it remains pending, cancelled for terminal/no-date states, and
 recreated only when an active dated task needs one. Sent reminders are never
 reopened. No migration or client-side authorization is introduced.
+
+## D-109 — Due task reminders are delivered once to the existing in-app inbox
+
+Status: accepted and deployed to staging
+Date: 2026-08-02
+
+The existing action-plan task flow persisted default `in_app` reminders but did
+not have a scheduler delivery path. The five-minute scheduled Worker now scans
+only due, pending in-app reminders whose task is still active and whose case is
+not archived. It creates a localized RU/UZ inbox record with a deterministic
+`task-reminder:<reminder-id>` identifier and transitions the reminder to `sent`
+in one D1 batch. A retry therefore either creates the record and sends it, or
+finishes a pending transition after an earlier insert; it cannot duplicate the
+notification.
+
+The same predicates are rechecked in both batch statements, so a task completed,
+cancelled, or archived after selection does not receive a stale notification.
+The scheduler log contains counts only, never the task title or notification
+content. This scope implements the already-configured in-app channel only:
+email delivery is not represented as complete until its separate provider-backed
+outbox contract is connected to task reminders. No migration, provider call, or
+production change is required.

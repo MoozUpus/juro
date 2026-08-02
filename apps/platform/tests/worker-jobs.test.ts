@@ -15,7 +15,10 @@ import {
   type PlatformJobEnv,
 } from "../worker/platform-jobs";
 import { dispatchOutbox } from "../worker/platform-outbox";
-import { handleScheduled } from "../worker/platform-scheduled";
+import {
+  dispatchDueTaskReminders,
+  handleScheduled,
+} from "../worker/platform-scheduled";
 
 class SqliteD1Statement {
   constructor(
@@ -81,6 +84,17 @@ class SqliteD1Statement {
     return (this.owner.database.prepare(this.sql).get(
       ...this.sqliteValues(),
     ) as T | undefined) ?? null;
+  }
+
+  async all<T = Record<string, unknown>>(): Promise<{
+    results: T[];
+    success: true;
+    meta: { changes: number };
+  }> {
+    const results = this.owner.database.prepare(this.sql).all(
+      ...this.sqliteValues(),
+    ) as T[];
+    return { results, success: true, meta: { changes: 0 } };
   }
 }
 
@@ -162,6 +176,48 @@ function createDatabase(): {
   ) {
     sqlite.exec(statement);
   }
+  // The queue/scheduler fixture starts from the durable-runtime migration so
+  // that it remains small. Add the later task-notification boundary here for
+  // scheduled reminder contracts without coupling every worker test to all UI
+  // schema migrations.
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS cases (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text,
+      owner_user_id text NOT NULL,
+      locale text NOT NULL,
+      archived_at text
+    );
+    CREATE TABLE IF NOT EXISTS tasks (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text NOT NULL,
+      case_id text NOT NULL,
+      owner_user_id text NOT NULL,
+      title text NOT NULL,
+      due_at text,
+      status text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS task_reminders (
+      id text PRIMARY KEY NOT NULL,
+      task_id text NOT NULL,
+      channel text NOT NULL,
+      reminder_at text NOT NULL,
+      status text NOT NULL,
+      sent_at text,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS notifications (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text,
+      user_id text NOT NULL,
+      document_id text,
+      type text NOT NULL,
+      title text NOT NULL,
+      body text NOT NULL,
+      read_at text,
+      created_at text NOT NULL
+    );
+  `);
   return { sqlite, d1: new SqliteD1(sqlite) };
 }
 
@@ -922,6 +978,45 @@ test("reviewed outbox cron is locked, durable, and idempotent", async () => {
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS total FROM scheduled_locks").get() as { total: number }).total,
       0,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("due in-app task reminders create one inbox notification and remain retry-safe", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    sqlite.exec(`
+      INSERT INTO cases (id,workspace_id,owner_user_id,locale,archived_at)
+      VALUES ('case_reminder','ws_test','user_reminder','uz',NULL);
+      INSERT INTO tasks (id,workspace_id,case_id,owner_user_id,title,due_at,status)
+      VALUES ('task_reminder','ws_test','case_reminder','user_reminder','Ariza yuborish','2026-07-30T00:00:00.000Z','planned');
+      INSERT INTO task_reminders (id,task_id,channel,reminder_at,status,sent_at,updated_at)
+      VALUES ('reminder_due','task_reminder','in_app','2026-07-29T00:00:00.000Z','pending',NULL,'2026-07-28T00:00:00.000Z');
+    `);
+    const { env } = createEnv(d1);
+    const now = "2026-07-29T00:00:00.000Z";
+    assert.deepEqual(await dispatchDueTaskReminders(env, now), { due: 1, sent: 1 });
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT id,type,title,body FROM notifications WHERE id='task-reminder:reminder_due'",
+      ).get() },
+      {
+        id: "task-reminder:reminder_due",
+        type: "deadline_reminder",
+        title: "Vazifa muddati",
+        body: "Vazifa muddati yaqinlashmoqda: Ariza yuborish.",
+      },
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare("SELECT status,sent_at AS sentAt FROM task_reminders WHERE id='reminder_due'").get() },
+      { status: "sent", sentAt: now },
+    );
+    assert.deepEqual(await dispatchDueTaskReminders(env, now), { due: 0, sent: 0 });
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM notifications").get() as { total: number }).total,
+      1,
     );
   } finally {
     sqlite.close();
