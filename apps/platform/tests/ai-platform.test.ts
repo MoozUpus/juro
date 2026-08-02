@@ -11,6 +11,7 @@ import {
   AiRunConflictError,
   failAiRun,
   completeAiRun,
+  completeAiRunStatements,
   reserveAiRun,
 } from "../lib/ai/run-store";
 import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
@@ -278,6 +279,34 @@ test("AI completion persists the actual fallback provider and model", async () =
   assert.equal(ledger.provider, "anthropic");
   assert.equal(ledger.model, "claude-sonnet-4-6");
   assert.equal(ledger.status, "consumed");
+});
+
+test("AI completion cannot commit its ledger when an earlier conversation write fails", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "atomic-completion-request", 2));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  await assert.rejects(d1.batch([
+    d1.prepare("INSERT INTO conversations(id) VALUES (?)").bind("conversation-atomic"),
+    d1.prepare("INSERT INTO conversations(id) VALUES (?)").bind("conversation-atomic"),
+    ...completeAiRunStatements({
+      db: d1, runId: reserved.runId, ledgerId: reserved.ledgerId,
+      workspaceId: "workspace-1", userId: "user-1", idempotencyKey: "atomic-completion-request",
+      conversationId: "conversation-atomic", requestMessageId: "request-atomic", responseMessageId: "response-atomic",
+      providerResponseId: "response-provider-atomic", provider: "openai", fallbackFromProvider: null,
+      model: "gpt-5.6-sol", inputTokens: 10, outputTokens: 20, cachedInputTokens: 0,
+      attempts: 1, latencyMs: 100, chargeable: true,
+    }),
+  ]));
+
+  const run = sqlite.prepare("SELECT status FROM ai_runs WHERE id=?").get(reserved.runId) as { status: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  const idempotency = sqlite.prepare("SELECT status FROM idempotency_keys WHERE key=?")
+    .get("legal-chat:workspace-1:user-1:atomic-completion-request") as { status: string };
+  assert.equal(run.status, "reserved");
+  assert.equal(ledger.status, "reserved");
+  assert.equal(idempotency.status, "started");
 });
 
 test("AI usage reservation enforces a monthly limit and request hash binding", async () => {

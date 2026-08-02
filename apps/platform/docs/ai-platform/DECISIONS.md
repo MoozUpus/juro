@@ -2280,3 +2280,13 @@ or the existing run without opening a second usage ledger entry. Terminal
 provider, validation, authorization and plan errors are not offered as retries:
 the current idempotency contract marks failed runs final, so presenting that
 button would be misleading.
+## D-115 — AI response persistence and usage finalization are atomic
+
+Status: accepted and deployed to staging (Worker version `4da61758-ee58-46c2-9a0a-d03d01bcc91f`)
+Date: 2026-08-02
+
+The AI route previously committed conversation records and then finalized the
+AI run in a second D1 batch. The completion statements are now composed into
+the same batch as the conversation, source, fact, branch, version and audit
+records. A D1 failure rolls back the entire batch; the error path can safely
+release the original reservation without an answer being persisted separately.

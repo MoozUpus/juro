@@ -37,6 +37,10 @@ Scope: implemented integration-branch controls. This file does not claim live Op
   uncertain network/stream failure or an existing processing run; provider and
   validation failures remain ordinary errors, so the UI never presents a retry
   that would be stuck on a failed idempotency record.
+- Conversation messages, source links, proposed facts, audit evidence, and the
+  completion/release of the AI usage reservation are committed in one D1 batch.
+  A failed conversation write therefore cannot leave a visible answer with an
+  incomplete AI-run or a consumed usage record.
 
 ## Open release gates
 

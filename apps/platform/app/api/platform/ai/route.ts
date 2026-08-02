@@ -5,7 +5,7 @@ import { AiUnavailableError } from "../../../../lib/document-builder/ai/openai";
 import { aiProviderStatus, legalAiProvider, type LegalAiProgress } from "../../../../lib/ai/provider";
 import {
   AiRunConflictError,
-  completeAiRun,
+  completeAiRunStatements,
   failAiRun,
   reserveAiRun,
   sha256Json,
@@ -286,8 +286,7 @@ async function executePost(
     }), now),
   ];
   try {
-    await db.batch(statements);
-    await completeAiRun({
+    await db.batch([...statements, ...completeAiRunStatements({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey,
       conversationId, requestMessageId: userMessageId, responseMessageId: assistantMessageId,
@@ -297,7 +296,7 @@ async function executePost(
       inputTokens: aiResult.usage.inputTokens, outputTokens: aiResult.usage.outputTokens,
       cachedInputTokens: aiResult.usage.cachedInputTokens, attempts: aiResult.attempts,
       latencyMs: aiResult.latencyMs, chargeable: result.responseKind === "answer",
-    });
+    })]);
   } catch (error) {
     await failAiRun({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,

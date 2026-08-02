@@ -133,7 +133,7 @@ async function resolveExistingReservation(db: D1Database, registryKey: string, r
   return { kind: "processing", runId: row.resultRef || "" };
 }
 
-export async function completeAiRun(input: {
+export type CompleteAiRunInput = {
   db: D1Database;
   runId: string;
   ledgerId: string;
@@ -153,10 +153,12 @@ export async function completeAiRun(input: {
   attempts: number;
   latencyMs: number;
   chargeable: boolean;
-}): Promise<void> {
+};
+
+export function completeAiRunStatements(input: CompleteAiRunInput): D1PreparedStatement[] {
   const now = isoNow();
   const registryKey = `legal-chat:${input.workspaceId}:${input.userId}:${input.idempotencyKey}`;
-  await input.db.batch([
+  return [
     input.db.prepare(
       `UPDATE ai_runs SET conversation_id=?,request_message_id=?,response_message_id=?,provider_response_id=?,provider=?,fallback_from_provider=?,model=?,status='completed',
        input_tokens=?,output_tokens=?,cached_input_tokens=?,attempt_count=?,latency_ms=?,completed_at=?,updated_at=?
@@ -178,7 +180,11 @@ export async function completeAiRun(input: {
     input.db.prepare(
       "UPDATE idempotency_keys SET status='completed',result_ref=?,completed_at=?,updated_at=? WHERE key=? AND request_hash IS NOT NULL",
     ).bind(input.runId, now, now, registryKey),
-  ]);
+  ];
+}
+
+export async function completeAiRun(input: CompleteAiRunInput): Promise<void> {
+  await input.db.batch(completeAiRunStatements(input));
 }
 
 export async function failAiRun(input: {
