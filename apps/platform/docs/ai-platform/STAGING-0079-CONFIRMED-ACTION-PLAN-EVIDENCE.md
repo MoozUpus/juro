@@ -29,3 +29,10 @@ git diff --check                           PASS
 ```
 
 The route is included in the staging Worker build. A protected authenticated browser interaction remains pending Cloudflare Access access; an anonymous request cannot validate a private user flow and is not treated as evidence of the flow.
+
+## Staging deployment
+
+- Worker: `juro-platform-staging`
+- Worker version: `3d9f261b-fa7e-4408-a12f-3d167656918a`
+- Deployment command: `npm run deploy:staging` — PASS
+- Bound storage shown by Wrangler: staging D1 `juro-staging`, private R2 `juro-staging-files`, backup R2 `juro-staging-backups`, quarantine R2 `juro-staging-quarantine`; no production binding was deployed.
