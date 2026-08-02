@@ -3,19 +3,33 @@
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import Link from "next/link";
 import { BookOpenCheck, Bot, ExternalLink, FilePenLine, HelpCircle, LoaderCircle, Scale, ShieldCheck } from "lucide-react";
-import { useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+
+type SupportCategory = "technical" | "ai_error" | "wrong_norm" | "document" | "ocr" | "tariff" | "lawyer" | "privacy" | "security" | "deletion" | "workspace" | "feedback" | "other";
+type SupportSeverity = "low" | "normal" | "high" | "critical";
+type SupportStatus = "open" | "waiting_user" | "resolved";
+
+const supportCopy = {
+  ru: { category: "Категория", severity: "Срочность", technical: "Техническая проблема", ai_error: "Ошибка AI", wrong_norm: "Неверная норма", document: "Документ", ocr: "Распознавание", tariff: "Тариф", lawyer: "Юрист", privacy: "Приватность", security: "Безопасность", deletion: "Удаление данных", workspace: "Рабочее пространство", feedback: "Отзыв", other: "Другое", low: "Низкая", normal: "Обычная", high: "Высокая", critical: "Критическая", open: "Открыто", waiting_user: "Ожидается ваш ответ", resolved: "Решено", historyLoading: "Загружаем обращения…", historyUpdated: "Список обращений обновлён", detailsLoaded: "Детали обращения загружены" },
+  uz: { category: "Kategoriya", severity: "Muhimlik", technical: "Texnik muammo", ai_error: "AI xatosi", wrong_norm: "Noto‘g‘ri norma", document: "Hujjat", ocr: "Matnni tanish", tariff: "Tarif", lawyer: "Yurist", privacy: "Maxfiylik", security: "Xavfsizlik", deletion: "Ma’lumotlarni o‘chirish", workspace: "Ish maydoni", feedback: "Fikr-mulohaza", other: "Boshqa", low: "Past", normal: "Oddiy", high: "Yuqori", critical: "Muhim", open: "Ochiq", waiting_user: "Javobingiz kutilmoqda", resolved: "Hal qilindi", historyLoading: "Murojaatlar yuklanmoqda…", historyUpdated: "Murojaatlar ro‘yxati yangilandi", detailsLoaded: "Murojaat tafsilotlari yuklandi" },
+} as const;
+
+const supportCategories: SupportCategory[] = ["technical", "ai_error", "wrong_norm", "document", "ocr", "tariff", "lawyer", "privacy", "security", "deletion", "workspace", "feedback", "other"];
+const supportSeverities: SupportSeverity[] = ["low", "normal", "high", "critical"];
 
 export function HelpClient({ locale }: { locale: PlatformLocale; accountType: AccountType }) {
   const ru = locale === "ru";
+  const support = supportCopy[locale];
   const base = usePlatformBasePath();
-  const [subject, setSubject] = useState(""); const [message, setMessage] = useState(""); const [sending, setSending] = useState(false); const [supportStatus, setSupportStatus] = useState("");
-  const [tickets, setTickets] = useState<Array<{ id: string; subject: string; status: string }>>([]);
-  const [selectedTicket, setSelectedTicket] = useState<{ subject: string; status: string; messages: Array<{ id: string; authorType: "requester" | "staff"; body: string }> } | null>(null);
-  async function loadTickets() { try { const response = await fetch("/api/platform/support-tickets", { cache: "no-store" }); const body = await response.json() as { tickets?: Array<{ id: string; subject: string; status: string }> }; if (!response.ok) throw new Error(); setTickets(body.tickets ?? []); } catch { setSupportStatus(ru ? "Не удалось загрузить обращения." : "Murojaatlarni yuklab bo‘lmadi."); } }
-  async function openTicket(ticketId: string) { try { const response = await fetch(`/api/platform/support-tickets/${encodeURIComponent(ticketId)}`, { cache: "no-store" }); const body = await response.json() as { ticket?: { subject: string; status: string }; messages?: Array<{ id: string; authorType: "requester" | "staff"; body: string }> }; if (!response.ok || !body.ticket) throw new Error(); setSelectedTicket({ ...body.ticket, messages: body.messages ?? [] }); } catch { setSupportStatus(ru ? "Не удалось открыть обращение." : "Murojaatni ochib bo‘lmadi."); } }
+  const [subject, setSubject] = useState(""); const [message, setMessage] = useState(""); const [category, setCategory] = useState<SupportCategory>("technical"); const [severity, setSeverity] = useState<SupportSeverity>("normal"); const [sending, setSending] = useState(false); const [loadingTickets, setLoadingTickets] = useState(false); const [supportStatus, setSupportStatus] = useState("");
+  const [tickets, setTickets] = useState<Array<{ id: string; subject: string; status: SupportStatus }>>([]);
+  const [selectedTicket, setSelectedTicket] = useState<{ subject: string; status: SupportStatus; messages: Array<{ id: string; authorType: "requester" | "staff"; body: string }> } | null>(null);
+  const loadTickets = useCallback(async () => { setLoadingTickets(true); try { const response = await fetch("/api/platform/support-tickets", { cache: "no-store" }); const body = await response.json() as { tickets?: Array<{ id: string; subject: string; status: SupportStatus }> }; if (!response.ok) throw new Error(); setTickets(body.tickets ?? []); setSupportStatus(support.historyUpdated); } catch { setSupportStatus(ru ? "Не удалось загрузить обращения." : "Murojaatlarni yuklab bo‘lmadi."); } finally { setLoadingTickets(false); } }, [ru, support.historyUpdated]);
+  useEffect(() => { const timer = window.setTimeout(() => void loadTickets(), 0); return () => window.clearTimeout(timer); }, [loadTickets]);
+  async function openTicket(ticketId: string) { setLoadingTickets(true); try { const response = await fetch(`/api/platform/support-tickets/${encodeURIComponent(ticketId)}`, { cache: "no-store" }); const body = await response.json() as { ticket?: { subject: string; status: SupportStatus }; messages?: Array<{ id: string; authorType: "requester" | "staff"; body: string }> }; if (!response.ok || !body.ticket) throw new Error(); setSelectedTicket({ ...body.ticket, messages: body.messages ?? [] }); setSupportStatus(support.detailsLoaded); } catch { setSupportStatus(ru ? "Не удалось открыть обращение." : "Murojaatni ochib bo‘lmadi."); } finally { setLoadingTickets(false); } }
 
-  async function submitSupport(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSending(true); setSupportStatus(""); try { const response = await fetch("/api/platform/support-tickets", { method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ category: "technical", severity: "normal", subject, message, locale }) }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || "Ошибка"); setSubject(""); setMessage(""); setSupportStatus(ru ? "Обращение отправлено." : "Murojaat yuborildi."); await loadTickets(); } catch (value) { setSupportStatus(value instanceof Error ? value.message : String(value)); } finally { setSending(false); } }
+  async function submitSupport(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSending(true); setSupportStatus(""); try { const response = await fetch("/api/platform/support-tickets", { method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ category, severity, subject, message, locale }) }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || "Ошибка"); setSubject(""); setMessage(""); setSupportStatus(ru ? "Обращение отправлено." : "Murojaat yuborildi."); await loadTickets(); } catch (value) { setSupportStatus(value instanceof Error ? value.message : String(value)); } finally { setSending(false); } }
   return (
     <section className="help-workspace">
       <header>
@@ -52,17 +66,18 @@ export function HelpClient({ locale }: { locale: PlatformLocale; accountType: Ac
           <Link href={`${base}/settings/privacy`}>{ru ? "Открыть приватность" : "Maxfiylikni ochish"}</Link>
         </article>
       </div>
-      <form className="help-support" onSubmit={(event) => void submitSupport(event)}>
+      <form className="help-support" onSubmit={(event) => void submitSupport(event)} aria-busy={sending}>
         <h2>{ru ? "Написать в поддержку" : "Qo‘llab-quvvatlashga yozish"}</h2>
+        <div className="help-support-selects"><label>{support.category}<select value={category} onChange={(event) => setCategory(event.target.value as SupportCategory)}>{supportCategories.map((value) => <option key={value} value={value}>{support[value]}</option>)}</select></label><label>{support.severity}<select value={severity} onChange={(event) => setSeverity(event.target.value as SupportSeverity)}>{supportSeverities.map((value) => <option key={value} value={value}>{support[value]}</option>)}</select></label></div>
         <label>{ru ? "Тема" : "Mavzu"}<input value={subject} minLength={4} maxLength={180} required onChange={(event) => setSubject(event.target.value)} /></label>
         <label>{ru ? "Сообщение" : "Xabar"}<textarea value={message} minLength={10} maxLength={8000} required onChange={(event) => setMessage(event.target.value)} /></label>
-        {supportStatus && <p role="status">{supportStatus}</p>}
+        {supportStatus && <p role="status" aria-live="polite">{supportStatus}</p>}
         <button disabled={sending}>{sending && <LoaderCircle className="spin" />}{ru ? "Отправить" : "Yuborish"}</button>
       </form>
       <section className="help-ticket-history" aria-labelledby="support-history-title">
-        <div className="help-ticket-heading"><h2 id="support-history-title">{ru ? "Мои обращения" : "Mening murojaatlarim"}</h2><button type="button" onClick={() => void loadTickets()}>{ru ? "Обновить" : "Yangilash"}</button></div>
-        {tickets.length === 0 ? <p>{ru ? "Здесь появится статус и ответ поддержки." : "Bu yerda qo‘llab-quvvatlash holati va javobi ko‘rinadi."}</p> : <ul>{tickets.map((ticket) => <li key={ticket.id}><button type="button" onClick={() => void openTicket(ticket.id)}><strong>{ticket.subject}</strong><span>{ticket.status}</span></button></li>)}</ul>}
-        {selectedTicket && <section className="help-ticket-thread" aria-live="polite"><h3>{selectedTicket.subject}</h3><p>{selectedTicket.status}</p>{selectedTicket.messages.map((item) => <article key={item.id} data-author={item.authorType}><strong>{item.authorType === "staff" ? (ru ? "Поддержка JURO" : "JURO qo‘llab-quvvatlash") : (ru ? "Вы" : "Siz")}</strong><p>{item.body}</p></article>)}</section>}
+        <div className="help-ticket-heading"><h2 id="support-history-title">{ru ? "Мои обращения" : "Mening murojaatlarim"}</h2><button type="button" onClick={() => void loadTickets()} disabled={loadingTickets}>{ru ? "Обновить" : "Yangilash"}</button></div>
+        {loadingTickets && tickets.length === 0 ? <p role="status">{support.historyLoading}</p> : tickets.length === 0 ? <p>{ru ? "Здесь появится статус и ответ поддержки." : "Bu yerda qo‘llab-quvvatlash holati va javobi ko‘rinadi."}</p> : <ul>{tickets.map((ticket) => <li key={ticket.id}><button type="button" onClick={() => void openTicket(ticket.id)} disabled={loadingTickets} aria-label={`${ticket.subject}: ${support[ticket.status]}`}><strong>{ticket.subject}</strong><span>{support[ticket.status]}</span></button></li>)}</ul>}
+        {selectedTicket && <section className="help-ticket-thread" aria-live="polite"><h3>{selectedTicket.subject}</h3><p>{support[selectedTicket.status]}</p>{selectedTicket.messages.map((item) => <article key={item.id} data-author={item.authorType}><strong>{item.authorType === "staff" ? (ru ? "Поддержка JURO" : "JURO qo‘llab-quvvatlash") : (ru ? "Вы" : "Siz")}</strong><p>{item.body}</p></article>)}</section>}
       </section>
       <aside className="help-legal">
         <BookOpenCheck />

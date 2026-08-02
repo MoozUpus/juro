@@ -1265,6 +1265,15 @@ test("staff support inbox requires capability, fresh MFA, and private ticket det
   assert.match(route, /support\.tickets\.manage/); assert.match(detail, /export async function GET/); assert.match(detail, /support\.tickets\.manage/); assert.match(detail, /ORDER BY created_at ASC,id ASC LIMIT 200/); assert.match(detail, /support_ticket_viewed/); assert.match(detail, /private, no-store/);
   assert.match(client, /admin\/support-tickets/); assert.match(client, /x-juro-csrf/); assert.match(client, /waiting_user/); assert.match(client, /aria-live="polite"/); assert.match(client, /t\[ticket\.status\]/); assert.match(client, /t\.requester/);
 });
+test("user support form exposes only validated categories, localized status, and tenant ticket history", async () => {
+  const [client, support] = await Promise.all([
+    readFile(new URL("../app/_platform/HelpClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/support.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(client, /supportCategories/); assert.match(client, /supportSeverities/); assert.match(client, /category, severity, subject, message, locale/);
+  assert.match(client, /window\.setTimeout\(\(\) => void loadTickets\(\), 0\)/); assert.match(client, /support\[ticket\.status\]/); assert.match(client, /aria-live="polite"/);
+  assert.match(support, /wrong_norm.*document.*ocr.*tariff.*lawyer.*privacy.*security.*deletion.*workspace.*feedback/s);
+});
 test("lawyer offers are validated, access-bound, auditable, and owner-resolved", async () => {
   assert.equal(lawyerOfferCreateSchema.safeParse({
     scopeDescription: "Проверить договор, подготовить замечания и согласовать безопасную редакцию.",
