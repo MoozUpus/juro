@@ -15,7 +15,7 @@ export const GET = withApiErrors(async function GET() {
     `SELECT type,revoked_at AS revokedAt FROM consents
      WHERE user_id=? AND workspace_id IS NULL
        AND type IN ('marketing_email','weekly_case_summary','unfinished_document','comments','lawyer_request_updates')
-     ORDER BY granted_at DESC`,
+     ORDER BY granted_at DESC, rowid DESC`,
   ).bind(user.id).all<{ type: string; revokedAt: string | null }>();
   const preferences = Object.fromEntries(optionalEmailPreferenceKeys.map((key) => [key, false])) as Record<typeof optionalEmailPreferenceKeys[number], boolean>;
   const resolved = new Set<string>();

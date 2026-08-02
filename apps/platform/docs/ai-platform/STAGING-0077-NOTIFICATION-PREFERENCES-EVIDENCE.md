@@ -20,7 +20,7 @@ secret, or notification payload is exposed by this endpoint.
 
 - Environment: protected `staging`
 - Worker: `juro-platform-staging`
-- Worker version: `93a867ca-bb8d-42d4-9367-d4b085bf444d`
+- Worker version: `be2c958f-9581-44a8-89a3-6f6525f7798b`
 - Owner route: `https://staging.app.juro.uz/ru/individual/settings`
 - D1 migration: none; this slice reuses the existing append-only `consents`
   table and `workspace_audit_events`.
@@ -38,6 +38,8 @@ secret, or notification payload is exposed by this endpoint.
 - diff check and changed-file secret-pattern check — passed
 - `npm run deploy:staging` — passed; deployment lists only staging D1, R2,
   Queues, Vectorize, Analytics Engine and assets bindings
+- The final deployed revision orders equal-time consent rows by `rowid DESC`,
+  so a revoke-and-regrant in the same timestamp is read deterministically.
 - Anonymous `HEAD` of the owner route — `302` to Cloudflare Access with
   `Cache-Control: no-store`; no Access boundary was bypassed.
 

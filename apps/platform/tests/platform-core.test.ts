@@ -1140,6 +1140,7 @@ test("optional email preferences are strict, consent-backed, audited, and locali
   assert.match(route, /workspaceForUser\(user\)/);
   assert.match(route, /workspace_audit_events/);
   assert.match(route, /revoked_at/);
+  assert.match(route, /ORDER BY granted_at DESC, rowid DESC/);
   assert.match(route, /cache-control": "private, no-store/);
   assert.match(client, /x-juro-csrf/);
   assert.match(client, /role="alert"/);
