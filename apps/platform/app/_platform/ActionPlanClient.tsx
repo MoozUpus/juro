@@ -101,6 +101,7 @@ export function ActionPlanClient({
   const [openCase, setOpenCase] = useState<string | null>(initialCaseId ?? null);
   const [versionsByCase, setVersionsByCase] = useState<Record<string, PlanVersion[]>>({});
   const [loadingVersionsFor, setLoadingVersionsFor] = useState<string | null>(null);
+  const [creatingTasksFor, setCreatingTasksFor] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -191,6 +192,18 @@ export function ActionPlanClient({
     }
   }
 
+  async function createTasks(item: Case) {
+    if (creatingTasksFor === item.id) return;
+    setCreatingTasksFor(item.id); setError("");
+    try {
+      const response = await fetch(`/api/platform/cases/${item.id}/tasks`, { method: "POST", headers: { "x-juro-csrf": "1" } });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error || (ru ? "Не удалось создать задачи." : "Vazifalarni yaratib bo‘lmadi."));
+      await load();
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setCreatingTasksFor(null); }
+  }
+
   const deadlines = useMemo(
     () => cases.flatMap((item) => item.steps
       .filter((step) => step.dueAt && !["completed", "cancelled"].includes(step.status))
@@ -266,6 +279,10 @@ export function ActionPlanClient({
                     <ChevronDown className={expanded ? "rotated" : ""} />
                   </button>
                   {expanded && <div className="plan-steps" id={panelId}>
+                    <button type="button" className="plan-primary" disabled={creatingTasksFor === item.id} onClick={() => void createTasks(item)}>
+                      {creatingTasksFor === item.id ? <LoaderCircle className="spin" /> : <Plus />}
+                      {ru ? "Подтвердить и добавить шаги в задачи" : "Tasdiqlash va qadamlarni vazifalarga qo‘shish"}
+                    </button>
                     <section className="plan-history" aria-label={ru ? "История версий плана" : "Reja versiyalari tarixi"}>
                       <button
                         type="button"
