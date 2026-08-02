@@ -309,6 +309,30 @@ test("AI completion cannot commit its ledger when an earlier conversation write 
   assert.equal(idempotency.status, "started");
 });
 
+test("a genuinely stale AI reservation releases its cycle and requires a fresh idempotency key", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const input = reservationInput(d1, "stale-reservation-request", 2);
+  const reserved = await reserveAiRun(input);
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+  const staleAt = new Date(Date.now() - 16 * 60 * 1_000).toISOString();
+  sqlite.prepare("UPDATE ai_runs SET updated_at=? WHERE id=?").run(staleAt, reserved.runId);
+  sqlite.prepare("UPDATE idempotency_keys SET updated_at=? WHERE key=?")
+    .run(staleAt, "legal-chat:workspace-1:user-1:stale-reservation-request");
+
+  const replay = await reserveAiRun(input);
+  assert.equal(replay.kind, "expired");
+  if (replay.kind === "expired") assert.equal(replay.runId, reserved.runId);
+  const run = sqlite.prepare("SELECT status,error_code AS errorCode FROM ai_runs WHERE id=?").get(reserved.runId) as { status: string; errorCode: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  const idempotency = sqlite.prepare("SELECT status FROM idempotency_keys WHERE key=?")
+    .get("legal-chat:workspace-1:user-1:stale-reservation-request") as { status: string };
+  assert.equal(run.status, "failed");
+  assert.equal(run.errorCode, "AI_RUN_EXPIRED");
+  assert.equal(ledger.status, "released");
+  assert.equal(idempotency.status, "failed");
+});
+
 test("AI usage reservation enforces a monthly limit and request hash binding", async () => {
   const { d1 } = aiDatabase();
   const firstInput = reservationInput(d1, "request-one", 1);

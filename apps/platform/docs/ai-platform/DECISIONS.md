@@ -2290,3 +2290,16 @@ AI run in a second D1 batch. The completion statements are now composed into
 the same batch as the conversation, source, fact, branch, version and audit
 records. A D1 failure rolls back the entire batch; the error path can safely
 release the original reservation without an answer being persisted separately.
+## D-116 — Expire only unclaimed stale AI reservations
+
+Status: accepted and deployed to staging (Worker version `aaef9157-ce92-4c49-a6d7-621d94b4edfb`)
+Date: 2026-08-02
+
+An idempotency record that has remained in `started` state for at least fifteen
+minutes may represent a Worker interruption rather than an active provider
+request. The server can release it only while its run is still `reserved`.
+Before persisting a provider result, the original request atomically claims the
+run as `finalizing`; stale cleanup never changes that state. The old key is
+never reused: the client must create a fresh request after `AI_RUN_EXPIRED`.
+This prevents a delayed execution from persisting a second answer or consuming
+the same usage reservation twice.

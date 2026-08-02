@@ -1,5 +1,6 @@
 const CHAT_FEATURE = "legal_chat";
 const FREE_MONTHLY_CYCLES = 20;
+const STALE_RESERVATION_MS = 15 * 60 * 1_000;
 
 export type AiRunReservation = {
   kind: "reserved";
@@ -19,6 +20,7 @@ export type AiRunReplay = {
 };
 
 export type AiRunPending = { kind: "processing"; runId: string };
+export type AiRunExpired = { kind: "expired"; runId: string };
 
 export class AiRunConflictError extends Error {
   readonly code: "IDEMPOTENCY_CONFLICT" | "PLAN_LIMIT";
@@ -47,7 +49,7 @@ type ReserveInput = {
   monthlyLimit?: number;
 };
 
-export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservation | AiRunReplay | AiRunPending> {
+export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservation | AiRunReplay | AiRunPending | AiRunExpired> {
   const registryKey = `legal-chat:${input.workspaceId}:${input.userId}:${input.idempotencyKey}`;
   const scope = `legal-chat:${input.workspaceId}:${input.userId}`;
   const now = isoNow();
@@ -109,10 +111,10 @@ export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservatio
   return { kind: "reserved", runId, ledgerId, correlationId, periodStart, periodEnd };
 }
 
-async function resolveExistingReservation(db: D1Database, registryKey: string, requestHash: string): Promise<AiRunReplay | AiRunPending> {
+async function resolveExistingReservation(db: D1Database, registryKey: string, requestHash: string): Promise<AiRunReplay | AiRunPending | AiRunExpired> {
   const row = await db.prepare(
-    "SELECT request_hash AS requestHash,status,result_ref AS resultRef FROM idempotency_keys WHERE key=?",
-  ).bind(registryKey).first<{ requestHash: string; status: string; resultRef: string | null }>();
+    "SELECT request_hash AS requestHash,status,result_ref AS resultRef,updated_at AS updatedAt FROM idempotency_keys WHERE key=?",
+  ).bind(registryKey).first<{ requestHash: string; status: string; resultRef: string | null; updatedAt: string }>();
   if (!row || row.requestHash !== requestHash) {
     throw new AiRunConflictError("IDEMPOTENCY_CONFLICT", "Idempotency key was already used for a different request.");
   }
@@ -130,7 +132,48 @@ async function resolveExistingReservation(db: D1Database, registryKey: string, r
       };
     }
   }
+  if (await expireStaleReservation(db, registryKey, row)) {
+    return { kind: "expired", runId: row.resultRef || "" };
+  }
   return { kind: "processing", runId: row.resultRef || "" };
+}
+
+async function expireStaleReservation(
+  db: D1Database,
+  registryKey: string,
+  row: { status: string; resultRef: string | null; updatedAt: string },
+): Promise<boolean> {
+  if (row.status !== "started" || Date.parse(row.updatedAt) > Date.now() - STALE_RESERVATION_MS) return false;
+  const now = isoNow();
+  if (!row.resultRef) {
+    const result = await db.prepare(
+      "UPDATE idempotency_keys SET status='failed',updated_at=? WHERE key=? AND status='started' AND updated_at<=? AND result_ref IS NULL",
+    ).bind(now, registryKey, new Date(Date.now() - STALE_RESERVATION_MS).toISOString()).run();
+    return Number(result.meta.changes ?? 0) === 1;
+  }
+  const cutoff = new Date(Date.now() - STALE_RESERVATION_MS).toISOString();
+  await db.batch([
+    db.prepare(
+      "UPDATE ai_runs SET status='failed',error_code='AI_RUN_EXPIRED',completed_at=?,updated_at=? WHERE id=? AND status='reserved' AND updated_at<=?",
+    ).bind(now, now, row.resultRef, cutoff),
+    db.prepare(
+      "UPDATE ai_usage_ledger SET status='released',released_at=?,updated_at=? WHERE ai_run_id=? AND status='reserved' AND EXISTS (SELECT 1 FROM ai_runs WHERE id=? AND status='failed' AND error_code='AI_RUN_EXPIRED')",
+    ).bind(now, now, row.resultRef, row.resultRef),
+    db.prepare(
+      "UPDATE idempotency_keys SET status='failed',updated_at=? WHERE key=? AND status='started' AND EXISTS (SELECT 1 FROM ai_runs WHERE id=? AND status='failed' AND error_code='AI_RUN_EXPIRED')",
+    ).bind(now, registryKey, row.resultRef),
+  ]);
+  const expired = await db.prepare("SELECT status,error_code AS errorCode FROM ai_runs WHERE id=?")
+    .bind(row.resultRef).first<{ status: string; errorCode: string | null }>();
+  return expired?.status === "failed" && expired.errorCode === "AI_RUN_EXPIRED";
+}
+
+export async function beginAiRunFinalization(input: Pick<CompleteAiRunInput, "db" | "runId" | "workspaceId" | "userId">): Promise<boolean> {
+  const now = isoNow();
+  const result = await input.db.prepare(
+    "UPDATE ai_runs SET status='finalizing',updated_at=? WHERE id=? AND workspace_id=? AND user_id=? AND status='reserved'",
+  ).bind(now, input.runId, input.workspaceId, input.userId).run();
+  return Number(result.meta.changes ?? 0) === 1;
 }
 
 export type CompleteAiRunInput = {
@@ -162,7 +205,7 @@ export function completeAiRunStatements(input: CompleteAiRunInput): D1PreparedSt
     input.db.prepare(
       `UPDATE ai_runs SET conversation_id=?,request_message_id=?,response_message_id=?,provider_response_id=?,provider=?,fallback_from_provider=?,model=?,status='completed',
        input_tokens=?,output_tokens=?,cached_input_tokens=?,attempt_count=?,latency_ms=?,completed_at=?,updated_at=?
-       WHERE id=? AND workspace_id=? AND user_id=? AND status='reserved'`,
+       WHERE id=? AND workspace_id=? AND user_id=? AND status='finalizing'`,
     ).bind(
       input.conversationId, input.requestMessageId, input.responseMessageId, input.providerResponseId,
       input.provider, input.fallbackFromProvider, input.model,
@@ -171,19 +214,21 @@ export function completeAiRunStatements(input: CompleteAiRunInput): D1PreparedSt
     ),
     input.db.prepare(
       `UPDATE ai_usage_ledger SET status=?,provider=?,model=?,input_tokens=?,output_tokens=?,cached_input_tokens=?,
-       released_at=?,consumed_at=?,updated_at=? WHERE id=? AND ai_run_id=? AND status='reserved'`,
+       released_at=?,consumed_at=?,updated_at=? WHERE id=? AND ai_run_id=? AND status='reserved'
+       AND EXISTS (SELECT 1 FROM ai_runs WHERE id=? AND status='completed')`,
     ).bind(
       input.chargeable ? "consumed" : "released", input.provider, input.model, input.inputTokens, input.outputTokens,
       input.cachedInputTokens, input.chargeable ? null : now, input.chargeable ? now : null,
-      now, input.ledgerId, input.runId,
+      now, input.ledgerId, input.runId, input.runId,
     ),
     input.db.prepare(
-      "UPDATE idempotency_keys SET status='completed',result_ref=?,completed_at=?,updated_at=? WHERE key=? AND request_hash IS NOT NULL",
-    ).bind(input.runId, now, now, registryKey),
+      "UPDATE idempotency_keys SET status='completed',result_ref=?,completed_at=?,updated_at=? WHERE key=? AND status='started' AND EXISTS (SELECT 1 FROM ai_runs WHERE id=? AND status='completed')",
+    ).bind(input.runId, now, now, registryKey, input.runId),
   ];
 }
 
 export async function completeAiRun(input: CompleteAiRunInput): Promise<void> {
+  if (!await beginAiRunFinalization(input)) throw new Error("AI_RUN_FINALIZATION_CLAIM_FAILED");
   await input.db.batch(completeAiRunStatements(input));
 }
 
@@ -199,12 +244,12 @@ export async function failAiRun(input: {
   const now = isoNow();
   const registryKey = `legal-chat:${input.workspaceId}:${input.userId}:${input.idempotencyKey}`;
   await input.db.batch([
-    input.db.prepare("UPDATE ai_runs SET status='failed',error_code=?,completed_at=?,updated_at=? WHERE id=? AND workspace_id=? AND user_id=? AND status='reserved'")
+    input.db.prepare("UPDATE ai_runs SET status='failed',error_code=?,completed_at=?,updated_at=? WHERE id=? AND workspace_id=? AND user_id=? AND status IN ('reserved','finalizing')")
       .bind(input.errorCode, now, now, input.runId, input.workspaceId, input.userId),
-    input.db.prepare("UPDATE ai_usage_ledger SET status='released',released_at=?,updated_at=? WHERE id=? AND ai_run_id=? AND status='reserved'")
-      .bind(now, now, input.ledgerId, input.runId),
-    input.db.prepare("UPDATE idempotency_keys SET status='failed',result_ref=?,updated_at=? WHERE key=?")
-      .bind(input.runId, now, registryKey),
+    input.db.prepare("UPDATE ai_usage_ledger SET status='released',released_at=?,updated_at=? WHERE id=? AND ai_run_id=? AND status='reserved' AND EXISTS (SELECT 1 FROM ai_runs WHERE id=? AND status='failed')")
+      .bind(now, now, input.ledgerId, input.runId, input.runId),
+    input.db.prepare("UPDATE idempotency_keys SET status='failed',result_ref=?,updated_at=? WHERE key=? AND status='started' AND EXISTS (SELECT 1 FROM ai_runs WHERE id=? AND status='failed')")
+      .bind(input.runId, now, registryKey, input.runId),
   ]);
 }
 

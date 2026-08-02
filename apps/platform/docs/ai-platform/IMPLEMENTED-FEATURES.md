@@ -1,7 +1,7 @@
 # JURO implemented-features checkpoint
 > Current authoritative checkpoint — 2026-08-02: only the evidence in this
 > paragraph is current when it conflicts with older chronological entries.
-> Staging Worker `4da61758-ee58-46c2-9a0a-d03d01bcc91f` contains the tested
+> Staging Worker `aaef9157-ce92-4c49-a6d7-621d94b4edfb` contains the tested
 > document-analysis trust boundary and atomic AI-response finalization, and
 > runs only against isolated staging bindings. The latest local gate passes
 > lint, the full test suite, staging build, and staging artifact validation;

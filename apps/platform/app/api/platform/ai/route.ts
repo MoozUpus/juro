@@ -5,6 +5,7 @@ import { AiUnavailableError } from "../../../../lib/document-builder/ai/openai";
 import { aiProviderStatus, legalAiProvider, type LegalAiProgress } from "../../../../lib/ai/provider";
 import {
   AiRunConflictError,
+  beginAiRunFinalization,
   completeAiRunStatements,
   failAiRun,
   reserveAiRun,
@@ -184,6 +185,15 @@ async function executePost(
   if (reservation.kind === "processing") {
     return response({ code: "AI_RUN_PROCESSING", runId: reservation.runId }, 202);
   }
+  if (reservation.kind === "expired") {
+    return response({
+      code: "AI_RUN_EXPIRED",
+      runId: reservation.runId,
+      error: locale === "ru"
+        ? "Предыдущий запрос не завершился вовремя. Отправьте его ещё раз — будет создан новый защищённый запрос."
+        : "Oldingi so‘rov vaqtida yakunlanmadi. Uni yana yuboring — yangi himoyalangan so‘rov yaratiladi.",
+    }, 409);
+  }
 
   let aiResult;
   try {
@@ -246,6 +256,17 @@ async function executePost(
     }, 422);
   }
   const now = isoNow();
+  if (!await beginAiRunFinalization({
+    db, runId: reservation.runId, workspaceId: workspace.id, userId: user.id,
+  })) {
+    return response({
+      code: "AI_RUN_EXPIRED",
+      runId: reservation.runId,
+      error: locale === "ru"
+        ? "Ответ не был сохранён: предыдущий запрос уже был безопасно закрыт. Отправьте вопрос ещё раз."
+        : "Javob saqlanmadi: oldingi so‘rov xavfsiz yopilgan. Savolni yana yuboring.",
+    }, 409);
+  }
   const userMessageId = crypto.randomUUID();
   const assistantMessageId = crypto.randomUUID();
   const branchId = crypto.randomUUID();

@@ -55,3 +55,11 @@ Scope: implemented integration-branch controls. This file does not claim live Op
   reach an AI provider.
 
 These limits are fail-closed and do not authorize a production deployment.
+## Stale reservation recovery
+
+An unfinished AI request is not retried by silently reusing its idempotency key.
+After fifteen minutes without an update, only a still-`reserved` run may be
+closed as `AI_RUN_EXPIRED`; its reserved usage is released. A provider result
+must first claim `finalizing`, which prevents that cleanup from racing the
+atomic message/ledger finalization. The UI receives an explicit RU/UZ response
+and creates a new request only when the user sends again.
