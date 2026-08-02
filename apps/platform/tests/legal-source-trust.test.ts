@@ -267,6 +267,10 @@ test("legal keywords are bounded and locale-aware", () => {
     legalSearchKeywords("Договор договор Увольнение срок", "ru", 3),
     ["договор", "увольнение"],
   );
+  assert.deepEqual(
+    legalSearchKeywords("Закон 205, статья 1", "ru", 8),
+    ["закон", "205", "статья", "1"],
+  );
 });
 
 test("only complete Lex and Advice corpus runs establish database freshness", () => {

@@ -180,7 +180,9 @@ export function legalSearchKeywords(
     value
       .slice(0, 80_000)
       .toLocaleLowerCase(locale === "ru" ? "ru" : "uz")
-      .match(/[\p{L}\p{N}]{5,}/gu) ?? [],
+      // Act, article, and clause identifiers can be short numbers. Keep them
+      // for exact official-metadata matching while bounding their length.
+      .match(/[\p{L}\p{N}]{5,}|\p{N}{1,10}/gu) ?? [],
   )].slice(0, Math.max(1, Math.min(12, limit)));
 }
 
@@ -437,7 +439,20 @@ export async function retrieveVerifiedLegalSources(
     };
   }
 
-  const lexicalConditions = keywords.map(() => "lower(section.body_text) LIKE ?");
+  const lexicalFields = [
+    "source.act_title",
+    "COALESCE(source.act_identifier,'')",
+    "COALESCE(section.canonical_ref,'')",
+    "COALESCE(section.article,'')",
+    "COALESCE(section.heading,'')",
+    "section.body_text",
+  ];
+  const lexicalConditions = keywords.flatMap(() =>
+    lexicalFields.map((field) => `lower(${field}) LIKE ?`),
+  );
+  const lexicalBindings = keywords.flatMap((keyword) =>
+    lexicalFields.map(() => `%${keyword}%`),
+  );
   const semanticCondition = semanticVectorIds.length
     ? `chunk.vector_id IN (${semanticVectorIds.map(() => "?").join(",")})`
     : null;
@@ -513,7 +528,7 @@ export async function retrieveVerifiedLegalSources(
     LIMIT 48
   `).bind(
     locale,
-    ...keywords.map((keyword) => `%${keyword}%`),
+    ...lexicalBindings,
     ...semanticVectorIds,
   ).all<VerifiedLegalSourceEvidenceRow>();
 

@@ -997,6 +997,15 @@ test("AI chat obtains its cycle limit from server-side workspace entitlements", 
   assert.doesNotMatch(route, /MONTHLY_CHAT_LIMIT/);
 });
 
+test("verified legal retrieval includes official metadata in exact lexical matching", async () => {
+  const source = await readFile(new URL("../lib/legal/verified-retrieval.ts", import.meta.url), "utf8");
+  for (const field of ["source.act_title", "source.act_identifier", "section.canonical_ref", "section.article", "section.heading", "section.body_text"]) {
+    assert.match(source, new RegExp(field.replaceAll(".", "\\.")));
+  }
+  assert.match(source, /\\p\{N\}\{1,10\}/);
+  assert.match(source, /lexicalBindings/);
+});
+
 test("billing never advertises credentials as an implemented checkout", async () => {
   const [provider, client] = await Promise.all([
     readFile(new URL("../lib/billing/provider.ts", import.meta.url), "utf8"),

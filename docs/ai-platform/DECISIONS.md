@@ -48,3 +48,17 @@ cycles/month; verified active paid plans receive their explicit higher server po
 limits. The same resolved entitlement is returned in the private usage summary.
 This prevents a paid workspace from being silently limited by a route-level free-plan
 constant and prevents the browser from being the source of entitlement truth.
+
+## D-099 — verified lexical retrieval includes official identifiers
+
+Status: accepted and locally verified
+Date: 2026-08-02
+
+Verified legal retrieval continues to select only a current, published, staff-approved
+and verified Lex/Advice source version. Its lexical candidate query now searches the
+official act title and identifier, plus section canonical reference, article and
+heading, before considering body text. Short numeric terms are retained only for
+bounded act/article/clause identifiers (up to ten digits) and remain subject to the
+existing source-lifecycle, jurisdiction, locale and citation-validation gates. This
+improves direct official-reference queries without permitting an unverified source to
+be cited as law.
