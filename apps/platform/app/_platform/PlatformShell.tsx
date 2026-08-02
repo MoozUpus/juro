@@ -10,7 +10,7 @@ import {
   Bell,
   Bot,
   BriefcaseBusiness,
-  CalendarCheck2,
+  CalendarCheck2, CalendarDays,
   FileCheck2,
   FilePenLine,
   Files,
@@ -50,6 +50,7 @@ const nav = [
   ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"], ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"],
   ["monitoring", Scale, "Мониторинг", "Monitoring"],
   ["action-plan", CalendarCheck2, "План действий", "Harakatlar rejasi"], ["consultations", ReceiptText, "Консультации", "Maslahatlar"],
+  ["calendar", CalendarDays, "Календарь", "Kalendar"],
   ["history", History, "История", "Tarix"], ["archive", Archive, "Архив", "Arxiv"],
   ["team", UsersRound, "Команда", "Jamoa"], ["notifications", Bell, "Уведомления", "Bildirishnomalar"],
 ] as const;

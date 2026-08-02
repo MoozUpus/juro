@@ -9,6 +9,7 @@ export const PLATFORM_MODULES = [
   "document-review",
   "monitoring",
   "action-plan",
+  "calendar",
   "consultations",
   "history",
   "archive",

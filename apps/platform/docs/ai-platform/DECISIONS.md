@@ -2219,3 +2219,21 @@ existing authenticated shell. A notification from another workspace is therefore
 neither returned nor marked read. No migration is needed because
 `notifications.workspace_id` already exists and the scheduler writes it. The
 route remains private/no-store and preserves the existing CSRF guard for writes.
+
+## D-111 — Calendar is a tenant-scoped projection of plans and confirmed tasks
+
+Status: accepted, pending staging deployment
+Date: 2026-08-02
+
+The calendar deliberately does not introduce a second deadline store. It reads
+active dated `action_plan_steps` from non-archived cases in the active
+workspace, then left-joins a confirmed task only when its case and workspace
+also match. The display therefore stays correct both before task confirmation
+and after a plan step becomes an executable task.
+
+The API accepts only an inclusive/exclusive valid ISO-date window of at most
+367 days, derives the current date in Asia/Tashkent server-side, and returns
+private/no-store data. Terminal plan steps and terminal tasks are excluded. The
+new UI is available on canonical personal and business routes and preserves the
+legacy business redirect; no D1 schema change, migration, or provider call is
+necessary.

@@ -18,6 +18,7 @@ import "../../../_platform/document-comparison.css";
 import "../../../_platform/history-archive.css";
 import "../../../_platform/help.css";
 import "../../../_platform/action-plan.css";
+import "../../../_platform/calendar.css";
 import "../../../_platform/monitoring.css";
 import "../../../_document-builder/document-builder.css";
 import "../../../_platform/platform-readability.css";

@@ -1223,6 +1223,23 @@ test("action-plan steps and confirmed tasks share a bounded server-side status v
   assert.match(updateStep, /UPDATE task_reminders SET status=CASE WHEN \? THEN 'pending' ELSE 'cancelled' END/);
   assert.match(updateStep, /INSERT OR IGNORE INTO task_reminders/);
 });
+test("calendar reads only active-workspace plan deadlines and keeps its date window bounded", async () => {
+  const [route, client, routing] = await Promise.all([
+    readFile(new URL("../app/api/platform/calendar/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/CalendarClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/routing.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /c\.workspace_id=\?/);
+  assert.match(route, /s\.due_at>=\? AND s\.due_at<\?/);
+  assert.match(route, /t\.workspace_id=c\.workspace_id/);
+  assert.match(route, /cache-control": "private, no-store/);
+  assert.match(route, /calendarRangeFromSearch/);
+  assert.match(client, /"month", "week", "list", "cases", "overdue"/);
+  assert.match(client, /api\/platform\/calendar/);
+  assert.match(client, /action-plan\//);
+  assert.match(routing, /"calendar"/);
+});
 test("lawyer offers are validated, access-bound, auditable, and owner-resolved", async () => {
   assert.equal(lawyerOfferCreateSchema.safeParse({
     scopeDescription: "Проверить договор, подготовить замечания и согласовать безопасную редакцию.",
