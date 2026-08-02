@@ -1,5 +1,12 @@
 # JURO deferred and gated features
 
+> Current checkpoint — 2026-08-02: staging configuration and static guards are
+> deployed, but the external gates in this register remain real blockers unless
+> replaced by new evidence. In particular, no live provider probe is enabled,
+> no malware scanner is attached, no approved rigged Jurobek source is present,
+> and no authenticated browser runtime is available. None of these omissions is
+> represented in UI as a completed capability.
+
 Updated: 2026-07-30
 
 This register distinguishes real implementation from planned scope. A database table, UI placeholder, binding, or feature flag is not counted as a working feature.

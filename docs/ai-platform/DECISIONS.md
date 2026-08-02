@@ -109,3 +109,16 @@ required and optional credential bindings from generated Wrangler `vars`.
 This includes the legacy generic AI binding and future legislation/payment
 credentials. Runtime values must remain Cloudflare secrets; model names and
 other non-sensitive configuration remain ordinary environment variables.
+
+## D-104 — current checkpoint outranks historical evidence summaries
+
+Status: accepted and documented
+Date: 2026-08-02
+
+The AI-platform documentation retains chronological evidence but now starts its
+implemented and limitation registers with an explicitly authoritative current
+checkpoint. It prevents historical environment flags, secret inventories and
+deployment versions from being mistaken for present state. A current checkpoint
+may only record verified names, build/test output and deploy identifiers; it
+does not convert unavailable browser, provider, scanner, legal-corpus or asset
+gates into a claim of completion.

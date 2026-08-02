@@ -1,5 +1,19 @@
 # JURO known limitations checkpoint
 
+> Current authoritative checkpoint — 2026-08-02: this section supersedes an
+> older historical statement below when they conflict. `juro-platform-staging`
+> is deployed as Worker version `960c6a86-a4ef-421f-af91-1d058c84d2e3`, with
+> isolated `juro-staging` D1, staging R2/Queues/Vectorize, and no production
+> mutation. Read-only secret inventory confirms names for OpenAI, Anthropic,
+> Resend, Turnstile and the identity keyring; it does not prove provider calls.
+> `STAGING_SYNTHETIC_PROBES_ENABLED` is currently `false`, so no current live
+> provider, fallback, OTP-mailbox, authenticated browser, or Access session
+> result is claimed. The document malware gate remains fail-closed, so uploads
+> cannot reach extraction or AI. The approved rigged 3D Jurobek asset is absent;
+> voice-with-avatar remains off with text-only fallback. The local browser
+> control runtime remains unavailable, so visual, accessibility and real-device
+> assertions are open. Production remains unchanged.
+
 > Phase 5 OCR checkpoint — 2026-07-31: migration `0042` and the Workers AI
 > `toMarkdown` OCR/extraction consumer pass locally, including tenant isolation,
 > integrity, retry, replay, R2 derivative, outbox chaining, and account-purge

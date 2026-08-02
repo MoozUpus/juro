@@ -1,4 +1,13 @@
 # JURO implemented-features checkpoint
+> Current authoritative checkpoint — 2026-08-02: only the evidence in this
+> paragraph is current when it conflicts with older chronological entries.
+> Staging Worker `960c6a86-a4ef-421f-af91-1d058c84d2e3` contains the tested
+> document-analysis trust boundary and runs only against isolated staging
+> bindings. Latest local gates pass: type-check, lint, 391 core tests, 91
+> Cloudflare tests, artifact matrix and staging artifact validation. Staging
+> secret *names* include OpenAI and Anthropic, but `STAGING_SYNTHETIC_PROBES_ENABLED`
+> is false; no current live provider response, safe-file analysis, authenticated
+> browser journey or production behavior is claimed.
 > Current branch delta — 2026-07-31: legal chat and document analysis now reject duplicate, missing, citation-free, provider-invented, or referentially incomplete legal sources at provider and persistence boundaries. Provider-authored source metadata is replaced with the canonical server-retrieved record. Invalid output fails as `INVALID_AI_OUTPUT`. The slice has no migration/dependency and is locally verified; staging deployment is not yet claimed.
 
 > Current staging delta — 2026-07-31: the AI and document-analysis paths share an exact publication-evidence retrieval boundary and a dual-corpus freshness gate. Missing full Lex/Advice corpus evidence fails closed; stale evidence is explicitly downgraded in RU/UZ. Tampered publication, lifecycle, section, effective-date, and expiry evidence is rejected. The slice is deployed only to owner-protected staging as version `37687899-f17a-4bdf-9f9c-41c6b509cfb9`; it adds no migration/dependency and does not change production.
