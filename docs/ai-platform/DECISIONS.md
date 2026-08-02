@@ -74,3 +74,14 @@ the bounded lower-case, title-case and upper-case variants of each legal keyword
 to the existing official-metadata and section fields. This is a candidate-match
 improvement only: source lifecycle, locale, verification, publication, current
 activation and server-side citation checks remain mandatory.
+
+## D-101 — synthetic evaluation inputs can enforce gates but never prove legal quality
+
+Status: accepted and locally verified
+Date: 2026-08-02
+
+The reproducible RU/UZ evaluation corpus is a release-harness input set, not legal
+ground truth. Its validator now rejects host/type disagreement, missing human review,
+reviewer language scores below 95/100, and critical-deadline detection below 98%.
+A passing evaluation still requires real reviewed outputs and verified existing
+official URLs; the synthetic fixtures cannot create a legal-quality claim.

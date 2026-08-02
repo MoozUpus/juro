@@ -14,6 +14,9 @@ export type LegalEvaluationScenario = {
   requiresHumanReview: true;
 };
 
+export const MIN_REVIEWED_LANGUAGE_QUALITY = 95;
+export const MIN_CRITICAL_DEADLINE_DETECTION_RATE = 0.98;
+
 const ruArea: Record<LegalEvaluationArea, string> = {
   civil: "гражданском споре", contracts: "договоре", labor: "трудовых отношениях",
   family: "семейной ситуации", entrepreneurship: "предпринимательской деятельности",
@@ -36,6 +39,12 @@ const coverageTags = [
 ] as const;
 
 function basePrompt(locale: LegalEvaluationLocale, area: LegalEvaluationArea, index: number): string {
+  const coverage = coverageTags[index % coverageTags.length];
+  if (coverage === "deadline") {
+    return locale === "ru"
+      ? `По ${ruArea[area]} срок подачи важного заявления истекает завтра. Объясните первоочередное действие, какую дату нужно подтвердить и почему срок нельзя считать без применимой нормы Узбекистана.`
+      : `${uzArea[area]} bo‘yicha muhim ariza berish muddati ertaga tugaydi. Birinchi harakatni, qaysi sanani tasdiqlash kerakligini va O‘zbekistonning qo‘llanadigan normasiz muddatni nega hisoblab bo‘lmasligini tushuntiring.`;
+  }
   if (locale === "ru") {
     return `Нужна помощь по ${ruArea[area]}. Событие произошло ${index % 2 === 0 ? "ранее" : "недавно"}; объясните, какие факты и дату нужно уточнить, прежде чем делать юридический вывод по праву Узбекистана.`;
   }
@@ -44,14 +53,17 @@ function basePrompt(locale: LegalEvaluationLocale, area: LegalEvaluationArea, in
 
 function buildBase(locale: LegalEvaluationLocale): LegalEvaluationScenario[] {
   return LEGAL_EVALUATION_AREAS.flatMap((area) =>
-    Array.from({ length: 11 }, (_, index) => ({
-      id: `legal-${locale}-${area}-${String(index + 1).padStart(2, "0")}`,
-      locale,
-      area,
-      prompt: basePrompt(locale, area, index),
-      tags: [coverageTags[index % coverageTags.length], index % 3 === 0 ? "incomplete_facts" : "ordinary"],
-      requiresHumanReview: true,
-    })),
+    Array.from({ length: 11 }, (_, index) => {
+      const coverage = coverageTags[index % coverageTags.length]!;
+      return {
+        id: `legal-${locale}-${area}-${String(index + 1).padStart(2, "0")}`,
+        locale,
+        area,
+        prompt: basePrompt(locale, area, index),
+        tags: [coverage, ...(coverage === "deadline" ? ["critical_deadline"] : []), index % 3 === 0 ? "incomplete_facts" : "ordinary"],
+        requiresHumanReview: true,
+      };
+    }),
   );
 }
 
@@ -94,20 +106,45 @@ export function validateLegalEvaluationResults(
   const scenarioIds = new Set(scenarios.map(({ id }) => id));
   if (results.length !== scenarios.length) failures.push("RESULT_COUNT_MISMATCH");
   const resultIds = new Set<string>();
+  let detectedCriticalDeadlines = 0;
+  const criticalDeadlineScenarioIds = new Set(
+    scenarios.filter((scenario) => scenario.tags.includes("critical_deadline")).map((scenario) => scenario.id),
+  );
   for (const result of results) {
     if (!scenarioIds.has(result.scenarioId)) failures.push(`UNKNOWN_SCENARIO:${result.scenarioId}`);
     if (resultIds.has(result.scenarioId)) failures.push(`DUPLICATE_RESULT:${result.scenarioId}`);
     resultIds.add(result.scenarioId);
-    if (result.citedUrls.some((url) => !/^https:\/\/(lex\.uz|advice\.uz)\//.test(url))) {
-      failures.push(`UNVERIFIED_CITATION:${result.scenarioId}`);
-    }
     if (result.citedUrls.length !== result.citedSourceTypes.length) {
       failures.push(`CITATION_SOURCE_TYPE_MISMATCH:${result.scenarioId}`);
     }
+    for (const [index, url] of result.citedUrls.entries()) {
+      const declaredType = result.citedSourceTypes[index];
+      const expectedType = /^https:\/\/lex\.uz\//.test(url)
+        ? "lex"
+        : /^https:\/\/advice\.uz\//.test(url)
+          ? "advice"
+          : null;
+      if (!expectedType) {
+        failures.push(`UNVERIFIED_CITATION:${result.scenarioId}`);
+      } else if (declaredType !== expectedType) {
+        failures.push(`CITATION_SOURCE_TYPE_INVALID:${result.scenarioId}`);
+      }
+    }
     if (!result.humanReviewerId) failures.push(`HUMAN_REVIEW_MISSING:${result.scenarioId}`);
+    if (!Number.isFinite(result.reviewedLanguageQuality)
+      || (result.reviewedLanguageQuality ?? 0) < MIN_REVIEWED_LANGUAGE_QUALITY) {
+      failures.push(`LANGUAGE_QUALITY_BELOW_THRESHOLD:${result.scenarioId}`);
+    }
+    if (criticalDeadlineScenarioIds.has(result.scenarioId) && result.criticalDeadlineDetected) {
+      detectedCriticalDeadlines += 1;
+    }
   }
   for (const scenario of scenarios) {
     if (!resultIds.has(scenario.id)) failures.push(`RESULT_MISSING:${scenario.id}`);
+  }
+  if (criticalDeadlineScenarioIds.size > 0
+    && detectedCriticalDeadlines / criticalDeadlineScenarioIds.size < MIN_CRITICAL_DEADLINE_DETECTION_RATE) {
+    failures.push("CRITICAL_DEADLINE_DETECTION_BELOW_THRESHOLD");
   }
   return { passed: failures.length === 0, failures };
 }
