@@ -64,7 +64,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
 
   const provider = paymentProviderStatus();
-  if (!provider.configured) {
+  if (!provider.credentialsConfigured) {
     return response({
       code: "PAYMENT_PROVIDER_UNAVAILABLE",
       error: parsed.data.locale === "ru"

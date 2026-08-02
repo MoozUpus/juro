@@ -997,6 +997,18 @@ test("AI chat obtains its cycle limit from server-side workspace entitlements", 
   assert.doesNotMatch(route, /MONTHLY_CHAT_LIMIT/);
 });
 
+test("billing never advertises credentials as an implemented checkout", async () => {
+  const [provider, client] = await Promise.all([
+    readFile(new URL("../lib/billing/provider.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/BillingClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(provider, /credentialsConfigured/);
+  assert.match(provider, /checkoutAvailable: false/);
+  assert.match(client, /disabled=\{!data\.provider\.checkoutAvailable/);
+  assert.match(client, /Checkout — скоро/);
+  assert.doesNotMatch(client, /data\.provider\.configured/);
+});
+
 test("legislation monitoring never auto-publishes or invents feed entries", async () => {
   const source = await readFile(new URL("../app/api/platform/monitoring/route.ts", import.meta.url), "utf8");
   assert.match(source, /u\.status='published_verified'/);
