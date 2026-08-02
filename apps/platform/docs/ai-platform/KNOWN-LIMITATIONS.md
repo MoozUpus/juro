@@ -2,7 +2,7 @@
 
 > Current authoritative checkpoint — 2026-08-02: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`
-> is deployed as Worker version `c9c54208-55be-4d6c-9413-950e0cc78d5f`, with
+> is deployed as Worker version `97745a0a-f0c6-416b-9049-f756a66403a6`, with
 > isolated `juro-staging` D1, staging R2/Queues/Vectorize, and no production
 > mutation. Read-only secret inventory confirms names for OpenAI, Anthropic,
 > Resend, Turnstile and the identity keyring; it does not prove provider calls.
@@ -280,7 +280,7 @@ No Phase 5 production-readiness claim is made.
 - STT, TTS, realtime voice, audio retention/purge, and voice-with-avatar remain feature-off; text AI remains the honest fallback.
 - Authenticated screenshots, keyboard traversal, axe, NVDA/VoiceOver, 200% zoom, console/hydration, 320–1440+ matrix, and real-device touch checks remain blocked by the recorded browser-control kernel failure. Access was not bypassed.
 - LCP/INP/CLS, route bundle delta, GPU/memory, long-session, and WebGL context-loss measurements are not claimed.
-- The shared pre-existing desktop shell collapse animates `grid-template-columns` and `width`; it is a P1 motion debt for a separately approved production shell migration, not introduced by the prototype.
+- The shared shell’s grid/width layout transition was removed in staging version `97745a0a-f0c6-416b-9049-f756a66403a6`; authenticated visual and touch-device verification remains open.
 - The full phases 3–7 product definition, legal/document evaluation corpus, live provider calls, malware scan, hybrid retrieval, complete lawyer marketplace/admin/support/status, and closed beta remain incomplete.
 - Phase 9 is not a closed beta until authenticated owner test accounts and the full browser/security matrix pass.
 - Phase 10 production readiness is not reached. Production functional deployment and production UI replacement require separate explicit owner approvals.

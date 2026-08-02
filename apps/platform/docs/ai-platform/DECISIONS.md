@@ -1720,7 +1720,7 @@ Date: 2026-07-30
 
 The first cinematic platform slice is an additive authenticated route, not a replacement of canonical UI. It requires exact `APP_ENV=staging`, carries `noindex/nofollow/nocache`, reuses the real shell, tenant, dashboard API, and canonical workflow routes, and has separate personal and business-workspace paths. The unscoped entry returns 404 in a production artifact. No schema, provider, secret, or dependency change is introduced.
 
-The owner-approved Jurobek 3D source is absent. The prototype uses only the existing 60,670-byte WebP, labels it as a static no-WebGL fallback, links to real text chat, and does not simulate microphone, STT, TTS, lip sync, or a live lawyer. Motion is limited to short state feedback and respects reduced motion/transparency/contrast. The Impeccable detector returned no findings; the remaining shared grid/width shell transition is recorded as production migration debt rather than changed before approval.
+The owner-approved Jurobek 3D source is absent. The prototype uses only the existing 60,670-byte WebP, labels it as a static no-WebGL fallback, links to real text chat, and does not simulate microphone, STT, TTS, lip sync, or a live lawyer. Motion is limited to short state feedback and respects reduced motion/transparency/contrast. The Impeccable detector returned no findings; the former shared grid/width shell transition is addressed separately by D-120, with authenticated visual verification still open.
 
 The exact source is deployed as Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` at 100% traffic. D1 integrity, exact binding inventory, secret names, Access denial, and unchanged production version were re-read. Chrome automation still fails before navigation, so screenshots and interactive accessibility/performance evidence are not inferred from source or control-plane checks.
 
@@ -2350,3 +2350,20 @@ Staging evidence: Worker `juro-platform-staging`, version
 `c9c54208-55be-4d6c-9413-950e0cc78d5f`, deployed after the full local test,
 staging build, artifact-validation, and Cloudflare-type gates. Production was
 not changed.
+
+## D-120 — Shell collapse does not animate layout geometry
+
+Status: accepted; deployed to staging
+Date: 2026-08-02
+
+The shared application shell previously transitioned `grid-template-columns`
+and sidebar `width` during desktop collapse. Those properties cause layout and
+paint work on the whole application surface. Collapse now changes geometry
+without a transition; interactive spatial movement is reserved for the mobile
+drawer and active-navigation indicator, which use `transform`. The static test
+`tests/platform-shell-motion.test.ts` prevents reintroducing either prohibited
+layout transition. This keeps semantic navigation and keyboard behavior
+unchanged, and reduced-motion handling remains in place. Staging evidence:
+Worker `juro-platform-staging` version
+`97745a0a-f0c6-416b-9049-f756a66403a6`; authenticated visual verification
+remains open.

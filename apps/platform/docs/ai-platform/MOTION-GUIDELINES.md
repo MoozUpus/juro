@@ -26,6 +26,6 @@ Motion is interruptible where interactive, never delays navigation, and never hi
 | No isolated cinematic prototype | Scoped prototype with restrained directional feedback | Connects related work routes without turning a dashboard into a presentation |
 | Potential temptation to animate Jurobek | Static 60,670-byte WebP with explicit fallback label | No verified rig, lip sync, or WebGL dependency exists |
 | No prototype-specific reduced-transparency contract | Solid navy fallback and higher-contrast text | Maintains legibility for accessibility preferences |
-| Shared shell still animates grid/width | Left unchanged and logged as P1 migration debt | Production UI replacement is not authorized |
+| Shared shell animated grid/width while collapsing navigation | Collapse now snaps geometry; only mobile drawer/indicator use transform | Avoid layout animation and reduce main-content reflow jank |
 
-The `review-animations` and `improve-animations` passes found no P0/P1 issue introduced by the prototype. The existing shared shell layout transition remains the only P1 motion finding.
+The `review-animations` and `improve-animations` passes found no P0/P1 issue introduced by the prototype. On 2026-08-02 the shared shell’s grid/width transition was removed and covered by `platform-shell-motion.test.ts`; the collapse path now has no layout-property animation. It is deployed to staging Worker `97745a0a-f0c6-416b-9049-f756a66403a6`; authenticated visual verification remains open.
