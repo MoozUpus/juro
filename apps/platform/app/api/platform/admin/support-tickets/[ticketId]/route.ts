@@ -7,6 +7,16 @@ import { requireD1 } from "../../../../../../lib/document-builder/storage/runtim
 const replySchema = z.object({ body: z.string().trim().min(1).max(8_000), status: z.enum(["open", "waiting_user", "resolved"]) }).strict();
 type Context = { params: Promise<{ ticketId: string }> };
 
+export async function GET(request: Request, context: Context) {
+  await requirePlatformStaffRequest(request, "support.tickets.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
+  const { ticketId } = await context.params;
+  const db = requireD1();
+  const ticket = await db.prepare("SELECT id,category,severity,status,subject,created_at AS createdAt,updated_at AS updatedAt FROM support_tickets WHERE id=? LIMIT 1").bind(ticketId).first();
+  if (!ticket) return Response.json({ code: "NOT_FOUND" }, { status: 404, headers: { "cache-control": "private, no-store" } });
+  const messages = await db.prepare("SELECT id,author_type AS authorType,body,created_at AS createdAt FROM support_messages WHERE ticket_id=? ORDER BY created_at ASC,id ASC LIMIT 200").bind(ticketId).all();
+  return Response.json({ ticket, messages: messages.results }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
+}
+
 export async function POST(request: Request, context: Context) {
   const staff = await requirePlatformStaffRequest(request, "support.tickets.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   const parsed = await parseJsonRequest(request, replySchema, 10_240);

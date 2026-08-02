@@ -9,6 +9,7 @@
 @media(hover:hover) and (pointer:fine){.staff-withdrawal button:hover{border-color:var(--staff-shell)}.staff-withdrawal .staff-withdraw-confirm:hover{border-color:#6f2d26;background:#6f2d26}}
 @media(hover:hover) and (pointer:fine){.staff-sync button:not(:disabled):hover{background:var(--staff-shell-2)}}
 @media(max-width:600px){.staff-withdrawal>div:last-child{flex-direction:column-reverse}.staff-withdrawal button{width:100%}}
+.staff-support-messages{display:grid;gap:.6rem;max-height:24rem;overflow:auto;margin:1rem 0}.staff-support-messages article{padding:.75rem;border:1px solid var(--staff-border);border-radius:.5rem}.staff-support-messages article b{font-size:.7rem;color:var(--staff-accent)}.staff-support-messages article p{white-space:pre-wrap;line-height:1.5;font-size:.82rem}.staff-decision form{display:grid;gap:.75rem}.staff-decision form label{display:grid;gap:.35rem;font-size:.72rem;font-weight:800;color:var(--staff-muted)}.staff-decision form select{min-height:2.75rem;padding:0 .6rem;border:1px solid var(--staff-border-strong);border-radius:.45rem;background:#fff}
 @media(max-width:800px){.staff-sync{grid-template-columns:1fr}.staff-sync>div:first-child{grid-row:auto}.staff-sync .staff-sync-error,.staff-sync .staff-sync-confirmation{grid-column:1}}
 @media(max-width:600px){.staff-sync-controls{grid-template-columns:1fr}.staff-sync button{width:100%}}
 
