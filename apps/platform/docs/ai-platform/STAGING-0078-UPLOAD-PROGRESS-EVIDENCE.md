@@ -4,7 +4,7 @@ Date: 2026-08-02
 
 ## Delivered slice
 
-The document-review upload surface reports the actual browser upload progress
+The document-review and dashboard quick-upload surfaces report the actual browser upload progress
 from `XMLHttpRequest.upload` only when the browser supplies a computable byte
 length. It separately communicates SHA-256 preparation, byte transfer, and
 private-quarantine finalization in RU and Uzbek Latin. The control exposes an
@@ -21,7 +21,7 @@ provider.
 
 - Environment: protected `staging`
 - Worker: `juro-platform-staging`
-- Worker version: `5506400c-0f7c-4708-802c-c6263d0ad2c4`
+- Worker version: `5e0ef094-2580-4e04-a486-0f849795c212`
 - Surface: `https://staging.app.juro.uz/ru/individual/document-review`
 - D1 migration and new Cloudflare resource: none
 - Production Worker, production D1/R2, Sites and `apps/website`: unchanged

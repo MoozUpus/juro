@@ -75,6 +75,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   const [file, setFile] = useState<File | null>(null);
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ phase: "hashing" | "uploading" | "finalizing"; loaded: number; total: number } | null>(null);
 
   const load = useCallback(async () => {
     setError("");
@@ -100,15 +101,17 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
     if (file) {
       if (!consent) return;
       setSubmitting(true);
+      setUploadProgress({ phase: "hashing", loaded: 0, total: file.size });
       setError("");
       try {
-        const body = await uploadDocumentForAnalysis(file, locale);
+        const body = await uploadDocumentForAnalysis(file, locale, setUploadProgress);
         const search = body.analysis?.id ? `?analysis=${encodeURIComponent(body.analysis.id)}` : "";
         router.push(`${base}/document-review${search}`);
       } catch (value) {
         setError(value instanceof Error ? value.message : String(value));
       } finally {
         setSubmitting(false);
+        setUploadProgress(null);
       }
       return;
     }
@@ -134,6 +137,16 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
     { href: `${base}/action-plan`, icon: CalendarClock, copy: copy.actions.plan },
     { href: `${base}/consultations`, icon: MessageSquareText, copy: copy.actions.lawyer },
   ];
+  const uploadPercent = uploadProgress?.phase === "uploading" && uploadProgress.total > 0
+    ? Math.round((uploadProgress.loaded / uploadProgress.total) * 100)
+    : null;
+  const uploadStatus = !uploadProgress ? "" : uploadProgress.phase === "hashing"
+    ? (ru ? "Проверяем целостность файла…" : "Fayl yaxlitligi tekshirilmoqda…")
+    : uploadProgress.phase === "finalizing"
+      ? (ru ? "Сохраняем файл в приватный карантин…" : "Fayl shaxsiy karantinga saqlanmoqda…")
+      : uploadPercent === null
+        ? (ru ? "Передаём файл…" : "Fayl yuborilmoqda…")
+        : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);
   const attention = data ? [
     ...data.comparisons
       .filter((item) => !["completed", "completed_partial"].includes(item.status))
@@ -251,6 +264,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
                 <span>{copy.consent}</span>
               </label>
             )}
+            {uploadProgress && <p className="dashboard-upload-status" role="status" aria-live="polite">{uploadStatus}</p>}
           </form>
         </div>
         <GoldenRoute locale={locale} label={copy.journeyLabel} steps={copy.journeySteps} />

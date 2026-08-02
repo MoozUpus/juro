@@ -22,6 +22,7 @@
 .dashboard-file-chip button svg{width:17px}
 .dashboard-upload-consent{display:flex;grid-column:2/-1;align-items:flex-start;gap:9px;padding:5px 6px 2px;color:#52646e;font-size:13px;line-height:1.45}
 .dashboard-upload-consent input{width:18px;height:18px;margin-top:1px;accent-color:var(--p-navy);flex:none}
+.dashboard-upload-status{min-height:18px;margin:0;grid-column:2/-1;color:#52646e;font-size:12px}
 .golden-route{display:grid;min-width:0;align-content:center;padding:28px;border:1px solid rgba(255,255,255,.12);border-radius:18px;background:rgba(255,255,255,.055)}
 .golden-route-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
 .golden-route-heading>span{color:#e1bd6d;font-size:13px;font-weight:850;letter-spacing:.12em}
