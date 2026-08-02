@@ -68,6 +68,7 @@ function SingleDocumentReview({ locale }: { locale: PlatformLocale }) {
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ phase: "hashing" | "uploading" | "finalizing"; loaded: number; total: number } | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -93,10 +94,11 @@ function SingleDocumentReview({ locale }: { locale: PlatformLocale }) {
     event.preventDefault();
     if (!file || !consent) return;
     setUploading(true);
+    setUploadProgress({ phase: "hashing", loaded: 0, total: file.size });
     setError("");
     setNotice("");
     try {
-      const body = await uploadDocumentForAnalysis(file, locale);
+      const body = await uploadDocumentForAnalysis(file, locale, setUploadProgress);
       setNotice(body.message || (ru ? "Анализ завершён." : "Tahlil yakunlandi."));
       setFile(null);
       setConsent(false);
@@ -104,13 +106,24 @@ function SingleDocumentReview({ locale }: { locale: PlatformLocale }) {
       await load();
       if (body.analysis) setSelected(body.analysis);
     } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
-    finally { setUploading(false); }
+    finally { setUploading(false); setUploadProgress(null); }
   }
+
+  const uploadPercent = uploadProgress?.phase === "uploading" && uploadProgress.total > 0
+    ? Math.round((uploadProgress.loaded / uploadProgress.total) * 100)
+    : null;
+  const uploadStatus = !uploadProgress ? "" : uploadProgress.phase === "hashing"
+    ? (ru ? "Проверяем целостность файла…" : "Fayl yaxlitligi tekshirilmoqda…")
+    : uploadProgress.phase === "finalizing"
+      ? (ru ? "Сохраняем файл в приватный карантин…" : "Fayl shaxsiy karantinga saqlanmoqda…")
+      : uploadPercent === null
+        ? (ru ? "Передаём файл…" : "Fayl yuborilmoqda…")
+        : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);
 
   return <>
     {error && <p className="review-message error" role="alert"><CircleAlert />{error}</p>}
     {notice && <p className="review-message success" role="status"><ShieldCheck />{notice}</p>}
-    <form className="review-upload" onSubmit={upload}><div className="review-drop"><Upload /><div><strong>{file?.name || (ru ? "PDF, DOCX, JPG, PNG или ZIP" : "PDF, DOCX, JPG, PNG yoki ZIP")}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : (ru ? "До 50 МБ · потоковая загрузка с SHA-256" : "50 MB gacha · SHA-256 bilan oqimli yuklash")}</span></div><input ref={inputRef} type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></div><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /><span>{ru ? "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла. Понимаю, что результат нужно проверить." : "Tanlangan faylni maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman."}</span></label><button disabled={!file || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Загрузить и проверить" : "Yuklash va tekshirish"}</button></form>
+    <form className="review-upload" onSubmit={upload}><div className="review-drop"><Upload /><div><strong>{file?.name || (ru ? "PDF, DOCX, JPG, PNG или ZIP" : "PDF, DOCX, JPG, PNG yoki ZIP")}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : (ru ? "До 50 МБ · потоковая загрузка с SHA-256" : "50 MB gacha · SHA-256 bilan oqimli yuklash")}</span></div><input ref={inputRef} type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></div>{uploadProgress && <div className="review-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div>}<p className="review-upload-status" aria-live="polite">{uploadStatus}</p><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /><span>{ru ? "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла. Понимаю, что результат нужно проверить." : "Tanlangan faylni maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman."}</span></label><button disabled={!file || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Загрузить и проверить" : "Yuklash va tekshirish"}</button></form>
     {loading ? <div className="review-loading"><LoaderCircle className="spin" /></div> : <div className="review-layout"><aside><h2>{ru ? "Последние файлы" : "So‘nggi fayllar"}</h2>{analyses.length ? analyses.map(item => <button className={selected?.id === item.id ? "active" : ""} key={item.id} onClick={() => setSelected(item)}><FileCheck2 /><span><strong>{item.fileName}</strong><small>{statusLabel(item.status, ru)}</small></span></button>) : <p>{ru ? "Загруженных файлов пока нет." : "Hozircha yuklangan fayllar yo‘q."}</p>}</aside><main>{selected ? <AnalysisView analysis={selected} ru={ru} onChanged={load} /> : <div className="review-empty"><FileCheck2 /><h2>{ru ? "Выберите файл для анализа" : "Tahlil uchun faylni tanlang"}</h2></div>}</main></div>}
   </>;
 }

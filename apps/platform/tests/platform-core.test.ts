@@ -1126,6 +1126,22 @@ test("notification reads use strict bounded input and expose resilient UI states
   assert.match(client, /Не удалось загрузить уведомления/);
 });
 
+test("document upload progress is byte-based and remains accessible", async () => {
+  const [upload, client] = await Promise.all([
+    readFile(new URL("../lib/document-analysis/client-upload.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/DocumentReviewClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(upload, /type SecureDocumentUploadProgress/);
+  assert.match(upload, /new XMLHttpRequest\(\)/);
+  assert.match(upload, /request\.upload\.addEventListener\("progress"/);
+  assert.match(upload, /event\.lengthComputable/);
+  assert.match(upload, /onProgress\?\.\(\{ phase: "finalizing"/);
+  assert.match(client, /role="progressbar"/);
+  assert.match(client, /aria-valuetext=\{uploadStatus\}/);
+  assert.match(client, /Передаём файл/);
+  assert.match(client, /Fayl yuborilmoqda/);
+});
+
 test("optional email preferences are strict, consent-backed, audited, and localized", async () => {
   assert.deepEqual(optionalEmailPreferenceKeys, ["marketing_email", "weekly_case_summary", "unfinished_document", "comments", "lawyer_request_updates"]);
   assert.equal(notificationPreferencesSchema.safeParse({ preferences: { marketing_email: true, weekly_case_summary: false, unfinished_document: true, comments: false, lawyer_request_updates: true } }).success, true);
