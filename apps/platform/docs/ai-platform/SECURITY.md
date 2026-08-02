@@ -24,6 +24,22 @@ Staging uses `juro-staging`, `juro-staging-files`, `juro-staging-backups`, stagi
 
 Production D1 `juro-production`, private bucket `juro-private-documents`, Sites version 20, `app.juro.uz`, and legacy Worker `juro` are outside this release. Production purge, Cron, and async flags remain false and no production schedule is declared.
 
+## 2026-08-02 Worker/runtime review
+
+The Worker review used current Cloudflare best-practice guidance and current
+public Worker type definitions. The checked runtime uses generated bindings,
+structured queue logging, explicit error handling, Web Crypto and no
+`passThroughOnException`. The document-builder row-id fallback no longer calls
+`Math.random()`; an unavailable Web Crypto source fails closed instead. This
+review is source/test evidence, not a substitute for authenticated staging or
+production security testing.
+
+The reviewed implementation was deployed only to staging as Worker
+`juro-platform-staging` version `c9c54208-55be-4d6c-9413-950e0cc78d5f`.
+An unauthenticated smoke request reached the Cloudflare Access boundary and
+received `302` to Access login; that verifies protection and reachability, not
+an authenticated product flow. Production was not changed.
+
 ## Release security evidence
 
 Local gates include type-check, lint, full tests, route/CSRF/security tests, migration constraints, D1/R2 purge tests, Queue/Cron/outbox tests, Cloudflare environment-matrix dry-runs, exact staging artifact validation, builder/comparison smokes, and working-tree/history secret-pattern scans.

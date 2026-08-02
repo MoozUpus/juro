@@ -2321,7 +2321,7 @@ resource.
 
 ## D-118 — Queue evidence distinguishes implemented consumers from live operations
 
-Status: accepted
+Status: accepted; deployed to staging
 Date: 2026-08-02
 
 The queue runtime already has durable lease/idempotency handling and concrete
@@ -2333,3 +2333,20 @@ the same bounded operation. `malware.scan` stays unbound and fail-closed until
 a privacy-approved scanner is actually attached. Documentation must not call
 these implemented handlers absent, nor treat their local tests/configuration as
 proof of provider delivery, scanner release, DLQ/redrive, or alert operations.
+
+## D-119 — Document-builder client identifiers require Web Crypto
+
+Status: accepted
+Date: 2026-08-02
+
+Questionnaire-row identifiers are not authorization tokens, but they may become
+part of a persisted draft. The fallback to `Math.random()` was removed: JURO
+uses `crypto.randomUUID()` or `crypto.getRandomValues()` and fails explicitly
+when neither secure API exists. Supported HTTPS browsers and Workers provide
+Web Crypto, so this never silently weakens identifier entropy on an unsupported
+runtime.
+
+Staging evidence: Worker `juro-platform-staging`, version
+`c9c54208-55be-4d6c-9413-950e0cc78d5f`, deployed after the full local test,
+staging build, artifact-validation, and Cloudflare-type gates. Production was
+not changed.
