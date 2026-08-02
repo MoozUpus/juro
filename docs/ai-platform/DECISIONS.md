@@ -85,3 +85,16 @@ ground truth. Its validator now rejects host/type disagreement, missing human re
 reviewer language scores below 95/100, and critical-deadline detection below 98%.
 A passing evaluation still requires real reviewed outputs and verified existing
 official URLs; the synthetic fixtures cannot create a legal-quality claim.
+
+## D-102 — document-analysis input keeps trust boundaries explicit
+
+Status: accepted and locally verified
+Date: 2026-08-02
+
+The document-analysis provider payload separates server-controlled analysis
+parameters and verified legal sources from `untrustedDocument`. File name, MIME
+metadata, OCR warnings, declared user side and extracted text remain intact as
+evidence but are labelled untrusted for the model. The system instruction makes
+their non-instructional status explicit. This is defense in depth: the safe-file
+gate, server-only providers, no document tools, strict output schema, excerpt
+validation and verified-citation replay remain mandatory.

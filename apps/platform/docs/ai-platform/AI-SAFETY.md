@@ -26,8 +26,10 @@ Scope: implemented integration-branch controls. This file does not claim live Op
 - `stale` sources move confirmed findings to assumptions, mark deadlines
   preliminary, lower legal-compliance confidence, show an RU/UZ warning, and
   recommend lawyer review.
-- Document content is untrusted input and cannot change system instructions,
-  source policy, authorization, or tool behavior.
+- All document-controlled fields (file name, MIME metadata, OCR warnings,
+  declared side and extracted text) are supplied under an explicit
+  `untrustedDocument` boundary. They remain evidence for analysis but cannot
+  change system instructions, source policy, authorization, or tool behavior.
 - Actual provider/model, instruction hash, source-evidence hash, freshness, and
   safe usage metadata are persisted without logging document or chat bodies.
 
