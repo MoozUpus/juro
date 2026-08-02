@@ -56,6 +56,8 @@ export function GlobalSearch({
   const router = useRouter();
   const dialogRef = useRef<HTMLElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const wasOpenRef = useRef(false);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -100,6 +102,11 @@ export function GlobalSearch({
   }, [open]);
 
   useEffect(() => {
+    if (!open && wasOpenRef.current) triggerRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [open]);
+
+  useEffect(() => {
     if (!open || query.trim().length < 2) {
       setResults([]);
       setLoading(false);
@@ -141,7 +148,10 @@ export function GlobalSearch({
     const item = resultLinks[active];
     if (!item) return;
     if (item.result.type === "source") {
-      if (safeOfficialUrl(item.href)) window.open(item.href, "_blank", "noopener,noreferrer");
+      if (safeOfficialUrl(item.href)) {
+        window.open(item.href, "_blank", "noopener,noreferrer");
+        setOpen(false);
+      }
     } else {
       router.push(item.href);
       setOpen(false);
@@ -150,7 +160,7 @@ export function GlobalSearch({
 
   return (
     <>
-      <button className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={ru ? "Глобальный поиск" : "Global qidiruv"}>
+      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={ru ? "Глобальный поиск" : "Global qidiruv"}>
         <Search /><span>{ru ? "Поиск" : "Qidiruv"}</span><kbd>⌘K</kbd>
       </button>
       {open && (

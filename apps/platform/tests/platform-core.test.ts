@@ -971,6 +971,7 @@ test("workspace switching is membership-scoped and never reuses an invalid defau
 
 test("global search is tenant-scoped, escapes LIKE input and avoids document-text leakage", async () => {
   const source = await readFile(new URL("../app/api/platform/search/route.ts", import.meta.url), "utf8");
+  const client = await readFile(new URL("../app/_platform/GlobalSearch.tsx", import.meta.url), "utf8");
   assert.match(source, /workspace_id=\?/);
   assert.match(source, /owner_user_id=\?/);
   assert.ok(source.includes("ESCAPE '\\\\'"));
@@ -980,6 +981,9 @@ test("global search is tenant-scoped, escapes LIKE input and avoids document-tex
   assert.match(source, /t\.workspace_id=\? AND t\.owner_user_id=\?/);
   assert.match(source, /a\.workspace_id=\? AND a\.owner_user_id=\?/);
   assert.match(source, /status='public_approved' AND public_approved_at IS NOT NULL/);
+  assert.match(client, /triggerRef = useRef<HTMLButtonElement>/);
+  assert.match(client, /triggerRef\.current\?\.focus\(\)/);
+  assert.match(client, /wasOpenRef\.current = open/);
 });
 
 test("legislation monitoring never auto-publishes or invents feed entries", async () => {
