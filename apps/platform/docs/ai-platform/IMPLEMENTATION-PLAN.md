@@ -300,7 +300,15 @@ Then stop and request two separate explicit approvals: first for production depl
 6. Final RU/UZ policies and the legal-language priority rule require legal approval.
 7. Malware scanner and audio/video providers require selection only after adapter and privacy/cost evaluation.
 8. Live Queue consumers require quarantine/DLQ consumption, alerts, redrive, durable ledger reconciliation, and per-kind producer/handler flags.
-9. Side-effecting jobs require provider idempotency or immutable subject-version IDs plus lease renewal/fencing. Consumers remain absent and the global runtime is disabled. Only `legal.sync` has a local handler; every other valid v2 job fails closed as `JOB_HANDLER_NOT_ENABLED`.
+9. Side-effecting jobs use immutable identifiers plus the `job_runs`
+   lease/idempotency boundary. Staging enables consumers for document analysis,
+   OCR, document/report export, security email, legal acquisition/parse/index,
+   and account-deletion cleanup. These handlers are locally covered, but the
+   remote per-kind queue/DLQ, alert, redrive and provider-delivery matrix is
+   still open. `notification.dispatch` has no producer/handler because the
+   scheduled reminder path writes the deterministic inbox notification directly;
+   `malware.scan` remains intentionally unattached and fails closed pending an
+   approved scanner.
 10. The Sites deployment pipeline must prove it selects the explicit production build; ordinary `npm run build` intentionally produces development.
 11. The Browser bootstrap was recovered through a temporary session-local CommonJS scope without modifying JURO or the user-home package. Authenticated current-version RU/UZ personal/business builder evidence now covers desktop, tablet, 390 px, 320 px, skip-link reachability, mobile navigation, overflow, and console state; 200% zoom, reduced-motion, axe, Lighthouse, real-device, and broader critical-route validation remain open.
 12. No approved rigged 3D Jurobek asset is present; avatar/voice-with-avatar remains disabled and a static fallback is mandatory.

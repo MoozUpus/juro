@@ -2318,3 +2318,18 @@ entire search request. The lawyer result deliberately uses the stable
 column. This is a read-only compatibility boundary: it does not mask a failed
 migration in release checks and introduces neither a migration nor a new
 resource.
+
+## D-118 — Queue evidence distinguishes implemented consumers from live operations
+
+Status: accepted
+Date: 2026-08-02
+
+The queue runtime already has durable lease/idempotency handling and concrete
+handlers for document analysis, OCR, export, security email, legal-source
+acquisition/normalization/indexing, and deletion cleanup. Staging deliberately
+enables only those reviewed consumers. `notification.dispatch` is not a hidden
+stub: scheduled task reminders insert the deterministic in-app notification in
+the same bounded operation. `malware.scan` stays unbound and fail-closed until
+a privacy-approved scanner is actually attached. Documentation must not call
+these implemented handlers absent, nor treat their local tests/configuration as
+proof of provider delivery, scanner release, DLQ/redrive, or alert operations.

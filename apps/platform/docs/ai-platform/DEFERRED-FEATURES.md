@@ -24,6 +24,18 @@ This register distinguishes real implementation from planned scope. A database t
 - Realtime voice, avatar lip sync, original-audio retention automation, audio/video call provider, and call recording remain off. Text chat must not pretend these are live.
 - The approved Jurobek 3D asset still requires source-asset verification, rig/material/facial review, optimization evidence, WebGL fallback, and device testing before integration.
 
+## Background-job boundary
+
+The staging Worker has enabled and locally covered consumers for document
+analysis, OCR, document/report export, security email, legal acquisition,
+normalization/indexing, and account-deletion cleanup. Each uses the durable
+`job_runs` lease/idempotency boundary. This is not evidence of an end-to-end
+provider, scanner, or delivery result: the queue/DLQ operational matrix still
+needs controlled staging messages, logs, alert delivery, redrive, and ledger
+reconciliation. `notification.dispatch` has no producer/handler because task
+reminders are durably inserted by the scheduled runtime; `malware.scan` remains
+unattached and rejects fail-closed until a real scanner is approved.
+
 ## Product and operations gates
 
 - Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, admin/support/status/analytics, and deletion across every future provider remain incomplete.
