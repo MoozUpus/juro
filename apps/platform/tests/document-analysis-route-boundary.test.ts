@@ -50,6 +50,8 @@ test("AI and document processors revalidate provider citations before persistenc
   assert.match(aiRoute, /originalUrl: source\.officialUrl/);
   assert.match(processor, /enforceDocumentAnalysisSourceBoundary\(/);
   assert.match(processor, /enforceDocumentExcerptBoundary\(/);
+  const provider = source("lib/document-analysis/provider.ts");
+  assert.match(provider, /untrustedDocument\.documentText/);
   assert.match(processor, /originalUrl: source\.officialUrl/);
   assert.match(
     processor,
