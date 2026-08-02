@@ -1319,6 +1319,21 @@ test("action-plan steps and confirmed tasks share a bounded server-side status v
   assert.match(updateStep, /UPDATE task_reminders SET status=CASE WHEN \? THEN 'pending' ELSE 'cancelled' END/);
   assert.match(updateStep, /INSERT OR IGNORE INTO task_reminders/);
 });
+
+test("case workspace documents and activity are tenant-scoped", async () => {
+  const [route, client] = await Promise.all([
+    readFile(new URL("../app/api/platform/cases/[caseId]/workspace/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/CaseWorkspaceClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /requireApiUser\(\)/);
+  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /workspace_id=\?/);
+  assert.match(route, /case_id=\?/);
+  assert.match(route, /cache-control": "private, no-store/);
+  assert.match(client, /\/workspace/);
+  assert.match(client, /Документы дела/);
+  assert.match(client, /Активность дела/);
+});
 test("calendar reads only active-workspace plan deadlines and keeps its date window bounded", async () => {
   const [route, client, routing] = await Promise.all([
     readFile(new URL("../app/api/platform/calendar/route.ts", import.meta.url), "utf8"),
