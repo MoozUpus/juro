@@ -19,7 +19,7 @@ export const GET = withApiErrors(async function GET(request:Request){
   const caseId=new URL(request.url).searchParams.get("caseId");
   const caseScope=caseId ? " AND c.id=?" : "";
   const query=`SELECT c.id,c.title,c.description,c.legal_area AS legalArea,c.status,c.next_deadline_at AS nextDeadlineAt,c.created_at AS createdAt,c.updated_at AS updatedAt,
-    p.id AS planId,p.title AS planTitle,p.status AS planStatus,p.progress_percent AS progressPercent,
+    p.id AS planId,p.title AS planTitle,p.status AS planStatus,p.progress_percent AS progressPercent,p.current_revision AS planRevision,
     (SELECT json_group_array(json_object('id',s.id,'ordinal',s.ordinal,'title',s.title,'description',s.description,'status',s.status,'dueAt',s.due_at,'actionType',s.action_type,'templateCode',s.template_code,'revision',s.revision)) FROM action_plan_steps s WHERE s.plan_id=p.id ORDER BY s.ordinal) AS stepsJson
     FROM cases c LEFT JOIN action_plans p ON p.case_id=c.id WHERE c.workspace_id=?${caseScope} AND c.archived_at IS NULL ORDER BY c.updated_at DESC`;
   const rows=caseId ? await db.prepare(query).bind(workspace.id,caseId).all() : await db.prepare(query).bind(workspace.id).all();

@@ -49,7 +49,15 @@ type Case = {
   planTitle: string;
   planStatus: string;
   progressPercent: number;
+  planRevision: number;
   steps: Step[];
+};
+
+type PendingPlanChange = {
+  id: string;
+  status: StepStatus;
+  dueAt: string | null;
+  revision: number;
 };
 
 type PlanSnapshot = {
@@ -97,7 +105,8 @@ export function ActionPlanClient({
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
-  const [savingStepId, setSavingStepId] = useState<string | null>(null);
+  const [pendingChangesByCase, setPendingChangesByCase] = useState<Record<string, Record<string, PendingPlanChange>>>({});
+  const [applyingChangesFor, setApplyingChangesFor] = useState<string | null>(null);
   const [openCase, setOpenCase] = useState<string | null>(initialCaseId ?? null);
   const [versionsByCase, setVersionsByCase] = useState<Record<string, PlanVersion[]>>({});
   const [loadingVersionsFor, setLoadingVersionsFor] = useState<string | null>(null);
@@ -159,36 +168,49 @@ export function ActionPlanClient({
     }
   }
 
-  async function updateStep(
-    item: Case,
-    step: Step,
-    status: StepStatus,
-    dueAt: string | null = step.dueAt?.slice(0, 10) || null,
-  ) {
-    if (savingStepId === step.id) return;
-    setSavingStepId(step.id);
+  function stageStepChange(item: Case, step: Step, patch: Partial<Pick<PendingPlanChange, "status" | "dueAt">>) {
+    const current = pendingChangesByCase[item.id]?.[step.id];
+    const next: PendingPlanChange = {
+      id: step.id,
+      status: patch.status ?? current?.status ?? step.status,
+      dueAt: "dueAt" in patch ? patch.dueAt ?? null : current?.dueAt ?? step.dueAt?.slice(0, 10) ?? null,
+      revision: step.revision,
+    };
+    const unchanged = next.status === step.status && next.dueAt === (step.dueAt?.slice(0, 10) ?? null);
+    setPendingChangesByCase((all) => {
+      const caseChanges = { ...(all[item.id] || {}) };
+      if (unchanged) delete caseChanges[step.id];
+      else caseChanges[step.id] = next;
+      return { ...all, [item.id]: caseChanges };
+    });
+  }
+
+  async function applyStagedChanges(item: Case) {
+    const changes = Object.values(pendingChangesByCase[item.id] || {});
+    if (!changes.length || applyingChangesFor === item.id) return;
+    setApplyingChangesFor(item.id);
     setError("");
     try {
-      const response = await fetch(`/api/platform/cases/${item.id}/steps/${step.id}`, {
+      const response = await fetch(`/api/platform/cases/${item.id}/plan`, {
         method: "PATCH",
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ status, revision: step.revision, dueAt }),
+        body: JSON.stringify({ revision: item.planRevision, changes }),
       });
+      const data = await response.json() as { error?: string };
       if (response.status === 409) {
-        setError(ru
-          ? "План изменён в другой вкладке. Данные обновлены."
-          : "Reja boshqa oynada o‘zgartirilgan. Ma’lumot yangilandi.");
+        setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
+        setError(ru ? "План изменён в другой вкладке. Показаны актуальные данные." : "Reja boshqa oynada o‘zgartirilgan. Amaldagi ma’lumotlar ko‘rsatildi.");
         await load();
         return;
       }
-      if (!response.ok) {
-        const data = await response.json() as { error?: string };
-        setError(data.error || (ru ? "Не удалось сохранить шаг." : "Qadamni saqlab bo‘lmadi."));
-        return;
-      }
+      if (!response.ok) throw new Error(data.error || (ru ? "Не удалось применить изменения плана." : "Reja o‘zgarishlarini qo‘llab bo‘lmadi."));
+      setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
+      setVersionsByCase((all) => ({ ...all, [item.id]: [] }));
       await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
     } finally {
-      setSavingStepId(null);
+      setApplyingChangesFor(null);
     }
   }
 
@@ -300,8 +322,31 @@ export function ActionPlanClient({
                         </li>)}
                       </ol> : null}
                     </section>
+                    {Object.values(pendingChangesByCase[item.id] || {}).length > 0 && <section className="plan-change-preview" aria-labelledby={`plan-preview-${item.id}`}>
+                      <div>
+                        <small>{ru ? "Предпросмотр версии" : "Versiyani oldindan ko‘rish"}</small>
+                        <h3 id={`plan-preview-${item.id}`}>{ru ? "Изменения ещё не применены" : "O‘zgarishlar hali qo‘llanmagan"}</h3>
+                        <p>{ru ? "Проверьте изменения: они будут сохранены одной новой версией плана только после подтверждения." : "O‘zgarishlarni tekshiring: ular faqat tasdiqlangandan keyin rejaning bitta yangi versiyasi sifatida saqlanadi."}</p>
+                      </div>
+                      <ul>
+                        {item.steps.filter((step) => pendingChangesByCase[item.id]?.[step.id]).map((step) => {
+                          const change = pendingChangesByCase[item.id][step.id];
+                          const beforeDate = step.dueAt?.slice(0, 10) || (ru ? "не задан" : "belgilanmagan");
+                          const afterDate = change.dueAt || (ru ? "не задан" : "belgilanmagan");
+                          return <li key={step.id}><strong>{step.title}</strong><span>{step.status} → {change.status}{beforeDate !== afterDate ? ` · ${beforeDate} → ${afterDate}` : ""}</span></li>;
+                        })}
+                      </ul>
+                      <div className="plan-change-actions">
+                        <button type="button" onClick={() => setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }))}>{ru ? "Отменить" : "Bekor qilish"}</button>
+                        <button type="button" className="plan-primary" disabled={applyingChangesFor === item.id} onClick={() => void applyStagedChanges(item)}>
+                          {applyingChangesFor === item.id ? <LoaderCircle className="spin" /> : <Check />}
+                          {ru ? "Подтвердить и применить" : "Tasdiqlash va qo‘llash"}
+                        </button>
+                      </div>
+                    </section>}
                     {item.steps.map((step) => {
-                      const saving = savingStepId === step.id;
+                      const staged = pendingChangesByCase[item.id]?.[step.id];
+                      const saving = applyingChangesFor === item.id;
                       const builderQuery = new URLSearchParams({ caseId: item.id, stepId: step.id });
                       if (step.templateCode) builderQuery.set("template", step.templateCode);
                       return <div className={`plan-step ${step.status === "completed" ? "done" : ""}`} key={step.id}>
@@ -314,17 +359,17 @@ export function ActionPlanClient({
                           <span>{ru ? "Срок" : "Muddat"}</span>
                           <input
                             type="date"
-                            value={step.dueAt?.slice(0, 10) || ""}
+                            value={staged?.dueAt ?? step.dueAt?.slice(0, 10) ?? ""}
                             disabled={saving}
-                            onChange={(event) => void updateStep(item, step, step.status, event.target.value || null)}
+                            onChange={(event) => stageStepChange(item, step, { dueAt: event.target.value || null })}
                           />
                         </label>
                         <label className="plan-step-status">
                           <span className="sr-only">{ru ? "Статус шага" : "Qadam holati"}</span>
                           <select
-                            value={step.status}
+                            value={staged?.status ?? step.status}
                             disabled={saving}
-                            onChange={(event) => void updateStep(item, step, event.target.value as StepStatus)}
+                            onChange={(event) => stageStepChange(item, step, { status: event.target.value as StepStatus })}
                           >
                             <option value="not_started">{ru ? "Не начато" : "Boshlanmagan"}</option>
                             <option value="in_progress">{ru ? "В работе" : "Jarayonda"}</option>

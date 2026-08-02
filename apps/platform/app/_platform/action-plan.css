@@ -46,6 +46,26 @@
   border-radius: 9px;
 }
 
+.plan-change-preview {
+  display: grid;
+  gap: 14px;
+  margin: 14px 0;
+  padding: 18px;
+  border: 1px solid #d8c18b;
+  border-radius: 12px;
+  background: #fffaf0;
+}
+
+.plan-change-preview small { color: #71551d; font-weight: 750; }
+.plan-change-preview h3 { margin: 3px 0 0; color: #142230; font-size: 17px; }
+.plan-change-preview p { margin: 5px 0 0; color: #4a586d; }
+.plan-change-preview ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.plan-change-preview li { display: grid; gap: 2px; padding: 10px 12px; border-radius: 8px; background: #fff; color: #273a51; }
+.plan-change-preview li span { color: #607088; font-size: 13px; }
+.plan-change-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+.plan-change-actions > button:not(.plan-primary) { min-height: 42px; border: 1px solid #b7c0cc; border-radius: 9px; background: #fff; color: #253850; padding: 0 14px; font: inherit; font-weight: 700; }
+.plan-change-actions > button:focus-visible { outline: 3px solid #87631f; outline-offset: 2px; }
+
 @media (max-width: 1180px) {
   .plan-step {
     grid-template-columns: 32px minmax(0, 1fr) minmax(132px, 150px) 36px;

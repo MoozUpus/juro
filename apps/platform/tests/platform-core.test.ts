@@ -1272,6 +1272,24 @@ test("action-plan history snapshots are tenant-scoped and immutable", async () =
   assert.match(migration, /action_plan_versions_no_delete/);
 });
 
+test("confirmed action-plan changes are validated, scoped, and saved as one version", async () => {
+  const [schema, route, client] = await Promise.all([
+    readFile(new URL("../lib/platform/action-plan.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/cases/[caseId]/plan/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/ActionPlanClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(schema, /confirmedActionPlanPatchSchema/);
+  assert.match(schema, /A step may be changed only once/);
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /workspaceForUser\(user\)/);
+  assert.match(route, /plan_changes_confirmed/);
+  assert.match(route, /current_revision=current_revision\+1/);
+  assert.match(route, /INSERT INTO action_plan_versions/);
+  assert.match(client, /Предпросмотр версии/);
+  assert.match(client, /Подтвердить и применить/);
+  assert.match(client, /\/api\/platform\/cases\/\$\{item\.id\}\/plan/);
+});
+
 test("action-plan task confirmation is tenant-scoped and idempotent per plan revision", async () => {
   const route = await readFile(new URL("../app/api/platform/cases/[caseId]/tasks/route.ts", import.meta.url), "utf8");
   assert.match(route, /WHERE id=\? AND workspace_id=\? AND archived_at IS NULL/);

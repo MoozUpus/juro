@@ -28,3 +28,26 @@ export const actionPlanStepPatchSchema = z.object({
 }).strict();
 
 export type ActionPlanStepPatch = z.infer<typeof actionPlanStepPatchSchema>;
+
+const actionPlanConfirmedChangeSchema = actionPlanStepPatchSchema.extend({
+  id: z.string().uuid(),
+});
+
+export const confirmedActionPlanPatchSchema = z.object({
+  revision: z.number().int().positive(),
+  changes: z.array(actionPlanConfirmedChangeSchema).min(1).max(40),
+}).strict().superRefine((value, context) => {
+  const ids = new Set<string>();
+  for (const [index, change] of value.changes.entries()) {
+    if (ids.has(change.id)) {
+      context.addIssue({
+        code: "custom",
+        path: ["changes", index, "id"],
+        message: "A step may be changed only once per confirmed plan update.",
+      });
+    }
+    ids.add(change.id);
+  }
+});
+
+export type ConfirmedActionPlanPatch = z.infer<typeof confirmedActionPlanPatchSchema>;
