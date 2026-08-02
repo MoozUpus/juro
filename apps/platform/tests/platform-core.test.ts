@@ -1056,17 +1056,17 @@ test("Jurobek is a static optimized image without animation handlers or 3D depen
 test("case-detail routes remain tenant-scoped and do not render the workspace-wide plan", async () => {
   const [api, client, personalPage, businessPage] = await Promise.all([
     readFile(new URL("../app/api/platform/cases/route.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/_platform/ActionPlanClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/CaseWorkspaceClient.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/[locale]/[accountType]/cases/[caseId]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/[locale]/business/[workspaceId]/cases/[caseId]/page.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(api, /new URL\(request\.url\)\.searchParams\.get\("caseId"\)/);
   assert.match(api, /WHERE c\.workspace_id=\?\$\{caseScope\}/);
   assert.match(api, /bind\(workspace\.id,caseId\)/);
-  assert.match(client, /initialCaseId \? `\/api\/platform\/cases\?caseId=\$\{encodeURIComponent\(initialCaseId\)\}`/);
-  assert.match(client, /!initialCaseId && <form className="plan-create"/);
-  assert.match(personalPage, /initialCaseId=\{caseId\}/);
-  assert.match(businessPage, /initialCaseId=\{caseId\}/);
+  assert.match(client, /api\/platform\/cases\?caseId=\$\{encodeURIComponent\(caseId\)\}/);
+  assert.match(client, /api\/platform\/cases\/\$\{encodeURIComponent\(caseId\)\}\/tasks/);
+  assert.match(personalPage, /CaseWorkspaceClient locale=\{locale\} caseId=\{caseId\}/);
+  assert.match(businessPage, /CaseWorkspaceClient locale=\{locale\} caseId=\{caseId\}/);
 });
 
 test("lawyer handoff keeps conflict review anonymized and access explicitly consented", async () => {
@@ -1239,6 +1239,20 @@ test("calendar reads only active-workspace plan deadlines and keeps its date win
   assert.match(client, /api\/platform\/calendar/);
   assert.match(client, /action-plan\//);
   assert.match(routing, /"calendar"/);
+});
+test("case detail is a tenant-backed workspace rather than a plan-only alias", async () => {
+  const [personalRoute, businessRoute, client] = await Promise.all([
+    readFile(new URL("../app/[locale]/[accountType]/cases/[caseId]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/[locale]/business/[workspaceId]/cases/[caseId]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/CaseWorkspaceClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(personalRoute, /CaseWorkspaceClient/);
+  assert.match(businessRoute, /CaseWorkspaceClient/);
+  assert.match(client, /api\/platform\/cases\?caseId=/);
+  assert.match(client, /\/tasks/);
+  assert.match(client, /action-plan/);
+  assert.match(client, /calendar/);
+  assert.doesNotMatch(personalRoute, /ActionPlanClient/);
 });
 test("lawyer offers are validated, access-bound, auditable, and owner-resolved", async () => {
   assert.equal(lawyerOfferCreateSchema.safeParse({

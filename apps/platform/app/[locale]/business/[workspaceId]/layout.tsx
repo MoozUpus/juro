@@ -5,6 +5,7 @@ import "../../../_platform/platform-shell.css";
 import "../../../_platform/global-search.css";
 import "../../../_platform/dashboard.css";
 import "../../../_platform/cases.css";
+import "../../../_platform/case-workspace.css";
 import "../../../_platform/team.css";
 import "../../../_platform/ai-lawyer.css";
 import "../../../_platform/ai-lawyer-phase4.css";

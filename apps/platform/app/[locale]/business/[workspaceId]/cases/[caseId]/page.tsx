@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 
-import { ActionPlanClient } from "../../../../../_platform/ActionPlanClient";
+import { CaseWorkspaceClient } from "../../../../../_platform/CaseWorkspaceClient";
 import { requireChatGPTUser } from "../../../../../chatgpt-auth";
 import { isLocale, isWorkspaceId, platformBasePath } from "../../../../../../lib/platform/routing";
 
@@ -11,5 +11,5 @@ export default async function BusinessCasePage({ params }: { params: Promise<{ l
   if (!isLocale(locale) || !isWorkspaceId(workspaceId)) notFound();
   const base = platformBasePath(locale, "business", workspaceId);
   await requireChatGPTUser(`${base}/cases/${encodeURIComponent(caseId)}`);
-  return <ActionPlanClient locale={locale} accountType="business" initialCaseId={caseId} />;
+  return <CaseWorkspaceClient locale={locale} caseId={caseId} />;
 }
