@@ -2142,3 +2142,21 @@ The preview is controlled independently by
 development and production. A disabled route returns a non-descriptive 404
 before session processing, preserving a feature-flag rollback path without
 coupling lawyer publication to legal-source operations.
+
+## D-107 — Confirming plan steps creates one audit record per immutable plan revision
+
+Status: accepted and locally regression-tested; staging deployment pending
+Date: 2026-08-02
+
+The action-plan confirmation endpoint already used the plan-step identifier as
+the task ID and `INSERT OR IGNORE`, so retries could not duplicate tasks or
+reminders. It did, however, append a new `tasks_created` case event on every
+retry. The endpoint now reads the owning plan ID and its monotonic revision and
+uses the deterministic event identity
+`action-plan-tasks:<case>:<plan>:<revision>` with `INSERT OR IGNORE`.
+
+The client can therefore safely retry a failed confirmation: exactly one task
+per step, one default reminder per due task, and one audit event are retained for
+that plan revision. A later user-confirmed plan revision receives its own event,
+preserving the append-only case history. No D1 migration, provider call, or
+production change is required.

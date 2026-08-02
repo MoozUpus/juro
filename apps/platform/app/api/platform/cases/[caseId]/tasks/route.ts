@@ -37,7 +37,7 @@ export const POST = withApiErrors(async function POST(
   const db = requireD1();
   const owned = await db.prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1").bind(caseId, workspace.id).first();
   if (!owned) return response({ error: "Дело недоступно.", code: "CASE_UNAVAILABLE" }, 404);
-  const steps = await db.prepare("SELECT s.id,s.title,s.description,s.due_at AS dueAt,s.deadline_type AS deadlineType FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id WHERE p.case_id=? ORDER BY s.ordinal").bind(caseId).all<{ id: string; title: string; description: string | null; dueAt: string | null; deadlineType: string }>();
+  const steps = await db.prepare("SELECT s.id,s.title,s.description,s.due_at AS dueAt,s.deadline_type AS deadlineType,p.id AS planId,p.current_revision AS planRevision FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id WHERE p.case_id=? ORDER BY s.ordinal").bind(caseId).all<{ id: string; title: string; description: string | null; dueAt: string | null; deadlineType: string; planId: string; planRevision: number }>();
   const now = isoNow();
   const statements = steps.results.flatMap((step) => {
     const taskId = step.id;
@@ -47,10 +47,17 @@ export const POST = withApiErrors(async function POST(
       ...(reminderAt ? [db.prepare("INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) VALUES (?,?,'in_app',?,'pending',?,?,?)").bind(`${taskId}:default`, taskId, reminderAt, `${taskId}:in_app:default`, now, now)] : []),
     ];
   });
-  await db.batch([
-    ...statements,
-    db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'tasks_created',?,?)").bind(crypto.randomUUID(), caseId, user.id, JSON.stringify({ source: "action_plan", stepCount: steps.results.length }), now),
-  ]);
+  const plan = steps.results[0];
+  const confirmationStatements = plan
+    ? [db.prepare("INSERT OR IGNORE INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'tasks_created',?,?)").bind(
+      `action-plan-tasks:${caseId}:${plan.planId}:${plan.planRevision}`,
+      caseId,
+      user.id,
+      JSON.stringify({ source: "action_plan", planId: plan.planId, planRevision: plan.planRevision, stepCount: steps.results.length }),
+      now,
+    )]
+    : [];
+  await db.batch([...statements, ...confirmationStatements]);
   const count = await db.prepare("SELECT count(*) AS count FROM tasks WHERE case_id=? AND workspace_id=?").bind(caseId, workspace.id).first<{ count: number }>();
   return response({ ok: true, taskCount: count?.count ?? 0 }, 201);
 });

@@ -1181,6 +1181,16 @@ test("action-plan history snapshots are tenant-scoped and immutable", async () =
   assert.match(migration, /action_plan_versions_no_update/);
   assert.match(migration, /action_plan_versions_no_delete/);
 });
+
+test("action-plan task confirmation is tenant-scoped and idempotent per plan revision", async () => {
+  const route = await readFile(new URL("../app/api/platform/cases/[caseId]/tasks/route.ts", import.meta.url), "utf8");
+  assert.match(route, /WHERE id=\? AND workspace_id=\? AND archived_at IS NULL/);
+  assert.match(route, /p\.id AS planId,p\.current_revision AS planRevision/);
+  assert.match(route, /INSERT OR IGNORE INTO tasks/);
+  assert.match(route, /INSERT OR IGNORE INTO case_events/);
+  assert.match(route, /action-plan-tasks:\$\{caseId\}:\$\{plan\.planId\}:\$\{plan\.planRevision\}/);
+  assert.match(route, /planRevision: plan\.planRevision/);
+});
 test("lawyer offers are validated, access-bound, auditable, and owner-resolved", async () => {
   assert.equal(lawyerOfferCreateSchema.safeParse({
     scopeDescription: "Проверить договор, подготовить замечания и согласовать безопасную редакцию.",
