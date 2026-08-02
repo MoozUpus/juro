@@ -109,6 +109,7 @@ export function ActionPlanClient({
   const [applyingChangesFor, setApplyingChangesFor] = useState<string | null>(null);
   const [openCase, setOpenCase] = useState<string | null>(initialCaseId ?? null);
   const [versionsByCase, setVersionsByCase] = useState<Record<string, PlanVersion[]>>({});
+  const [selectedHistoryVersionByCase, setSelectedHistoryVersionByCase] = useState<Record<string, string>>({});
   const [loadingVersionsFor, setLoadingVersionsFor] = useState<string | null>(null);
   const [creatingTasksFor, setCreatingTasksFor] = useState<string | null>(null);
 
@@ -316,11 +317,31 @@ export function ActionPlanClient({
                       </button>
                       {versionsByCase[item.id]?.length ? <ol>
                         {versionsByCase[item.id].map((entry) => <li key={entry.id}>
-                          <strong>{ru ? "Версия " + entry.version : entry.version + "-versiya"}</strong>
-                          <span>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(entry.createdAt))}</span>
-                          <small>{entry.snapshot ? entry.snapshot.progressPercent + "% · " + entry.snapshot.steps.filter((step) => step.status === "completed").length + "/" + entry.snapshot.steps.length : (ru ? "Снимок недоступен" : "Snapshot mavjud emas")}</small>
+                          <button type="button" aria-pressed={selectedHistoryVersionByCase[item.id] === entry.id} onClick={() => setSelectedHistoryVersionByCase((all) => ({ ...all, [item.id]: entry.id }))}>
+                            <strong>{ru ? "Версия " + entry.version : entry.version + "-versiya"}</strong>
+                            <span>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(entry.createdAt))}</span>
+                            <small>{entry.snapshot ? entry.snapshot.progressPercent + "% · " + entry.snapshot.steps.filter((step) => step.status === "completed").length + "/" + entry.snapshot.steps.length : (ru ? "Снимок недоступен" : "Snapshot mavjud emas")}</small>
+                          </button>
                         </li>)}
                       </ol> : null}
+                      {(() => {
+                        const versions = versionsByCase[item.id] || [];
+                        const selectedId = selectedHistoryVersionByCase[item.id];
+                        const index = versions.findIndex((entry) => entry.id === selectedId);
+                        const selectedVersion = index >= 0 ? versions[index] : null;
+                        const previousVersion = index >= 0 ? versions[index + 1] : null;
+                        if (!selectedVersion?.snapshot || !previousVersion?.snapshot) return selectedVersion ? <p className="plan-history-empty">{ru ? "Для первой версии нет предыдущего снимка для сравнения." : "Birinchi versiyani solishtirish uchun oldingi snapshot yo‘q."}</p> : null;
+                        const previousSteps = new Map(previousVersion.snapshot.steps.map((step) => [step.id, step]));
+                        const selectedSteps = new Map(selectedVersion.snapshot.steps.map((step) => [step.id, step]));
+                        const changes = selectedVersion.snapshot.steps.flatMap((step) => {
+                          const before = previousSteps.get(step.id);
+                          if (!before) return [`${step.title}: ${ru ? "добавлен" : "qo‘shildi"}`];
+                          const detail = [before.status !== step.status ? `${before.status} → ${step.status}` : "", before.dueAt !== step.dueAt ? `${before.dueAt || (ru ? "без срока" : "muddat yo‘q")} → ${step.dueAt || (ru ? "без срока" : "muddat yo‘q")}` : ""].filter(Boolean).join(" · ");
+                          return detail ? [`${step.title}: ${detail}`] : [];
+                        });
+                        previousVersion.snapshot.steps.forEach((step) => { if (!selectedSteps.has(step.id)) changes.push(`${step.title}: ${ru ? "удалён" : "olib tashlandi"}`); });
+                        return <section className="plan-history-diff" aria-live="polite"><h4>{ru ? `Различия: версия ${selectedVersion.version} и ${previousVersion.version}` : `${selectedVersion.version}- va ${previousVersion.version}-versiyalar farqi`}</h4>{changes.length ? <ul>{changes.map((change) => <li key={change}>{change}</li>)}</ul> : <p>{ru ? "Содержимое шагов не изменилось." : "Qadamlar mazmuni o‘zgarmagan."}</p>}</section>;
+                      })()}
                     </section>
                     {Object.values(pendingChangesByCase[item.id] || {}).length > 0 && <section className="plan-change-preview" aria-labelledby={`plan-preview-${item.id}`}>
                       <div>

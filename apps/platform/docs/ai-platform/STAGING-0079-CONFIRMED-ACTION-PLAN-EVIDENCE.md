@@ -8,6 +8,7 @@ Date: 2026-08-02
 - The handler resolves the active workspace on the server, verifies every step belongs to the case plan, and uses the current plan revision as an optimistic concurrency guard.
 - A successful batch updates all requested steps, any already-created linked tasks/reminders, case deadline metadata, one immutable `action_plan_versions` snapshot, and one case audit event.
 - The action-plan screen now stages date/status changes locally, renders a RU/UZ diff, and requires the user to explicitly select **Confirm and apply** before persisting one new plan version.
+- Persisted history can be selected to compare one immutable version with its immediately preceding snapshot, showing added/removed/changed step status and deadline values without changing either snapshot.
 - A conflict returns `VERSION_CONFLICT`; the client discards only the unpersisted draft and reloads server state. No plan mutation occurs before the confirmation request.
 
 ## Safety boundaries
@@ -33,6 +34,6 @@ The route is included in the staging Worker build. A protected authenticated bro
 ## Staging deployment
 
 - Worker: `juro-platform-staging`
-- Worker version: `3d9f261b-fa7e-4408-a12f-3d167656918a`
+- Worker versions: `3d9f261b-fa7e-4408-a12f-3d167656918a` (confirmation flow), `6c8a4116-d30d-4999-be8f-3e216a8a7a0e` (history diff)
 - Deployment command: `npm run deploy:staging` — PASS
 - Bound storage shown by Wrangler: staging D1 `juro-staging`, private R2 `juro-staging-files`, backup R2 `juro-staging-backups`, quarantine R2 `juro-staging-quarantine`; no production binding was deployed.

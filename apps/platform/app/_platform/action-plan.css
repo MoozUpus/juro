@@ -66,6 +66,16 @@
 .plan-change-actions > button:not(.plan-primary) { min-height: 42px; border: 1px solid #b7c0cc; border-radius: 9px; background: #fff; color: #253850; padding: 0 14px; font: inherit; font-weight: 700; }
 .plan-change-actions > button:focus-visible { outline: 3px solid #87631f; outline-offset: 2px; }
 
+.plan-history ol { display: grid; gap: 8px; padding: 0; list-style: none; }
+.plan-history li > button { display: grid; width: 100%; gap: 3px; border: 1px solid #d7dfe7; border-radius: 9px; background: #fff; color: #273a51; padding: 10px 12px; text-align: left; font: inherit; }
+.plan-history li > button[aria-pressed=true] { border-color: #8c6c2c; background: #fffaf0; }
+.plan-history li > button:focus-visible { outline: 3px solid #87631f; outline-offset: 2px; }
+.plan-history li > button span,.plan-history li > button small,.plan-history-empty { color: #607088; font-size: 13px; }
+.plan-history-diff { margin-top: 10px; border-left: 3px solid #be974f; background: #f8f6f2; padding: 12px; }
+.plan-history-diff h4 { margin: 0 0 8px; color: #26394f; font-size: 14px; }
+.plan-history-diff ul { display: grid; gap: 5px; margin: 0; padding-left: 18px; color: #42556c; font-size: 13px; }
+.plan-history-diff p { margin: 0; color: #607088; font-size: 13px; }
+
 @media (max-width: 1180px) {
   .plan-step {
     grid-template-columns: 32px minmax(0, 1fr) minmax(132px, 150px) 36px;

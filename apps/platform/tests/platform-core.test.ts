@@ -1287,6 +1287,8 @@ test("confirmed action-plan changes are validated, scoped, and saved as one vers
   assert.match(route, /INSERT INTO action_plan_versions/);
   assert.match(client, /Предпросмотр версии/);
   assert.match(client, /Подтвердить и применить/);
+  assert.match(client, /Различия: версия/);
+  assert.match(client, /selectedHistoryVersionByCase/);
   assert.match(client, /\/api\/platform\/cases\/\$\{item\.id\}\/plan/);
 });
 
