@@ -226,6 +226,7 @@ Protected staging now contains a functional bounded slice connecting cases, plan
 - neutral inaccessible-object response;
 - RU/UZ date and complete status controls;
 - valid case/step context preserved across library, category, template, back, and locale navigation;
+- an explicit AI-chat confirmation can convert only a persisted, tenant-owned structured response into one new UUID-compatible case, immutable version-1 plan, steps, tasks, case event, and workspace audit event; client-supplied plan text is never accepted and retries return the existing case;
 - existing builder-side tenant validation retained before draft creation;
 - accessible expansion state, touch target, responsive layout, and reduced-motion behavior.
 
