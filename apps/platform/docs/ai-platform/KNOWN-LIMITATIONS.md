@@ -234,10 +234,15 @@ The deployed Worker now exposes both provider secret names and server-side model
 
 - A real malware scanner is not connected; every new document-analysis upload remains quarantined and unavailable to AI/download.
 - The malware queue binding is intentionally not attached and no fake scan result is produced.
-- OCR, page counting, bounding boxes, extraction, Claude analysis, OpenAI fallback, corrections, exports, and multi-file packages are not implemented by this slice.
+- The later "Phase 5 async-analysis" checkpoint supersedes this initial
+  secure-upload baseline for bounded extraction, structured provider adapters,
+  and report exports. It must not be read as a claim that those later slices are
+  absent.
 - ZIP/DOCX now receive bounded central-directory, path, nesting, encryption, symlink, member, expansion-ratio/size, and OOXML structure checks. Local-header identity, CRC verification, decompression timeout, and the real isolated scanner/extractor must still revalidate before any derivative or AI access.
 - The browser computes SHA-256 from one in-memory `ArrayBuffer`; this does not buffer the upload in the Worker, but a later client-side incremental hash path may improve low-memory devices.
-- Fetch upload progress is not yet surfaced; the UI has a busy state but no byte-level progress indicator.
+- Upload byte progress is surfaced through the secure XHR client on both the
+  dashboard and document-review surfaces. Authenticated browser verification of
+  that UI remains open; it is not inferred from the component source alone.
 - Authenticated staging HTTP and R2 round-trip evidence remains open because the available browser-control kernel fails before connecting to the existing Access session. Access was not bypassed.
 - New document-analysis quarantine uploads use the separate private staging quarantine bucket with `quarantine-v2/` keys. Existing legacy `quarantine/` keys remain in the primary bucket for backward-compatible deletion; no automatic migration is claimed.
 - No Phase 5 production readiness or document-analysis quality threshold is claimed.

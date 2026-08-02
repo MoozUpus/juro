@@ -35,9 +35,14 @@ test("secure upload routes enforce streaming, checksum, tenant, and quarantine b
 test("dashboard and review surfaces use the secure upload client", () => {
   const dashboard = source("app/_platform/DashboardClient.tsx");
   const review = source("app/_platform/DocumentReviewClient.tsx");
+  const uploadClient = source("lib/document-analysis/client-upload.ts");
   assert.match(dashboard, /uploadDocumentForAnalysis\(file, locale, setUploadProgress\)/);
   assert.match(review, /uploadDocumentForAnalysis\(file, locale, setUploadProgress\)/);
   assert.match(dashboard, /role="progressbar"/);
+  assert.match(review, /role="progressbar"/);
+  assert.match(uploadClient, /new XMLHttpRequest\(\)/);
+  assert.match(uploadClient, /request\.upload\.addEventListener\("progress"/);
+  assert.match(uploadClient, /x-juro-file-sha256/);
   assert.doesNotMatch(`${dashboard}\n${review}`, /new FormData\(\)/);
 });
 
