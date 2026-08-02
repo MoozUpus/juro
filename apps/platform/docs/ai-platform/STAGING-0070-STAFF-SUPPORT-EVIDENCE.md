@@ -12,6 +12,11 @@ append-only `workspace_audit_events` table before any message content is
 returned. Staff replies remain CSRF-protected and create a separate
 `support_ticket_replied` event.
 
+The current staged client localizes all support status, priority, and
+author-role labels in RU/UZ rather than exposing storage enums. It announces
+loading/detail state through a polite live region, uses an explicit error alert,
+and gives every ticket-opening control an accessible name.
+
 No support message text is included in audit metadata. User-facing ticket
 access remains limited to the active workspace and original requester.
 
@@ -19,7 +24,7 @@ access remains limited to the active workspace and original requester.
 
 - Environment: `staging`
 - Worker: `juro-platform-staging`
-- Worker version: `5dfab985-173c-48c0-9ddd-57c02c20c941`
+- Worker version: `554bea99-5a9b-4c3a-a5ef-e1678c755ca5`
 - D1 binding: existing `juro-staging` (schema unchanged)
 - Deployment command: `npm run deploy:staging`
 - Staging route: `https://staging.app.juro.uz/ru/admin/support`
