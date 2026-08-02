@@ -2222,7 +2222,7 @@ route remains private/no-store and preserves the existing CSRF guard for writes.
 
 ## D-111 — Calendar is a tenant-scoped projection of plans and confirmed tasks
 
-Status: accepted, pending staging deployment
+Status: accepted and deployed to staging
 Date: 2026-08-02
 
 The calendar deliberately does not introduce a second deadline store. It reads
