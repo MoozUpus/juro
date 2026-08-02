@@ -23,7 +23,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
   if (query.length < 2) return response({ query, results: [] });
   const like = likeValue(query);
   const db = requireD1();
-  const [cases, documents, conversations, comparisons, templates, sources] = await db.batch([
+  const [cases, documents, conversations, comparisons, tasks, analyses, templates, lawyers, sources] = await db.batch([
     db.prepare(
       `SELECT id,title,description AS subtitle,updated_at AS updatedAt
        FROM cases WHERE workspace_id=? AND archived_at IS NULL
@@ -51,11 +51,32 @@ export const GET = withApiErrors(async function GET(request: Request) {
        ORDER BY c.updated_at DESC LIMIT 6`,
     ).bind(workspace.id, user.id, like, like),
     db.prepare(
+      `SELECT t.id,t.case_id AS caseId,t.title,coalesce(t.description,'') AS subtitle,
+        t.updated_at AS updatedAt
+       FROM tasks t WHERE t.workspace_id=? AND t.owner_user_id=? AND t.status!='cancelled'
+         AND (t.title LIKE ? ESCAPE '\\' OR t.description LIKE ? ESCAPE '\\')
+       ORDER BY t.updated_at DESC LIMIT 6`,
+    ).bind(workspace.id, user.id, like, like),
+    db.prepare(
+      `SELECT a.id,f.file_name AS title,a.status AS subtitle,a.updated_at AS updatedAt
+       FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
+       WHERE a.workspace_id=? AND a.owner_user_id=? AND f.file_name LIKE ? ESCAPE '\\'
+       ORDER BY a.updated_at DESC LIMIT 6`,
+    ).bind(workspace.id, user.id, like),
+    db.prepare(
       `SELECT t.key AS id,l.name AS title,t.category AS subtitle,t.updated_at AS updatedAt
        FROM document_templates t JOIN document_template_locales l ON l.template_id=t.id
        WHERE t.active=1 AND l.language=? AND l.name LIKE ? ESCAPE '\\'
        ORDER BY l.name LIMIT 6`,
     ).bind(locale, like),
+    db.prepare(
+      `SELECT id,display_name AS title,coalesce(firm_name,'') AS subtitle,
+        coalesce(public_approved_at,created_at) AS updatedAt
+       FROM lawyer_profiles
+       WHERE status='public_approved' AND public_approved_at IS NOT NULL
+         AND (display_name LIKE ? ESCAPE '\\' OR firm_name LIKE ? ESCAPE '\\')
+       ORDER BY display_name COLLATE NOCASE LIMIT 6`,
+    ).bind(like, like),
     db.prepare(
       `SELECT id,act_title AS title,coalesce(act_identifier,'') AS subtitle,
         last_checked_at AS updatedAt,official_url AS officialUrl,
@@ -75,7 +96,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
       ...withType("document", documents.results),
       ...withType("conversation", conversations.results),
       ...withType("comparison", comparisons.results),
+      ...withType("task", tasks.results),
+      ...withType("analysis", analyses.results),
       ...withType("template", templates.results),
+      ...withType("lawyer", lawyers.results),
       ...withType(
         "source",
         filterTrustedVerifiedLegalSources(

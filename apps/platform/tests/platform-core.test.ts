@@ -976,6 +976,10 @@ test("global search is tenant-scoped, escapes LIKE input and avoids document-tex
   assert.ok(source.includes("ESCAPE '\\\\'"));
   assert.ok(source.includes('replaceAll("%", "\\\\%")'));
   assert.doesNotMatch(source, /final_content|auto_content|structured_json AS/);
+  for (const table of ["tasks", "document_analyses", "lawyer_profiles"]) assert.match(source, new RegExp(table));
+  assert.match(source, /t\.workspace_id=\? AND t\.owner_user_id=\?/);
+  assert.match(source, /a\.workspace_id=\? AND a\.owner_user_id=\?/);
+  assert.match(source, /status='public_approved' AND public_approved_at IS NOT NULL/);
 });
 
 test("legislation monitoring never auto-publishes or invents feed entries", async () => {

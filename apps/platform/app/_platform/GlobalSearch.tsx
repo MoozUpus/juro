@@ -8,12 +8,15 @@ import {
   BookOpenCheck,
   Bot,
   BriefcaseBusiness,
+  CheckSquare,
   FileDiff,
   FilePenLine,
   Files,
+  FileSearch,
   LoaderCircle,
   Search,
   X,
+  UserRound,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -23,10 +26,11 @@ import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 type SearchResult = {
   id: string;
-  type: "case" | "document" | "conversation" | "comparison" | "template" | "source";
+  type: "case" | "document" | "conversation" | "comparison" | "task" | "analysis" | "template" | "lawyer" | "source";
   title: string;
   subtitle: string | null;
   updatedAt: string;
+  caseId?: string;
   officialUrl?: string;
 };
 
@@ -35,7 +39,10 @@ const icons = {
   document: Files,
   conversation: Bot,
   comparison: FileDiff,
+  task: CheckSquare,
+  analysis: FileSearch,
   template: FilePenLine,
+  lawyer: UserRound,
   source: BookOpenCheck,
 } as const;
 
@@ -162,7 +169,7 @@ export function GlobalSearch({
                   if (event.key === "ArrowUp") { event.preventDefault(); setActive((current) => Math.max(current - 1, 0)); }
                   if (event.key === "Enter") { event.preventDefault(); openActive(); }
                 }}
-                placeholder={ru ? "Чаты, документы, дела, сравнения, шаблоны, источники" : "Chatlar, hujjatlar, ishlar, taqqoslashlar, shablonlar, manbalar"}
+                placeholder={ru ? "Чаты, документы, дела, задачи, анализы, юристы, источники" : "Chatlar, hujjatlar, ishlar, vazifalar, tahlillar, yuristlar, manbalar"}
                 aria-controls="global-search-results"
                 aria-activedescendant={resultLinks[active] ? `global-search-result-${active}` : undefined}
               />
@@ -208,7 +215,10 @@ function resultHref(result: SearchResult, base: string, query: string) {
   if (result.type === "document") return `${base}/documents/${encodeURIComponent(result.id)}`;
   if (result.type === "conversation") return `${base}/ai-chat?conversationId=${encodeURIComponent(result.id)}`;
   if (result.type === "comparison") return `${base}/documents/comparisons/${encodeURIComponent(result.id)}`;
+  if (result.type === "task") return result.caseId ? `${base}/cases/${encodeURIComponent(result.caseId)}` : `${base}/cases`;
+  if (result.type === "analysis") return `${base}/document-review?analysisId=${encodeURIComponent(result.id)}`;
   if (result.type === "template") return `${base}/document-builder?q=${encodeURIComponent(query)}`;
+  if (result.type === "lawyer") return `${base}/lawyers/${encodeURIComponent(result.id)}`;
   return safeOfficialUrl(result.officialUrl || "") ? result.officialUrl! : `${base}/monitoring`;
 }
 
@@ -226,7 +236,10 @@ function typeLabel(type: SearchResult["type"], ru: boolean) {
     document: ["Документ", "Hujjat"],
     conversation: ["Диалог", "Suhbat"],
     comparison: ["Сравнение", "Taqqoslash"],
+    task: ["Задача", "Vazifa"],
+    analysis: ["Анализ", "Tahlil"],
     template: ["Шаблон", "Shablon"],
+    lawyer: ["Юрист", "Yurist"],
     source: ["Официальный источник", "Rasmiy manba"],
   } as const;
   return labels[type][ru ? 0 : 1];
