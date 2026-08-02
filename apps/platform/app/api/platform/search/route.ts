@@ -14,6 +14,16 @@ function likeValue(value: string) {
   return `%${value.replaceAll("\\", "\\\\").replaceAll("%", "\\%").replaceAll("_", "\\_")}%`;
 }
 
+async function hasTable(db: D1Database, table: string) {
+  return Boolean(await db.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1",
+  ).bind(table).first());
+}
+
+function emptySearchRows(db: D1Database, columns: string) {
+  return db.prepare(`SELECT ${columns} WHERE 0`);
+}
+
 export const GET = withApiErrors(async function GET(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
@@ -23,6 +33,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
   if (query.length < 2) return response({ query, results: [] });
   const like = likeValue(query);
   const db = requireD1();
+  const [tasksAvailable, lawyersAvailable] = await Promise.all([
+    hasTable(db, "tasks"),
+    hasTable(db, "lawyer_profiles"),
+  ]);
   const [cases, documents, conversations, comparisons, tasks, analyses, templates, lawyers, sources] = await db.batch([
     db.prepare(
       `SELECT id,title,description AS subtitle,updated_at AS updatedAt
@@ -50,13 +64,15 @@ export const GET = withApiErrors(async function GET(request: Request) {
          AND (one.file_name LIKE ? ESCAPE '\\' OR two.file_name LIKE ? ESCAPE '\\')
        ORDER BY c.updated_at DESC LIMIT 6`,
     ).bind(workspace.id, user.id, like, like),
-    db.prepare(
+    tasksAvailable ? db.prepare(
       `SELECT t.id,t.case_id AS caseId,t.title,coalesce(t.description,'') AS subtitle,
         t.updated_at AS updatedAt
        FROM tasks t WHERE t.workspace_id=? AND t.owner_user_id=? AND t.status!='cancelled'
          AND (t.title LIKE ? ESCAPE '\\' OR t.description LIKE ? ESCAPE '\\')
        ORDER BY t.updated_at DESC LIMIT 6`,
-    ).bind(workspace.id, user.id, like, like),
+    ).bind(workspace.id, user.id, like, like) : emptySearchRows(
+      db, "'' AS id,NULL AS caseId,'' AS title,'' AS subtitle,'' AS updatedAt",
+    ),
     db.prepare(
       `SELECT a.id,f.file_name AS title,a.status AS subtitle,a.updated_at AS updatedAt
        FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
@@ -69,14 +85,16 @@ export const GET = withApiErrors(async function GET(request: Request) {
        WHERE t.active=1 AND l.language=? AND l.name LIKE ? ESCAPE '\\'
        ORDER BY l.name LIMIT 6`,
     ).bind(locale, like),
-    db.prepare(
-      `SELECT id,display_name AS title,coalesce(firm_name,'') AS subtitle,
+    lawyersAvailable ? db.prepare(
+      `SELECT id,display_name AS title,'' AS subtitle,
         coalesce(public_approved_at,created_at) AS updatedAt
        FROM lawyer_profiles
        WHERE status='public_approved' AND public_approved_at IS NOT NULL
-         AND (display_name LIKE ? ESCAPE '\\' OR firm_name LIKE ? ESCAPE '\\')
+         AND display_name LIKE ? ESCAPE '\\'
        ORDER BY display_name COLLATE NOCASE LIMIT 6`,
-    ).bind(like, like),
+    ).bind(like) : emptySearchRows(
+      db, "'' AS id,'' AS title,'' AS subtitle,'' AS updatedAt",
+    ),
     db.prepare(
       `SELECT id,act_title AS title,coalesce(act_identifier,'') AS subtitle,
         last_checked_at AS updatedAt,official_url AS officialUrl,

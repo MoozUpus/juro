@@ -2303,3 +2303,18 @@ run as `finalizing`; stale cleanup never changes that state. The old key is
 never reused: the client must create a fresh request after `AI_RUN_EXPIRED`.
 This prevents a delayed execution from persisting a second answer or consuming
 the same usage reservation twice.
+
+## D-117 — Global search tolerates additive-schema rollout states
+
+Status: accepted and deployed to staging (Worker version `f6effb4a-e04f-4c83-822e-1f30c3f09424`)
+Date: 2026-08-02
+
+Global search is available during and after expand-contract migrations. It
+checks the D1 schema for the additive `tasks` and `lawyer_profiles` tables
+before including their result queries in the read batch. When a table is not
+yet present, the route supplies an empty typed result instead of failing the
+entire search request. The lawyer result deliberately uses the stable
+`display_name` field only, so rollout does not depend on a later optional firm
+column. This is a read-only compatibility boundary: it does not mask a failed
+migration in release checks and introduces neither a migration nor a new
+resource.

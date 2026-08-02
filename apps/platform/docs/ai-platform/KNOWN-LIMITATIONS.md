@@ -2,7 +2,7 @@
 
 > Current authoritative checkpoint — 2026-08-02: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`
-> is deployed as Worker version `aaef9157-ce92-4c49-a6d7-621d94b4edfb`, with
+> is deployed as Worker version `f6effb4a-e04f-4c83-822e-1f30c3f09424`, with
 > isolated `juro-staging` D1, staging R2/Queues/Vectorize, and no production
 > mutation. Read-only secret inventory confirms names for OpenAI, Anthropic,
 > Resend, Turnstile and the identity keyring; it does not prove provider calls.
@@ -13,6 +13,11 @@
 > voice-with-avatar remains off with text-only fallback. The local browser
 > control runtime remains unavailable, so visual, accessibility and real-device
 > assertions are open. Production remains unchanged.
+
+> The staging deployment includes a search-route compatibility fix for a
+> local or partially migrated D1 schema without `tasks` or `lawyer_profiles`.
+> It is locally covered and does not replace the requirement to apply and verify
+> the planned migrations in staging before a release.
 
 > Phase 5 OCR checkpoint — 2026-07-31: migration `0042` and the Workers AI
 > `toMarkdown` OCR/extraction consumer pass locally, including tenant isolation,
