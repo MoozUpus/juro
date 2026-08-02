@@ -227,7 +227,11 @@ The deployed Worker now exposes both provider secret names and server-side model
 - Edit, regenerate, and immutable branch history are deployed to protected staging, but live provider-backed branch creation and authenticated browser evidence remain open because only fixed synthetic provider probes are verified.
 - Reconnect/resume, durable partial-stream recovery, memory, guest flow, and full entitlement integration remain open.
 - Conversation facts remain conversation-scoped rather than branch-scoped; source evidence remains attached to the exact answer message.
-- Retrieval is exact lexical retrieval from current verified D1 material; Vectorize hybrid retrieval, reranking, and citation revalidation remain open.
+- Hybrid retrieval is implemented as lexical D1 matching plus optional isolated
+  Vectorize matches. A vector id is never a citation: each candidate is reloaded
+  from D1 and verified against the active immutable publication evidence before
+  it can enter a prompt. Live indexed-corpus, reranking, and authenticated
+  staging evidence remain open.
 - Authenticated browser QA is blocked by a local browser-control kernel failure before connection; anonymous Access denial is verified and Access was not bypassed.
 
 ## Phase 5 secure-upload open gates — 2026-07-30
@@ -266,7 +270,8 @@ The following gates remain open:
 - No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.
 - no live provider request/fallback, completed result, token/cost row from a real provider, or authenticated browser flow is proven;
 - scanned/image OCR, actual ZIP/multi-file package extraction and relationship analysis, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
-- retrieval is exact lexical over current verified D1 rows, not complete hybrid Vectorize/reranking/citation revalidation;
+- live indexed-corpus and reranking evidence remain open; the implemented hybrid
+  D1/Vectorize retrieval still revalidates every candidate citation server-side;
 - corrections, redline, exports, the 100-package evaluation, DLQ redrive, and full performance/security/browser gates remain incomplete.
 
 No Phase 5 production-readiness claim is made.

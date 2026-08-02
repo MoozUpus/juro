@@ -431,9 +431,10 @@ async function hasIndexedVerifiedSource(
   return Boolean(row?.found);
 }
 /**
- * Exact lexical retrieval over only current, activated official publications.
- * Every result is revalidated against publication/lifecycle evidence and the
- * complete immutable section/chunk set before any text enters an AI prompt.
+ * Hybrid lexical/semantic retrieval over only current, activated official
+ * publications. Semantic matches are only deterministic Vectorize ids: every
+ * result is reloaded and revalidated against publication/lifecycle evidence and
+ * the complete immutable section/chunk set before any text enters an AI prompt.
  */
 export async function retrieveVerifiedLegalSources(
   db: D1Database,
