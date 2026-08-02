@@ -37,6 +37,7 @@ test("dashboard and review surfaces use the secure upload client", () => {
   const review = source("app/_platform/DocumentReviewClient.tsx");
   assert.match(dashboard, /uploadDocumentForAnalysis\(file, locale, setUploadProgress\)/);
   assert.match(review, /uploadDocumentForAnalysis\(file, locale, setUploadProgress\)/);
+  assert.match(dashboard, /role="progressbar"/);
   assert.doesNotMatch(`${dashboard}\n${review}`, /new FormData\(\)/);
 });
 

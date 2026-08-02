@@ -264,7 +264,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
                 <span>{copy.consent}</span>
               </label>
             )}
-            {uploadProgress && <p className="dashboard-upload-status" role="status" aria-live="polite">{uploadStatus}</p>}
+            {uploadProgress && <><div className="dashboard-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div><p className="dashboard-upload-status" role="status" aria-live="polite">{uploadStatus}</p></>}
           </form>
         </div>
         <GoldenRoute locale={locale} label={copy.journeyLabel} steps={copy.journeySteps} />
