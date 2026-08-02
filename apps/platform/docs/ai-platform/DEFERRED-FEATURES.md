@@ -45,12 +45,11 @@ unattached and rejects fail-closed until a real scanner is approved.
 ### Lawyer-directory staging gate
 
 The additive migrations `0058` and `0059`, the bilingual self-service
-professional-profile UI, and the fresh-MFA staff moderation inbox are locally
-implemented and tested. No staging D1 change, Worker deployment, public profile
-publication, or browser flow is claimed until a new private backup and an
-explicit authorization for both migrations are executed. Advocate verification
-and formal credential checking remain deliberately deferred; profiles can carry
-only a self-declared advocate state.
+professional-profile UI, and the fresh-MFA staff moderation inbox are applied
+to isolated staging after the recorded private backup and postflight checks.
+Public profile publication and authenticated browser flow are still not claimed.
+Advocate verification and formal credential checking remain deliberately
+deferred; profiles can carry only a self-declared advocate state.
 
 ## Current account-deletion limitations
 

@@ -1,9 +1,9 @@
 # JURO implemented-features checkpoint
 > Current authoritative checkpoint — 2026-08-02: only the evidence in this
 > paragraph is current when it conflicts with older chronological entries.
-> Staging Worker `f6effb4a-e04f-4c83-822e-1f30c3f09424` contains the tested
+> Staging Worker `c9c54208-55be-4d6c-9413-950e0cc78d5f` contains the tested
 > document-analysis trust boundary and atomic AI-response finalization. The
-> deployed staging change additionally makes global search safe while additive
+> deployed staging changes additionally make global search safe while additive
 > `tasks` and `lawyer_profiles` tables are not yet present in a D1 environment,
 > rather than returning a server error for every search request. It runs only
 > against isolated staging bindings. The latest local gate passes
@@ -12,7 +12,8 @@
 > Staging secret *names* include OpenAI and Anthropic, but
 > `STAGING_SYNTHETIC_PROBES_ENABLED` is false; no current live provider
 > response, safe-file analysis, authenticated browser journey, or production
-> behavior is claimed.
+> behavior is claimed. The same version also removes the document-builder
+> `Math.random()` fallback: unavailable Web Crypto fails closed instead.
 > Current branch delta — 2026-07-31: legal chat and document analysis now reject duplicate, missing, citation-free, provider-invented, or referentially incomplete legal sources at provider and persistence boundaries. Provider-authored source metadata is replaced with the canonical server-retrieved record. Invalid output fails as `INVALID_AI_OUTPUT`. The slice has no migration/dependency and is locally verified; staging deployment is not yet claimed.
 
 > Current staging delta — 2026-07-31: the AI and document-analysis paths share an exact publication-evidence retrieval boundary and a dual-corpus freshness gate. Missing full Lex/Advice corpus evidence fails closed; stale evidence is explicitly downgraded in RU/UZ. Tampered publication, lifecycle, section, effective-date, and expiry evidence is rejected. The slice is deployed only to owner-protected staging as version `37687899-f17a-4bdf-9f9c-41c6b509cfb9`; it adds no migration/dependency and does not change production.

@@ -2,7 +2,7 @@
 
 > Current authoritative checkpoint — 2026-08-02: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`
-> is deployed as Worker version `f6effb4a-e04f-4c83-822e-1f30c3f09424`, with
+> is deployed as Worker version `c9c54208-55be-4d6c-9413-950e0cc78d5f`, with
 > isolated `juro-staging` D1, staging R2/Queues/Vectorize, and no production
 > mutation. Read-only secret inventory confirms names for OpenAI, Anthropic,
 > Resend, Turnstile and the identity keyring; it does not prove provider calls.
