@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { BookOpenCheck, Bot, Check, CircleAlert, FileQuestion, History, ListPlus, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, X } from "lucide-react";
+import { BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, ListPlus, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRetryableRequestError, createAiRetryRequest, isUserCancelledAiRequest, shouldOfferAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
@@ -28,6 +28,7 @@ type LegalResult = {
   actionPlan: Array<{ title: string; description: string }>;
   deadlines: Array<{ title: string; dueDate: string | null; calculationMethod: string; confidence: string }>;
   urgency: "normal" | "high" | "critical";
+  suggestedDocument: { templateCode: string | null; title: string; reason: string } | null;
   suggestLawyer: boolean;
   legalDatabaseAsOf: string;
 };
@@ -68,6 +69,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
   const [canRetry, setCanRetry] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [openingSuggestedDocument, setOpeningSuggestedDocument] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -215,6 +217,32 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     }
   }
 
+  async function openSuggestedDocument() {
+    if (!answer?.messageId || answer.result.responseKind !== "answer" || !answer.result.suggestedDocument || openingSuggestedDocument) return;
+    const confirmed = window.confirm(ru
+      ? "Открыть опубликованный шаблон JURO для проверки и заполнения? JURO ещё не создаст документ и не передаст данные в URL."
+      : "Tekshirish va to‘ldirish uchun JUROdagi e’lon qilingan shablon ochilsinmi? JURO hozircha hujjat yaratmaydi va ma’lumotlarni URLga uzatmaydi.");
+    if (!confirmed) return;
+    setOpeningSuggestedDocument(true);
+    setError("");
+    try {
+      const response = await fetch("/api/platform/ai/suggested-document", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ assistantMessageId: answer.messageId, locale }),
+      });
+      const body = await response.json() as { templateCode?: string; categorySlug?: string; error?: string };
+      if (!response.ok || !body.templateCode || !body.categorySlug) {
+        throw new Error(body.error || (ru ? "Шаблон не удалось проверить." : "Shablonni tekshirib bo‘lmadi."));
+      }
+      router.push(`${base}/document-builder/${encodeURIComponent(body.categorySlug)}/${encodeURIComponent(body.templateCode)}`);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setOpeningSuggestedDocument(false);
+    }
+  }
+
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
     <section className="ai-workspace">
@@ -234,6 +262,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} />
             <div className="ai-answer-actions">
               {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => void savePlanToCase()}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : (ru ? "Добавить план в новое дело" : "Rejani yangi ishga qo‘shish")}</button>}
+              {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? (ru ? "Проверяем шаблон…" : "Shablon tekshirilmoqda…") : (ru ? "Открыть шаблон JURO" : "JURO shablonini ochish")}</button>}
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
             </div>
@@ -337,6 +366,7 @@ function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness
     {result.assumptions.length > 0 && <><h3>{ru ? "Предположения" : "Taxminlar"}</h3>{result.assumptions.map((item) => <section className="ai-result-block ai-assumption" key={item.statement}><strong>{item.statement}</strong><p>{item.impact}</p></section>)}</>}
     {result.risks.length > 0 && <><h3>{ru ? "Риски" : "Xavflar"}</h3>{result.risks.map((risk) => <section className={`ai-result-block risk-${risk.level}`} key={`${risk.level}:${risk.title}`}><strong>{risk.title}</strong><p>{risk.explanation}</p></section>)}</>}
     {result.actionPlan.length > 0 && <><h3>{ru ? "План действий" : "Harakatlar rejasi"}</h3><ol>{result.actionPlan.map((step) => <li key={step.title}><strong>{step.title}</strong><p>{step.description}</p></li>)}</ol></>}
+    {result.suggestedDocument && <section className="ai-result-block"><h3>{ru ? "Рекомендованный документ" : "Tavsiya etilgan hujjat"}</h3><strong>{result.suggestedDocument.title}</strong><p>{result.suggestedDocument.reason}</p></section>}
     {result.requiredDocuments.length > 0 && <><h3>{ru ? "Документы" : "Hujjatlar"}</h3><ul>{result.requiredDocuments.map((document) => <li key={document.name}><strong>{document.name}</strong> — {document.reason}</li>)}</ul></>}
     {result.deadlines.length > 0 && <><h3>{ru ? "Сроки" : "Muddatlar"}</h3>{result.deadlines.map((deadline) => <section className="ai-result-block" key={deadline.title}><strong>{deadline.title}{deadline.dueDate ? ` · ${deadline.dueDate}` : ""}</strong><p>{deadline.calculationMethod}</p></section>)}</>}
   </article>;

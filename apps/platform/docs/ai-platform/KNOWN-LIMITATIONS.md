@@ -2,13 +2,17 @@
 
 > Current authoritative checkpoint — 2026-08-03: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`
-> is deployed as Worker version `579cfa2c-7651-4c03-97eb-49c8aedc4ac1`, with
+> is deployed as Worker version `120456d4-0da2-4531-aae4-fbe597bc2329`, with
 > isolated `juro-staging` D1, staging R2/Queues/Vectorize, and no production
 > mutation. Read-only secret inventory confirms names for OpenAI, Anthropic,
 > Resend, Turnstile and the identity keyring; it does not prove provider calls.
 > `STAGING_SYNTHETIC_PROBES_ENABLED` is currently `false`, so no current live
 > provider, fallback, OTP-mailbox, authenticated browser, or Access session
-> result is claimed. The document malware gate remains fail-closed, so uploads
+> result is claimed. The configured OpenAI model produced four stored
+> `PROVIDER_UNAVAILABLE` runs; the Worker now attempts its configured Anthropic
+> fallback for that failure class, but a successful authenticated fallback run
+> is still required before claiming AI-chat availability. The document malware
+> gate remains fail-closed, so uploads
 > cannot reach extraction or AI. The approved rigged 3D Jurobek asset is absent;
 > voice-with-avatar remains off with text-only fallback. The local browser
 > control runtime remains unavailable, so visual, accessibility and real-device

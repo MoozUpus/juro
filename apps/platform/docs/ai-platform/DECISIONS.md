@@ -2419,3 +2419,24 @@ test suite (91/91), staging build, artifact validation, generated Cloudflare
 binding check, and environment matrix validation. A non-authenticated request
 is correctly intercepted by Cloudflare Access. An authenticated browser run is
 still required to prove the end-to-end click path. Production is unchanged.
+
+## D-123 — Provider-unavailable errors may fail over without retrying OpenAI
+
+Status: accepted; deployed to protected staging
+Date: 2026-08-03
+
+`juro-platform-staging` has both provider secret names, but its stored AI runs
+showed `PROVIDER_UNAVAILABLE` while requesting configured OpenAI model
+`gpt-5.6-sol`. A model entitlement/configuration failure is not improved by
+retrying OpenAI, but it is a valid availability failure under JURO's approved
+provider policy. The resilient provider now attempts the already configured
+Anthropic fallback for `PROVIDER_UNAVAILABLE` as well as retryable/invalid
+structured-output failures; explicit provider refusals and user cancellations
+remain non-fallback paths. The fallback is recorded as the actual provider on
+a completed run. The error result contains no provider response body or user
+content.
+
+This changes only protected staging behavior. It does not establish that either
+provider completed a real answer: an authenticated controlled test is still
+required. Staging Worker version `120456d4-0da2-4531-aae4-fbe597bc2329` also
+contains the server-verified AI-to-published-builder-template handoff.

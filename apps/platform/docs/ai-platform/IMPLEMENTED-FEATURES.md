@@ -1,4 +1,11 @@
 # JURO implemented-features checkpoint
+> Current staging delta — 2026-08-03: `juro-platform-staging` Worker version
+> `120456d4-0da2-4531-aae4-fbe597bc2329` resolves an AI-suggested template only
+> from a persisted assistant message after authenticated workspace ownership,
+> then opens the existing published document-builder route. The browser cannot
+> select a template code, title, or case identifier. It also fails over from an
+> unavailable OpenAI run to configured Anthropic; an authenticated successful
+> provider response remains unproven. Production is unchanged.
 > Current authoritative checkpoint — 2026-08-02: only the evidence in this
 > paragraph is current when it conflicts with older chronological entries.
 > Staging Worker `c9c54208-55be-4d6c-9413-950e0cc78d5f` contains the tested

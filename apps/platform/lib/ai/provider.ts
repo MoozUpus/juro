@@ -2,6 +2,7 @@ import { hasAnthropicConfiguration } from "../document-builder/ai/anthropic";
 import { AiUnavailableError, callOpenAiStructured, hasAiConfiguration, type AiStructuredResult } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
 import { anthropicModel, runAnthropicLegalChat } from "./anthropic-provider";
+import { shouldUseAnthropicFallback } from "./provider-fallback";
 import {
   enforceLegalChatSourceBoundary,
   forceClarificationWithoutVerifiedSources,
@@ -170,7 +171,7 @@ function modelForRequest(reasoningMode: "fast" | "deep"): string {
 export function isAnthropicFallbackEligible(error: unknown): boolean {
   return error instanceof AiUnavailableError
     && error.code !== "AI_REFUSED"
-    && (error.retryable || error.code === "INVALID_AI_OUTPUT");
+    && shouldUseAnthropicFallback(error);
 }
 
 class ResilientLegalProvider implements LegalAiProvider {
