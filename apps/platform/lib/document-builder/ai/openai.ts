@@ -6,7 +6,9 @@ export type AiProviderErrorCode =
   | "PROVIDER_TIMEOUT"
   | "INVALID_AI_OUTPUT"
   | "AI_REFUSED"
-  | "AI_CANCELLED";
+  | "AI_CANCELLED"
+  | "ANTHROPIC_PREFLIGHT_FAILED"
+  | "ANTHROPIC_POSTPROCESS_FAILED";
 
 export class AiUnavailableError extends Error {
   readonly code: AiProviderErrorCode;
