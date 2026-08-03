@@ -2,24 +2,26 @@
 
 > Current authoritative runtime checkpoint — 2026-08-04: read-only Cloudflare
 > and D1 evidence confirms active staging Worker
-> `adde6374-cbec-4e20-918d-e6c303ac75e9` at 100% traffic and schema through
-> `0064`; only guest migration `0065` is pending. Provider transport is no
+> `eef56269-2980-42b8-bc76-9a348f6d187b` at 100% traffic and schema through
+> `0066`; guest and voice migrations are applied. Provider transport is no
 > longer the cause of the earlier unavailable state: the latest closed OpenAI
 > and Anthropic probes succeeded, and aggregate `ai_runs` metadata contains
 > completed runs for both providers after the last historical OpenAI failure.
 > This does not prove an authenticated RU/UZ browser flow, citation quality or
 > legal accuracy. See `STAGING-AI-RUNTIME-2026-08-04.md`.
+> All seven reviewed staging Queues now have producer/consumer attachment;
+> `notification.dispatch` passed a remote identifiers-only neutral-rejection
+> probe. Malware scanning remains deliberately unattached and fail-closed.
 
 ## Guest AI local candidate — 2026-08-03
 
 - The one-answer route, encrypted 24-hour storage, clarification flow,
   Turnstile/rate-limit boundary and scheduled purge are implemented and tested
   locally.
-- Additive migration `0065_guest_ai_sessions.sql` is not applied to staging.
-  The cleanup is inert before the table exists and production keeps
-  `GUEST_AI_ENABLED=false`.
-- Private-R2 backup, disposable restore rehearsal, migration checks, deploy,
-  real-provider smoke and protected RU/UZ browser/accessibility QA are open.
+- Additive migration `0065_guest_ai_sessions.sql`, private-R2 backup, disposable
+  restore rehearsal, migration checks and staging deploy are complete. Production
+  keeps `GUEST_AI_ENABLED=false`.
+- Real-provider guest smoke and protected RU/UZ browser/accessibility QA are open.
 
 > Current authoritative checkpoint — 2026-08-03: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`

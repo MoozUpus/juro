@@ -32,8 +32,9 @@ normalization/indexing, and account-deletion cleanup. Each uses the durable
 `job_runs` lease/idempotency boundary. This is not evidence of an end-to-end
 provider, scanner, or delivery result: the queue/DLQ operational matrix still
 needs controlled staging messages, logs, alert delivery, redrive, and ledger
-reconciliation. `notification.dispatch` has no producer/handler because task
-reminders are durably inserted by the scheduled runtime; `malware.scan` remains
+reconciliation. `notification.dispatch` now has an outbox producer and a
+tenant-safe, idempotent staging consumer; a controlled identifiers-only message
+proved remote handler execution and was cleaned up. `malware.scan` remains
 unattached and rejects fail-closed until a real scanner is approved.
 
 ## Product and operations gates

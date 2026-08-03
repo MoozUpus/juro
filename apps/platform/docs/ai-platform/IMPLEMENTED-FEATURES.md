@@ -1,5 +1,19 @@
 # JURO implemented-features checkpoint
 
+> Current authoritative staging checkpoint — 2026-08-04: Worker
+> `eef56269-2980-42b8-bc76-9a348f6d187b` receives 100% of protected staging
+> traffic and D1 is through additive migration `0066`. Guest AI persistence,
+> voice-message storage/retention, task-reminder outbox dispatch and all seven
+> reviewed Queue consumers are deployed. The notification consumer passed a
+> remote identifiers-only delivery probe and its synthetic rows were removed.
+> Local lint, typecheck, complete tests, Cloudflare tests, staging build/artifact,
+> Cloudflare types, secret-pattern scan and 34-scenario document-builder smoke
+> pass; both GitHub validation jobs passed on functional commit `50fa3dc`.
+> This does not close authenticated browser, malware-scanner, complete legal
+> corpus/human review, policy approval, approved 3D asset, production deployment
+> or production UI-replacement gates. Later evidence overrides stale historical
+> “local candidate” and older Worker-version statements below.
+
 ## Phase 4 — Guest AI entry (local candidate)
 
 `/:locale/guest/ai-lawyer` provides one real RU/UZ legal answer without a
@@ -10,8 +24,9 @@ sessions, atomic entitlement reservation and idempotent retry protect the API.
 Clarifications do not consume the answer. Input and output are encrypted at rest
 and purged after 24 hours. The page is `noindex` and offers registration after
 the answer. Focused local service, route, migration, config and scheduler tests
-pass. Migration `0065`, private backup/restore, staging deploy and protected
-RU/UZ provider/browser evidence remain required before this is called live.
+pass. Migration `0065`, private backup/restore and staging deploy are now proven
+by the current checkpoint; protected RU/UZ provider/browser evidence remains
+required before this is called release-ready.
 > Current local delta — 2026-08-03: AI retry no longer leaves a failed,
 > released idempotency record in an endless `processing` response. Unknown
 > transport outcomes retain the same request/key; a server-confirmed terminal
