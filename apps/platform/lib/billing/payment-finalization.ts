@@ -1,6 +1,7 @@
 import { sha256 } from "../auth/crypto";
 import { buildCapturedPaymentLedger } from "./ledger";
 import { subscriptionEntitlementsConfigSchema, type sandboxPaymentEventSchema } from "./input";
+import { finalizeMarketplaceServiceSandboxPayment } from "./marketplace-payment-finalization";
 import type { z } from "zod";
 
 type SandboxPaymentEvent = z.infer<typeof sandboxPaymentEventSchema>;
@@ -72,6 +73,13 @@ export async function finalizeSandboxPayment(
   if (existingEvent) {
     const order = existingEvent.orderId ? await db.prepare("SELECT status FROM marketplace_orders WHERE id=? LIMIT 1").bind(existingEvent.orderId).first<{ status: string }>() : null;
     return Object.freeze({ replay: true, orderId: existingEvent.orderId ?? "", orderStatus: order?.status ?? existingEvent.internalStatus, paymentId: null });
+  }
+
+  const orderKind = await db.prepare(`SELECT o.order_type AS orderType FROM payment_attempts a
+    JOIN marketplace_orders o ON o.id=a.order_id WHERE a.provider='sandbox' AND a.provider_attempt_id=? LIMIT 1`)
+    .bind(event.providerAttemptId).first<{ orderType: string }>();
+  if (orderKind?.orderType === "LEGAL_SERVICE") {
+    return finalizeMarketplaceServiceSandboxPayment(db, event, rawBody, now);
   }
 
   const attempt = await db.prepare(`SELECT a.id AS attemptId,a.payment_id AS paymentId,a.internal_status AS attemptStatus,
