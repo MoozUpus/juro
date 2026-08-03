@@ -1,6 +1,6 @@
 # Voice and avatar checkpoint
 
-Status: implemented in the feature branch and locally verified; not yet deployed to staging.
+Status: the voice-message slice and migration `0066` are deployed to Access-protected staging in Worker version `d22705e4-446a-47f1-825e-b77f1135504d`; authenticated voice E2E and human RU/UZ QA are still pending.
 
 ## Implemented voice-message slice
 
@@ -25,4 +25,4 @@ Models are server-side configuration: `OPENAI_TRANSCRIPTION_MODEL=gpt-4o-transcr
 
 ## Staging gate
 
-Apply migrations `0065` and `0066` only after a private D1 backup. Deploy only with `npm run deploy:staging`, which builds and validates the staging-generated Wrangler configuration. Then verify microphone-denied, upload, transcript editing, AI send, TTS, early delete, 30-day purge scheduling, RU/UZ, mobile keyboard, reduced motion and text-only fallback.
+The private backup, isolated restore, migrations `0065`/`0066`, staging build and staging deployment have passed. Anonymous routes remain protected by Cloudflare Access. Still verify behind Access: microphone denial, upload/finalize/transcription, transcript editing and confirmation, AI send, TTS playback/stop, early delete, 30-day purge scheduling, RU/UZ human quality, mobile keyboard, reduced motion and text-only fallback. Detailed evidence is in `STAGING-0066-VOICE-EVIDENCE.md`.

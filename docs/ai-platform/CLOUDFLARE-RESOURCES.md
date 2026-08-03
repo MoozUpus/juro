@@ -4,9 +4,9 @@ Current read-only verification: 2026-08-04. Staging resources below were queried
 
 ## Staging
 
-- Worker: `juro-platform-staging`; active deployment version before the next release is `6c94e0ab-680e-446c-85c1-ebe22fbb2b3b` at 100% traffic.
-- D1: `juro-staging`, ID `bb716a96-b2fb-4823-90d6-6c228fed181a`, EEUR, 170 tables after migration `0065`.
-- Private R2: `juro-staging-files` (18 objects at verification), `juro-staging-backups` (74 objects), `juro-staging-quarantine` (0 objects). Object counts are operational observations, not application invariants.
+- Worker: `juro-platform-staging`; active deployment version `d22705e4-446a-47f1-825e-b77f1135504d` receives 100% of staging traffic.
+- D1: `juro-staging`, ID `bb716a96-b2fb-4823-90d6-6c228fed181a`, EEUR, 171 tables and 3,964,928 bytes after additive migration `0066`.
+- Private R2: `juro-staging-files` (18 objects at verification), `juro-staging-backups` (77 objects), `juro-staging-quarantine` (0 objects). Object counts are operational observations, not application invariants.
 - Vectorize: `staging-lex-uz`, `staging-advice-uz`, `staging-internal-legal-materials`, and `staging-user-documents`; each exists with 1,536 dimensions and cosine distance.
 - Analytics Engine dataset: `juro-platform-staging` is present in the validated Worker binding artifact.
 
