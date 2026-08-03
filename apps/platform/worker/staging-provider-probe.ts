@@ -11,8 +11,9 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // generation; provider messages and bodies remain excluded. v17 validates the
 // bounded JSON-string tool envelope while preserving the full Zod boundary.
 // v18 exercises the production Anthropic adapter, including its fail-closed
-// normalization and source-boundary enforcement.
-const PROBE_KEY = "staging-anthropic-legal-chat-v18";
+// normalization and source-boundary enforcement. v19 adds bounded stage codes
+// for preflight versus post-processing failures, without logging content.
+const PROBE_KEY = "staging-anthropic-legal-chat-v19";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 

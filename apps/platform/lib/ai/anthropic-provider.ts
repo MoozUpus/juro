@@ -56,16 +56,27 @@ function normalizeAnthropicLegalChatResponse(
 }
 
 export async function runAnthropicLegalChat(input: LegalChatRequest, options: LegalAiRunOptions = {}): Promise<LegalAiRunResult> {
-  await options.onProgress?.({ stage: "provider_started", provider: "anthropic", model: anthropicModel() });
-  const usableSourceIds = new Set(
-    input.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id),
-  );
+  let model: string;
+  let usableSourceIds: Set<string>;
+  try {
+    model = anthropicModel();
+    await options.onProgress?.({ stage: "provider_started", provider: "anthropic", model });
+    usableSourceIds = new Set(
+      input.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id),
+    );
+  } catch {
+    throw new AiUnavailableError(
+      "Резервный AI-провайдер не смог подготовить запрос.",
+      "ANTHROPIC_PREFLIGHT_FAILED",
+      false,
+    );
+  }
   const result = await callAnthropicStructured<LegalChatResponse>({
     schema: legalChatJsonSchema,
     parse: (value) => normalizeAnthropicLegalChatResponse(value, input),
     timeoutMs: input.reasoningMode === "deep" ? 75_000 : 45_000,
     requestId: input.requestId,
-    model: anthropicModel(),
+    model,
     signal: options.signal,
     strictOutput: false,
     instructions: [
@@ -98,49 +109,52 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
       })),
     },
   });
-  const constrainedData = usableSourceIds.size === 0
-    ? forceClarificationWithoutVerifiedSources(result.data, {
-      locale: input.locale,
-      answerMode: input.answerMode,
-      reasoningMode: input.reasoningMode,
-      legalDatabaseAsOf: input.legalDatabaseAsOf,
-    })
-    : {
-      ...result.data,
-      language: input.locale,
-      jurisdiction: "UZ" as const,
-      answerMode: input.answerMode,
-      reasoningMode: input.reasoningMode,
-      legalDatabaseAsOf: input.legalDatabaseAsOf,
-    };
-  let data: LegalChatResponse;
   try {
-    data = enforceLegalChatSourceBoundary(constrainedData, usableSourceIds);
-  } catch {
+    const constrainedData = usableSourceIds.size === 0
+      ? forceClarificationWithoutVerifiedSources(result.data, {
+        locale: input.locale,
+        answerMode: input.answerMode,
+        reasoningMode: input.reasoningMode,
+        legalDatabaseAsOf: input.legalDatabaseAsOf,
+      })
+      : {
+        ...result.data,
+        language: input.locale,
+        jurisdiction: "UZ" as const,
+        answerMode: input.answerMode,
+        reasoningMode: input.reasoningMode,
+        legalDatabaseAsOf: input.legalDatabaseAsOf,
+      };
+    const data = enforceLegalChatSourceBoundary(constrainedData, usableSourceIds);
+    const sourceById = new Map(input.sources.map((source) => [source.id, source]));
+    return {
+      ...result,
+      data: {
+        ...data,
+        sources: data.sources.map((reference) => {
+          const source = sourceById.get(reference.sourceId);
+          if (!source) throw new TypeError("Verified source metadata is unavailable.");
+          return {
+            sourceId: source.id,
+            actTitle: source.actTitle,
+            actIdentifier: source.actIdentifier,
+            article: source.article ?? null,
+            excerpt: source.excerpt ?? null,
+            originalUrl: source.officialUrl,
+            status: "current" as const,
+            effectiveDate: source.effectiveDate ?? null,
+            verifiedAt: source.verifiedAt,
+          };
+        }),
+        legalDatabaseAsOf: input.legalDatabaseAsOf,
+      },
+    };
+  } catch (error) {
+    if (error instanceof AiUnavailableError) throw error;
     throw new AiUnavailableError(
-      "AI-ответ содержит неподтверждённую или неполную ссылку на правовой источник.",
-      "INVALID_AI_OUTPUT",
+      "Резервный AI-ответ не прошёл серверную проверку источников.",
+      "ANTHROPIC_POSTPROCESS_FAILED",
       false,
     );
   }
-  const sourceById = new Map(input.sources.map((source) => [source.id, source]));
-  data = {
-    ...data,
-    sources: data.sources.map((reference) => {
-      const source = sourceById.get(reference.sourceId)!;
-      return {
-        sourceId: source.id,
-        actTitle: source.actTitle,
-        actIdentifier: source.actIdentifier,
-        article: source.article ?? null,
-        excerpt: source.excerpt ?? null,
-        originalUrl: source.officialUrl,
-        status: "current" as const,
-        effectiveDate: source.effectiveDate ?? null,
-        verifiedAt: source.verifiedAt,
-      };
-    }),
-    legalDatabaseAsOf: input.legalDatabaseAsOf,
-  };
-  return { ...result, data };
 }
