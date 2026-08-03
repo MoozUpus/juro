@@ -2,6 +2,21 @@ export type PlatformLocale = "ru" | "uz";
 export type PersonalAccountType = "individual" | "entrepreneur" | "lawyer";
 export type AccountType = PersonalAccountType | "business";
 
+export const CASE_SECTIONS = [
+  "overview",
+  "chat",
+  "documents",
+  "analyses",
+  "plan",
+  "calendar",
+  "sources",
+  "participants",
+  "lawyer",
+  "activity",
+  "access",
+] as const;
+export type CaseSection = typeof CASE_SECTIONS[number];
+
 export const PLATFORM_MODULES = [
   "dashboard",
   "ai-chat",
@@ -71,6 +86,10 @@ export function workspaceForAccountRoute<
 
 export function isPlatformModule(value: string): value is PlatformModule {
   return PLATFORM_MODULES.includes(value as PlatformModule);
+}
+
+export function isCaseSection(value: string): value is CaseSection {
+  return CASE_SECTIONS.includes(value as CaseSection);
 }
 
 export function platformBasePath(
