@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, ListPlus, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, X } from "lucide-react";
+import { BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, ListPlus, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRetryableRequestError, createAiRetryRequest, isUserCancelledAiRequest, shouldOfferAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
@@ -44,6 +44,10 @@ type AiRequestPayload = {
   operation: AiMessageOperation;
   sourceMessageId?: string;
 };
+type AiFeedbackType = "helpful" | "not_helpful" | "wrong_norm" | "broken_link" | "outdated" | "incomplete" | "language" | "unsafe" | "ignored_facts";
+type AiFeedback = { feedbackType: AiFeedbackType; comment: string | null; updatedAt: string };
+
+const feedbackOptions: AiFeedbackType[] = ["not_helpful", "wrong_norm", "broken_link", "outdated", "incomplete", "language", "unsafe", "ignored_facts"];
 
 export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const ru = locale === "ru";
@@ -70,6 +74,11 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [canRetry, setCanRetry] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
   const [openingSuggestedDocument, setOpeningSuggestedDocument] = useState(false);
+  const [feedback, setFeedback] = useState<AiFeedback[]>([]);
+  const [feedbackType, setFeedbackType] = useState<AiFeedbackType>("not_helpful");
+  const [feedbackComment, setFeedbackComment] = useState("");
+  const [savingFeedback, setSavingFeedback] = useState(false);
+  const [feedbackStatus, setFeedbackStatus] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -91,6 +100,16 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }, [ru, selectedBranchId, selectedConversationId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!answer?.messageId) { setFeedback([]); setFeedbackStatus(""); return; }
+    let active = true;
+    void fetch(`/api/platform/ai/feedback?assistantMessageId=${encodeURIComponent(answer.messageId)}`, { cache: "no-store" })
+      .then(async (response) => ({ response, body: await response.json() as { feedback?: AiFeedback[] } }))
+      .then(({ response, body }) => { if (active && response.ok) setFeedback(body.feedback ?? []); })
+      .catch(() => { /* Feedback is supplementary; an unavailable read must not hide the legal answer. */ });
+    return () => { active = false; };
+  }, [answer?.messageId]);
 
   async function submit(
     event?: FormEvent,
@@ -243,6 +262,35 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     }
   }
 
+  async function saveFeedback(nextType: AiFeedbackType, comment = "") {
+    if (!answer?.messageId || savingFeedback) return;
+    setSavingFeedback(true);
+    setFeedbackStatus("");
+    try {
+      const response = await fetch("/api/platform/ai/feedback", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ assistantMessageId: answer.messageId, feedbackType: nextType, comment }),
+      });
+      const body = await response.json() as { error?: string; feedbackType?: AiFeedbackType; updatedAt?: string };
+      if (!response.ok || body.feedbackType === undefined || body.updatedAt === undefined) throw new Error(body.error || (ru ? "Отзыв не сохранён." : "Fikr-mulohaza saqlanmadi."));
+      const savedFeedback: AiFeedback = { feedbackType: body.feedbackType, comment: comment.trim() || null, updatedAt: body.updatedAt };
+      setFeedback((current) => [...current.filter((item) => item.feedbackType !== savedFeedback.feedbackType), savedFeedback]);
+      setFeedbackComment("");
+      setFeedbackStatus(ru ? "Спасибо, отзыв сохранён для проверки качества JURO." : "Rahmat, fikr-mulohaza JURO sifatini tekshirish uchun saqlandi.");
+    } catch (value) {
+      setFeedbackStatus(value instanceof Error ? value.message : String(value));
+    } finally {
+      setSavingFeedback(false);
+    }
+  }
+
+  function feedbackLabel(type: AiFeedbackType) {
+    const ruLabels: Record<AiFeedbackType, string> = { helpful: "Полезно", not_helpful: "Не помогло", wrong_norm: "Неверная норма", broken_link: "Нерабочая ссылка", outdated: "Устарело", incomplete: "Неполно", language: "Проблема языка", unsafe: "Небезопасно", ignored_facts: "Не учтены факты" };
+    const uzLabels: Record<AiFeedbackType, string> = { helpful: "Foydali", not_helpful: "Yordam bermadi", wrong_norm: "Noto‘g‘ri norma", broken_link: "Ishlamaydigan havola", outdated: "Eskirgan", incomplete: "To‘liq emas", language: "Til muammosi", unsafe: "Xavfsiz emas", ignored_facts: "Faktlar hisobga olinmadi" };
+    return (ru ? ruLabels : uzLabels)[type];
+  }
+
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
     <section className="ai-workspace">
@@ -266,6 +314,21 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
             </div>
+            {answer.messageId && <section className="ai-feedback" aria-labelledby="ai-feedback-heading">
+              <div><h2 id="ai-feedback-heading">{ru ? "Оцените этот ответ" : "Bu javobni baholang"}</h2><p>{ru ? "Отзыв привязан к этому сохранённому ответу и помогает проверить качество источников." : "Fikr-mulohaza shu saqlangan javobga bog‘lanadi va manbalar sifatini tekshirishga yordam beradi."}</p></div>
+              <div className="ai-feedback-actions">
+                <button type="button" className={feedback.some((item) => item.feedbackType === "helpful") ? "selected" : undefined} disabled={savingFeedback} onClick={() => void saveFeedback("helpful")}><ThumbsUp />{feedback.some((item) => item.feedbackType === "helpful") ? (ru ? "Полезно — сохранено" : "Foydali — saqlandi") : feedbackLabel("helpful")}</button>
+                <details>
+                  <summary>{ru ? "Сообщить о проблеме" : "Muammo haqida xabar berish"}</summary>
+                  <div className="ai-feedback-form">
+                    <label>{ru ? "Что не так" : "Nima noto‘g‘ri"}<select value={feedbackType} onChange={(event) => setFeedbackType(event.target.value as AiFeedbackType)}>{feedbackOptions.map((item) => <option value={item} key={item}>{feedbackLabel(item)}</option>)}</select></label>
+                    <label>{ru ? "Комментарий — необязательно" : "Izoh — ixtiyoriy"}<textarea value={feedbackComment} maxLength={2_000} onChange={(event) => setFeedbackComment(event.target.value)} placeholder={ru ? "Не указывайте лишние персональные данные." : "Ortiqcha shaxsiy ma’lumotlarni kiritmang."} /></label>
+                    <button type="button" disabled={savingFeedback} onClick={() => void saveFeedback(feedbackType, feedbackComment)}>{savingFeedback ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : (ru ? "Сохранить отзыв" : "Fikrni saqlash")}</button>
+                  </div>
+                </details>
+              </div>
+              {feedbackStatus && <p className="ai-feedback-status" role="status">{feedbackStatus}</p>}
+            </section>}
             {answer.branches && answer.branches.length > 1 && <nav className="ai-branch-history" aria-label={ru ? "Версии ответа" : "Javob versiyalari"}>
               <span><History />{ru ? "Версии" : "Versiyalar"}</span>
               {answer.branches.map((branch) => <button type="button" aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} onClick={() => { setEditSourceMessageId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(answer.conversationId)}&branchId=${encodeURIComponent(branch.branchId)}`, { scroll: false }); }}>{branch.versionNumber} · {branch.operation}</button>)}

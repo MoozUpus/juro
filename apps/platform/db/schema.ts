@@ -1607,6 +1607,23 @@ export const aiRuns = sqliteTable("ai_runs", {
   index("ai_runs_conversation_idx").on(table.conversationId, table.createdAt),
 ]);
 
+export const aiFeedback = sqliteTable("ai_feedback", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  assistantMessageId: text("assistant_message_id").notNull().references(() => conversationMessages.id, { onDelete: "cascade" }),
+  aiRunId: text("ai_run_id").notNull().references(() => aiRuns.id, { onDelete: "cascade" }),
+  feedbackType: text("feedback_type").notNull(),
+  comment: text("comment"),
+  ...timestamps,
+}, (table) => [
+  check("ai_feedback_type_check", sql`${table.feedbackType} IN ('helpful','not_helpful','wrong_norm','broken_link','outdated','incomplete','language','unsafe','ignored_facts')`),
+  uniqueIndex("ai_feedback_response_type_uidx").on(table.workspaceId, table.userId, table.assistantMessageId, table.feedbackType),
+  index("ai_feedback_workspace_created_idx").on(table.workspaceId, table.createdAt),
+  index("ai_feedback_ai_run_idx").on(table.aiRunId, table.createdAt),
+]);
+
 export const aiUsageLedger = sqliteTable("ai_usage_ledger", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
