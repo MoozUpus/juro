@@ -858,7 +858,7 @@ private-R2 export matched SHA-256
 `99f0357fc665338f53e4a0c6062134ac267cb5fc04dde34f2da12302a5b1d51f`.
 Exact evidence is in `STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md`.
 
-## Migration 0061 — Payment foundation (pending staging authorization)
+## Migration 0061 — Payment foundation (protected staging applied)
 
 `0061_cheerful_christian_walker.sql` is an additive Stage-1 financial schema.
 It creates versioned pricing/tax/plan configuration, tenant-owned orders,
@@ -873,11 +873,14 @@ require ledger totals to match actual entries before posting, and freeze posted
 transactions/entries. Application rollback disables `PAYMENT_FOUNDATION_ENABLED`
 and deploys the prior Worker while retaining unused additive tables.
 
-Before staging apply: create and verify a Time Travel bookmark, export the remote
-D1 to a private object under `juro-staging-backups`, independently verify the
-object hash/round trip, and prove a disposable restore. Apply only `0061`, run
-`quick_check`, `foreign_key_check`, migration-ledger and trigger inventory checks,
-then create a second verified checkpoint. Production is not authorized.
+On 2026-08-03, the owner authorized the staging gate. A Time Travel bookmark,
+three pre-export artifacts, private R2 round-trip SHA-256 verification and an
+isolated SQLite restore preceded the apply. The isolated checkout contained only
+`0061` pending; Wrangler applied it successfully. Postflight found 17 billing
+tables, 14 financial guards, `quick_check=ok`, no foreign-key rows, and the
+synthetic test-only `staging_individual` plan. A second post-export also passed
+private R2 checksum verification. Exact evidence is in
+`STAGING-0061-PAYMENT-FOUNDATION-EVIDENCE.md`. Production is not authorized.
 
 `scripts/staging-payment-foundation-seed.sql` is a separate, explicit synthetic
 fixture with zero tax/provider fee and one test plan. It is never part of the

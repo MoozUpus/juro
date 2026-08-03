@@ -30,6 +30,7 @@ No document in this directory authorizes or implies a production schema, traffic
 - `BACKUP-RESTORE.md` — backup evidence contract, Time Travel checkpoints, portable private-R2 exports, isolated restore evidence, and still-open operational RTO.
 - `STAGING-0034-EVIDENCE.md` — exact pre/post bookmarks, hashes, isolated restore, migration, deployment, synthetic workspace, protected browser QA, and rollback evidence for the current staging checkpoint.
 - `STAGING-0060-AI-FEEDBACK-EVIDENCE.md` — checksum-verified private pre/post exports, additive feedback migration, D1 postflight, staging deploy, and remaining authenticated-browser gate.
+- `STAGING-0061-PAYMENT-FOUNDATION-EVIDENCE.md` — private D1 checkpoint/restore rehearsal, additive payment foundation migration, synthetic staging plan, deployment, and the remaining authenticated checkout gate.
 - `SECRETS.md` — server-only secret names/contracts and presence-by-name inventory, never values.
 - `RETENTION.md` — implemented account-deletion lifecycle, retained evidence, purge order, and open retention gates.
 - `SECURITY.md` — implemented platform controls, environment isolation, release evidence, and open security gates.

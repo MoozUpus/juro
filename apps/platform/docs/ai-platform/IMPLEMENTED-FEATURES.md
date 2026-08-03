@@ -441,6 +441,10 @@ Locally implemented behind environment gates:
 - retry after decline without repricing or duplicate consent;
 - production and real-provider paths fail closed.
 
-This is not yet deployed. Migration `0061`, the staging-only signing secret and
-the synthetic staging price fixture remain gated by a fresh private D1
-backup/restore rehearsal and explicit owner permission.
+Migration `0061`, the staging-only signing-secret name, and the synthetic
+staging price fixture are now deployed only to protected staging after explicit
+owner permission, private D1 pre/post checkpoints, checksum round trips and an
+isolated restore rehearsal. Worker version
+`9051c167-8e1a-46c8-86f8-c7f6c9e75b82` serves commit `1a6074b`; production is
+unchanged. The final authenticated checkout-to-signed-sandbox-event E2E remains
+an open Stage-1 gate. See `STAGING-0061-PAYMENT-FOUNDATION-EVIDENCE.md`.

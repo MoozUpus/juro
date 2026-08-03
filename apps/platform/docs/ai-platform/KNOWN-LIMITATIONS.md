@@ -360,10 +360,13 @@ unauthenticated and does not change production.
 
 ## Payment foundation open gates
 
-- Migration `0061` and the new Worker routes are local only until a new private
-  staging D1 checkpoint and restore rehearsal are approved and verified.
-- The staging sandbox needs a distinct `PAYMENT_SANDBOX_WEBHOOK_SECRET`; no value
-  is stored in source or requested in chat.
+- Migration `0061` and the Stage-1 Worker are deployed only to protected
+  staging after checksum-verified private-R2 pre/post checkpoints and an
+  isolated SQLite restore rehearsal. The secret-name inventory includes
+  `PAYMENT_SANDBOX_WEBHOOK_SECRET`; its value is not stored in source or docs.
+- An Access-authorized owner must still run the protected checkout-to-signed
+  sandbox-event flow. Anonymous HTTP smoke proves Access denial only and is not
+  a substitute for that transaction E2E proof.
 - The only prepared price is an explicitly synthetic staging fixture. No
   production price, tax position, commission, provider contract, fiscal receipt,
   refund, chargeback, or payout is approved or claimed.
