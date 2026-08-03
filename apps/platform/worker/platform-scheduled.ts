@@ -6,6 +6,7 @@ import {
 } from "../lib/legal/scheduled-corpus-sync";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
+import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -312,6 +313,13 @@ export async function handleScheduled(
       db: env.DB,
       now,
     });
+    failureCode = "VOICE_RETENTION_CLEANUP_FAILED";
+    const voiceRetention = await purgeExpiredVoiceRecordings({
+      db: env.DB,
+      bucket: env.BUCKET,
+      quarantineBucket: env.QUARANTINE_BUCKET,
+      now,
+    });
     failureCode = "PROVIDER_PROBE_FAILED";
     const providerProbe = await maybeRunStagingProviderProbes(env);
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
@@ -336,6 +344,8 @@ export async function handleScheduled(
       guestAiRetentionEligible: guestAiRetention.eligible,
       guestAiRetentionPurged: guestAiRetention.purged,
       guestAiReservationsReleased: guestAiRetention.reservationsReleased,
+      voiceRetentionEligible: voiceRetention.eligible,
+      voiceRetentionPurged: voiceRetention.purged,
       providerProbeAttempted: providerProbe?.attempted ?? 0,
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,

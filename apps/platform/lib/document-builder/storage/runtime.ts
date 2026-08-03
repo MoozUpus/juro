@@ -18,6 +18,8 @@ export interface BuilderRuntimeEnv {
   OPENAI_CHAT_MODEL?: string;
   OPENAI_DEEP_MODEL?: string;
   OPENAI_FALLBACK_MODEL?: string;
+  OPENAI_TRANSCRIPTION_MODEL?: string;
+  OPENAI_TTS_MODEL?: string;
   ANTHROPIC_API_KEY?: string;
   ANTHROPIC_DOCUMENT_MODEL?: string;
   ANTHROPIC_FALLBACK_MODEL?: string;

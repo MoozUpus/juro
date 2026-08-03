@@ -193,6 +193,93 @@
   outline-offset: 2px;
 }
 
+.ai-voice-controls {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: .45rem;
+  padding: .7rem .8rem;
+  border: 1px solid color-mix(in srgb, var(--platform-border, #cad3dc) 84%, transparent);
+  border-radius: .85rem;
+  background: color-mix(in srgb, var(--platform-surface, #fff) 94%, var(--platform-accent, #be974f) 6%);
+}
+
+.ai-voice-actions,
+.ai-speech-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .55rem;
+}
+
+.ai-voice-actions button,
+.ai-speech-controls button {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .45rem;
+}
+
+.ai-voice-actions svg,
+.ai-speech-controls svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ai-voice-controls output {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: var(--platform-text, #10283d);
+}
+
+.ai-voice-controls p,
+.ai-speech-controls small,
+.ai-speech-controls p {
+  margin: 0;
+  color: var(--platform-muted, #5d6b77);
+}
+
+.ai-voice-controls progress {
+  width: 100%;
+  height: .25rem;
+  accent-color: var(--platform-accent, #be974f);
+}
+
+.ai-speech-controls {
+  flex-basis: 100%;
+  padding-top: .65rem;
+  border-top: 1px solid color-mix(in srgb, var(--platform-border, #cad3dc) 75%, transparent);
+}
+
+.ai-speech-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.ai-speech-controls select {
+  min-height: 2.75rem;
+}
+
+.ai-speech-controls audio {
+  max-width: min(100%, 22rem);
+  min-height: 2.75rem;
+}
+
+@media (max-width: 640px) {
+  .ai-voice-actions > button,
+  .ai-speech-controls > button,
+  .ai-speech-controls audio {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-voice-controls progress {
+    animation: none;
+  }
+}
+
 @media (max-width: 520px) {
   .ai-plan-destination {
     width: 100%;

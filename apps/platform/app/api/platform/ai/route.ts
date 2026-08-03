@@ -32,6 +32,13 @@ import {
   type UserMemory,
 } from "../../../../lib/ai/user-memory";
 import type { IdentityKeyring } from "../../../../lib/auth/keyring";
+import {
+  assertVoiceTranscriptMatches,
+  linkVoiceRecordingStatement,
+  VoiceRecordingError,
+  voiceKeyring,
+  type VoiceRecordingRow,
+} from "../../../../lib/ai/voice-recording";
 
 const INSTRUCTION_VERSION = "juro-legal-chat-v1";
 
@@ -95,6 +102,7 @@ async function executePost(
     caseId?: string;
     answerMode?: string;
     reasoningMode?: string;
+    voiceRecordingId?: string;
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
   const submittedQuestion = body?.question?.trim();
@@ -161,6 +169,25 @@ async function executePost(
     }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
   }
   const question = branchInput.question;
+  let voiceRecording: VoiceRecordingRow | null = null;
+  if (body?.voiceRecordingId) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.voiceRecordingId)) {
+      return response({ code: "INVALID_VOICE_REQUEST", error: locale === "ru" ? "Некорректная голосовая запись." : "Ovozli yozuv noto‘g‘ri." }, 400);
+    }
+    try {
+      voiceRecording = await assertVoiceTranscriptMatches({
+        db,
+        keyring: voiceKeyring(runtimeEnv().IDENTITY_KEYRING),
+        recordingId: body.voiceRecordingId,
+        workspaceId: workspace.id,
+        userId: user.id,
+        question,
+      });
+    } catch (error) {
+      if (!(error instanceof VoiceRecordingError)) throw error;
+      return response({ code: error.code, error: error.message }, error.status);
+    }
+  }
   let memoryEncryption: IdentityKeyring | null = null;
   let memories: UserMemory[] = [];
   try {
@@ -359,6 +386,16 @@ async function executePost(
     ...result.sources.map((source) => db.prepare(
       "INSERT INTO conversation_sources (id,conversation_id,message_id,source_id,citation_label,created_at) VALUES (?,?,?,?,?,?)",
     ).bind(crypto.randomUUID(), conversationId, assistantMessageId, source.sourceId, source.article || source.actIdentifier || source.sourceId, now)),
+    ...(voiceRecording ? [linkVoiceRecordingStatement({
+      db,
+      recordingId: voiceRecording.id,
+      workspaceId: workspace.id,
+      userId: user.id,
+      conversationId,
+      messageId: userMessageId,
+      caseId: body?.caseId || null,
+      now,
+    })] : []),
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'conversation',?,'ai_chat_completed',?,?)",
     ).bind(crypto.randomUUID(), workspace.id, user.id, conversationId, JSON.stringify({

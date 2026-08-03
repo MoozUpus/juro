@@ -122,3 +122,19 @@ deployment versions from being mistaken for present state. A current checkpoint
 may only record verified names, build/test output and deploy identifiers; it
 does not convert unavailable browser, provider, scanner, legal-corpus or asset
 gates into a claim of completion.
+
+## D-105 — voice messages are an optional encrypted enhancement, not realtime voice
+
+Status: accepted and locally verified
+Date: 2026-08-04
+
+The first voice slice records only after an explicit user action, limits a recording
+to five minutes and 25 MB, uploads through a tenant-authorized API into a private
+quarantine bucket, validates the full object before promotion, and sends it to the
+server-side OpenAI transcription endpoint. Only an AES-GCM-protected transcript is
+stored in D1. The original audio expires after 30 days and can be deleted earlier.
+The user reviews and edits the transcript before the normal AI-chat request; the
+recording is linked to the persisted message only inside the successful chat batch.
+TTS is server-side and disclosed as synthetic AI speech. Realtime voice, WebGL and
+the Jurobek avatar remain disabled until an approved rigged asset and separate
+quality/performance gates exist. Text chat remains independent from voice support.

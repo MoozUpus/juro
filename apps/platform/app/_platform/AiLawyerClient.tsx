@@ -6,8 +6,10 @@ import { BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, Histor
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
+import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
+import { AssistantSpeechControls, VoiceMessageControls } from "./VoiceMessageControls";
 
 type ProviderStatus = { configured: boolean; provider: string | null; model: string | null; fallbackConfigured: boolean };
 type Usage = { used: number; limit: number; periodEnd: string };
@@ -44,6 +46,7 @@ type AiRequestPayload = {
   conversationId?: string;
   operation: AiMessageOperation;
   sourceMessageId?: string;
+  voiceRecordingId?: string;
 };
 type AiFeedbackType = "helpful" | "not_helpful" | "wrong_norm" | "broken_link" | "outdated" | "incomplete" | "language" | "unsafe" | "ignored_facts";
 type AiFeedback = { feedbackType: AiFeedbackType; comment: string | null; updatedAt: string };
@@ -86,6 +89,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [feedbackComment, setFeedbackComment] = useState("");
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState("");
+  const [voiceRecordingId, setVoiceRecordingId] = useState("");
 
   const load = useCallback(async () => {
     try {
@@ -147,6 +151,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setAnswer(resultBody.selected);
       if (resultBody.usage) setUsage(resultBody.usage);
       setQuestion("");
+      setVoiceRecordingId("");
       setEditSourceMessageId("");
       pendingAiRequestRef.current = null;
       setCanRetry(false);
@@ -175,6 +180,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       conversationId: answer?.conversationId || selectedConversationId || undefined,
       operation,
       sourceMessageId,
+      voiceRecordingId: operation === "new" || operation === "follow_up" ? (voiceRecordingId || undefined) : undefined,
     }, () => crypto.randomUUID());
     const controller = new AbortController();
     streamAbortRef.current = controller;
@@ -183,6 +189,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     setCanRetry(false);
     setStreamStatus(ru ? "JURO принимает запрос…" : "JURO so‘rovni qabul qilmoqda…");
     try {
+      if (pending.payload.voiceRecordingId && pending.payload.question) {
+        setStreamStatus(ru ? "Подтверждаем распознанный текст…" : "Tanilgan matn tasdiqlanmoqda…");
+        await confirmVoiceTranscript(pending.payload.voiceRecordingId, pending.payload.question.trim());
+      }
       const response = await fetch("/api/platform/ai", {
         method: "POST",
         headers: {
@@ -223,6 +233,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setAnswer(body);
       if (body.usage) setUsage(body.usage);
       setQuestion("");
+      setVoiceRecordingId("");
       setEditSourceMessageId("");
       pendingAiRequestRef.current = null;
       setCanRetry(false);
@@ -379,8 +390,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     <section className="ai-workspace">
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setEditSourceMessageId(""); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
-        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => { setEditSourceMessageId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false }); }}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
+        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setVoiceRecordingId(""); setEditSourceMessageId(""); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
+        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => { setEditSourceMessageId(""); setVoiceRecordingId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false }); }}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
       </aside>
       <main className="ai-dialog">
         <header><span><Bot /></span><div><h1>{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div></header>
@@ -401,8 +412,9 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
                 <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => void savePlanToCase()}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : targetCaseId ? (ru ? "Добавить в выбранное дело" : "Tanlangan ishga qo‘shish") : (ru ? "Создать дело с планом" : "Reja bilan ish yaratish")}</button>
               </div>}
               {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? (ru ? "Проверяем шаблон…" : "Shablon tekshirilmoqda…") : (ru ? "Открыть шаблон JURO" : "JURO shablonini ochish")}</button>}
-              <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
+              <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setVoiceRecordingId(""); setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
+              {answer.messageId && answer.result.responseKind === "answer" && <AssistantSpeechControls locale={locale} assistantMessageId={answer.messageId} disabled={sending} />}
             </div>
             {answer.messageId && <section className="ai-feedback" aria-labelledby="ai-feedback-heading">
               <div><h2 id="ai-feedback-heading">{ru ? "Оцените этот ответ" : "Bu javobni baholang"}</h2><p>{ru ? "Отзыв привязан к этому сохранённому ответу и помогает проверить качество источников." : "Fikr-mulohaza shu saqlangan javobga bog‘lanadi va manbalar sifatini tekshirishga yordam beradi."}</p></div>
@@ -431,6 +443,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             <label>{ru ? "Ответ" : "Javob"}<select value={answerMode} onChange={(event) => setAnswerMode(event.target.value as "short" | "detailed")}><option value="short">{ru ? "Кратко" : "Qisqa"}</option><option value="detailed">{ru ? "Подробно" : "Batafsil"}</option></select></label>
             <label>{ru ? "Режим" : "Rejim"}<select value={reasoningMode} onChange={(event) => setReasoningMode(event.target.value as "fast" | "deep")}><option value="fast">{ru ? "Быстро" : "Tez"}</option><option value="deep">{ru ? "Глубоко" : "Chuqur"}</option></select></label>
           </div>
+          <VoiceMessageControls
+            locale={locale}
+            disabled={!status?.configured || sending}
+            recordingId={voiceRecordingId}
+            onTranscript={({ recordingId, transcript }) => { setVoiceRecordingId(recordingId); setQuestion(transcript); pendingAiRequestRef.current = null; setCanRetry(false); }}
+            onClear={() => setVoiceRecordingId("")}
+          />
           <label className="sr-only" htmlFor="ai-question">{ru ? "Юридический вопрос" : "Yuridik savol"}</label>
           <textarea id="ai-question" value={question} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setQuestion(event.target.value); }} onKeyDown={handleComposerKeyDown} disabled={!status?.configured || sending} placeholder={ru ? "Что произошло? Enter — отправить" : "Nima bo‘ldi? Enter — yuborish"} />
           {sending

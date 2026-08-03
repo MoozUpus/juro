@@ -463,6 +463,13 @@
       "when": 1785783600000,
       "tag": "0065_guest_ai_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "6",
+      "when": 1785870000000,
+      "tag": "0066_voice_recordings",
+      "breakpoints": true
     }
   ]
 }

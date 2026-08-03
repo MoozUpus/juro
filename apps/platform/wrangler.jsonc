@@ -24,7 +24,9 @@
     "LAWYER_PROFILE_DIRECTORY_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
     "JOB_SCHEMA_VERSION": "1",
-        "EMBEDDING_MODEL": "text-embedding-3-large",
+    "EMBEDDING_MODEL": "text-embedding-3-large",
+    "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
+    "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
     "EMAIL_FROM": "JURO <no-reply@juro.uz>"
   },
   "d1_databases": [
@@ -156,6 +158,8 @@
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
         "OPENAI_CHAT_MODEL": "gpt-5.6-sol",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
+        "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
+        "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
         "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-6",
         "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6"
       },
@@ -322,6 +326,8 @@
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
         "EMBEDDING_MODEL": "text-embedding-3-large",
+        "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
+        "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>"
       },
       "d1_databases": [
