@@ -113,13 +113,13 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
     });
   } catch (error) {
     if (error instanceof AiUnavailableError) throw error;
-    const stackFrames = error instanceof Error
-      ? error.stack?.split("\n").slice(1, 5).map((frame) => frame.trim().replace(/[?#].*$/, ""))
+    const stackFrames = error instanceof Error && typeof error.stack === "string"
+      ? error.stack.split("\n").slice(1, 5).map((frame) => frame.trim().replace(/[?#].*$/, ""))
       : undefined;
     console.error({
       event: "anthropic.adapter_exception",
       stage: "request",
-      errorName: error instanceof Error ? error.name : "UnknownError",
+      errorName: error instanceof Error && typeof error.name === "string" ? error.name : "UnknownError",
       stackFrames,
     });
     throw new AiUnavailableError(
