@@ -11,16 +11,22 @@ export type AiProviderErrorCode =
 export class AiUnavailableError extends Error {
   readonly code: AiProviderErrorCode;
   readonly retryable: boolean;
+  readonly providerStatus: number | null;
+  readonly providerErrorType: string | null;
 
   constructor(
     message: string,
     code: AiProviderErrorCode = "PROVIDER_UNAVAILABLE",
     retryable = true,
+    providerStatus: number | null = null,
+    providerErrorType: string | null = null,
   ) {
     super(message);
     this.name = "AiUnavailableError";
     this.code = code;
     this.retryable = retryable;
+    this.providerStatus = providerStatus;
+    this.providerErrorType = providerErrorType;
   }
 }
 

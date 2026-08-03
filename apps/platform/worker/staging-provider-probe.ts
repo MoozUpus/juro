@@ -4,9 +4,12 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // v1 completed for OpenAI and terminally failed for Anthropic before the
 // owner rotated the staging Anthropic key. Keep those records immutable. v5
 // verified only a trivial Anthropic schema; v6 exercised the exact legal-chat
-// schema but found an application-boundary error. Keep its immutable record;
-// v9 re-runs the same no-content check after the Anthropic schema adapter.
-const PROBE_KEY = "staging-anthropic-legal-chat-v9";
+// schema but found an application-boundary error. v10-v13 isolated the strict
+// grammar rejection. v14 confirmed plain JSON is not contract-reliable. v15
+// validates forced non-strict tool use plus the unchanged Zod/source boundary.
+// v16 persists only bounded HTTP/type metadata after v15 failed before model
+// generation; provider messages and bodies remain excluded.
+const PROBE_KEY = "staging-anthropic-legal-chat-v16";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 
@@ -62,6 +65,20 @@ function providerErrorCode(error: unknown): string {
   return "PROVIDER_PROBE_FAILED";
 }
 
+function anthropicHttpFailureCode(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    const status = "providerStatus" in error ? (error as { providerStatus?: unknown }).providerStatus : null;
+    const type = "providerErrorType" in error ? (error as { providerErrorType?: unknown }).providerErrorType : null;
+    if (typeof status === "number" && status >= 400 && status <= 599) {
+      const safeType = typeof type === "string" && /^[a-z_]{3,40}$/.test(type)
+        ? `_${type.toUpperCase()}`
+        : "";
+      return `PROBE_ANTHROPIC_HTTP_${status}${safeType}`.slice(0, 64);
+    }
+  }
+  return error instanceof TypeError ? "PROBE_ANTHROPIC_CALL_TYPE_ERROR" : "PROBE_ANTHROPIC_CALL_FAILED";
+}
+
 async function executeProviderProbe(provider: Provider) {
   if (provider === "anthropic") {
     const { callAnthropicStructured } = await import("../lib/document-builder/ai/anthropic");
@@ -74,7 +91,7 @@ async function executeProviderProbe(provider: Provider) {
     let result;
     try {
       result = await callAnthropicStructured({
-        instructions: "JURO staging contract check. Return a clarification response with no legal conclusions or sources.",
+        instructions: "JURO staging contract check. Call emit_result with a clarification response, no legal conclusions and no sources.",
         input: {
           jurisdiction: "UZ",
           question: "Synthetic staging check: request clarification only.",
@@ -89,11 +106,10 @@ async function executeProviderProbe(provider: Provider) {
         maxAttempts: 1,
         timeoutMs: 20_000,
         requestId: probeId(provider),
+        strictOutput: false,
       });
     } catch (error) {
-      throw new ProviderProbeStageError(
-        error instanceof TypeError ? "PROBE_ANTHROPIC_CALL_TYPE_ERROR" : "PROBE_ANTHROPIC_CALL_FAILED",
-      );
+      throw new ProviderProbeStageError(anthropicHttpFailureCode(error));
     }
     try {
       const constrained = forceClarificationWithoutVerifiedSources(result.data, {

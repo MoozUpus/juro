@@ -10,14 +10,14 @@ import {
 interface AnthropicMessagesPayload {
   id?: string;
   model?: string;
-  content?: Array<{ type?: string; text?: string }>;
+  content?: Array<{ type?: string; text?: string; name?: string; input?: unknown }>;
   stop_reason?: string | null;
   usage?: {
     input_tokens?: number;
     output_tokens?: number;
     cache_read_input_tokens?: number;
   };
-  error?: { message?: string };
+  error?: { type?: string; message?: string };
 }
 
 export function hasAnthropicConfiguration(): boolean {
@@ -34,6 +34,7 @@ export async function callAnthropicStructured<T>(options: {
   model?: string;
   maxAttempts?: 1 | 2;
   signal?: AbortSignal;
+  strictOutput?: boolean;
 }): Promise<AiStructuredResult<T>> {
   const configuration = runtimeEnv();
   const apiKey = configuration.ANTHROPIC_API_KEY;
@@ -70,12 +71,19 @@ export async function callAnthropicStructured<T>(options: {
             role: "user",
             content: typeof options.input === "string" ? options.input : JSON.stringify(options.input),
           }],
-          output_config: {
+          ...(options.strictOutput === false ? {
+            tools: [{
+              name: "emit_result",
+              description: "Return the complete validated JURO result.",
+              input_schema: anthropicCompatibleJsonSchema(options.schema),
+            }],
+            tool_choice: { type: "tool", name: "emit_result" },
+          } : { output_config: {
             format: {
               type: "json_schema",
               schema: anthropicCompatibleJsonSchema(options.schema),
             },
-          },
+          } }),
         }),
         signal: controller.signal,
       });
@@ -91,6 +99,8 @@ export async function callAnthropicStructured<T>(options: {
           `Резервная AI-проверка недоступна: ${payload.error?.message || `HTTP ${response.status}`}`,
           "PROVIDER_UNAVAILABLE",
           retryable,
+          response.status,
+          payload.error?.type ?? null,
         );
       }
       if (payload.stop_reason === "refusal") {
@@ -100,17 +110,21 @@ export async function callAnthropicStructured<T>(options: {
         if (attempt < maxAttempts) continue;
         throw new AiUnavailableError("Резервный AI-ответ превысил допустимый размер.", "INVALID_AI_OUTPUT", false);
       }
-      if (payload.stop_reason && payload.stop_reason !== "end_turn" && payload.stop_reason !== "stop_sequence") {
+      if (payload.stop_reason && payload.stop_reason !== "end_turn" && payload.stop_reason !== "stop_sequence"
+        && !(options.strictOutput === false && payload.stop_reason === "tool_use")) {
         throw new AiUnavailableError(`Резервная AI-проверка не завершена: ${payload.stop_reason}.`, "PROVIDER_UNAVAILABLE", true);
       }
+      const toolInput = options.strictOutput === false
+        ? payload.content?.find((item) => item.type === "tool_use" && item.name === "emit_result")?.input
+        : undefined;
       const text = payload.content?.find((item) => item.type === "text" && item.text)?.text;
-      if (!text) {
+      if (options.strictOutput === false ? toolInput === undefined : !text) {
         if (attempt < maxAttempts) continue;
         throw new AiUnavailableError("Резервная AI-проверка не вернула структурированный результат.", "INVALID_AI_OUTPUT", false);
       }
       try {
         return {
-          data: options.parse(JSON.parse(text)),
+          data: options.parse(options.strictOutput === false ? toolInput : JSON.parse(text!)),
           provider: "anthropic",
           model: payload.model || model,
           providerResponseId: payload.id || response.headers.get("request-id"),
