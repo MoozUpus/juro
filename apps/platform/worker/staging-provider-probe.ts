@@ -8,8 +8,9 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // grammar rejection. v14 confirmed plain JSON is not contract-reliable. v15
 // validates forced non-strict tool use plus the unchanged Zod/source boundary.
 // v16 persists only bounded HTTP/type metadata after v15 failed before model
-// generation; provider messages and bodies remain excluded.
-const PROBE_KEY = "staging-anthropic-legal-chat-v16";
+// generation; provider messages and bodies remain excluded. v17 validates the
+// bounded JSON-string tool envelope while preserving the full Zod boundary.
+const PROBE_KEY = "staging-anthropic-legal-chat-v17";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 

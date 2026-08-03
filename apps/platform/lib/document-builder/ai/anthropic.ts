@@ -24,6 +24,29 @@ export function hasAnthropicConfiguration(): boolean {
   return Boolean(runtimeEnv().ANTHROPIC_API_KEY);
 }
 
+const anthropicJsonEnvelopeSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: ["payload_json"],
+  properties: {
+    payload_json: {
+      type: "string",
+      description: "A JSON string containing the complete JURO result.",
+    },
+  },
+} as const;
+
+export function parseAnthropicJsonEnvelope(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new TypeError("Anthropic tool input must be an object.");
+  }
+  const payloadJson = (input as { payload_json?: unknown }).payload_json;
+  if (typeof payloadJson !== "string") {
+    throw new TypeError("Anthropic tool input must contain payload_json.");
+  }
+  return JSON.parse(payloadJson);
+}
+
 export async function callAnthropicStructured<T>(options: {
   instructions: string;
   input: unknown;
@@ -45,6 +68,10 @@ export async function callAnthropicStructured<T>(options: {
   const startedAt = Date.now();
   const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const maxAttempts = options.maxAttempts ?? 2;
+  const providerSchema = anthropicCompatibleJsonSchema(options.schema);
+  const systemInstructions = options.strictOutput === false
+    ? `${options.instructions}\n\nCall emit_result exactly once. Its payload_json field must be a JSON string matching this schema: ${JSON.stringify(providerSchema)}`
+    : options.instructions;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
@@ -66,7 +93,7 @@ export async function callAnthropicStructured<T>(options: {
         body: JSON.stringify({
           model,
           max_tokens: 8_192,
-          system: options.instructions,
+          system: systemInstructions,
           messages: [{
             role: "user",
             content: typeof options.input === "string" ? options.input : JSON.stringify(options.input),
@@ -75,13 +102,13 @@ export async function callAnthropicStructured<T>(options: {
             tools: [{
               name: "emit_result",
               description: "Return the complete validated JURO result.",
-              input_schema: anthropicCompatibleJsonSchema(options.schema),
+              input_schema: anthropicJsonEnvelopeSchema,
             }],
             tool_choice: { type: "tool", name: "emit_result" },
           } : { output_config: {
             format: {
               type: "json_schema",
-              schema: anthropicCompatibleJsonSchema(options.schema),
+              schema: providerSchema,
             },
           } }),
         }),
@@ -124,7 +151,7 @@ export async function callAnthropicStructured<T>(options: {
       }
       try {
         return {
-          data: options.parse(options.strictOutput === false ? toolInput : JSON.parse(text!)),
+          data: options.parse(options.strictOutput === false ? parseAnthropicJsonEnvelope(toolInput) : JSON.parse(text!)),
           provider: "anthropic",
           model: payload.model || model,
           providerResponseId: payload.id || response.headers.get("request-id"),
