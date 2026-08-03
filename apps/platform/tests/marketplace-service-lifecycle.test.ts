@@ -81,6 +81,16 @@ test("marketplace legal-service payment creates exactly one allocation and payab
       "/ru/individual/orders/test/payment",
       new Date("2026-08-03T10:01:00.000Z"),
     );
+    const replayedConfirm = await confirmMarketplaceServiceCheckout(
+      d1,
+      actor,
+      String(created.order.id),
+      "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+      "/ru/individual/orders/test/payment",
+      new Date("2026-08-03T10:01:01.000Z"),
+    );
+    assert.equal(confirmed.paymentAttempt?.id, replayedConfirm.paymentAttempt?.id);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM payment_attempts").get()?.count, 1);
     const event = {
       eventId: "ffffffff-ffff-4fff-8fff-ffffffffffff",
       type: "payment.funded" as const,

@@ -70,3 +70,12 @@ test("business proposal flows resolve the route workspace server-side and never 
   assert.match(flow, /\?workspaceId=\$\{encodeURIComponent\(workspaceId\)\}/);
   assert.match(flow, /\.\.\.\(workspaceId \? \{ workspaceId \} : \{\}\)/);
 });
+
+test("proposal acceptance keeps explicit consent immutable while making same-version retries safe", () => {
+  const acceptRoute = readFileSync(new URL("../app/api/cases/[caseId]/proposals/[proposalId]/accept/route.ts", import.meta.url), "utf8");
+  assert.match(acceptRoute, /proposal_acceptances/);
+  assert.match(acceptRoute, /existingAcceptance/);
+  assert.match(acceptRoute, /replayed: true/);
+  assert.match(acceptRoute, /PROPOSAL_ALREADY_ACCEPTED/);
+  assert.match(acceptRoute, /workspaceForUserById/);
+});

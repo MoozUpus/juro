@@ -81,6 +81,12 @@ credits only JURO's VAT component to `VAT_PAYABLE`; the independent lawyer's
 VAT remains part of the payable owed to that lawyer. The full platform test
 suite and the lifecycle test passed after the fix.
 
+The same lifecycle test now also proves confirm-checkout replay: sending the
+same client idempotency key twice returns the original payment attempt and
+does not create a second attempt. The proposal-acceptance endpoint likewise
+returns a safe replay only for the same accepted agreement version; it rejects
+a mismatched later version and never mutates the immutable acceptance row.
+
 ## Authenticated UI coverage in the deployed artifact
 
 The deployment now exposes the same protected flow to both personal and

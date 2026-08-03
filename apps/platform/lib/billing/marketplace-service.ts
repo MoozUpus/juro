@@ -48,14 +48,56 @@ export async function createMarketplaceServiceCheckout(db: D1Database, actor: Ac
   return (await readCheckoutOrder(db, actor, orderId))!;
 }
 
-export async function confirmMarketplaceServiceCheckout(db: D1Database, actor: Actor, orderId: string, requestId: string, checkoutUrl: string, now = new Date()): Promise<CheckoutOrderView> {
-  const view=await readCheckoutOrder(db,actor,orderId); if(!view || view.order.orderType!=="LEGAL_SERVICE" || !view.pricingSnapshot) throw new BillingDomainError("ORDER_UNAVAILABLE",404,"Заказ недоступен / Buyurtma mavjud emas.");
-  if(view.order.status!=="PRICED" || view.order.acceptedPricingSnapshotId) throw new BillingDomainError("ORDER_NOT_CONFIRMABLE",409,"Заказ уже изменился / Buyurtma o‘zgargan.");
-  const at=now.toISOString(); const attemptId=crypto.randomUUID(); const providerAttemptId=ext("sandbox_pay");
-  await db.batch([
-    db.prepare("UPDATE marketplace_orders SET accepted_pricing_snapshot_id=?,status='AWAITING_PAYMENT',provider='sandbox',provider_status='created',version=version+1,updated_at=? WHERE id=? AND workspace_id=? AND customer_user_id=? AND status='PRICED' AND accepted_pricing_snapshot_id IS NULL").bind(view.pricingSnapshot.id,at,orderId,actor.workspaceId,actor.userId),
-    db.prepare("INSERT INTO payment_attempts (id,external_id,order_id,provider,provider_attempt_id,provider_status,internal_status,amount_minor,currency,idempotency_key,checkout_url,expires_at,version,created_at,updated_at) VALUES (?,?,?,'sandbox',?,'created','client_action_required',?,'UZS',?,?,?,1,?,?)").bind(attemptId,ext("juro_pay"),orderId,providerAttemptId,view.pricingSnapshot.clientTotalMinor,`checkout:confirm:${actor.userId}:${requestId}`,checkoutUrl,view.order.expiresAt,at,at),
-    db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'marketplace_order',?,'legal_service_checkout_confirmed',?,?)").bind(crypto.randomUUID(),actor.workspaceId,actor.userId,orderId,JSON.stringify({paymentAttemptId:attemptId}),at),
-  ]);
-  return (await readCheckoutOrder(db,actor,orderId))!;
+export async function confirmMarketplaceServiceCheckout(
+  db: D1Database,
+  actor: Actor,
+  orderId: string,
+  requestId: string,
+  checkoutUrl: string,
+  now = new Date(),
+): Promise<CheckoutOrderView> {
+  const view = await readCheckoutOrder(db, actor, orderId);
+  if (!view || view.order.orderType !== "LEGAL_SERVICE" || !view.pricingSnapshot) {
+    throw new BillingDomainError("ORDER_UNAVAILABLE", 404, "Заказ недоступен / Buyurtma mavjud emas.");
+  }
+  const idempotencyKey = `checkout:confirm:${actor.userId}:${requestId}`;
+  const existingAttempt = await db.prepare(
+    "SELECT id FROM payment_attempts WHERE order_id=? AND idempotency_key=? LIMIT 1",
+  ).bind(orderId, idempotencyKey).first<{ id: string }>();
+  if (existingAttempt) return (await readCheckoutOrder(db, actor, orderId))!;
+  if (view.order.status !== "PRICED" || view.order.acceptedPricingSnapshotId) {
+    throw new BillingDomainError("ORDER_NOT_CONFIRMABLE", 409, "Заказ уже изменился / Buyurtma o‘zgargan.");
+  }
+  if (typeof view.order.expiresAt === "string" && Date.parse(view.order.expiresAt) <= now.getTime()) {
+    throw new BillingDomainError("ORDER_EXPIRED", 409, "Расчёт истёк / Hisob muddati tugagan.");
+  }
+  const recentAttempts = await db.prepare(`SELECT COUNT(*) AS count FROM payment_attempts a
+    JOIN marketplace_orders o ON o.id=a.order_id
+    WHERE a.order_id=? AND o.customer_user_id=? AND a.created_at>=?`)
+    .bind(orderId, actor.userId, new Date(now.getTime() - 60 * 60_000).toISOString())
+    .first<{ count: number }>();
+  if (Number(recentAttempts?.count ?? 0) >= 20) {
+    throw new BillingDomainError("RATE_LIMITED", 429, "Слишком много попыток оплаты / To‘lov urinishlari juda ko‘p.");
+  }
+  const at = now.toISOString();
+  const attemptId = crypto.randomUUID();
+  const providerAttemptId = ext("sandbox_pay");
+  try {
+    await db.batch([
+      db.prepare("UPDATE marketplace_orders SET accepted_pricing_snapshot_id=?,status='AWAITING_PAYMENT',provider='sandbox',provider_status='created',version=version+1,updated_at=? WHERE id=? AND workspace_id=? AND customer_user_id=? AND status='PRICED' AND accepted_pricing_snapshot_id IS NULL").bind(view.pricingSnapshot.id, at, orderId, actor.workspaceId, actor.userId),
+      db.prepare("INSERT INTO payment_attempts (id,external_id,order_id,provider,provider_attempt_id,provider_status,internal_status,amount_minor,currency,idempotency_key,checkout_url,expires_at,version,created_at,updated_at) VALUES (?,?,?,'sandbox',?,'created','client_action_required',?,'UZS',?,?,?,1,?,?)").bind(attemptId, ext("juro_pay"), orderId, providerAttemptId, view.pricingSnapshot.clientTotalMinor, idempotencyKey, checkoutUrl, view.order.expiresAt, at, at),
+      db.prepare("INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'marketplace_order',?,'legal_service_checkout_confirmed',?,?)").bind(crypto.randomUUID(), actor.workspaceId, actor.userId, orderId, JSON.stringify({ paymentAttemptId: attemptId }), at),
+    ]);
+  } catch (error) {
+    if (!unique(error)) throw error;
+    const replay = await db.prepare(
+      "SELECT id FROM payment_attempts WHERE order_id=? AND idempotency_key=? LIMIT 1",
+    ).bind(orderId, idempotencyKey).first<{ id: string }>();
+    if (!replay) throw error;
+  }
+  const confirmed = await readCheckoutOrder(db, actor, orderId);
+  if (!confirmed?.paymentAttempt) {
+    throw new BillingDomainError("ORDER_CONFIRMATION_CONFLICT", 409, "Заказ уже обрабатывается / Buyurtma qayta ishlanmoqda.");
+  }
+  return confirmed;
 }
