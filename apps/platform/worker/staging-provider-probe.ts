@@ -10,7 +10,9 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // v16 persists only bounded HTTP/type metadata after v15 failed before model
 // generation; provider messages and bodies remain excluded. v17 validates the
 // bounded JSON-string tool envelope while preserving the full Zod boundary.
-const PROBE_KEY = "staging-anthropic-legal-chat-v17";
+// v18 exercises the production Anthropic adapter, including its fail-closed
+// normalization and source-boundary enforcement.
+const PROBE_KEY = "staging-anthropic-legal-chat-v18";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 
@@ -68,6 +70,10 @@ function providerErrorCode(error: unknown): string {
 
 function anthropicHttpFailureCode(error: unknown): string {
   if (typeof error === "object" && error !== null) {
+    const code = "code" in error ? (error as { code?: unknown }).code : null;
+    if (typeof code === "string" && /^[A-Z0-9_]{3,48}$/.test(code)) {
+      return `PROBE_ANTHROPIC_${code}`.slice(0, 64);
+    }
     const status = "providerStatus" in error ? (error as { providerStatus?: unknown }).providerStatus : null;
     const type = "providerErrorType" in error ? (error as { providerErrorType?: unknown }).providerErrorType : null;
     if (typeof status === "number" && status >= 400 && status <= 599) {
@@ -82,50 +88,29 @@ function anthropicHttpFailureCode(error: unknown): string {
 
 async function executeProviderProbe(provider: Provider) {
   if (provider === "anthropic") {
-    const { callAnthropicStructured } = await import("../lib/document-builder/ai/anthropic");
-    const {
-      enforceLegalChatSourceBoundary,
-      forceClarificationWithoutVerifiedSources,
-      legalChatJsonSchema,
-      parseLegalChatResponse,
-    } = await import("../lib/ai/legal-chat-schema");
+    const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
     let result;
     try {
-      result = await callAnthropicStructured({
-        instructions: "JURO staging contract check. Call emit_result with a clarification response, no legal conclusions and no sources.",
-        input: {
-          jurisdiction: "UZ",
-          question: "Synthetic staging check: request clarification only.",
-          language: "ru",
-          answerMode: "short",
-          reasoningMode: "fast",
-          legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
-          verifiedSources: [],
-        },
-        schema: legalChatJsonSchema,
-        parse: parseLegalChatResponse,
-        maxAttempts: 1,
-        timeoutMs: 20_000,
+      result = await runAnthropicLegalChat({
+        question: "Synthetic staging check: request clarification only.",
+        locale: "ru",
+        answerMode: "short",
+        reasoningMode: "fast",
+        sources: [],
+        legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
         requestId: probeId(provider),
-        strictOutput: false,
+        safetyIdentifier: "staging-synthetic-provider-probe",
       });
     } catch (error) {
       throw new ProviderProbeStageError(anthropicHttpFailureCode(error));
     }
-    try {
-      const constrained = forceClarificationWithoutVerifiedSources(result.data, {
-        locale: "ru",
-        answerMode: "short",
-        reasoningMode: "fast",
-        legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
-      });
-      enforceLegalChatSourceBoundary(constrained, new Set());
-      return { ...result, data: constrained };
-    } catch (error) {
+    if (result.data.responseKind !== "clarification_required" || result.data.sources.length !== 0
+      || result.data.confirmedFindings.length !== 0) {
       throw new ProviderProbeStageError(
-        error instanceof TypeError ? "PROBE_LEGAL_BOUNDARY_TYPE_ERROR" : "PROBE_LEGAL_BOUNDARY_FAILED",
+        "PROBE_LEGAL_BOUNDARY_FAILED",
       );
     }
+    return result;
   }
   const instructions = "JURO staging connectivity probe. This is fixed synthetic technical input, not legal advice or user data. Return exactly the JSON object {\"status\":\"ok\"}.";
   if (provider === "openai") {

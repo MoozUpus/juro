@@ -15,6 +15,46 @@ export function anthropicModel(): string {
   return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
 }
 
+function normalizeAnthropicLegalChatResponse(
+  value: unknown,
+  input: LegalChatRequest,
+): LegalChatResponse {
+  const record = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+  const text = (key: string, fallback: string) =>
+    typeof record[key] === "string" && record[key].trim() ? record[key] as string : fallback;
+  const list = (key: string) => Array.isArray(record[key]) ? record[key] : [];
+  const defaultQuestion = input.locale === "ru"
+    ? "Какие обстоятельства, документы и даты можно уточнить?"
+    : "Qaysi holatlar, hujjatlar va sanalarni aniqlashtirish mumkin?";
+  const responseKind = record.responseKind === "answer" || record.responseKind === "clarification_required"
+    ? record.responseKind
+    : "clarification_required";
+  return parseLegalChatResponse({
+    responseKind,
+    summary: text("summary", input.locale === "ru" ? "Для ответа нужны уточнения." : "Javob uchun aniqlik kiritish kerak."),
+    answer: text("answer", input.locale === "ru" ? "Уточните обстоятельства, чтобы JURO мог проверить применимые нормы." : "JURO tegishli normalarni tekshirishi uchun holatlarni aniqlashtiring."),
+    language: input.locale,
+    jurisdiction: "UZ",
+    answerMode: input.answerMode,
+    reasoningMode: input.reasoningMode,
+    clarificationQuestions: list("clarificationQuestions").length > 0 ? list("clarificationQuestions") : [defaultQuestion],
+    confirmedFindings: list("confirmedFindings"),
+    assumptions: list("assumptions"),
+    risks: list("risks"),
+    sources: list("sources"),
+    requiredDocuments: list("requiredDocuments"),
+    actionPlan: list("actionPlan"),
+    deadlines: list("deadlines"),
+    successOutlook: record.successOutlook && typeof record.successOutlook === "object" ? record.successOutlook : null,
+    urgency: record.urgency === "high" || record.urgency === "critical" ? record.urgency : "normal",
+    suggestedDocument: record.suggestedDocument && typeof record.suggestedDocument === "object" ? record.suggestedDocument : null,
+    suggestLawyer: typeof record.suggestLawyer === "boolean" ? record.suggestLawyer : false,
+    legalDatabaseAsOf: input.legalDatabaseAsOf,
+  });
+}
+
 export async function runAnthropicLegalChat(input: LegalChatRequest, options: LegalAiRunOptions = {}): Promise<LegalAiRunResult> {
   await options.onProgress?.({ stage: "provider_started", provider: "anthropic", model: anthropicModel() });
   const usableSourceIds = new Set(
@@ -22,7 +62,7 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
   );
   const result = await callAnthropicStructured<LegalChatResponse>({
     schema: legalChatJsonSchema,
-    parse: parseLegalChatResponse,
+    parse: (value) => normalizeAnthropicLegalChatResponse(value, input),
     timeoutMs: input.reasoningMode === "deep" ? 75_000 : 45_000,
     requestId: input.requestId,
     model: anthropicModel(),
