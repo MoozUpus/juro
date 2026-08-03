@@ -191,7 +191,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     try {
       if (pending.payload.voiceRecordingId && pending.payload.question) {
         setStreamStatus(ru ? "Подтверждаем распознанный текст…" : "Tanilgan matn tasdiqlanmoqda…");
-        await confirmVoiceTranscript(pending.payload.voiceRecordingId, pending.payload.question.trim());
+        await confirmVoiceTranscript(pending.payload.voiceRecordingId, pending.payload.question.trim(), locale);
       }
       const response = await fetch("/api/platform/ai", {
         method: "POST",

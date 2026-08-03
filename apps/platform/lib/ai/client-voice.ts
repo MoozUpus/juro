@@ -17,7 +17,7 @@ export async function uploadAndTranscribeVoice(input: {
     "/api/platform/voice/recordings",
     {
       method: "POST",
-      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey, "x-juro-csrf": "1" },
+      headers: { "content-type": "application/json", "idempotency-key": idempotencyKey, "x-juro-csrf": "1", "x-juro-locale": input.locale },
       body: JSON.stringify({
         mimeType: input.blob.type.split(";", 1)[0].toLowerCase(),
         sizeBytes: input.blob.size,
@@ -34,32 +34,33 @@ export async function uploadAndTranscribeVoice(input: {
       "content-type": input.blob.type.split(";", 1)[0].toLowerCase(),
       "x-juro-file-sha256": sha256,
       "x-juro-csrf": "1",
+      "x-juro-locale": input.locale,
     },
     body: input.blob,
   });
   if (!uploadResponse.ok) throw new Error(await responseError(uploadResponse));
   input.onPhase?.("finalizing");
   await jsonRequest(`/api/platform/voice/recordings/${encodeURIComponent(initialized.recording.id)}/finalize`, {
-    method: "POST", headers: { "x-juro-csrf": "1" },
+    method: "POST", headers: { "x-juro-csrf": "1", "x-juro-locale": input.locale },
   });
   input.onPhase?.("transcribing");
   return jsonRequest<VoiceUploadResult>(
     `/api/platform/voice/recordings/${encodeURIComponent(initialized.recording.id)}/transcribe`,
-    { method: "POST", headers: { "x-juro-csrf": "1" } },
+    { method: "POST", headers: { "x-juro-csrf": "1", "x-juro-locale": input.locale } },
   );
 }
 
-export async function confirmVoiceTranscript(recordingId: string, transcript: string): Promise<void> {
+export async function confirmVoiceTranscript(recordingId: string, transcript: string, locale: "ru" | "uz"): Promise<void> {
   await jsonRequest(`/api/platform/voice/recordings/${encodeURIComponent(recordingId)}`, {
     method: "PATCH",
-    headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+    headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": locale },
     body: JSON.stringify({ transcript }),
   });
 }
 
-export async function deleteVoiceRecording(recordingId: string): Promise<void> {
+export async function deleteVoiceRecording(recordingId: string, locale: "ru" | "uz"): Promise<void> {
   await jsonRequest(`/api/platform/voice/recordings/${encodeURIComponent(recordingId)}`, {
-    method: "DELETE", headers: { "x-juro-csrf": "1" },
+    method: "DELETE", headers: { "x-juro-csrf": "1", "x-juro-locale": locale },
   });
 }
 

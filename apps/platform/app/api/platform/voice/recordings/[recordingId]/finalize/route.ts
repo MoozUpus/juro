@@ -1,7 +1,7 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
 import { requireD1, requireQuarantineR2, requireR2 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { finalizeVoiceRecording, voiceRecordingForUser } from "../../../../../../../lib/ai/voice-recording";
-import { publicVoiceRecording, voiceErrorResponse, voiceResponse } from "../../../../../../../lib/ai/voice-http";
+import { publicVoiceRecording, voiceErrorResponse, voiceLocale, voiceProblem, voiceResponse } from "../../../../../../../lib/ai/voice-http";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
 
 type Context = { params: Promise<{ recordingId: string }> };
@@ -12,13 +12,14 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   const workspace = await workspaceForUser(user);
   const { recordingId } = await context.params;
   const recording = await voiceRecordingForUser(requireD1(), recordingId, workspace.id, user.id);
-  if (!recording) return voiceResponse({ code: "VOICE_RECORDING_NOT_FOUND", error: "Запись недоступна." }, 404);
+  const locale = voiceLocale(request, recording?.locale === "uz" ? "uz" : "ru");
+  if (!recording) return voiceProblem("VOICE_RECORDING_NOT_FOUND", 404, locale);
   try {
     const updated = await finalizeVoiceRecording({
       db: requireD1(), bucket: requireR2(), quarantineBucket: requireQuarantineR2(), recording,
     });
     return voiceResponse({ recording: publicVoiceRecording(updated) });
   } catch (error) {
-    return voiceErrorResponse(error) ?? Promise.reject(error);
+    return voiceErrorResponse(error, locale) ?? Promise.reject(error);
   }
 });

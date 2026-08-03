@@ -126,7 +126,7 @@ export function VoiceMessageControls(props: {
   }
 
   async function clear() {
-    if (props.recordingId) await deleteVoiceRecording(props.recordingId).catch(() => undefined);
+    if (props.recordingId) await deleteVoiceRecording(props.recordingId, props.locale).catch(() => undefined);
     props.onClear();
     setPhase("idle");
     setElapsedMs(0);
@@ -169,7 +169,7 @@ export function AssistantSpeechControls(props: { locale: PlatformLocale; assista
     try {
       const response = await fetch("/api/platform/voice/speech", {
         method: "POST",
-        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        headers: { "content-type": "application/json", "x-juro-csrf": "1", "x-juro-locale": props.locale },
         body: JSON.stringify({ assistantMessageId: props.assistantMessageId, voice, locale: props.locale }),
       });
       if (!response.ok) {

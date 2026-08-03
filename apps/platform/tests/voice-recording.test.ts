@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parseIdentityKeyring } from "../lib/auth/keyring";
+import { voiceErrorResponse, voiceLocale } from "../lib/ai/voice-http";
 import {
   assertVoiceTranscriptMatches,
   finalizeVoiceRecording,
@@ -14,10 +15,25 @@ import {
   saveEditedVoiceTranscript,
   synthesizeAssistantSpeech,
   transcribeVoiceRecording,
+  VoiceRecordingError,
 } from "../lib/ai/voice-recording";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const NOW = "2026-08-04T12:00:00.000Z";
+
+test("voice API errors honor the explicit RU/UZ locale without exposing internal messages", async () => {
+  assert.equal(voiceLocale(new Request("https://app.juro.uz/api", { headers: { "x-juro-locale": "uz" } })), "uz");
+  const response = voiceErrorResponse(
+    new VoiceRecordingError("VOICE_TRANSCRIPTION_UNAVAILABLE", 503, "internal provider detail"),
+    "uz",
+  );
+  assert.ok(response);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    code: "VOICE_TRANSCRIPTION_UNAVAILABLE",
+    error: "Nutqni matnga aylantirish vaqtincha mavjud emas.",
+  });
+});
 
 function encodedKey(seed: number): string {
   const bytes = Uint8Array.from({ length: 32 }, (_, index) => (seed + index) % 256);

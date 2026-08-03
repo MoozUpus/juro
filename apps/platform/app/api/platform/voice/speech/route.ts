@@ -3,7 +3,7 @@ import { z } from "zod";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import { synthesizeAssistantSpeech } from "../../../../../lib/ai/voice-recording";
-import { voiceErrorResponse, voiceResponse } from "../../../../../lib/ai/voice-http";
+import { voiceErrorResponse, voiceLocale, voiceProblem } from "../../../../../lib/ai/voice-http";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
 const requestSchema = z.object({
@@ -17,12 +17,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return voiceResponse({ code: "INVALID_VOICE_REQUEST", error: "Некорректный запрос озвучивания." }, 400);
+  const locale = parsed.success ? parsed.data.locale : voiceLocale(request);
+  if (!parsed.success) return voiceProblem("INVALID_VOICE_REQUEST", 400, locale);
   const message = await requireD1().prepare(`SELECT m.content
     FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
     WHERE m.id=? AND m.author_type='assistant' AND c.workspace_id=? AND c.owner_user_id=? LIMIT 1`)
     .bind(parsed.data.assistantMessageId, workspace.id, user.id).first<{ content: string }>();
-  if (!message) return voiceResponse({ code: "VOICE_RECORDING_NOT_FOUND", error: "Ответ недоступен." }, 404);
+  if (!message) return voiceProblem("VOICE_RESPONSE_NOT_FOUND", 404, locale);
   try {
     const env = runtimeEnv();
     const providerResponse = await synthesizeAssistantSpeech({
@@ -40,6 +41,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
       },
     });
   } catch (error) {
-    return voiceErrorResponse(error) ?? Promise.reject(error);
+    return voiceErrorResponse(error, locale) ?? Promise.reject(error);
   }
 });
