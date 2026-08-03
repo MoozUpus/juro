@@ -537,3 +537,20 @@ artifact is deployed and traversed through an authenticated RU/UZ session.
 ## Phase 6 — canonical manual case creation (protected staging)
 
 The cases list opens a dedicated RU/UZ `cases/new` route for personal and explicit business workspaces. The form uses a shared allowlisted scenario catalog and persists through the authenticated, CSRF-protected cases API. The server resolves the tenant, rejects cross-audience scenarios and writes the case, plan, four initial steps, immutable version and case event atomically. A successful local HTTP/D1 smoke created and re-read the same case. Worker version `06028d89-322c-42d4-95f2-41d89da8461e` contains the route; authenticated Access traversal remains an open staging gate. See `STAGING-0087-CANONICAL-CASE-CREATE-EVIDENCE.md`.
+
+## Phase 4/8 — canonical plain voice mode (local candidate)
+
+The existing encrypted voice-message backend is now exposed through canonical
+personal and explicit business-workspace `ai-lawyer/voice` routes. Those routes
+open the same tenant-owned AI conversation with `mode=voice`, so text, voice,
+case context, history, usage and retry semantics do not diverge. Dashboard has
+a direct voice entry.
+
+The RU/UZ client exposes actual microphone, transcription, provider-processing
+and playback states; recording never starts automatically. It supports five-
+minute recording, pause/stop/cancel, editable transcript review, explicit send,
+selectable TTS voice, captions, mute, stop and replay. The verified Jurobek WebP
+is a static poster only; voice-with-avatar remains disabled without an approved
+rig. Focused route, D1/R2/provider-contract and UI-state tests pass 11/11.
+Protected staging deployment and authenticated browser/provider evidence remain
+open. Production is unchanged.

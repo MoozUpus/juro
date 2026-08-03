@@ -2,11 +2,13 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, ListPlus, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, X } from "lucide-react";
+import { AudioLines, BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, UserRoundX, X } from "lucide-react";
+import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
+import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import { AssistantSpeechControls, VoiceMessageControls } from "./VoiceMessageControls";
@@ -64,6 +66,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const router = useRouter();
   const selectedConversationId = searchParams.get("conversationId") || "";
   const selectedBranchId = searchParams.get("branchId") || "";
+  const voiceMode = searchParams.get("mode") === "voice";
   const base = usePlatformBasePath();
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
@@ -90,6 +93,21 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [savingFeedback, setSavingFeedback] = useState(false);
   const [feedbackStatus, setFeedbackStatus] = useState("");
   const [voiceRecordingId, setVoiceRecordingId] = useState("");
+  const [voiceRecorderPhase, setVoiceRecorderPhase] = useState<VoiceRecorderPhase>("idle");
+  const [voiceSpeechPhase, setVoiceSpeechPhase] = useState<VoiceSpeechPhase>("idle");
+
+  function aiLocation(params = new URLSearchParams()): string {
+    if (voiceMode) params.set("mode", "voice");
+    const serialized = params.toString();
+    return serialized ? `${pathname}?${serialized}` : pathname;
+  }
+
+  function setComposerMode(next: "text" | "voice") {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "voice") params.set("mode", "voice");
+    else params.delete("mode");
+    router.replace(params.size ? `${pathname}?${params}` : pathname, { scroll: false });
+  }
 
   const load = useCallback(async () => {
     try {
@@ -157,7 +175,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setCanRetry(false);
       const nextParams = new URLSearchParams({ conversationId: statusBody.conversationId });
       if (statusBody.branchId) nextParams.set("branchId", statusBody.branchId);
-      router.replace(`${pathname}?${nextParams}`, { scroll: false });
+      router.replace(aiLocation(nextParams), { scroll: false });
       return { kind: "completed" as const };
     }
     return { kind: "uncertain" as const };
@@ -239,7 +257,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setCanRetry(false);
       const nextParams = new URLSearchParams({ conversationId: body.conversationId });
       if (body.branchId) nextParams.set("branchId", body.branchId);
-      router.replace(`${pathname}?${nextParams}`, { scroll: false });
+      router.replace(aiLocation(nextParams), { scroll: false });
     } catch (value) {
       const cancelled = isUserCancelledAiRequest(value);
       if (!cancelled && (value instanceof AiRetryableRequestError || value instanceof TypeError)) {
@@ -387,14 +405,22 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
-    <section className="ai-workspace">
+    <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""}`}>
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setVoiceRecordingId(""); setEditSourceMessageId(""); router.replace(pathname, { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
-        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => { setEditSourceMessageId(""); setVoiceRecordingId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(item.id)}`, { scroll: false }); }}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
+        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setVoiceRecordingId(""); setEditSourceMessageId(""); router.replace(aiLocation(), { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
+        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => { setEditSourceMessageId(""); setVoiceRecordingId(""); router.replace(aiLocation(new URLSearchParams({ conversationId: item.id })), { scroll: false }); }}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
       </aside>
       <main className="ai-dialog">
-        <header><span><Bot /></span><div><h1>{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div></header>
+        <header><span><Bot /></span><div><h1>{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button><button type="button" disabled title={ru ? "Нужен утверждённый 3D-ассет Журобека" : "Tasdiqlangan Jurobek 3D asseti kerak"}><UserRoundX />{ru ? "С аватаром · скоро" : "Avatar bilan · tez orada"}</button></nav></header>
+        {voiceMode && <VoiceModeStage
+          locale={locale}
+          configured={Boolean(status?.configured)}
+          answerReady={Boolean(answer)}
+          sending={sending}
+          recorderPhase={voiceRecorderPhase}
+          speechPhase={voiceSpeechPhase}
+        />}
         {!status?.configured && <div className="ai-unavailable" role="status"><ShieldAlert /><div><strong>{ru ? "AI пока недоступен" : "AI hozircha ishlamaydi"}</strong><p>{ru ? "Сервер не подтвердил ключ AI-провайдера. JURO не имитирует ответ и не показывает ложный success." : "Server AI-provayder kalitini tasdiqlamadi. JURO javobni taqlid qilmaydi va soxta muvaffaqiyatni ko‘rsatmaydi."}</p></div></div>}
         {error && <div className="ai-error" role="alert"><CircleAlert /><div><p>{error}</p>{canRetry && <button type="button" disabled={sending} onClick={() => { const pending = pendingAiRequestRef.current; if (pending) void submit(undefined, undefined, pending); }}>{ru ? "Безопасно повторить запрос" : "So‘rovni xavfsiz qaytarish"}</button>}</div></div>}
         <div className="ai-answer-stream" aria-live="polite" aria-busy={sending}>
@@ -414,7 +440,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? (ru ? "Проверяем шаблон…" : "Shablon tekshirilmoqda…") : (ru ? "Открыть шаблон JURO" : "JURO shablonini ochish")}</button>}
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setVoiceRecordingId(""); setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
-              {answer.messageId && answer.result.responseKind === "answer" && <AssistantSpeechControls locale={locale} assistantMessageId={answer.messageId} disabled={sending} />}
+              {answer.messageId && answer.result.responseKind === "answer" && <AssistantSpeechControls locale={locale} assistantMessageId={answer.messageId} disabled={sending} onPhaseChange={setVoiceSpeechPhase} />}
             </div>
             {answer.messageId && <section className="ai-feedback" aria-labelledby="ai-feedback-heading">
               <div><h2 id="ai-feedback-heading">{ru ? "Оцените этот ответ" : "Bu javobni baholang"}</h2><p>{ru ? "Отзыв привязан к этому сохранённому ответу и помогает проверить качество источников." : "Fikr-mulohaza shu saqlangan javobga bog‘lanadi va manbalar sifatini tekshirishga yordam beradi."}</p></div>
@@ -433,7 +459,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             </section>}
             {answer.branches && answer.branches.length > 1 && <nav className="ai-branch-history" aria-label={ru ? "Версии ответа" : "Javob versiyalari"}>
               <span><History />{ru ? "Версии" : "Versiyalar"}</span>
-              {answer.branches.map((branch) => <button type="button" aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} onClick={() => { setEditSourceMessageId(""); router.replace(`${pathname}?conversationId=${encodeURIComponent(answer.conversationId)}&branchId=${encodeURIComponent(branch.branchId)}`, { scroll: false }); }}>{branch.versionNumber} · {branch.operation}</button>)}
+              {answer.branches.map((branch) => <button type="button" aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} onClick={() => { setEditSourceMessageId(""); router.replace(aiLocation(new URLSearchParams({ conversationId: answer.conversationId, branchId: branch.branchId })), { scroll: false }); }}>{branch.versionNumber} · {branch.operation}</button>)}
             </nav>}
           </>}
         </div>
@@ -447,6 +473,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             locale={locale}
             disabled={!status?.configured || sending}
             recordingId={voiceRecordingId}
+            presentation={voiceMode ? "stage" : "inline"}
+            onPhaseChange={setVoiceRecorderPhase}
             onTranscript={({ recordingId, transcript }) => { setVoiceRecordingId(recordingId); setQuestion(transcript); pendingAiRequestRef.current = null; setCanRetry(false); }}
             onClear={() => setVoiceRecordingId("")}
           />
@@ -465,6 +493,53 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       </aside>
     </section>
   );
+}
+
+function VoiceModeStage(props: {
+  locale: PlatformLocale;
+  configured: boolean;
+  answerReady: boolean;
+  sending: boolean;
+  recorderPhase: VoiceRecorderPhase;
+  speechPhase: VoiceSpeechPhase;
+}) {
+  const ru = props.locale === "ru";
+  const state = resolveVoiceModeState(props);
+  const labels: Record<VoiceModeState, [string, string]> = {
+    idle: ["Голосовой режим ожидает", "Ovozli rejim kutmoqda"],
+    ready: ["Готов слушать после вашего нажатия", "Bosganingizdan keyin tinglashga tayyor"],
+    listening: ["Слушаю вашу ситуацию", "Vaziyatingizni tinglayapman"],
+    transcribing: ["Защищённо распознаю речь", "Nutqni himoyalangan tarzda matnga aylantiryapman"],
+    thinking: ["Проверяю факты и источники", "Faktlar va manbalarni tekshiryapman"],
+    speaking: ["Озвучиваю сохранённый AI-ответ", "Saqlangan AI javobini ovozlantiryapman"],
+    paused: ["Пауза — вы управляете продолжением", "Pauza — davom ettirish sizning nazoratingizda"],
+    completed: ["Ответ готов — проверьте текст и источники", "Javob tayyor — matn va manbalarni tekshiring"],
+    offline: ["Голосовой провайдер сейчас недоступен", "Ovoz provayderi hozir mavjud emas"],
+    error: ["Голосовой этап не завершён — можно повторить или перейти к тексту", "Ovoz bosqichi yakunlanmadi — qayta urinib ko‘ring yoki matnga o‘ting"],
+  };
+  return <section className="ai-voice-stage" data-state={state} aria-labelledby="ai-voice-stage-title">
+    <div className="ai-voice-stage-portrait">
+      <Image
+        src="/jurobek-avatar.webp"
+        alt={ru ? "Журобек, статичный цифровой помощник JURO" : "Jurobek, JUROning statik raqamli yordamchisi"}
+        width={1024}
+        height={1792}
+        sizes="(max-width: 760px) 92px, 116px"
+        priority={false}
+      />
+    </div>
+    <div className="ai-voice-stage-copy">
+      <span><AudioLines aria-hidden="true" />{ru ? "Голосовой режим" : "Ovozli rejim"}</span>
+      <h2 id="ai-voice-stage-title">{labels[state][ru ? 0 : 1]}</h2>
+      <p>{ru
+        ? "Микрофон включается только по вашему нажатию. Перед отправкой вы увидите и сможете исправить расшифровку."
+        : "Mikrofon faqat siz bosganda yoqiladi. Yuborishdan oldin matnni ko‘rib, tahrirlashingiz mumkin."}</p>
+      <small>{ru
+        ? "Изображение Журобека статично: утверждённый 3D-rig ещё не предоставлен. Это AI, а не живой юрист."
+        : "Jurobek tasviri statik: tasdiqlangan 3D rig hali taqdim etilmagan. Bu AI, tirik yurist emas."}</small>
+    </div>
+    <output role={state === "error" ? "alert" : "status"} aria-live="polite">{state}</output>
+  </section>;
 }
 
 type AiStreamStatus = {

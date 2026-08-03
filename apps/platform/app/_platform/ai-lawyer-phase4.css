@@ -471,11 +471,212 @@
   opacity: .5;
 }
 
+.ai-composer-mode {
+  display: flex;
+  margin-left: auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+
+.ai-composer-mode button {
+  display: inline-flex;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  border: 1px solid rgba(6, 40, 68, .14);
+  border-radius: .625rem;
+  background: #fff;
+  color: #405663;
+  padding: .45rem .65rem;
+  font: inherit;
+  font-size: .6875rem;
+  font-weight: 780;
+}
+
+.ai-composer-mode button[aria-pressed="true"] {
+  border-color: #be974f;
+  background: #fff8e9;
+  color: #062844;
+}
+
+.ai-composer-mode button:disabled {
+  cursor: not-allowed;
+  opacity: .52;
+}
+
+.ai-composer-mode svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ai-voice-stage {
+  display: grid;
+  min-height: 10rem;
+  margin: .875rem 1.125rem 0;
+  overflow: hidden;
+  border: 1px solid rgba(190, 151, 79, .32);
+  border-radius: 1rem;
+  background:
+    radial-gradient(circle at 12% 18%, rgba(190, 151, 79, .18), transparent 34%),
+    linear-gradient(135deg, #062844, #0a3655 68%, #0c2a42);
+  color: #fff;
+  grid-template-columns: 7rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: .875rem 1rem 0;
+}
+
+.ai-voice-stage-portrait {
+  height: 9rem;
+  overflow: hidden;
+  align-self: end;
+}
+
+.ai-voice-stage-portrait img {
+  display: block;
+  width: 100%;
+  height: auto;
+  transform: translateY(-1.2rem);
+}
+
+.ai-voice-stage-copy {
+  align-self: center;
+  padding-bottom: .875rem;
+}
+
+.ai-voice-stage-copy > span {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  color: #e1bd72;
+  font-size: .6875rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.ai-voice-stage-copy svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.ai-voice-stage h2 {
+  margin: .35rem 0 .25rem;
+  color: #fff;
+  font-size: clamp(1.15rem, 2vw, 1.55rem);
+  letter-spacing: -.025em;
+}
+
+.ai-voice-stage p,
+.ai-voice-stage small {
+  display: block;
+  max-width: 48rem;
+  margin: 0;
+  color: #c9d4db;
+  line-height: 1.5;
+}
+
+.ai-voice-stage p { font-size: .75rem; }
+.ai-voice-stage small { margin-top: .35rem; font-size: .625rem; }
+
+.ai-voice-stage > output {
+  min-width: 6rem;
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  color: #e6c681;
+  padding: .45rem .65rem;
+  font-size: .625rem;
+  font-weight: 850;
+  letter-spacing: .07em;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ai-voice-stage[data-state="error"] > output,
+.ai-voice-stage[data-state="offline"] > output {
+  border-color: rgba(255, 188, 180, .36);
+  color: #ffd0ca;
+}
+
+.ai-voice-stage[data-state="listening"] > output,
+.ai-voice-stage[data-state="speaking"] > output {
+  border-color: rgba(172, 227, 196, .38);
+  color: #bde8cf;
+}
+
+.ai-workspace-voice .ai-voice-controls.is-stage {
+  border-color: rgba(190, 151, 79, .42);
+  background: #fffaf0;
+}
+
+.ai-composer-mode button:focus-visible,
+.ai-voice-controls button:focus-visible,
+.ai-speech-controls button:focus-visible,
+.ai-speech-controls select:focus-visible {
+  outline: 3px solid #be974f;
+  outline-offset: 2px;
+}
+
+.ai-composer-mode button:active,
+.ai-voice-controls button:active,
+.ai-speech-controls button:active {
+  transform: scale(.98);
+}
+
+@media (max-width: 900px) {
+  .ai-dialog > header {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .ai-composer-mode {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .ai-composer-mode button {
+    flex: 1 1 auto;
+  }
+
+  .ai-voice-stage {
+    grid-template-columns: 5.5rem minmax(0, 1fr);
+  }
+
+  .ai-voice-stage-portrait { height: 7.5rem; }
+  .ai-voice-stage > output { grid-column: 2; justify-self: start; margin-bottom: .75rem; }
+}
+
+@media (max-width: 560px) {
+  .ai-composer-mode button:disabled { display: none; }
+
+  .ai-voice-stage {
+    margin: .625rem .75rem 0;
+    grid-template-columns: 4.25rem minmax(0, 1fr);
+    gap: .75rem;
+    padding: .75rem .75rem 0;
+  }
+
+  .ai-voice-stage-portrait { height: 6.5rem; }
+  .ai-voice-stage-copy { padding-bottom: .625rem; }
+  .ai-voice-stage-copy small { display: none; }
+  .ai-voice-stage > output { min-width: 0; }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .ai-answer-actions button:not(:disabled):hover,
   .ai-branch-history button:hover { background: #f4f0e8; }
 
   .ai-feedback-actions > button:not(:disabled):hover,
   .ai-feedback summary:hover,
-  .ai-feedback-form button:not(:disabled):hover { background: #f4f0e8; }
+  .ai-feedback-form button:not(:disabled):hover,
+  .ai-composer-mode button:not(:disabled):hover { background: #f4f0e8; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-composer-mode button:active,
+  .ai-voice-controls button:active,
+  .ai-speech-controls button:active { transform: none; }
 }

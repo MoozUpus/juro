@@ -367,6 +367,23 @@ GET /api/document-builder/standalone-signed-shares/:token/file
 
 `POST /api/platform/cases` is the real persistence boundary for all three routes. It resolves tenant context server-side and writes the case, plan, steps, immutable plan version and event in one D1 batch.
 
+### Canonical plain voice — local candidate
+
+| Route | Behavior | Authorization/data boundary |
+|---|---|---|
+| `/:locale/:accountType/ai-lawyer/voice` | `308` to the same personal `ai-chat?mode=voice` conversation surface | destination requires the existing authenticated personal workspace shell |
+| `/:locale/business/:workspaceId/ai-lawyer/voice` | `308` preserving the explicit workspace to `ai-chat?mode=voice` | destination independently verifies membership and active workspace |
+| `/:locale/business/ai-lawyer/voice` | resolves an authorized active workspace before redirect | server-side authenticated legacy adapter; URL workspace is never trusted |
+| `POST /api/platform/voice/recordings` | initialize bounded idempotent recording | session, active tenant, CSRF, D1 |
+| `PUT /api/platform/voice/recordings/:recordingId` | upload declared bytes to private quarantine | owner/workspace check, MIME/size/hash contract, private R2 |
+| `POST /api/platform/voice/recordings/:recordingId/finalize` | verify and promote safe audio object | owner/workspace check, magic/hash/size, private R2 |
+| `POST /api/platform/voice/recordings/:recordingId/transcribe` | server-side configured OpenAI STT | owner/workspace check, encrypted transcript in D1 |
+| `PATCH,DELETE /api/platform/voice/recordings/:recordingId` | confirm edited transcript or delete audio | owner/workspace check and CSRF |
+| `POST /api/platform/voice/speech` | synthesize one persisted assistant message | owner/workspace message lookup and server-only configured OpenAI TTS |
+
+Voice and text share the existing AI POST/SSE route, conversation IDs, branch
+history, case context and usage ledger. Voice-with-avatar is not enabled.
+
 1. Add target routes before redirecting old ones.
 2. Preserve locale, account type, workspace, object ID, and safe query state.
 3. Do not place confidential content in URLs.

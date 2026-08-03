@@ -19,6 +19,7 @@ import {
   Files,
   LoaderCircle,
   MessageSquareText,
+  Mic,
   Paperclip,
   RotateCcw,
   Send,
@@ -266,6 +267,12 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
             )}
             {uploadProgress && <><div className="dashboard-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div><p className="dashboard-upload-status" role="status" aria-live="polite">{uploadStatus}</p></>}
           </form>
+          <Link className="dashboard-voice-entry" href={`${base}/ai-lawyer/voice`}>
+            <Mic aria-hidden="true" />
+            <span>{ru ? "Открыть голосовой режим" : "Ovozli rejimni ochish"}</span>
+            <small>{ru ? "Запись включится только после нажатия" : "Yozuv faqat bosgandan keyin boshlanadi"}</small>
+            <ArrowRight aria-hidden="true" />
+          </Link>
         </div>
         <GoldenRoute locale={locale} label={copy.journeyLabel} steps={copy.journeySteps} />
       </section>

@@ -18,6 +18,10 @@ function destination(
   if (segments.length === 0 || (segments.length === 1 && segments[0] === "new")) {
     return Response.redirect(target, 308);
   }
+  if (segments.length === 1 && segments[0] === "voice") {
+    target.searchParams.set("mode", "voice");
+    return Response.redirect(target, 308);
+  }
   if (segments.length === 2 && segments[0] === "chat" && UUID_PATTERN.test(segments[1])) {
     target.searchParams.set("conversationId", segments[1]);
     return Response.redirect(target, 308);

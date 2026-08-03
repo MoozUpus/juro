@@ -330,7 +330,12 @@ No Phase 5 production-readiness claim is made.
 
 - The exact prototype is deployed to protected staging as Worker version `cfef8153-3322-4ce5-b271-3478a0531b28`; deployment itself does not close the authenticated design gate.
 - The owner-approved rigged Jurobek source is absent; armature, skinning, clips, shirt lettering, facial corrections, gaze, materials, lip sync, and 3D optimization are not implemented or claimed.
-- STT, TTS, realtime voice, audio retention/purge, and voice-with-avatar remain feature-off; text AI remains the honest fallback.
+- Plain STT/TTS, encrypted transcript storage, private-R2 audio retention/purge,
+  editable transcript confirmation and canonical voice routes are implemented
+  locally on the migration-0066 backend. Protected staging deploy and an
+  authenticated real-provider/browser run remain open. Realtime voice and
+  voice-with-avatar remain feature-off; text AI remains the independent
+  fallback.
 - Authenticated screenshots, keyboard traversal, axe, NVDA/VoiceOver, 200% zoom, console/hydration, 320–1440+ matrix, and real-device touch checks remain blocked by the recorded browser-control kernel failure. Access was not bypassed.
 - LCP/INP/CLS, route bundle delta, GPU/memory, long-session, and WebGL context-loss measurements are not claimed.
 - The shared shell’s grid/width layout transition was removed in staging version `97745a0a-f0c6-416b-9049-f756a66403a6`; authenticated visual and touch-device verification remains open.

@@ -2615,3 +2615,24 @@ Date: 2026-08-04
 Manual creation is not a client-side shortcut to the action-plan screen. Personal and explicit business workspaces receive canonical `cases/new` routes, while legacy business URLs first resolve an authorized active workspace. The browser submits only bounded case facts and an allowlisted scenario identity; it never submits a workspace ID, generated plan text, step list or audit metadata.
 
 One shared typed catalog supplies RU/UZ labels and server-side initial steps. Schema validation rejects unknown fields and mismatched personal/business scenarios; the API repeats the audience check after resolving the active workspace from the authenticated user. The case, plan, four steps, immutable version and case event are inserted in one D1 batch so a partial success is not shown. No migration or dependency was needed. Local HTTP/D1 create/read smoke and the full regression suite pass; staging Worker `06028d89-322c-42d4-95f2-41d89da8461e` contains the feature. Production is unchanged.
+
+## D-130 — Plain voice is a mode of the persisted AI conversation
+
+Status: accepted for local implementation; protected staging deployment pending
+Date: 2026-08-04
+
+Voice input does not create a second chat product or a separate history. The
+canonical personal and explicit business `ai-lawyer/voice` routes redirect to
+the same authenticated `ai-chat` client with a non-sensitive `mode=voice`
+query. Conversation, branch, case, usage and retry context therefore remain
+server-owned and identical when the user switches between text and voice.
+
+Visual listening, transcription, thinking and speaking states derive only from
+the actual MediaRecorder, upload/transcription request, AI stream and audio
+element. The microphone never starts automatically. The transcript remains
+editable and must match the encrypted recording transcript before the AI route
+links it to the persisted user message. The verified static Jurobek poster is
+not an avatar implementation; voice-with-avatar remains disabled until an
+owner-approved rig is supplied and audited. No migration or dependency is
+introduced beyond already-applied additive migration 0066. Production remains
+unchanged.

@@ -4,9 +4,8 @@ import { Mic, Pause, Play, RotateCcw, Square, Trash2, Volume2, VolumeX } from "l
 import { useEffect, useRef, useState } from "react";
 
 import { deleteVoiceRecording, uploadAndTranscribeVoice } from "../../lib/ai/client-voice";
+import type { VoiceRecorderPhase, VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import type { PlatformLocale } from "../../lib/platform/routing";
-
-type RecorderPhase = "idle" | "listening" | "paused" | "hashing" | "uploading" | "finalizing" | "transcribing" | "ready" | "error";
 
 function monotonicNow(): number {
   return performance.now();
@@ -18,9 +17,12 @@ export function VoiceMessageControls(props: {
   onTranscript: (value: { recordingId: string; transcript: string }) => void;
   onClear: () => void;
   recordingId: string;
+  presentation?: "inline" | "stage";
+  onPhaseChange?: (phase: VoiceRecorderPhase) => void;
 }) {
   const ru = props.locale === "ru";
-  const [phase, setPhase] = useState<RecorderPhase>("idle");
+  const onPhaseChange = props.onPhaseChange;
+  const [phase, setPhase] = useState<VoiceRecorderPhase>("idle");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [error, setError] = useState("");
   const recorderRef = useRef<MediaRecorder | null>(null);
@@ -32,6 +34,7 @@ export function VoiceMessageControls(props: {
   const cancelledRef = useRef(false);
 
   useEffect(() => () => releaseMedia(recorderRef, streamRef), []);
+  useEffect(() => { onPhaseChange?.(phase); }, [phase, onPhaseChange]);
 
   useEffect(() => {
     if (phase !== "listening") return;
@@ -133,8 +136,8 @@ export function VoiceMessageControls(props: {
     setError("");
   }
 
-  const busy = new Set<RecorderPhase>(["hashing", "uploading", "finalizing", "transcribing"]).has(phase);
-  return <section className="ai-voice-controls" aria-label={ru ? "Голосовой ввод" : "Ovozli kiritish"}>
+  const busy = new Set<VoiceRecorderPhase>(["hashing", "uploading", "finalizing", "transcribing"]).has(phase);
+  return <section className={`ai-voice-controls ${props.presentation === "stage" ? "is-stage" : ""}`} data-phase={phase} aria-label={ru ? "Голосовой ввод" : "Ovozli kiritish"}>
     <div className="ai-voice-actions">
       {phase === "idle" && <button type="button" disabled={props.disabled} onClick={() => void start()}><Mic />{ru ? "Записать вопрос" : "Savolni yozish"}</button>}
       {(phase === "listening" || phase === "paused") && <>
@@ -153,19 +156,26 @@ export function VoiceMessageControls(props: {
   </section>;
 }
 
-export function AssistantSpeechControls(props: { locale: PlatformLocale; assistantMessageId: string; disabled?: boolean }) {
+export function AssistantSpeechControls(props: { locale: PlatformLocale; assistantMessageId: string; disabled?: boolean; onPhaseChange?: (phase: VoiceSpeechPhase) => void }) {
   const ru = props.locale === "ru";
+  const onPhaseChange = props.onPhaseChange;
   const [voice, setVoice] = useState<"marin" | "cedar">("marin");
   const [audioUrl, setAudioUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [muted, setMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  useEffect(() => () => { if (audioUrl) URL.revokeObjectURL(audioUrl); }, [audioUrl]);
+  useEffect(() => () => {
+    audioRef.current?.pause();
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    onPhaseChange?.("idle");
+  }, [audioUrl, onPhaseChange]);
 
   async function speak() {
     setLoading(true);
     setError("");
+    onPhaseChange?.("preparing");
     try {
       const response = await fetch("/api/platform/voice/speech", {
         method: "POST",
@@ -179,18 +189,51 @@ export function AssistantSpeechControls(props: { locale: PlatformLocale; assista
       const nextUrl = URL.createObjectURL(await response.blob());
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       setAudioUrl(nextUrl);
-      window.setTimeout(() => { void audioRef.current?.play(); }, 0);
+      window.setTimeout(() => {
+        void audioRef.current?.play().catch(() => {
+          setError(ru ? "Браузер не разрешил воспроизведение. Нажмите повтор." : "Brauzer ijro etishga ruxsat bermadi. Qayta urinishni bosing.");
+          onPhaseChange?.("error");
+        });
+      }, 0);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
+      onPhaseChange?.("error");
     } finally {
       setLoading(false);
     }
   }
 
+  function stop() {
+    audioRef.current?.pause();
+    if (audioRef.current) audioRef.current.currentTime = 0;
+    onPhaseChange?.("completed");
+  }
+
+  function replay() {
+    if (!audioRef.current) return;
+    audioRef.current.currentTime = 0;
+    void audioRef.current.play().catch(() => onPhaseChange?.("error"));
+  }
+
   return <div className="ai-speech-controls">
     <label>{ru ? "AI-голос" : "AI ovozi"}<select value={voice} onChange={(event) => setVoice(event.target.value as "marin" | "cedar")}><option value="marin">Marin</option><option value="cedar">Cedar</option></select></label>
     <button type="button" disabled={props.disabled || loading} onClick={() => void speak()}><Volume2 />{loading ? (ru ? "Готовим аудио…" : "Audio tayyorlanmoqda…") : (ru ? "Озвучить ответ" : "Javobni ovozlantirish")}</button>
-    {audioUrl && <><audio ref={audioRef} src={audioUrl} controls preload="metadata" /><button type="button" onClick={() => { audioRef.current?.pause(); if (audioRef.current) audioRef.current.currentTime = 0; }}><VolumeX />{ru ? "Остановить" : "To‘xtatish"}</button></>}
+    {audioUrl && <>
+      <audio
+        ref={audioRef}
+        src={audioUrl}
+        controls
+        muted={muted}
+        preload="metadata"
+        onPlay={() => onPhaseChange?.("speaking")}
+        onPause={() => { if (audioRef.current && audioRef.current.currentTime > 0 && !audioRef.current.ended) onPhaseChange?.("paused"); }}
+        onEnded={() => onPhaseChange?.("completed")}
+        onError={() => onPhaseChange?.("error")}
+      />
+      <button type="button" aria-pressed={muted} onClick={() => setMuted((value) => !value)}>{muted ? <VolumeX /> : <Volume2 />}{muted ? (ru ? "Включить звук" : "Ovozni yoqish") : (ru ? "Без звука" : "Ovozni o‘chirish")}</button>
+      <button type="button" onClick={stop}><Square />{ru ? "Остановить" : "To‘xtatish"}</button>
+      <button type="button" onClick={replay}><RotateCcw />{ru ? "Повторить" : "Qayta eshitish"}</button>
+    </>}
     <small>{ru ? "Синтетический AI-голос, не живой юрист." : "Sun’iy AI ovozi, tirik yurist emas."}</small>
     {error && <p role="alert">{error}</p>}
   </div>;
@@ -211,8 +254,8 @@ function formatElapsed(milliseconds: number) {
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-function phaseLabel(phase: RecorderPhase, ru: boolean) {
-  const labels: Record<RecorderPhase, [string, string]> = {
+function phaseLabel(phase: VoiceRecorderPhase, ru: boolean) {
+  const labels: Record<VoiceRecorderPhase, [string, string]> = {
     idle: ["Микрофон включается только после нажатия.", "Mikrofon faqat bosgandan keyin yoqiladi."],
     listening: ["Идёт запись.", "Yozuv davom etmoqda."],
     paused: ["Запись приостановлена.", "Yozuv pauzada."],

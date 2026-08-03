@@ -23,6 +23,13 @@ test("personal ai-lawyer compatibility routes preserve locale and canonical acco
   );
   assert.equal(chat.status, 308);
   assert.equal(chat.headers.get("location"), `https://staging.app.juro.uz/uz/lawyer/ai-chat?conversationId=${chatId}`);
+
+  const voice = await personalAiLawyerCompatibilityRoute(
+    new Request("https://staging.app.juro.uz/ru/entrepreneur/ai-lawyer/voice"),
+    Promise.resolve({ locale: "ru", accountType: "entrepreneur", path: ["voice"] }),
+  );
+  assert.equal(voice.status, 308);
+  assert.equal(voice.headers.get("location"), "https://staging.app.juro.uz/ru/entrepreneur/ai-chat?mode=voice");
 });
 
 test("business compatibility route keeps the exact workspace and rejects malformed paths", async () => {
@@ -32,6 +39,13 @@ test("business compatibility route keeps the exact workspace and rejects malform
   );
   assert.equal(response.status, 308);
   assert.equal(response.headers.get("location"), "https://staging.app.juro.uz/ru/business/workspace-1/ai-chat");
+
+  const voice = await businessAiLawyerCompatibilityRoute(
+    new Request("https://staging.app.juro.uz/uz/business/workspace-1/ai-lawyer/voice"),
+    Promise.resolve({ locale: "uz", workspaceId: "workspace-1", path: ["voice"] }),
+  );
+  assert.equal(voice.status, 308);
+  assert.equal(voice.headers.get("location"), "https://staging.app.juro.uz/uz/business/workspace-1/ai-chat?mode=voice");
 
   for (const invalid of [
     personalAiLawyerCompatibilityRoute(
@@ -64,9 +78,11 @@ test("vinext receives explicit compatibility routes instead of an optional catch
     "../app/[locale]/[accountType]/ai-lawyer/route.ts",
     "../app/[locale]/[accountType]/ai-lawyer/new/route.ts",
     "../app/[locale]/[accountType]/ai-lawyer/chat/[chatId]/route.ts",
+    "../app/[locale]/[accountType]/ai-lawyer/voice/route.ts",
     "../app/[locale]/business/[workspaceId]/ai-lawyer/route.ts",
     "../app/[locale]/business/[workspaceId]/ai-lawyer/new/route.ts",
     "../app/[locale]/business/[workspaceId]/ai-lawyer/chat/[chatId]/route.ts",
+    "../app/[locale]/business/[workspaceId]/ai-lawyer/voice/route.ts",
   ];
 
   for (const route of explicitRoutes) {

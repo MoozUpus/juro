@@ -28,6 +28,9 @@ Status: integration-branch evidence only; production routes are unchanged.
 | `/:locale/:personalType/ai-lawyer/chat/:chatId` | `/:locale/:personalType/ai-chat?conversationId=:chatId` | UUID-only compatibility redirect | 308 | future deep links | local direct route tests pass; malformed IDs return 404 |
 | `/:locale/business/:workspaceId/ai-lawyer[/new]` | `/:locale/business/:workspaceId/ai-chat` | workspace-preserving compatibility redirect; authorization remains at destination | 308 | business target architecture | local direct route tests pass; staging deploy pending |
 | `/:locale/business/:workspaceId/ai-lawyer/chat/:chatId` | `/:locale/business/:workspaceId/ai-chat?conversationId=:chatId` | workspace- and UUID-preserving compatibility redirect | 308 | future business deep links | local direct route tests pass; malformed workspace/chat IDs return 404 |
+| `/:locale/:personalType/ai-lawyer/voice` | `/:locale/:personalType/ai-chat?mode=voice` | canonical plain-voice entry using the same conversation and case context | 308 | dashboard voice entry and direct links | focused route/state/backend tests pass; staging deploy pending |
+| `/:locale/business/:workspaceId/ai-lawyer/voice` | `/:locale/business/:workspaceId/ai-chat?mode=voice` | workspace-preserving plain-voice entry | 308 | business dashboard/direct links | focused route/state/backend tests pass; staging deploy pending |
+| `/:locale/business/ai-lawyer/voice` | authorized active workspace `ai-chat?mode=voice` | authenticated legacy business resolution | 307 after tenant resolution | legacy business links | source/type/route build pending full regression |
 
 ## Invariants
 
