@@ -88,11 +88,12 @@ export function ClientServiceProposals({ locale, accountType, workspaceId, caseI
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
-    const response = await fetch(`/api/cases/${encodeURIComponent(caseId)}/proposals`, { cache: "no-store" });
+    const query = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : "";
+    const response = await fetch(`/api/cases/${encodeURIComponent(caseId)}/proposals${query}`, { cache: "no-store" });
     const body = await response.json() as { proposals?: Proposal[]; error?: string };
     if (!response.ok) throw new Error(body.error || "PROPOSALS_UNAVAILABLE");
     setItems(body.proposals || []);
-  }, [caseId]);
+  }, [caseId, workspaceId]);
 
   useEffect(() => { void load().catch((value) => setError(localError(value, ru))).finally(() => setLoading(false)); }, [load, ru]);
 
@@ -102,7 +103,7 @@ export function ClientServiceProposals({ locale, accountType, workspaceId, caseI
     try {
       const response = await fetch(`/api/cases/${encodeURIComponent(caseId)}/proposals/${encodeURIComponent(item.id)}/accept`, {
         method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ requestId: crypto.randomUUID(), agreementVersion, accepted: true, locale }),
+        body: JSON.stringify({ requestId: crypto.randomUUID(), agreementVersion, accepted: true, locale, ...(workspaceId ? { workspaceId } : {}) }),
       });
       const body = await response.json() as { error?: string; code?: string };
       if (!response.ok) throw new Error(body.error || body.code || "PROPOSAL_ACCEPT_FAILED");
@@ -115,7 +116,7 @@ export function ClientServiceProposals({ locale, accountType, workspaceId, caseI
     setBusyId(item.id); setError("");
     try {
       const response = await fetch(`/api/cases/${encodeURIComponent(caseId)}/proposals/${encodeURIComponent(item.id)}/checkout`, {
-        method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ requestId: crypto.randomUUID() }),
+        method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ requestId: crypto.randomUUID(), ...(workspaceId ? { workspaceId } : {}) }),
       });
       const body = await response.json() as { order?: { id?: string }; error?: string; code?: string };
       const orderId = body.order?.id;

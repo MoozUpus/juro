@@ -53,3 +53,20 @@ test("marketplace proposal UI uses the protected proposal endpoints and supports
   assert.match(businessCheckout, /MarketplaceProposalCheckoutClient/);
   assert.match(businessCheckout, /accountType="business"/);
 });
+
+test("business proposal flows resolve the route workspace server-side and never trust it as an access grant", () => {
+  const listRoute = readFileSync(new URL("../app/api/cases/[caseId]/proposals/route.ts", import.meta.url), "utf8");
+  const acceptRoute = readFileSync(new URL("../app/api/cases/[caseId]/proposals/[proposalId]/accept/route.ts", import.meta.url), "utf8");
+  const checkoutRoute = readFileSync(new URL("../app/api/cases/[caseId]/proposals/[proposalId]/checkout/route.ts", import.meta.url), "utf8");
+  const flow = readFileSync(new URL("../app/_platform/MarketplaceServiceProposalFlow.tsx", import.meta.url), "utf8");
+  for (const route of [listRoute, acceptRoute, checkoutRoute]) {
+    assert.match(route, /workspaceForUserById/);
+    assert.match(route, /WORKSPACE_UNAVAILABLE/);
+  }
+  assert.match(listRoute, /requestedWorkspaceId/);
+  assert.match(listRoute, /client_user_id=\?/);
+  assert.match(acceptRoute, /client_user_id=\?/);
+  assert.match(checkoutRoute, /owner_user_id=\?/);
+  assert.match(flow, /\?workspaceId=\$\{encodeURIComponent\(workspaceId\)\}/);
+  assert.match(flow, /\.\.\.\(workspaceId \? \{ workspaceId \} : \{\}\)/);
+});
