@@ -8,7 +8,7 @@ session/IP limits and an atomic one-answer reservation. It retrieves approved
 legal sources, verifies citations and freshness, validates `LegalChatResponse`,
 and persists encrypted input/output only. A clarification releases the answer;
 only a validated final response consumes it. Provider failure never creates a
-success response or charge. Migration `0064` and staging provider/browser proof
+success response or charge. Migration `0065` and staging provider/browser proof
 remain open.
 
 Updated: 2026-08-03

@@ -7,8 +7,8 @@ function statements(sql: string): string[] {
   return sql.split("--> statement-breakpoint").map((value) => value.trim()).filter(Boolean);
 }
 
-test("0064 is additive and keeps guest legal content encrypted and short-lived", () => {
-  const sql = readFileSync(new URL("../drizzle/0064_guest_ai_sessions.sql", import.meta.url), "utf8");
+test("0065 is additive and keeps guest legal content encrypted and short-lived", () => {
+  const sql = readFileSync(new URL("../drizzle/0065_guest_ai_sessions.sql", import.meta.url), "utf8");
   assert.doesNotMatch(sql, /DROP\s+(?:TABLE|COLUMN|INDEX)/i);
   assert.match(sql, /CREATE TABLE `guest_ai_sessions`/);
   assert.match(sql, /CREATE TABLE `guest_ai_runs`/);
@@ -19,11 +19,11 @@ test("0064 is additive and keeps guest legal content encrypted and short-lived",
   assert.match(sql, /answer_count.+BETWEEN 0 AND 1/);
 });
 
-test("0064 enforces one answer, bounded requests, encrypted fields, and cascade purge", () => {
+test("0065 enforces one answer, bounded requests, encrypted fields, and cascade purge", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys=ON");
-    const sql = readFileSync(new URL("../drizzle/0064_guest_ai_sessions.sql", import.meta.url), "utf8");
+    const sql = readFileSync(new URL("../drizzle/0065_guest_ai_sessions.sql", import.meta.url), "utf8");
     for (const statement of statements(sql)) db.exec(statement);
     const now = "2026-08-03T00:00:00.000Z";
     const expiry = "2026-08-04T00:00:00.000Z";

@@ -256,7 +256,7 @@ test("guest retention releases stale reservations and cascades expired encrypted
   }
 });
 
-test("guest retention is inert before migration 0064", async () => {
+test("guest retention is inert before migration 0065", async () => {
   let inspected = "";
   const db = {
     prepare(sql: string) {

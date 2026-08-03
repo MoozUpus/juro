@@ -151,7 +151,7 @@ const cloudflareTestFiles = [
   "tests/migration-0042-file-extractions.test.ts",
   "tests/migration-0061-billing-foundation.test.ts",
   "tests/migration-0062-ai-memory.test.ts",
-  "tests/migration-0064-guest-ai.test.ts",
+  "tests/migration-0065-guest-ai.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 

@@ -8,7 +8,7 @@
 
 Only `ru` and `uz` are accepted. The route is `noindex, nofollow`, uses its
 isolated `/api/guest/ai` backend, and does not alter authenticated routes.
-Production keeps the flag disabled; migration `0064` removes no existing route.
+Production keeps the flag disabled; migration `0065` removes no existing route.
 
 Updated: 2026-07-29
 Status: integration-branch evidence only; production routes are unchanged.

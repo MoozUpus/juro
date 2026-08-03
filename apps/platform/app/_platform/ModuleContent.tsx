@@ -25,7 +25,7 @@ export function ModuleContent({ locale, accountType, module, userName, workspace
   const ru=locale==="ru";
   if(module==="action-plan") return <ActionPlanClient locale={locale} accountType={accountType}/>;
   if(module==="calendar") return <CalendarClient locale={locale}/>;
-  if(module==="consultations") return accountType==="lawyer" ? <LawyerRequestsClient locale={locale}/> : <><ConsultationsClient locale={locale}/><LawyerHandoffClient locale={locale}/></>;
+  if(module==="consultations") return accountType==="lawyer" ? <LawyerRequestsClient locale={locale}/> : <><ConsultationsClient locale={locale}/><LawyerHandoffClient locale={locale} accountType={accountType} workspaceId={workspaceId}/></>;
   if(module==="dashboard") return <DashboardClient locale={locale} accountType={accountType} userName={userName}/>;
   if(module==="cases") return <CasesClient locale={locale} accountType={accountType}/>;
   if(module==="team") return <TeamClient locale={locale}/>;

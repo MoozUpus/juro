@@ -229,7 +229,7 @@ function createDatabase(): {
     );
   `);
   const guestMigration = readFileSync(
-    new URL("../drizzle/0064_guest_ai_sessions.sql", import.meta.url),
+    new URL("../drizzle/0065_guest_ai_sessions.sql", import.meta.url),
     "utf8",
   );
   for (const statement of guestMigration

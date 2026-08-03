@@ -5,7 +5,7 @@
 - The one-answer route, encrypted 24-hour storage, clarification flow,
   Turnstile/rate-limit boundary and scheduled purge are implemented and tested
   locally.
-- Additive migration `0064_guest_ai_sessions.sql` is not applied to staging.
+- Additive migration `0065_guest_ai_sessions.sql` is not applied to staging.
   The cleanup is inert before the table exists and production keeps
   `GUEST_AI_ENABLED=false`.
 - Private-R2 backup, disposable restore rehearsal, migration checks, deploy,

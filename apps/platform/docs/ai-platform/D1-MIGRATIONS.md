@@ -1,8 +1,8 @@
 # JURO D1 migrations
 
-## Migration 0064 — guest AI sessions
+## Migration 0065 — guest AI sessions
 
-`0064_guest_ai_sessions.sql` additively creates `guest_ai_sessions` and
+`0065_guest_ai_sessions.sql` additively creates `guest_ai_sessions` and
 `guest_ai_runs`. It has no plaintext question/answer columns: tokens, IPs and
 requests are digested or AES-GCM encrypted. State/count/encryption checks and a
 cascading foreign key constrain lifecycle; unique idempotency and atomic
@@ -10,7 +10,7 @@ reservation prevent duplicate final answers.
 
 Before staging: create and verify a fresh D1 checkpoint, write a checksummed
 export to private `juro-staging-backups`, restore it into a disposable database,
-apply only `0064`, then run ledger, `quick_check`, `foreign_key_check`, schema
+apply only `0065`, then run ledger, `quick_check`, `foreign_key_check`, schema
 inventory and a post-checkpoint. Rollback disables `GUEST_AI_ENABLED` and leaves
 the additive tables unused. Production migration/deploy is not authorized.
 
@@ -937,3 +937,21 @@ disposable restore, apply only `0062`, then run migration-ledger, `quick_check`,
 `foreign_key_check`, schema/index inventory, and private post-checkpoint checks.
 The server-only `IDENTITY_KEYRING` must parse before enabling memory. Production
 migration or deployment is not authorized.
+
+## Migration 0064 — one active marketplace payment attempt (pending staging authorization)
+
+`0064_marketplace_open_payment_attempt.sql` adds one partial unique index only:
+an order can have at most one `client_action_required` payment attempt. Failed
+attempts are not included, so an approved retry path remains available. This
+prevents two distinct concurrent confirmation requests from creating two active
+sandbox attempts for the same priced legal-service order. It has no data
+backfill, table rebuild, delete, or drop.
+
+The migration has passed the local full migration matrix, foreign-key checks,
+marketplace lifecycle tests, typecheck, and lint. It has not been applied to
+staging or production. Before staging application, take and verify a private
+`juro-staging-backups` D1 export, apply only `0064`, then rerun migration list,
+`quick_check`, `foreign_key_check`, and the marketplace replay/concurrency
+tests. Application rollback keeps the additive index unused by rolling the
+Worker back; index removal is deferred to a separately approved contract
+phase.

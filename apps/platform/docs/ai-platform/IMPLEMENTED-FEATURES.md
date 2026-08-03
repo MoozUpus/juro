@@ -10,7 +10,7 @@ sessions, atomic entitlement reservation and idempotent retry protect the API.
 Clarifications do not consume the answer. Input and output are encrypted at rest
 and purged after 24 hours. The page is `noindex` and offers registration after
 the answer. Focused local service, route, migration, config and scheduler tests
-pass. Migration `0064`, private backup/restore, staging deploy and protected
+pass. Migration `0065`, private backup/restore, staging deploy and protected
 RU/UZ provider/browser evidence remain required before this is called live.
 > Current local delta — 2026-08-03: AI retry no longer leaves a failed,
 > released idempotency record in an endless `processing` response. Unknown

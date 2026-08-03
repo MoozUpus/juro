@@ -1,4 +1,4 @@
--- Short-lived guest AI sessions. Questions and answers are encrypted; no
+-- Migration 0065: short-lived guest AI sessions. Questions and answers are encrypted; no
 -- plaintext legal content is stored.
 -- Expand-only; production remains disabled by GUEST_AI_ENABLED=false.
 CREATE TABLE `guest_ai_sessions` (

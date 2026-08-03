@@ -10,7 +10,7 @@ boundaries and `noindex` RU/UZ UI contracts. Focused suites passed 11/11, 27/27
 and 67/67. Typecheck, lint, Cloudflare type drift check, full `npm test`,
 development/staging builds and artifact validation pass. A tracked-file scan
 found no OpenAI, Anthropic or private-key signature. Remote gates require backup, restore,
-migration `0064`, deploy and protected provider/browser QA.
+migration `0065`, deploy and protected provider/browser QA.
 
 Required checks for each staging vertical slice: typecheck, lint, focused unit/integration/security routes, bounded build, artifact validation, secret scan, and relevant D1/R2/queue evidence. Current regression includes auth, tenant isolation, legal-source acquisition/review, scheduled corpus logic, document boundaries, cases, handoff, and staff access.
 

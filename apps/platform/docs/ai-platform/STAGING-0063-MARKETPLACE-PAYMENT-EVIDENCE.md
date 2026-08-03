@@ -55,8 +55,13 @@ npm run validate:artifact -- --environment staging
 The initial marketplace artifact was deployed as Worker version
 `bcd03042-5628-4ebd-a742-7623890ba38b`. A follow-up ledger correctness fix was
 deployed as `6cd53a3e-2794-4108-83fd-8a443d59b8cb`; the Cloudflare deployment
-listing then recorded the Git-uploaded current version
-`9fa6926a-5c67-4e61-a311-b7782818b0c5` at 100% traffic.
+listing recorded the Git-uploaded version
+`9fa6926a-5c67-4e61-a311-b7782818b0c5` at 100% traffic. The marketplace UI
+integration was deployed as Worker version
+`5f2e688d-2637-4bf9-b6bc-2f8f22e0d7c0`. The business-workspace isolation
+hardening was then uploaded as `cbf16608-9611-43c3-812a-2019a0a0d8f5`.
+Cloudflare subsequently recorded `9fc20ed9-207c-4281-b285-2a7aec9e0275` as
+the 100%-traffic secret-change deployment based on that current Worker.
 
 `https://staging.app.juro.uz/` returned Cloudflare Access's expected `302`
 response to an unauthenticated smoke request.
@@ -75,6 +80,37 @@ both included in `LAWYER_PAYABLE` and posted as JURO's VAT liability. The fix
 credits only JURO's VAT component to `VAT_PAYABLE`; the independent lawyer's
 VAT remains part of the payable owed to that lawyer. The full platform test
 suite and the lifecycle test passed after the fix.
+
+The same lifecycle test now also proves confirm-checkout replay: sending the
+same client idempotency key twice returns the original payment attempt and
+does not create a second attempt. The proposal-acceptance endpoint likewise
+returns a safe replay only for the same accepted agreement version; it rejects
+a mismatched later version and never mutates the immutable acceptance row.
+
+## Authenticated UI coverage in the deployed artifact
+
+The deployment now exposes the same protected flow to both personal and
+business workspaces:
+
+- a lawyer with an active case access grant can submit RU/UZ service scope,
+  duration, and UZS price through the proposal endpoint;
+- the case owner can load only their tenant-scoped proposals, explicitly accept
+  the agreement, and create a checkout;
+- the checkout hand-off works for both
+  `/:locale/:accountType/cases/:caseId/proposals/:proposalId/checkout` and
+  `/:locale/business/:workspaceId/cases/:caseId/proposals/:proposalId/checkout`;
+- every write uses the existing CSRF and server-side session/workspace checks.
+
+For a business route, the browser forwards its workspace ID only as route
+context. The proposal list, agreement acceptance, and checkout endpoints each
+resolve that ID with `workspaceForUserById`, require membership again on the
+server, and still constrain the case/proposal query by both workspace and
+client owner. A mismatched or inaccessible workspace receives the neutral
+`WORKSPACE_UNAVAILABLE` / unavailable-object response and does not grant
+cross-tenant access.
+
+The UI contract is covered by `migration-0063-marketplace-service.test.ts` and
+the full platform suite was rerun after its addition.
 
 ## Remaining staging gate
 
