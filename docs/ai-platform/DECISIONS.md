@@ -138,3 +138,17 @@ recording is linked to the persisted message only inside the successful chat bat
 TTS is server-side and disclosed as synthetic AI speech. Realtime voice, WebGL and
 the Jurobek avatar remain disabled until an approved rigged asset and separate
 quality/performance gates exist. Text chat remains independent from voice support.
+
+## D-106 — configure only secrets with real runtime consumers
+
+Status: accepted and staging bindings verified
+Date: 2026-08-04
+
+The current platform uses one versioned `IDENTITY_KEYRING` contract for authenticated
+encryption and keyed lookup evidence across identity, MFA, memory, deletion, guest AI
+and voice transcripts. Opaque server-side sessions do not consume a `SESSION_SECRET`,
+and Cloudflare Cron does not expose a public `CRON_SECRET` endpoint. Standalone secret
+names from the original target architecture are therefore not added as unused dashboard
+placeholders. A new secret is introduced only with a real server consumer, rotation
+plan, deploy validator and tests. This keeps the runtime source of truth explicit and
+avoids a false claim that unused secret names improve security.
