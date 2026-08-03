@@ -26,8 +26,10 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // static adapter import because the worker bundler rewrote the dynamic import
 // to index.js, whose public namespace does not expose this internal function.
 // v24 exercises the exact OpenAI legal-chat structured-output contract and
-// stores only bounded HTTP/error metadata when the request is rejected.
-const PROBE_KEY = "staging-openai-legal-chat-v24";
+// stores only bounded HTTP/error metadata when the request is rejected. v25
+// verifies the same contract after normalizing Zod's draft-7 annotations to
+// the provider-supported Structured Outputs subset.
+const PROBE_KEY = "staging-openai-legal-chat-v25";
 type Provider = "openai" | "anthropic";
 const providers = ["openai"] as const satisfies readonly Provider[];
 

@@ -1,5 +1,6 @@
 import { runtimeEnv } from "../storage/runtime";
 import { readResponsesSse, ResponsesSseError } from "../../ai/responses-sse";
+import { openAiCompatibleJsonSchema } from "../../ai/openai-schema";
 
 export type AiProviderErrorCode =
   | "PROVIDER_UNAVAILABLE"
@@ -149,7 +150,7 @@ export async function callOpenAiStructured<T>(options: {
               type: "json_schema",
               name: options.schemaName,
               strict: true,
-              schema: options.schema,
+              schema: openAiCompatibleJsonSchema(options.schema),
             },
           },
         }),
