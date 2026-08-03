@@ -413,3 +413,7 @@ unauthenticated and does not change production.
 - Authenticated browser, mobile, keyboard, screen-reader and visual checks of the
   checkout require the protected staging deployment; local build/tests are not a
   substitute.
+
+## Canonical case creation open gate
+
+Canonical manual case creation is deployed to protected staging and passes a real local HTTP/D1 create/read smoke. A remote authenticated staging create/read, RU/UZ visual pass, mobile/keyboard/axe pass and cleanup of any resulting synthetic case still require an Access-authorized test session.

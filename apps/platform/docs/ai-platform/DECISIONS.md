@@ -2606,3 +2606,12 @@ Local service tests prove new-case compatibility, existing-case append,
 version history, task creation, exact replay, foreign-workspace denial and
 legacy-ID safety. Staging deployment and authenticated RU/UZ browser evidence
 remain open. Production is unchanged.
+
+## D-129 — Manual case creation shares one server-owned scenario contract
+
+Status: accepted and deployed to protected staging
+Date: 2026-08-04
+
+Manual creation is not a client-side shortcut to the action-plan screen. Personal and explicit business workspaces receive canonical `cases/new` routes, while legacy business URLs first resolve an authorized active workspace. The browser submits only bounded case facts and an allowlisted scenario identity; it never submits a workspace ID, generated plan text, step list or audit metadata.
+
+One shared typed catalog supplies RU/UZ labels and server-side initial steps. Schema validation rejects unknown fields and mismatched personal/business scenarios; the API repeats the audience check after resolving the active workspace from the authenticated user. The case, plan, four steps, immutable version and case event are inserted in one D1 batch so a partial success is not shown. No migration or dependency was needed. Local HTTP/D1 create/read smoke and the full regression suite pass; staging Worker `06028d89-322c-42d4-95f2-41d89da8461e` contains the feature. Production is unchanged.

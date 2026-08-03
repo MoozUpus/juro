@@ -357,6 +357,16 @@ GET /api/document-builder/standalone-signed-shares/:token/file
 
 ## Migration rules
 
+### Canonical case creation — protected staging
+
+| Current URL | Target/behavior | Evidence |
+|---|---|---|
+| `/:locale/:accountType/cases/new` | Authenticated RU/UZ personal-account create surface | `STAGING-0087-CANONICAL-CASE-CREATE-EVIDENCE.md` |
+| `/:locale/business/:workspaceId/cases/new` | Authenticated create surface bound to the explicit business workspace | `STAGING-0087-CANONICAL-CASE-CREATE-EVIDENCE.md` |
+| `/:locale/business/cases/new` | Resolves the active permitted workspace, then redirects to its canonical route | `STAGING-0087-CANONICAL-CASE-CREATE-EVIDENCE.md` |
+
+`POST /api/platform/cases` is the real persistence boundary for all three routes. It resolves tenant context server-side and writes the case, plan, steps, immutable plan version and event in one D1 batch.
+
 1. Add target routes before redirecting old ones.
 2. Preserve locale, account type, workspace, object ID, and safe query state.
 3. Do not place confidential content in URLs.

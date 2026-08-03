@@ -533,3 +533,7 @@ AI-created steps use UUID identities; a strict compatibility pattern keeps
 already-deployed legacy AI steps editable. Focused tests pass 7/7 and
 type-check passes. This is local evidence only until the reviewed staging
 artifact is deployed and traversed through an authenticated RU/UZ session.
+
+## Phase 6 — canonical manual case creation (protected staging)
+
+The cases list opens a dedicated RU/UZ `cases/new` route for personal and explicit business workspaces. The form uses a shared allowlisted scenario catalog and persists through the authenticated, CSRF-protected cases API. The server resolves the tenant, rejects cross-audience scenarios and writes the case, plan, four initial steps, immutable version and case event atomically. A successful local HTTP/D1 smoke created and re-read the same case. Worker version `06028d89-322c-42d4-95f2-41d89da8461e` contains the route; authenticated Access traversal remains an open staging gate. See `STAGING-0087-CANONICAL-CASE-CREATE-EVIDENCE.md`.
