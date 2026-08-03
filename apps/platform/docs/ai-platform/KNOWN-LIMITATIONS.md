@@ -1,5 +1,15 @@
 # JURO known limitations checkpoint
 
+> Current authoritative runtime checkpoint — 2026-08-04: read-only Cloudflare
+> and D1 evidence confirms active staging Worker
+> `adde6374-cbec-4e20-918d-e6c303ac75e9` at 100% traffic and schema through
+> `0064`; only guest migration `0065` is pending. Provider transport is no
+> longer the cause of the earlier unavailable state: the latest closed OpenAI
+> and Anthropic probes succeeded, and aggregate `ai_runs` metadata contains
+> completed runs for both providers after the last historical OpenAI failure.
+> This does not prove an authenticated RU/UZ browser flow, citation quality or
+> legal accuracy. See `STAGING-AI-RUNTIME-2026-08-04.md`.
+
 ## Guest AI local candidate — 2026-08-03
 
 - The one-answer route, encrypted 24-hour storage, clarification flow,

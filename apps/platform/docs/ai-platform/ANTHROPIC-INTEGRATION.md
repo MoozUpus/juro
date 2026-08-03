@@ -1,5 +1,16 @@
 # Anthropic integration
 
+## Runtime checkpoint — 2026-08-04
+
+The retained closed probe `staging-anthropic-legal-chat-v23` succeeded against
+`claude-sonnet-4-6` with 2,197 input tokens, 455 output tokens, 7,563 ms and no
+error. A privacy-safe aggregate D1 query also shows three completed Anthropic
+`ai_runs`, latest `2026-08-03T18:47:09.126Z`, without an error code. This
+supersedes the older “no live response” statement below. It proves transport
+and structured persistence, not authenticated browser fallback, document
+analysis quality, legal accuracy or production readiness. See
+`STAGING-AI-RUNTIME-2026-08-04.md`.
+
 Updated: 2026-07-31
 
 ## Implemented fallback boundary

@@ -1,11 +1,11 @@
 # JURO deferred and gated features
 
-> Current checkpoint — 2026-08-02: staging configuration and static guards are
-> deployed, but the external gates in this register remain real blockers unless
-> replaced by new evidence. In particular, no live provider probe is enabled,
-> no malware scanner is attached, no approved rigged Jurobek source is present,
-> and no authenticated browser runtime is available. None of these omissions is
-> represented in UI as a completed capability.
+> Current checkpoint — 2026-08-04: closed one-time OpenAI and Anthropic staging
+> probes and later completed-run metadata prove both provider transports; the
+> probe flag is correctly disabled again. Authenticated RU/UZ browser/citation
+> and legal-quality gates remain open. No malware scanner is attached, no
+> approved rigged Jurobek source is present, and no authenticated browser runtime
+> is available. None of these omissions is represented as completed capability.
 
 Updated: 2026-07-30
 

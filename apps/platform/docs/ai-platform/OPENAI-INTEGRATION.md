@@ -1,5 +1,16 @@
 # OpenAI integration
 
+## Runtime checkpoint — 2026-08-04
+
+Read-only staging metadata confirms the v26 OpenAI probe remains successful and
+two completed OpenAI `ai_runs` exist after the seven historical
+`PROVIDER_UNAVAILABLE` records. The latest completed OpenAI run is
+`2026-08-03T18:45:09.229Z`; the latest historical failure is
+`2026-08-03T07:06:30.603Z`. Therefore the earlier blanket unavailable message
+does not describe the current provider transport. Authenticated UI, verified
+citation and legal-quality gates remain open. See
+`STAGING-AI-RUNTIME-2026-08-04.md`.
+
 ## Guest request path
 
 The feature-gated guest endpoint uses the same server-only provider adapter as
