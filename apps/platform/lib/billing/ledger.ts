@@ -86,14 +86,18 @@ export function buildCapturedPaymentLedger(
     currency: "UZS",
     memo: revenueAccount === "SUBSCRIPTION_REVENUE" ? "JURO subscription revenue" : "JURO platform revenue",
   });
-  const totalVat = pricing.lawyerVatAmountMinor + pricing.juroVatAmountMinor;
-  if (totalVat > 0) entries.push({
+  // The lawyer's gross amount already includes any tax collected for that
+  // independent provider and is credited in full to LAWYER_PAYABLE. Posting
+  // it again as JURO's VAT liability would double-count the amount and make
+  // a legal-service capture unbalanced. JURO only records VAT on its own
+  // marketplace revenue component.
+  const juroVat = pricing.juroVatAmountMinor;
+  if (juroVat > 0) entries.push({
     accountCode: "VAT_PAYABLE",
     side: "CREDIT",
-    amountMinor: totalVat,
+    amountMinor: juroVat,
     currency: "UZS",
-    memo: "Component-level VAT payable",
+    memo: "JURO VAT payable",
   });
   return balanceLedgerEntries(entries);
 }
-
