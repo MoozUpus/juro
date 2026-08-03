@@ -14,8 +14,8 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // normalization and source-boundary enforcement. v19 adds bounded stage codes
 // for preflight versus post-processing failures, without logging content. v20
 // adds a request-stage stack path event; prompts and provider bodies stay out.
-// v21 keeps diagnostics type-safe even for nonstandard cross-bundle errors.
-const PROBE_KEY = "staging-anthropic-legal-chat-v21";
+// v22 records the same bounded stack paths at the probe boundary.
+const PROBE_KEY = "staging-anthropic-legal-chat-v22";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 
@@ -105,6 +105,16 @@ async function executeProviderProbe(provider: Provider) {
         safetyIdentifier: "staging-synthetic-provider-probe",
       });
     } catch (error) {
+      const stackFrames = error instanceof Error && typeof error.stack === "string"
+        ? error.stack.split("\n").slice(1, 6).map((frame) => frame.trim().replace(/[?#].*$/, ""))
+        : undefined;
+      console.error({
+        event: "staging.provider_probe_exception",
+        provider: "anthropic",
+        errorName: error instanceof Error && typeof error.name === "string" ? error.name : "UnknownError",
+        safeCode: anthropicHttpFailureCode(error),
+        stackFrames,
+      });
       throw new ProviderProbeStageError(anthropicHttpFailureCode(error));
     }
     if (result.data.responseKind !== "clarification_required" || result.data.sources.length !== 0
