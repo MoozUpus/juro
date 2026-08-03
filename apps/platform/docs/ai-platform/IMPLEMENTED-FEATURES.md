@@ -1,4 +1,12 @@
 # JURO implemented-features checkpoint
+> Current local delta — 2026-08-03: AI retry no longer leaves a failed,
+> released idempotency record in an endless `processing` response. Unknown
+> transport outcomes retain the same request/key; a server-confirmed terminal
+> failure returns a bounded state and an explicit retry receives a fresh key.
+> Provider refusal and user cancellation do not auto-restart. Focused state
+> machine/client tests, type-check, and lint pass. This delta is not deployed;
+> automatic reconnect and durable partial-token resume remain open.
+
 > Current staging delta — 2026-08-03: `juro-platform-staging` Worker version
 > `6ec3e8ab-434b-4ab5-98db-c26908d6c8a3` serves the protected AI-answer feedback
 > route and UI. Feedback is linked server-side to the caller's completed,
@@ -448,3 +456,24 @@ isolated restore rehearsal. Worker version
 `9051c167-8e1a-46c8-86f8-c7f6c9e75b82` serves commit `1a6074b`; production is
 unchanged. The final authenticated checkout-to-signed-sandbox-event E2E remains
 an open Stage-1 gate. See `STAGING-0061-PAYMENT-FOUNDATION-EVIDENCE.md`.
+
+## Phase 4 — encrypted user memory (local candidate)
+
+The privacy settings route now exposes RU/UZ controls backed by a real
+authenticated API: list, create, edit, delete, clear accessible memory, and
+enable or disable narrow automatic extraction. Entries are encrypted at rest
+with record-bound server-side key material and tenant-filtered before
+decryption. Passwords, OTP/TOTP codes and payment-card-like values are rejected;
+manual high-sensitivity entries require an explicit checkbox on both creation
+and edit.
+
+The legal-chat route loads at most 20 user-owned global/current-workspace
+entries, binds them into the idempotency request hash, and passes only their
+category, scope and statement to OpenAI or Anthropic as untrusted user context.
+Successful persisted user messages may produce bounded safe memory candidates.
+Memory failure does not create a false AI failure; privacy export instead fails
+closed if it cannot decrypt a complete visible memory set.
+
+Local evidence: 7/7 focused memory/migration tests, type-check and lint pass.
+Migration `0062`, keyring validation, staging deployment, authenticated RU/UZ
+browser QA, retention purge and production remain open.

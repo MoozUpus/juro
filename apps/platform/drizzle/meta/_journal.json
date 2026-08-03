@@ -435,6 +435,13 @@
       "when": 1785745011628,
       "tag": "0061_cheerful_christian_walker",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "6",
+      "when": 1785761222224,
+      "tag": "0062_nervous_shinko_yamashiro",
+      "breakpoints": true
     }
   ]
 }

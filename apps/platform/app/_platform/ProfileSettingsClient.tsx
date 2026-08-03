@@ -3,6 +3,7 @@
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import { LawyerProfessionalProfile } from "./LawyerProfessionalProfile";
 import { NotificationPreferencesPanel } from "./NotificationPreferencesPanel";
+import { MemoryPanel } from "./MemoryPanel";
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated profile data is hydrated after the first browser render */
 
@@ -938,6 +939,7 @@ export function ProfileSettingsClient({ locale, accountType, view }: { locale: P
         </ul>
       </section>
     </div>}
+    {view === "privacy" && <MemoryPanel locale={locale} />}
     {view === "privacy" && data && <div className="profile-panels">
       <section>
         <h2><Download />{ru ? "Экспорт данных" : "Ma’lumotlarni eksport qilish"}</h2>

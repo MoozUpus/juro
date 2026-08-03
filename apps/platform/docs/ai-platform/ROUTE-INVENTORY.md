@@ -132,18 +132,21 @@ Implemented locally:
 
 ```text
 /:locale/:accountType/dashboard
-```
-
-Still missing:
-
-```text
-/:locale/:accountType/ai-lawyer/new
-/:locale/:accountType/ai-lawyer/chat/:chatId
+/:locale/:personalType/ai-lawyer
+/:locale/:personalType/ai-lawyer/new
+/:locale/:personalType/ai-lawyer/chat/:chatId
+/:locale/business/:workspaceId/ai-lawyer
+/:locale/business/:workspaceId/ai-lawyer/new
+/:locale/business/:workspaceId/ai-lawyer/chat/:chatId
 ```
 
 The `main` module migration is complete in source with a localized 308
-compatibility redirect and rendered-Worker coverage. The `ai-chat` module
-still requires migration and compatibility redirects.
+compatibility redirect and rendered-Worker coverage. AI-lawyer target URLs now
+have permanent, locale/account/workspace-preserving compatibility redirects to
+the existing functional `ai-chat` surface. Chat detail accepts only a UUID and
+maps it to `conversationId`; unknown paths and malformed IDs return neutral
+404. These redirects pass local direct route tests but are not yet deployed to
+staging or production.
 
 ### Cases
 

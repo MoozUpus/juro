@@ -15,6 +15,13 @@ export class AiRetryableRequestError extends Error {
   }
 }
 
+export class AiRestartableRequestError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AiRestartableRequestError";
+  }
+}
+
 export function createAiRetryRequest<TPayload>(
   payload: TPayload,
   createIdempotencyKey: () => string,
@@ -33,5 +40,15 @@ export function isUserCancelledAiRequest(error: unknown) {
 
 export function shouldOfferAiRetry(error: unknown) {
   return !isUserCancelledAiRequest(error)
-    && (error instanceof AiRetryableRequestError || error instanceof TypeError);
+    && (error instanceof AiRetryableRequestError || error instanceof AiRestartableRequestError || error instanceof TypeError);
+}
+
+export function shouldUseFreshAiRetry(error: unknown) {
+  return error instanceof AiRestartableRequestError;
+}
+
+export function isRestartableAiTerminal(status: number, code: unknown) {
+  return typeof code === "string"
+    && ["AI_RUN_FAILED", "INVALID_AI_OUTPUT", "PROVIDER_TIMEOUT", "PROVIDER_UNAVAILABLE"].includes(code)
+    && [409, 422, 503, 504].includes(status);
 }

@@ -24,6 +24,14 @@ import {
 } from "../../../../lib/legal/verified-retrieval";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+import {
+  listUserMemories,
+  memoryKeyring,
+  persistAutomaticMemories,
+  UserMemoryError,
+  type UserMemory,
+} from "../../../../lib/ai/user-memory";
+import type { IdentityKeyring } from "../../../../lib/auth/keyring";
 
 const INSTRUCTION_VERSION = "juro-legal-chat-v1";
 
@@ -145,9 +153,43 @@ async function executePost(
     }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
   }
   const question = branchInput.question;
+  let memoryEncryption: IdentityKeyring | null = null;
+  let memories: UserMemory[] = [];
+  try {
+    memoryEncryption = memoryKeyring(runtimeEnv().IDENTITY_KEYRING);
+    memories = (await listUserMemories({
+      db,
+      keyring: memoryEncryption,
+      userId: user.id,
+      workspaceId: workspace.id,
+    })).slice(0, 20);
+  } catch (error) {
+    if (!(error instanceof UserMemoryError)) throw error;
+    console.warn({
+      event: "ai.memory_context_unavailable",
+      code: error.code,
+      workspaceIdHash: await sha256Json({ workspaceId: workspace.id }),
+    });
+  }
   const retrieval = await retrieveVerifiedLegalSources(db, question, locale, 8, { semantic: runtimeEnv() });
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
-  const requestHash = await sha256Json({ question, locale, answerMode, reasoningMode, conversationId: body?.conversationId || null, caseId: body?.caseId || null, operation: branchInput.operation, sourceMessageId: branchInput.forkedFromMessageId });
+  const requestHash = await sha256Json({
+    question,
+    locale,
+    answerMode,
+    reasoningMode,
+    conversationId: body?.conversationId || null,
+    caseId: body?.caseId || null,
+    operation: branchInput.operation,
+    sourceMessageId: branchInput.forkedFromMessageId,
+    memory: memories.map((memory) => ({
+      id: memory.id,
+      category: memory.category,
+      statement: memory.statement,
+      scope: memory.scope,
+      updatedAt: memory.updatedAt,
+    })),
+  });
   const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
   const instructionHash = await sha256Json({ version: INSTRUCTION_VERSION, jurisdiction: "UZ" });
   const sourceVersionHash = await sha256Json({
@@ -194,12 +236,27 @@ async function executePost(
         : "Oldingi so‘rov vaqtida yakunlanmadi. Uni yana yuboring — yangi himoyalangan so‘rov yaratiladi.",
     }, 409);
   }
+  if (reservation.kind === "failed") {
+    return response({
+      code: "AI_RUN_FAILED",
+      runId: reservation.runId,
+      previousErrorCode: publicAiFailureCode(reservation.errorCode),
+      error: locale === "ru"
+        ? "Предыдущая попытка завершилась ошибкой и не списала лимит. Можно безопасно создать новый запрос."
+        : "Oldingi urinish xato bilan yakunlandi va limit yechilmadi. Yangi so‘rovni xavfsiz yaratish mumkin.",
+    }, 409);
+  }
 
   let aiResult;
   try {
     aiResult = await provider.runLegalChat({
       question, locale, answerMode, reasoningMode, sources, legalDatabaseAsOf,
       requestId: reservation.correlationId, safetyIdentifier,
+      memories: memories.map((memory) => ({
+        category: memory.category,
+        statement: memory.statement,
+        scope: memory.scope,
+      })),
     }, { signal, onProgress });
   } catch (error) {
     const code = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";
@@ -324,6 +381,27 @@ async function executePost(
       workspaceId: workspace.id, userId: user.id, idempotencyKey, errorCode: "PERSISTENCE_FAILED",
     });
     throw error;
+  }
+
+  if (memoryEncryption) {
+    try {
+      await persistAutomaticMemories({
+        db,
+        keyring: memoryEncryption,
+        userId: user.id,
+        workspaceId: workspace.id,
+        conversationId,
+        messageId: userMessageId,
+        question,
+        locale,
+      });
+    } catch (error) {
+      console.warn({
+        event: "ai.memory_persistence_failed",
+        code: error instanceof UserMemoryError ? error.code : "MEMORY_WRITE_FAILED",
+        runId: reservation.runId,
+      });
+    }
   }
 
   return response({
@@ -465,4 +543,14 @@ function localizedProviderError(locale: "ru" | "uz", code: string) {
     AI_CANCELLED: "Javob yaratish to‘xtatildi. Limit yechilmadi.",
   };
   return (locale === "ru" ? ru : uz)[code] || (locale === "ru" ? ru.PROVIDER_UNAVAILABLE : uz.PROVIDER_UNAVAILABLE);
+}
+
+function publicAiFailureCode(code: string) {
+  return new Set([
+    "AI_CANCELLED",
+    "AI_REFUSED",
+    "INVALID_AI_OUTPUT",
+    "PROVIDER_TIMEOUT",
+    "PROVIDER_UNAVAILABLE",
+  ]).has(code) ? code : "AI_RUN_FAILED";
 }

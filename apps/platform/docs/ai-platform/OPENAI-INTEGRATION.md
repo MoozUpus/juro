@@ -20,9 +20,13 @@ OpenAI is the primary provider for `POST /api/platform/ai`. Calls are made only 
 - source boundary: only server-retrieved, verified source IDs with non-empty excerpts may support confirmed findings, risks, deadlines, or citations;
 - no verified excerpt: the result is canonicalized to `clarification_required`, legal claims are removed, and the reserved answer cycle is released;
 - retry: at most two attempts for provider/network conditions;
+- browser retry state: uncertain transport replay keeps the exact idempotency
+  key; a D1-confirmed failed/released run returns a bounded terminal state and
+  an explicit retry receives a fresh key instead of looping as `processing`;
 - refusal: `AI_REFUSED` is returned as a non-fallback safety result;
 - timeout and invalid output: typed failures, no raw provider body returned to the browser;
 - audit: provider, actual model, provider response ID, token usage, latency, attempts, instruction hash, source-version hash, and correlation ID are stored server-side.
+- memory (local candidate): up to 20 decrypted user-owned global/current-workspace records are included as explicitly untrusted context; their normalized content participates in the idempotency request hash, but plaintext is not written to logs or audit metadata.
 
 The implementation does not send a user-provided URL as legislation. User text and document text are marked as untrusted data in provider instructions.
 
@@ -41,10 +45,12 @@ The remaining live gate is an Access-authenticated browser request in RU and UZ,
 - the full platform regression, environment matrix, staging artifact, and protected staging deployment postflight passed;
 - the exact RU/UZ legal-chat provider contract, no-source safety boundary, D1 run/ledger lifecycle, non-chargeable clarification, persistence, audit, replay, and cleanup are verified by the real staging lifecycle probe;
 - an authenticated end-user RU/UZ browser stream, stop/disconnect trace, and verified-source citation flow remain to be verified through the protected UI/API flow;
-- reconnect and resumable partial recovery are not implemented;
+- exact completed-response idempotent replay and terminal-failure recovery are
+  implemented locally; automatic reconnect and durable partial-token resume are
+  not implemented;
 - edit/regenerate/branch history;
 - hybrid Vectorize retrieval and reranking;
-- memory and entitlement service integration;
+- encrypted user memory is implemented and tested locally; staging migration, a valid keyring, authenticated RU/UZ UI/provider verification and retention purge remain open;
 - live provider cost verification;
 - production binding or deployment.
 

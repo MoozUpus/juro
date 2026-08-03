@@ -5,7 +5,7 @@
 import { BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, ListPlus, LoaderCircle, Pencil, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
-import { AiRetryableRequestError, createAiRetryRequest, isUserCancelledAiRequest, shouldOfferAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
+import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
@@ -167,7 +167,11 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         );
       }
       const body = terminal.body as Answer & { error?: string; code?: string };
-      if (terminal.status < 200 || terminal.status >= 300) throw new Error(body.error || (ru ? "Не удалось получить ответ." : "Javob olinmadi."));
+      if (terminal.status < 200 || terminal.status >= 300) {
+        const message = body.error || (ru ? "Не удалось получить ответ." : "Javob olinmadi.");
+        if (isRestartableAiTerminal(terminal.status, body.code)) throw new AiRestartableRequestError(message);
+        throw new Error(message);
+      }
       if (terminal.status === 202) throw new AiRetryableRequestError(ru ? "Запрос уже обрабатывается. Повторите проверку через несколько секунд." : "So‘rov qayta ishlanmoqda. Bir necha soniyadan so‘ng qayta tekshiring.");
       setAnswer(body);
       if (body.usage) setUsage(body.usage);
@@ -181,7 +185,9 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     } catch (value) {
       const cancelled = isUserCancelledAiRequest(value);
       if (!cancelled && shouldOfferAiRetry(value)) {
-        pendingAiRequestRef.current = pending;
+        pendingAiRequestRef.current = shouldUseFreshAiRetry(value)
+          ? createAiRetryRequest(pending.payload, () => crypto.randomUUID())
+          : pending;
         setCanRetry(true);
       }
       setError(cancelled

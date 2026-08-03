@@ -16,3 +16,13 @@ Use feature flags and queue pause before data restoration. Roll back application
 Rollback on authentication outage, cross-tenant exposure, upload/delete corruption, uncontrolled provider cost, persistent queue replay, critical accessibility regression, document-builder regression, or unexpected public exposure of staging.
 
 Production rollback requires an approved production change set, a fresh backup/restore rehearsal, exact prior version IDs, and the two owner approvals; this document grants no production action.
+
+## Migration 0062 / memory rollback
+
+Before staging activation, preserve a verified private D1 checkpoint and the
+previous Worker version. If memory causes decryption, tenant, export or AI-chat
+regressions, first deploy the previous Worker; additive memory tables remain
+unused and no down migration is required. Do not delete the tables during an
+incident. Restore D1 only for demonstrated corruption after preserving current
+evidence. A malformed `IDENTITY_KEYRING` keeps memory unavailable by design and
+must be corrected through Cloudflare secret entry, never through chat or Git.

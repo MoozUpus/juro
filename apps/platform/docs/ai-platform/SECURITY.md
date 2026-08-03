@@ -58,3 +58,21 @@ The deployed staging `POST /api/platform/workspaces` creation path authenticates
 Document-analysis initialization requires session, active workspace membership, same-origin/CSRF proof, strict JSON, consent, a 50 MB bound, supported MIME/extension pairing, SHA-256, and a tenant-scoped idempotency key. Binary PUT repeats session/workspace/CSRF checks and requires exact content length, MIME, and checksum before streaming to private R2.
 
 Finalize rechecks the private object and bounded magic bytes. New files are unavailable from the normal download route because their kind remains `analysis_quarantined`. With no real malware scanner attached, the server records `MALWARE_SCANNER_UNAVAILABLE`, returns a recoverable `FILE_SCAN_UNAVAILABLE` state, and never invokes OCR or an AI provider. The deprecated multipart route cannot store or analyze a file. This is a fail-closed foundation, not proof of safe files; archive safety, malware scanning, OCR prompt-injection isolation, async scan/extract jobs, and authenticated staging HTTP proof remain release gates.
+
+## Encrypted user-memory boundary — local candidate
+
+Memory API operations reuse session authentication, active-workspace resolution,
+same-origin/CSRF write enforcement, strict Zod unions, UUID validation, no-store
+responses and neutral not-found behavior. Plaintext statements are encrypted
+with record-bound server-only key material before D1 persistence. Queries bind
+the authenticated user and, for workspace scope, the current workspace before
+decryption or mutation. Audit metadata contains category/scope/action only.
+
+Credential detection is fail-closed and Unicode-aware for RU/UZ/English terms.
+OTP/TOTP, password, access-code and payment-card-like values are always refused.
+High-sensitivity facts are excluded from automatic extraction and require an
+explicit checkbox for manual create/edit. Provider prompts label memory as
+untrusted context and prohibit treating it as instructions. Focused tests cover
+cross-user/workspace access, ciphertext-at-rest, record binding, credential
+rejection, explicit sensitive consent, no-plaintext audit, and account purge.
+Migration `0062` and authenticated staging security evidence remain pending.

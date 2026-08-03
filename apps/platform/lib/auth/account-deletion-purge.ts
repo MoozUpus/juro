@@ -416,6 +416,11 @@ async function inventory(
          (SELECT count(*) FROM consultation_bookings WHERE requester_user_id=?) +
          (SELECT count(*) FROM monitoring_preferences WHERE user_id=?) +
          (SELECT count(*) FROM notifications WHERE user_id=?) +
+         (SELECT count(*) FROM user_memory_settings WHERE user_id=?) +
+         (SELECT count(*) FROM user_memories WHERE user_id=?) +
+         (SELECT count(*) FROM memory_sources WHERE memory_id IN (
+           SELECT id FROM user_memories WHERE user_id=?
+         )) +
          (SELECT count(*) FROM workspace_members WHERE user_id=?) +
          (SELECT count(*) FROM auth_sessions WHERE user_id=?) +
          (SELECT count(*) FROM auth_devices WHERE user_id=?) +
@@ -434,7 +439,7 @@ async function inventory(
          )
        ) AS retainedFinancialRecords`,
   ).bind(
-    ...Array.from({ length: 28 }, () => userId),
+    ...Array.from({ length: 31 }, () => userId),
   ).first<Record<keyof PurgeInventory, number>>();
   if (!row) {
     throw new AccountDeletionPurgeError(
@@ -510,6 +515,8 @@ function deletionStatements(
     db.prepare(`DELETE FROM consultation_bookings WHERE requester_user_id=?`).bind(user),
     db.prepare(`DELETE FROM monitoring_preferences WHERE user_id=?`).bind(user),
     db.prepare(`DELETE FROM notifications WHERE user_id=?`).bind(user),
+    db.prepare(`DELETE FROM user_memories WHERE user_id=?`).bind(user),
+    db.prepare(`DELETE FROM user_memory_settings WHERE user_id=?`).bind(user),
     db.prepare(`DELETE FROM contacts WHERE owner_user_id=?`).bind(user),
     db.prepare(
       `DELETE FROM workspace_invitations
@@ -761,8 +768,11 @@ export async function executeAccountDeletionPurge(
 
   try {
     const results = await env.DB.batch(statements);
-    const requestUpdate = results[33];
-    const profileUpdate = results[35];
+    // The terminal request/profile guards are the fifth- and third-last
+    // statements respectively. Relative positions avoid silently weakening
+    // these checks when an additive domain adds an earlier purge statement.
+    const requestUpdate = results.at(-5);
+    const profileUpdate = results.at(-3);
     if (
       Number(requestUpdate?.meta?.changes ?? 0) !== 1
       || Number(profileUpdate?.meta?.changes ?? 0) !== 1

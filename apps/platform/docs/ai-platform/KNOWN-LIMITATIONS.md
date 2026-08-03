@@ -230,7 +230,11 @@ The deployed Worker now exposes both provider secret names and server-side model
 - No live user/legal OpenAI response, Anthropic document result, or provider failover is claimed.
 - Upstream Responses SSE, bounded browser progress, stop, and no-charge cancellation are implemented and locally tested, but no live provider stream is claimed beyond fixed synthetic probes.
 - Edit, regenerate, and immutable branch history are deployed to protected staging, but live provider-backed branch creation and authenticated browser evidence remain open because only fixed synthetic provider probes are verified.
-- Reconnect/resume, durable partial-stream recovery, memory, guest flow, and full entitlement integration remain open.
+- Reconnect/resume, durable partial-stream recovery, guest flow, and full entitlement integration remain open. Encrypted user memory is implemented locally but migration `0062`, valid staging keyring evidence, authenticated RU/UZ QA and scheduled hard purge are still open.
+- A terminal failed/released AI run is now recoverable through an explicit fresh
+  retry instead of an endless `processing` replay. Automatic reconnect and
+  durable partial-token recovery remain open; JURO still renders no unvalidated
+  partial legal answer.
 - Conversation facts remain conversation-scoped rather than branch-scoped; source evidence remains attached to the exact answer message.
 - Hybrid retrieval is implemented as lexical D1 matching plus optional isolated
   Vectorize matches. A vector id is never a citation: each candidate is reloaded

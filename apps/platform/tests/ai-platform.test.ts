@@ -205,6 +205,13 @@ test("cancelled AI run releases reserved usage and records no charge", async () 
   assert.equal(run.errorCode, "AI_CANCELLED");
   assert.equal(ledger.status, "released");
   assert.equal(idempotency.status, "failed");
+
+  const terminalReplay = await reserveAiRun(reservationInput(d1, "cancelled-request", 1));
+  assert.equal(terminalReplay.kind, "failed");
+  if (terminalReplay.kind === "failed") {
+    assert.equal(terminalReplay.runId, reserved.runId);
+    assert.equal(terminalReplay.errorCode, "AI_CANCELLED");
+  }
 });
 
 
@@ -332,6 +339,7 @@ test("a genuinely stale AI reservation releases its cycle and requires a fresh i
   assert.equal(run.errorCode, "AI_RUN_EXPIRED");
   assert.equal(ledger.status, "released");
   assert.equal(idempotency.status, "failed");
+
 });
 
 test("a finalizing AI run cannot be expired by an old idempotency timestamp", async () => {

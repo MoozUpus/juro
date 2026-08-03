@@ -1,8 +1,14 @@
 import { requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { userIdentityById } from "../../../../../lib/auth/identity-protection";
 import { runtimeIdentityProtection } from "../../../../../lib/auth/identity-runtime";
-import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import {
+  listUserMemories,
+  memoryKeyring,
+  memorySettings,
+  UserMemoryError,
+} from "../../../../../lib/ai/user-memory";
 
 export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
@@ -13,6 +19,31 @@ export const GET = withApiErrors(async function GET() {
     runtimeIdentityProtection(),
     user.id,
   );
+  let memories;
+  let memoryPreferences;
+  try {
+    const keyring = memoryKeyring(runtimeEnv().IDENTITY_KEYRING);
+    [memories, memoryPreferences] = await Promise.all([
+      listUserMemories({
+        db,
+        keyring,
+        userId: user.id,
+        workspaceId: workspace.id,
+      }),
+      memorySettings(db, user.id),
+    ]);
+  } catch (error) {
+    if (error instanceof UserMemoryError) {
+      return Response.json({
+        code: error.code,
+        error: "Зашифрованная память временно недоступна; неполный экспорт не создан. / Shifrlangan xotira vaqtincha mavjud emas; to‘liq bo‘lmagan eksport yaratilmadi.",
+      }, {
+        status: 503,
+        headers: { "cache-control": "private, no-store", pragma: "no-cache" },
+      });
+    }
+    throw error;
+  }
   const [profile, workspaceRow, memberships, cases, documents, consents, acceptances, consultations, audit] = await db.batch([
     db.prepare("SELECT id,full_name,locale,account_type,company_name,organization_role,primary_goal,timezone,created_at,updated_at FROM user_profiles WHERE id=?").bind(user.id),
     db.prepare("SELECT id,type,name,full_name,short_name,locale,created_at,updated_at FROM workspaces WHERE id=?").bind(workspace.id),
@@ -44,8 +75,12 @@ export const GET = withApiErrors(async function GET() {
     consents: consents.results,
     policyAcceptances: acceptances.results,
     consultations: consultations.results,
+    memory: {
+      settings: memoryPreferences,
+      entries: memories,
+    },
     auditEvents: audit.results,
-    note: "File bodies and third-party confidential content are excluded from this portable metadata export.",
+    note: "File bodies and third-party confidential content are excluded. Active memory entries visible in the current workspace are decrypted only for this authenticated export.",
   }, null, 2);
   return new Response(body, {
     headers: {

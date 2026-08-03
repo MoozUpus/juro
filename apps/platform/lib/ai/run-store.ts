@@ -21,6 +21,7 @@ export type AiRunReplay = {
 
 export type AiRunPending = { kind: "processing"; runId: string };
 export type AiRunExpired = { kind: "expired"; runId: string };
+export type AiRunFailed = { kind: "failed"; runId: string; errorCode: string };
 
 export class AiRunConflictError extends Error {
   readonly code: "IDEMPOTENCY_CONFLICT" | "PLAN_LIMIT";
@@ -49,7 +50,7 @@ type ReserveInput = {
   monthlyLimit?: number;
 };
 
-export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservation | AiRunReplay | AiRunPending | AiRunExpired> {
+export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservation | AiRunReplay | AiRunPending | AiRunExpired | AiRunFailed> {
   const registryKey = `legal-chat:${input.workspaceId}:${input.userId}:${input.idempotencyKey}`;
   const scope = `legal-chat:${input.workspaceId}:${input.userId}`;
   const now = isoNow();
@@ -61,7 +62,13 @@ export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservatio
   ).bind(registryKey, scope, input.requestHash, expiresAt, now, now).run();
 
   if ((insert.meta.changes ?? 0) === 0) {
-    return resolveExistingReservation(input.db, registryKey, input.requestHash);
+    return resolveExistingReservation(
+      input.db,
+      registryKey,
+      input.requestHash,
+      input.workspaceId,
+      input.userId,
+    );
   }
 
   const runId = crypto.randomUUID();
@@ -111,7 +118,13 @@ export async function reserveAiRun(input: ReserveInput): Promise<AiRunReservatio
   return { kind: "reserved", runId, ledgerId, correlationId, periodStart, periodEnd };
 }
 
-async function resolveExistingReservation(db: D1Database, registryKey: string, requestHash: string): Promise<AiRunReplay | AiRunPending | AiRunExpired> {
+async function resolveExistingReservation(
+  db: D1Database,
+  registryKey: string,
+  requestHash: string,
+  workspaceId: string,
+  userId: string,
+): Promise<AiRunReplay | AiRunPending | AiRunExpired | AiRunFailed> {
   const row = await db.prepare(
     "SELECT request_hash AS requestHash,status,result_ref AS resultRef,updated_at AS updatedAt FROM idempotency_keys WHERE key=?",
   ).bind(registryKey).first<{ requestHash: string; status: string; resultRef: string | null; updatedAt: string }>();
@@ -123,19 +136,33 @@ async function resolveExistingReservation(db: D1Database, registryKey: string, r
       `SELECT r.id,r.conversation_id AS conversationId,r.response_message_id AS responseMessageId,
         m.structured_json AS structuredJson
        FROM ai_runs r LEFT JOIN conversation_messages m ON m.id=r.response_message_id
-       WHERE r.id=? AND r.status='completed'`,
-    ).bind(row.resultRef).first<{ id: string; conversationId: string | null; responseMessageId: string | null; structuredJson: string | null }>();
+       WHERE r.id=? AND r.workspace_id=? AND r.user_id=? AND r.status='completed'`,
+    ).bind(row.resultRef, workspaceId, userId).first<{ id: string; conversationId: string | null; responseMessageId: string | null; structuredJson: string | null }>();
     if (completed?.structuredJson && completed.conversationId && completed.responseMessageId) {
       return {
         kind: "completed", runId: completed.id, conversationId: completed.conversationId,
         responseMessageId: completed.responseMessageId, response: parseJson(completed.structuredJson, null),
       };
     }
+    return { kind: "failed", runId: row.resultRef, errorCode: "AI_RUN_REPLAY_UNAVAILABLE" };
+  }
+  if (row.status === "failed") {
+    const failed = row.resultRef
+      ? await db.prepare(
+        "SELECT error_code AS errorCode FROM ai_runs WHERE id=? AND workspace_id=? AND user_id=? AND status='failed'",
+      ).bind(row.resultRef, workspaceId, userId).first<{ errorCode: string | null }>()
+      : null;
+    return {
+      kind: "failed",
+      runId: row.resultRef || "",
+      errorCode: failed?.errorCode || "AI_RUN_FAILED",
+    };
   }
   if (await expireStaleReservation(db, registryKey, row)) {
     return { kind: "expired", runId: row.resultRef || "" };
   }
-  return { kind: "processing", runId: row.resultRef || "" };
+  if (row.status === "started") return { kind: "processing", runId: row.resultRef || "" };
+  return { kind: "failed", runId: row.resultRef || "", errorCode: "AI_RUN_STATE_INVALID" };
 }
 
 async function expireStaleReservation(

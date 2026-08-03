@@ -282,6 +282,23 @@ function seedContent(
      ) VALUES ('purge-contact',?,'Counterparty','Sensitive person',?,?)`,
   ).run(USER_ID, NOW, NOW);
   sqlite.prepare(
+    `INSERT INTO user_memory_settings (
+       user_id,automatic_enabled,created_at,updated_at
+     ) VALUES (?,1,?,?)`,
+  ).run(USER_ID, NOW, NOW);
+  sqlite.prepare(
+    `INSERT INTO user_memories (
+       id,user_id,workspace_id,scope,scope_key,category,ciphertext,iv,
+       key_version,content_sha256,source_kind,status,created_at,updated_at
+     ) VALUES ('purge-memory',?,?,'workspace',?,'legal_context',
+       'encrypted-memory','memory-iv','v2',?,'manual','active',?,?)`,
+  ).run(USER_ID, WORKSPACE_ID, `workspace:${WORKSPACE_ID}`, "9".repeat(64), NOW, NOW);
+  sqlite.prepare(
+    `INSERT INTO memory_sources (
+       id,memory_id,source_type,source_ref,created_at
+     ) VALUES ('purge-memory-source','purge-memory','manual','settings',?)`,
+  ).run(NOW);
+  sqlite.prepare(
     `INSERT INTO consents (
        id,user_id,workspace_id,type,version,scope_json,granted_at
      ) VALUES ('purge-consent',?,?,'privacy','1','{}',?)`,
@@ -364,6 +381,18 @@ test("purge removes D1/R2 content, redacts shared comments, and retains immutabl
     );
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS total FROM contacts WHERE owner_user_id=?").get(USER_ID) as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM user_memories WHERE user_id=?").get(USER_ID) as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM user_memory_settings WHERE user_id=?").get(USER_ID) as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM memory_sources WHERE id='purge-memory-source'").get() as { total: number }).total,
       0,
     );
     assert.equal(

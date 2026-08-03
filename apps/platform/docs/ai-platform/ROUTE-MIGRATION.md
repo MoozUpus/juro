@@ -14,6 +14,10 @@ Status: integration-branch evidence only; production routes are unchanged.
 | `/document-builder-test/**` | `/document-builder/**` | retain permanent redirect | 308 | old inbound links | existing rendered regression passes |
 | `/document-builder/**` | `/:locale/:accountType/document-builder/**` | retain compatibility redirect | 307/308 by existing handler | public links and saved bookmarks | existing route/security tests pass |
 | `/ru/individual/document-builder` | same | preserve canonical builder route | — | required production contract | protected staging browser regression passed for RU/UZ library, category, template and documents navigation; production unchanged |
+| `/:locale/:personalType/ai-lawyer` and `/new` | `/:locale/:personalType/ai-chat` | permanent compatibility redirect; unknown subpaths fail closed | 308 | approved target architecture and saved staging links | local direct route tests pass; staging deploy pending |
+| `/:locale/:personalType/ai-lawyer/chat/:chatId` | `/:locale/:personalType/ai-chat?conversationId=:chatId` | UUID-only compatibility redirect | 308 | future deep links | local direct route tests pass; malformed IDs return 404 |
+| `/:locale/business/:workspaceId/ai-lawyer[/new]` | `/:locale/business/:workspaceId/ai-chat` | workspace-preserving compatibility redirect; authorization remains at destination | 308 | business target architecture | local direct route tests pass; staging deploy pending |
+| `/:locale/business/:workspaceId/ai-lawyer/chat/:chatId` | `/:locale/business/:workspaceId/ai-chat?conversationId=:chatId` | workspace- and UUID-preserving compatibility redirect | 308 | future business deep links | local direct route tests pass; malformed workspace/chat IDs return 404 |
 
 ## Invariants
 

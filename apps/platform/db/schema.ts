@@ -1662,6 +1662,55 @@ export const confirmedFacts = sqliteTable("confirmed_facts", {
   ...timestamps,
 }, (table) => [index("confirmed_facts_case_idx").on(table.caseId, table.status)]);
 
+export const userMemorySettings = sqliteTable("user_memory_settings", {
+  userId: text("user_id").primaryKey().references(() => userProfiles.id, { onDelete: "cascade" }),
+  automaticEnabled: integer("automatic_enabled", { mode: "boolean" }).notNull().default(true),
+  ...timestamps,
+});
+
+export const userMemories = sqliteTable("user_memories", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
+  scope: text("scope").notNull().default("global"),
+  scopeKey: text("scope_key").notNull(),
+  category: text("category").notNull(),
+  ciphertext: text("ciphertext").notNull(),
+  iv: text("iv").notNull(),
+  keyVersion: text("key_version").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  sourceKind: text("source_kind").notNull(),
+  status: text("status").notNull().default("active"),
+  deletedAt: text("deleted_at"),
+  ...timestamps,
+}, (table) => [
+  check("user_memories_scope_check", sql`${table.scope} IN ('global','workspace')`),
+  check("user_memories_scope_key_check", sql`(${table.scope}='global' AND ${table.workspaceId} IS NULL AND ${table.scopeKey}='global') OR (${table.scope}='workspace' AND ${table.workspaceId} IS NOT NULL AND ${table.scopeKey}='workspace:' || ${table.workspaceId})`),
+  check("user_memories_category_check", sql`${table.category} IN ('profile_name','language','company','answer_style','user_instruction','counterparty','legal_context','typical_requisite')`),
+  check("user_memories_source_kind_check", sql`${table.sourceKind} IN ('manual','automatic','profile')`),
+  check("user_memories_status_check", sql`${table.status} IN ('active','deleted')`),
+  check("user_memories_hash_check", sql`length(${table.contentSha256}) = 64`),
+  uniqueIndex("user_memories_identity_uidx")
+    .on(table.userId, table.scopeKey, table.contentSha256)
+    .where(sql`${table.status} = 'active'`),
+  index("user_memories_user_status_idx").on(table.userId, table.status, table.updatedAt),
+  index("user_memories_workspace_status_idx").on(table.workspaceId, table.status, table.updatedAt),
+]);
+
+export const memorySources = sqliteTable("memory_sources", {
+  id: text("id").primaryKey(),
+  memoryId: text("memory_id").notNull().references(() => userMemories.id, { onDelete: "cascade" }),
+  conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+  messageId: text("message_id").references(() => conversationMessages.id, { onDelete: "set null" }),
+  sourceType: text("source_type").notNull(),
+  sourceRef: text("source_ref"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check("memory_sources_type_check", sql`${table.sourceType} IN ('manual','chat','profile')`),
+  index("memory_sources_memory_idx").on(table.memoryId, table.createdAt),
+  index("memory_sources_conversation_idx").on(table.conversationId, table.createdAt),
+]);
+
 export const legalSources = sqliteTable("legal_sources", {
   id: text("id").primaryKey(),
   canonicalId: text("canonical_id"),

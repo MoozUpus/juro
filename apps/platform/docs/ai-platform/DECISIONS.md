@@ -2468,3 +2468,55 @@ may use an explicitly enabled sandbox adapter, but production checkout,
 their separate contractual, tax, provider, security, and release gates pass.
 Migration `0061` is local-only until a fresh private-R2 D1 backup and restore
 rehearsal are authorized and verified. Production remains unchanged.
+
+## D-125 — User memory is encrypted, user-owned context and never an instruction channel
+
+Status: accepted for local implementation; staging migration and deployment pending owner authorization
+Date: 2026-08-03
+
+JURO memory stores only a bounded statement, category, scope, source metadata,
+and cryptographic evidence. Statement text is encrypted with the existing
+versioned identity keyring using record-bound AES-GCM context. D1 stores the
+ciphertext, IV, key version and a normalized SHA-256 equality hash; plaintext
+does not enter audit metadata. Global records are owned by one user. Workspace
+records additionally require the active workspace on every read or mutation.
+
+Automatic extraction is deliberately narrow. Credential-like material is
+always rejected, and high-sensitivity facts are never saved automatically.
+Manual creation or editing of a high-sensitivity record requires a distinct
+user checkbox; passwords, OTP/TOTP codes and payment-card-like values remain
+forbidden even with confirmation. The user can disable automatic memory, edit
+or soft-delete individual entries, clear the global/current-workspace view, and
+receive the decrypted visible entries in an authenticated privacy export.
+
+Provider adapters receive memory as explicitly untrusted user context. It may
+inform facts and answer preferences but cannot override current instructions,
+verified-source policy, jurisdiction or the current question. Missing/invalid
+encryption fails memory closed while AI chat continues without memory; privacy
+export fails closed rather than silently creating an incomplete archive.
+
+Migration `0062` is additive and is not yet applied remotely. Its active-row
+partial unique index permits retained deleted history while preventing two
+active duplicates. Staging deployment requires a fresh private-R2 D1 checkpoint,
+restore proof, application of only `0062`, integrity checks, and a valid
+`IDENTITY_KEYRING`. Production remains unchanged.
+
+## D-126 — AI retry distinguishes an uncertain transport from a terminal failed run
+
+Status: accepted for local implementation; staging deployment pending
+Date: 2026-08-03
+
+An interrupted browser stream and a server-confirmed terminal failure are not
+the same state. After an uncertain transport error JURO retains and replays the
+same payload and idempotency key, so a completed run can be returned without a
+second charge. Once D1 proves that the run and its usage reservation are failed
+and released, replaying that key must not report `processing` forever. It now
+returns a bounded `AI_RUN_FAILED` terminal state and the browser prepares a new
+idempotency key for an explicit retry.
+
+Only provider-unavailable, timeout, invalid structured output, and the bounded
+failed-run replay state are restartable. Provider refusal and explicit user
+cancellation do not silently create a new request. Internal persistence/state
+codes are collapsed before reaching the browser. This change adds no migration
+or provider call and does not claim durable partial-token resume; unvalidated
+legal text remains hidden until terminal validation and persistence complete.

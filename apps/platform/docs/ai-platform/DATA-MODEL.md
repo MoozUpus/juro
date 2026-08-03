@@ -37,3 +37,19 @@ The complete local migration sequence is `0000`–`0034` (35 ledger entries). Mi
 ## Deferred domains
 
 The target AI chat, legal-source retrieval, document intelligence/OCR, user-document vectors, lawyer marketplace, billing entitlements, support/status, voice/avatar, and full admin domains are not all runtime-complete. Existing foundational tables are not proof that their product behavior, external providers, or retention automation is active.
+
+## User memory domain — local migration 0062 candidate
+
+`user_memory_settings` stores the account-level automatic-memory preference.
+`user_memories` stores user ownership, optional workspace scope, semantic
+category, encrypted statement envelope, normalized equality hash, lifecycle and
+source kind. Global scope requires a null workspace and the fixed `global`
+scope key; workspace scope requires the exact referenced workspace and derived
+scope key. A partial unique index applies only to active rows, so it prevents an
+active duplicate without blocking multiple retained deleted records.
+
+`memory_sources` links a memory record to a manual action, profile source or
+originating conversation/message. Source deletion uses `SET NULL`; memory and
+user deletion cascade. Human-readable memory text is never stored in source or
+workspace audit metadata. Migration `0062_nervous_shinko_yamashiro.sql` is
+additive and local-only until the staging backup/restore/migration gate passes.

@@ -550,20 +550,175 @@
 .notification-preferences-panel > button:disabled { cursor: not-allowed; opacity: .45; }
 .notification-preferences-panel > button svg { width: 17px; }
 
+.memory-panel {
+  display: grid;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid rgba(6, 40, 68, .13);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.memory-panel-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  align-items: start;
+}
+
+.memory-panel h2,
+.memory-panel h3 { margin: 0; color: #173042; }
+.memory-panel h2 { display: flex; align-items: center; gap: 8px; font-size: 19px; }
+.memory-panel h2 svg { width: 20px; color: #8a6728; }
+.memory-panel h3 { font-size: 15px; }
+.memory-panel-heading p,
+.memory-empty,
+.memory-clear p { max-width: 760px; margin: 6px 0 0; color: #64737d; font-size: 12px; line-height: 1.6; }
+
+.memory-toggle {
+  display: grid;
+  min-width: min(100%, 310px);
+  min-height: 48px;
+  padding: 10px 12px;
+  border: 1px solid rgba(6, 40, 68, .15);
+  border-radius: 10px;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  align-items: center;
+  color: #334b5a;
+  font-size: 12px;
+  font-weight: 760;
+  cursor: pointer;
+}
+
+.memory-toggle:has(input:checked) { border-color: #b58a38; background: #fffaf0; }
+.memory-toggle:focus-within { outline: 3px solid rgba(6, 40, 68, .28); outline-offset: 2px; }
+.memory-toggle input,
+.memory-sensitive-confirmation input { width: 20px; height: 20px; margin: 0; accent-color: #8a6728; }
+
+.memory-unavailable {
+  display: flex;
+  margin: 0;
+  padding: 13px;
+  gap: 9px;
+  align-items: start;
+  border-radius: 11px;
+  background: #fff5df;
+  color: #725119;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.memory-unavailable svg { width: 19px; flex: none; }
+.memory-create,
+.memory-list { display: grid; gap: 13px; }
+.memory-create { padding-top: 17px; border-top: 1px solid rgba(6, 40, 68, .1); }
+.memory-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.memory-create label,
+.memory-row label { display: grid; gap: 7px; color: #465965; font-size: 12px; font-weight: 780; }
+.memory-create select,
+.memory-row select,
+.memory-create textarea,
+.memory-row textarea {
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid rgba(6, 40, 68, .18);
+  border-radius: 10px;
+  background: #fff;
+  color: #173042;
+  font: inherit;
+}
+
+.memory-create textarea,
+.memory-row textarea { min-height: 84px; resize: vertical; line-height: 1.5; }
+.memory-create select:focus-visible,
+.memory-row select:focus-visible,
+.memory-create textarea:focus-visible,
+.memory-row textarea:focus-visible { outline: 3px solid rgba(6, 40, 68, .28); outline-offset: 2px; }
+.memory-sensitive-confirmation { grid-template-columns: 20px 1fr !important; align-items: start; font-weight: 600 !important; line-height: 1.45; }
+
+.memory-create > button,
+.memory-row-actions button,
+.memory-clear button {
+  display: inline-flex;
+  width: max-content;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 9px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  background: #062844;
+  color: #fff;
+  font-weight: 820;
+  transition: transform 140ms var(--ease-out);
+}
+
+.memory-create > button:active,
+.memory-row-actions button:active,
+.memory-clear button:active { transform: scale(.98); }
+.memory-create > button:disabled,
+.memory-row-actions button:disabled,
+.memory-clear button:disabled { cursor: not-allowed; opacity: .45; }
+.memory-create button svg,
+.memory-row-actions button svg { width: 17px; }
+
+.memory-row {
+  display: grid;
+  padding: 15px 0;
+  border-top: 1px solid rgba(6, 40, 68, .1);
+  grid-template-columns: minmax(150px, .35fr) minmax(240px, 1fr) auto;
+  grid-template-areas:
+    "meta category actions"
+    "meta statement actions"
+    "meta confirmation actions";
+  gap: 12px;
+  align-items: end;
+}
+
+.memory-row-meta { display: flex; grid-area: meta; flex-direction: column; gap: 4px; align-self: center; color: #64737d; font-size: 10px; }
+.memory-row-meta span:first-child { color: #8a6728; font-weight: 820; }
+.memory-category { grid-area: category; }
+.memory-statement { grid-area: statement; }
+.memory-row-confirmation { grid-area: confirmation; }
+.memory-row-actions { display: flex; grid-area: actions; gap: 8px; align-self: end; }
+.memory-row-actions .danger-outline,
+.memory-clear .danger-outline { border: 1px solid #ba5b56; background: #fff; color: #8f3430; }
+.memory-clear { padding-top: 15px; border-top: 1px solid rgba(6, 40, 68, .1); }
+.memory-clear [role="group"] { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.memory-clear [role="group"] p { flex-basis: 100%; }
+
 @media (max-width: 900px) {
   .business-workspace-panel form {
     grid-template-columns: 1fr;
+  }
+  .memory-panel-heading { flex-direction: column; }
+  .memory-toggle { width: 100%; }
+  .memory-row {
+    grid-template-columns: 1fr;
+    grid-template-areas: "meta" "category" "statement" "confirmation" "actions";
+    align-items: stretch;
   }
 }
 
 @media (max-width: 720px) {
   .notification-preferences-panel { padding: 17px; }
   .notification-preferences-panel > button { width: 100%; }
+  .memory-panel { padding: 17px; }
+  .memory-fields { grid-template-columns: 1fr; }
+  .memory-create > button,
+  .memory-row-actions,
+  .memory-row-actions button,
+  .memory-clear > button { width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .business-workspace-panel button,
-  .notification-preferences-panel > button {
+  .notification-preferences-panel > button,
+  .memory-create > button,
+  .memory-row-actions button,
+  .memory-clear button {
     transition: none;
   }
 }

@@ -905,3 +905,21 @@ Postflight proved no pending migrations, `quick_check=ok`, no foreign-key rows,
 and a 532,542-byte private-R2 export that passed an independent round trip.
 Rollback is application-first: leave the additive table unused and deploy the
 prior Worker or disable the synthetic flag. No production migration was applied.
+
+## Migration 0062 — encrypted user memory (pending staging authorization)
+
+`0062_nervous_shinko_yamashiro.sql` additively creates
+`user_memory_settings`, `user_memories`, and `memory_sources`. It does not drop,
+rename, rebuild or backfill existing data. Scope/category/source/status/hash
+checks reject malformed rows. User/workspace/conversation/message foreign keys
+preserve tenant lifecycle. A partial unique index covers only active
+`(user_id, scope_key, content_sha256)` identities, allowing multiple deleted
+records while preventing two active duplicates.
+
+Application rollback deploys the prior Worker and leaves the additive tables
+unused. Before staging apply: make and verify a fresh Time Travel bookmark,
+write a checksummed portable export to private `juro-staging-backups`, prove a
+disposable restore, apply only `0062`, then run migration-ledger, `quick_check`,
+`foreign_key_check`, schema/index inventory, and private post-checkpoint checks.
+The server-only `IDENTITY_KEYRING` must parse before enabling memory. Production
+migration or deployment is not authorized.

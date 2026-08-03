@@ -63,3 +63,18 @@ Minimum records retained for documented security, consent, access-audit, confirm
 ## Known boundaries
 
 User-document Vectorize deletion is not yet connected because user-document indexing is not an enabled product feature. It must be added before that index accepts tenant content. Provider-side AI deletion, guest cleanup, voice-audio cleanup, legal holds, and production retention automation remain deferred and feature-gated.
+
+## User memory lifecycle — local candidate
+
+An individual memory deletion is immediately hidden from reads and excluded
+from AI context through `status=deleted` and `deleted_at`. The current
+implementation retains that encrypted soft-deleted row pending the configurable
+hard-purge job; scheduled seven-day hard purge is still an open gate and must
+not be claimed as active.
+
+Account closure is different: the real deletion transaction now inventories
+and deletes `user_memory_settings`, `user_memories`, and cascading
+`memory_sources` before the profile tombstone is written. The purge regression
+uses actual memory/source/settings rows and proves all three are absent while
+retained consent/security/audit evidence remains. This local behavior depends
+on additive migration `0062` and is not yet staging evidence.
