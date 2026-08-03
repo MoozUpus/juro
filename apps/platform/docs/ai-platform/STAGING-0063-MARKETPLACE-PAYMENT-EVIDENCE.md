@@ -57,8 +57,11 @@ The initial marketplace artifact was deployed as Worker version
 deployed as `6cd53a3e-2794-4108-83fd-8a443d59b8cb`; the Cloudflare deployment
 listing recorded the Git-uploaded version
 `9fa6926a-5c67-4e61-a311-b7782818b0c5` at 100% traffic. The marketplace UI
-integration is deployed as current Worker version
-`5f2e688d-2637-4bf9-b6bc-2f8f22e0d7c0`.
+integration was deployed as Worker version
+`5f2e688d-2637-4bf9-b6bc-2f8f22e0d7c0`. The business-workspace isolation
+hardening was then uploaded as `cbf16608-9611-43c3-812a-2019a0a0d8f5`.
+Cloudflare subsequently recorded `9fc20ed9-207c-4281-b285-2a7aec9e0275` as
+the 100%-traffic secret-change deployment based on that current Worker.
 
 `https://staging.app.juro.uz/` returned Cloudflare Access's expected `302`
 response to an unauthenticated smoke request.
@@ -91,6 +94,14 @@ business workspaces:
   `/:locale/:accountType/cases/:caseId/proposals/:proposalId/checkout` and
   `/:locale/business/:workspaceId/cases/:caseId/proposals/:proposalId/checkout`;
 - every write uses the existing CSRF and server-side session/workspace checks.
+
+For a business route, the browser forwards its workspace ID only as route
+context. The proposal list, agreement acceptance, and checkout endpoints each
+resolve that ID with `workspaceForUserById`, require membership again on the
+server, and still constrain the case/proposal query by both workspace and
+client owner. A mismatched or inaccessible workspace receives the neutral
+`WORKSPACE_UNAVAILABLE` / unavailable-object response and does not grant
+cross-tenant access.
 
 The UI contract is covered by `migration-0063-marketplace-service.test.ts` and
 the full platform suite was rerun after its addition.
