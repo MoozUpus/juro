@@ -29,8 +29,10 @@ export const actionPlanStepPatchSchema = z.object({
 
 export type ActionPlanStepPatch = z.infer<typeof actionPlanStepPatchSchema>;
 
+const legacyAiPlanStepIdSchema = z.string().regex(/^plan_ai_[0-9a-f]{32}:step:[1-9]\d{0,2}$/);
+
 const actionPlanConfirmedChangeSchema = actionPlanStepPatchSchema.extend({
-  id: z.string().uuid(),
+  id: z.union([z.string().uuid(), legacyAiPlanStepIdSchema]),
 });
 
 export const confirmedActionPlanPatchSchema = z.object({

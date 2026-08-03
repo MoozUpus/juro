@@ -185,11 +185,27 @@
 }
 
 .ai-answer-actions button:focus-visible,
+.ai-plan-destination select:focus-visible,
 .ai-branch-history button:focus-visible,
 .ai-edit-notice button:focus-visible,
 .ai-error button:focus-visible {
   outline: 3px solid #be974f;
   outline-offset: 2px;
+}
+
+@media (max-width: 520px) {
+  .ai-plan-destination {
+    width: 100%;
+    grid-template-columns: 1fr;
+  }
+
+  .ai-plan-destination label {
+    grid-column: auto;
+  }
+
+  .ai-plan-destination button {
+    justify-content: center;
+  }
 }
 
 .ai-feedback {
@@ -239,6 +255,32 @@
   font: inherit;
   font-size: .75rem;
   font-weight: 750;
+}
+
+.ai-plan-destination {
+  display: grid;
+  grid-template-columns: minmax(9rem, 14rem) auto;
+  align-items: end;
+  gap: .25rem .5rem;
+}
+
+.ai-plan-destination label {
+  grid-column: 1 / -1;
+  color: #526571;
+  font-size: .6875rem;
+  font-weight: 750;
+}
+
+.ai-plan-destination select {
+  min-height: 2.75rem;
+  min-width: 0;
+  border: 1px solid rgba(6, 40, 68, .22);
+  border-radius: .625rem;
+  background: #fff;
+  color: #062844;
+  padding: 0 2rem 0 .75rem;
+  font: inherit;
+  font-size: .75rem;
 }
 
 .ai-feedback-actions > button.selected {

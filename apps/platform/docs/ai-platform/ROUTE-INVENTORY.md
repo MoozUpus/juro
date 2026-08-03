@@ -251,6 +251,7 @@ POST /api/onboarding
 
 ```text
 GET,POST /api/platform/ai
+POST /api/platform/ai/action-plan
 GET /api/platform/ai/runs/:idempotencyKey
 PATCH /api/platform/ai/facts/:factId
 GET /api/platform/dashboard
@@ -292,6 +293,12 @@ POST /api/platform/legal-sources/reviews/:reviewId/claim
 POST /api/platform/legal-sources/reviews/:reviewId/decision
 POST /api/platform/legal-sources/reviews/:reviewId/publication
 ```
+
+`POST /api/platform/ai/action-plan` accepts only an assistant-message UUID,
+locale, and an optional destination-case UUID. It rehydrates the saved
+structured answer server-side. Without a destination it creates one new case;
+with a destination it appends an immutable version and real tasks to a
+tenant-owned non-archived case. The operation is CSRF-protected and replay-safe.
 
 ### Inactive staff surface
 

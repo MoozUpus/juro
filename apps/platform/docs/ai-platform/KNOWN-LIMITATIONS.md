@@ -274,7 +274,13 @@ The following gates remain open:
 
 - The deployed slice supports existing case creation, plan-step status/date updates, nearest deadline, and builder linkage; it is not the complete Phase 6 lifecycle.
 - Immutable action-plan version history and the proposed-plan diff/confirmation UI are deployed to protected staging. Legal-basis calculation, business-day/holiday rules, and complete case-tab APIs remain open. Reminders are created only after the user confirms task creation; task ownership is the current user in this first-stage model.
-- A persisted structured AI answer can now create one new tenant-owned case, immutable plan version, plan steps, and tasks only after the user explicitly confirms the action. The browser submits only the assistant message ID; the server re-reads the workspace-owned structured response and makes retries idempotent. Appending an AI plan to an existing case, deadline calculation from legal rules, business-day/holiday rules, and complete case-tab APIs remain open.
+- A persisted structured AI answer can create a new tenant-owned case after
+  explicit confirmation. The existing-case append gap is now closed locally:
+  the user selects a real destination, the server re-reads the tenant-owned
+  assistant message, appends an immutable plan revision and tasks, and exact
+  replay is idempotent. Staging deployment and authenticated RU/UZ
+  click-through remain open. Deadline calculation from legal rules,
+  business-day/holiday rules and complete case-tab APIs are still incomplete.
 - A `templateCode` query hint can accompany a plan step, but automatic resolution to a category/template route is not claimed; the user can select the real published template while case/step context is preserved.
 - Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
 - No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.

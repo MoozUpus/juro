@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   AiActionPlanSaveError,
+  saveAiActionPlanInputSchema,
   saveAiActionPlanToCase,
 } from "../lib/ai/action-plan-save";
+import { confirmedActionPlanPatchSchema } from "../lib/platform/action-plan";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const USER_ID = "user_ai_plan";
@@ -69,6 +71,8 @@ test("explicit AI-plan confirmation persists a tenant-scoped case, immutable pla
       (sqlite.prepare("SELECT count(*) AS count FROM action_plan_steps WHERE plan_id=?").get(first.planId) as { count: number }).count,
       2,
     );
+    const stepIds = sqlite.prepare("SELECT id FROM action_plan_steps WHERE plan_id=? ORDER BY ordinal").all(first.planId) as Array<{ id: string }>;
+    assert.ok(stepIds.every((step) => /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/.test(step.id)));
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS count FROM tasks WHERE case_id=? AND workspace_id=?").get(first.caseId, WORKSPACE_ID) as { count: number }).count,
       2,
@@ -89,6 +93,141 @@ test("explicit AI-plan confirmation persists a tenant-scoped case, immutable pla
   } finally {
     sqlite.close();
   }
+});
+
+test("explicit confirmation appends a persisted AI plan to one tenant-owned case as an immutable revision", async () => {
+  const { sqlite, d1 } = seed();
+  const caseId = "6b56f9b7-b726-4ed3-8d4a-4bf42ec8da14";
+  const planId = "89ff827b-37de-4c3c-89af-e5d4fc1a192c";
+  const originalStepId = "85b6dbe9-cb62-4706-b4fb-1a57a95aa00c";
+  try {
+    sqlite.prepare(
+      "INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(caseId, WORKSPACE_ID, USER_ID, "individual", "ru", "Существующее дело", null, "contracts", "open", 1, NOW, NOW);
+    sqlite.prepare(
+      "INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?)",
+    ).run(planId, caseId, USER_ID, "Основной план", "completed", 100, 1, NOW, NOW);
+    sqlite.prepare(
+      "INSERT INTO action_plan_steps (id,plan_id,ordinal,title,description,status,deadline_type,action_type,revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(originalStepId, planId, 1, "Исходный шаг", "Не менять", "completed", "calendar_days", "manual", 1, NOW, NOW);
+    sqlite.prepare(
+      "INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) VALUES (?,?,?,?,?,?,?)",
+    ).run(crypto.randomUUID(), planId, 1, USER_ID, "initial", JSON.stringify({ version: 1 }), NOW);
+
+    const first = await saveAiActionPlanToCase({
+      db: d1,
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
+      assistantMessageId: ASSISTANT_MESSAGE_ID,
+      targetCaseId: caseId,
+      now: "2026-08-03T08:05:00.000Z",
+    });
+    assert.deepEqual(first, { caseId, planId, taskCount: 2, replay: false });
+    assert.equal(
+      (sqlite.prepare("SELECT current_revision AS revision FROM action_plans WHERE id=?").get(planId) as { revision: number }).revision,
+      2,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT progress_percent AS progress,status FROM action_plans WHERE id=?").get(planId) as { progress: number; status: string }).progress,
+      33,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS count FROM action_plan_steps WHERE plan_id=?").get(planId) as { count: number }).count,
+      3,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS count FROM tasks WHERE case_id=? AND workspace_id=?").get(caseId, WORKSPACE_ID) as { count: number }).count,
+      2,
+    );
+    const version = sqlite.prepare(
+      "SELECT reason,snapshot_json AS snapshotJson FROM action_plan_versions WHERE plan_id=? AND version=2",
+    ).get(planId) as { reason: string; snapshotJson: string };
+    assert.equal(version.reason, "ai_plan_appended");
+    const snapshot = JSON.parse(version.snapshotJson) as { version: number; assistantMessageId: string; steps: Array<{ title: string }> };
+    assert.equal(snapshot.version, 2);
+    assert.equal(snapshot.assistantMessageId, ASSISTANT_MESSAGE_ID);
+    assert.deepEqual(snapshot.steps.map((step) => step.title), ["Исходный шаг", "Собрать документы", "Подготовить требование"]);
+
+    const replay = await saveAiActionPlanToCase({
+      db: d1,
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
+      assistantMessageId: ASSISTANT_MESSAGE_ID,
+      targetCaseId: caseId,
+      now: "2026-08-03T08:06:00.000Z",
+    });
+    assert.deepEqual(replay, { ...first, replay: true });
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS count FROM action_plan_versions WHERE plan_id=?").get(planId) as { count: number }).count,
+      2,
+    );
+
+    const secondCaseId = "f953aeaf-a212-4ea2-a7d4-ac612e840bbb";
+    sqlite.prepare(
+      "INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(secondCaseId, WORKSPACE_ID, USER_ID, "individual", "ru", "Дело без плана", null, "contracts", "open", 1, NOW, NOW);
+    const secondDestination = await saveAiActionPlanToCase({
+      db: d1,
+      workspaceId: WORKSPACE_ID,
+      userId: USER_ID,
+      assistantMessageId: ASSISTANT_MESSAGE_ID,
+      targetCaseId: secondCaseId,
+      now: "2026-08-03T08:07:00.000Z",
+    });
+    assert.equal(secondDestination.caseId, secondCaseId);
+    assert.equal(secondDestination.taskCount, 2);
+    assert.equal(secondDestination.replay, false);
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS count FROM action_plan_steps WHERE plan_id=?").get(secondDestination.planId) as { count: number }).count,
+      2,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS count FROM action_plan_versions WHERE plan_id=? AND version=1").get(secondDestination.planId) as { count: number }).count,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("AI-plan append input is UUID-bounded and a foreign case remains undiscoverable", async () => {
+  assert.equal(saveAiActionPlanInputSchema.safeParse({ assistantMessageId: ASSISTANT_MESSAGE_ID, targetCaseId: "not-a-case", locale: "ru" }).success, false);
+  const { sqlite, d1 } = seed();
+  const foreignWorkspaceId = "ws_ai_plan_foreign";
+  const foreignCaseId = "2e3c46e3-9d0a-4425-a4e4-9fa6a1c1bb98";
+  try {
+    sqlite.prepare(
+      "INSERT INTO workspaces (id,type,name,full_name,short_name,locale,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?)",
+    ).run(foreignWorkspaceId, "individual", "Foreign", null, null, "ru", NOW, NOW);
+    sqlite.prepare(
+      "INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+    ).run(foreignCaseId, foreignWorkspaceId, USER_ID, "individual", "ru", "Чужое дело", null, "contracts", "open", 1, NOW, NOW);
+    await assert.rejects(
+      () => saveAiActionPlanToCase({
+        db: d1,
+        workspaceId: WORKSPACE_ID,
+        userId: USER_ID,
+        assistantMessageId: ASSISTANT_MESSAGE_ID,
+        targetCaseId: foreignCaseId,
+        now: NOW,
+      }),
+      (error: unknown) => error instanceof AiActionPlanSaveError && error.code === "AI_ACTION_PLAN_CASE_NOT_FOUND",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("confirmed plan changes accept only UUID steps or the bounded legacy AI-step identity", () => {
+  const base = { status: "not_started", revision: 1, dueAt: null } as const;
+  assert.equal(confirmedActionPlanPatchSchema.safeParse({
+    revision: 1,
+    changes: [{ ...base, id: `plan_ai_${ASSISTANT_MESSAGE_ID.replaceAll("-", "")}:step:2` }],
+  }).success, true);
+  assert.equal(confirmedActionPlanPatchSchema.safeParse({
+    revision: 1,
+    changes: [{ ...base, id: "plan_ai_escape:step:2 OR 1=1" }],
+  }).success, false);
 });
 
 test("legacy non-UUID plan cases retain replay safety after the builder-compatible ID migration", async () => {
@@ -148,9 +287,12 @@ test("AI-plan route and chat require server-side ownership and explicit confirma
   assert.match(route, /workspaceForUser\(user\)/);
   assert.match(route, /saveAiActionPlanToCase/);
   assert.match(service, /conversation\.workspace_id=\? AND conversation\.owner_user_id=\?/);
+  assert.match(service, /c\.id=\? AND c\.workspace_id=\? AND c\.archived_at IS NULL/);
   assert.match(service, /structuredJson/);
   assert.match(service, /ai_action_plan_confirmed/);
+  assert.match(service, /ai_action_plan_appended/);
   assert.match(client, /window\.confirm\(/);
   assert.match(client, /\/api\/platform\/ai\/action-plan/);
   assert.match(client, /assistantMessageId: answer\.messageId/);
+  assert.match(client, /targetCaseId: targetCaseId \|\| undefined/);
 });

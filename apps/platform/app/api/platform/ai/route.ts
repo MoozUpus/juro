@@ -56,6 +56,13 @@ export const GET = withApiErrors(async function GET(request: Request) {
       (SELECT json_group_array(json_object('id',f.id,'statement',f.statement,'status',f.status)) FROM confirmed_facts f WHERE f.conversation_id=c.id) AS factsJson
      FROM conversations c WHERE c.workspace_id=? AND c.owner_user_id=? ORDER BY c.updated_at DESC LIMIT 40`,
   ).bind(workspace.id, user.id).all();
+  const cases = await db.prepare(
+    `SELECT id,title,status,updated_at AS updatedAt
+     FROM cases
+     WHERE workspace_id=? AND archived_at IS NULL
+     ORDER BY updated_at DESC,id
+     LIMIT 50`,
+  ).bind(workspace.id).all();
   const selected = selectedId
     ? await loadConversationResult(db, selectedId, workspace.id, user.id, selectedBranchId)
     : null;
@@ -66,6 +73,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
       ...row,
       facts: parseJson(String((row as Record<string, unknown>).factsJson || "[]"), []),
     })),
+    cases: cases.results,
     selected,
   });
 });

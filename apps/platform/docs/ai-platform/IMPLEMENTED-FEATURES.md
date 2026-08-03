@@ -483,3 +483,20 @@ Local evidence: the combined AI-memory and Worker scheduled-runtime suite passes
 34/34, with type-check and lint also passing. Migration `0062`, keyring
 validation, remote scheduled-run evidence, staging deployment, authenticated
 RU/UZ browser QA and production remain open.
+
+## Phase 6 — AI plan destination (local candidate)
+
+The AI answer surface now lets the user choose either a new case or one of the
+real non-archived cases returned by the tenant-scoped AI bootstrap response.
+The selected case ID is only a locator: the server re-reads the persisted
+assistant message and derives every step, source reference and task from its
+validated structured result.
+
+For an existing case, JURO appends steps after the current plan, increments the
+optimistic plan/case revision, writes an immutable `ai_plan_appended` snapshot,
+creates real tasks, case activity and workspace audit evidence, and makes an
+exact retry idempotent. A foreign/archived case is neutral not-found. New
+AI-created steps use UUID identities; a strict compatibility pattern keeps
+already-deployed legacy AI steps editable. Focused tests pass 7/7 and
+type-check passes. This is local evidence only until the reviewed staging
+artifact is deployed and traversed through an authenticated RU/UZ session.

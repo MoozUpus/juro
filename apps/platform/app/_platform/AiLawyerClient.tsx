@@ -13,6 +13,7 @@ type ProviderStatus = { configured: boolean; provider: string | null; model: str
 type Usage = { used: number; limit: number; periodEnd: string };
 type SourceFreshness = { status: "fresh" | "stale" | "unavailable"; asOf: string; ageDays: number | null; maxAgeDays: number };
 type Conversation = { id: string; title: string; locale: string; status: string; updatedAt: string; lastAnswer: string | null; facts: Fact[] };
+type CaseOption = { id: string; title: string; status: string; updatedAt: string };
 type Fact = { id: string; statement: string; status: string };
 type Source = { sourceId: string; actTitle: string; actIdentifier: string | null; article: string | null; excerpt: string | null; originalUrl: string; status: string; effectiveDate: string | null; verifiedAt: string };
 type LegalResult = {
@@ -64,6 +65,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [status, setStatus] = useState<ProviderStatus | null>(null);
   const [usage, setUsage] = useState<Usage | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [cases, setCases] = useState<CaseOption[]>([]);
   const [question, setQuestion] = useState(() => (searchParams.get("prompt") || "").slice(0, 4_000));
   const [answerMode, setAnswerMode] = useState<"short" | "detailed">("detailed");
   const [reasoningMode, setReasoningMode] = useState<"fast" | "deep">("fast");
@@ -77,6 +79,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
   const [canRetry, setCanRetry] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
+  const [targetCaseId, setTargetCaseId] = useState("");
   const [openingSuggestedDocument, setOpeningSuggestedDocument] = useState(false);
   const [feedback, setFeedback] = useState<AiFeedback[]>([]);
   const [feedbackType, setFeedbackType] = useState<AiFeedbackType>("not_helpful");
@@ -90,11 +93,12 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       if (selectedConversationId) params.set("conversationId", selectedConversationId);
       if (selectedBranchId) params.set("branchId", selectedBranchId);
       const response = await fetch(`/api/platform/ai${params.size ? `?${params}` : ""}`, { cache: "no-store" });
-      const body = await response.json() as { status?: ProviderStatus; usage?: Usage; conversations?: Conversation[]; selected?: Answer | null; error?: string };
+      const body = await response.json() as { status?: ProviderStatus; usage?: Usage; conversations?: Conversation[]; cases?: CaseOption[]; selected?: Answer | null; error?: string };
       if (!response.ok) throw new Error(body.error || (ru ? "AI-модуль не загрузился." : "AI moduli yuklanmadi."));
       setStatus(body.status ?? null);
       setUsage(body.usage ?? null);
       setConversations(body.conversations ?? []);
+      setCases(body.cases ?? []);
       setAnswer(body.selected ?? null);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -288,9 +292,14 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   async function savePlanToCase() {
     if (!answer?.messageId || answer.result.responseKind !== "answer" || !answer.result.actionPlan.length || savingPlan) return;
-    const confirmed = window.confirm(ru
-      ? "Создать новое дело и задачи по показанному плану? Исходный AI-ответ сохранится без изменений."
-      : "Ko‘rsatilgan reja bo‘yicha yangi ish va vazifalar yaratilsinmi? Asl AI javobi o‘zgarmaydi.");
+    const selectedCase = cases.find((item) => item.id === targetCaseId);
+    const confirmed = window.confirm(targetCaseId
+      ? (ru
+        ? `Добавить задачи по показанному плану в дело «${selectedCase?.title ?? "Выбранное дело"}»? Исходный AI-ответ и текущая версия плана сохранятся.`
+        : `Ko‘rsatilgan reja vazifalari “${selectedCase?.title ?? "Tanlangan ish"}” ishiga qo‘shilsinmi? Asl AI javobi va joriy reja versiyasi saqlanadi.`)
+      : (ru
+        ? "Создать новое дело и задачи по показанному плану? Исходный AI-ответ сохранится без изменений."
+        : "Ko‘rsatilgan reja bo‘yicha yangi ish va vazifalar yaratilsinmi? Asl AI javobi o‘zgarmaydi."));
     if (!confirmed) return;
     setSavingPlan(true);
     setError("");
@@ -298,7 +307,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       const response = await fetch("/api/platform/ai/action-plan", {
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ assistantMessageId: answer.messageId, locale }),
+        body: JSON.stringify({ assistantMessageId: answer.messageId, targetCaseId: targetCaseId || undefined, locale }),
       });
       const body = await response.json() as { caseId?: string; error?: string };
       if (!response.ok || !body.caseId) throw new Error(body.error || (ru ? "План не сохранён в дело." : "Reja ishga saqlanmadi."));
@@ -383,7 +392,14 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           ) : <>
             <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} />
             <div className="ai-answer-actions">
-              {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => void savePlanToCase()}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : (ru ? "Добавить план в новое дело" : "Rejani yangi ishga qo‘shish")}</button>}
+              {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && <div className="ai-plan-destination">
+                <label htmlFor="ai-plan-case">{ru ? "Куда добавить план" : "Rejani qayerga qo‘shish"}</label>
+                <select id="ai-plan-case" value={targetCaseId} disabled={savingPlan} onChange={(event) => setTargetCaseId(event.target.value)}>
+                  <option value="">{ru ? "Новое дело" : "Yangi ish"}</option>
+                  {cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                </select>
+                <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => void savePlanToCase()}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : targetCaseId ? (ru ? "Добавить в выбранное дело" : "Tanlangan ishga qo‘shish") : (ru ? "Создать дело с планом" : "Reja bilan ish yaratish")}</button>
+              </div>}
               {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? (ru ? "Проверяем шаблон…" : "Shablon tekshirilmoqda…") : (ru ? "Открыть шаблон JURO" : "JURO shablonini ochish")}</button>}
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>

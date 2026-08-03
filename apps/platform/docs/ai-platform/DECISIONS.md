@@ -2570,3 +2570,26 @@ cascade, compatibility and no-content logging. Migration `0062`, a valid
 staging keyring, an actual scheduled cleanup record and authenticated RU/UZ UI
 evidence remain required before remote behavior is claimed. Production is
 unchanged.
+
+## D-128 — Adding an AI plan to an existing case is a confirmed immutable append
+
+Status: accepted for local implementation; protected staging evidence pending
+Date: 2026-08-03
+
+The browser may choose a destination case, but it never submits plan text,
+legal sources or task content. The server re-reads the persisted structured
+assistant message, verifies that message belongs to the active user/workspace,
+and independently verifies that the destination case belongs to the active
+workspace and is not archived. Missing or foreign cases receive the same
+not-found boundary.
+
+An append preserves the current plan and creates a new immutable plan version.
+New steps are placed after the existing highest ordinal and receive stable
+UUID-shaped identities; matching tasks are created for the current user. A
+deterministic audit identity makes replay idempotent. Existing AI-plan steps
+created before this change keep working through a narrowly bounded legacy-ID
+parser; arbitrary text remains invalid. No migration or dependency is added.
+Local service tests prove new-case compatibility, existing-case append,
+version history, task creation, exact replay, foreign-workspace denial and
+legacy-ID safety. Staging deployment and authenticated RU/UZ browser evidence
+remain open. Production is unchanged.
