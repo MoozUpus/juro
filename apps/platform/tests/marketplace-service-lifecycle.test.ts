@@ -4,6 +4,7 @@ import {
   confirmMarketplaceServiceCheckout,
   createMarketplaceServiceCheckout,
 } from "../lib/billing/marketplace-service";
+import { BillingDomainError } from "../lib/billing/checkout-service";
 import { finalizeSandboxPayment } from "../lib/billing/payment-finalization";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -111,6 +112,59 @@ test("marketplace legal-service payment creates exactly one allocation and payab
     assert.equal(ledger.status, "posted");
     assert.equal(ledger.debit, ledger.credit);
     assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM payment_provider_events").get()?.count, 1);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("marketplace checkout allows one active attempt, rejects a distinct concurrent confirmation, and hides the order from another workspace", async () => {
+  const { sqlite, d1 } = seedMarketplace();
+  try {
+    const actor = { userId: ids.client, workspaceId: ids.workspace };
+    const checkout = await createMarketplaceServiceCheckout(
+      d1,
+      actor,
+      { proposalId: ids.proposal, requestId: "12121212-1212-4121-8121-121212121212" },
+      new Date(NOW),
+    );
+    const orderId = String(checkout.order.id);
+    const [first, second] = await Promise.allSettled([
+      confirmMarketplaceServiceCheckout(
+        d1,
+        actor,
+        orderId,
+        "13131313-1313-4131-8131-131313131313",
+        "/ru/individual/orders/test/payment",
+        new Date("2026-08-03T10:01:00.000Z"),
+      ),
+      confirmMarketplaceServiceCheckout(
+        d1,
+        actor,
+        orderId,
+        "14141414-1414-4141-8141-141414141414",
+        "/ru/individual/orders/test/payment",
+        new Date("2026-08-03T10:01:00.000Z"),
+      ),
+    ]);
+    assert.equal([first, second].filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal([first, second].filter((result) => result.status === "rejected").length, 1);
+    const rejected = first.status === "rejected" ? first.reason : second.status === "rejected" ? second.reason : null;
+    assert.ok(rejected instanceof BillingDomainError);
+    assert.ok(["ORDER_CONFIRMATION_CONFLICT", "ORDER_NOT_CONFIRMABLE"].includes(rejected.code));
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM payment_attempts WHERE order_id=? AND internal_status='client_action_required'").get(orderId)?.count, 1);
+
+    await assert.rejects(
+      confirmMarketplaceServiceCheckout(
+        d1,
+        { userId: ids.client, workspaceId: "99999999-9999-4999-8999-999999999998" },
+        orderId,
+        "15151515-1515-4151-8151-151515151515",
+        "/ru/individual/orders/test/payment",
+        new Date("2026-08-03T10:02:00.000Z"),
+      ),
+      (error: unknown) => error instanceof BillingDomainError && error.code === "ORDER_UNAVAILABLE",
+    );
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     sqlite.close();
