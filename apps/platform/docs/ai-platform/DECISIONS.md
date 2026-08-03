@@ -2518,5 +2518,10 @@ Only provider-unavailable, timeout, invalid structured output, and the bounded
 failed-run replay state are restartable. Provider refusal and explicit user
 cancellation do not silently create a new request. Internal persistence/state
 codes are collapsed before reaching the browser. This change adds no migration
-or provider call and does not claim durable partial-token resume; unvalidated
-legal text remains hidden until terminal validation and persistence complete.
+or provider call. A tenant-scoped, authenticated, no-store status endpoint lets
+the browser poll the exact idempotency record after an uncertain stream error.
+If the answer completed, the browser reloads the persisted structured message;
+if it failed, it offers a fresh-key retry; if status remains missing or active,
+the original key is retained. This does not claim durable partial-token resume;
+unvalidated legal text remains hidden until terminal validation and persistence
+complete.

@@ -3,9 +3,11 @@
 > released idempotency record in an endless `processing` response. Unknown
 > transport outcomes retain the same request/key; a server-confirmed terminal
 > failure returns a bounded state and an explicit retry receives a fresh key.
+> An authenticated tenant-scoped status read now performs bounded automatic
+> recovery of a completed persisted answer after an uncertain stream error.
 > Provider refusal and user cancellation do not auto-restart. Focused state
 > machine/client tests, type-check, and lint pass. This delta is not deployed;
-> automatic reconnect and durable partial-token resume remain open.
+> durable partial-token resume remains open.
 
 > Current staging delta — 2026-08-03: `juro-platform-staging` Worker version
 > `6ec3e8ab-434b-4ab5-98db-c26908d6c8a3` serves the protected AI-answer feedback

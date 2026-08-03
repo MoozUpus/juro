@@ -251,6 +251,7 @@ POST /api/onboarding
 
 ```text
 GET,POST /api/platform/ai
+GET /api/platform/ai/runs/:idempotencyKey
 PATCH /api/platform/ai/facts/:factId
 GET /api/platform/dashboard
 GET,POST /api/platform/cases

@@ -13,6 +13,7 @@ import {
   failAiRun,
   completeAiRun,
   completeAiRunStatements,
+  readAiRunStatus,
   reserveAiRun,
 } from "../lib/ai/run-store";
 import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
@@ -212,6 +213,18 @@ test("cancelled AI run releases reserved usage and records no charge", async () 
     assert.equal(terminalReplay.runId, reserved.runId);
     assert.equal(terminalReplay.errorCode, "AI_CANCELLED");
   }
+  assert.deepEqual(await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "cancelled-request",
+  }), { kind: "failed", runId: reserved.runId, errorCode: "AI_CANCELLED" });
+  assert.deepEqual(await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-2",
+    idempotencyKey: "cancelled-request",
+  }), { kind: "missing" });
 });
 
 
@@ -240,6 +253,12 @@ test("AI run reservation is idempotent and clarification does not consume a cycl
   const first = await reserveAiRun(input);
   assert.equal(first.kind, "reserved");
   if (first.kind !== "reserved") return;
+  assert.deepEqual(await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "request-one",
+  }), { kind: "processing", runId: first.runId });
 
   const inProgress = await reserveAiRun(input);
   assert.equal(inProgress.kind, "processing");
@@ -269,6 +288,19 @@ test("AI run reservation is idempotent and clarification does not consume a cycl
     .get(first.ledgerId) as { status: string; inputTokens: number };
   assert.equal(ledger.status, "released");
   assert.equal(ledger.inputTokens, 100);
+  const completedStatus = await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "request-one",
+  });
+  assert.equal(completedStatus.kind, "completed");
+  if (completedStatus.kind === "completed") {
+    assert.equal(completedStatus.runId, first.runId);
+    assert.equal(completedStatus.conversationId, "conversation-1");
+    assert.equal(completedStatus.responseMessageId, "assistant-1");
+    assert.equal(completedStatus.branchId, null);
+  }
 });
 
 test("AI completion persists the actual fallback provider and model", async () => {
@@ -414,6 +446,7 @@ function aiDatabase(): { sqlite: DatabaseSync; d1: D1Database } {
     CREATE TABLE idempotency_keys (key TEXT PRIMARY KEY,scope TEXT NOT NULL,request_hash TEXT NOT NULL,status TEXT NOT NULL,result_ref TEXT,expires_at TEXT NOT NULL,completed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
     CREATE TABLE conversations (id TEXT PRIMARY KEY);
     CREATE TABLE conversation_messages (id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL,structured_json TEXT);
+    CREATE TABLE message_branches (id TEXT PRIMARY KEY,response_message_id TEXT NOT NULL,workspace_id TEXT NOT NULL,owner_user_id TEXT NOT NULL);
     CREATE TABLE ai_runs (id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,conversation_id TEXT,request_message_id TEXT,response_message_id TEXT,idempotency_key TEXT NOT NULL,correlation_id TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,provider_response_id TEXT,fallback_from_provider TEXT,answer_mode TEXT NOT NULL,reasoning_mode TEXT NOT NULL,status TEXT NOT NULL,legal_database_as_of TEXT NOT NULL,instruction_hash TEXT NOT NULL,source_version_hash TEXT NOT NULL,input_tokens INTEGER NOT NULL,output_tokens INTEGER NOT NULL,cached_input_tokens INTEGER NOT NULL,estimated_cost_microusd INTEGER,attempt_count INTEGER NOT NULL,latency_ms INTEGER,error_code TEXT,started_at TEXT NOT NULL,completed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(workspace_id,user_id,idempotency_key));
     CREATE TABLE ai_usage_ledger (id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,ai_run_id TEXT NOT NULL,idempotency_key TEXT NOT NULL,feature TEXT NOT NULL,period_start TEXT NOT NULL,period_end TEXT NOT NULL,units INTEGER NOT NULL,status TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,input_tokens INTEGER NOT NULL,output_tokens INTEGER NOT NULL,cached_input_tokens INTEGER NOT NULL,estimated_cost_microusd INTEGER,released_at TEXT,consumed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(ai_run_id),UNIQUE(workspace_id,user_id,idempotency_key));
   `);

@@ -46,6 +46,10 @@ type AiRequestPayload = {
 };
 type AiFeedbackType = "helpful" | "not_helpful" | "wrong_norm" | "broken_link" | "outdated" | "incomplete" | "language" | "unsafe" | "ignored_facts";
 type AiFeedback = { feedbackType: AiFeedbackType; comment: string | null; updatedAt: string };
+type AiRunRecoveryStatus =
+  | { kind: "processing"; runId: string }
+  | { kind: "completed"; runId: string; conversationId: string; responseMessageId: string; branchId: string | null }
+  | { kind: "failed"; runId: string; errorCode: string };
 
 const feedbackOptions: AiFeedbackType[] = ["not_helpful", "wrong_norm", "broken_link", "outdated", "incomplete", "language", "unsafe", "ignored_facts"];
 
@@ -110,6 +114,45 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       .catch(() => { /* Feedback is supplementary; an unavailable read must not hide the legal answer. */ });
     return () => { active = false; };
   }, [answer?.messageId]);
+
+  async function recoverPendingRequest(pending: AiRetryRequest<AiRequestPayload>, signal: AbortSignal) {
+    const waits = [500, 1_000, 1_500, 2_500, 4_000];
+    for (const wait of waits) {
+      await abortableDelay(wait, signal);
+      const statusResponse = await fetch(
+        `/api/platform/ai/runs/${encodeURIComponent(pending.idempotencyKey)}`,
+        { cache: "no-store", signal },
+      );
+      if (statusResponse.status === 404) continue;
+      const statusBody = await statusResponse.json().catch(() => null) as AiRunRecoveryStatus | null;
+      if ((!statusResponse.ok && statusResponse.status !== 202) || !statusBody?.kind) {
+        throw new TypeError("AI_RUN_RECOVERY_UNAVAILABLE");
+      }
+      if (statusBody.kind === "processing") continue;
+      if (statusBody.kind === "failed") return { kind: "failed" as const };
+
+      const params = new URLSearchParams({ conversationId: statusBody.conversationId });
+      if (statusBody.branchId) params.set("branchId", statusBody.branchId);
+      const resultResponse = await fetch(`/api/platform/ai?${params}`, { cache: "no-store", signal });
+      const resultBody = await resultResponse.json().catch(() => null) as {
+        selected?: Answer | null;
+        usage?: Usage;
+        error?: string;
+      } | null;
+      if (!resultResponse.ok || !resultBody?.selected) throw new TypeError("AI_RUN_RECOVERY_RESULT_UNAVAILABLE");
+      setAnswer(resultBody.selected);
+      if (resultBody.usage) setUsage(resultBody.usage);
+      setQuestion("");
+      setEditSourceMessageId("");
+      pendingAiRequestRef.current = null;
+      setCanRetry(false);
+      const nextParams = new URLSearchParams({ conversationId: statusBody.conversationId });
+      if (statusBody.branchId) nextParams.set("branchId", statusBody.branchId);
+      router.replace(`${pathname}?${nextParams}`, { scroll: false });
+      return { kind: "completed" as const };
+    }
+    return { kind: "uncertain" as const };
+  }
 
   async function submit(
     event?: FormEvent,
@@ -184,6 +227,31 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       router.replace(`${pathname}?${nextParams}`, { scroll: false });
     } catch (value) {
       const cancelled = isUserCancelledAiRequest(value);
+      if (!cancelled && (value instanceof AiRetryableRequestError || value instanceof TypeError)) {
+        setStreamStatus(ru ? "Проверяем, сохранился ли ответ…" : "Javob saqlanganini tekshiryapmiz…");
+        try {
+          const recovery = await recoverPendingRequest(pending, controller.signal);
+          if (recovery.kind === "completed") {
+            setError("");
+            return;
+          }
+          if (recovery.kind === "failed") {
+            pendingAiRequestRef.current = createAiRetryRequest(pending.payload, () => crypto.randomUUID());
+            setCanRetry(true);
+            setError(ru
+              ? "Предыдущая попытка завершилась без списания лимита. Можно безопасно повторить запрос."
+              : "Oldingi urinish limit yechilmasdan yakunlandi. So‘rovni xavfsiz takrorlash mumkin.");
+            return;
+          }
+        } catch (recoveryError) {
+          if (isUserCancelledAiRequest(recoveryError)) {
+            setError(ru ? "Восстановление остановлено." : "Tiklash to‘xtatildi.");
+            return;
+          }
+          // An unavailable status check is still an uncertain outcome. Reuse
+          // the exact request/key on the next explicit retry.
+        }
+      }
       if (!cancelled && shouldOfferAiRetry(value)) {
         pendingAiRequestRef.current = shouldUseFreshAiRetry(value)
           ? createAiRetryRequest(pending.payload, () => crypto.randomUUID())
@@ -447,4 +515,22 @@ function formatDate(value: string, ru: boolean) {
 
 function safeOfficialUrl(value: string) {
   try { return new URL(value).protocol === "https:"; } catch { return false; }
+}
+
+function abortableDelay(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    const abort = () => {
+      window.clearTimeout(timeout);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
 }

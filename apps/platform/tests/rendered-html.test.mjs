@@ -389,6 +389,7 @@ test("platform workflow APIs return private 401 responses without a session", as
     "/api/platform/consultations",
     "/api/platform/dashboard",
     "/api/platform/ai",
+    "/api/platform/ai/runs/recovery-request-0001",
     "/api/platform/document-review",
     "/api/platform/document-comparisons",
     "/api/platform/document-analysis/analysis-test/exports",

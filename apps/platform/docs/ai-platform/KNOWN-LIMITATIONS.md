@@ -232,8 +232,9 @@ The deployed Worker now exposes both provider secret names and server-side model
 - Edit, regenerate, and immutable branch history are deployed to protected staging, but live provider-backed branch creation and authenticated browser evidence remain open because only fixed synthetic provider probes are verified.
 - Reconnect/resume, durable partial-stream recovery, guest flow, and full entitlement integration remain open. Encrypted user memory is implemented locally but migration `0062`, valid staging keyring evidence, authenticated RU/UZ QA and scheduled hard purge are still open.
 - A terminal failed/released AI run is now recoverable through an explicit fresh
-  retry instead of an endless `processing` replay. Automatic reconnect and
-  durable partial-token recovery remain open; JURO still renders no unvalidated
+  retry instead of an endless `processing` replay. A bounded automatic status
+  check can reload a completed persisted answer after an uncertain stream error.
+  Durable partial-token recovery remains open; JURO still renders no unvalidated
   partial legal answer.
 - Conversation facts remain conversation-scoped rather than branch-scoped; source evidence remains attached to the exact answer message.
 - Hybrid retrieval is implemented as lexical D1 matching plus optional isolated

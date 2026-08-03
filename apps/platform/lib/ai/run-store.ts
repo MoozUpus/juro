@@ -23,6 +23,12 @@ export type AiRunPending = { kind: "processing"; runId: string };
 export type AiRunExpired = { kind: "expired"; runId: string };
 export type AiRunFailed = { kind: "failed"; runId: string; errorCode: string };
 
+export type AiRunStatus =
+  | { kind: "missing" }
+  | { kind: "processing"; runId: string }
+  | { kind: "completed"; runId: string; conversationId: string; responseMessageId: string; branchId: string | null }
+  | { kind: "failed"; runId: string; errorCode: string };
+
 export class AiRunConflictError extends Error {
   readonly code: "IDEMPOTENCY_CONFLICT" | "PLAN_LIMIT";
 
@@ -163,6 +169,64 @@ async function resolveExistingReservation(
   }
   if (row.status === "started") return { kind: "processing", runId: row.resultRef || "" };
   return { kind: "failed", runId: row.resultRef || "", errorCode: "AI_RUN_STATE_INVALID" };
+}
+
+export async function readAiRunStatus(input: {
+  db: D1Database;
+  workspaceId: string;
+  userId: string;
+  idempotencyKey: string;
+}): Promise<AiRunStatus> {
+  const registryKey = `legal-chat:${input.workspaceId}:${input.userId}:${input.idempotencyKey}`;
+  const scope = `legal-chat:${input.workspaceId}:${input.userId}`;
+  const row = await input.db.prepare(
+    `SELECT k.status AS registryStatus,k.result_ref AS resultRef,
+      r.id AS runId,r.status AS runStatus,r.error_code AS errorCode,
+      r.conversation_id AS conversationId,r.response_message_id AS responseMessageId,
+      (SELECT b.id FROM message_branches b
+       WHERE b.response_message_id=r.response_message_id
+         AND b.workspace_id=? AND b.owner_user_id=? LIMIT 1) AS branchId
+     FROM idempotency_keys k
+     LEFT JOIN ai_runs r ON r.id=k.result_ref AND r.workspace_id=? AND r.user_id=?
+     WHERE k.key=? AND k.scope=? LIMIT 1`,
+  ).bind(
+    input.workspaceId,
+    input.userId,
+    input.workspaceId,
+    input.userId,
+    registryKey,
+    scope,
+  ).first<{
+    registryStatus: string;
+    resultRef: string | null;
+    runId: string | null;
+    runStatus: string | null;
+    errorCode: string | null;
+    conversationId: string | null;
+    responseMessageId: string | null;
+    branchId: string | null;
+  }>();
+  if (!row) return { kind: "missing" };
+  const runId = row.runId || row.resultRef || "";
+  if (row.registryStatus === "completed" && row.runStatus === "completed") {
+    if (row.conversationId && row.responseMessageId) {
+      return {
+        kind: "completed",
+        runId,
+        conversationId: row.conversationId,
+        responseMessageId: row.responseMessageId,
+        branchId: row.branchId,
+      };
+    }
+    return { kind: "failed", runId, errorCode: "AI_RUN_REPLAY_UNAVAILABLE" };
+  }
+  if (row.registryStatus === "started" && (!row.runStatus || ["reserved", "finalizing"].includes(row.runStatus))) {
+    return { kind: "processing", runId };
+  }
+  if (["failed", "rejected"].includes(row.runStatus || "") || row.registryStatus === "failed") {
+    return { kind: "failed", runId, errorCode: row.errorCode || "AI_RUN_FAILED" };
+  }
+  return { kind: "failed", runId, errorCode: "AI_RUN_STATE_INVALID" };
 }
 
 async function expireStaleReservation(

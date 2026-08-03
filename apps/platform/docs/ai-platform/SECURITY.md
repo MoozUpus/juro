@@ -76,3 +76,19 @@ untrusted context and prohibit treating it as instructions. Focused tests cover
 cross-user/workspace access, ciphertext-at-rest, record binding, credential
 rejection, explicit sensitive consent, no-plaintext audit, and account purge.
 Migration `0062` and authenticated staging security evidence remain pending.
+
+## AI stream recovery boundary — local candidate
+
+`GET /api/platform/ai/runs/:idempotencyKey` authenticates before validation or
+D1 access and derives both user and active workspace server-side. The registry
+lookup binds the full user/workspace scope and joins only a run owned by the same
+tenant. Responses are private/no-store and expose only bounded lifecycle state
+plus persisted conversation/message identifiers already owned by that user.
+
+The browser reuses the original key while outcome is missing or processing. It
+creates a new key only after D1 proves terminal failure and usage release. A
+completed recovery reloads the already validated and persisted structured
+message through the existing tenant-scoped conversation read. Partial provider
+text, request hashes, prompts, internal error details, token data, and cross-
+tenant existence are not returned. Local service and rendered unauthenticated
+route tests pass; authenticated staging evidence remains pending.
