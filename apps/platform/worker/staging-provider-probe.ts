@@ -1,5 +1,12 @@
 import { z } from "zod";
 import { runAnthropicLegalChat } from "../lib/ai/anthropic-provider";
+import {
+  enforceLegalChatSourceBoundary,
+  forceClarificationWithoutVerifiedSources,
+  legalChatJsonSchema,
+  parseLegalChatResponse,
+} from "../lib/ai/legal-chat-schema";
+import { callOpenAiStructured } from "../lib/document-builder/ai/openai";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 // v1 completed for OpenAI and terminally failed for Anthropic before the
@@ -18,20 +25,17 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // v22 records the same bounded stack paths at the probe boundary. v23 uses a
 // static adapter import because the worker bundler rewrote the dynamic import
 // to index.js, whose public namespace does not expose this internal function.
-const PROBE_KEY = "staging-anthropic-legal-chat-v23";
+// v24 exercises the exact OpenAI legal-chat structured-output contract and
+// stores only bounded HTTP/error metadata when the request is rejected.
+const PROBE_KEY = "staging-openai-legal-chat-v24";
 type Provider = "openai" | "anthropic";
-const providers = ["anthropic"] as const satisfies readonly Provider[];
+const providers = ["openai"] as const satisfies readonly Provider[];
 
+// Retained as the stable minimal probe contract used by unit tests and older
+// immutable probe records. v24 itself exercises the full legal-chat schema.
 export const providerProbeOutputSchema = z.object({
   status: z.literal("ok"),
 }).strict();
-
-const providerProbeJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["status"],
-  properties: { status: { type: "string", const: "ok" } },
-};
 
 export type StagingProviderProbeSummary = {
   attempted: number;
@@ -92,6 +96,24 @@ function anthropicHttpFailureCode(error: unknown): string {
   return error instanceof TypeError ? "PROBE_ANTHROPIC_CALL_TYPE_ERROR" : "PROBE_ANTHROPIC_CALL_FAILED";
 }
 
+function openAiHttpFailureCode(error: unknown): string {
+  if (typeof error === "object" && error !== null) {
+    const code = "code" in error ? (error as { code?: unknown }).code : null;
+    const status = "providerStatus" in error ? (error as { providerStatus?: unknown }).providerStatus : null;
+    const type = "providerErrorType" in error ? (error as { providerErrorType?: unknown }).providerErrorType : null;
+    if (typeof status === "number" && status >= 400 && status <= 599) {
+      const safeType = typeof type === "string" && /^[a-zA-Z0-9_.-]{3,48}$/.test(type)
+        ? `_${type.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}`
+        : "";
+      return `PROBE_OPENAI_HTTP_${status}${safeType}`.slice(0, 64);
+    }
+    if (typeof code === "string" && /^[A-Z0-9_]{3,48}$/.test(code)) {
+      return `PROBE_OPENAI_${code}`.slice(0, 64);
+    }
+  }
+  return error instanceof TypeError ? "PROBE_OPENAI_CALL_TYPE_ERROR" : "PROBE_OPENAI_CALL_FAILED";
+}
+
 async function executeProviderProbe(provider: Provider) {
   if (provider === "anthropic") {
     let result;
@@ -127,20 +149,47 @@ async function executeProviderProbe(provider: Provider) {
     }
     return result;
   }
-  const instructions = "JURO staging connectivity probe. This is fixed synthetic technical input, not legal advice or user data. Return exactly the JSON object {\"status\":\"ok\"}.";
   if (provider === "openai") {
-    const { callOpenAiStructured } = await import("../lib/document-builder/ai/openai");
-    return callOpenAiStructured({
-      instructions,
-      input: "fixed synthetic connectivity probe",
-      schemaName: "juro_staging_provider_probe",
-      schema: providerProbeJsonSchema,
-      parse: (value) => providerProbeOutputSchema.parse(value),
-      maxAttempts: 1,
-      timeoutMs: 20_000,
-      requestId: probeId(provider),
-      textVerbosity: "low",
+    let result;
+    try {
+      result = await callOpenAiStructured({
+        instructions: "JURO staging contract check. Return a clarification response, no legal conclusions and no sources.",
+        input: {
+          jurisdiction: "UZ",
+          question: "Synthetic staging check: request clarification only.",
+          language: "ru",
+          answerMode: "short",
+          reasoningMode: "fast",
+          legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
+          verifiedSources: [],
+        },
+        schemaName: "juro_staging_legal_chat_probe",
+        schema: legalChatJsonSchema,
+        parse: parseLegalChatResponse,
+        maxAttempts: 1,
+        timeoutMs: 30_000,
+        requestId: probeId(provider),
+        safetyIdentifier: "staging-synthetic-provider-probe",
+        reasoningEffort: "low",
+        textVerbosity: "low",
+      });
+    } catch (error) {
+      console.error({
+        event: "staging.provider_probe_exception",
+        provider: "openai",
+        errorName: error instanceof Error && typeof error.name === "string" ? error.name : "UnknownError",
+        safeCode: openAiHttpFailureCode(error),
+      });
+      throw new ProviderProbeStageError(openAiHttpFailureCode(error));
+    }
+    const constrained = forceClarificationWithoutVerifiedSources(result.data, {
+      locale: "ru",
+      answerMode: "short",
+      reasoningMode: "fast",
+      legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
     });
+    enforceLegalChatSourceBoundary(constrained, new Set());
+    return { ...result, data: constrained };
   }
   throw new Error("PROVIDER_PROBE_NOT_IMPLEMENTED");
 }

@@ -48,7 +48,7 @@ interface ResponsesApiPayload {
     total_tokens?: number;
     input_tokens_details?: { cached_tokens?: number };
   };
-  error?: { message?: string };
+  error?: { message?: string; type?: string; code?: string };
 }
 
 export type AiProviderUsage = {
@@ -169,6 +169,8 @@ export async function callOpenAiStructured<T>(options: {
           `AI-проверка недоступна: ${payload.error?.message || `HTTP ${response.status}`}`,
           "PROVIDER_UNAVAILABLE",
           retryable,
+          response.status,
+          payload.error?.code || payload.error?.type || null,
         );
       }
 
