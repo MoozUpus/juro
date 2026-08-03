@@ -1,6 +1,27 @@
 # JURO AI platform decision log
 
 This log records material implementation decisions. Status values are `accepted`, `pending approval`, or `superseded`.
+
+## D-086 — marketplace service funds remain distinct from JURO revenue and payout execution
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-03
+
+A legal-service proposal is versioned separately from the older descriptive
+lawyer offer. The client accepts a specific agreement digest and scope before a
+service order can be priced. The service checkout creates a frozen pricing
+snapshot with separate lawyer and JURO components, tax components, and a
+configurable marketplace commission rate. It never accepts a client-supplied
+total.
+
+Only a verified server payment event activates the order. That event posts a
+balanced ledger transaction, creates one settlement allocation and one
+`PENDING_SETTLEMENT` lawyer payable. A provider-independent payout is not
+attempted in this stage; therefore it cannot be duplicated or mistaken for a
+bank transfer. Production remains disabled through the existing payment
+foundation flags. Migration `0063` is expand-only and must pass the standard
+private staging backup, restore drill, synthetic seed, and authenticated E2E
+gate before deployment.
 ## D-085 — provider citations are closed referential records, not model-authored metadata
 
 Status: accepted and locally verified; staging deployment pending
