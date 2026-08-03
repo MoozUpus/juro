@@ -93,7 +93,9 @@ export async function confirmMarketplaceServiceCheckout(
     const replay = await db.prepare(
       "SELECT id FROM payment_attempts WHERE order_id=? AND idempotency_key=? LIMIT 1",
     ).bind(orderId, idempotencyKey).first<{ id: string }>();
-    if (!replay) throw error;
+    if (!replay) {
+      throw new BillingDomainError("ORDER_CONFIRMATION_CONFLICT", 409, "Заказ уже обрабатывается / Buyurtma qayta ishlanmoqda.");
+    }
   }
   const confirmed = await readCheckoutOrder(db, actor, orderId);
   if (!confirmed?.paymentAttempt) {

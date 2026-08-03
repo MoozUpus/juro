@@ -923,3 +923,21 @@ disposable restore, apply only `0062`, then run migration-ledger, `quick_check`,
 `foreign_key_check`, schema/index inventory, and private post-checkpoint checks.
 The server-only `IDENTITY_KEYRING` must parse before enabling memory. Production
 migration or deployment is not authorized.
+
+## Migration 0064 — one active marketplace payment attempt (pending staging authorization)
+
+`0064_marketplace_open_payment_attempt.sql` adds one partial unique index only:
+an order can have at most one `client_action_required` payment attempt. Failed
+attempts are not included, so an approved retry path remains available. This
+prevents two distinct concurrent confirmation requests from creating two active
+sandbox attempts for the same priced legal-service order. It has no data
+backfill, table rebuild, delete, or drop.
+
+The migration has passed the local full migration matrix, foreign-key checks,
+marketplace lifecycle tests, typecheck, and lint. It has not been applied to
+staging or production. Before staging application, take and verify a private
+`juro-staging-backups` D1 export, apply only `0064`, then rerun migration list,
+`quick_check`, `foreign_key_check`, and the marketplace replay/concurrency
+tests. Application rollback keeps the additive index unused by rolling the
+Worker back; index removal is deferred to a separately approved contract
+phase.

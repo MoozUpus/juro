@@ -79,3 +79,10 @@ test("proposal acceptance keeps explicit consent immutable while making same-ver
   assert.match(acceptRoute, /PROPOSAL_ALREADY_ACCEPTED/);
   assert.match(acceptRoute, /workspaceForUserById/);
 });
+
+test("0064 permits retry after a failed attempt but prevents concurrent active payment attempts", () => {
+  const sql = readFileSync(new URL("../drizzle/0064_marketplace_open_payment_attempt.sql", import.meta.url), "utf8");
+  assert.doesNotMatch(sql, /DROP\s+(?:TABLE|COLUMN|INDEX)/i);
+  assert.match(sql, /CREATE UNIQUE INDEX `payment_attempts_order_open_uidx`/);
+  assert.match(sql, /WHERE `internal_status` = 'client_action_required'/);
+});
