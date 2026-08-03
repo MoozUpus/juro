@@ -1,4 +1,5 @@
 import { DEFAULT_ANTHROPIC_MODEL } from "../../ai/provider-models";
+import { anthropicCompatibleJsonSchema } from "../../ai/anthropic-schema";
 import { runtimeEnv } from "../storage/runtime";
 import {
   AiUnavailableError,
@@ -72,7 +73,7 @@ export async function callAnthropicStructured<T>(options: {
           output_config: {
             format: {
               type: "json_schema",
-              schema: options.schema,
+              schema: anthropicCompatibleJsonSchema(options.schema),
             },
           },
         }),

@@ -2,10 +2,11 @@ import { z } from "zod";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 // v1 completed for OpenAI and terminally failed for Anthropic before the
-// owner rotated the staging Anthropic key. Keep that record immutable and use
-// a fresh logical key for the explicit post-rotation Anthropic verification.
-// v5 verifies the latest staging key rotation.
-const PROBE_KEY = "staging-anthropic-connectivity-v5";
+// owner rotated the staging Anthropic key. Keep those records immutable. v5
+// verified only a trivial Anthropic schema; v6 exercised the exact legal-chat
+// schema but found an application-boundary error. Keep its immutable record;
+// v9 re-runs the same no-content check after the Anthropic schema adapter.
+const PROBE_KEY = "staging-anthropic-legal-chat-v9";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 
@@ -27,6 +28,13 @@ export type StagingProviderProbeSummary = {
   skipped: number;
 };
 
+class ProviderProbeStageError extends Error {
+  constructor(readonly safeCode: string) {
+    super(safeCode);
+    this.name = "ProviderProbeStageError";
+  }
+}
+
 export function stagingProviderProbeEnabled(
   env: Pick<PlatformJobEnv, "APP_ENV" | "STAGING_SYNTHETIC_PROBES_ENABLED">,
 ): boolean {
@@ -42,12 +50,66 @@ function providerErrorCode(error: unknown): string {
   const code = typeof error === "object" && error !== null && "code" in error
     ? (error as { code?: unknown }).code
     : null;
-  return typeof code === "string" && /^[A-Z0-9_]{3,64}$/.test(code)
-    ? code
-    : "PROVIDER_PROBE_FAILED";
+  if (typeof code === "string" && /^[A-Z0-9_]{3,64}$/.test(code)) return code;
+  if (error instanceof ProviderProbeStageError) return error.safeCode;
+  // D1 stores no exception message, provider response, prompt, or output.
+  // The narrow class is sufficient to distinguish transport/schema/runtime
+  // failures while preserving the closed probe's no-content guarantee.
+  const name = error instanceof Error ? error.name : "";
+  if (name === "ZodError") return "PROVIDER_PROBE_SCHEMA_INVALID";
+  if (name === "TypeError") return "PROVIDER_PROBE_TYPE_ERROR";
+  if (name === "ReferenceError") return "PROVIDER_PROBE_REFERENCE_ERROR";
+  return "PROVIDER_PROBE_FAILED";
 }
 
 async function executeProviderProbe(provider: Provider) {
+  if (provider === "anthropic") {
+    const { callAnthropicStructured } = await import("../lib/document-builder/ai/anthropic");
+    const {
+      enforceLegalChatSourceBoundary,
+      forceClarificationWithoutVerifiedSources,
+      legalChatJsonSchema,
+      parseLegalChatResponse,
+    } = await import("../lib/ai/legal-chat-schema");
+    let result;
+    try {
+      result = await callAnthropicStructured({
+        instructions: "JURO staging contract check. Return a clarification response with no legal conclusions or sources.",
+        input: {
+          jurisdiction: "UZ",
+          question: "Synthetic staging check: request clarification only.",
+          language: "ru",
+          answerMode: "short",
+          reasoningMode: "fast",
+          legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
+          verifiedSources: [],
+        },
+        schema: legalChatJsonSchema,
+        parse: parseLegalChatResponse,
+        maxAttempts: 1,
+        timeoutMs: 20_000,
+        requestId: probeId(provider),
+      });
+    } catch (error) {
+      throw new ProviderProbeStageError(
+        error instanceof TypeError ? "PROBE_ANTHROPIC_CALL_TYPE_ERROR" : "PROBE_ANTHROPIC_CALL_FAILED",
+      );
+    }
+    try {
+      const constrained = forceClarificationWithoutVerifiedSources(result.data, {
+        locale: "ru",
+        answerMode: "short",
+        reasoningMode: "fast",
+        legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
+      });
+      enforceLegalChatSourceBoundary(constrained, new Set());
+      return { ...result, data: constrained };
+    } catch (error) {
+      throw new ProviderProbeStageError(
+        error instanceof TypeError ? "PROBE_LEGAL_BOUNDARY_TYPE_ERROR" : "PROBE_LEGAL_BOUNDARY_FAILED",
+      );
+    }
+  }
   const instructions = "JURO staging connectivity probe. This is fixed synthetic technical input, not legal advice or user data. Return exactly the JSON object {\"status\":\"ok\"}.";
   if (provider === "openai") {
     const { callOpenAiStructured } = await import("../lib/document-builder/ai/openai");
@@ -63,16 +125,7 @@ async function executeProviderProbe(provider: Provider) {
       textVerbosity: "low",
     });
   }
-  const { callAnthropicStructured } = await import("../lib/document-builder/ai/anthropic");
-  return callAnthropicStructured({
-    instructions,
-    input: "fixed synthetic connectivity probe",
-    schema: providerProbeJsonSchema,
-    parse: (value) => providerProbeOutputSchema.parse(value),
-    maxAttempts: 1,
-    timeoutMs: 20_000,
-    requestId: probeId(provider),
-  });
+  throw new Error("PROVIDER_PROBE_NOT_IMPLEMENTED");
 }
 
 async function runOne(
