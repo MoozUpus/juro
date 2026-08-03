@@ -1,13 +1,7 @@
 import { z } from "zod";
 import { runAnthropicLegalChat } from "../lib/ai/anthropic-provider";
-import {
-  enforceLegalChatSourceBoundary,
-  forceClarificationWithoutVerifiedSources,
-  legalChatJsonSchema,
-  parseLegalChatResponse,
-} from "../lib/ai/legal-chat-schema";
-import { callOpenAiStructured } from "../lib/document-builder/ai/openai";
 import type { PlatformJobEnv } from "./platform-jobs";
+import { runStagingAiChatLifecycleProbe } from "./staging-ai-chat-lifecycle-probe";
 
 // v1 completed for OpenAI and terminally failed for Anthropic before the
 // owner rotated the staging Anthropic key. Keep those records immutable. v5
@@ -28,8 +22,10 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // v24 exercises the exact OpenAI legal-chat structured-output contract and
 // stores only bounded HTTP/error metadata when the request is rejected. v25
 // verifies the same contract after normalizing Zod's draft-7 annotations to
-// the provider-supported Structured Outputs subset.
-const PROBE_KEY = "staging-openai-legal-chat-v25";
+// the provider-supported Structured Outputs subset. v26 runs complete RU and
+// UZ synthetic tenant lifecycles: reservation, provider, persistence, released
+// clarification usage, idempotent replay, audit evidence, and full cleanup.
+const PROBE_KEY = "staging-openai-legal-chat-v26";
 type Provider = "openai" | "anthropic";
 const providers = ["openai"] as const satisfies readonly Provider[];
 
@@ -116,7 +112,7 @@ function openAiHttpFailureCode(error: unknown): string {
   return error instanceof TypeError ? "PROBE_OPENAI_CALL_TYPE_ERROR" : "PROBE_OPENAI_CALL_FAILED";
 }
 
-async function executeProviderProbe(provider: Provider) {
+async function executeProviderProbe(env: PlatformJobEnv, provider: Provider) {
   if (provider === "anthropic") {
     let result;
     try {
@@ -152,29 +148,8 @@ async function executeProviderProbe(provider: Provider) {
     return result;
   }
   if (provider === "openai") {
-    let result;
     try {
-      result = await callOpenAiStructured({
-        instructions: "JURO staging contract check. Return a clarification response, no legal conclusions and no sources.",
-        input: {
-          jurisdiction: "UZ",
-          question: "Synthetic staging check: request clarification only.",
-          language: "ru",
-          answerMode: "short",
-          reasoningMode: "fast",
-          legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
-          verifiedSources: [],
-        },
-        schemaName: "juro_staging_legal_chat_probe",
-        schema: legalChatJsonSchema,
-        parse: parseLegalChatResponse,
-        maxAttempts: 1,
-        timeoutMs: 30_000,
-        requestId: probeId(provider),
-        safetyIdentifier: "staging-synthetic-provider-probe",
-        reasoningEffort: "low",
-        textVerbosity: "low",
-      });
+      return await runStagingAiChatLifecycleProbe(env);
     } catch (error) {
       console.error({
         event: "staging.provider_probe_exception",
@@ -184,14 +159,6 @@ async function executeProviderProbe(provider: Provider) {
       });
       throw new ProviderProbeStageError(openAiHttpFailureCode(error));
     }
-    const constrained = forceClarificationWithoutVerifiedSources(result.data, {
-      locale: "ru",
-      answerMode: "short",
-      reasoningMode: "fast",
-      legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
-    });
-    enforceLegalChatSourceBoundary(constrained, new Set());
-    return { ...result, data: constrained };
   }
   throw new Error("PROVIDER_PROBE_NOT_IMPLEMENTED");
 }
@@ -213,7 +180,7 @@ async function runOne(
   if (Number(insert.meta.changes ?? 0) !== 1) return "skipped";
 
   try {
-    const result = await executeProviderProbe(provider);
+    const result = await executeProviderProbe(env, provider);
     const finishedAt = new Date().toISOString();
     const updated = await env.DB.prepare(`
       UPDATE staging_provider_probes
