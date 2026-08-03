@@ -3,49 +3,101 @@
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated billing data is hydrated after the first browser render */
 
 import { Check, CircleAlert, CreditCard, LoaderCircle, ReceiptText, ShieldCheck } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
-import type { PlatformLocale } from "../../lib/platform/routing";
+import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { platformBasePath, type AccountType, type PlatformLocale } from "../../lib/platform/routing";
+
+type Plan = {
+  planVersionId: string;
+  code: string;
+  nameRu: string;
+  nameUz: string;
+  billingPeriod: "monthly" | "annual" | "one_time";
+  priceMinor: number;
+  currency: "UZS";
+  entitlementsJson: string;
+};
 
 type BillingData = {
-  provider: { credentialsConfigured: boolean; checkoutAvailable: boolean; provider: string | null };
-  config: {
-    freeStart: { label: { ru: string; uz: string }; details: { ru: string; uz: string } };
-    plans: Array<{ code: string; name: { ru: string; uz: string }; priceLabel: string; features: { ru: string[]; uz: string[] } }>;
-  };
+  provider: { enabled: boolean; sandboxEnabled: boolean; productionApproved: boolean; reason: string };
   subscription: { planCode: string; status: string; currentPeriodEndsAt: string | null } | null;
   payments: Array<{ id: string; amountMinor: number; currency: string; status: string; createdAt: string }>;
 };
 
-export function BillingClient({ locale }: { locale: PlatformLocale }) {
+function money(amountMinor: number, locale: PlatformLocale) {
+  return `${new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "uz-UZ", { maximumFractionDigits: 0 }).format(amountMinor / 100)} сум`;
+}
+
+function planBenefits(plan: Plan, ru: boolean): string[] {
+  try {
+    const parsed = JSON.parse(plan.entitlementsJson) as { entitlements?: Array<{ code?: string; limitValue?: number | null }> };
+    const values = (parsed.entitlements ?? []).slice(0, 4).map((item) => {
+      const code = String(item.code ?? "").replaceAll(/[._-]/g, " ");
+      return item.limitValue == null ? code : `${code}: ${item.limitValue}`;
+    }).filter(Boolean);
+    if (values.length) return values;
+  } catch { /* invalid plan config is blocked by checkout; the list remains readable */ }
+  return [ru ? "Точные условия зафиксируются перед оплатой" : "Aniq shartlar to‘lovdan oldin qayd etiladi"];
+}
+
+export function BillingClient({ locale, accountType, workspaceId }: { locale: PlatformLocale; accountType: AccountType; workspaceId?: string }) {
   const ru = locale === "ru";
+  const router = useRouter();
   const [data, setData] = useState<BillingData | null>(null);
+  const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [pendingPlan, setPendingPlan] = useState("");
+  const formatter = useMemo(() => new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium" }), [ru]);
+
   const load = useCallback(async () => {
+    setError("");
     try {
-      const response = await fetch("/api/platform/billing", { cache: "no-store" });
-      const body = await response.json() as BillingData & { error?: string };
-      if (!response.ok) throw new Error(body.error || (ru ? "Тарифы не загрузились." : "Tariflar yuklanmadi."));
-      setData(body);
-    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
-    finally { setLoading(false); }
+      const [billingResponse, plansResponse] = await Promise.all([
+        fetch("/api/platform/billing", { cache: "no-store" }),
+        fetch("/api/subscriptions/plans", { cache: "no-store" }),
+      ]);
+      const billingBody = await billingResponse.json() as BillingData & { error?: string };
+      const plansBody = await plansResponse.json() as { plans?: Plan[]; error?: string };
+      if (!billingResponse.ok) throw new Error(billingBody.error || (ru ? "Тарифы не загрузились." : "Tariflar yuklanmadi."));
+      if (!plansResponse.ok) throw new Error(plansBody.error || (ru ? "Утверждённые цены недоступны." : "Tasdiqlangan narxlar mavjud emas."));
+      setData(billingBody);
+      setPlans(plansBody.plans ?? []);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setLoading(false);
+    }
   }, [ru]);
+
   useEffect(() => { void load(); }, [load]);
 
-  async function choose(planCode: string) {
-    setPendingPlan(planCode);
+  async function choose(planVersionId: string) {
+    setPendingPlan(planVersionId);
     setError("");
-    const response = await fetch("/api/platform/billing", {
-      method: "POST",
-      headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-      body: JSON.stringify({ planCode, locale }),
-    });
-    const body = await response.json() as { error?: string };
-    if (!response.ok) setError(body.error || (ru ? "Оплата не началась." : "To‘lov boshlanmadi."));
-    setPendingPlan("");
+    try {
+      const response = await fetch("/api/checkout/create", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ requestId: crypto.randomUUID(), planVersionId, locale, ...(workspaceId ? { workspaceId } : {}) }),
+      });
+      const body = await response.json() as { order?: { id?: unknown }; error?: string; code?: string };
+      if (!response.ok || typeof body.order?.id !== "string") throw new Error(body.error || body.code || (ru ? "Не удалось создать заказ." : "Buyurtma yaratilmadi."));
+      router.push(`${platformBasePath(locale, accountType, workspaceId)}/checkout/${encodeURIComponent(body.order.id)}`);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+      setPendingPlan("");
+    }
   }
 
-  if (loading) return <div className="billing-loading"><LoaderCircle className="spin" /></div>;
-  return <section className="billing-workspace"><header><CreditCard /><div><small>JURO · BILLING</small><h1>{ru ? "Тариф и оплата" : "Tarif va to‘lov"}</h1><p>{ru ? "Условия хранятся в одной конфигурации. Платёж не считается успешным без ответа реального провайдера." : "Shartlar yagona konfiguratsiyada saqlanadi. Haqiqiy provayder javobisiz to‘lov muvaffaqiyatli hisoblanmaydi."}</p></div></header>{error && <p className="billing-error" role="alert"><CircleAlert />{error}</p>}{data && <><div className={`billing-provider ${data.provider.checkoutAvailable ? "ready" : ""}`}><ShieldCheck /><div><strong>{data.provider.checkoutAvailable ? (ru ? "Checkout доступен" : "Checkout mavjud") : (ru ? "Checkout — скоро" : "Checkout — tez kunda")}</strong><p>{data.provider.checkoutAvailable ? data.provider.provider : (data.provider.credentialsConfigured ? (ru ? "Провайдер настроен, но безопасный checkout-adapter ещё не включён." : "Provayder sozlangan, ammo xavfsiz checkout-adapter hali yoqilmagan.") : (ru ? "Оплата появится после подключения и проверки платёжного провайдера." : "To‘lov provayder ulanib tekshirilgandan keyin paydo bo‘ladi."))}</p></div></div><div className="billing-free"><strong>{data.config.freeStart.label[locale]}</strong><p>{data.config.freeStart.details[locale]}</p></div><div className="billing-plans">{data.config.plans.map(plan => <article key={plan.code} className={data.subscription?.planCode === plan.code ? "current" : ""}><small>{data.subscription?.planCode === plan.code ? (ru ? "Текущий план" : "Joriy reja") : "JURO"}</small><h2>{plan.name[locale]}</h2><div className="billing-price">{plan.priceLabel}</div><ul>{plan.features[locale].map(feature => <li key={feature}><Check />{feature}</li>)}</ul><button disabled={!data.provider.checkoutAvailable || Boolean(pendingPlan)} onClick={() => void choose(plan.code)}>{pendingPlan === plan.code ? <LoaderCircle className="spin" /> : <CreditCard />}{data.provider.checkoutAvailable ? (ru ? "Выбрать тариф" : "Tarifni tanlash") : (ru ? "Скоро" : "Tez kunda")}</button></article>)}</div><section className="billing-history"><h2><ReceiptText />{ru ? "История платежей" : "To‘lovlar tarixi"}</h2>{data.payments.length ? data.payments.map(payment => <div key={payment.id}><strong>{new Intl.NumberFormat(ru ? "ru-RU" : "uz-UZ").format(payment.amountMinor / 100)} {payment.currency}</strong><span>{payment.status}</span><time>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ",{dateStyle:"medium"}).format(new Date(payment.createdAt))}</time></div>) : <p>{ru ? "Подтверждённых платежей пока нет." : "Hozircha tasdiqlangan to‘lovlar yo‘q."}</p>}</section></>}</section>;
+  if (loading) return <div className="billing-loading" role="status"><LoaderCircle className="spin" /><span className="sr-only">{ru ? "Загрузка тарифов" : "Tariflar yuklanmoqda"}</span></div>;
+  return <section className="billing-workspace">
+    <header><CreditCard aria-hidden="true"/><div><small>JURO · BILLING</small><h1>{ru ? "Тариф и оплата" : "Tarif va to‘lov"}</h1><p>{ru ? "Выберите утверждённый тариф. Полная сумма, налог и режим продления фиксируются в заказе до оплаты." : "Tasdiqlangan tarifni tanlang. To‘liq summa, soliq va uzaytirish tartibi to‘lovdan oldin buyurtmada qayd etiladi."}</p></div></header>
+    {error && <p className="billing-error" role="alert"><CircleAlert aria-hidden="true"/>{error}<button type="button" onClick={() => void load()}>{ru ? "Повторить" : "Qayta urinish"}</button></p>}
+    {data && <>
+      <div className={`billing-provider ${data.provider.enabled ? "ready" : ""}`}><ShieldCheck aria-hidden="true"/><div><strong>{data.provider.enabled ? (ru ? "Безопасное оформление включено" : "Xavfsiz rasmiylashtirish yoqilgan") : (ru ? "Оформление временно недоступно" : "Rasmiylashtirish vaqtincha mavjud emas")}</strong><p>{data.provider.sandboxEnabled ? (ru ? "Staging: тестовая оплата, реальные деньги не списываются." : "Staging: sinov to‘lovi, haqiqiy pul yechilmaydi.") : (ru ? "Платёж активируется только после проверки провайдера." : "To‘lov faqat provayder tekshirilgandan keyin faollashadi.")}</p></div></div>
+      {plans.length ? <div className="billing-plans">{plans.map(plan => <article key={plan.planVersionId} className={data.subscription?.planCode === plan.code ? "current" : ""}><small>{data.subscription?.planCode === plan.code ? (ru ? "Текущий план" : "Joriy reja") : "JURO"}</small><h2>{ru ? plan.nameRu : plan.nameUz}</h2><div className="billing-price">{money(plan.priceMinor, locale)}</div><p className="billing-period">{plan.billingPeriod === "monthly" ? (ru ? "за месяц, без налога" : "oyiga, soliqsiz") : plan.billingPeriod === "annual" ? (ru ? "за год, без налога" : "yiliga, soliqsiz") : (ru ? "разовый платёж, без налога" : "bir martalik, soliqsiz")}</p><ul>{planBenefits(plan, ru).map(feature => <li key={feature}><Check aria-hidden="true"/>{feature}</li>)}</ul><button type="button" disabled={!data.provider.enabled || Boolean(pendingPlan)} onClick={() => void choose(plan.planVersionId)}>{pendingPlan === plan.planVersionId ? <LoaderCircle className="spin" aria-hidden="true"/> : <CreditCard aria-hidden="true"/>}{ru ? "Перейти к расчёту" : "Hisob-kitobga o‘tish"}</button></article>)}</div> : <div className="billing-empty" role="status"><ReceiptText aria-hidden="true"/><div><h2>{ru ? "Нет утверждённых цен" : "Tasdiqlangan narxlar yo‘q"}</h2><p>{ru ? "JURO не создаёт заказ по черновой или неподтверждённой цене." : "JURO qoralama yoki tasdiqlanmagan narx bo‘yicha buyurtma yaratmaydi."}</p></div></div>}
+      <section className="billing-history"><h2><ReceiptText aria-hidden="true"/>{ru ? "История платежей" : "To‘lovlar tarixi"}</h2>{data.payments.length ? data.payments.map(payment => <div key={payment.id}><strong>{money(payment.amountMinor, locale)}</strong><span>{payment.status}</span><time dateTime={payment.createdAt}>{formatter.format(new Date(payment.createdAt))}</time></div>) : <p>{ru ? "Подтверждённых платежей пока нет." : "Hozircha tasdiqlangan to‘lovlar yo‘q."}</p>}</section>
+    </>}
+  </section>;
 }

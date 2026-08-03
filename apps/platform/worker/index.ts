@@ -28,6 +28,10 @@ type FrameworkEnv = PlatformJobEnv & {
   PAYMENT_PROVIDER?: string;
   PAYMENT_API_KEY?: string;
   PAYMENT_WEBHOOK_SECRET?: string;
+  PAYMENT_FOUNDATION_ENABLED?: string;
+  PAYMENT_SANDBOX_ENABLED?: string;
+  PAYMENT_PRODUCTION_APPROVED?: string;
+  PAYMENT_SANDBOX_WEBHOOK_SECRET?: string;
   ALLOW_PLATFORM_AUTH_HEADERS?: string;
 };
 

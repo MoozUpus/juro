@@ -1935,6 +1935,195 @@ export const monitoringPreferences = sqliteTable("monitoring_preferences", {
   index("monitoring_preferences_delivery_idx").on(table.frequency, table.lastDeliveredAt),
 ]);
 
+export const pricingPolicies = sqliteTable("pricing_policies", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("draft"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("pricing_policies_code_uidx").on(table.code),
+  index("pricing_policies_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const pricingPolicyVersions = sqliteTable("pricing_policy_versions", {
+  id: text("id").primaryKey(),
+  policyId: text("policy_id").notNull().references(() => pricingPolicies.id, { onDelete: "restrict" }),
+  version: integer("version").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  providerCommissionRateBasisPoints: integer("provider_commission_rate_basis_points").notNull(),
+  vatRateBasisPoints: integer("vat_rate_basis_points").notNull(),
+  providerFeeBearer: text("provider_fee_bearer").notNull(),
+  basis: text("basis").notNull(),
+  contractNumber: text("contract_number"),
+  effectiveFrom: text("effective_from").notNull(),
+  effectiveTo: text("effective_to"),
+  approvalStatus: text("approval_status").notNull().default("draft"),
+  approvedByUserId: text("approved_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  approvedAt: text("approved_at"),
+  createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("pricing_policy_versions_policy_version_uidx").on(table.policyId, table.version),
+  index("pricing_policy_versions_effective_idx").on(table.approvalStatus, table.effectiveFrom, table.effectiveTo),
+  check("pricing_policy_versions_currency_check", sql`${table.currency} = 'UZS'`),
+  check("pricing_policy_versions_commission_rate_check", sql`${table.providerCommissionRateBasisPoints} BETWEEN 0 AND 10000`),
+  check("pricing_policy_versions_vat_rate_check", sql`${table.vatRateBasisPoints} BETWEEN 0 AND 10000`),
+]);
+
+export const taxProfiles = sqliteTable("tax_profiles", {
+  id: text("id").primaryKey(),
+  subjectType: text("subject_type").notNull(),
+  subjectId: text("subject_id").notNull(),
+  serviceType: text("service_type").notNull(),
+  payerStatus: text("payer_status").notNull(),
+  taxModel: text("tax_model").notNull(),
+  vatRateBasisPoints: integer("vat_rate_basis_points").notNull().default(0),
+  effectiveFrom: text("effective_from").notNull(),
+  effectiveTo: text("effective_to"),
+  approvalStatus: text("approval_status").notNull().default("draft"),
+  approvedByUserId: text("approved_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  approvedAt: text("approved_at"),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("tax_profiles_subject_service_version_uidx").on(table.subjectType, table.subjectId, table.serviceType, table.version),
+  index("tax_profiles_effective_idx").on(table.subjectType, table.subjectId, table.serviceType, table.approvalStatus, table.effectiveFrom),
+  check("tax_profiles_vat_rate_check", sql`${table.vatRateBasisPoints} BETWEEN 0 AND 10000`),
+]);
+
+export const subscriptionPlans = sqliteTable("subscription_plans", {
+  id: text("id").primaryKey(),
+  code: text("code").notNull(),
+  status: text("status").notNull().default("draft"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("subscription_plans_code_uidx").on(table.code),
+  index("subscription_plans_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const subscriptionPlanVersions = sqliteTable("subscription_plan_versions", {
+  id: text("id").primaryKey(),
+  planId: text("plan_id").notNull().references(() => subscriptionPlans.id, { onDelete: "restrict" }),
+  version: integer("version").notNull(),
+  nameRu: text("name_ru").notNull(),
+  nameUz: text("name_uz").notNull(),
+  billingPeriod: text("billing_period").notNull(),
+  priceMinor: integer("price_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  entitlementsJson: text("entitlements_json").notNull(),
+  effectiveFrom: text("effective_from").notNull(),
+  effectiveTo: text("effective_to"),
+  approvalStatus: text("approval_status").notNull().default("draft"),
+  approvedByUserId: text("approved_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  approvedAt: text("approved_at"),
+  createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("subscription_plan_versions_plan_version_uidx").on(table.planId, table.version),
+  index("subscription_plan_versions_effective_idx").on(table.approvalStatus, table.effectiveFrom, table.effectiveTo),
+  check("subscription_plan_versions_price_check", sql`${table.priceMinor} >= 0`),
+  check("subscription_plan_versions_currency_check", sql`${table.currency} = 'UZS'`),
+]);
+
+export const marketplaceOrders = sqliteTable("marketplace_orders", {
+  id: text("id").primaryKey(),
+  externalId: text("external_id").notNull(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+  customerUserId: text("customer_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  orderType: text("order_type").notNull(),
+  status: text("status").notNull().default("DRAFT"),
+  currency: text("currency").notNull().default("UZS"),
+  totalAmountMinor: integer("total_amount_minor").notNull().default(0),
+  acceptedPricingSnapshotId: text("accepted_pricing_snapshot_id"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  provider: text("provider"),
+  providerStatus: text("provider_status"),
+  version: integer("version").notNull().default(1),
+  expiresAt: text("expires_at"),
+  settledAt: text("settled_at"),
+  failedAt: text("failed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("marketplace_orders_external_uidx").on(table.externalId),
+  uniqueIndex("marketplace_orders_workspace_idempotency_uidx").on(table.workspaceId, table.idempotencyKey),
+  index("marketplace_orders_workspace_status_idx").on(table.workspaceId, table.status, table.updatedAt),
+  index("marketplace_orders_customer_idx").on(table.customerUserId, table.updatedAt),
+  check("marketplace_orders_amount_check", sql`${table.totalAmountMinor} >= 0`),
+  check("marketplace_orders_currency_check", sql`${table.currency} = 'UZS'`),
+]);
+
+export const orderItems = sqliteTable("order_items", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull().references(() => marketplaceOrders.id, { onDelete: "restrict" }),
+  itemType: text("item_type").notNull(),
+  referenceType: text("reference_type"),
+  referenceId: text("reference_id"),
+  titleRu: text("title_ru").notNull(),
+  titleUz: text("title_uz").notNull(),
+  quantity: integer("quantity").notNull().default(1),
+  unitAmountMinor: integer("unit_amount_minor").notNull(),
+  baseAmountMinor: integer("base_amount_minor").notNull(),
+  taxAmountMinor: integer("tax_amount_minor").notNull().default(0),
+  totalAmountMinor: integer("total_amount_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("order_items_order_idx").on(table.orderId, table.createdAt),
+  check("order_items_quantity_check", sql`${table.quantity} > 0`),
+  check("order_items_amounts_check", sql`${table.unitAmountMinor} >= 0 AND ${table.baseAmountMinor} >= 0 AND ${table.taxAmountMinor} >= 0 AND ${table.totalAmountMinor} >= 0`),
+  check("order_items_currency_check", sql`${table.currency} = 'UZS'`),
+]);
+
+export const pricingSnapshots = sqliteTable("pricing_snapshots", {
+  id: text("id").primaryKey(),
+  orderId: text("order_id").notNull().references(() => marketplaceOrders.id, { onDelete: "restrict" }),
+  version: integer("version").notNull(),
+  lawyerBaseAmountMinor: integer("lawyer_base_amount_minor").notNull(),
+  lawyerVatAmountMinor: integer("lawyer_vat_amount_minor").notNull(),
+  lawyerGrossAmountMinor: integer("lawyer_gross_amount_minor").notNull(),
+  juroBaseAmountMinor: integer("juro_base_amount_minor").notNull(),
+  juroVatAmountMinor: integer("juro_vat_amount_minor").notNull(),
+  juroGrossAmountMinor: integer("juro_gross_amount_minor").notNull(),
+  subscriptionCreditMinor: integer("subscription_credit_minor").notNull().default(0),
+  discountAmountMinor: integer("discount_amount_minor").notNull().default(0),
+  providerCommissionRateBasisPoints: integer("provider_commission_rate_basis_points").notNull().default(0),
+  providerCommissionBaseMinor: integer("provider_commission_base_minor").notNull().default(0),
+  providerCommissionAmountMinor: integer("provider_commission_amount_minor").notNull().default(0),
+  providerCommissionAllocationJson: text("provider_commission_allocation_json").notNull(),
+  clientTotalMinor: integer("client_total_minor").notNull(),
+  expectedProviderSettlementMinor: integer("expected_provider_settlement_minor").notNull(),
+  lawyerExpectedPayoutMinor: integer("lawyer_expected_payout_minor").notNull(),
+  juroExpectedRevenueMinor: integer("juro_expected_revenue_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  taxPolicyVersionId: text("tax_policy_version_id").notNull(),
+  pricingPolicyVersionId: text("pricing_policy_version_id").notNull().references(() => pricingPolicyVersions.id, { onDelete: "restrict" }),
+  calculationHash: text("calculation_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("pricing_snapshots_order_version_uidx").on(table.orderId, table.version),
+  uniqueIndex("pricing_snapshots_calculation_hash_uidx").on(table.calculationHash),
+  index("pricing_snapshots_policy_idx").on(table.pricingPolicyVersionId, table.createdAt),
+  check("pricing_snapshots_nonnegative_check", sql`${table.lawyerBaseAmountMinor} >= 0 AND ${table.lawyerVatAmountMinor} >= 0 AND ${table.lawyerGrossAmountMinor} >= 0 AND ${table.juroBaseAmountMinor} >= 0 AND ${table.juroVatAmountMinor} >= 0 AND ${table.juroGrossAmountMinor} >= 0 AND ${table.subscriptionCreditMinor} >= 0 AND ${table.discountAmountMinor} >= 0 AND ${table.providerCommissionAmountMinor} >= 0 AND ${table.clientTotalMinor} >= 0 AND ${table.expectedProviderSettlementMinor} >= 0 AND ${table.lawyerExpectedPayoutMinor} >= 0 AND ${table.juroExpectedRevenueMinor} >= 0`),
+  check("pricing_snapshots_currency_check", sql`${table.currency} = 'UZS'`),
+]);
+
+export const taxComponents = sqliteTable("tax_components", {
+  id: text("id").primaryKey(),
+  pricingSnapshotId: text("pricing_snapshot_id").notNull().references(() => pricingSnapshots.id, { onDelete: "restrict" }),
+  providerType: text("provider_type").notNull(),
+  providerId: text("provider_id").notNull(),
+  taxProfileId: text("tax_profile_id").notNull().references(() => taxProfiles.id, { onDelete: "restrict" }),
+  taxableBaseMinor: integer("taxable_base_minor").notNull(),
+  rateBasisPoints: integer("rate_basis_points").notNull(),
+  taxAmountMinor: integer("tax_amount_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("tax_components_snapshot_idx").on(table.pricingSnapshotId, table.createdAt),
+  check("tax_components_amounts_check", sql`${table.taxableBaseMinor} >= 0 AND ${table.taxAmountMinor} >= 0 AND ${table.rateBasisPoints} BETWEEN 0 AND 10000`),
+]);
+
 export const subscriptions = sqliteTable("subscriptions", {
   id: text("id").primaryKey(),
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
@@ -1942,11 +2131,80 @@ export const subscriptions = sqliteTable("subscriptions", {
   providerCustomerId: text("provider_customer_id"),
   providerSubscriptionId: text("provider_subscription_id"),
   planCode: text("plan_code").notNull(),
+  planVersionId: text("plan_version_id").references(() => subscriptionPlanVersions.id, { onDelete: "restrict" }),
+  orderId: text("order_id").references(() => marketplaceOrders.id, { onDelete: "restrict" }),
   status: text("status").notNull(),
+  billingPeriod: text("billing_period"),
+  autoRenewConsentAt: text("auto_renew_consent_at"),
+  startedAt: text("started_at"),
   currentPeriodEndsAt: text("current_period_ends_at"),
   cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" }).notNull().default(false),
+  gracePeriodEndsAt: text("grace_period_ends_at"),
+  version: integer("version").notNull().default(1),
   ...timestamps,
 }, (table) => [uniqueIndex("subscriptions_workspace_uidx").on(table.workspaceId), index("subscriptions_status_idx").on(table.status, table.updatedAt)]);
+
+export const subscriptionEntitlements = sqliteTable("subscription_entitlements", {
+  id: text("id").primaryKey(),
+  subscriptionId: text("subscription_id").notNull().references(() => subscriptions.id, { onDelete: "restrict" }),
+  entitlementCode: text("entitlement_code").notNull(),
+  limitValue: integer("limit_value"),
+  unit: text("unit").notNull(),
+  periodStart: text("period_start").notNull(),
+  periodEnd: text("period_end").notNull(),
+  rolloverAllowed: integer("rollover_allowed", { mode: "boolean" }).notNull().default(false),
+  metadataJson: text("metadata_json").notNull().default("{}"),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("subscription_entitlements_period_uidx").on(table.subscriptionId, table.entitlementCode, table.periodStart),
+  index("subscription_entitlements_active_idx").on(table.subscriptionId, table.periodEnd),
+  check("subscription_entitlements_limit_check", sql`${table.limitValue} IS NULL OR ${table.limitValue} >= 0`),
+]);
+
+export const entitlementUsage = sqliteTable("entitlement_usage", {
+  id: text("id").primaryKey(),
+  entitlementId: text("entitlement_id").notNull().references(() => subscriptionEntitlements.id, { onDelete: "restrict" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  orderId: text("order_id").references(() => marketplaceOrders.id, { onDelete: "restrict" }),
+  quantity: integer("quantity").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  status: text("status").notNull().default("reserved"),
+  consumedAt: text("consumed_at"),
+  releasedAt: text("released_at"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("entitlement_usage_workspace_idempotency_uidx").on(table.workspaceId, table.idempotencyKey),
+  index("entitlement_usage_entitlement_status_idx").on(table.entitlementId, table.status, table.createdAt),
+  check("entitlement_usage_quantity_check", sql`${table.quantity} > 0`),
+]);
+
+export const subscriptionInvoices = sqliteTable("subscription_invoices", {
+  id: text("id").primaryKey(),
+  externalId: text("external_id").notNull(),
+  subscriptionId: text("subscription_id").references(() => subscriptions.id, { onDelete: "restrict" }),
+  orderId: text("order_id").notNull().references(() => marketplaceOrders.id, { onDelete: "restrict" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+  invoiceNumber: text("invoice_number").notNull(),
+  status: text("status").notNull().default("draft"),
+  subtotalMinor: integer("subtotal_minor").notNull(),
+  taxAmountMinor: integer("tax_amount_minor").notNull(),
+  totalAmountMinor: integer("total_amount_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  dueAt: text("due_at"),
+  issuedAt: text("issued_at"),
+  paidAt: text("paid_at"),
+  voidedAt: text("voided_at"),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("subscription_invoices_external_uidx").on(table.externalId),
+  uniqueIndex("subscription_invoices_number_uidx").on(table.invoiceNumber),
+  uniqueIndex("subscription_invoices_order_uidx").on(table.orderId),
+  index("subscription_invoices_workspace_status_idx").on(table.workspaceId, table.status, table.createdAt),
+  check("subscription_invoices_amounts_check", sql`${table.subtotalMinor} >= 0 AND ${table.taxAmountMinor} >= 0 AND ${table.totalAmountMinor} >= 0`),
+]);
 
 export const payments = sqliteTable("payments", {
   id: text("id").primaryKey(),
@@ -1959,6 +2217,109 @@ export const payments = sqliteTable("payments", {
   receiptObjectKey: text("receipt_object_key"),
   ...timestamps,
 }, (table) => [index("payments_workspace_idx").on(table.workspaceId, table.createdAt)]);
+
+export const paymentAttempts = sqliteTable("payment_attempts", {
+  id: text("id").primaryKey(),
+  externalId: text("external_id").notNull(),
+  orderId: text("order_id").notNull().references(() => marketplaceOrders.id, { onDelete: "restrict" }),
+  paymentId: text("payment_id").references(() => payments.id, { onDelete: "restrict" }),
+  provider: text("provider").notNull(),
+  providerAttemptId: text("provider_attempt_id"),
+  providerStatus: text("provider_status"),
+  internalStatus: text("internal_status").notNull().default("created"),
+  amountMinor: integer("amount_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  checkoutUrl: text("checkout_url"),
+  expiresAt: text("expires_at"),
+  settledAt: text("settled_at"),
+  failedAt: text("failed_at"),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("payment_attempts_external_uidx").on(table.externalId),
+  uniqueIndex("payment_attempts_order_idempotency_uidx").on(table.orderId, table.idempotencyKey),
+  uniqueIndex("payment_attempts_provider_uidx").on(table.provider, table.providerAttemptId).where(sql`${table.providerAttemptId} IS NOT NULL`),
+  index("payment_attempts_order_status_idx").on(table.orderId, table.internalStatus, table.updatedAt),
+  check("payment_attempts_amount_check", sql`${table.amountMinor} >= 0`),
+]);
+
+export const paymentProviderEvents = sqliteTable("payment_provider_events", {
+  id: text("id").primaryKey(),
+  provider: text("provider").notNull(),
+  providerEventId: text("provider_event_id").notNull(),
+  eventType: text("event_type").notNull(),
+  payloadSha256: text("payload_sha256").notNull(),
+  signatureVerified: integer("signature_verified", { mode: "boolean" }).notNull().default(false),
+  internalStatus: text("internal_status").notNull().default("received"),
+  orderId: text("order_id").references(() => marketplaceOrders.id, { onDelete: "restrict" }),
+  paymentAttemptId: text("payment_attempt_id").references(() => paymentAttempts.id, { onDelete: "restrict" }),
+  receivedAt: text("received_at").notNull(),
+  processedAt: text("processed_at"),
+  failedAt: text("failed_at"),
+  failureCode: text("failure_code"),
+}, (table) => [
+  uniqueIndex("payment_provider_events_provider_event_uidx").on(table.provider, table.providerEventId),
+  index("payment_provider_events_status_idx").on(table.internalStatus, table.receivedAt),
+  check("payment_provider_events_sha_check", sql`length(${table.payloadSha256}) = 64`),
+]);
+
+export const ledgerAccounts = sqliteTable("ledger_accounts", {
+  id: text("id").primaryKey(),
+  ownerType: text("owner_type").notNull(),
+  ownerId: text("owner_id").notNull(),
+  code: text("code").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  status: text("status").notNull().default("active"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("ledger_accounts_owner_code_uidx").on(table.ownerType, table.ownerId, table.code, table.currency),
+  index("ledger_accounts_code_idx").on(table.code, table.status),
+  check("ledger_accounts_currency_check", sql`${table.currency} = 'UZS'`),
+]);
+
+export const ledgerTransactions = sqliteTable("ledger_transactions", {
+  id: text("id").primaryKey(),
+  externalId: text("external_id").notNull(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+  orderId: text("order_id").references(() => marketplaceOrders.id, { onDelete: "restrict" }),
+  paymentId: text("payment_id").references(() => payments.id, { onDelete: "restrict" }),
+  transactionType: text("transaction_type").notNull(),
+  status: text("status").notNull().default("draft"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  debitTotalMinor: integer("debit_total_minor").notNull().default(0),
+  creditTotalMinor: integer("credit_total_minor").notNull().default(0),
+  occurredAt: text("occurred_at").notNull(),
+  postedAt: text("posted_at"),
+  failedAt: text("failed_at"),
+  version: integer("version").notNull().default(1),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("ledger_transactions_external_uidx").on(table.externalId),
+  uniqueIndex("ledger_transactions_workspace_idempotency_uidx").on(table.workspaceId, table.idempotencyKey),
+  index("ledger_transactions_order_idx").on(table.orderId, table.createdAt),
+  check("ledger_transactions_totals_check", sql`${table.debitTotalMinor} >= 0 AND ${table.creditTotalMinor} >= 0`),
+  check("ledger_transactions_posted_balance_check", sql`${table.status} != 'posted' OR ${table.debitTotalMinor} = ${table.creditTotalMinor}`),
+]);
+
+export const ledgerEntries = sqliteTable("ledger_entries", {
+  id: text("id").primaryKey(),
+  transactionId: text("transaction_id").notNull().references(() => ledgerTransactions.id, { onDelete: "restrict" }),
+  accountId: text("account_id").notNull().references(() => ledgerAccounts.id, { onDelete: "restrict" }),
+  sequence: integer("sequence").notNull(),
+  side: text("side").notNull(),
+  amountMinor: integer("amount_minor").notNull(),
+  currency: text("currency").notNull().default("UZS"),
+  memo: text("memo").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("ledger_entries_transaction_sequence_uidx").on(table.transactionId, table.sequence),
+  index("ledger_entries_account_idx").on(table.accountId, table.createdAt),
+  check("ledger_entries_side_check", sql`${table.side} IN ('DEBIT','CREDIT')`),
+  check("ledger_entries_amount_check", sql`${table.amountMinor} > 0`),
+  check("ledger_entries_currency_check", sql`${table.currency} = 'UZS'`),
+]);
 
 export const accountDeletionChallenges = sqliteTable(
   "account_deletion_challenges",

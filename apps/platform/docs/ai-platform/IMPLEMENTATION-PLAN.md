@@ -397,3 +397,35 @@ cases/plans, lawyers, tariffs, admin/support/status, the cinematic prototype,
 Jurobek/voice, accessibility/performance matrices, and production readiness
 remain subsequent gates. Production still requires separate functional and UI
 confirmations.
+
+## Payment foundation execution gate — 2026-08-03
+
+Verified current state:
+
+- `subscriptions` and `payments` exist, but checkout is intentionally disabled;
+- plan prices are placeholders and must not be treated as approved prices;
+- lawyer requests, conflict checks, access grants, and versioned text offers
+  already exist and will be reused by later marketplace-payment stages;
+- Order, immutable pricing snapshot, invoice, provider-event replay protection,
+  entitlement usage, and double-entry ledger are absent;
+- baseline type-check and lint pass before Payment foundation changes.
+
+Ordered implementation:
+
+1. add local migration `0061` with only additive financial entities and nullable
+   compatibility links;
+2. add deterministic integer-money pricing and balanced-ledger domain services;
+3. add authenticated workspace-scoped create/read/confirm checkout APIs with
+   validation, safe-write checks, server idempotency, and audit events;
+4. add a disabled-by-default provider adapter boundary and explicit non-production
+   sandbox implementation;
+5. add RU/UZ checkout and order-status surfaces only after the backend contract
+   and migration invariants pass;
+6. run type-check, lint, unit/integration/migration/security tests, build,
+   artifact validation, and document-builder regression;
+7. request separate authorization for a private staging D1 backup, restore
+   rehearsal, migration `0061`, and staging deploy.
+
+Stage 2 marketplace payments will not begin until this gate has a working
+staging checkout with replay-safe payment confirmation and balanced ledger
+evidence. No production mutation is authorized.

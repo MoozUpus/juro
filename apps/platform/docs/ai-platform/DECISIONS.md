@@ -2440,3 +2440,31 @@ This changes only protected staging behavior. It does not establish that either
 provider completed a real answer: an authenticated controlled test is still
 required. Staging Worker version `120456d4-0da2-4531-aae4-fbe597bc2329` also
 contains the server-verified AI-to-published-builder-template handoff.
+
+## D-124 — Payment foundation extends the existing billing boundary additively
+
+Status: accepted for local implementation; staging migration and deployment pending owner authorization
+Date: 2026-08-03
+
+The existing `subscriptions` and `payments` tables and `/api/platform/billing`
+route remain compatibility surfaces. They are not sufficient evidence of a
+charge: the current adapter deliberately reports checkout unavailable. Payment
+foundation therefore adds an order aggregate, immutable pricing snapshots,
+versioned plan and policy records, invoices, payment attempts, provider-event
+deduplication, subscription entitlements, and a double-entry ledger without
+dropping or renaming existing data.
+
+All monetary values are integer minor units and all percentage rates are integer
+basis points. Pricing is calculated server-side from an approved versioned
+policy and stored once per accepted order. Subsequent policy changes cannot
+reprice an existing order. A ledger transaction is valid only when total debits
+equal total credits in the same currency; a single balance column is never the
+financial source of truth.
+
+No subscription price is invented by this change. Unapproved or missing plan,
+tax, or provider configuration fails closed. Development and protected staging
+may use an explicitly enabled sandbox adapter, but production checkout,
+`uzum_nasiya_production`, and automatic lawyer payouts remain disabled until
+their separate contractual, tax, provider, security, and release gates pass.
+Migration `0061` is local-only until a fresh private-R2 D1 backup and restore
+rehearsal are authorized and verified. Production remains unchanged.

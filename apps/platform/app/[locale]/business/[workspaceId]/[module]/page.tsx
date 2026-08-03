@@ -31,6 +31,7 @@ export default async function BusinessModulePage({
       accountType="business"
       module={module}
       userName={user.fullName ?? user.displayName}
+      workspaceId={workspaceId}
     />
   );
 }

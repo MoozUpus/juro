@@ -422,3 +422,25 @@ to three safe approved excerpts and never serializes requester, workspace,
 moderator, or moderation-reason fields. Protected staging version
 `0ecee8c7-af31-46a7-8c1b-1aa903986e8c` receives 100% traffic. Evidence:
 `STAGING-0062-AUTHENTICATED-LAWYER-DETAIL-EVIDENCE.md`.
+
+## Payment foundation — local Stage 1
+
+Locally implemented behind environment gates:
+
+- approved/versioned plan, pricing-policy and tax-profile lookup;
+- integer-minor-unit pricing with deterministic rounding;
+- idempotent tenant-owned order creation and immutable pricing snapshots;
+- RU/UZ checkout with explicit one-time versus auto-renew consent;
+- draft/issued/paid invoice lifecycle;
+- signed, timestamp-bounded sandbox webhook verification;
+- amount/state/replay validation before any financial side effect;
+- atomic subscription activation, compatibility payment record, entitlements,
+  audit event, and balanced posted ledger transaction;
+- authenticated RU/UZ order/payment screens for personal and canonical business
+  workspace routes;
+- retry after decline without repricing or duplicate consent;
+- production and real-provider paths fail closed.
+
+This is not yet deployed. Migration `0061`, the staging-only signing secret and
+the synthetic staging price fixture remain gated by a fresh private D1
+backup/restore rehearsal and explicit owner permission.

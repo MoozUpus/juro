@@ -137,12 +137,15 @@ const coreTestFiles = [
   "tests/workspace-creation.test.ts",
   "tests/workspace-invitations.test.ts",
   "tests/platform-core.test.ts",
+  "tests/billing-foundation.test.ts",
+  "tests/checkout-service.test.ts",
 ];
 
 const cloudflareTestFiles = [
   "tests/cloudflare-config.test.ts",
   "tests/migration-safety.test.ts",
   "tests/migration-0042-file-extractions.test.ts",
+  "tests/migration-0061-billing-foundation.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 

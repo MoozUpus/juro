@@ -1011,16 +1011,22 @@ test("verified legal retrieval includes official metadata in exact lexical match
   assert.doesNotMatch(source, /lower\(\$\{field\}\) LIKE/);
 });
 
-test("billing never advertises credentials as an implemented checkout", async () => {
-  const [provider, client] = await Promise.all([
+test("billing exposes only the gated Payment foundation and never treats credentials as payment success", async () => {
+  const [provider, foundation, client, createRoute] = await Promise.all([
     readFile(new URL("../lib/billing/provider.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/billing/foundation.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/BillingClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/checkout/create/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(provider, /credentialsConfigured/);
   assert.match(provider, /checkoutAvailable: false/);
-  assert.match(client, /disabled=\{!data\.provider\.checkoutAvailable/);
-  assert.match(client, /Checkout — скоро/);
+  assert.match(foundation, /PAYMENT_PRODUCTION_APPROVED/);
+  assert.match(foundation, /sandboxEnabled: false/);
+  assert.match(client, /disabled=\{!data\.provider\.enabled/);
+  assert.match(client, /api\/checkout\/create/);
+  assert.match(createRoute, /paymentFoundationStatus/);
   assert.doesNotMatch(client, /data\.provider\.configured/);
+  assert.doesNotMatch(client + createRoute, /providerPaymentId.*success|status:\s*["']paid["']/i);
 });
 
 test("legislation monitoring never auto-publishes or invents feed entries", async () => {

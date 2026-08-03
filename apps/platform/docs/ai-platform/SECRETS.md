@@ -113,11 +113,17 @@ principal.
 - `LEGISLATION_FEED_API_KEY`
 - `PAYMENT_API_KEY`
 - `PAYMENT_WEBHOOK_SECRET`
+- `PAYMENT_SANDBOX_WEBHOOK_SECRET` (development/staging only)
 
 The last three provider/integration values are optional until the corresponding integration is actually selected. `AI_PROVIDER_API_KEY` is a legacy generic name and must not replace the explicit OpenAI/Anthropic bindings in a new environment.
 
 Provider secrets must remain separate per environment and may not use
 `NEXT_PUBLIC_*`.
+
+`PAYMENT_SANDBOX_WEBHOOK_SECRET` signs the protected staging payment simulator.
+Enter a distinct high-entropy value through `wrangler secret put` for the
+staging Worker; never reuse a provider credential or a production secret. Its
+presence does not authorize a real payment provider or production payments.
 
 ## Turnstile binding contract
 

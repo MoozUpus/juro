@@ -428,6 +428,13 @@
       "when": 1785737047759,
       "tag": "0060_lethal_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "6",
+      "when": 1785745011628,
+      "tag": "0061_cheerful_christian_walker",
+      "breakpoints": true
     }
   ]
 }

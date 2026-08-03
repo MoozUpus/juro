@@ -83,6 +83,7 @@ for (const secretBinding of [
   "LEGISLATION_FEED_API_KEY",
   "PAYMENT_API_KEY",
   "PAYMENT_WEBHOOK_SECRET",
+  "PAYMENT_SANDBOX_WEBHOOK_SECRET",
 ]) {
   assert.equal(
     Object.hasOwn(artifact.vars ?? {}, secretBinding),

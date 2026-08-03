@@ -858,6 +858,31 @@ private-R2 export matched SHA-256
 `99f0357fc665338f53e4a0c6062134ac267cb5fc04dde34f2da12302a5b1d51f`.
 Exact evidence is in `STAGING-0041-ANALYSIS-REPORT-EXPORT-EVIDENCE.md`.
 
+## Migration 0061 — Payment foundation (pending staging authorization)
+
+`0061_cheerful_christian_walker.sql` is an additive Stage-1 financial schema.
+It creates versioned pricing/tax/plan configuration, tenant-owned orders,
+immutable pricing snapshots, invoices, payment attempts/events, subscription
+entitlements, usage records, and a balanced double-entry ledger. Existing
+`subscriptions` receive only nullable/additive lifecycle columns; the existing
+`payments` table is preserved.
+
+The migration contains no table drop or destructive backfill. D1 triggers freeze
+approved version records and accepted snapshots, prevent order identity changes,
+require ledger totals to match actual entries before posting, and freeze posted
+transactions/entries. Application rollback disables `PAYMENT_FOUNDATION_ENABLED`
+and deploys the prior Worker while retaining unused additive tables.
+
+Before staging apply: create and verify a Time Travel bookmark, export the remote
+D1 to a private object under `juro-staging-backups`, independently verify the
+object hash/round trip, and prove a disposable restore. Apply only `0061`, run
+`quick_check`, `foreign_key_check`, migration-ledger and trigger inventory checks,
+then create a second verified checkpoint. Production is not authorized.
+
+`scripts/staging-payment-foundation-seed.sql` is a separate, explicit synthetic
+fixture with zero tax/provider fee and one test plan. It is never part of the
+migration chain and must never run against production.
+
 ## Migration 0048 — protected staging provider connectivity evidence
 
 `0048_staging_provider_probe.sql` additively creates only the

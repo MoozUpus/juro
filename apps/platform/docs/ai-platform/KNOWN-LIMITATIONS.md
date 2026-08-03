@@ -357,3 +357,19 @@ The authenticated lawyer-detail route is deployed to protected staging, but its
 Access-authorized browser traversal, RU/UZ visual review, and a real approved
 review record check remain open. The route does not make the public directory
 unauthenticated and does not change production.
+
+## Payment foundation open gates
+
+- Migration `0061` and the new Worker routes are local only until a new private
+  staging D1 checkpoint and restore rehearsal are approved and verified.
+- The staging sandbox needs a distinct `PAYMENT_SANDBOX_WEBHOOK_SECRET`; no value
+  is stored in source or requested in chat.
+- The only prepared price is an explicitly synthetic staging fixture. No
+  production price, tax position, commission, provider contract, fiscal receipt,
+  refund, chargeback, or payout is approved or claimed.
+- Stage 2 marketplace orders, Uzum sandbox, reconciliation imports, payout
+  batches, refunds, disputes and real provider webhooks remain blocked behind
+  separate later stages.
+- Authenticated browser, mobile, keyboard, screen-reader and visual checks of the
+  checkout require the protected staging deployment; local build/tests are not a
+  substitute.

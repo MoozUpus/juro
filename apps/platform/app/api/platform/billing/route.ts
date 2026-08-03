@@ -3,12 +3,13 @@ import { parseJsonRequest } from "../../../../lib/auth/input";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { billingPlanSelectionSchema } from "../../../../lib/billing/input";
 import { paymentProviderStatus } from "../../../../lib/billing/provider";
+import { paymentFoundationStatus } from "../../../../lib/billing/foundation";
 import {
   assertSafeWrite,
   requireApiUser,
   withApiErrors,
 } from "../../../../lib/document-builder/auth/api";
-import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 function response(body: unknown, status = 200) {
@@ -38,7 +39,7 @@ export const GET = withApiErrors(async function GET() {
   ]);
   const [subscription, payments] = records;
   return response({
-    provider: paymentProviderStatus(),
+    provider: paymentFoundationStatus(runtimeEnv()),
     config: pricingConfig,
     subscription: subscription.results[0] ?? null,
     payments: payments.results,
