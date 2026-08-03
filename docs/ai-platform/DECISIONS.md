@@ -1,5 +1,19 @@
 # Decisions
 
+## D-103 — case navigation is URL-addressable and workspace-scoped
+
+Status: accepted and staging-deployed
+Date: 2026-08-04
+
+Every material case section has a stable localized URL, but all sections share
+one tenant boundary. The server resolves the authenticated user's active
+workspace, verifies the case belongs to it, and scopes each joined domain again
+by workspace/case; private user-owned domains additionally bind the user. This
+supports refresh, back/forward and direct links without copying case data into
+client state or creating separate weaker APIs. Workspace members are labelled
+honestly as workspace-level access until a separate case-role model is approved;
+lawyer grants remain explicit, auditable and revocable.
+
 ## 2026-07-31 — consent-gated lawyer handoff
 
 A lawyer receives only an anonymized request before a conflict check. A clear conflict result does not itself grant access to a case. A separate, explicit customer consent creates a durable grant; the customer may revoke it. This prevents accidental disclosure during lawyer selection and keeps the disclosure event auditable.

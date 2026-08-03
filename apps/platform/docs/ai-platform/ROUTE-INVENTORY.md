@@ -4,6 +4,12 @@ Audit date: 2026-07-28
 Production Sites revision: `4031078` (v20)
 Integration branch baseline: remote `8ab1693` plus the current local Phase 2 checkpoint
 
+> Current staging delta — 2026-08-04: commit `33ff471`, deployed as protected
+> staging Worker `166f25f3-caa2-4312-b577-beabdfd1f37c`, adds validated
+> canonical case sections for personal and explicit business workspaces. This
+> supersedes the older plan-only/ignored-ID statement below. Production remains
+> unchanged; authenticated browser QA is still open.
+
 This inventory distinguishes actual routes from target routes. An entry marked `missing` is not represented as working.
 
 Production routing is split: `app.juro.uz` serves Sites v20, while `admin.juro.uz` and the `juro` workers.dev hostname serve a separate legacy Worker asset set. The Workers Domains and Sites control planes both report ownership information for `app.juro.uz`; no route migration or DNS change is safe until that ambiguity is reconciled. `staging.app.juro.uz`, `staging.juro.uz`, and `status.juro.uz` currently have no DNS records.
@@ -36,6 +42,7 @@ Current route shells:
 /:locale/:accountType
 /:locale/:accountType/:module
 /:locale/:accountType/cases/:caseId
+/:locale/:accountType/cases/:caseId/:section
 /:locale/:accountType/action-plan/:caseId
 /:locale/:accountType/contacts
 /:locale/:accountType/notifications
@@ -43,7 +50,13 @@ Current route shells:
 /:locale/:accountType/settings/security
 ```
 
-`cases/:caseId` and `action-plan/:caseId` currently ignore the object ID when rendering and load the general cases collection. They are not complete object-specific screens.
+`cases/:caseId` is now an object-specific, tenant-backed overview. Its validated
+URL sections are `chat`, `documents`, `analyses`, `plan`, `calendar`, `sources`,
+`participants`, `lawyer`, `activity`, and `access`. Explicit business routes use
+`/:locale/business/:workspaceId/cases/:caseId/:section`; reserved legacy business
+routes preserve the section through the existing workspace-selection redirect.
+`action-plan/:caseId` remains the dedicated editable plan surface linked from the
+case workspace.
 
 ## Document builder
 

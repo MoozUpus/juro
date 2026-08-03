@@ -2,7 +2,7 @@
 
 > Current authoritative runtime checkpoint — 2026-08-04: read-only Cloudflare
 > and D1 evidence confirms active staging Worker
-> `eef56269-2980-42b8-bc76-9a348f6d187b` at 100% traffic and schema through
+> `166f25f3-caa2-4312-b577-beabdfd1f37c` at 100% traffic and schema through
 > `0066`; guest and voice migrations are applied. Provider transport is no
 > longer the cause of the earlier unavailable state: the latest closed OpenAI
 > and Anthropic probes succeeded, and aggregate `ai_runs` metadata contains
@@ -12,6 +12,9 @@
 > All seven reviewed staging Queues now have producer/consumer attachment;
 > `notification.dispatch` passed a remote identifiers-only neutral-rejection
 > probe. Malware scanning remains deliberately unattached and fail-closed.
+> Canonical case section routes are deployed and anonymously proven to remain
+> behind Access, but authenticated case-data, keyboard, responsive and human
+> RU/UZ browser journeys remain unclaimed.
 
 ## Guest AI local candidate — 2026-08-03
 

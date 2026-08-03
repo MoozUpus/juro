@@ -1,14 +1,19 @@
 # JURO implemented-features checkpoint
 
 > Current authoritative staging checkpoint — 2026-08-04: Worker
-> `eef56269-2980-42b8-bc76-9a348f6d187b` receives 100% of protected staging
+> `166f25f3-caa2-4312-b577-beabdfd1f37c` receives 100% of protected staging
 > traffic and D1 is through additive migration `0066`. Guest AI persistence,
 > voice-message storage/retention, task-reminder outbox dispatch and all seven
 > reviewed Queue consumers are deployed. The notification consumer passed a
 > remote identifiers-only delivery probe and its synthetic rows were removed.
 > Local lint, typecheck, complete tests, Cloudflare tests, staging build/artifact,
 > Cloudflare types, secret-pattern scan and 34-scenario document-builder smoke
-> pass; both GitHub validation jobs passed on functional commit `50fa3dc`.
+> pass. Functional commit `33ff471` additionally deploys tenant-backed,
+> URL-addressable RU/UZ case sections for personal and explicit business
+> workspaces. Focused route/security tests, the complete local suite,
+> Cloudflare tests/types, staging build/artifact, 34-scenario builder smoke and
+> comparison smoke pass. GitHub checks for this latest commit may still be in
+> progress; the earlier notification checkpoint passed both validation jobs.
 > This does not close authenticated browser, malware-scanner, complete legal
 > corpus/human review, policy approval, approved 3D asset, production deployment
 > or production UI-replacement gates. Later evidence overrides stale historical
