@@ -273,7 +273,7 @@ The following gates remain open:
 - A `templateCode` query hint can accompany a plan step, but automatic resolution to a category/template route is not claimed; the user can select the real published template while case/step context is preserved.
 - Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
 - No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.
-- no live provider request/fallback, completed result, token/cost row from a real provider, or authenticated browser flow is proven;
+- real OpenAI RU/UZ no-source lifecycle and Anthropic fallback provider calls are proven in protected staging, including bounded token/latency evidence and D1 run/ledger semantics; an Access-authenticated browser flow, verified-source live answer, and provider cost reconciliation remain unproven;
 - scanned/image OCR, actual ZIP/multi-file package extraction and relationship analysis, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
 - live indexed-corpus and reranking evidence remain open; the implemented hybrid
   D1/Vectorize retrieval still revalidates every candidate citation server-side;

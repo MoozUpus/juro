@@ -32,13 +32,15 @@ On 2026-08-03, the closed one-time probe `staging-openai-legal-chat-v25` exercis
 
 The live fix is staging Worker version `c8aff902-c151-4a6b-a5dd-2ce5480236d5` from commit `35b3cd0`. The preceding v24 record failed with bounded code `PROBE_OPENAI_HTTP_400_INVALID_JSON_SCHEMA`, proving that transport and authentication reached OpenAI but Zod's raw draft-7 schema was rejected before generation. Provider-schema normalization removed that failure without weakening application validation.
 
-The required gate is an authenticated RU and UZ request, D1 run/ledger verification, a no-source clarification test, a verified-source citation test, an invalid-output test, and a provider-outage fallback test. The key must never be pasted into chat, Git, logs, screenshots, or client configuration.
+The follow-up closed lifecycle probe `staging-openai-legal-chat-v26` was deployed from commit `351a0b0` as staging Worker version `a2b2357e-0dc8-4b83-9c45-8813f48d0968`. It completed real OpenAI requests in both RU and UZ and verified the service-layer lifecycle against `juro-staging`: tenant fixture creation, run/usage reservation, strict provider parsing, no-source clarification, conversation/message/branch/version persistence, audit evidence, non-chargeable ledger release, idempotent replay, and cleanup. The bounded D1 evidence is `status=succeeded`, `model=gpt-5.6-sol`, `input_tokens=2038`, `output_tokens=295`, `latency_ms=6493`, `error_code=NULL`, started `2026-08-03T12:30:59.178Z` and finished `2026-08-03T12:31:11.566Z`. The flag was returned to `false`, all 45 bindings remained present, and post-run counts for synthetic users, workspaces, conversations, runs, ledgers, and idempotency rows were all zero.
+
+The remaining live gate is an Access-authenticated browser request in RU and UZ, plus a verified-source citation flow and explicit stop/disconnect trace. D1 run/ledger persistence, no-source clarification, invalid-output handling, and provider fallback have service-level or contract evidence. The key must never be pasted into chat, Git, logs, screenshots, or client configuration.
 ## Verification and remaining work
 
 - local transport, source-boundary, and usage-ledger tests cover split SSE frames, malformed events, terminal structured JSON, and cancellation without charge;
 - the full platform regression, environment matrix, staging artifact, and protected staging deployment postflight passed;
-- the exact RU legal-chat provider contract and no-source safety boundary are verified by the real staging probe;
-- an authenticated end-user RU/UZ stream, stop/disconnect trace, usage-ledger proof, verified-source citation flow, and retry/fallback trace remain to be verified through the protected UI/API flow;
+- the exact RU/UZ legal-chat provider contract, no-source safety boundary, D1 run/ledger lifecycle, non-chargeable clarification, persistence, audit, replay, and cleanup are verified by the real staging lifecycle probe;
+- an authenticated end-user RU/UZ browser stream, stop/disconnect trace, and verified-source citation flow remain to be verified through the protected UI/API flow;
 - reconnect and resumable partial recovery are not implemented;
 - edit/regenerate/branch history;
 - hybrid Vectorize retrieval and reranking;
