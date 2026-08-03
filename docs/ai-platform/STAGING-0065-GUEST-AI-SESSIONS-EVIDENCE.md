@@ -27,3 +27,5 @@ Downloading the private R2 object produced the same hash. An isolated in-memory 
 ## Deployment state
 
 No Worker deployment was performed at this checkpoint. Commit `d3f957c` contains the voice-message routes and requires additive migration `0066`; deploying it before `0066` would knowingly expose an incomplete feature. The existing authorization named only `0065`, so staging deployment remains paused until the owner explicitly includes `0066`.
+
+The unchanged active staging deployment remains Worker version `6c94e0ab-680e-446c-85c1-ebe22fbb2b3b` at 100% traffic. Anonymous requests to both `/ru/individual/ai-lawyer/new` and the protected regression route `/ru/individual/document-builder` returned Cloudflare Access `302` responses; this proves the routes remain access-protected, not that their authenticated flows have passed.
