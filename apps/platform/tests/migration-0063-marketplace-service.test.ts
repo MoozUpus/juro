@@ -36,3 +36,20 @@ test("marketplace staging seed is synthetic, idempotent, and keeps the 10% rate 
   assert.match(seed, /1000/);
   assert.doesNotMatch(seed, /INSERT\s+INTO\s+(?:marketplace_orders|payment_attempts|lawyer_payables)/i);
 });
+
+test("marketplace proposal UI uses the protected proposal endpoints and supports personal and business checkout routes", () => {
+  const flow = readFileSync(new URL("../app/_platform/MarketplaceServiceProposalFlow.tsx", import.meta.url), "utf8");
+  const lawyer = readFileSync(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8");
+  const client = readFileSync(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8");
+  const personalCheckout = readFileSync(new URL("../app/[locale]/[accountType]/cases/[caseId]/proposals/[proposalId]/checkout/page.tsx", import.meta.url), "utf8");
+  const businessCheckout = readFileSync(new URL("../app/[locale]/business/[workspaceId]/cases/[caseId]/proposals/[proposalId]/checkout/page.tsx", import.meta.url), "utf8");
+  for (const endpoint of ["/proposals`, {", "/accept`, {", "/checkout`, {"]) assert.match(flow, new RegExp(endpoint.replace(/[{}]/g, "\\$&")));
+  assert.match(flow, /x-juro-csrf/);
+  assert.match(flow, /accepted: true/);
+  assert.match(flow, /platformBasePath/);
+  assert.match(lawyer, /LawyerServiceProposalForm/);
+  assert.match(client, /ClientServiceProposals/);
+  assert.match(personalCheckout, /MarketplaceProposalCheckoutClient/);
+  assert.match(businessCheckout, /MarketplaceProposalCheckoutClient/);
+  assert.match(businessCheckout, /accountType="business"/);
+});
