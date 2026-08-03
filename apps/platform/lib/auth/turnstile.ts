@@ -16,11 +16,12 @@ export type TurnstileValidationResult =
   | { status: "invalid" }
   | { status: "unavailable" };
 
-export async function validateAuthTurnstile(input: {
+export async function validateTurnstile(input: {
   secretKey: string;
   token: string;
   remoteIp: string | null;
   expectedHostname: string;
+  expectedAction: string;
   fetcher?: typeof fetch;
 }): Promise<TurnstileValidationResult> {
   const secretKey = input.secretKey.trim();
@@ -58,11 +59,25 @@ export async function validateAuthTurnstile(input: {
     return { status: "unavailable" };
   }
   if (!parsed.success) return { status: "invalid" };
-  if (parsed.action !== TURNSTILE_ACTION) return { status: "invalid" };
+  if (
+    !/^[a-z][a-z0-9_]{2,31}$/.test(input.expectedAction)
+    || parsed.action !== input.expectedAction
+  ) return { status: "invalid" };
   if (parsed.hostname?.toLocaleLowerCase() !== expectedHostname) {
     return { status: "invalid" };
   }
   return { status: "verified" };
 }
 
+export function validateAuthTurnstile(input: {
+  secretKey: string;
+  token: string;
+  remoteIp: string | null;
+  expectedHostname: string;
+  fetcher?: typeof fetch;
+}): Promise<TurnstileValidationResult> {
+  return validateTurnstile({ ...input, expectedAction: TURNSTILE_ACTION });
+}
+
 export const authTurnstileAction = TURNSTILE_ACTION;
+export const guestAiTurnstileAction = "guest_ai";

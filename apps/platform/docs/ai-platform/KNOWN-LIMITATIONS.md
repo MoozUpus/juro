@@ -1,5 +1,16 @@
 # JURO known limitations checkpoint
 
+## Guest AI local candidate — 2026-08-03
+
+- The one-answer route, encrypted 24-hour storage, clarification flow,
+  Turnstile/rate-limit boundary and scheduled purge are implemented and tested
+  locally.
+- Additive migration `0064_guest_ai_sessions.sql` is not applied to staging.
+  The cleanup is inert before the table exists and production keeps
+  `GUEST_AI_ENABLED=false`.
+- Private-R2 backup, disposable restore rehearsal, migration checks, deploy,
+  real-provider smoke and protected RU/UZ browser/accessibility QA are open.
+
 > Current authoritative checkpoint — 2026-08-03: this section supersedes an
 > older historical statement below when they conflict. `juro-platform-staging`
 > is deployed as Worker version `6ec3e8ab-434b-4ab5-98db-c26908d6c8a3`, with

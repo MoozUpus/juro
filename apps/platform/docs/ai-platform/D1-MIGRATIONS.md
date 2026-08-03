@@ -1,5 +1,19 @@
 # JURO D1 migrations
 
+## Migration 0064 — guest AI sessions
+
+`0064_guest_ai_sessions.sql` additively creates `guest_ai_sessions` and
+`guest_ai_runs`. It has no plaintext question/answer columns: tokens, IPs and
+requests are digested or AES-GCM encrypted. State/count/encryption checks and a
+cascading foreign key constrain lifecycle; unique idempotency and atomic
+reservation prevent duplicate final answers.
+
+Before staging: create and verify a fresh D1 checkpoint, write a checksummed
+export to private `juro-staging-backups`, restore it into a disposable database,
+apply only `0064`, then run ledger, `quick_check`, `foreign_key_check`, schema
+inventory and a post-checkpoint. Rollback disables `GUEST_AI_ENABLED` and leaves
+the additive tables unused. Production migration/deploy is not authorized.
+
 > Current migration checkpoint — 2026-08-03: isolated `juro-staging` is through additive `0060_lethal_slapstick.sql`. A checksum-verified private pre-export and post-export are retained in `juro-staging-backups`; postflight reports `quick_check=ok`, an empty `foreign_key_check`, and the new `ai_feedback` table. Production is unchanged.
 
 Updated: 2026-08-03

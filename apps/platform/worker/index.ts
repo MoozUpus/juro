@@ -23,6 +23,7 @@ type FrameworkEnv = PlatformJobEnv & {
   EMAIL_FROM?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
+  GUEST_AI_ENABLED?: string;
   APP_URL?: string;
   PUBLIC_SITE_URL?: string;
   PAYMENT_PROVIDER?: string;

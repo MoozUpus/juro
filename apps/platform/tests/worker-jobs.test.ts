@@ -228,6 +228,16 @@ function createDatabase(): {
       memory_id text NOT NULL REFERENCES user_memories(id) ON DELETE CASCADE
     );
   `);
+  const guestMigration = readFileSync(
+    new URL("../drizzle/0064_guest_ai_sessions.sql", import.meta.url),
+    "utf8",
+  );
+  for (const statement of guestMigration
+    .split("--> statement-breakpoint")
+    .map((value) => value.trim())
+    .filter(Boolean)) {
+    sqlite.exec(statement);
+  }
   return { sqlite, d1: new SqliteD1(sqlite) };
 }
 
@@ -1034,6 +1044,72 @@ test("outbox cron hard-purges only due memory tombstones without logging content
     assert.equal(completion?.memoryRetentionEligible, 1);
     assert.equal(completion?.memoryRetentionPurged, 1);
     assert.doesNotMatch(entries.join("\n"), /SECRET_MEMORY_MARKER/);
+  } finally {
+    console.log = originalLog;
+    sqlite.close();
+  }
+});
+
+test("outbox cron purges expired guest AI content and retains active sessions without logging ciphertext", async () => {
+  const { sqlite, d1 } = createDatabase();
+  const entries: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => entries.push(values.join(" "));
+  try {
+    const sessionInsert = sqlite.prepare(`INSERT INTO guest_ai_sessions(
+      id,token_hmac,token_key_version,ip_hmac,locale,state,request_count,
+      answer_count,expires_at,consumed_at,created_at,updated_at
+    ) VALUES (?,?,?,?,?,'consumed',1,1,?,?,?,?)`);
+    sessionInsert.run(
+      "guest_due", "token-due", "v1", "ip-due", "ru",
+      "2020-08-09T00:00:00.000Z", "2020-08-03T00:01:00.000Z",
+      "2026-08-03T00:00:00.000Z", "2026-08-03T00:01:00.000Z",
+    );
+    sessionInsert.run(
+      "guest_future", "token-future", "v1", "ip-future", "uz",
+      "2999-08-09T00:00:00.000Z", "2026-08-03T00:01:00.000Z",
+      "2026-08-03T00:00:00.000Z", "2026-08-03T00:01:00.000Z",
+    );
+    const runInsert = sqlite.prepare(`INSERT INTO guest_ai_runs(
+      id,session_id,idempotency_key,request_hash,correlation_id,provider,model,
+      status,response_kind,request_ciphertext,request_iv,request_key_version,
+      result_ciphertext,result_iv,result_key_version,legal_database_as_of,
+      instruction_hash,source_version_hash,expires_at,started_at,completed_at,
+      created_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,'completed','answer',?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    runInsert.run(
+      "guest-run-due", "guest_due", "guest-idem-due", "a".repeat(64),
+      "guest-corr-due", "openai", "synthetic", "SECRET_GUEST_QUESTION_CIPHER",
+      "iv", "v1", "SECRET_GUEST_RESULT_CIPHER", "iv", "v1",
+      "2026-08-03T00:00:00.000Z", "b".repeat(64), "c".repeat(64),
+      "2020-08-09T00:00:00.000Z", "2020-08-03T00:00:00.000Z",
+      "2026-08-03T00:01:00.000Z", "2026-08-03T00:00:00.000Z",
+      "2026-08-03T00:01:00.000Z",
+    );
+
+    const { env } = createEnv(d1, {
+      asyncEnabled: "true",
+      cronEnabled: "true",
+    });
+    await handleScheduled({
+      scheduledTime: Date.UTC(2026, 7, 10, 0, 5),
+      cron: "*/5 * * * *",
+      noRetry() {},
+    }, env);
+
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM guest_ai_sessions WHERE id='guest_due'").get()?.count, 0);
+    assert.equal(sqlite.prepare("SELECT COUNT(*) AS count FROM guest_ai_runs WHERE id='guest-run-due'").get()?.count, 0);
+    assert.equal(sqlite.prepare("SELECT state FROM guest_ai_sessions WHERE id='guest_future'").get()?.state, "consumed");
+    const completion = entries.map((entry) => {
+      try {
+        return JSON.parse(entry) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }).find((entry) => entry.event === "scheduled.outbox_completed");
+    assert.equal(completion?.guestAiRetentionEligible, 1);
+    assert.equal(completion?.guestAiRetentionPurged, 1);
+    assert.doesNotMatch(entries.join("\n"), /SECRET_GUEST_/);
   } finally {
     console.log = originalLog;
     sqlite.close();

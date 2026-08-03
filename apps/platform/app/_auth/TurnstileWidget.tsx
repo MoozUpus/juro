@@ -18,11 +18,13 @@ export function TurnstileWidget({
   locale,
   resetSignal,
   onToken,
+  action = "auth_otp",
 }: {
   siteKey: string;
   locale: "ru" | "uz";
   resetSignal: number;
   onToken: (token: string) => void;
+  action?: string;
 }) {
   const container = useRef<HTMLDivElement>(null);
   const widgetId = useRef<string | null>(null);
@@ -49,7 +51,7 @@ export function TurnstileWidget({
         container.current,
         {
           sitekey: siteKey,
-          action: "auth_otp",
+          action,
           language: locale,
           theme: "light",
           size: "flexible",
@@ -102,7 +104,7 @@ export function TurnstileWidget({
         widgetId.current = null;
       }
     };
-  }, [locale, siteKey]);
+  }, [action, locale, siteKey]);
 
   useEffect(() => {
     const turnstile = (window as TurnstileWindow).turnstile;

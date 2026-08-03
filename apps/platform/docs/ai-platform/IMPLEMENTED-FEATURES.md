@@ -1,4 +1,17 @@
 # JURO implemented-features checkpoint
+
+## Phase 4 — Guest AI entry (local candidate)
+
+`/:locale/guest/ai-lawyer` provides one real RU/UZ legal answer without a
+permanent account. It uses the provider adapter, legal retrieval, citation and
+freshness verification, and structured-output validation; there is no mock
+success path. Turnstile, same-origin writes, IP rate limiting, signed short-lived
+sessions, atomic entitlement reservation and idempotent retry protect the API.
+Clarifications do not consume the answer. Input and output are encrypted at rest
+and purged after 24 hours. The page is `noindex` and offers registration after
+the answer. Focused local service, route, migration, config and scheduler tests
+pass. Migration `0064`, private backup/restore, staging deploy and protected
+RU/UZ provider/browser evidence remain required before this is called live.
 > Current local delta — 2026-08-03: AI retry no longer leaves a failed,
 > released idempotency record in an endless `processing` response. Unknown
 > transport outcomes retain the same request/key; a server-confirmed terminal

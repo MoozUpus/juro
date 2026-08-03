@@ -1,5 +1,18 @@
 # JURO AI platform decision log
 
+## 2026-08-03 — Short-lived guest AI boundary
+
+The guest entry point is a separate, feature-gated legal-chat boundary. A
+server-issued HttpOnly, SameSite=Strict cookie identifies a 24-hour session;
+its token is stored only as an HMAC digest. Questions and structured results
+are encrypted with the server-side identity keyring, never stored as plaintext.
+Up to five clarification turns do not consume the single final answer. Atomic
+reservation plus an idempotency key prevents double use; provider or validation
+failure releases the reservation. Turnstile, safe-write origin checks and an IP
+HMAC rate limit apply before provider execution. The route reuses verified legal
+retrieval/source freshness rules. A bounded scheduler purges expired sessions
+and cascading runs. Development/staging enable the flag; production does not.
+
 This log records material implementation decisions. Status values are `accepted`, `pending approval`, or `superseded`.
 
 ## D-086 — marketplace service funds remain distinct from JURO revenue and payout execution

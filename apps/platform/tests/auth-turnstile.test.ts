@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateAuthTurnstile } from "../lib/auth/turnstile";
+import { validateAuthTurnstile, validateTurnstile } from "../lib/auth/turnstile";
 
 test("Turnstile verification binds token, IP, action, and hostname", async () => {
   let requestBody: Record<string, unknown> | null = null;
@@ -90,4 +90,32 @@ test("Turnstile rejects empty or oversized inputs before network access", async 
     assert.deepEqual(result, { status: "invalid" });
   }
   assert.equal(fetchCalls, 0);
+});
+
+test("Turnstile supports an isolated guest AI action without weakening the auth action", async () => {
+  const result = await validateTurnstile({
+    secretKey: "server-secret",
+    token: "single-use-guest-token",
+    remoteIp: "203.0.113.12",
+    expectedHostname: "staging.app.juro.uz",
+    expectedAction: "guest_ai",
+    fetcher: async () => Response.json({
+      success: true,
+      action: "guest_ai",
+      hostname: "staging.app.juro.uz",
+    }),
+  });
+  assert.deepEqual(result, { status: "verified" });
+  assert.deepEqual(await validateTurnstile({
+    secretKey: "server-secret",
+    token: "single-use-guest-token",
+    remoteIp: null,
+    expectedHostname: "staging.app.juro.uz",
+    expectedAction: "auth_otp",
+    fetcher: async () => Response.json({
+      success: true,
+      action: "guest_ai",
+      hostname: "staging.app.juro.uz",
+    }),
+  }), { status: "invalid" });
 });

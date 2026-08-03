@@ -1,5 +1,16 @@
 # JURO retention and account deletion
 
+## Guest AI retention
+
+Guest sessions expire 24 hours after creation. Encrypted questions and answers
+live only in `guest_ai_runs`; deletion of the parent session cascades to its
+runs. The five-minute scheduler releases stale in-flight reservations and
+deletes expired sessions in bounded batches. It checks `sqlite_master` first,
+so a Worker deployed before additive migration `0064` remains inert. Logs contain
+counts only, never tokens, IP digests, content, ciphertext or sources. Local
+tests prove active-session preservation, stale recovery, cascade deletion and
+the pre-migration no-op. Remote scheduler proof remains pending staging apply.
+
 Updated: 2026-08-03
 Status: the account-deletion lifecycle and purge implementation is locally verified and deployed to owner-only protected staging. Schema, bindings, consumers, cron, and fail-closed probe dispatch are verified. A controlled rerun after secret re-entry still rejected the malformed identity keyring before fixture creation; the full synthetic D1/R2 purge remains open pending owner correction. Production is unchanged.
 

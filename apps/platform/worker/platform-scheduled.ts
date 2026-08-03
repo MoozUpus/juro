@@ -5,6 +5,7 @@ import {
   startScheduledCorpusSync,
 } from "../lib/legal/scheduled-corpus-sync";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
+import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -306,6 +307,11 @@ export async function handleScheduled(
       db: env.DB,
       now,
     });
+    failureCode = "GUEST_AI_RETENTION_CLEANUP_FAILED";
+    const guestAiRetention = await purgeExpiredGuestAiSessions({
+      db: env.DB,
+      now,
+    });
     failureCode = "PROVIDER_PROBE_FAILED";
     const providerProbe = await maybeRunStagingProviderProbes(env);
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
@@ -327,6 +333,9 @@ export async function handleScheduled(
       taskRemindersSent: taskReminders.sent,
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,
+      guestAiRetentionEligible: guestAiRetention.eligible,
+      guestAiRetentionPurged: guestAiRetention.purged,
+      guestAiReservationsReleased: guestAiRetention.reservationsReleased,
       providerProbeAttempted: providerProbe?.attempted ?? 0,
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,

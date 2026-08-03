@@ -129,6 +129,8 @@ const coreTestFiles = [
   "tests/ai-branch-history.test.ts",
   "tests/ai-lawyer-compat-route.test.ts",
   "tests/ai-memory.test.ts",
+  "tests/guest-ai.test.ts",
+  "tests/guest-ai-route-boundary.test.ts",
   "tests/analysis-export.test.ts",
   "tests/archive-inspector.test.ts",
   "tests/staff-access.test.ts",
@@ -149,6 +151,7 @@ const cloudflareTestFiles = [
   "tests/migration-0042-file-extractions.test.ts",
   "tests/migration-0061-billing-foundation.test.ts",
   "tests/migration-0062-ai-memory.test.ts",
+  "tests/migration-0064-guest-ai.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 
