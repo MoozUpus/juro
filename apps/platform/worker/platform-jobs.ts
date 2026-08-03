@@ -37,6 +37,10 @@ import {
   recordAnalysisReportExportFailure,
 } from "../lib/document-analysis/report-exporter";
 import {
+  executeTaskReminderNotification,
+  NotificationDispatchError,
+} from "../lib/notifications/task-reminder-dispatch";
+import {
   isStagingDeletionProbe,
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
@@ -151,6 +155,9 @@ type JobErrorCode =
   | "LEGAL_SOURCE_SYNC_FAILED"
   | "LEGAL_SOURCE_PARSE_FAILED"
   | "LEGAL_SOURCE_INDEX_FAILED"
+  | "NOTIFICATION_INTEGRITY_FAILED"
+  | "NOTIFICATION_PERSISTENCE_FAILED"
+  | "NOTIFICATION_SOURCE_NOT_FOUND"
   | "PRIVILEGED_ACCOUNT_REVIEW_REQUIRED"
   | "STAGING_SYNTHETIC_PROBE_DISABLED"
   | "STAGING_SYNTHETIC_PROBE_D1_FAILED"
@@ -689,6 +696,21 @@ async function executeJob(
         throw new SafeJobError(error.code, false);
       }
       if (error instanceof AccountDeletionPurgeError) {
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
+  }
+  if (envelope.kind === "notification.dispatch") {
+    try {
+      await executeTaskReminderNotification(
+        env,
+        envelope.subjectId,
+        envelope.workspaceId!,
+      );
+      return;
+    } catch (error) {
+      if (error instanceof NotificationDispatchError) {
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;

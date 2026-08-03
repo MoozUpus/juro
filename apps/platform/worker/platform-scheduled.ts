@@ -7,6 +7,7 @@ import {
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
+import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -16,12 +17,8 @@ const TASK_REMINDER_BATCH_SIZE = 100;
 
 type DueTaskReminder = {
   reminderId: string;
-  taskId: string;
   workspaceId: string;
-  userId: string;
-  taskTitle: string;
-  dueAt: string | null;
-  locale: "ru" | "uz";
+  updatedAt: string;
 };
 
 function isoAfter(value: string, milliseconds: number): string {
@@ -49,42 +46,26 @@ function logScheduled(
   else console.log(entry);
 }
 
-function taskReminderCopy(
-  reminder: Pick<DueTaskReminder, "locale" | "taskTitle">,
-): { title: string; body: string } {
-  if (reminder.locale === "uz") {
-    return {
-      title: "Vazifa muddati",
-      body: `Vazifa muddati yaqinlashmoqda: ${reminder.taskTitle}.`,
-    };
-  }
-  return {
-    title: "Срок по задаче",
-    body: `Приближается срок по задаче: ${reminder.taskTitle}.`,
-  };
-}
-
 /**
- * Delivers due in-app task reminders directly to the existing notifications
- * inbox. The deterministic notification id and conditional state transition
- * make a retry safe even after a Worker interruption.
+ * Enqueues opaque reminder identifiers through the durable outbox. The queue
+ * consumer reloads and authorizes all tenant state before delivery.
  */
-export async function dispatchDueTaskReminders(
+export async function enqueueDueTaskReminders(
   env: PlatformJobEnv,
   now: string,
-): Promise<{ due: number; sent: number }> {
+): Promise<{ due: number; enqueued: number }> {
   const due = await env.DB.prepare(
     `SELECT
        tr.id AS reminderId,
-       tr.task_id AS taskId,
        t.workspace_id AS workspaceId,
-       t.owner_user_id AS userId,
-       t.title AS taskTitle,
-       t.due_at AS dueAt,
-       c.locale AS locale
+       tr.updated_at AS updatedAt
      FROM task_reminders tr
      JOIN tasks t ON t.id=tr.task_id
-     JOIN cases c ON c.id=t.case_id
+     JOIN cases c ON c.id=t.case_id AND c.workspace_id=t.workspace_id
+     JOIN workspace_members wm
+       ON wm.workspace_id=t.workspace_id
+      AND wm.user_id=t.owner_user_id
+      AND wm.status='active'
      WHERE tr.channel='in_app'
        AND tr.status='pending'
        AND tr.reminder_at<=?
@@ -94,77 +75,35 @@ export async function dispatchDueTaskReminders(
      LIMIT ?`,
   ).bind(now, TASK_REMINDER_BATCH_SIZE).all<DueTaskReminder>();
 
-  let sent = 0;
+  let enqueued = 0;
   for (const reminder of due.results) {
-    const copy = taskReminderCopy(reminder);
-    const notificationId = `task-reminder:${reminder.reminderId}`;
-    const results = await env.DB.batch([
-      env.DB.prepare(
-        `INSERT OR IGNORE INTO notifications (
-           id,workspace_id,user_id,document_id,type,title,body,read_at,created_at
-         )
-         SELECT ?,?,?,?,?,?,?,NULL,?
-         WHERE EXISTS (
-           SELECT 1
-           FROM task_reminders tr
-           JOIN tasks t ON t.id=tr.task_id
-           JOIN cases c ON c.id=t.case_id
-           WHERE tr.id=?
-             AND tr.channel='in_app'
-             AND tr.status='pending'
-             AND tr.reminder_at<=?
-             AND t.id=?
-             AND t.workspace_id=?
-             AND t.owner_user_id=?
-             AND t.status NOT IN ('completed','cancelled')
-             AND c.archived_at IS NULL
-         )`,
-      ).bind(
-        notificationId,
-        reminder.workspaceId,
-        reminder.userId,
-        null,
-        "deadline_reminder",
-        copy.title,
-        copy.body,
-        now,
-        reminder.reminderId,
-        now,
-        reminder.taskId,
-        reminder.workspaceId,
-        reminder.userId,
-      ),
-      env.DB.prepare(
-        `UPDATE task_reminders
-         SET status='sent',sent_at=?,updated_at=?
-         WHERE id=?
-           AND channel='in_app'
-           AND status='pending'
-           AND reminder_at<=?
-           AND EXISTS (
-             SELECT 1
-             FROM tasks t
-             JOIN cases c ON c.id=t.case_id
-             WHERE t.id=task_reminders.task_id
-               AND t.id=?
-               AND t.workspace_id=?
-               AND t.owner_user_id=?
-               AND t.status NOT IN ('completed','cancelled')
-               AND c.archived_at IS NULL
-           )`,
-      ).bind(
-        now,
-        now,
-        reminder.reminderId,
-        now,
-        reminder.taskId,
-        reminder.workspaceId,
-        reminder.userId,
-      ),
-    ]);
-    sent += Number(results[1]?.meta?.changes ?? 0);
+    const subjectId = taskReminderSubjectId(
+      reminder.reminderId,
+      reminder.updatedAt,
+    );
+    const result = await env.DB.prepare(
+      `INSERT OR IGNORE INTO job_outbox (
+         id,queue_binding,job_type,schema_version,idempotency_key,subject_id,
+         workspace_id,correlation_id,enqueued_at,available_at,status,
+         dispatch_attempts,created_at,updated_at
+       ) VALUES (
+         ?,'NOTIFICATIONS_QUEUE','notification.dispatch',1,?,?,?, ?,?,?,
+         'pending',0,?,?
+       )`,
+    ).bind(
+      subjectId,
+      subjectId,
+      subjectId,
+      reminder.workspaceId,
+      subjectId,
+      now,
+      now,
+      now,
+      now,
+    ).run();
+    enqueued += Number(result.meta?.changes ?? 0);
   }
-  return { due: due.results.length, sent };
+  return { due: due.results.length, enqueued };
 }
 
 async function claimSchedule(
@@ -296,13 +235,11 @@ export async function handleScheduled(
   }
   let failureCode = "OUTBOX_DISPATCH_FAILED";
   try {
-    const summary = await dispatchOutbox(env, 100);
-    failureCode = "TASK_REMINDER_DISPATCH_FAILED";
+    failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
     const now = new Date().toISOString();
-    const taskReminders = await dispatchDueTaskReminders(
-      env,
-      now,
-    );
+    const taskReminders = await enqueueDueTaskReminders(env, now);
+    failureCode = "OUTBOX_DISPATCH_FAILED";
+    const summary = await dispatchOutbox(env, 100);
     failureCode = "MEMORY_RETENTION_CLEANUP_FAILED";
     const memoryRetention = await purgeDueDeletedUserMemories({
       db: env.DB,
@@ -338,7 +275,7 @@ export async function handleScheduled(
       retrying: summary.retrying,
       rejected: summary.rejected,
       taskRemindersDue: taskReminders.due,
-      taskRemindersSent: taskReminders.sent,
+      taskRemindersEnqueued: taskReminders.enqueued,
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,
       guestAiRetentionEligible: guestAiRetention.eligible,

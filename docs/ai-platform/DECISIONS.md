@@ -152,3 +152,17 @@ names from the original target architecture are therefore not added as unused da
 placeholders. A new secret is introduced only with a real server consumer, rotation
 plan, deploy validator and tests. This keeps the runtime source of truth explicit and
 avoids a false claim that unused secret names improve security.
+
+## D-107 — task reminders cross the queue boundary as identifiers only
+
+Status: accepted and locally verified; staging deployment pending
+Date: 2026-08-04
+
+The scheduler no longer writes task-reminder notifications directly. It creates an
+idempotent `notification.dispatch` row in the existing durable outbox and publishes
+only a versioned reminder identifier, workspace identifier and correlation evidence.
+The consumer reloads the reminder, task, case and active workspace membership from
+D1, rejects cross-workspace subjects neutrally, ignores stale versions and creates a
+deterministic inbox notification in the same D1 batch that marks the reminder sent.
+Retries and duplicate queue deliveries cannot create a second notification. No task
+title, message body or other user content is placed in the queue envelope or logs.

@@ -259,6 +259,15 @@ assert.deepEqual(
         max_concurrency: 1,
         retry_delay: 30,
       },
+      {
+        queue: "staging-notifications",
+        max_batch_size: 5,
+        max_batch_timeout: 5,
+        max_retries: 5,
+        dead_letter_queue: "staging-notifications-dlq",
+        max_concurrency: 2,
+        retry_delay: 30,
+      },
     ]
     : [],
   "Only reviewed staging consumers may be attached",

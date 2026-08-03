@@ -16,7 +16,7 @@ import {
 } from "../worker/platform-jobs";
 import { dispatchOutbox } from "../worker/platform-outbox";
 import {
-  dispatchDueTaskReminders,
+  enqueueDueTaskReminders,
   handleScheduled,
 } from "../worker/platform-scheduled";
 
@@ -187,6 +187,16 @@ function createDatabase(): {
       owner_user_id text NOT NULL,
       locale text NOT NULL,
       archived_at text
+    );
+    CREATE TABLE IF NOT EXISTS workspace_members (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text NOT NULL,
+      user_id text NOT NULL,
+      role text NOT NULL,
+      status text NOT NULL,
+      joined_at text NOT NULL,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
     );
     CREATE TABLE IF NOT EXISTS tasks (
       id text PRIMARY KEY NOT NULL,
@@ -368,7 +378,7 @@ function mockBatch(
 }
 
 function envelope(
-  kind: JobKind = "notification.dispatch",
+  kind: JobKind = "malware.scan",
   overrides: Partial<JobEnvelope> = {},
 ): JobEnvelope {
   const tenantKind = new Set<JobKind>([
@@ -763,10 +773,10 @@ test("queue mismatches and disabled handlers are recorded as terminal rejections
       "JOB_QUEUE_MISMATCH",
     );
 
-    const disabledBody = envelope("notification.dispatch", {
-      jobId: "job_notification_disabled",
-      idempotencyKey: "idem_notification_disabled",
-      correlationId: "corr_notification_disabled",
+    const disabledBody = envelope("malware.scan", {
+      jobId: "job_malware_disabled",
+      idempotencyKey: "idem_malware_disabled",
+      correlationId: "corr_malware_disabled",
     });
     const disabled = mockMessage(disabledBody, "disabled_handler");
     await runBatch(
@@ -1120,6 +1130,13 @@ test("due in-app task reminders create one inbox notification and remain retry-s
   const { sqlite, d1 } = createDatabase();
   try {
     sqlite.exec(`
+      INSERT INTO workspace_members (
+        id,workspace_id,user_id,role,status,joined_at,created_at,updated_at
+      ) VALUES (
+        'wm_reminder','ws_test','user_reminder','owner','active',
+        '2026-07-20T00:00:00.000Z','2026-07-20T00:00:00.000Z',
+        '2026-07-20T00:00:00.000Z'
+      );
       INSERT INTO cases (id,workspace_id,owner_user_id,locale,archived_at)
       VALUES ('case_reminder','ws_test','user_reminder','uz',NULL);
       INSERT INTO tasks (id,workspace_id,case_id,owner_user_id,title,due_at,status)
@@ -1127,9 +1144,38 @@ test("due in-app task reminders create one inbox notification and remain retry-s
       INSERT INTO task_reminders (id,task_id,channel,reminder_at,status,sent_at,updated_at)
       VALUES ('reminder_due','task_reminder','in_app','2026-07-29T00:00:00.000Z','pending',NULL,'2026-07-28T00:00:00.000Z');
     `);
-    const { env } = createEnv(d1);
+    const { env, sends } = createEnv(d1);
     const now = "2026-07-29T00:00:00.000Z";
-    assert.deepEqual(await dispatchDueTaskReminders(env, now), { due: 1, sent: 1 });
+    assert.deepEqual(await enqueueDueTaskReminders(env, now), {
+      due: 1,
+      enqueued: 1,
+    });
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM notifications").get() as { total: number }).total,
+      0,
+    );
+    assert.deepEqual(await dispatchOutbox(env, 10), {
+      claimed: 1,
+      dispatched: 1,
+      rejected: 0,
+      retrying: 0,
+    });
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0]?.binding, "NOTIFICATIONS_QUEUE");
+    const queued = sends[0]?.body as JobEnvelope;
+    assert.equal(queued.kind, "notification.dispatch");
+    assert.equal(queued.workspaceId, "ws_test");
+    assert.match(queued.subjectId, /^task-reminder:reminder_due:[0-9a-z]+$/);
+    assert.doesNotMatch(JSON.stringify(queued), /Ariza yuborish/);
+
+    const first = mockMessage(queued, "notification_reminder_1");
+    await runBatch(
+      env,
+      expectedQueueName("notification.dispatch", "development"),
+      [first.message],
+    );
+    assert.equal(first.state.acknowledgements, 1);
+    assert.deepEqual(first.state.retries, []);
     assert.deepEqual(
       { ...sqlite.prepare(
         "SELECT id,type,title,body FROM notifications WHERE id='task-reminder:reminder_due'",
@@ -1141,14 +1187,85 @@ test("due in-app task reminders create one inbox notification and remain retry-s
         body: "Vazifa muddati yaqinlashmoqda: Ariza yuborish.",
       },
     );
-    assert.deepEqual(
-      { ...sqlite.prepare("SELECT status,sent_at AS sentAt FROM task_reminders WHERE id='reminder_due'").get() },
-      { status: "sent", sentAt: now },
+    const sentRow = sqlite.prepare(
+      "SELECT status,sent_at AS sentAt FROM task_reminders WHERE id='reminder_due'",
+    ).get() as { status: string; sentAt: string | null };
+    assert.equal(sentRow.status, "sent");
+    assert.ok(sentRow.sentAt);
+
+    const duplicate = mockMessage(queued, "notification_reminder_2", 2);
+    await runBatch(
+      env,
+      expectedQueueName("notification.dispatch", "development"),
+      [duplicate.message],
     );
-    assert.deepEqual(await dispatchDueTaskReminders(env, now), { due: 0, sent: 0 });
+    assert.equal(duplicate.state.acknowledgements, 1);
+    assert.deepEqual(duplicate.state.retries, []);
+    assert.deepEqual(await enqueueDueTaskReminders(env, now), {
+      due: 0,
+      enqueued: 0,
+    });
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS total FROM notifications").get() as { total: number }).total,
       1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("notification consumer does not reveal or deliver a reminder across workspaces", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    sqlite.exec(`
+      INSERT INTO workspaces (id,type,name,locale,created_at,updated_at)
+      VALUES ('ws_other','individual','Other workspace','ru','2026-07-20T00:00:00.000Z','2026-07-20T00:00:00.000Z');
+      INSERT INTO workspace_members (
+        id,workspace_id,user_id,role,status,joined_at,created_at,updated_at
+      ) VALUES (
+        'wm_isolated','ws_test','user_isolated','owner','active',
+        '2026-07-20T00:00:00.000Z','2026-07-20T00:00:00.000Z',
+        '2026-07-20T00:00:00.000Z'
+      );
+      INSERT INTO cases (id,workspace_id,owner_user_id,locale,archived_at)
+      VALUES ('case_isolated','ws_test','user_isolated','ru',NULL);
+      INSERT INTO tasks (id,workspace_id,case_id,owner_user_id,title,due_at,status)
+      VALUES ('task_isolated','ws_test','case_isolated','user_isolated','Sensitive title','2026-07-30T00:00:00.000Z','planned');
+      INSERT INTO task_reminders (id,task_id,channel,reminder_at,status,sent_at,updated_at)
+      VALUES ('reminder_isolated','task_isolated','in_app','2026-07-29T00:00:00.000Z','pending',NULL,'2026-07-28T00:00:00.000Z');
+    `);
+    const { env } = createEnv(d1);
+    const subjectId = "task-reminder:reminder_isolated:ms3w2yo0";
+    const body = envelope("notification.dispatch", {
+      jobId: "job_notification_cross_workspace",
+      idempotencyKey: "idem_notification_cross_workspace",
+      subjectId,
+      workspaceId: "ws_other",
+      correlationId: "corr_notification_cross_workspace",
+    });
+    const item = mockMessage(body, "notification_cross_workspace");
+    await runBatch(
+      env,
+      expectedQueueName("notification.dispatch", "development"),
+      [item.message],
+    );
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT error_code FROM job_runs WHERE idempotency_key=?",
+      ).get(body.idempotencyKey) as { error_code: string }).error_code,
+      "NOTIFICATION_SOURCE_NOT_FOUND",
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM notifications").get() as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT status FROM task_reminders WHERE id='reminder_isolated'",
+      ).get() as { status: string }).status,
+      "pending",
     );
   } finally {
     sqlite.close();

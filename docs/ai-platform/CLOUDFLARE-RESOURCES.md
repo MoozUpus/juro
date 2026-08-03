@@ -12,6 +12,13 @@ Current read-only verification: 2026-08-04. Staging resources below were queried
 
 Queue and DLQ resources exist for document analysis, OCR, document export, email notifications, legal-source sync, data-retention cleanup and notifications. The six processing queues have a staging producer and consumer. `staging-notifications` currently has a producer but no consumer; the application contract deliberately rejects its unimplemented handler, so notification queue processing is not release-complete and must not be represented as working.
 
+The current local deployment candidate adds the reviewed, idempotent
+`notification.dispatch` consumer and a seventh staging consumer binding for
+`staging-notifications` with its existing DLQ. Local lint, typecheck, the 102-test
+Cloudflare suite, full application tests and staging artifact validation pass. This
+paragraph is not remote evidence: the active staging deployment above still has six
+consumers until a separately approved staging deploy is completed and verified.
+
 The validated staging artifact binds exactly:
 
 - `staging-document-analysis`
