@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -56,4 +57,29 @@ test("business compatibility route keeps the exact workspace and rejects malform
   ]) {
     assert.equal((await invalid).status, 404);
   }
+});
+
+test("vinext receives explicit compatibility routes instead of an optional catch-all", () => {
+  const explicitRoutes = [
+    "../app/[locale]/[accountType]/ai-lawyer/route.ts",
+    "../app/[locale]/[accountType]/ai-lawyer/new/route.ts",
+    "../app/[locale]/[accountType]/ai-lawyer/chat/[chatId]/route.ts",
+    "../app/[locale]/business/[workspaceId]/ai-lawyer/route.ts",
+    "../app/[locale]/business/[workspaceId]/ai-lawyer/new/route.ts",
+    "../app/[locale]/business/[workspaceId]/ai-lawyer/chat/[chatId]/route.ts",
+  ];
+
+  for (const route of explicitRoutes) {
+    assert.equal(existsSync(new URL(route, import.meta.url)), true, route);
+  }
+
+  assert.equal(
+    existsSync(
+      new URL(
+        "../app/[locale]/[accountType]/ai-lawyer/[[...path]]/route.ts",
+        import.meta.url,
+      ),
+    ),
+    false,
+  );
 });
