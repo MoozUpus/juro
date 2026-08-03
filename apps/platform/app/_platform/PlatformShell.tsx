@@ -49,6 +49,7 @@ const nav = [
   ["cases", BriefcaseBusiness, "Мои дела", "Mening ishlarim"], ["documents", Files, "Документы", "Hujjatlar"],
   ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"], ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"],
   ["monitoring", Scale, "Мониторинг", "Monitoring"],
+  ["lawyers", UsersRound, "Юристы", "Yuristlar"],
   ["action-plan", CalendarCheck2, "План действий", "Harakatlar rejasi"], ["consultations", ReceiptText, "Консультации", "Maslahatlar"],
   ["calendar", CalendarDays, "Календарь", "Kalendar"],
   ["history", History, "История", "Tarix"], ["archive", Archive, "Архив", "Arxiv"],

@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated handoff records are loaded after the first browser render */
 
 import { LoaderCircle, ShieldCheck, UserRoundCheck } from "lucide-react";
+import { useSearchParams } from "next/navigation";
 import { LawyerRequestMessages } from "./LawyerRequestMessages";
 import { LawyerReviewForm } from "./LawyerReviewForm";
 import { ClientServiceProposals } from "./MarketplaceServiceProposalFlow";
@@ -30,6 +31,7 @@ type PublicLawyer = {
 
 export function LawyerHandoffClient({ locale, accountType, workspaceId }: { locale: PlatformLocale; accountType: AccountType; workspaceId?: string }) {
   const ru = locale === "ru";
+  const selectedLawyerId = useSearchParams().get("lawyer") || "";
   const [cases, setCases] = useState<CaseOption[]>([]);
   const [requests, setRequests] = useState<HandoffRequest[]>([]);
   const [lawyers, setLawyers] = useState<PublicLawyer[]>([]);
@@ -68,8 +70,10 @@ export function LawyerHandoffClient({ locale, accountType, workspaceId }: { loca
     setCaseId((current) => current || nextCases[0]?.id || "");
     setRequests(requestBody.requests || []);
     setEntitlements(consultationBody.entitlements || null);
-    setLawyers(lawyerBody.lawyers || []);
-  }, []);
+    const directory = lawyerBody.lawyers || [];
+    setLawyers(directory);
+    if (selectedLawyerId && directory.some((lawyer) => lawyer.id === selectedLawyerId)) setLawyerProfileId(selectedLawyerId);
+  }, [selectedLawyerId]);
 
   useEffect(() => { void load().catch((value) => setError(value instanceof Error ? value.message : String(value))); }, [load]);
 
