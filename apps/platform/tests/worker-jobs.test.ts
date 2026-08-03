@@ -217,6 +217,16 @@ function createDatabase(): {
       read_at text,
       created_at text NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS user_memories (
+      id text PRIMARY KEY NOT NULL,
+      status text NOT NULL,
+      deleted_at text,
+      ciphertext text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS memory_sources (
+      id text PRIMARY KEY NOT NULL,
+      memory_id text NOT NULL REFERENCES user_memories(id) ON DELETE CASCADE
+    );
   `);
   return { sqlite, d1: new SqliteD1(sqlite) };
 }
@@ -980,6 +990,52 @@ test("reviewed outbox cron is locked, durable, and idempotent", async () => {
       0,
     );
   } finally {
+    sqlite.close();
+  }
+});
+
+test("outbox cron hard-purges only due memory tombstones without logging content", async () => {
+  const { sqlite, d1 } = createDatabase();
+  const entries: string[] = [];
+  const originalLog = console.log;
+  console.log = (...values: unknown[]) => entries.push(values.join(" "));
+  try {
+    sqlite.exec(`
+      INSERT INTO user_memories (id,status,deleted_at,ciphertext) VALUES
+        ('memory_due','deleted','2020-01-01T00:00:00.000Z','SECRET_MEMORY_MARKER'),
+        ('memory_future','deleted','2999-01-01T00:00:00.000Z','future-ciphertext'),
+        ('memory_active','active','2020-01-01T00:00:00.000Z','active-ciphertext');
+      INSERT INTO memory_sources (id,memory_id) VALUES
+        ('source_due','memory_due'),
+        ('source_future','memory_future'),
+        ('source_active','memory_active');
+    `);
+    const { env } = createEnv(d1, {
+      asyncEnabled: "true",
+      cronEnabled: "true",
+    });
+    await handleScheduled({
+      scheduledTime: Date.UTC(2026, 7, 10, 0, 5),
+      cron: "*/5 * * * *",
+      noRetry() {},
+    }, env);
+
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM user_memories WHERE id='memory_due'").get()?.total, 0);
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM memory_sources WHERE id='source_due'").get()?.total, 0);
+    assert.equal(sqlite.prepare("SELECT status FROM user_memories WHERE id='memory_future'").get()?.status, "deleted");
+    assert.equal(sqlite.prepare("SELECT status FROM user_memories WHERE id='memory_active'").get()?.status, "active");
+    const completion = entries.map((entry) => {
+      try {
+        return JSON.parse(entry) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    }).find((entry) => entry.event === "scheduled.outbox_completed");
+    assert.equal(completion?.memoryRetentionEligible, 1);
+    assert.equal(completion?.memoryRetentionPurged, 1);
+    assert.doesNotMatch(entries.join("\n"), /SECRET_MEMORY_MARKER/);
+  } finally {
+    console.log = originalLog;
     sqlite.close();
   }
 });

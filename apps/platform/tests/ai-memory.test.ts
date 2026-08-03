@@ -11,6 +11,7 @@ import {
   memoryKeyring,
   memorySettings,
   persistAutomaticMemories,
+  purgeDueDeletedUserMemories,
   saveUserMemory,
   setAutomaticMemory,
   updateUserMemory,
@@ -216,6 +217,113 @@ test("manual memory rejects credentials and requires explicit confirmation for s
       String(sqlite.prepare("SELECT ciphertext FROM user_memories WHERE id=?").get(saved.id)?.ciphertext),
       /паспорт/iu,
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("memory retention hard-purges only bounded due tombstones and cascades sources", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await seedTenant(d1, "user-retention", ["workspace-retention"]);
+    const keyring = testKeyring();
+    const saved = [];
+    for (const statement of [
+      "Retention due first",
+      "Retention due second",
+      "Retention future",
+      "Retention active",
+    ]) {
+      saved.push(await saveUserMemory({
+        db: d1,
+        keyring,
+        userId: "user-retention",
+        workspaceId: "workspace-retention",
+        category: "answer_style",
+        statement,
+        scope: "global",
+        sourceKind: "manual",
+        sourceType: "manual",
+        confirmSensitive: false,
+      }));
+    }
+    sqlite.prepare("UPDATE user_memories SET status='deleted',deleted_at=? WHERE id=?")
+      .run("2026-08-01T00:00:00.000Z", saved[0].id);
+    sqlite.prepare("UPDATE user_memories SET status='deleted',deleted_at=? WHERE id=?")
+      .run("2026-08-02T00:00:00.000Z", saved[1].id);
+    sqlite.prepare("UPDATE user_memories SET status='deleted',deleted_at=? WHERE id=?")
+      .run("2026-08-09T00:00:00.000Z", saved[2].id);
+
+    assert.deepEqual(await purgeDueDeletedUserMemories({
+      db: d1,
+      now: "2026-08-10T00:00:00.000Z",
+      limit: 1,
+    }), { eligible: 1, purged: 1 });
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM user_memories WHERE id=?").get(saved[0].id)?.total, 0);
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM memory_sources WHERE memory_id=?").get(saved[0].id)?.total, 0);
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM user_memories WHERE id=?").get(saved[1].id)?.total, 1);
+
+    assert.deepEqual(await purgeDueDeletedUserMemories({
+      db: d1,
+      now: "2026-08-10T00:00:00.000Z",
+      limit: 50,
+    }), { eligible: 1, purged: 1 });
+    assert.equal(sqlite.prepare("SELECT status FROM user_memories WHERE id=?").get(saved[2].id)?.status, "deleted");
+    assert.equal(sqlite.prepare("SELECT status FROM user_memories WHERE id=?").get(saved[3].id)?.status, "active");
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM memory_sources").get()?.total, 2);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("memory retention is inert before additive migration 0062 exists", async () => {
+  let statementText = "";
+  const db = {
+    prepare(sql: string) {
+      statementText = sql;
+      return {
+        bind() {
+          return this;
+        },
+        async first() {
+          return null;
+        },
+      };
+    },
+  } as unknown as D1Database;
+  assert.deepEqual(await purgeDueDeletedUserMemories({
+    db,
+    now: "2026-08-10T00:00:00.000Z",
+  }), { eligible: 0, purged: 0 });
+  assert.match(statementText, /sqlite_master/);
+});
+
+test("memory retention enforces the 100-row batch ceiling", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await seedTenant(d1, "user-retention-batch", ["workspace-retention-batch"]);
+    const insert = sqlite.prepare(`
+      INSERT INTO user_memories (
+        id,user_id,workspace_id,scope,scope_key,category,ciphertext,iv,key_version,
+        content_sha256,source_kind,status,deleted_at,created_at,updated_at
+      ) VALUES (?,? ,NULL,'global','global','answer_style','ciphertext','iv','v1',
+        ?,'manual','deleted','2020-01-01T00:00:00.000Z',
+        '2020-01-01T00:00:00.000Z','2020-01-01T00:00:00.000Z')
+    `);
+    for (let index = 0; index < 101; index += 1) {
+      insert.run(
+        `memory-batch-${String(index).padStart(3, "0")}`,
+        "user-retention-batch",
+        index.toString(16).padStart(64, "0"),
+      );
+    }
+    assert.deepEqual(await purgeDueDeletedUserMemories({
+      db: d1,
+      now: "2026-08-10T00:00:00.000Z",
+      limit: 1_000,
+    }), { eligible: 100, purged: 100 });
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM user_memories").get()?.total, 1);
   } finally {
     sqlite.close();
   }

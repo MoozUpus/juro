@@ -1,6 +1,6 @@
 # JURO retention and account deletion
 
-Updated: 2026-07-30
+Updated: 2026-08-03
 Status: the account-deletion lifecycle and purge implementation is locally verified and deployed to owner-only protected staging. Schema, bindings, consumers, cron, and fail-closed probe dispatch are verified. A controlled rerun after secret re-entry still rejected the malformed identity keyring before fixture creation; the full synthetic D1/R2 purge remains open pending owner correction. Production is unchanged.
 
 ## Policy boundary
@@ -64,13 +64,24 @@ Minimum records retained for documented security, consent, access-audit, confirm
 
 User-document Vectorize deletion is not yet connected because user-document indexing is not an enabled product feature. It must be added before that index accepts tenant content. Provider-side AI deletion, guest cleanup, voice-audio cleanup, legal holds, and production retention automation remain deferred and feature-gated.
 
-## User memory lifecycle — local candidate
+## User memory lifecycle — locally verified candidate
 
 An individual memory deletion is immediately hidden from reads and excluded
-from AI context through `status=deleted` and `deleted_at`. The current
-implementation retains that encrypted soft-deleted row pending the configurable
-hard-purge job; scheduled seven-day hard purge is still an open gate and must
-not be claimed as active.
+from AI context through `status=deleted` and `deleted_at`. The reviewed five-
+minute scheduled runtime now permanently deletes only tombstones whose
+`deleted_at` is at least seven days old. Selection is deterministic and bounded
+to 100 rows per invocation; the final delete repeats the status/time guard so a
+changed row cannot be removed from a stale selection. Cascading foreign keys
+remove its `memory_sources`. Active rows and future tombstones are preserved.
+
+The cleanup checks `sqlite_master` before querying memory tables. An application
+deploy therefore remains inert in an environment where additive migration
+`0062` has not been applied. Scheduled logs contain only eligible/purged counts,
+never ciphertext, plaintext, identifiers or source metadata. Focused service
+and scheduled-runtime tests prove the cutoff, batch bound, cascade, active/future
+preservation, pre-migration no-op and no-content logging. Remote migration,
+scheduled-run and authenticated staging evidence remain open, so this is not
+claimed as active outside the locally verified candidate.
 
 Account closure is different: the real deletion transaction now inventories
 and deletes `user_memory_settings`, `user_memories`, and cascading

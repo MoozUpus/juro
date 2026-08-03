@@ -2546,3 +2546,27 @@ if it failed, it offers a fresh-key retry; if status remains missing or active,
 the original key is retained. This does not claim durable partial-token resume;
 unvalidated legal text remains hidden until terminal validation and persistence
 complete.
+
+## D-127 — Memory hard purge derives eligibility from the immutable soft-delete timestamp
+
+Status: accepted for local implementation; protected staging evidence pending
+Date: 2026-08-03
+
+Memory deletion must hide data immediately while retaining a short recovery and
+operational safety window. JURO therefore treats `deleted_at` as the authoritative
+start of a fixed seven-day retention period. The existing locked five-minute
+scheduled runtime selects no more than 100 due tombstones ordered by
+`deleted_at,id`, then repeats `status='deleted'` and cutoff predicates on each
+delete. Cascading `memory_sources` are removed with the parent; active rows and
+future tombstones cannot match.
+
+No extra migration or `purge_after` copy is introduced: duplicating a derived
+date would permit drift between two retention authorities. A `sqlite_master`
+guard makes the runtime a no-op before additive migration `0062`, allowing an
+application rollback or expand-first deploy without missing-table failure.
+Scheduled telemetry contains aggregate eligible/purged counts only. The local
+service and scheduled-runtime tests prove cutoff, deterministic batch behavior,
+cascade, compatibility and no-content logging. Migration `0062`, a valid
+staging keyring, an actual scheduled cleanup record and authenticated RU/UZ UI
+evidence remain required before remote behavior is claimed. Production is
+unchanged.

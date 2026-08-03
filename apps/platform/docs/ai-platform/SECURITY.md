@@ -77,6 +77,17 @@ cross-user/workspace access, ciphertext-at-rest, record binding, credential
 rejection, explicit sensitive consent, no-plaintext audit, and account purge.
 Migration `0062` and authenticated staging security evidence remain pending.
 
+Soft-deleted memory is now eligible for permanent removal only after the fixed
+seven-day retention window. The existing locked scheduled runtime selects at
+most 100 due tombstones in deterministic order and repeats the deleted/time
+predicate on every delete. `memory_sources` is removed only by the declared
+foreign-key cascade. A `sqlite_master` presence guard makes the runtime a safe
+no-op before migration `0062`; no missing-table fallback can delete another
+domain. Structured runtime logs expose counts only. Focused tests cover active
+and future-row preservation, batch bounds, cascading sources, pre-migration
+inertness and absence of memory content from logs. This remains local evidence
+until `0062` and the exact Worker are verified in protected staging.
+
 ## AI stream recovery boundary — local candidate
 
 `GET /api/platform/ai/runs/:idempotencyKey` authenticates before validation or

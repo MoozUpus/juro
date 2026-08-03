@@ -476,6 +476,10 @@ Successful persisted user messages may produce bounded safe memory candidates.
 Memory failure does not create a false AI failure; privacy export instead fails
 closed if it cannot decrypt a complete visible memory set.
 
-Local evidence: 7/7 focused memory/migration tests, type-check and lint pass.
-Migration `0062`, keyring validation, staging deployment, authenticated RU/UZ
-browser QA, retention purge and production remain open.
+The existing locked five-minute scheduled runtime now also hard-purges at most
+100 memory tombstones after seven days. It is inert before `0062`, preserves
+active/future rows, cascades source metadata and records only aggregate counts.
+Local evidence: the combined AI-memory and Worker scheduled-runtime suite passes
+34/34, with type-check and lint also passing. Migration `0062`, keyring
+validation, remote scheduled-run evidence, staging deployment, authenticated
+RU/UZ browser QA and production remain open.

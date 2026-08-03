@@ -4,6 +4,7 @@ import {
   reconcileScheduledCorpusSyncRuns,
   startScheduledCorpusSync,
 } from "../lib/legal/scheduled-corpus-sync";
+import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -291,17 +292,28 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
+  let failureCode = "OUTBOX_DISPATCH_FAILED";
   try {
     const summary = await dispatchOutbox(env, 100);
+    failureCode = "TASK_REMINDER_DISPATCH_FAILED";
+    const now = new Date().toISOString();
     const taskReminders = await dispatchDueTaskReminders(
       env,
-      new Date().toISOString(),
+      now,
     );
+    failureCode = "MEMORY_RETENTION_CLEANUP_FAILED";
+    const memoryRetention = await purgeDueDeletedUserMemories({
+      db: env.DB,
+      now,
+    });
+    failureCode = "PROVIDER_PROBE_FAILED";
     const providerProbe = await maybeRunStagingProviderProbes(env);
+    failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
     const corpusRunsCompleted =
       env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
         ? await reconcileScheduledCorpusSyncRuns(env)
         : 0;
+    failureCode = "SCHEDULE_COMPLETION_FAILED";
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {
       event: "scheduled.outbox_completed",
@@ -313,6 +325,8 @@ export async function handleScheduled(
       rejected: summary.rejected,
       taskRemindersDue: taskReminders.due,
       taskRemindersSent: taskReminders.sent,
+      memoryRetentionEligible: memoryRetention.eligible,
+      memoryRetentionPurged: memoryRetention.purged,
       providerProbeAttempted: providerProbe?.attempted ?? 0,
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,
@@ -321,10 +335,10 @@ export async function handleScheduled(
     });
   } catch {
     try {
-      await finishSchedule(env, run, "failed", "OUTBOX_DISPATCH_FAILED");
+      await finishSchedule(env, run, "failed", failureCode);
     } catch {
       // The expiring lock allows recovery when bookkeeping also fails.
     }
-    throw new Error("OUTBOX_DISPATCH_FAILED");
+    throw new Error(failureCode);
   }
 }

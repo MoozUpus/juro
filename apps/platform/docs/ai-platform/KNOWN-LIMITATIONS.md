@@ -230,7 +230,7 @@ The deployed Worker now exposes both provider secret names and server-side model
 - No live user/legal OpenAI response, Anthropic document result, or provider failover is claimed.
 - Upstream Responses SSE, bounded browser progress, stop, and no-charge cancellation are implemented and locally tested, but no live provider stream is claimed beyond fixed synthetic probes.
 - Edit, regenerate, and immutable branch history are deployed to protected staging, but live provider-backed branch creation and authenticated browser evidence remain open because only fixed synthetic provider probes are verified.
-- Reconnect/resume, durable partial-stream recovery, guest flow, and full entitlement integration remain open. Encrypted user memory is implemented locally but migration `0062`, valid staging keyring evidence, authenticated RU/UZ QA and scheduled hard purge are still open.
+- Reconnect/resume, durable partial-stream recovery, guest flow, and full entitlement integration remain open. Encrypted user memory and its bounded seven-day hard-purge runtime are implemented locally, but migration `0062`, valid staging keyring evidence, authenticated RU/UZ QA and remote scheduled-run proof are still open.
 - A terminal failed/released AI run is now recoverable through an explicit fresh
   retry instead of an endless `processing` replay. A bounded automatic status
   check can reload a completed persisted answer after an uncertain stream error.

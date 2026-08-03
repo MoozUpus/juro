@@ -12,6 +12,9 @@ function isoNow(): string {
   return new Date().toISOString();
 }
 
+export const USER_MEMORY_SOFT_DELETE_RETENTION_MS = 7 * 24 * 60 * 60 * 1_000;
+const USER_MEMORY_PURGE_BATCH_SIZE = 100;
+
 export const memoryCategories = [
   "profile_name",
   "language",
@@ -460,6 +463,47 @@ export async function clearUserMemories(input: {
     `).bind(crypto.randomUUID(), input.workspaceId, input.userId, JSON.stringify({ scope: "accessible" }), now),
   ]);
   return Number(result.meta.changes ?? 0);
+}
+
+/**
+ * Permanently removes only memory rows that have remained soft-deleted for the
+ * policy window. The sqlite_master guard keeps an application deploy compatible
+ * with an environment where additive migration 0062 has not been applied yet.
+ */
+export async function purgeDueDeletedUserMemories(input: {
+  db: D1Database;
+  now?: string;
+  limit?: number;
+}): Promise<{ eligible: number; purged: number }> {
+  const now = input.now ?? isoNow();
+  const nowMs = Date.parse(now);
+  if (!Number.isFinite(nowMs)) throw new TypeError("MEMORY_RETENTION_CLOCK_INVALID");
+  const requestedLimit = input.limit ?? USER_MEMORY_PURGE_BATCH_SIZE;
+  const limit = Number.isFinite(requestedLimit)
+    ? Math.min(USER_MEMORY_PURGE_BATCH_SIZE, Math.max(1, Math.trunc(requestedLimit)))
+    : USER_MEMORY_PURGE_BATCH_SIZE;
+  const table = await input.db.prepare(
+    "SELECT 1 AS present FROM sqlite_master WHERE type='table' AND name='user_memories'",
+  ).first<{ present: number }>();
+  if (!table) return { eligible: 0, purged: 0 };
+
+  const cutoff = new Date(nowMs - USER_MEMORY_SOFT_DELETE_RETENTION_MS).toISOString();
+  const due = await input.db.prepare(`
+    SELECT id FROM user_memories
+    WHERE status='deleted' AND deleted_at IS NOT NULL AND deleted_at<=?
+    ORDER BY deleted_at ASC,id ASC
+    LIMIT ?
+  `).bind(cutoff, limit).all<{ id: string }>();
+  if (due.results.length === 0) return { eligible: 0, purged: 0 };
+
+  const results = await input.db.batch(due.results.map(({ id }) => input.db.prepare(`
+    DELETE FROM user_memories
+    WHERE id=? AND status='deleted' AND deleted_at IS NOT NULL AND deleted_at<=?
+  `).bind(id, cutoff)));
+  return {
+    eligible: due.results.length,
+    purged: results.reduce((total, result) => total + Number(result.meta.changes ?? 0), 0),
+  };
 }
 
 export async function persistAutomaticMemories(input: {
