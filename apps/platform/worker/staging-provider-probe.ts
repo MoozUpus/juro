@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { runAnthropicLegalChat } from "../lib/ai/anthropic-provider";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 // v1 completed for OpenAI and terminally failed for Anthropic before the
@@ -14,8 +15,10 @@ import type { PlatformJobEnv } from "./platform-jobs";
 // normalization and source-boundary enforcement. v19 adds bounded stage codes
 // for preflight versus post-processing failures, without logging content. v20
 // adds a request-stage stack path event; prompts and provider bodies stay out.
-// v22 records the same bounded stack paths at the probe boundary.
-const PROBE_KEY = "staging-anthropic-legal-chat-v22";
+// v22 records the same bounded stack paths at the probe boundary. v23 uses a
+// static adapter import because the worker bundler rewrote the dynamic import
+// to index.js, whose public namespace does not expose this internal function.
+const PROBE_KEY = "staging-anthropic-legal-chat-v23";
 type Provider = "openai" | "anthropic";
 const providers = ["anthropic"] as const satisfies readonly Provider[];
 
@@ -91,7 +94,6 @@ function anthropicHttpFailureCode(error: unknown): string {
 
 async function executeProviderProbe(provider: Provider) {
   if (provider === "anthropic") {
-    const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
     let result;
     try {
       result = await runAnthropicLegalChat({
