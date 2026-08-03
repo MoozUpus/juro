@@ -1,10 +1,24 @@
 # JURO D1 migrations
 
-> Current migration checkpoint — 2026-08-02: isolated `juro-staging` is through additive `0059_pretty_punisher.sql`; `0058_innocent_ben_grimm.sql` and `0059_pretty_punisher.sql` were applied after a checksum-verified private remote export. Postflight `quick_check=ok`, `foreign_key_check` is empty, and Wrangler reports no pending migration. Production is unchanged.
+> Current migration checkpoint — 2026-08-03: isolated `juro-staging` is through additive `0060_lethal_slapstick.sql`. A checksum-verified private pre-export and post-export are retained in `juro-staging-backups`; postflight reports `quick_check=ok`, an empty `foreign_key_check`, and the new `ai_feedback` table. Production is unchanged.
 
-Updated: 2026-08-02
-Latest source migration: `0059_pretty_punisher.sql` (applied only to isolated staging)
+Updated: 2026-08-03
+Latest source migration: `0060_lethal_slapstick.sql` (applied only to isolated staging)
 Remote application status: `0000`–`0004` are applied to both `juro-production` and `juro-development`; `0005`–`0034` are not applied there. Isolated EEUR `juro-staging` (`bb716a96-b2fb-4823-90d6-6c228fed181a`) has the exact 35-entry `0000`–`0034` ledger. Migration `0034` was applied only after a new Time Travel bookmark, full/schema/data/manifest export, private-R2 checksum round trip, and isolated pre-change restore. Postflight reports 113 application tables (114 including `d1_migrations`), 72 triggers, 199 non-internal indexes, no pending migration, and zero foreign-key violations. No production or development migration was run.
+
+## Staging-applied `0060` — tenant-scoped AI answer feedback
+
+`0060_lethal_slapstick.sql` is additive: `ai_feedback` stores a bounded feedback
+type and optional comment, and references the existing workspace, user,
+conversation, persisted assistant message, and completed AI run. Its unique
+index makes each feedback type idempotent per user/answer; no AI question or
+answer is copied into analytics. The remote preflight found 60 migrations
+through `0059`, no existing `ai_feedback` table, `quick_check=ok`, and no
+foreign-key violations. After applying only `0060`, staging reports 61
+migrations, four `ai_feedback` indexes (including SQLite's primary-key index),
+zero feedback rows, `quick_check=ok`, and no foreign-key violations. Exact
+private checkpoint hashes, Worker version, tests, and remaining browser gate
+are recorded in `STAGING-0060-AI-FEEDBACK-EVIDENCE.md`.
 
 ## Staging-applied `0034` — business workspace identity
 

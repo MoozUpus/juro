@@ -1,11 +1,13 @@
 # JURO implemented-features checkpoint
 > Current staging delta — 2026-08-03: `juro-platform-staging` Worker version
-> `120456d4-0da2-4531-aae4-fbe597bc2329` resolves an AI-suggested template only
-> from a persisted assistant message after authenticated workspace ownership,
-> then opens the existing published document-builder route. The browser cannot
-> select a template code, title, or case identifier. It also fails over from an
-> unavailable OpenAI run to configured Anthropic; an authenticated successful
-> provider response remains unproven. Production is unchanged.
+> `6ec3e8ab-434b-4ab5-98db-c26908d6c8a3` serves the protected AI-answer feedback
+> route and UI. Feedback is linked server-side to the caller's completed,
+> persisted assistant message and actual AI run; client input cannot choose a
+> workspace, conversation, run, or answer. It is D1-backed by staging-only
+> migration `0060_lethal_slapstick.sql`, which passed a checksum-verified
+> private pre/post checkpoint and D1 integrity checks. The previous safe
+> suggested-document handoff remains included. OpenAI fallback remains
+> unproven for an authenticated legal-chat response; production is unchanged.
 > Current authoritative checkpoint — 2026-08-02: only the evidence in this
 > paragraph is current when it conflicts with older chronological entries.
 > Staging Worker `c9c54208-55be-4d6c-9413-950e0cc78d5f` contains the tested
