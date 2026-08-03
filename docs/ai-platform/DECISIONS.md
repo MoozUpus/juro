@@ -155,7 +155,7 @@ avoids a false claim that unused secret names improve security.
 
 ## D-107 — task reminders cross the queue boundary as identifiers only
 
-Status: accepted and locally verified; staging deployment pending
+Status: accepted and staging verified
 Date: 2026-08-04
 
 The scheduler no longer writes task-reminder notifications directly. It creates an
@@ -166,3 +166,5 @@ D1, rejects cross-workspace subjects neutrally, ignores stale versions and creat
 deterministic inbox notification in the same D1 batch that marks the reminder sent.
 Retries and duplicate queue deliveries cannot create a second notification. No task
 title, message body or other user content is placed in the queue envelope or logs.
+Staging deployment `eef56269-2980-42b8-bc76-9a348f6d187b` attached the reviewed
+consumer and a synthetic neutral-rejection probe confirmed end-to-end delivery.
