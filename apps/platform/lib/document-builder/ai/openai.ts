@@ -8,6 +8,7 @@ export type AiProviderErrorCode =
   | "AI_REFUSED"
   | "AI_CANCELLED"
   | "ANTHROPIC_PREFLIGHT_FAILED"
+  | "ANTHROPIC_REQUEST_FAILED"
   | "ANTHROPIC_POSTPROCESS_FAILED";
 
 export class AiUnavailableError extends Error {
