@@ -50,7 +50,7 @@ export function CasesClient({ locale }: { locale: PlatformLocale; accountType: A
     <section className="cases-live">
       <header>
         <div><small>JURO · {ru ? "Дела" : "Ishlar"}</small><h1>{ru ? "Единая история юридической работы" : "Yuridik ishlarning yagona tarixi"}</h1><p>{ru ? "Дело связывает подтверждённые факты, документы, план, сроки и консультацию." : "Ish tasdiqlangan faktlar, hujjatlar, reja, muddatlar va maslahatni bog‘laydi."}</p></div>
-        <Link href={`${base}/action-plan`}><Plus />{ru ? "Создать дело" : "Ish yaratish"}</Link>
+        <Link href={`${base}/cases/new`}><Plus />{ru ? "Создать дело" : "Ish yaratish"}</Link>
       </header>
       <div className="cases-live-tools">
         <label><Search /><span className="sr-only">{ru ? "Поиск дел" : "Ishlarni qidirish"}</span><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={ru ? "Найти дело" : "Ishni topish"} /></label>
@@ -79,7 +79,7 @@ export function CasesClient({ locale }: { locale: PlatformLocale; accountType: A
           })}
         </div>
       ) : (
-        <div className="cases-live-empty"><BriefcaseBusiness /><h2>{query ? (ru ? "Ничего не найдено" : "Hech narsa topilmadi") : (ru ? "Дел пока нет" : "Hozircha ishlar yo‘q")}</h2><p>{ru ? "Начните с ситуации — JURO создаст дело и связанный план." : "Vaziyatdan boshlang — JURO ish va bog‘langan rejani yaratadi."}</p>{!query && <Link href={`${base}/action-plan`}>{ru ? "Создать первое дело" : "Birinchi ishni yaratish"}</Link>}</div>
+        <div className="cases-live-empty"><BriefcaseBusiness /><h2>{query ? (ru ? "Ничего не найдено" : "Hech narsa topilmadi") : (ru ? "Дел пока нет" : "Hozircha ishlar yo‘q")}</h2><p>{ru ? "Начните с ситуации — JURO создаст дело и связанный план." : "Vaziyatdan boshlang — JURO ish va bog‘langan rejani yaratadi."}</p>{!query && <Link href={`${base}/cases/new`}>{ru ? "Создать первое дело" : "Birinchi ishni yaratish"}</Link>}</div>
       )}
     </section>
   );

@@ -17,6 +17,7 @@
     "test:rendered": "node scripts/platform-tasks.mjs test-rendered",
     "smoke:document-builder": "node scripts/platform-tasks.mjs smoke-document-builder",
     "smoke:document-comparison": "node scripts/platform-tasks.mjs smoke-document-comparison",
+    "smoke:case-create": "node scripts/platform-tasks.mjs smoke-case-create",
     "validate:artifact": "node scripts/platform-tasks.mjs artifact",
     "cf:types": "node scripts/platform-tasks.mjs cf-types",
     "cf:types:check": "node scripts/platform-tasks.mjs cf-types-check",

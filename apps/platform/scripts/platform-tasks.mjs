@@ -852,6 +852,9 @@ async function main() {
     case "smoke-document-comparison":
       await runSmoke("smoke-document-comparison.ts", args);
       return;
+    case "smoke-case-create":
+      await runSmoke("smoke-case-create.ts", args);
+      return;
     case "dev":
       await runInteractiveTask(
         "vite",
@@ -973,7 +976,7 @@ async function main() {
     }
     default:
       throw new Error(
-        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|type-check|lint|build|artifact|matrix|cf-types|cf-types-check|db-generate>",
+        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|matrix|cf-types|cf-types-check|db-generate>",
       );
   }
 }

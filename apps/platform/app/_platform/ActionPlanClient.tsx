@@ -14,6 +14,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { caseScenariosForAccount } from "../../lib/platform/case-create";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
@@ -74,18 +75,6 @@ type PlanVersion = {
   createdAt: string;
   snapshot: PlanSnapshot | null;
 };
-const catalog = {
-  individual: [
-    { id: "unpaid-salary", ru: "Невыплата заработной платы", uz: "Ish haqi to‘lanmasligi" },
-    { id: "debt", ru: "Возврат долга", uz: "Qarzni qaytarish" },
-    { id: "consumer", ru: "Защита прав потребителя", uz: "Iste’molchi huquqlarini himoya qilish" },
-  ],
-  business: [
-    { id: "debt-recovery", ru: "Взыскание задолженности", uz: "Qarzdorlikni undirish" },
-    { id: "contract-breach", ru: "Нарушение договора", uz: "Shartnoma buzilishi" },
-  ],
-};
-
 export function ActionPlanClient({
   locale,
   accountType,
@@ -97,7 +86,7 @@ export function ActionPlanClient({
 }) {
   const ru = locale === "ru";
   const base = usePlatformBasePath();
-  const scenarioCatalog = accountType === "business" ? catalog.business : catalog.individual;
+  const scenarioCatalog = caseScenariosForAccount(accountType);
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

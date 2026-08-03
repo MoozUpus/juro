@@ -1,15 +1,9 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
+import { parseJsonRequest } from "../../../../lib/auth/input";
+import { caseCreateInputSchema, caseScenarioMatchesAccount, caseScenarioSteps } from "../../../../lib/platform/case-create";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
-
-const scenarios: Record<string, { ru: string[]; uz: string[] }> = {
-  "unpaid-salary": { ru: ["Собрать трудовые документы и расчёты", "Подготовить письменное требование работодателю", "Зафиксировать вручение требования", "Проверить ответ и определить следующий способ защиты"], uz: ["Mehnat hujjatlari va hisob-kitoblarni yig‘ish", "Ish beruvchiga yozma talab tayyorlash", "Talab topshirilganini qayd etish", "Javobni tekshirib, keyingi himoya usulini belgilash"] },
-  debt: { ru: ["Собрать подтверждения долга", "Проверить срок и условия возврата", "Подготовить требование о возврате", "Зафиксировать ответ или отсутствие ответа"], uz: ["Qarzni tasdiqlovchi dalillarni yig‘ish", "Qaytarish muddati va shartlarini tekshirish", "Qaytarish talabini tayyorlash", "Javobni yoki javob yo‘qligini qayd etish"] },
-  consumer: { ru: ["Собрать чек, договор и переписку", "Сформулировать нарушение и требование", "Направить претензию", "Оценить ответ и дальнейшие действия"], uz: ["Chek, shartnoma va yozishmalarni yig‘ish", "Buzilish va talabni ifodalash", "Talabnoma yuborish", "Javob va keyingi harakatlarni baholash"] },
-  "debt-recovery": { ru: ["Проверить договор и первичные документы", "Рассчитать подтверждённую задолженность", "Подготовить досудебную претензию", "Зафиксировать ответ и решение о следующем этапе"], uz: ["Shartnoma va birlamchi hujjatlarni tekshirish", "Tasdiqlangan qarzdorlikni hisoblash", "Sudgacha talabnoma tayyorlash", "Javob va keyingi bosqich qarorini qayd etish"] },
-  "contract-breach": { ru: ["Зафиксировать обязательство и нарушение", "Собрать доказательства исполнения своей стороны", "Подготовить уведомление или претензию", "Согласовать способ урегулирования"], uz: ["Majburiyat va buzilishni qayd etish", "O‘z tomonining ijrosini tasdiqlovchi dalillarni yig‘ish", "Bildirishnoma yoki talabnoma tayyorlash", "Hal etish usulini kelishish"] },
-};
 
 function response(body: unknown, status=200){return Response.json(body,{status,headers:{"cache-control":"private, no-store"}});}
 
@@ -27,18 +21,21 @@ export const GET = withApiErrors(async function GET(request:Request){
 });
 
 export const POST = withApiErrors(async function POST(request:Request){
-  assertSafeWrite(request); const user=await requireApiUser(); const body=await request.json().catch(()=>null) as {title?:string;description?:string;legalArea?:string;locale?:string;accountType?:string}|null;
-  const title=body?.title?.trim().slice(0,180); const legalArea=body?.legalArea&&scenarios[body.legalArea]?body.legalArea:"debt"; const locale=body?.locale==="uz"?"uz":"ru"; const accountType=body?.accountType==="business"?"business":"individual";
-  if(!title)return response({error:locale==="ru"?"Укажите название ситуации.":"Vaziyat nomini kiriting."},400);
+  assertSafeWrite(request); const user=await requireApiUser();
+  const parsed=await parseJsonRequest(request,caseCreateInputSchema,4_096);
+  if(!parsed.ok)return response({error:"INVALID_CASE_INPUT",code:parsed.error},400);
+  const {title,description,legalArea,locale}=parsed.data;
   const now=isoNow(); const caseId=crypto.randomUUID(); const planId=crypto.randomUUID();
-  const steps=scenarios[legalArea][locale].map((stepTitle,ordinal)=>({id:crypto.randomUUID(),title:stepTitle,ordinal:ordinal+1,status:"not_started"}));
+  const steps=caseScenarioSteps(legalArea,locale).map((stepTitle,ordinal)=>({id:crypto.randomUUID(),title:stepTitle,ordinal:ordinal+1,status:"not_started"}));
   const planTitle=locale==="ru" ? "План: "+title : "Reja: "+title;
   const initialSnapshot=JSON.stringify({version:1,title:planTitle,status:"in_progress",progressPercent:0,steps});
   const db=requireD1();
   const workspace=await workspaceForUser(user);
+  const accountType=workspace.type==="business"?"business":parsed.data.accountType==="business"?"individual":parsed.data.accountType;
+  if(!caseScenarioMatchesAccount(legalArea,accountType))return response({error:"INVALID_CASE_SCENARIO"},400);
   await db.batch([
-    db.prepare("INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'open',1,?,?)").bind(caseId,workspace.id,user.id,accountType,locale,title,body?.description?.trim().slice(0,2000)||null,legalArea,now,now),
-    db.prepare("INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,'in_progress',0,1,?,?)")
+    db.prepare("INSERT INTO cases (id,workspace_id,owner_user_id,account_type,locale,title,description,legal_area,status,current_revision,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,'open',1,?,?)").bind(caseId,workspace.id,user.id,accountType,locale,title,description||null,legalArea,now,now),
+    db.prepare("INSERT INTO action_plans (id,case_id,created_by_user_id,title,status,progress_percent,current_revision,created_at,updated_at) VALUES (?,?,?,?,'in_progress',0,1,?,?)")
       .bind(planId,caseId,user.id,planTitle,now,now),
     ...steps.map((step)=>db.prepare("INSERT INTO action_plan_steps (id,plan_id,ordinal,title,status,deadline_type,revision,created_at,updated_at) VALUES (?,?,?,?,'not_started','calendar_days',1,?,?)")
       .bind(step.id,planId,step.ordinal,step.title,now,now)),
