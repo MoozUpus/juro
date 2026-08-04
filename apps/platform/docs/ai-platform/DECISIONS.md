@@ -2962,3 +2962,23 @@ before returning a bounded excerpt. Metadata indexes and filters may improve
 performance later but cannot weaken these checks. Superseded and account-owned
 vectors are deleted by bounded, retryable mutations whose state is recorded in
 D1. Migration/deploy and two-account staging proof require separate approval.
+
+## D-143 — Provider cost evidence is immutable, content-free and price-versioned
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+Every document-indexing/search embedding attempt writes one immutable D1 event
+using the provider response's actual token usage, actual model and safe request
+identifier. Its daily aggregate is updated in the same D1 batch, so an event-ID
+replay cannot increment totals twice. Provider error bodies and user content are
+never copied into the cost domain.
+
+Prices are effective-dated immutable administrator records with provider-bound
+official HTTPS evidence; no price is hard-coded or seeded. Missing pricing stays
+explicitly unpriced. Cost events retain opaque tenant IDs without account foreign
+keys so required accounting evidence can survive content deletion. Provider
+billing and D1 cannot form a distributed transaction, so a provider-success/D1-
+failure path fails the product action and remains subject to later operational
+reconciliation. Migration `0081` and the fresh-MFA costs console remain local
+until a separately authorized backup, ordered migration and staging deploy.

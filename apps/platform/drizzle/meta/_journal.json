@@ -568,6 +568,13 @@
       "when": 1785927600000,
       "tag": "0080_user_document_vectors",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "6",
+      "when": 1785931200000,
+      "tag": "0081_provider_cost_observability",
+      "breakpoints": true
     }
   ]
 }

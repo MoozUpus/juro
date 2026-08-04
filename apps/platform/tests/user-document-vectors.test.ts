@@ -62,8 +62,11 @@ function embeddingFetch(): typeof fetch {
     const body = JSON.parse(String(init?.body)) as { input: string[]; dimensions: number };
     assert.equal(body.dimensions, 1536);
     return Response.json({
-      data: body.input.map((_value, index) => ({ index, embedding: Array.from({ length: 1536 }, () => index / 100) })),
-    });
+      object: "list",
+      model: "text-embedding-3-large",
+      data: body.input.map((_value, index) => ({ object: "embedding", index, embedding: Array.from({ length: 1536 }, () => index / 100) })),
+      usage: { prompt_tokens: body.input.length * 11, total_tokens: body.input.length * 11 },
+    }, { headers: { "x-request-id": `req_${body.input.length}` } });
   };
 }
 
@@ -204,6 +207,26 @@ test("0080 indexes immutable text and search fails closed across tenants and tam
     assert.equal(vectorize.deleted.length, 1);
     assert.equal((sqlite.prepare("SELECT status FROM user_document_index_jobs").get() as { status: string }).status, "delete_submitted");
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+    const usage = sqlite.prepare(
+      `SELECT feature,status,provider,model,input_tokens AS inputTokens,
+        provider_request_id AS providerRequestId,price_version_id AS priceVersionId
+       FROM ai_provider_usage_events ORDER BY created_at,id`,
+    ).all() as Array<Record<string, unknown>>;
+    assert.equal(usage.length, 5);
+    assert.equal(usage.filter((event) => event.feature === "document_indexing").length, 1);
+    assert.equal(usage.filter((event) => event.feature === "document_search").length, 4);
+    assert.ok(usage.every((event) => event.status === "succeeded"));
+    assert.ok(usage.every((event) => event.provider === "openai"));
+    assert.ok(usage.every((event) => event.model === "text-embedding-3-large"));
+    assert.ok(usage.every((event) => event.inputTokens === 11));
+    assert.ok(usage.every((event) => event.providerRequestId === "req_1"));
+    assert.ok(usage.every((event) => event.priceVersionId === null));
+    const aggregate = sqlite.prepare(
+      `SELECT sum(request_count) AS requests,sum(unpriced_request_count) AS unpriced
+       FROM ai_cost_daily_aggregates`,
+    ).get() as { requests: number; unpriced: number };
+    assert.equal(aggregate.requests, 5);
+    assert.equal(aggregate.unpriced, 5);
   } finally {
     sqlite.close();
   }

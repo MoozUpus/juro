@@ -855,3 +855,24 @@ search, cross-workspace denial, denial to a non-owner workspace member, metadata
 tampering rejection, D1 trigger fencing, purge deletion, and foreign-key
 integrity. Remote indexes are still empty and migration `0080` is unapplied;
 therefore this section is a local candidate, not staging or production evidence.
+
+## Provider usage and embedding cost observability (local candidate)
+
+Migration `0081` records every document-indexing and document-search embedding
+attempt as an immutable metadata-only event and updates its daily aggregate in
+the same D1 batch. Successful calls use OpenAI's returned model, request ID and
+actual token usage. HTTP/network/schema failures record a bounded error code and
+do not report a fabricated charge.
+
+Prices are immutable, effective-dated administrator records rather than
+hard-coded runtime constants. The source URL must be official HTTPS on the
+matching provider domain. An absent effective price produces an explicit
+unpriced count. The dense RU/UZ `/:locale/admin/costs` surface and API require
+the administrator-only operations capability plus fresh MFA; mutations are
+CSRF-protected.
+
+Focused tests cover exact integer cost calculation, unpriced calls, failed calls,
+duplicate event rollback, immutable events/prices, provider-bound source URLs,
+account-deletion retention without content, staff-role separation and the admin
+route boundary. Migration `0081`, official price configuration and remote
+reconciliation remain unapplied/unverified in staging; production is unchanged.

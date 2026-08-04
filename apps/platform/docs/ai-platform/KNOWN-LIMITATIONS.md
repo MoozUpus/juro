@@ -605,7 +605,7 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 
 ## User-document semantic search open gates
 
-- Migration `0080` and the matching Worker/API changes are local only. They have
+- Migrations `0080`–`0081` and the matching Worker/API changes are local only. They have
   not been applied or deployed to staging or production.
 - The first bounded implementation indexes immutable normalized document-analysis
   versions only. Builder documents, OCR page coordinates and shared-workspace
@@ -617,6 +617,11 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 - Development and staging user-document indexes currently have no metadata
   indexes. Workspace namespaces plus D1 post-authorization preserve isolation,
   but remote scale and latency must be measured before broader rollout.
-- Query-embedding cost is not yet projected into the unified AI usage ledger.
-  Remote two-account isolation, deletion propagation, cost accounting and search
-  latency remain staging gates after an authorized backup, migration and deploy.
+- Query and indexing embedding usage is projected locally into the append-only
+  `0081` provider ledger using actual response token counts. No production price
+  is hard-coded; calls remain explicitly unpriced until an administrator records
+  an effective official price version.
+- Remote two-account isolation, deletion propagation, cost reconciliation and
+  search latency remain staging gates after an authorized backup, ordered
+  migrations and deploy. Provider billing and D1 are not one distributed
+  transaction, so provider-success/D1-failure reconciliation remains open.

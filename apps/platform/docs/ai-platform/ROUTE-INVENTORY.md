@@ -1,5 +1,11 @@
 # JURO route inventory
 
+> Local cost-observability delta — 2026-08-04: `/:locale/admin/costs` and
+> `/api/platform/admin/costs` provide a noindex RU/UZ aggregate view and immutable
+> price-version creation. Both require `staff.operations.manage`, active TOTP and
+> MFA verified within 15 minutes; POST also requires same-origin CSRF evidence.
+> Migration `0081` and staging browser/deploy evidence remain pending.
+
 > Local lawyer-review reply delta — 2026-08-04: an approved review can receive a
 > versioned response through `POST /api/platform/lawyer-reviews/:reviewId/reply`.
 > Staff list/decision APIs and `/:locale/admin/lawyer-review-replies` require
@@ -67,6 +73,7 @@ Current route shells:
 /:locale/help
 /:locale/help/:articleSlug
 /:locale/admin/knowledge-base
+/:locale/admin/costs
 ```
 
 `cases/:caseId` is now an object-specific, tenant-backed overview. Its validated

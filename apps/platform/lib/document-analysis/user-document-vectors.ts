@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { recordProviderUsage } from "../ai/provider-usage";
 
 const EMBEDDING_DIMENSIONS = 1536;
 const DEFAULT_EMBEDDING_MODEL = "text-embedding-3-large";
@@ -14,6 +15,7 @@ export const USER_DOCUMENT_VECTOR_ERROR_CODES = [
   "USER_DOCUMENT_VECTOR_CONFIGURATION_UNAVAILABLE",
   "USER_DOCUMENT_VECTOR_OBJECT_INVALID",
   "USER_DOCUMENT_VECTOR_EMBEDDING_FAILED",
+  "USER_DOCUMENT_VECTOR_USAGE_PERSISTENCE_FAILED",
   "USER_DOCUMENT_VECTOR_MUTATION_FAILED",
   "USER_DOCUMENT_VECTOR_PERSISTENCE_FAILED",
 ] as const;
@@ -95,10 +97,17 @@ export type UserDocumentSearchResult = {
 };
 
 const embeddingResponseSchema = z.object({
+  object: z.literal("list"),
+  model: z.string().trim().min(1).max(120),
   data: z.array(z.object({
+    object: z.literal("embedding").optional(),
     index: z.number().int().nonnegative(),
     embedding: z.array(z.number().finite()).length(EMBEDDING_DIMENSIONS),
   })).min(1),
+  usage: z.object({
+    prompt_tokens: z.number().int().nonnegative(),
+    total_tokens: z.number().int().nonnegative(),
+  }).strict(),
 }).strict();
 
 function retryableProviderStatus(status: number): boolean {
@@ -116,13 +125,39 @@ function checksumHex(value: ArrayBuffer | undefined): string | null {
 }
 
 async function createEmbeddings(
-  env: Pick<UserDocumentVectorEnv, "OPENAI_API_KEY" | "EMBEDDING_MODEL">,
+  env: Pick<UserDocumentVectorEnv, "APP_ENV" | "DB" | "OPENAI_API_KEY" | "EMBEDDING_MODEL">,
   inputs: readonly string[],
   fetchImpl: typeof fetch,
+  usage: { workspaceId: string; userId: string; feature: "document_indexing" | "document_search" },
 ): Promise<number[][]> {
   if (!env.OPENAI_API_KEY) {
     throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_CONFIGURATION_UNAVAILABLE", false);
   }
+  const startedAt = new Date().toISOString();
+  const requestedModel = env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
+  const recordFailure = async (errorCode: string): Promise<void> => {
+    try {
+      await recordProviderUsage({
+        db: env.DB,
+        environment: env.APP_ENV,
+        workspaceId: usage.workspaceId,
+        userId: usage.userId,
+        feature: usage.feature,
+        operation: "embeddings",
+        provider: "openai",
+        model: requestedModel,
+        inputTokens: 0,
+        itemCount: inputs.length,
+        dimensions: EMBEDDING_DIMENSIONS,
+        status: "failed",
+        errorCode,
+        startedAt,
+        completedAt: new Date().toISOString(),
+      });
+    } catch {
+      throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_USAGE_PERSISTENCE_FAILED", true);
+    }
+  };
   let response: Response;
   try {
     response = await fetchImpl("https://api.openai.com/v1/embeddings", {
@@ -132,30 +167,60 @@ async function createEmbeddings(
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL,
+        model: requestedModel,
         input: inputs,
         dimensions: EMBEDDING_DIMENSIONS,
         encoding_format: "float",
       }),
     });
   } catch {
+    await recordFailure("PROVIDER_NETWORK_ERROR");
     throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_EMBEDDING_FAILED", true);
   }
   if (!response.ok) {
+    const status = response.status;
     await response.body?.cancel().catch(() => undefined);
+    await recordFailure(`PROVIDER_HTTP_${status}`);
     throw new UserDocumentVectorError(
       "USER_DOCUMENT_VECTOR_EMBEDDING_FAILED",
-      retryableProviderStatus(response.status),
+      retryableProviderStatus(status),
     );
   }
   let parsed: z.infer<typeof embeddingResponseSchema>;
   try {
     parsed = embeddingResponseSchema.parse(await response.json());
   } catch {
+    await recordFailure("PROVIDER_RESPONSE_INVALID");
     throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_EMBEDDING_FAILED", false);
   }
-  if (parsed.data.length !== inputs.length || parsed.data.some((item, index) => item.index !== index)) {
+  if (
+    parsed.data.length !== inputs.length
+    || parsed.data.some((item, index) => item.index !== index)
+    || parsed.usage.total_tokens < parsed.usage.prompt_tokens
+  ) {
+    await recordFailure("PROVIDER_RESPONSE_INVALID");
     throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_EMBEDDING_FAILED", false);
+  }
+  try {
+    await recordProviderUsage({
+      db: env.DB,
+      environment: env.APP_ENV,
+      workspaceId: usage.workspaceId,
+      userId: usage.userId,
+      feature: usage.feature,
+      operation: "embeddings",
+      provider: "openai",
+      model: parsed.model,
+      providerRequestId: response.headers.get("x-request-id"),
+      inputTokens: parsed.usage.prompt_tokens,
+      itemCount: inputs.length,
+      dimensions: EMBEDDING_DIMENSIONS,
+      status: "succeeded",
+      startedAt,
+      completedAt: new Date().toISOString(),
+    });
+  } catch {
+    throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_USAGE_PERSISTENCE_FAILED", true);
   }
   return parsed.data.map((item) => item.embedding);
 }
@@ -322,7 +387,12 @@ export async function executeUserDocumentIndexJob(
     let latestMutationId: string | null = null;
     for (let start = 0; start < chunks.length; start += EMBEDDING_BATCH_SIZE) {
       const batch = chunks.slice(start, start + EMBEDDING_BATCH_SIZE);
-      const embeddings = await createEmbeddings(env, batch.map((chunk) => chunk.text), options.fetchImpl ?? fetch);
+      const embeddings = await createEmbeddings(
+        env,
+        batch.map((chunk) => chunk.text),
+        options.fetchImpl ?? fetch,
+        { workspaceId: row.workspaceId, userId: row.ownerUserId, feature: "document_indexing" },
+      );
       try {
         const mutation = await env.USER_DOCUMENTS_INDEX.upsert(batch.map((chunk, offset) => ({
           id: vectorIds[start + offset]!,
@@ -445,7 +515,12 @@ export async function searchUserDocuments(
     "SELECT 1 AS found FROM workspace_members WHERE workspace_id=? AND user_id=? AND status='active' LIMIT 1",
   ).bind(input.workspaceId, input.userId).first<{ found: number }>();
   if (!membership?.found) return [];
-  const [embedding] = await createEmbeddings(env, [query], options.fetchImpl ?? fetch);
+  const [embedding] = await createEmbeddings(
+    env,
+    [query],
+    options.fetchImpl ?? fetch,
+    { workspaceId: input.workspaceId, userId: input.userId, feature: "document_search" },
+  );
   let matches: VectorizeMatches;
   try {
     matches = await env.USER_DOCUMENTS_INDEX.query(embedding!, {

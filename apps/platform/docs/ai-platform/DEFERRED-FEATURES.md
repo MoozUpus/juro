@@ -13,10 +13,10 @@ This register distinguishes real implementation from planned scope. A database t
 
 ## Provider and legal-intelligence gates
 
-- OpenAI legal chat, structured legal output, streaming/branching/memory, model routing, cost controls, and evaluated RU/UZ legal quality are not staging-ready.
+- OpenAI legal chat, structured legal output, streaming/branching/memory, model routing, evaluated RU/UZ legal quality, cost thresholds/alerts and provider-billing reconciliation are not staging-ready. Local migration `0081` now covers actual-token embedding usage, immutable price versions and daily aggregates without content, but it is not deployed.
 - Anthropic document analysis, OCR, comparison quality gates, redline/correction, and provider fallback are not staging-ready.
 - Advice/Lex ingestion, version-aware hybrid retrieval, citation verification, daily sync, legal editor, and the 250-scenario human-reviewed legal evaluation remain gated.
-- Remote development/staging user-document indexes remain empty at this checkpoint. The local `0080` candidate now implements immutable-version indexing, owner-scoped semantic search, superseded-vector deletion, and account-purge deletion, but it is not active until a separately authorized migration/deploy and protected staging evidence.
+- Remote development/staging user-document indexes remain empty at this checkpoint. The local `0080`–`0081` candidates implement immutable-version indexing, owner-scoped semantic search, superseded-vector deletion, account-purge deletion and actual-token cost accounting, but they are not active until a separately authorized migration/deploy, official price entry and protected staging evidence.
 
 ## File and communication gates
 

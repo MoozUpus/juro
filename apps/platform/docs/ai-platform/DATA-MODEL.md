@@ -96,3 +96,19 @@ the comment text. D1 guards make retained events immutable while allowing the
 entire user-owned graph to cascade on account deletion. `case_events` and
 `workspace_audit_events` receive metadata-only lifecycle evidence. No
 notification row is created by this domain.
+
+## Provider cost observability — local migration 0081 candidate
+
+`ai_provider_usage_events` is append-only per provider attempt. It stores
+environment, opaque tenant scope, feature/operation, actual provider/model,
+provider request ID, token/item counts, status, bounded error code, selected
+price version and integer micro-USD estimate. It contains no prompt, response,
+document text, filename or direct contact field.
+
+`ai_model_price_versions` is append-only, effective-dated administrator evidence.
+No runtime price is seeded. `ai_cost_daily_aggregates` is the derived mutable
+projection keyed by environment/day/scope/feature/operation/provider/model and is
+updated atomically with each event. Price/event rows intentionally have no user
+or workspace foreign key so required financial evidence can survive content and
+account deletion; opaque tenant IDs are subject to the documented retention
+policy.

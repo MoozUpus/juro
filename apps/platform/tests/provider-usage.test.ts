@@ -1,0 +1,207 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import {
+  createAiModelPriceVersion,
+  ProviderUsageError,
+  readAiCostDashboard,
+  recordProviderUsage,
+} from "../lib/ai/provider-usage";
+import { platformStaffRoleAllows } from "../lib/auth/staff-access";
+import { sqliteD1Fixture } from "./helpers/sqlite-d1";
+
+const now = "2026-08-04T12:00:00.000Z";
+
+function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]) {
+  sqlite.prepare("INSERT INTO user_profiles(id,email,created_at,updated_at) VALUES ('cost-user','cost@example.test',?,?)")
+    .run(now, now);
+  sqlite.prepare("INSERT INTO workspaces(id,type,name,created_at,updated_at) VALUES ('cost-workspace','individual','Cost',?,?)")
+    .run(now, now);
+  sqlite.prepare(`INSERT INTO workspace_members
+    (id,workspace_id,user_id,role,status,joined_at,created_at,updated_at)
+    VALUES ('cost-member','cost-workspace','cost-user','owner','active',?,?,?)`).run(now, now, now);
+}
+
+test("0081 records priced and failed provider calls exactly once without content", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    const price = await createAiModelPriceVersion({
+      db: d1,
+      actorUserId: "cost-user",
+      now: new Date(now),
+      value: {
+        provider: "openai",
+        model: "text-embedding-3-large",
+        operation: "embeddings",
+        inputMicrousdPerMillionTokens: 130_000,
+        outputMicrousdPerMillionTokens: 0,
+        cachedInputMicrousdPerMillionTokens: 0,
+        effectiveFrom: "2026-08-01T00:00:00.000Z",
+        sourceUrl: "https://openai.com/api/pricing/",
+      },
+    });
+    const success = await recordProviderUsage({
+      db: d1,
+      environment: "development",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "document_search",
+      operation: "embeddings",
+      provider: "openai",
+      model: "text-embedding-3-large",
+      providerRequestId: "req_cost_1",
+      inputTokens: 1_000,
+      itemCount: 1,
+      dimensions: 1_536,
+      status: "succeeded",
+      startedAt: "2026-08-04T11:59:59.000Z",
+      completedAt: now,
+      eventId: "usage-cost-success",
+    });
+    assert.equal(success.priceVersionId, price.id);
+    assert.equal(success.estimatedCostMicrousd, 130);
+
+    await recordProviderUsage({
+      db: d1,
+      environment: "development",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "document_search",
+      operation: "embeddings",
+      provider: "openai",
+      model: "text-embedding-3-large",
+      inputTokens: 0,
+      itemCount: 1,
+      dimensions: 1_536,
+      status: "failed",
+      errorCode: "PROVIDER_HTTP_429",
+      startedAt: now,
+      completedAt: "2026-08-04T12:00:01.000Z",
+      eventId: "usage-cost-failure",
+    });
+
+    const rows = (sqlite.prepare(
+      `SELECT status,input_tokens AS inputTokens,estimated_cost_microusd AS cost,
+        provider_request_id AS requestId,error_code AS errorCode
+       FROM ai_provider_usage_events ORDER BY completed_at`,
+    ).all() as Array<Record<string, unknown>>).map((row) => ({ ...row }));
+    assert.deepEqual(rows, [
+      { status: "succeeded", inputTokens: 1_000, cost: 130, requestId: "req_cost_1", errorCode: null },
+      { status: "failed", inputTokens: 0, cost: null, requestId: null, errorCode: "PROVIDER_HTTP_429" },
+    ]);
+    const aggregate = { ...(sqlite.prepare(
+      `SELECT request_count AS requests,failed_request_count AS failures,input_tokens AS inputTokens,
+        estimated_cost_microusd AS cost,unpriced_request_count AS unpriced
+       FROM ai_cost_daily_aggregates`,
+    ).get() as Record<string, unknown>) };
+    assert.deepEqual(aggregate, { requests: 2, failures: 1, inputTokens: 1_000, cost: 130, unpriced: 0 });
+
+    await assert.rejects(
+      () => recordProviderUsage({
+        db: d1,
+        environment: "development",
+        workspaceId: "cost-workspace",
+        userId: "cost-user",
+        feature: "document_search",
+        operation: "embeddings",
+        provider: "openai",
+        model: "text-embedding-3-large",
+        inputTokens: 1_000,
+        status: "succeeded",
+        startedAt: now,
+        completedAt: now,
+        eventId: "usage-cost-success",
+      }),
+      (error: unknown) => error instanceof ProviderUsageError && error.code === "PROVIDER_USAGE_PERSISTENCE_FAILED",
+    );
+    assert.equal((sqlite.prepare("SELECT request_count AS count FROM ai_cost_daily_aggregates").get() as { count: number }).count, 2);
+
+    assert.throws(
+      () => sqlite.prepare("UPDATE ai_provider_usage_events SET input_tokens=5 WHERE id='usage-cost-success'").run(),
+      /AI_PROVIDER_USAGE_EVENT_IMMUTABLE/,
+    );
+    assert.throws(
+      () => sqlite.prepare("DELETE FROM ai_model_price_versions WHERE id=?").run(price.id),
+      /AI_MODEL_PRICE_VERSION_IMMUTABLE/,
+    );
+    const usageColumns = (sqlite.prepare("PRAGMA table_info(ai_provider_usage_events)").all() as Array<{ name: string }>)
+      .map((column) => column.name);
+    for (const forbidden of ["prompt", "answer", "document_text", "filename", "email", "phone"]) {
+      assert.equal(usageColumns.includes(forbidden), false);
+    }
+    sqlite.prepare("DELETE FROM workspace_members WHERE workspace_id='cost-workspace'").run();
+    sqlite.prepare("DELETE FROM workspaces WHERE id='cost-workspace'").run();
+    sqlite.prepare("DELETE FROM user_profiles WHERE id='cost-user'").run();
+    assert.equal((sqlite.prepare("SELECT count(*) AS count FROM ai_provider_usage_events").get() as { count: number }).count, 2);
+    assert.equal((sqlite.prepare("SELECT count(*) AS count FROM ai_model_price_versions").get() as { count: number }).count, 1);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("0081 cost admin boundary is administrator-only, fresh-MFA-gated and CSRF-protected", () => {
+  const route = readFileSync(new URL("../app/api/platform/admin/costs/route.ts", import.meta.url), "utf8");
+  const page = readFileSync(new URL("../app/[locale]/admin/costs/page.tsx", import.meta.url), "utf8");
+  const client = readFileSync(new URL("../app/_staff/CostConsole.tsx", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../drizzle/0081_provider_cost_observability.sql", import.meta.url), "utf8");
+
+  assert.equal(platformStaffRoleAllows("administrator", "staff.operations.manage"), true);
+  assert.equal(platformStaffRoleAllows("support", "staff.operations.manage"), false);
+  assert.equal(platformStaffRoleAllows("legal_reviewer", "staff.operations.manage"), false);
+  assert.match(route, /requirePlatformStaffRequest\(request, "staff\.operations\.manage", \{ freshMfaWithinMs: 15 \* 60 \* 1000 \}\)/);
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(page, /requirePlatformStaffAccess\(runtime\.DB, session, "staff\.operations\.manage", \{ now, freshMfaWithinMs: 15 \* 60 \* 1000 \}\)/);
+  assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
+  assert.match(client, /"x-juro-csrf": "1"/);
+  assert.doesNotMatch(client, /dangerouslySetInnerHTML|transition:\s*all/);
+  assert.match(migration, /ai_provider_usage_events_no_update/);
+  assert.match(migration, /ai_provider_usage_events_no_delete/);
+});
+
+test("0081 price sources are provider-bound and dashboard reports unpriced calls", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    await assert.rejects(
+      () => createAiModelPriceVersion({
+        db: d1,
+        actorUserId: "cost-user",
+        now: new Date(now),
+        value: {
+          provider: "openai",
+          model: "text-embedding-3-large",
+          operation: "embeddings",
+          inputMicrousdPerMillionTokens: 1,
+          effectiveFrom: now,
+          sourceUrl: "https://example.com/pricing",
+        },
+      }),
+      (error: unknown) => error instanceof ProviderUsageError && error.code === "PROVIDER_USAGE_INVALID",
+    );
+    await recordProviderUsage({
+      db: d1,
+      environment: "staging",
+      workspaceId: "cost-workspace",
+      userId: "cost-user",
+      feature: "document_indexing",
+      operation: "embeddings",
+      provider: "openai",
+      model: "text-embedding-3-large",
+      inputTokens: 25,
+      itemCount: 2,
+      dimensions: 1_536,
+      status: "succeeded",
+      startedAt: now,
+      completedAt: now,
+      eventId: "usage-unpriced",
+    });
+    const dashboard = await readAiCostDashboard({ db: d1, environment: "staging", now: new Date(now) });
+    assert.equal(dashboard.prices.length, 0);
+    assert.equal(dashboard.daily.length, 1);
+    assert.equal(dashboard.unpricedEvents, 1);
+  } finally {
+    sqlite.close();
+  }
+});

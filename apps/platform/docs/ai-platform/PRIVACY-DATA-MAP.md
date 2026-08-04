@@ -4,6 +4,20 @@ D1 contains tenant-scoped metadata, sessions, audit evidence, normalized legal w
 
 Retention, deletion and deletion-purge boundaries are documented in `RETENTION.md` and `BACKUP-RESTORE.md`. This map describes implementation boundaries, not legal-policy approval.
 
+## AI provider usage and cost — local candidate
+
+| Data | Storage | Protection | Scope and disclosure |
+|---|---|---|---|
+| provider/model/operation/status/token counts | D1 `ai_provider_usage_events` | append-only triggers, strict enums/bounds, server-only write path | fresh-MFA operations administrators through bounded aggregates; never returned as tenant content |
+| opaque workspace/user IDs | D1 usage event and daily aggregate | no email/name/phone joins in the dashboard; no content fields | retained for financial/accounting evidence according to retention policy |
+| provider request ID and safe error code | D1 usage event | bounded identifier; no raw provider error body | operational reconciliation only |
+| effective price/version/source | D1 `ai_model_price_versions` | immutable; official provider HTTPS host; administrator plus fresh MFA | cost calculation and audit |
+| daily cost projection | D1 `ai_cost_daily_aggregates` | atomic batch with immutable source event | administrator operations dashboard |
+
+Prompt text, answer text, extracted/OCR text, document names, emails, phone
+numbers and API secrets are not stored in this domain. Migration `0081` and the
+admin surface are local only until the authorized staging migration/deploy gate.
+
 ## AI user memory — local candidate
 
 | Data | Storage | Protection | Scope and disclosure |

@@ -1,5 +1,31 @@
 # JURO D1 migrations
 
+## Pending 0081 — provider cost observability
+
+`0081_provider_cost_observability.sql` additively creates immutable provider
+usage events, immutable effective-dated price versions and a daily aggregate
+projection. Document indexing/search records actual provider response token
+counts; the schema contains no prompt, answer, document, filename, email or
+phone fields. Price versions are not seeded and accept only a provider-matching
+official HTTPS source through the server service.
+
+Local focused tests cover exact integer cost calculation, unpriced/failed calls,
+duplicate-event atomic rollback, immutability, account-deletion retention and
+fresh-MFA administrator route contracts. Staging requires a new verified private
+backup, the complete ordered migration set `0069`–`0081`, schema/FK/postflight
+checks, official price entry and matching Worker deploy under explicit owner
+authorization. Rollback is application-first; the additive tables can remain
+unused.
+
+## Pending 0080 — tenant-safe user-document vectors
+
+`0080_user_document_vectors.sql` additively creates the D1 authorization and
+lifecycle ledger for immutable normalized analysis versions in Vectorize. It is
+owner-only, verifies private-R2 size/SHA-256 before indexing and after every
+search match, and records bounded retryable delete mutations for superseded
+versions and account purge. No document text enters the ledger or queue envelope.
+It remains local and must be applied before `0081` in the same authorized cycle.
+
 ## Pending 0079 — moderated lawyer review replies
 
 `0079_lawyer_review_replies.sql` additively introduces versioned lawyer replies
@@ -58,11 +84,12 @@ foreign-key postflight passed, and Worker version
 Production is unchanged. Exact evidence is in
 `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
 
-Migrations `0069`–`0079` are local additive candidates and have not been applied
+Migrations `0069`–`0081` are local additive candidates and have not been applied
 to staging or production. They cover immutable analysis corrections, corrected
 exports, comparison exports, per-change review decisions and fenced R2 write
 reconciliation, analysis/document case links, legal bookmarks and the versioned
-knowledge base, protected staff authoring and moderated lawyer-review replies respectively.
+knowledge base, protected staff authoring, moderated lawyer-review replies,
+tenant-safe user-document vectors and provider cost observability respectively.
 
 ## Pending 0073 — analysis-version R2 write intents
 
