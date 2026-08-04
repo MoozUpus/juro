@@ -1,5 +1,12 @@
 # JURO known limitations checkpoint
 
+> Lex discovery checkpoint — 2026-08-05: the local candidate discovers only
+> recent official RU/UZ RSS entries; it is not a full historical or
+> priority-area corpus backfill. All results require human legal review before
+> publication, and the current deployed staging Worker (`cff38f0`) does not yet
+> run this path. No claim is made for corpus completeness, nightly remote
+> execution, citation entailment quality or the 250-scenario evaluation gate.
+
 > System-status checkpoint — 2026-08-05: local migration `0083` implements a
 > bilingual public projection, immutable forward-only incident updates,
 > fresh-MFA operations console and narrow hostname boundary. Staging is through

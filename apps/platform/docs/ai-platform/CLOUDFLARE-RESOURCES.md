@@ -1,5 +1,12 @@
 # JURO Cloudflare resources
 
+> Local candidate — 2026-08-05: `LEGAL_LEX_RSS_DISCOVERY_ENABLED` is `true`
+> only in the checked-in staging environment candidate and `false` in
+> development/production. No binding or remote resource is added. The deployed
+> staging Worker remains version `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4` from
+> commit `cff38f0`, and `juro-staging` remains through migration `0078` (79
+> ledger rows). Production is unchanged.
+
 > Current checkpoint — 2026-08-05: protected staging Worker
 > `juro-platform-staging` version `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4`
 > serves 100% from commit `cff38f0`. `juro-staging` is through additive

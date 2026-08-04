@@ -1,5 +1,18 @@
 # Test plan
 
+## Lex RSS discovery gate — local candidate
+
+`tests/legal-source-discovery.test.ts` covers exact official endpoints,
+RU/UZ balancing, canonical URL filtering, 512 KiB streaming bounds, media and
+XML validation, redirect rejection, mandatory scheduler wait and excessive
+delay failure. `tests/legal-scheduled-corpus-lifecycle.test.ts` proves that the
+daily run is acquired before discovery, a duplicate invocation performs no
+network discovery, and a candidate completes through private R2 into an
+immutable `pending_review` version and pending legal-review item. A live
+read-only probe of `https://lex.uz/robots.txt`, `/ru/rss` and `/uz/rss` observed
+the 20-second delay and canonical candidates. Staging deploy, queue/log evidence
+and reviewer-browser verification are still required.
+
 ## Lawyer review reply gate — local candidate
 
 `tests/lawyer-review-replies.test.ts` executes the full D1 lifecycle: strict

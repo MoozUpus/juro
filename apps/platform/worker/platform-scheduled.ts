@@ -212,7 +212,9 @@ export async function handleScheduled(
   }
 
   if (controller.cron === LEGAL_CORPUS_SYNC_CRON) {
-    const summary = await startScheduledCorpusSync(env);
+    const summary = await startScheduledCorpusSync(env, {
+      discoveryWait: (delayMs) => scheduler.wait(delayMs),
+    });
     logScheduled("info", {
       event: "scheduled.legal_corpus_started",
       environment: env.APP_ENV,

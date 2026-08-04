@@ -169,3 +169,64 @@ test("scheduled Advice sitemap candidates enter the normal review-only acquisiti
     sqlite.close();
   }
 });
+
+test("scheduled Lex RSS candidates enter the normal immutable review-only acquisition pipeline", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env: LegalSourceAcquisitionEnv & { LEGAL_LEX_RSS_DISCOVERY_ENABLED: string } = {
+    APP_ENV: "development",
+    DB: d1,
+    BUCKET: bucket as unknown as R2Bucket,
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_LEX_RSS_DISCOVERY_ENABLED: "true",
+  };
+  const now = new Date("2026-08-05T19:00:00.000Z");
+  let discoveryCalls = 0;
+  const discoverLex = async () => {
+    discoveryCalls += 1;
+    return [{
+      officialUrl: "https://lex.uz/ru/docs/8372154",
+      locale: "ru" as const,
+      canonicalId: "8372154",
+    }];
+  };
+  try {
+    const started = await startScheduledCorpusSync(env, {
+      now,
+      discoverLex,
+    });
+    assert.deepEqual(started, { started: 1, busy: 0, empty: 1 });
+    assert.equal(discoveryCalls, 1);
+    const duplicate = await startScheduledCorpusSync(env, { now, discoverLex });
+    assert.deepEqual(duplicate, { started: 0, busy: 2, empty: 0 });
+    assert.equal(discoveryCalls, 1, "daily run lock must be claimed before remote discovery");
+    const request = sqlite.prepare(`
+      SELECT id FROM legal_source_fetch_requests
+      WHERE source_kind='lex' AND canonical_id='8372154'
+    `).get() as { id: string };
+    await executeLegalSourceFetchRequest(env, request.id, {
+      now: () => now,
+      wait: async () => undefined,
+      fetchImpl: sourceFetch([
+        new Response("User-agent: *\nCrawl-delay: 20\n", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        }),
+        new Response(documentHtml("8372154"), {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      ]),
+    });
+    assert.equal(await reconcileScheduledCorpusSyncRuns(env, { now }), 1);
+    const review = sqlite.prepare(`
+      SELECT review.status,source.verification_state,version.status AS version_status
+      FROM legal_review_queue review
+      INNER JOIN legal_sources source ON source.id=review.source_id
+      INNER JOIN legal_source_versions version ON version.id=review.version_id
+    `).get() as { status: string; verification_state: string; version_status: string };
+    assert.equal(review.status, "pending");
+    assert.equal(review.verification_state, "fetched");
+    assert.equal(review.version_status, "pending_review");
+  } finally {
+    sqlite.close();
+  }
+});

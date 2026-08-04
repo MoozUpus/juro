@@ -1,5 +1,21 @@
 # Decisions
 
+## D-118 — Lex discovery uses official RSS and remains review-only
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+The public Lex surface exposes no working sitemap at the conventional RU, UZ or
+root paths, but publishes official RU and UZ RSS feeds. JURO therefore discovers
+only recent candidates from those two exact feeds; it does not crawl search
+results or arbitrary page links. The scheduler claims a unique environment/day
+run before remote access and honors `robots.txt` `Crawl-delay` using the Worker
+scheduler wait API. Strict byte, media, XML, locale and canonical URL bounds
+apply. Discovery is evidence acquisition only: every candidate stays
+`pending_review` and cannot enter AI retrieval until explicit legal publication.
+The feature is off in development and production; the staging configuration
+candidate still requires an authorized deployment and controlled evidence.
+
 ## D-111 — Knowledge Base publication requires fresh MFA and D1 actor evidence
 
 Status: accepted and locally verified

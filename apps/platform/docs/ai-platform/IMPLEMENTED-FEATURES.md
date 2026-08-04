@@ -1,5 +1,21 @@
 # JURO implemented-features checkpoint
 
+## Bounded Lex RU/UZ RSS discovery (local candidate)
+
+- The daily corpus run is claimed atomically before network discovery, so an
+  overlapping invocation cannot repeat RSS requests or bypass the source rate
+  policy.
+- Discovery uses only official `lex.uz` `robots.txt` and the exact RU/UZ RSS
+  endpoints, honors the declared 20-second delay, accepts strict RSS/XML within
+  512 KiB and keeps at most 40 balanced canonical `/ru|uz/docs/{id}` URLs.
+- Candidates reuse the existing acquisition queue, private raw/normalized R2
+  objects, immutable `pending_review` version and human publication boundary.
+  They do not become verified sources or AI context automatically.
+- Adversarial parser, duplicate-run fencing and full review-lifecycle tests pass
+  locally. A live read-only probe confirmed both official feeds and delay
+  handling. Remote staging remains at `cff38f0`; activation and protected
+  operational evidence require a separately authorized deployment.
+
 ## Public system status and incident management (local candidate)
 
 - Migration `0083` adds bilingual incidents, fixed public component impacts and

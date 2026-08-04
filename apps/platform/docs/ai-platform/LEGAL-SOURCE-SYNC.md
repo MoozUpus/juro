@@ -1,5 +1,16 @@
 # Legal source synchronization
 
+> Local candidate — 2026-08-05: the nightly scheduler can discover at most 40
+> recent canonical Lex documents from the official RU and UZ RSS feeds. It
+> reads `robots.txt` first, honors the declared 20-second `Crawl-delay` through
+> the Cloudflare scheduler wait API, bounds each response to 512 KiB, rejects
+> redirects/non-RSS/malformed XML and claims the daily D1 run before any remote
+> request. Discovered URLs enter the existing private-R2, `pending_review`,
+> human-publication boundary; discovery never verifies or exposes a source to
+> AI. The staging configuration candidate enables this flag, while development
+> and production keep it off. The currently deployed staging Worker remains at
+> commit `cff38f0`; no remote activation is claimed.
+
 Status: bounded Lex and Advice acquisition/normalization slices are implemented and proven in owner-only staging. Publication, retrieval, and AI use remain fail-closed pending explicit legal review. Advice and the staff source API are enabled only in staging; development and production remain disabled.
 
 ## Allowed sources
@@ -27,7 +38,7 @@ Before retrieving a document the worker:
 6. validates content type, content encoding, byte limit, and canonical identity;
 7. hashes the exact bytes and persists the raw object to private R2 under a content-addressed key.
 
-Current supported Crawl-delay maximum is 60 seconds. Lex currently declares 20 seconds. Advice currently permits the selected public document routes without a positive Crawl-delay; JURO still applies a minimum one-second host window before every Advice document request. The window key is scoped to environment and host, so a serial queue batch cannot bypass the policy and a Worker never waits/sleeps for it. A separate default-off Advice sitemap discovery capability may submit at most 20 canonical document URLs from the public robots-declared sitemap; it does not fetch arbitrary links and each candidate returns through this exact acquisition boundary. It is disabled in every environment pending policy/load review and live staging evidence.
+Current supported Crawl-delay maximum is 60 seconds. Lex currently declares 20 seconds. Advice currently permits the selected public document routes without a positive Crawl-delay; JURO still applies a minimum one-second host window before every Advice document request. The window key is scoped to environment and host, so a serial queue batch cannot bypass the policy and a Worker never waits/sleeps for it. A separate default-off Advice sitemap discovery capability may submit at most 20 canonical document URLs from the public robots-declared sitemap. The Lex discovery candidate reads only the exact official `https://lex.uz/ru/rss` and `https://lex.uz/uz/rss` feeds, balances RU/UZ results, and submits at most 40 exact canonical document URLs. Neither discovery path fetches arbitrary links; every candidate returns through this exact acquisition boundary.
 
 ## Normalization
 
@@ -50,6 +61,7 @@ AI routes filter for exact verified source state, verified timestamp, and conten
 - authenticated reviewer browser QA with an owner-approved reviewer identity;
 - approved publication to immutable sections/chunks;
 - multilingual RU/UZ source version model;
+- broad historical/priority-area Lex corpus backfill beyond the recent RSS window;
 - explicit policy/load approval and a controlled live staging run before enabling the implemented bounded Advice sitemap discovery flag;
 - lexical plus semantic retrieval with tenant-independent public-source filters;
 - server-side citation existence/status/effective-date verification;

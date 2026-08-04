@@ -1,6 +1,7 @@
 import { createLegalSourceFetchRequest, type LegalSourceAcquisitionEnv } from "./source-acquisition";
 import {
   discoverAdviceSitemapDocuments,
+  discoverLexRssDocuments,
   LegalSourceDiscoveryError,
 } from "./source-discovery";
 
@@ -27,8 +28,16 @@ function sourceRunId(kind: SourceKind, now: Date): string {
 }
 
 export async function startScheduledCorpusSync(
-  env: LegalSourceAcquisitionEnv & { LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED?: string },
-  options: { now?: Date; discoverAdvice?: () => Promise<DiscoveryCandidate[]> } = {},
+  env: LegalSourceAcquisitionEnv & {
+    LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED?: string;
+    LEGAL_LEX_RSS_DISCOVERY_ENABLED?: string;
+  },
+  options: {
+    now?: Date;
+    discoverAdvice?: () => Promise<DiscoveryCandidate[]>;
+    discoverLex?: () => Promise<DiscoveryCandidate[]>;
+    discoveryWait?: (delayMs: number) => Promise<void>;
+  } = {},
 ): Promise<ScheduledCorpusSyncSummary> {
   const now = options.now ?? new Date();
   const timestamp = now.toISOString();
@@ -36,34 +45,6 @@ export async function startScheduledCorpusSync(
   let busy = 0;
   let empty = 0;
   for (const kind of ["lex", "advice"] as const) {
-    const stored = await env.DB.prepare(`
-      SELECT official_url AS officialUrl,locale,canonical_id AS canonicalId
-      FROM legal_sources
-      WHERE source_type=? AND canonical_id IS NOT NULL
-        AND official_url IS NOT NULL
-      ORDER BY last_checked_at ASC
-      LIMIT ?
-    `).bind(kind, MAX_SOURCES_PER_KIND).all<Candidate>();
-    let discoveryError: string | null = null;
-    let discovered: DiscoveryCandidate[] = [];
-    if (kind === "advice" && env.LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED === "true") {
-      try {
-        discovered = options.discoverAdvice
-          ? await options.discoverAdvice()
-          : (await discoverAdviceSitemapDocuments({ maxDocuments: MAX_DISCOVERED_ADVICE_SOURCES })).candidates.map((candidate) => ({
-            officialUrl: candidate.canonicalUrl,
-            locale: candidate.locale,
-            canonicalId: candidate.canonicalId,
-          }));
-      } catch (error) {
-        discoveryError = error instanceof LegalSourceDiscoveryError
-          ? error.code
-          : "LEGAL_SOURCE_DISCOVERY_UNAVAILABLE";
-      }
-    }
-    const candidates = [...new Map(
-      [...stored.results, ...discovered].map((candidate) => [candidate.officialUrl, candidate]),
-    ).values()].slice(0, MAX_SOURCES_PER_KIND);
     const runId = sourceRunId(kind, now);
     const lockKey = `${env.APP_ENV}:${kind}:scheduled_corpus`;
     const created = await env.DB.prepare(`
@@ -76,30 +57,89 @@ export async function startScheduledCorpusSync(
     `).bind(
       runId, env.APP_ENV, kind,
       "running",
-      lockKey, candidates.length, timestamp, timestamp, timestamp,
+      lockKey, 0, timestamp, timestamp, timestamp,
     ).run();
     if (Number(created.meta.changes ?? 0) !== 1) {
       busy += 1;
       continue;
     }
-    if (candidates.length === 0) {
+    try {
+      const stored = await env.DB.prepare(`
+        SELECT official_url AS officialUrl,locale,canonical_id AS canonicalId
+        FROM legal_sources
+        WHERE source_type=? AND canonical_id IS NOT NULL
+          AND official_url IS NOT NULL
+        ORDER BY last_checked_at ASC
+        LIMIT ?
+      `).bind(kind, MAX_SOURCES_PER_KIND).all<Candidate>();
+      let discoveryError: string | null = null;
+      let discovered: DiscoveryCandidate[] = [];
+      const discoveryEnabled = kind === "lex"
+        ? env.LEGAL_LEX_RSS_DISCOVERY_ENABLED === "true"
+        : env.LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED === "true";
+      if (discoveryEnabled) {
+        try {
+          const discovery = kind === "lex"
+            ? options.discoverLex
+              ? await options.discoverLex()
+              : (await discoverLexRssDocuments({
+                maxDocuments: 40,
+                wait: options.discoveryWait,
+              })).candidates.map((candidate) => ({
+                officialUrl: candidate.canonicalUrl,
+                locale: candidate.locale,
+                canonicalId: candidate.canonicalId,
+              }))
+            : options.discoverAdvice
+              ? await options.discoverAdvice()
+              : (await discoverAdviceSitemapDocuments({
+                maxDocuments: MAX_DISCOVERED_ADVICE_SOURCES,
+                wait: options.discoveryWait,
+              })).candidates.map((candidate) => ({
+                officialUrl: candidate.canonicalUrl,
+                locale: candidate.locale,
+                canonicalId: candidate.canonicalId,
+              }));
+          discovered = discovery;
+        } catch (error) {
+          discoveryError = error instanceof LegalSourceDiscoveryError
+            ? error.code
+            : "LEGAL_SOURCE_DISCOVERY_UNAVAILABLE";
+        }
+      }
+      const candidates = [...new Map(
+        [...discovered, ...stored.results].map((candidate) => [candidate.officialUrl, candidate]),
+      ).values()].slice(0, MAX_SOURCES_PER_KIND);
+      await env.DB.prepare(`
+        UPDATE source_sync_runs SET discovered_count=?,updated_at=?
+        WHERE id=? AND status='running'
+      `).bind(candidates.length, timestamp, runId).run();
+      if (candidates.length === 0) {
+        await env.DB.prepare(`
+          UPDATE source_sync_runs
+          SET status='failed',finished_at=?,error_count=1,error_summary=?,updated_at=?
+          WHERE id=? AND status='running'
+        `).bind(timestamp, discoveryError ?? "LEGAL_SOURCE_CORPUS_EMPTY", timestamp, runId).run();
+        empty += 1;
+        continue;
+      }
+      for (const source of candidates) {
+        await createLegalSourceFetchRequest(env, {
+          url: source.officialUrl,
+          idempotencyKey: `scheduled_${dayKey(now)}_${kind}_${source.locale}_${source.canonicalId}`,
+          requestedByUserId: null,
+          correlationId: runId,
+        }, { now: () => now });
+      }
+      started += 1;
+    } catch (error) {
       await env.DB.prepare(`
         UPDATE source_sync_runs
         SET status='failed',finished_at=?,error_count=1,error_summary=?,updated_at=?
         WHERE id=? AND status='running'
-      `).bind(timestamp, discoveryError ?? "LEGAL_SOURCE_CORPUS_EMPTY", timestamp, runId).run();
-      empty += 1;
-      continue;
+      `).bind(timestamp, "LEGAL_SOURCE_CORPUS_START_FAILED", timestamp, runId).run();
+      throw error;
     }
-    for (const source of candidates) {
-      await createLegalSourceFetchRequest(env, {
-        url: source.officialUrl,
-        idempotencyKey: `scheduled_${dayKey(now)}_${kind}_${source.locale}_${source.canonicalId}`,
-        requestedByUserId: null,
-        correlationId: runId,
-      }, { now: () => now });
-    }
-    started += 1;
   }
   return { started, busy, empty };
 }

@@ -1,4 +1,11 @@
 # JURO legal-source foundation
+> Current branch checkpoint — 2026-08-05: official Lex RU/UZ RSS discovery is
+> implemented as a bounded review-only acquisition source. The daily run is
+> fenced before remote access; `robots.txt` delay, strict feed/media/size and
+> canonical-URL rules are enforced. Discovered material remains unverified and
+> excluded from retrieval until an explicit legal-review publication. This is a
+> local candidate only; staging remains deployed from `cff38f0` through `0078`.
+
 > Current branch checkpoint — 2026-07-31: citation output is now a closed server-side referential boundary. Allowed IDs must be declared exactly once, legal claims requiring evidence cannot be citation-free, and all source metadata is canonicalized from verified retrieval before persistence. This prevents provider-authored URLs/excerpts/dates from becoming application truth. Semantic claim-to-fragment entailment remains a separate open gate. The slice is locally tested and not yet staging-deployed.
 
 > Current staging checkpoint — 2026-07-31: verified retrieval replays publication, lifecycle, activation, effective-date, and complete reading-row evidence before source text can enter AI context. Corpus freshness requires successful full-corpus runs for both Lex and Advice; single-document fetches never qualify. The trust/freshness gate is deployed to owner-protected staging as version `37687899-f17a-4bdf-9f9c-41c6b509cfb9`. Staging has zero qualifying corpus runs, so its current truthful status is `unavailable`, with confirmed legal conclusions withheld. Evidence: `STAGING-PHASE3-TRUST-FRESHNESS-EVIDENCE.md`.

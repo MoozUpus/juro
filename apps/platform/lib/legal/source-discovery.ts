@@ -7,6 +7,8 @@ export const LEGAL_SOURCE_DISCOVERY_ERROR_CODES = [
   "LEGAL_SOURCE_DISCOVERY_TOO_LARGE",
   "LEGAL_SOURCE_DISCOVERY_ENCODING_REJECTED",
   "LEGAL_SOURCE_DISCOVERY_TIMEOUT",
+  "LEGAL_SOURCE_DISCOVERY_RATE_POLICY",
+  "LEGAL_SOURCE_DISCOVERY_CRAWL_WINDOW_REQUIRED",
 ] as const;
 
 export type LegalSourceDiscoveryErrorCode =
@@ -28,12 +30,26 @@ export type AdviceSitemapDiscovery = {
   fetchedAt: string;
 };
 
+export type LexRssDiscovery = {
+  candidates: LegalSourceReference[];
+  robotsUrl: string;
+  rssUrls: string[];
+  fetchedAt: string;
+  crawlDelaySeconds: number;
+};
+
 const USER_AGENT = "JURO-LegalSourceSync/1.0 (+https://juro.uz)";
-const ROBOTS_URL = "https://advice.uz/robots.txt";
+const USER_AGENT_TOKEN = "juro-legalsourcesync";
+const ADVICE_ROBOTS_URL = "https://advice.uz/robots.txt";
+const LEX_ROBOTS_URL = "https://lex.uz/robots.txt";
+const LEX_RSS_URLS = ["https://lex.uz/ru/rss", "https://lex.uz/uz/rss"] as const;
 const MAX_BYTES = 512 * 1024;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_DOCUMENTS = 20;
+const DEFAULT_MAX_LEX_DOCUMENTS = 40;
+const MAX_CRAWL_DELAY_SECONDS = 60;
 const ACCEPT_XML = "application/xml, text/xml;q=0.9, */*;q=0.1";
+const ACCEPT_RSS = "application/rss+xml, application/xml;q=0.9, text/xml;q=0.8, */*;q=0.1";
 
 function isAllowedSitemapUrl(value: string): boolean {
   try {
@@ -152,11 +168,89 @@ function robotsSitemaps(robots: string): string[] {
     });
 }
 
+type RobotsDelayGroup = {
+  agents: string[];
+  crawlDelay: number | null;
+};
+
+function robotsCrawlDelaySeconds(robots: string): number {
+  const groups: RobotsDelayGroup[] = [];
+  let current: RobotsDelayGroup | null = null;
+  let hasDirectives = false;
+  for (const rawLine of robots.split(/\r?\n/)) {
+    const line = rawLine.replace(/#.*/, "").trim();
+    if (!line) {
+      if (current && hasDirectives) {
+        current = null;
+        hasDirectives = false;
+      }
+      continue;
+    }
+    const separator = line.indexOf(":");
+    if (separator <= 0) continue;
+    const key = line.slice(0, separator).trim().toLowerCase();
+    const value = line.slice(separator + 1).trim();
+    if (key === "user-agent") {
+      if (!current || hasDirectives) {
+        current = { agents: [], crawlDelay: null };
+        groups.push(current);
+        hasDirectives = false;
+      }
+      current.agents.push(value.toLowerCase());
+      continue;
+    }
+    if (key !== "crawl-delay" || !current || current.agents.length === 0) continue;
+    hasDirectives = true;
+    const seconds = Number(value);
+    if (Number.isFinite(seconds) && seconds >= 0) current.crawlDelay = seconds;
+  }
+  const exact = groups.filter((group) => group.agents.includes(USER_AGENT_TOKEN));
+  const selected = exact.length > 0
+    ? exact
+    : groups.filter((group) => group.agents.includes("*"));
+  return Math.max(0, ...selected.map((group) => group.crawlDelay ?? 0));
+}
+
+async function honorCrawlDelay(
+  delaySeconds: number,
+  wait: ((delayMs: number) => Promise<void>) | undefined,
+): Promise<void> {
+  if (delaySeconds <= 0) return;
+  if (delaySeconds > MAX_CRAWL_DELAY_SECONDS) {
+    throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_RATE_POLICY", false);
+  }
+  if (!wait) {
+    throw new LegalSourceDiscoveryError(
+      "LEGAL_SOURCE_DISCOVERY_CRAWL_WINDOW_REQUIRED",
+      true,
+    );
+  }
+  await wait(Math.ceil(delaySeconds * 1_000));
+}
+
+function isAllowedLexRssUrl(value: string): boolean {
+  return LEX_RSS_URLS.includes(value as (typeof LEX_RSS_URLS)[number]);
+}
+
+function rssLinks(xml: string): string[] {
+  if (!/<rss(?:\s|>)/i.test(xml) || !/<channel(?:\s|>)/i.test(xml)) {
+    throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_UNAVAILABLE", false);
+  }
+  const links: string[] = [];
+  const expression = /<link(?:\s[^>]*)?>\s*([^<\s][^<]*?)\s*<\/link>/gi;
+  for (const match of xml.matchAll(expression)) {
+    const value = match[1]?.trim().replaceAll("&amp;", "&");
+    if (value) links.push(value);
+  }
+  return links;
+}
+
 export async function discoverAdviceSitemapDocuments(options: {
   fetchImpl?: FetchLike;
   now?: () => Date;
   maxDocuments?: number;
   timeoutMs?: number;
+  wait?: (delayMs: number) => Promise<void>;
 } = {}): Promise<AdviceSitemapDiscovery> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const maxDocuments = options.maxDocuments ?? DEFAULT_MAX_DOCUMENTS;
@@ -164,12 +258,13 @@ export async function discoverAdviceSitemapDocuments(options: {
   if (!Number.isSafeInteger(maxDocuments) || maxDocuments < 1 || maxDocuments > 100 || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1) {
     throw new TypeError("Invalid legal source discovery limits.");
   }
-  const robotsResponse = await fetchBounded(fetchImpl, ROBOTS_URL, "text/plain, */*;q=0.1", timeoutMs);
+  const robotsResponse = await fetchBounded(fetchImpl, ADVICE_ROBOTS_URL, "text/plain, */*;q=0.1", timeoutMs);
   if (contentType(robotsResponse) !== "text/plain") {
     await robotsResponse.body?.cancel();
     throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_CONTENT_TYPE_REJECTED", false);
   }
   const robots = await readText(robotsResponse, MAX_BYTES);
+  const crawlDelaySeconds = robotsCrawlDelaySeconds(robots);
   const roots = robotsSitemaps(robots).filter(isAllowedSitemapUrl);
   if (roots.length === 0) {
     throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_UNAVAILABLE", false);
@@ -181,6 +276,7 @@ export async function discoverAdviceSitemapDocuments(options: {
   while (pending.length > 0 && candidates.size < maxDocuments && sitemapUrls.length < 3) {
     const sitemap = pending.shift()!;
     if (!isAllowedSitemapUrl(sitemap) || sitemapUrls.includes(sitemap)) continue;
+    await honorCrawlDelay(crawlDelaySeconds, options.wait);
     const response = await fetchBounded(fetchImpl, sitemap, ACCEPT_XML, timeoutMs);
     const mediaType = contentType(response);
     if (mediaType !== "application/xml" && mediaType !== "text/xml") {
@@ -204,8 +300,80 @@ export async function discoverAdviceSitemapDocuments(options: {
   }
   return {
     candidates: [...candidates.values()],
-    robotsUrl: ROBOTS_URL,
+    robotsUrl: ADVICE_ROBOTS_URL,
     sitemapUrls,
     fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
+  };
+}
+
+export async function discoverLexRssDocuments(options: {
+  fetchImpl?: FetchLike;
+  now?: () => Date;
+  maxDocuments?: number;
+  timeoutMs?: number;
+  wait?: (delayMs: number) => Promise<void>;
+} = {}): Promise<LexRssDiscovery> {
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const maxDocuments = options.maxDocuments ?? DEFAULT_MAX_LEX_DOCUMENTS;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  if (
+    !Number.isSafeInteger(maxDocuments) || maxDocuments < 1 || maxDocuments > 100
+    || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1
+  ) {
+    throw new TypeError("Invalid legal source discovery limits.");
+  }
+
+  const robotsResponse = await fetchBounded(
+    fetchImpl,
+    LEX_ROBOTS_URL,
+    "text/plain, */*;q=0.1",
+    timeoutMs,
+  );
+  if (contentType(robotsResponse) !== "text/plain") {
+    await robotsResponse.body?.cancel();
+    throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_CONTENT_TYPE_REJECTED", false);
+  }
+  const robots = await readText(robotsResponse, MAX_BYTES);
+  const crawlDelaySeconds = robotsCrawlDelaySeconds(robots);
+  if (crawlDelaySeconds > MAX_CRAWL_DELAY_SECONDS) {
+    throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_RATE_POLICY", false);
+  }
+
+  const candidates = new Map<string, LegalSourceReference>();
+  const rssUrls: string[] = [];
+  const perFeedLimit = Math.ceil(maxDocuments / LEX_RSS_URLS.length);
+  for (const rssUrl of LEX_RSS_URLS) {
+    if (candidates.size >= maxDocuments) break;
+    if (!isAllowedLexRssUrl(rssUrl)) continue;
+    await honorCrawlDelay(crawlDelaySeconds, options.wait);
+    const response = await fetchBounded(fetchImpl, rssUrl, ACCEPT_RSS, timeoutMs);
+    const mediaType = contentType(response);
+    if (!["application/rss+xml", "application/xml", "text/xml"].includes(mediaType)) {
+      await response.body?.cancel();
+      throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_CONTENT_TYPE_REJECTED", false);
+    }
+    rssUrls.push(rssUrl);
+    let feedCandidates = 0;
+    for (const link of rssLinks(await readText(response, MAX_BYTES))) {
+      try {
+        const absolute = new URL(link, rssUrl);
+        const source = classifyLegalSourceUrl(absolute.href);
+        if (source.sourceKind !== "lex" || source.locale !== (rssUrl.includes("/ru/") ? "ru" : "uz")) {
+          continue;
+        }
+        if (!candidates.has(source.canonicalUrl)) feedCandidates += 1;
+        candidates.set(source.canonicalUrl, source);
+      } catch {
+        // RSS entries outside JURO's exact Lex document allowlist are ignored.
+      }
+      if (feedCandidates >= perFeedLimit || candidates.size >= maxDocuments) break;
+    }
+  }
+  return {
+    candidates: [...candidates.values()].slice(0, maxDocuments),
+    robotsUrl: LEX_ROBOTS_URL,
+    rssUrls,
+    fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
+    crawlDelaySeconds,
   };
 }
