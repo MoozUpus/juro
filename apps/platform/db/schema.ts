@@ -2003,6 +2003,44 @@ export const legalSourceCurrentActivations = sqliteTable("legal_source_current_a
   index("legal_source_current_activations_actor_idx").on(table.activatedByUserId, table.activatedAt),
 ]);
 
+export const userLegalBookmarks = sqliteTable("user_legal_bookmarks", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  versionId: text("version_id").notNull().references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  caseId: text("case_id").references(() => cases.id, { onDelete: "set null" }),
+  comment: text("comment"),
+  revision: integer("revision").notNull().default(1),
+  archivedAt: text("archived_at"),
+  ...timestamps,
+}, (table) => [
+  index("user_legal_bookmarks_user_idx").on(table.workspaceId, table.userId, table.updatedAt),
+  index("user_legal_bookmarks_case_idx").on(table.workspaceId, table.caseId, table.updatedAt),
+  index("user_legal_bookmarks_source_idx").on(table.sourceId, table.versionId),
+]);
+
+export const userLegalBookmarkEvents = sqliteTable("user_legal_bookmark_events", {
+  id: text("id").primaryKey(),
+  bookmarkId: text("bookmark_id").notNull().references(() => userLegalBookmarks.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull(),
+  userId: text("user_id").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  sourceId: text("source_id").notNull(),
+  versionId: text("version_id").notNull(),
+  caseId: text("case_id"),
+  eventType: text("event_type").notNull(),
+  revision: integer("revision").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  commentSha256: text("comment_sha256"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("user_legal_bookmark_events_revision_uidx").on(table.bookmarkId, table.revision),
+  uniqueIndex("user_legal_bookmark_events_idempotency_uidx").on(table.workspaceId, table.userId, table.idempotencyKey),
+  index("user_legal_bookmark_events_case_idx").on(table.workspaceId, table.caseId, table.createdAt),
+]);
+
 export const legalSourceLifecycleEvents = sqliteTable("legal_source_lifecycle_events", {
   id: text("id").primaryKey(),
   sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),

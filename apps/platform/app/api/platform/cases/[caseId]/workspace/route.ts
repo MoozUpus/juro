@@ -20,7 +20,7 @@ export const GET = withApiErrors(async function GET(
   ).bind(caseId, workspace.id).first<{ id: string }>();
   if (!owned) return response({ error: "Дело недоступно.", code: "CASE_UNAVAILABLE" }, 404);
 
-  const [documents, events, conversations, analyses, comparisons, sources, participants, lawyerRequests] = await db.batch([
+  const [documents, events, conversations, analyses, comparisons, sources, bookmarks, participants, lawyerRequests] = await db.batch([
     db.prepare(
       "SELECT id,title,status,language,plan_step_id AS planStepId,updated_at AS updatedAt FROM documents WHERE workspace_id=? AND case_id=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 20",
     ).bind(workspace.id, caseId),
@@ -58,6 +58,23 @@ export const GET = withApiErrors(async function GET(
        ORDER BY s.act_title,s.id LIMIT 100`,
     ).bind(workspace.id, user.id, caseId),
     db.prepare(
+      `SELECT bookmark.id AS bookmarkId,bookmark.source_id AS sourceId,
+        bookmark.version_id AS versionId,bookmark.comment,bookmark.revision,
+        bookmark.created_at AS createdAt,bookmark.updated_at AS updatedAt,
+        source.act_title AS actTitle,source.act_identifier AS actIdentifier,
+        source.official_url AS officialUrl,source.locale,
+        source.last_checked_at AS lastCheckedAt,
+        CASE WHEN activation.version_id=bookmark.version_id THEN 1 ELSE 0 END AS isCurrentVersion
+       FROM user_legal_bookmarks bookmark
+       JOIN legal_sources source ON source.id=bookmark.source_id
+       JOIN legal_source_versions version
+         ON version.id=bookmark.version_id AND version.source_id=source.id
+       LEFT JOIN legal_source_current_activations activation ON activation.source_id=source.id
+       WHERE bookmark.workspace_id=? AND bookmark.user_id=? AND bookmark.case_id=?
+         AND bookmark.archived_at IS NULL
+       ORDER BY bookmark.updated_at DESC LIMIT 100`,
+    ).bind(workspace.id, user.id, caseId),
+    db.prepare(
       `SELECT m.user_id AS userId,m.role,m.status,m.joined_at AS joinedAt,
         COALESCE(NULLIF(TRIM(p.full_name),''), CASE WHEN m.user_id=? THEN 'You' ELSE 'Workspace member' END) AS displayName
        FROM workspace_members m
@@ -86,6 +103,10 @@ export const GET = withApiErrors(async function GET(
     comparisons: comparisons.results,
     analyses: analyses.results,
     sources: sources.results,
+    bookmarks: bookmarks.results.map((bookmark) => {
+      const row = bookmark as Record<string, unknown>;
+      return { ...row, isCurrentVersion: Number(row.isCurrentVersion) === 1 };
+    }),
     participants: participants.results.map((participant) => {
       const row = participant as Record<string, unknown>;
       return { ...row, currentUser: row.userId === user.id };

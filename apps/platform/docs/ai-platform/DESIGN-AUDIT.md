@@ -318,3 +318,16 @@ Before the staging design gate:
 12. measured bundle and Core Web Vitals.
 13. rerun visual Impeccable/Taste passes on the staged prototype; the two source-contract reviews now have no High/P1/P2 findings, but that is not a visual score.
 
+## Legal bookmark control — local Before / After / Why
+
+| Before | After | Why |
+|---|---|---|
+| AI sources were outbound links only | Each verified source has an explicit RU/UZ save form with personal/case destination and optional comment | Converts a cited norm into durable user work without trusting client tenant/version data |
+| Case Sources mixed only incidental chat citations | Explicit pinned bookmarks are separated from incidental AI-dialog sources | Clarifies user agency and why an item remains in the case |
+| A later source revision had no visible bookmark semantics | The case row says current version or saved historical version | Prevents silent legal-context drift |
+| No removal control | A 44 px labelled archive control with live status removes the bookmark from the case | WCAG target size, keyboard access and reversible mental model |
+
+Motion review: this is a frequent legal-work action, so save/archive use no
+decorative transition or stagger. Native `details`, form state, disabled state
+and `aria-live` provide feedback. No dependency or animation runtime was added.
+

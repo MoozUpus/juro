@@ -1131,3 +1131,20 @@ key integrity, account cascade, stale-writer and direct-mutation tests pass.
 Staging and production remain unchanged pending a separately authorized backup,
 ordered migrations `0069`-`0075` and deploy. Wrangler executed all 16 statements
 against local `juro-development`; a repeat local list reports no pending migration.
+
+## Migration 0076 - verified legal bookmarks (local candidate)
+
+`0076_user_legal_bookmarks.sql` additively creates a user/workspace-owned
+bookmark projection and append-only mutation events. Each row references one
+legal source and the exact verified version that was current when saved. An
+optional case uses `SET NULL` on case deletion; account/workspace deletion
+cascades the user content and its events.
+
+The active-scope index prevents duplicate live bookmarks for the same user,
+source version and case. Event guards verify tenant, actor, source/version,
+projection revision and archive state; update/delete triggers preserve evidence.
+Workspace audit and case activity contain IDs, revision and comment hash only.
+Wrangler 4.92.0 executed 14 statements only against local `juro-development`; a
+repeat local list reports no pending migration. Staging and production remain
+unchanged pending a fresh verified private staging backup, ordered migrations
+`0069`-`0076` and separately authorized deploy.

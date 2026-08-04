@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { AudioLines, BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, UserRoundX, X } from "lucide-react";
+import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, Check, CircleAlert, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, UserRoundX, X } from "lucide-react";
 import Image from "next/image";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
@@ -489,10 +489,59 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       <aside className="ai-context">
         <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
         <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence"><h2>{ru ? "Источники" : "Manbalar"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <a key={`${source.sourceId}:${source.article || "source"}`} href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`}</em></a> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
+        <section className="ai-evidence"><h2>{ru ? "Источники" : "Manbalar"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <article className="ai-source-card" key={`${source.sourceId}:${source.article || "source"}`}><a href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`}</em></a><SourceBookmarkControl source={source} cases={cases} locale={locale} /></article> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );
+}
+
+function SourceBookmarkControl({ source, cases, locale }: { source: Source; cases: CaseOption[]; locale: PlatformLocale }) {
+  const ru = locale === "ru";
+  const [caseId, setCaseId] = useState("");
+  const [comment, setComment] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [status, setStatus] = useState("");
+  const [failed, setFailed] = useState(false);
+
+  async function save(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSaving(true);
+    setFailed(false);
+    setStatus("");
+    try {
+      const response = await fetch("/api/platform/legal-bookmarks", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": `legal-bookmark-create-${crypto.randomUUID()}`,
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({ sourceId: source.sourceId, caseId: caseId || null, comment: comment || null }),
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || (ru ? "Источник не сохранён." : "Manba saqlanmadi."));
+      setSaved(true);
+      setStatus(caseId
+        ? (ru ? "Норма сохранена в выбранное дело." : "Norma tanlangan ishga saqlandi.")
+        : (ru ? "Норма сохранена в личные закладки." : "Norma shaxsiy xatcho‘plarga saqlandi."));
+    } catch (error) {
+      setFailed(true);
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return <details className="ai-source-bookmark">
+    <summary><BookmarkPlus aria-hidden="true" />{saved ? (ru ? "Сохранено" : "Saqlandi") : (ru ? "Сохранить норму" : "Normani saqlash")}</summary>
+    <form onSubmit={(event) => void save(event)}>
+      <label>{ru ? "Добавить в дело — необязательно" : "Ishga qo‘shish — ixtiyoriy"}<select value={caseId} disabled={saving || saved} onChange={(event) => setCaseId(event.target.value)}><option value="">{ru ? "Личные закладки" : "Shaxsiy xatcho‘plar"}</option>{cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+      <label>{ru ? "Комментарий — необязательно" : "Izoh — ixtiyoriy"}<textarea value={comment} disabled={saving || saved} maxLength={2_000} onChange={(event) => setComment(event.target.value)} placeholder={ru ? "Почему эта норма важна для вашей ситуации" : "Bu norma vaziyatingiz uchun nega muhim"} /></label>
+      <button type="submit" disabled={saving || saved}><BookmarkPlus aria-hidden="true" />{saving ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : saved ? (ru ? "Сохранено" : "Saqlandi") : (ru ? "Сохранить проверенную версию" : "Tekshirilgan versiyani saqlash")}</button>
+      <output role={failed ? "alert" : "status"} aria-live="polite">{status}</output>
+    </form>
+  </details>;
 }
 
 function VoiceModeStage(props: {

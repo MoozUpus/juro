@@ -17,6 +17,7 @@ import {
   MessageSquareText,
   Scale,
   ShieldCheck,
+  Trash2,
   UsersRound,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -36,6 +37,7 @@ type CaseConversation = { id: string; title: string; status: string; locale: str
 type CaseComparison = { id: string; status: string; stage: string; overallRisk?: string | null; errorCode?: string | null; updatedAt: string };
 type CaseAnalysis = { id: string; status: string; errorCode?: string | null; fileName: string; mimeType: string; updatedAt: string };
 type CaseSource = { id: string; actTitle: string; actIdentifier?: string | null; officialUrl: string; status: string; locale: string; lastCheckedAt: string };
+type CaseBookmark = { bookmarkId: string; sourceId: string; versionId: string; comment?: string | null; revision: number; createdAt: string; updatedAt: string; actTitle: string; actIdentifier?: string | null; officialUrl: string; locale: string; lastCheckedAt: string; isCurrentVersion: boolean };
 type CaseParticipant = { userId: string; role: string; status: string; joinedAt: string; displayName: string; currentUser: boolean };
 type CaseLawyerRequest = { id: string; status: string; updatedAt: string; lawyerName?: string | null; activeGrantId?: string | null; grantedAt?: string | null; expiresAt?: string | null };
 type CaseWorkspaceData = {
@@ -45,6 +47,7 @@ type CaseWorkspaceData = {
   comparisons?: CaseComparison[];
   analyses?: CaseAnalysis[];
   sources?: CaseSource[];
+  bookmarks?: CaseBookmark[];
   participants?: CaseParticipant[];
   lawyerRequests?: CaseLawyerRequest[];
   error?: string;
@@ -136,7 +139,7 @@ function CaseSectionPanel({ section, locale, base, item, tasks, data }: { sectio
     ...(data.analyses ?? []).map((analysis) => ({ id: `analysis:${analysis.id}`, title: analysis.fileName, meta: `${statusLabel(analysis.status, ru)} · ${date(analysis.updatedAt, locale)}`, href: `${base}/document-review?analysisId=${encodeURIComponent(analysis.id)}&caseId=${encodeURIComponent(item.id)}` })),
     ...(data.comparisons ?? []).map((comparison) => ({ id: `comparison:${comparison.id}`, title: ru ? "Сравнение версий документа" : "Hujjat nusxalarini taqqoslash", meta: `${statusLabel(comparison.status, ru)}${comparison.overallRisk ? ` · ${riskLabel(comparison.overallRisk, ru)}` : ""} · ${date(comparison.updatedAt, locale)}`, href: `${base}/documents/comparisons/${encodeURIComponent(comparison.id)}` })),
   ]} action={<Link href={`${base}/document-review?caseId=${encodeURIComponent(item.id)}`}>{ru ? "Анализировать документ" : "Hujjatni tahlil qilish"}<ArrowUpRight /></Link>} />;
-  if (section === "sources") return <SimpleList icon={BookOpenCheck} title={ru ? "Источники дела" : "Ish manbalari"} empty={ru ? "Подтверждённые источники появятся после AI-ответа, привязанного к делу." : "Tasdiqlangan manbalar ishga biriktirilgan AI javobidan keyin paydo bo‘ladi."} items={(data.sources ?? []).map((source) => ({ id: source.id, title: source.actTitle, meta: `${source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")} · ${date(source.lastCheckedAt, locale)}`, externalHref: safeOfficialUrl(source.officialUrl) ? source.officialUrl : undefined }))} />;
+  if (section === "sources") return <CaseSourcesPanel locale={locale} sources={data.sources ?? []} initialBookmarks={data.bookmarks ?? []} />;
   if (section === "participants") return <SimpleList icon={UsersRound} title={ru ? "Участники пространства" : "Makon ishtirokchilari"} empty={ru ? "Активных участников нет." : "Faol ishtirokchilar yo‘q."} note={ru ? "Сейчас доступ к делу наследуется от активного workspace. Отдельные временные права юриста показаны в разделе «Доступ»." : "Hozir ishga kirish faol workspace orqali meros bo‘ladi. Yuristning alohida vaqtinchalik huquqlari «Ruxsat» bo‘limida ko‘rsatiladi."} items={(data.participants ?? []).map((participant) => ({ id: participant.userId, title: participant.currentUser ? `${participant.displayName} · ${ru ? "вы" : "siz"}` : participant.displayName, meta: `${roleLabel(participant.role, ru)} · ${date(participant.joinedAt, locale)}` }))} />;
   if (section === "lawyer") return <SimpleList icon={Scale} title={ru ? "Живой юрист" : "Jonli yurist"} empty={ru ? "По этому делу ещё нет заявки юристу." : "Bu ish bo‘yicha yuristga so‘rov yo‘q."} items={(data.lawyerRequests ?? []).map((request) => ({ id: request.id, title: request.lawyerName || (ru ? "Назначение юриста ожидается" : "Yurist tayinlanishi kutilmoqda"), meta: `${statusLabel(request.status, ru)} · ${date(request.updatedAt, locale)}`, trailing: request.activeGrantId ? (ru ? "Доступ активен" : "Ruxsat faol") : undefined }))} action={<Link href={`${base}/lawyers?caseId=${encodeURIComponent(item.id)}`}>{ru ? "Выбрать юриста" : "Yurist tanlash"}<ArrowUpRight /></Link>} />;
   if (section === "access") return <section className="case-workspace-tab-panel"><PanelHeading icon={ShieldCheck} title={ru ? "Доступ к делу" : "Ishga ruxsat"} /><p className="case-workspace-note">{ru ? "Базовый доступ имеют активные участники текущего workspace. Временный доступ юриста выдаётся только после отдельного подтверждения и может быть отозван." : "Asosiy ruxsat joriy workspace faol ishtirokchilariga beriladi. Yuristga vaqtinchalik ruxsat faqat alohida tasdiqdan keyin beriladi va bekor qilinishi mumkin."}</p><div className="case-access-grid"><SimpleListContent items={(data.participants ?? []).map((participant) => ({ id: participant.userId, title: participant.currentUser ? `${participant.displayName} · ${ru ? "вы" : "siz"}` : participant.displayName, meta: `${roleLabel(participant.role, ru)} · ${ru ? "доступ через workspace" : "workspace orqali ruxsat"}` }))} empty={ru ? "Активных участников нет." : "Faol ishtirokchilar yo‘q."} /><SimpleListContent items={(data.lawyerRequests ?? []).filter((request) => request.activeGrantId).map((request) => ({ id: request.id, title: request.lawyerName || (ru ? "Назначенный юрист" : "Tayinlangan yurist"), meta: `${ru ? "Предоставлен" : "Berilgan"}: ${date(request.grantedAt, locale)}`, trailing: request.expiresAt ? `${ru ? "до" : "gacha"} ${date(request.expiresAt, locale)}` : (ru ? "до отзыва" : "bekor qilinguncha") }))} empty={ru ? "Активного доступа юриста нет." : "Yuristning faol ruxsati yo‘q."} /></div></section>;
@@ -158,6 +161,57 @@ function SimpleListContent({ items, empty }: { items: SimpleItem[]; empty: strin
   return <ul className="case-workspace-records">{items.map((entry) => <li key={entry.id}><div><strong>{entry.title}</strong><span>{entry.meta}</span>{entry.trailing && <em>{entry.trailing}</em>}</div>{entry.href ? <Link href={entry.href}><ArrowUpRight /><span className="sr-only">{entry.title}</span></Link> : entry.externalHref ? <a href={entry.externalHref} target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{entry.title}</span></a> : null}</li>)}</ul>;
 }
 
+function CaseSourcesPanel({ locale, sources, initialBookmarks }: { locale: PlatformLocale; sources: CaseSource[]; initialBookmarks: CaseBookmark[] }) {
+  const ru = locale === "ru";
+  const [bookmarks, setBookmarks] = useState(initialBookmarks);
+  const [busyId, setBusyId] = useState("");
+  const [status, setStatus] = useState("");
+
+  async function removeBookmark(bookmark: CaseBookmark) {
+    setBusyId(bookmark.bookmarkId);
+    setStatus("");
+    try {
+      const response = await fetch(`/api/platform/legal-bookmarks/${encodeURIComponent(bookmark.bookmarkId)}`, {
+        method: "DELETE",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": `legal-bookmark-archive-${crypto.randomUUID()}`,
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({ revision: bookmark.revision }),
+      });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || (ru ? "Закладка не удалена." : "Xatcho‘p olib tashlanmadi."));
+      setBookmarks((current) => current.filter((item) => item.bookmarkId !== bookmark.bookmarkId));
+      setStatus(ru ? "Закладка удалена из дела." : "Xatcho‘p ishdan olib tashlandi.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusyId("");
+    }
+  }
+
+  return <section className="case-workspace-tab-panel case-sources-panel">
+    <PanelHeading icon={BookOpenCheck} title={ru ? "Источники дела" : "Ish manbalari"} />
+    <p className="case-workspace-note">{ru
+      ? "Сохранённые нормы закреплены за проверенной версией. JURO не заменяет их новой редакцией без вашего ведома."
+      : "Saqlangan normalar tekshirilgan versiyaga biriktiriladi. JURO ularni siz bilmasdan yangi tahrir bilan almashtirmaydi."}</p>
+    <output className="case-bookmark-status" aria-live="polite">{status}</output>
+    {bookmarks.length > 0 && <div className="case-bookmark-group"><h3>{ru ? "Мои закладки" : "Mening xatcho‘plarim"}</h3><ul className="case-bookmark-list">{bookmarks.map((bookmark) => <li key={bookmark.bookmarkId}>
+      <div>
+        <strong>{bookmark.actTitle}</strong>
+        <span>{bookmark.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")} · {bookmark.isCurrentVersion ? (ru ? "текущая версия" : "joriy versiya") : (ru ? "сохранённая историческая версия" : "saqlangan tarixiy versiya")}</span>
+        {bookmark.comment && <p>{bookmark.comment}</p>}
+      </div>
+      <div className="case-bookmark-actions">
+        {safeOfficialUrl(bookmark.officialUrl) && <a href={bookmark.officialUrl} target="_blank" rel="noreferrer"><ArrowUpRight /><span className="sr-only">{ru ? "Открыть официальный источник" : "Rasmiy manbani ochish"}</span></a>}
+        <button type="button" disabled={busyId === bookmark.bookmarkId} aria-label={ru ? `Удалить закладку «${bookmark.actTitle}»` : `«${bookmark.actTitle}» xatcho‘pini olib tashlash`} onClick={() => void removeBookmark(bookmark)}><Trash2 /></button>
+      </div>
+    </li>)}</ul></div>}
+    <div className="case-bookmark-group"><h3>{ru ? "Источники из AI-диалогов дела" : "Ishdagi AI suhbatlari manbalari"}</h3><SimpleListContent items={sources.map((source) => ({ id: source.id, title: source.actTitle, meta: `${source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")} · ${date(source.lastCheckedAt, locale)}`, externalHref: safeOfficialUrl(source.officialUrl) ? source.officialUrl : undefined }))} empty={ru ? "Подтверждённых источников в диалогах этого дела пока нет." : "Bu ish suhbatlarida hozircha tasdiqlangan manba yo‘q."} /></div>
+  </section>;
+}
+
 function PlanSteps({ item, locale, base, embedded = false }: { item: CaseRecord; locale: PlatformLocale; base: string; embedded?: boolean }) {
   const ru = locale === "ru";
   return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={FilePenLine} title={ru ? "Следующие шаги" : "Keyingi qadamlar"} action={!embedded ? <Link href={`${base}/action-plan/${encodeURIComponent(item.id)}`}>{ru ? "Открыть план" : "Rejani ochish"}</Link> : undefined} />{item.steps?.length ? <ol className="case-workspace-steps">{item.steps.map((step) => <li key={step.id}><CheckCircle2 className={step.status === "completed" ? "done" : undefined} /><div><strong>{step.title}</strong><span>{date(step.dueAt, locale)} · {statusLabel(step.status, ru)}</span></div></li>)}</ol> : <p className="case-workspace-muted">{ru ? "В плане пока нет шагов." : "Rejada hozircha qadam yo‘q."}</p>}</section>;
@@ -176,7 +230,7 @@ function sectionLabel(section: CaseSection, ru: boolean) {
 }
 
 function activityLabel(eventType: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = { case_created: ["Дело создано", "Ish yaratildi"], step_updated: ["Шаг плана обновлён", "Reja qadami yangilandi"], plan_changes_confirmed: ["Изменения плана подтверждены", "Reja o‘zgarishlari tasdiqlandi"], tasks_created: ["Задачи из плана подтверждены", "Rejadagi vazifalar tasdiqlandi"], document_created: ["Документ добавлен", "Hujjat qo‘shildi"], document_linked: ["Документ добавлен в дело", "Hujjat ishga qo‘shildi"], document_unlinked: ["Документ удалён из дела", "Hujjat ishdan olib tashlandi"], analysis_linked: ["Анализ добавлен в дело", "Tahlil ishga qo‘shildi"], analysis_unlinked: ["Анализ удалён из дела", "Tahlil ishdan olib tashlandi"] };
+  const labels: Record<string, [string, string]> = { case_created: ["Дело создано", "Ish yaratildi"], step_updated: ["Шаг плана обновлён", "Reja qadami yangilandi"], plan_changes_confirmed: ["Изменения плана подтверждены", "Reja o‘zgarishlari tasdiqlandi"], tasks_created: ["Задачи из плана подтверждены", "Rejadagi vazifalar tasdiqlandi"], document_created: ["Документ добавлен", "Hujjat qo‘shildi"], document_linked: ["Документ добавлен в дело", "Hujjat ishga qo‘shildi"], document_unlinked: ["Документ удалён из дела", "Hujjat ishdan olib tashlandi"], analysis_linked: ["Анализ добавлен в дело", "Tahlil ishga qo‘shildi"], analysis_unlinked: ["Анализ удалён из дела", "Tahlil ishdan olib tashlandi"], legal_bookmark_saved: ["Правовой источник сохранён", "Huquqiy manba saqlandi"], legal_bookmark_removed: ["Правовая закладка удалена", "Huquqiy xatcho‘p olib tashlandi"] };
   return labels[eventType]?.[ru ? 0 : 1] || (ru ? "Дело обновлено" : "Ish yangilandi");
 }
 

@@ -443,3 +443,17 @@ and document-builder routes remain unchanged.
 
 The localized document list consumes this additive route. Canonical builder and
 case URLs are unchanged; collaborators receive no case projection or edit control.
+
+### Verified legal bookmarks - local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `GET /api/platform/legal-bookmarks?caseId=:caseId` | Lists active bookmarks with exact saved version and current-version status | authenticated server-resolved workspace/user; optional case filter cannot widen scope |
+| `POST /api/platform/legal-bookmarks` | Saves the current verified publication with optional comment/case | CSRF, strict Zod, active publication verification, tenant case guard, Idempotency-Key |
+| `PUT /api/platform/legal-bookmarks/:bookmarkId` | Changes comment/case | CSRF, tenant/user lookup, optimistic revision, Idempotency-Key |
+| `DELETE /api/platform/legal-bookmarks/:bookmarkId` | Archives one bookmark | CSRF, tenant/user lookup, optimistic revision, Idempotency-Key |
+| `/:locale/:accountType/cases/:caseId/sources` | Shows pinned bookmarks and AI-dialog sources; permits archive | existing authenticated case workspace plus server-filtered data |
+
+The AI source panel exposes a RU/UZ native form for personal or case-scoped
+bookmarks. It does not accept workspace/user/version from the browser and does
+not create source-change notifications.

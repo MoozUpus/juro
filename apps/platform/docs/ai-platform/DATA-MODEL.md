@@ -82,3 +82,17 @@ version. D1 triggers enforce identity immutability, legal state transitions,
 tenant/source agreement and corrected-version membership. Cascading analysis or
 account deletion removes D1 rows; the purge service deletes the inventoried R2
 objects before crossing its D1 deletion boundary.
+
+## Legal bookmark domain — local migration 0076 candidate
+
+`user_legal_bookmarks` is the deletable current projection: workspace, user,
+verified source, exact source version, optional case, optional user comment,
+optimistic revision and archive time. A bookmark continues to identify the
+saved version even after a replacement publication becomes current.
+
+`user_legal_bookmark_events` records create/update/archive transitions with a
+scoped idempotency key, request hash and comment hash. It deliberately excludes
+the comment text. D1 guards make retained events immutable while allowing the
+entire user-owned graph to cascade on account deletion. `case_events` and
+`workspace_audit_events` receive metadata-only lifecycle evidence. No
+notification row is created by this domain.

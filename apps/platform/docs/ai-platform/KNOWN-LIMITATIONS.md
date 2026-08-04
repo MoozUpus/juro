@@ -1,5 +1,11 @@
 # JURO known limitations checkpoint
 
+> Legal-bookmark local checkpoint — 2026-08-04: version-pinned personal/case
+> bookmarks, bounded comments, immutable metadata-only events and RU/UZ controls
+> are implemented through local migration `0076`. They have not been migrated
+> or browser-tested in owner-protected staging. Source-change alerts and
+> notifications about past answers remain intentionally disabled.
+
 > Malware-scanner staging boundary — 2026-08-04: migration `0068` and a
 > provider-neutral internal service contract now cover strict response-schema
 > validation, source/R2 SHA verification, tenant fencing, immutable terminal

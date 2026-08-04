@@ -168,6 +168,19 @@ calls or the remaining full browser/accessibility/mobile matrix.
 
 ## Phase 3 legal-source foundation
 
+### Version-pinned user bookmarks — local candidate
+
+- A user can save a verified source from the RU/UZ AI source panel into personal
+  bookmarks or an active case, with an optional bounded comment.
+- D1 retains the exact publication version, shows whether it is still current,
+  and never silently rewrites the bookmark after source replacement.
+- Create/update/archive operations are CSRF-protected, tenant scoped,
+  idempotent, revision fenced and metadata-only audited.
+- The case Sources tab separates explicit bookmarks from sources seen in linked
+  AI conversations and allows the user to archive a bookmark.
+- Focused service/security/rendered-contract tests and local migration `0076`
+  pass. No staging/browser claim is made.
+
 | Slice | Locally implemented and tested | Not yet proved |
 |---|---|---|
 | Source lifecycle | Staging migration `0025`; source versions/sections/chunks, sync runs/errors, review queue; legacy rows default to `draft`; exact evidence required for verified records; verified evidence immutable; one active sync per lock key | Fetch/parse/snapshot activation; privileged legal-review flow; historical diff |

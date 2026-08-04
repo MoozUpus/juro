@@ -2923,3 +2923,22 @@ document text and participant data are not copied. Scoped idempotency and a
 unique document/revision pair prevent duplicate and stale writes. Existing
 creation evidence remains in `case_events.document_created`; no historical event
 is invented for pre-migration links.
+
+## D-141 - User legal bookmarks pin an exact verified version
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+A legal bookmark is not a mutable URL alias. At creation the server accepts only
+an active publication whose source and version are both verified, then stores
+that exact `version_id`. A later Lex/Advice activation is shown as a newer
+version but cannot silently rewrite the user's saved reference.
+
+The browser submits only a source locator, optional active case and optional
+comment. Session, workspace and user are resolved server-side; case ownership is
+checked independently. Scoped idempotency, optimistic revisions and an active
+scope unique index fence duplicate/stale writes. Add/update/archive transitions
+append immutable event and metadata-only workspace/case evidence. The user's
+comment remains only in the cascade-deletable bookmark projection; audit stores
+its SHA-256, not the text. No source-change or retrospective-answer notification
+is emitted because that product behavior remains explicitly disabled.
