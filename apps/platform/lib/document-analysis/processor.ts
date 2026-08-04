@@ -219,15 +219,6 @@ async function analyzeObject(
           error instanceof ComparisonProcessingError &&
           (error.code === "OCR_REQUIRED" || error.code === "NO_READABLE_TEXT")
         ) {
-          if (row.mimeType === "application/zip") {
-            await setAnalysisState(
-              env.DB,
-              row,
-              "awaiting_external_extraction",
-              "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED",
-            );
-            throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED", false);
-          }
           await scheduleOcrProcessing(env.DB, {
             analysisId: row.analysisId,
             fileId: row.fileId,
@@ -235,7 +226,12 @@ async function analyzeObject(
             ownerUserId: row.ownerUserId,
             sourceSha256: row.sha256.toLowerCase(),
           });
-          throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_OCR_REQUIRED", false);
+          throw new DocumentAnalysisProcessingError(
+            row.mimeType === "application/zip"
+              ? "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED"
+              : "DOCUMENT_ANALYSIS_OCR_REQUIRED",
+            false,
+          );
         }
         throw error;
       }

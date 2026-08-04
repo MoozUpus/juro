@@ -29,9 +29,27 @@ call the bounded deep verifier before it records quarantine success.
   extract both Russian and Uzbek Latin content.
 - The analysis processor must use the package extractor rather than pass an
   opaque archive to the single-document extractor.
-- A package containing an image must stop with
-  `DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED` and must not enqueue raw ZIP OCR.
+- A package containing an image must stop the synchronous analysis path with
+  `DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED`, persist `awaiting_ocr`, and enqueue
+  one identifiers-only `ocr.process` job without sending the raw ZIP to a
+  provider.
 - The extractor must repeat deep archive verification and retain the 500-page
   aggregate PDF limit before provider access.
 - A member above 20 MB or decoded package above 50 MB must stop before PDF/DOCX
   parsing and persist the external-extraction state without provider access.
+
+# Local ZIP-package OCR checkpoint — 2026-08-04
+
+- A valid package containing a real minimal DOCX and PNG must be expanded and
+  sent to Workers AI as one bounded array with deterministic opaque names.
+- Provider responses may arrive in a different order; the stored derivative must
+  retain deterministic package/member order and sum bounded token evidence.
+- Every response must match one expected opaque identity and MIME exactly.
+  Duplicate, missing, unexpected, empty, or over-budget results must fail before
+  derivative creation and before `document.analyze` is enqueued.
+- Inner extension spoofing and invalid nested DOCX structure must fail before
+  provider access.
+- This checkpoint does not satisfy the 500-page aggregate for scanned PDFs or
+  page-coordinate quality gates because Workers AI conversion supplies neither.
+- Focused extractor/scheduler/OCR suites pass 14/14 locally; full regression,
+  artifact, staging, scanner, and reviewed 100-package gates remain required.

@@ -317,6 +317,17 @@ deployed and does not replace the disabled malware scanner.
 
 The archive gate is deployed to protected staging as Worker version `3bc029a3-8722-4edd-8c05-d615d5ce9a13`. It does not mark a file safe or bypass the absent malware scanner. Exact verification and rollback evidence is in `STAGING-PHASE5-ARCHIVE-SAFETY-EVIDENCE.md`.
 
+The current local candidate extends the post-safe boundary for bounded ZIP
+packages. A package containing scans is queued for per-member conversion rather
+than passed opaquely to OCR. The consumer repeats deep verification, validates
+inner magic bytes and DOCX structure, uses opaque deterministic provider names,
+requires exact response identity/MIME/token/text evidence, and writes one
+deterministic tenant-scoped derivative. Reordered results are supported;
+duplicate or missing identities fail without derivative or downstream analysis.
+Limits are 20 files, 20 MB compressed input, 20 MB per expanded member, and
+50 MB total expanded working set. Targeted tests pass 14/14. This candidate is
+not deployed and does not bypass the absent malware scanner.
+
 ## Phase 5 async analysis consumer
 
 Protected staging now contains the real, fail-closed processing boundary after secure upload:

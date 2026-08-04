@@ -10,6 +10,7 @@ import {
   type ExtractedSection,
 } from "../document-comparison/types";
 import { verifyArchiveBytes } from "./archive-inspector";
+import { validateUploadMagicBytes } from "./upload-pipeline";
 
 const ZIP_MIME_TYPE = "application/zip";
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -34,14 +35,19 @@ export class PackageExtractionError extends Error {
   }
 }
 
-export async function extractAnalysisDocument(input: {
-  bytes: Uint8Array;
-  fileName: string;
+export type AnalysisPackageMember = {
+  name: string;
   mimeType: string;
-  sizeBytes: number;
-}): Promise<ExtractedDocument> {
-  if (input.mimeType !== ZIP_MIME_TYPE) return extractDocument(input);
+  bytes: Uint8Array;
+};
 
+export async function readAnalysisPackageMembers(input: {
+  bytes: Uint8Array;
+  mimeType: string;
+}): Promise<AnalysisPackageMember[]> {
+  if (input.mimeType !== ZIP_MIME_TYPE) {
+    throw new ComparisonProcessingError("UNSUPPORTED_FILE", "Ожидался ZIP-пакет документов.");
+  }
   await verifyArchiveBytes(input.bytes, input.mimeType);
   let zip: PizZip;
   try {
@@ -53,10 +59,8 @@ export async function extractAnalysisDocument(input: {
   const names = Object.keys(zip.files)
     .filter((name) => !zip.files[name]?.dir)
     .sort((left, right) => left < right ? -1 : left > right ? 1 : 0);
-  const documents: ExtractedDocument[] = [];
-  let totalPages = 0;
+  const members: AnalysisPackageMember[] = [];
   let totalMemberBytes = 0;
-
   for (const name of names) {
     const member = zip.file(name);
     const extension = name.split(".").at(-1)?.toLocaleLowerCase() ?? "";
@@ -64,22 +68,43 @@ export async function extractAnalysisDocument(input: {
     if (!member || !mimeType) {
       throw new ComparisonProcessingError("UNSUPPORTED_FILE", "ZIP-пакет содержит неподдерживаемый файл.");
     }
-    if (mimeType.startsWith("image/")) {
-      throw new ComparisonProcessingError(
-        "OCR_REQUIRED",
-        "ZIP-пакет содержит скан. Его нельзя анализировать до распознавания каждого файла отдельно.",
-      );
-    }
     const bytes = member.asUint8Array();
     totalMemberBytes += bytes.byteLength;
     if (bytes.byteLength > MAX_INLINE_MEMBER_BYTES || totalMemberBytes > MAX_INLINE_PACKAGE_BYTES) {
       throw new PackageExtractionError("ZIP-пакет превышает лимит встроенного безопасного извлечения.");
     }
+    if (!validateUploadMagicBytes(mimeType, bytes.subarray(0, 16), bytes.subarray(Math.max(0, bytes.byteLength - 16)))) {
+      throw new ComparisonProcessingError("CORRUPT_FILE", "Тип содержимого файла внутри ZIP не соответствует его расширению.");
+    }
+    if (mimeType === DOCX_MIME_TYPE) await verifyArchiveBytes(bytes, mimeType);
+    members.push({ name, mimeType, bytes });
+  }
+  return members;
+}
+
+export async function extractAnalysisDocument(input: {
+  bytes: Uint8Array;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+}): Promise<ExtractedDocument> {
+  if (input.mimeType !== ZIP_MIME_TYPE) return extractDocument(input);
+  const members = await readAnalysisPackageMembers(input);
+  const documents: ExtractedDocument[] = [];
+  let totalPages = 0;
+
+  for (const member of members) {
+    if (member.mimeType.startsWith("image/")) {
+      throw new ComparisonProcessingError(
+        "OCR_REQUIRED",
+        "ZIP-пакет содержит скан. Его нельзя анализировать до распознавания каждого файла отдельно.",
+      );
+    }
     const extracted = await extractDocument({
-      bytes,
-      fileName: name,
-      mimeType,
-      sizeBytes: bytes.byteLength,
+      bytes: member.bytes,
+      fileName: member.name,
+      mimeType: member.mimeType,
+      sizeBytes: member.bytes.byteLength,
     });
     totalPages += extracted.pageCount ?? 0;
     if (totalPages > MAX_PACKAGE_PAGES) {

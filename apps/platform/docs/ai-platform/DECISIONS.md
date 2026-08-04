@@ -2727,3 +2727,30 @@ package. Larger packages wait for a future streaming extractor. If any member
 needs OCR, JURO stops in an explicit package-OCR state and
 does not send the opaque archive to an OCR or language-model provider. This is a
 fail-closed intermediate capability until privacy-approved per-member OCR exists.
+
+# 2026-08-04 — Scanned package members are converted individually, never as an opaque archive
+
+Status: accepted for local implementation; staging deployment and scanner proof pending
+
+When a verified ZIP package contains an image or another member that requires
+conversion, the analysis processor now schedules the existing protected OCR
+queue instead of sending the ZIP bytes to any provider. The consumer repeats
+deep archive verification, magic-checks every member, deep-verifies nested DOCX
+containers, then sends one bounded array of at most 20 individually named
+documents to the Workers AI `toMarkdown` binding. Provider-facing names are
+opaque and deterministic; original filenames appear only inside the untrusted
+text boundary after conversion.
+
+Provider results are accepted only when every opaque name appears exactly once
+with the expected MIME, bounded token count, and non-empty text. Reordered
+results are mapped safely; missing, duplicate, or unexpected identities fail the
+job without creating a derivative or downstream legal-analysis event. The
+combined derivative preserves deterministic file boundaries and is stored under
+the existing tenant-scoped immutable extraction contract.
+
+This local slice is limited to packages no larger than 20 MB compressed input,
+20 MB per expanded member, 50 MB total expanded working set, and 20 files. Larger
+packages remain `awaiting_external_extraction`. Workers AI conversion does not
+prove a 500-page aggregate for scanned PDFs because the API response has no page
+count, so that release gate remains open. No migration, dependency, remote
+resource, staging deployment, or production change is introduced.

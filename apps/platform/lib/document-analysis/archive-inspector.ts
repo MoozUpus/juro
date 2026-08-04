@@ -278,16 +278,13 @@ async function verifyDeflatedEntry(
 ): Promise<{ size: number; crc: number }> {
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   try {
-    const source = new ReadableStream<Uint8Array>({
+    const source = new ReadableStream<ArrayBuffer | ArrayBufferView>({
       start(controller) {
         controller.enqueue(compressed);
         controller.close();
       },
     });
-    const decompressor = new DecompressionStream("deflate-raw" as CompressionFormat) as unknown as ReadableWritablePair<
-      Uint8Array,
-      Uint8Array
-    >;
+    const decompressor = new DecompressionStream("deflate-raw");
     reader = source.pipeThrough(decompressor).getReader();
     let size = 0;
     let crc = 0xffffffff;

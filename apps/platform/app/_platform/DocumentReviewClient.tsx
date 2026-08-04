@@ -213,15 +213,15 @@ function analysisState(status: string, errorCode: string | null, ru: boolean) {
     return {
       heading: ru ? "В пакете найден скан" : "Paketda skan topildi",
       message: ru
-        ? "Пакет не передан AI. Загрузите скан отдельно для OCR или соберите ZIP только из текстовых PDF и DOCX."
-        : "Paket AI ga yuborilmadi. Skan faylni OCR uchun alohida yuklang yoki ZIP paketini faqat matnli PDF va DOCX fayllaridan tuzing.",
+        ? "Пакет поставлен в очередь распознавания по отдельным файлам. Юридический анализ начнётся только после успешного OCR всего пакета."
+        : "Paket fayllar bo‘yicha matnni tanish navbatiga qo‘yildi. Yuridik tahlil faqat butun paket OCR’dan muvaffaqiyatli o‘tgach boshlanadi.",
     };
   }
   const states: Record<string, [string, string, string, string]> = {
     quarantined: ["Анализ не запущен", "Tahlil ishga tushirilmadi", "Файл помещён в карантин и не передан AI: staging-сканер вредоносного содержимого ещё не подключён.", "Fayl karantinga joylandi va AI ga yuborilmadi: staging zararli fayl skaneri hali ulanmagan."],
     processing: ["Идёт анализ", "Tahlil ketmoqda", "JURO извлекает структуру документа и проверяет выводы. Можно покинуть страницу и вернуться позже.", "JURO hujjat tuzilishini ajratmoqda va xulosalarni tekshirmoqda. Sahifadan chiqib, keyin qaytish mumkin."],
     persisting: ["Результат сохраняется", "Natija saqlanmoqda", "Анализ завершён у провайдера; JURO атомарно сохраняет нормализованный результат.", "Provayder tahlilni yakunladi; JURO normallashtirilgan natijani atomar saqlamoqda."],
-    awaiting_ocr: ["Нужно распознать скан", "Skan matnini tanish kerak", "Текст не извлечён напрямую. Файл не отправлен AI и ожидает подключённого OCR-конвейера.", "Matn to‘g‘ridan-to‘g‘ri ajratilmadi. Fayl AI ga yuborilmadi va OCR jarayonini kutmoqda."],
+    awaiting_ocr: ["Идёт подготовка OCR", "OCR tayyorlanmoqda", "Текст не извлечён напрямую. Файл поставлен в защищённую очередь распознавания; юридический AI получит только проверенный результат.", "Matn to‘g‘ridan-to‘g‘ri ajratilmadi. Fayl himoyalangan OCR navbatiga qo‘yildi; yuridik AI faqat tekshirilgan natijani oladi."],
     awaiting_external_extraction: ["Нужен безопасный обработчик", "Xavfsiz qayta ishlovchi kerak", "Файл превышает лимит встроенного извлечения и не отправлен AI. Требуется потоковый обработчик.", "Fayl ichki ajratish limitidan katta va AI ga yuborilmadi. Oqimli qayta ishlovchi kerak."],
     awaiting_chunked_analysis: ["Нужен пакетный анализ", "Bo‘lib tahlil qilish kerak", "Извлечённый текст превышает безопасный контекст одного запроса. JURO ожидает разбивку с итоговой проверкой.", "Ajratilgan matn bitta so‘rov uchun xavfsiz kontekstdan katta. JURO bo‘lib tahlil qilishni kutmoqda."],
     awaiting_ai_configuration: ["AI пока не подключён", "AI hali ulanmagan", "Безопасно извлечённый документ сохранён, но не отправлен провайдеру: server-side AI secret не настроен.", "Xavfsiz ajratilgan hujjat saqlandi, ammo provayderga yuborilmadi: server-side AI siri sozlanmagan."],

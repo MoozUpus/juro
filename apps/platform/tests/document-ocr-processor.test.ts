@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import PizZip from "pizzip";
 import {
   executeOcrProcessingJob,
   loadCompletedOcrExtraction,
@@ -136,6 +137,125 @@ test("OCR queue stores a tenant-scoped derivative and chains analysis exactly on
   }
 });
 
+test("OCR queue converts every verified ZIP member in one bounded provider batch", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    const source = packageBytes({
+      "01-contract.docx": docxBytes(["ДОГОВОР", "Срок исполнения — 10 дней."]),
+      "02-ilova.png": Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    });
+    const sourceSha256 = await seedOcrAnalysis(sqlite, bucket, source, {
+      fileName: "documents.zip",
+      mimeType: "application/zip",
+    });
+    await scheduleOcrProcessing(d1, scheduleInput(sourceSha256));
+
+    let aiCalls = 0;
+    const ai = {
+      async toMarkdown(documents: MarkdownDocument | MarkdownDocument[]) {
+        aiCalls += 1;
+        assert.ok(Array.isArray(documents));
+        assert.deepEqual(documents.map((document) => document.name), ["document-01.docx", "document-02.png"]);
+        assert.deepEqual(documents.map((document) => document.blob.type), [
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          "image/png",
+        ]);
+        return documents.map((document, index) => ({
+          id: `conversion-${index + 1}`,
+          name: document.name,
+          mimeType: document.blob.type,
+          format: "markdown" as const,
+          tokens: 10 + index,
+          data: index === 0
+            ? "# Договор\n\nСтороны подтверждают обязательства. Заказчик оплачивает услуги, а исполнитель передаёт результат в срок 10 дней."
+            : "# ILOVA\n\nBuyurtmachi ilovani yozma shaklda qabul qiladi.",
+        })).reverse();
+      },
+    } as unknown as Ai;
+    const env = { DB: d1, BUCKET: bucket as unknown as R2Bucket, AI: ai };
+    assert.equal((await executeOcrProcessingJob(env, "analysis-a", "workspace-a")).status, "completed");
+    assert.equal(aiCalls, 1);
+    assert.equal(bucket.putCalls, 1);
+
+    const extracted = await loadCompletedOcrExtraction(env, {
+      analysisId: "analysis-a",
+      workspaceId: "workspace-a",
+      fileId: "file-a",
+      sourceSha256,
+    });
+    assert.equal(extracted?.mimeType, "application/zip");
+    assert.equal(extracted?.detectedLanguage, "mixed");
+    assert.equal(extracted?.textQuality, "limited");
+    assert.equal(
+      extracted?.warningCode,
+      "PACKAGE_MULTI_DOCUMENT,CLOUDFLARE_CONVERSION_USED,AI_OCR_REVIEW_REQUIRED",
+    );
+    assert.match(extracted?.text ?? "", /ФАЙЛ: "01-contract\.docx"/);
+    assert.match(extracted?.text ?? "", /ФАЙЛ: "02-ilova\.png"/);
+    assert.ok(extracted?.sections.some((section) => section.heading?.startsWith("02-ilova.png")));
+    assert.equal(
+      (sqlite.prepare("SELECT token_estimate AS tokenEstimate FROM file_extractions").get() as { tokenEstimate: number }).tokenEstimate,
+      21,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("package OCR rejects duplicate or missing provider member identities without persisting a derivative", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const source = packageBytes({ "01.png": png, "02.png": png });
+    const sourceSha256 = await seedOcrAnalysis(sqlite, bucket, source, {
+      fileName: "documents.zip",
+      mimeType: "application/zip",
+    });
+    await scheduleOcrProcessing(d1, scheduleInput(sourceSha256));
+    await assert.rejects(
+      executeOcrProcessingJob({
+        DB: d1,
+        BUCKET: bucket as unknown as R2Bucket,
+        AI: {
+          async toMarkdown(documents: MarkdownDocument | MarkdownDocument[]) {
+            assert.ok(Array.isArray(documents));
+            return documents.map(() => ({
+              id: crypto.randomUUID(),
+              name: "document-01.png",
+              mimeType: "image/png",
+              format: "markdown" as const,
+              tokens: 2,
+              data: "Readable synthetic scan.",
+            }));
+          },
+        } as unknown as Ai,
+      }, "analysis-a", "workspace-a"),
+      (error: unknown) => error instanceof OcrProcessingError
+        && error.code === "OCR_PROVIDER_REJECTED" && !error.retryable,
+    );
+    assert.equal(bucket.putCalls, 0);
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        `SELECT a.status AS analysisStatus,x.status AS extractionStatus,x.error_code AS errorCode
+         FROM document_analyses a JOIN file_extractions x ON x.analysis_id=a.id WHERE a.id='analysis-a'`,
+      ).get() as object },
+      {
+        analysisStatus: "failed",
+        extractionStatus: "failed",
+        errorCode: "OCR_PROVIDER_REJECTED",
+      },
+    );
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM job_outbox WHERE job_type='document.analyze'").get() as { count: number }).count),
+      0,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("OCR queue denies cross-tenant identifiers before R2 or AI access", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
@@ -216,8 +336,11 @@ async function seedOcrAnalysis(
   sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
   bucket: FakeR2Bucket,
   source: Uint8Array,
+  options: { fileName?: string; mimeType?: string } = {},
 ): Promise<string> {
   const sourceSha256 = await sha256Hex(source);
+  const fileName = options.fileName ?? "scan.png";
+  const mimeType = options.mimeType ?? "image/png";
   sqlite.prepare(
     "INSERT INTO user_profiles(id,email,created_at,updated_at) VALUES (?,?,?,?),(?,?,?,?)",
   ).run("user-a", "a@example.test", now, now, "user-b", "b@example.test", now, now);
@@ -228,8 +351,8 @@ async function seedOcrAnalysis(
     `INSERT INTO document_files
      (id,workspace_id,owner_user_id,kind,r2_key,file_name,mime_type,size_bytes,sha256,created_at,updated_at)
      VALUES ('file-a','workspace-a','user-a','analysis_safe','safe/workspace-a/analysis-a/file-a',
-      'scan.png','image/png',?,?,?,?)`,
-  ).run(source.byteLength, sourceSha256, now, now);
+      ?,?,?,?,?,?)`,
+  ).run(fileName, mimeType, source.byteLength, sourceSha256, now, now);
   sqlite.prepare(
     `INSERT INTO document_analyses
      (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,created_at,updated_at)
@@ -237,6 +360,30 @@ async function seedOcrAnalysis(
   ).run(now, now);
   await bucket.seed("safe/workspace-a/analysis-a/file-a", source);
   return sourceSha256;
+}
+
+function xmlEscape(value: string): string {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+}
+
+function docxBytes(paragraphs: string[]): Uint8Array {
+  const zip = new PizZip();
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`,
+  );
+  zip.file("_rels/.rels", "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"/>");
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${paragraphs.map((paragraph) => `<w:p><w:r><w:t>${xmlEscape(paragraph)}</w:t></w:r></w:p>`).join("")}</w:body></w:document>`,
+  );
+  return zip.generate({ type: "uint8array", compression: "DEFLATE" });
+}
+
+function packageBytes(files: Record<string, Uint8Array>): Uint8Array {
+  const zip = new PizZip();
+  for (const [name, bytes] of Object.entries(files)) zip.file(name, bytes, { binary: true });
+  return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
 function scheduleInput(sourceSha256: string) {

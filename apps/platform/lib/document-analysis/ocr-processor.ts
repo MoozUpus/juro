@@ -2,11 +2,21 @@ import {
   detectDocumentLanguage,
   structureDocument,
 } from "../document-comparison/extract";
-import type { ExtractedDocument } from "../document-comparison/types";
+import {
+  ComparisonProcessingError,
+  type ExtractedDocument,
+  type ExtractedSection,
+} from "../document-comparison/types";
+import { ArchiveInspectionError } from "./archive-inspector";
+import {
+  PackageExtractionError,
+  readAnalysisPackageMembers,
+} from "./package-extractor";
 
 const EXTRACTION_METHOD = "workers_ai_markdown";
 const EXTRACTION_PROVIDER = "cloudflare_workers_ai";
 const EXTRACTION_MODEL = "to-markdown";
+const ZIP_MIME_TYPE = "application/zip";
 
 type OcrAnalysisRow = {
   analysisId: string;
@@ -56,6 +66,8 @@ export class OcrProcessingError extends Error {
       | "OCR_PROVIDER_UNAVAILABLE"
       | "OCR_PROVIDER_REJECTED"
       | "OCR_NO_READABLE_TEXT"
+      | "OCR_PACKAGE_INVALID"
+      | "OCR_PACKAGE_CAPACITY_REQUIRED"
       | "OCR_DERIVATIVE_INVALID"
       | "OCR_PERSISTENCE_FAILED",
     readonly retryable: boolean,
@@ -314,35 +326,8 @@ async function convertAndStore(
     throw new OcrProcessingError("OCR_INTEGRITY_FAILED", false);
   }
 
-  let response: ConversionResponse;
-  try {
-    response = await env.AI.toMarkdown({
-      name: opaqueFileName(row.mimeType),
-      blob: new Blob([sourceBytes], { type: row.mimeType }),
-    });
-  } catch {
-    throw new OcrProcessingError("OCR_PROVIDER_UNAVAILABLE", true);
-  }
-  if (response.format === "error") {
-    throw new OcrProcessingError("OCR_PROVIDER_REJECTED", false);
-  }
-  const text = normalizeExtractedText(response.data);
-  if (!text) throw new OcrProcessingError("OCR_NO_READABLE_TEXT", false);
-
-  const imageInput = row.mimeType.startsWith("image/");
-  const warnings = ["CLOUDFLARE_CONVERSION_USED"];
-  if (imageInput) warnings.push("AI_OCR_REVIEW_REQUIRED");
-  const extracted: ExtractedDocument = {
-    fileName: opaqueFileName(row.mimeType),
-    mimeType: row.mimeType,
-    sizeBytes: row.sizeBytes,
-    pageCount: null,
-    detectedLanguage: detectDocumentLanguage(text),
-    textQuality: imageInput ? "limited" : "good",
-    warningCode: warnings.join(","),
-    text,
-    sections: structureDocument(text),
-  };
+  const converted = await convertSourceWithWorkersAi(env.AI, row, sourceBytes);
+  const { extracted, tokenEstimate, warnings } = converted;
   const completedAt = new Date().toISOString();
   const stored: StoredExtraction = {
     schemaVersion: 1,
@@ -353,7 +338,7 @@ async function convertAndStore(
     extracted,
     provider: EXTRACTION_PROVIDER,
     model: EXTRACTION_MODEL,
-    tokenEstimate: response.tokens,
+    tokenEstimate,
     warnings,
     completedAt,
   };
@@ -390,9 +375,167 @@ async function convertAndStore(
     r2Key,
     textSha256,
     sizeBytes: bytes.byteLength,
-    tokenEstimate: response.tokens,
+    tokenEstimate,
     warnings,
   };
+}
+
+type ConvertedSource = {
+  extracted: ExtractedDocument;
+  tokenEstimate: number;
+  warnings: string[];
+};
+
+async function convertSourceWithWorkersAi(
+  ai: Ai,
+  row: OcrAnalysisRow,
+  sourceBytes: Uint8Array,
+): Promise<ConvertedSource> {
+  if (row.mimeType === ZIP_MIME_TYPE) return convertPackageWithWorkersAi(ai, row, sourceBytes);
+
+  const name = opaqueFileName(row.mimeType);
+  let response: ConversionResponse;
+  try {
+    response = await ai.toMarkdown({
+      name,
+      blob: new Blob([ownedArrayBuffer(sourceBytes)], { type: row.mimeType }),
+    });
+  } catch {
+    throw new OcrProcessingError("OCR_PROVIDER_UNAVAILABLE", true);
+  }
+  const converted = normalizeConversionResponse(response, name, row.mimeType);
+  const imageInput = row.mimeType.startsWith("image/");
+  const warnings = ["CLOUDFLARE_CONVERSION_USED"];
+  if (imageInput) warnings.push("AI_OCR_REVIEW_REQUIRED");
+  return {
+    tokenEstimate: converted.tokens,
+    warnings,
+    extracted: {
+      fileName: name,
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      pageCount: null,
+      detectedLanguage: detectDocumentLanguage(converted.text),
+      textQuality: imageInput ? "limited" : "good",
+      warningCode: warnings.join(","),
+      text: converted.text,
+      sections: structureDocument(converted.text),
+    },
+  };
+}
+
+async function convertPackageWithWorkersAi(
+  ai: Ai,
+  row: OcrAnalysisRow,
+  sourceBytes: Uint8Array,
+): Promise<ConvertedSource> {
+  let members: Awaited<ReturnType<typeof readAnalysisPackageMembers>>;
+  try {
+    members = await readAnalysisPackageMembers({ bytes: sourceBytes, mimeType: row.mimeType });
+  } catch (error) {
+    if (error instanceof PackageExtractionError) {
+      throw new OcrProcessingError("OCR_PACKAGE_CAPACITY_REQUIRED", false);
+    }
+    if (error instanceof ArchiveInspectionError || error instanceof ComparisonProcessingError) {
+      throw new OcrProcessingError("OCR_PACKAGE_INVALID", false);
+    }
+    throw error;
+  }
+
+  const requests = members.map((member, index) => ({
+    name: opaquePackageMemberName(index, member.mimeType),
+    blob: new Blob([ownedArrayBuffer(member.bytes)], { type: member.mimeType }),
+  }));
+  let responses: ConversionResponse[];
+  try {
+    responses = await ai.toMarkdown(requests);
+  } catch {
+    throw new OcrProcessingError("OCR_PROVIDER_UNAVAILABLE", true);
+  }
+  if (responses.length !== members.length) {
+    throw new OcrProcessingError("OCR_PROVIDER_REJECTED", false);
+  }
+  const expectedNames = new Set(requests.map((request) => request.name));
+  const responsesByName = new Map<string, ConversionResponse>();
+  for (const response of responses) {
+    if (!expectedNames.has(response.name) || responsesByName.has(response.name)) {
+      throw new OcrProcessingError("OCR_PROVIDER_REJECTED", false);
+    }
+    responsesByName.set(response.name, response);
+  }
+
+  const texts: string[] = [];
+  const sections: ExtractedSection[] = [];
+  let tokenEstimate = 0;
+  let limited = false;
+  for (const [index, member] of members.entries()) {
+    const converted = normalizeConversionResponse(
+      responsesByName.get(requests[index]!.name),
+      requests[index]!.name,
+      member.mimeType,
+    );
+    tokenEstimate += converted.tokens;
+    if (!Number.isSafeInteger(tokenEstimate)) {
+      throw new OcrProcessingError("OCR_PROVIDER_REJECTED", false);
+    }
+    texts.push(`===== ФАЙЛ: ${JSON.stringify(member.name)} =====\n\n${converted.text}`);
+    const memberSections = structureDocument(converted.text);
+    for (const section of memberSections) {
+      sections.push({
+        ...section,
+        id: `package-${index + 1}-${section.id}`,
+        index: sections.length,
+        heading: section.heading ? `${member.name} — ${section.heading}` : member.name,
+      });
+    }
+    if (member.mimeType.startsWith("image/")) limited = true;
+  }
+
+  const text = texts.join("\n\n");
+  const warnings = ["PACKAGE_MULTI_DOCUMENT", "CLOUDFLARE_CONVERSION_USED"];
+  if (limited) warnings.push("AI_OCR_REVIEW_REQUIRED");
+  return {
+    tokenEstimate,
+    warnings,
+    extracted: {
+      fileName: "document-package.zip",
+      mimeType: row.mimeType,
+      sizeBytes: row.sizeBytes,
+      pageCount: null,
+      detectedLanguage: detectDocumentLanguage(text),
+      textQuality: limited ? "limited" : "good",
+      warningCode: warnings.join(","),
+      text,
+      sections,
+    },
+  };
+}
+
+function normalizeConversionResponse(
+  response: ConversionResponse | undefined,
+  expectedName: string,
+  expectedMimeType: string,
+): { text: string; tokens: number } {
+  if (
+    !response || response.format === "error" || response.name !== expectedName ||
+    response.mimeType !== expectedMimeType || !Number.isSafeInteger(response.tokens) || response.tokens < 0
+  ) {
+    throw new OcrProcessingError("OCR_PROVIDER_REJECTED", false);
+  }
+  const text = normalizeExtractedText(response.data);
+  if (!text) throw new OcrProcessingError("OCR_NO_READABLE_TEXT", false);
+  return { text, tokens: response.tokens };
+}
+
+function opaquePackageMemberName(index: number, mimeType: string): string {
+  const extension = opaqueFileName(mimeType).split(".").at(-1) ?? "bin";
+  return `document-${String(index + 1).padStart(2, "0")}.${extension}`;
+}
+
+function ownedArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
 }
 
 async function loadOcrAnalysis(

@@ -77,3 +77,13 @@ test("a package containing an image fails closed instead of sending an opaque ZI
     (error: unknown) => error instanceof Error && "code" in error && error.code === "OCR_REQUIRED",
   );
 });
+
+test("a package member with a spoofed extension fails before extraction or OCR", async () => {
+  const bytes = packageBytes({
+    "spoofed.png": new TextEncoder().encode("not a PNG payload"),
+  });
+  await assert.rejects(
+    extractAnalysisDocument({ bytes, fileName: "spoofed.zip", mimeType: zipMime, sizeBytes: bytes.byteLength }),
+    (error: unknown) => error instanceof Error && "code" in error && error.code === "CORRUPT_FILE",
+  );
+});

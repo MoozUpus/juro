@@ -37,12 +37,22 @@ text remains explicitly marked for review.
 
 For `application/zip`, the document-analysis extractor repeats the deep archive
 verification, processes text PDF/DOCX members in deterministic order, preserves
-file boundaries in the untrusted provider input, caps known PDF pages at 500,
-and limits inline expanded members to 20 MB / the package working set to 50 MB.
-An image member fails closed as `DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED`; the
-opaque ZIP is never sent to OCR or an AI provider. Per-member OCR is still gated.
-Packages beyond the inline memory budget remain in
-`awaiting_external_extraction` for a future streaming worker.
+file boundaries in the untrusted provider input, caps known text-PDF pages at
+500, and limits inline expanded members to 20 MB / the package working set to
+50 MB. If a member requires OCR, the analysis is queued as `awaiting_ocr`; the
+opaque ZIP itself is never sent to a provider. The OCR consumer repeats all
+archive checks, validates each member's magic bytes and nested DOCX structure,
+and sends one bounded batch with opaque per-member names to Workers AI.
+
+The consumer requires an exact one-to-one match between requested and returned
+opaque identities, expected MIME, bounded token evidence, and non-empty text.
+Reordered results are safe; duplicates, omissions, or unexpected identities
+fail closed before derivative creation. Original filenames are restored only as
+quoted untrusted text boundaries in the deterministic combined derivative.
+Packages above 20 MB compressed input, 20 MB per expanded member, or 50 MB total
+expanded working set remain in `awaiting_external_extraction`. Scanned-PDF page
+count and page coordinates are not supplied by `toMarkdown` and remain release
+gates.
 
 ## Supported intake formats
 
@@ -57,18 +67,18 @@ MIME and extension must agree at initialization. Finalization checks PDF, PNG, J
 ## Evidence
 
 - TypeScript and generated Cloudflare types pass.
-- Targeted processor/provider/upload/OCR/export tests: 18/18.
+- Targeted package extractor/analysis scheduler/OCR processor tests for this local slice: 14/14.
 - Cloudflare config/migration/Queue regression tests: 84/84.
 - OCR tests prove tenant denial before R2/provider access, source-integrity
   failure, retryable provider absence, immutable derivative creation, and replay.
 - Account deletion proves the private derivative is deleted R2-first and its D1
   row cascades without touching another user's object.
 
-Authenticated staging OCR/provider execution is not claimed until migration
+Authenticated staging package OCR/provider execution is not claimed.
 
 ## Next gates
 
 1. Connect a privacy-approved real malware scanner; production must fail closed while it is unavailable.
-2. Apply `0042`, deploy protected staging, and execute an eligible safe-file OCR/provider smoke test.
+2. Apply pending migration `0068`, deploy protected staging, and execute an eligible safe-file OCR/provider smoke test only after scanner clearance exists.
 3. Run the complete 100-package/30-comparison reviewed evaluation, including clean-scan OCR quality.
-4. Add per-member OCR/coordinates for scanned ZIP packages, corrections, and redline artifacts.
+4. Add page coordinates and scanned-PDF page-count evidence, over-budget streaming extraction, corrections, and redline artifacts.

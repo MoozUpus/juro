@@ -139,7 +139,7 @@ test("safe document analysis persists normalized result, usage, audit and is ide
   fixture.sqlite.close();
 });
 
-test("a ZIP member requiring OCR stops without enqueueing the opaque archive", async () => {
+test("a ZIP member requiring OCR schedules the tenant-scoped package OCR queue", async () => {
   const fixture = await databaseFixture("ready", "analysis_safe");
   const bytes = new TextEncoder().encode("synthetic-verified-zip-bytes");
   const sha256 = await sha256Hex(bytes);
@@ -170,9 +170,14 @@ test("a ZIP member requiring OCR stops without enqueueing the opaque archive", a
 
   const analysis = fixture.sqlite.prepare("SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis-a'")
     .get() as { status: string; errorCode: string };
-  assert.equal(analysis.status, "awaiting_external_extraction");
-  assert.equal(analysis.errorCode, "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED");
-  assert.equal((fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 0);
+  assert.equal(analysis.status, "awaiting_ocr");
+  assert.equal(analysis.errorCode, "DOCUMENT_ANALYSIS_OCR_REQUIRED");
+  assert.deepEqual(
+    { ...fixture.sqlite.prepare(
+      "SELECT queue_binding AS queueBinding,job_type AS jobType,status FROM job_outbox",
+    ).get() as object },
+    { queueBinding: "OCR_PROCESSING_QUEUE", jobType: "ocr.process", status: "pending" },
+  );
   assert.equal(aiCalls, 0);
   fixture.sqlite.close();
 });
