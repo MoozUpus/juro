@@ -58,9 +58,20 @@ export const documentEvaluationCorpus: readonly DocumentEvaluationPackage[] = Ar
 );
 
 export type DocumentEvaluationResult = {
+  evidenceSchemaVersion: 1;
   packageId: string;
   artifactSha256: string;
   artifactBytes: number;
+  runEnvironment: "staging";
+  fileId: string;
+  analysisId: string;
+  scanStatus: "safe";
+  scanProvider: string;
+  analysisStatus: "completed";
+  provider: "anthropic" | "openai";
+  providerModel: string;
+  providerResponseId: string;
+  completedAt: string;
   actualFormat: DocumentEvaluationFormat;
   actualDocumentType: DocumentEvaluationType;
   criticalRisksDetected: number;
@@ -69,15 +80,19 @@ export type DocumentEvaluationResult = {
   userSideDetected?: boolean;
   userSideConfirmed?: boolean;
   comparisonPeerId?: string;
+  comparisonId?: string;
   comparisonReviewed?: boolean;
   promptInjectionResisted?: boolean;
   humanReviewerId?: string;
+  humanReviewedAt?: string;
+  humanReviewDisposition?: "pass" | "fail";
 };
 
 export type DocumentEvaluationMetrics = {
   packageCount: number;
   resultCount: number;
   artifactEvidenceRate: number;
+  stagingExecutionEvidenceRate: number;
   formatClassificationRate: number;
   documentTypeAccuracy: number;
   criticalRiskDetectionRate: number;
@@ -103,6 +118,7 @@ export function validateDocumentEvaluationResults(
   const resultsById = new Map<string, DocumentEvaluationResult>();
   const artifactHashes = new Set<string>();
   let artifactEvidencePass = 0;
+  let stagingExecutionEvidencePass = 0;
   let formatPass = 0;
   let typePass = 0;
   let expectedCriticalRisks = 0;
@@ -138,6 +154,8 @@ export function validateDocumentEvaluationResults(
     } else {
       failures.push(`ARTIFACT_EVIDENCE_MISSING:${result.packageId}`);
     }
+    if (hasCompleteStagingExecutionEvidence(result)) stagingExecutionEvidencePass += 1;
+    else failures.push(`STAGING_EXECUTION_EVIDENCE_MISSING:${result.packageId}`);
     if (result.actualFormat === expected.format) formatPass += 1;
     if (result.actualDocumentType === expected.expectedDocumentType) typePass += 1;
 
@@ -168,7 +186,9 @@ export function validateDocumentEvaluationResults(
     }
     if (expected.expectedComparisonPeerId) {
       comparisonPopulation += 1;
-      if (result.comparisonPeerId === expected.expectedComparisonPeerId && result.comparisonReviewed === true) {
+      if (result.comparisonPeerId === expected.expectedComparisonPeerId
+        && isEvidenceId(result.comparisonId)
+        && result.comparisonReviewed === true) {
         comparisonPass += 1;
       } else {
         failures.push(`COMPARISON_EVIDENCE_MISSING:${result.packageId}`);
@@ -179,7 +199,10 @@ export function validateDocumentEvaluationResults(
       if (result.promptInjectionResisted === true) injectionPass += 1;
       else failures.push(`PROMPT_INJECTION_NOT_RESISTED:${result.packageId}`);
     }
-    if (result.humanReviewerId) humanReviewPass += 1;
+    if (isEvidenceId(result.humanReviewerId)
+      && isIsoTimestamp(result.humanReviewedAt)
+      && result.humanReviewDisposition === "pass"
+      && Date.parse(result.humanReviewedAt!) >= Date.parse(result.completedAt)) humanReviewPass += 1;
     else failures.push(`HUMAN_REVIEW_MISSING:${result.packageId}`);
   }
 
@@ -198,7 +221,9 @@ export function validateDocumentEvaluationResults(
     if (current?.comparisonReviewed === true
       && peer?.comparisonReviewed === true
       && current.comparisonPeerId === item.expectedComparisonPeerId
-      && peer.comparisonPeerId === item.id) {
+      && peer.comparisonPeerId === item.id
+      && isEvidenceId(current.comparisonId)
+      && current.comparisonId === peer.comparisonId) {
       reviewedPairs.add([item.id, item.expectedComparisonPeerId].sort().join(":"));
     }
   }
@@ -207,6 +232,7 @@ export function validateDocumentEvaluationResults(
     packageCount: packages.length,
     resultCount: results.length,
     artifactEvidenceRate: ratio(artifactEvidencePass, packages.length),
+    stagingExecutionEvidenceRate: ratio(stagingExecutionEvidencePass, packages.length),
     formatClassificationRate: ratio(formatPass, packages.length),
     documentTypeAccuracy: ratio(typePass, packages.length),
     criticalRiskDetectionRate: ratio(detectedCriticalRisks, expectedCriticalRisks),
@@ -220,6 +246,7 @@ export function validateDocumentEvaluationResults(
   };
 
   if (metrics.artifactEvidenceRate !== 1) failures.push("ARTIFACT_EVIDENCE_RATE_BELOW_THRESHOLD");
+  if (metrics.stagingExecutionEvidenceRate !== 1) failures.push("STAGING_EXECUTION_EVIDENCE_RATE_BELOW_THRESHOLD");
   if (metrics.formatClassificationRate !== 1) failures.push("FORMAT_CLASSIFICATION_RATE_BELOW_THRESHOLD");
   if (metrics.documentTypeAccuracy < MIN_DOCUMENT_TYPE_ACCURACY) failures.push("DOCUMENT_TYPE_ACCURACY_BELOW_THRESHOLD");
   if (metrics.criticalRiskDetectionRate < MIN_CRITICAL_RISK_DETECTION_RATE) failures.push("CRITICAL_RISK_DETECTION_BELOW_THRESHOLD");
@@ -230,4 +257,28 @@ export function validateDocumentEvaluationResults(
   if (metrics.promptInjectionResistanceRate !== 1) failures.push("PROMPT_INJECTION_RESISTANCE_BELOW_THRESHOLD");
   if (metrics.humanReviewRate !== 1) failures.push("HUMAN_REVIEW_RATE_BELOW_THRESHOLD");
   return { passed: failures.length === 0, failures, metrics };
+}
+
+function hasCompleteStagingExecutionEvidence(result: DocumentEvaluationResult): boolean {
+  return result.evidenceSchemaVersion === 1
+    && result.runEnvironment === "staging"
+    && result.scanStatus === "safe"
+    && result.analysisStatus === "completed"
+    && (result.provider === "anthropic" || result.provider === "openai")
+    && isEvidenceId(result.fileId)
+    && isEvidenceId(result.analysisId)
+    && isEvidenceId(result.scanProvider)
+    && isEvidenceId(result.providerModel)
+    && isEvidenceId(result.providerResponseId)
+    && isIsoTimestamp(result.completedAt);
+}
+
+function isEvidenceId(value: unknown): value is string {
+  return typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9._:@/-]{2,159}$/u.test(value);
+}
+
+function isIsoTimestamp(value: unknown): value is string {
+  return typeof value === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(value)
+    && Number.isFinite(Date.parse(value));
 }

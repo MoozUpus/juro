@@ -444,8 +444,24 @@ No Phase 5 production-readiness claim is made.
 - The remote staging secret-name inventory confirms `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` by name; values were neither read nor exported.
 - Workers AI OCR is deployed, but no scanner-approved user file exists for a
   truthful live end-to-end provider run.
-- Coordinate-level OCR, multi-file ZIP packages, corrected/redline artifacts,
-  100 document packages, and 30 comparisons have not passed release gates.
+- Coordinate-level OCR and scanner-approved provider execution remain open.
+  Multi-file ZIP extraction/OCR and corrected/redline artifacts now have local
+  implementations. A deterministic 100-artifact/30-pair corpus exists locally,
+  but none of those artifacts has passed the real staging scanner/provider and
+  named-review release gate.
+
+## Document evaluation corpus open gate — 2026-08-04
+
+- The local materializer produced 100 distinct valid binary fixtures totaling
+  5,502,884 bytes and verified every size/hash/magic/path plus ground truth.
+- This is not a quality score. No generated row is marked scanner-safe,
+  provider-completed or human-reviewed by the generator.
+- The result validator rejects rows without exact artifact-manifest binding,
+  completed staging IDs, actual provider metadata, reciprocal comparison IDs and
+  timestamped named reviewer disposition.
+- A privacy-approved malware scanner, migrations/deploy, authenticated staging
+  execution of every artifact, 30 comparison runs and named legal/OCR review are
+  still required before Phase 5 can pass.
 
 ### Advice sitemap discovery (2026-08-01)
 

@@ -6,11 +6,29 @@ Updated: 2026-08-04
 
 `evaluation/document-evaluation-corpus.ts` defines a 100-item synthetic test-package manifest and 30 comparison pairs. It covers DOCX, text/scanned PDF, JPG, PNG, ZIP, tables, bilingual content, low-quality scans, annexes, injection payloads, renumbered clauses, hidden risks, dates/sums, and user-side selection.
 
-The manifest is not a claim that binary fixtures have passed OCR or Claude.
-`scripts/validate-document-evaluation.ts --results <reviewed-results.json>` is
-deliberately fail-closed: every result needs a unique real artifact SHA-256 and
-non-zero byte size, expected format, named reviewer, and the evidence applicable
-to its scenario. Manifest-only rows cannot pass.
+`npm run evaluate:documents:materialize -- --output .tmp/document-evaluation-corpus`
+creates real deterministic binaries for all 100 rows plus a hashed synthetic
+ground-truth file and `artifact-manifest.json`. The generator embeds the existing
+DejaVu Sans asset, rasterizes image/scanned-PDF fixtures, creates valid OOXML/ZIP
+containers with fixed metadata, and immediately re-reads every file to verify
+size, SHA-256, unique hash, expected magic bytes and safe relative path. The
+2026-08-04 local run produced 100 distinct artifacts, 30 comparison pairs and
+5,502,884 total artifact bytes with zero integrity failures. Generated binaries
+remain ignored local evidence rather than repository payload.
+
+The manifest and materialized artifacts are not a claim that the binaries have
+passed OCR or Claude. `npm run evaluate:documents:validate -- --results
+<reviewed-results.json> --artifacts <artifact-manifest.json>` is deliberately
+fail-closed: every result needs a unique artifact SHA-256 and non-zero size that
+match the materialized manifest, expected format, named and timestamped reviewer
+disposition, and the evidence applicable to its scenario. Each row must also
+identify a completed staging analysis, safe scanner verdict, file, actual
+provider/model/response and completion timestamp. Comparison rows must share a
+real comparison ID with their reciprocal peer. Manifest-only or locally
+generated rows without those explicit fields cannot pass. The validator checks
+shape and consistency, not the authority of a reviewer or existence of remote
+IDs; final evidence must therefore include the corresponding protected staging
+D1 export and an approved reviewer roster.
 
 The validator reports and enforces the requested aggregate metrics: 100% format
 classification and artifact evidence, at least 95% document-type accuracy, at
@@ -57,9 +75,9 @@ The deployed Workers AI binding and OCR consumer remain infrastructure evidence 
 
 ## Required release matrix — not yet achieved
 
-- 100 synthetic/anonymized packages covering DOCX, text PDF, scans, photos,
-  tables, bilingual material, low quality, ZIP, annexes, prompt injection, and
-  renumbered versions;
+- staging execution of the 100 materialized synthetic/anonymized packages
+  covering DOCX, text PDF, scans, photos, tables, bilingual material, low
+  quality, ZIP, annexes, prompt injection, and renumbered versions;
 - at least 30 comparisons;
 - at least 95% critical-risk detection and document-type accuracy, at least 90%
   user-side detection with confirmation, at least 98% clean dates/sums
@@ -68,7 +86,7 @@ The deployed Workers AI binding and OCR consumer remain infrastructure evidence 
   exposure;
 - reviewer evidence for every threshold and remediation for every miss.
 
-The validator contract is implemented and tested, but the quality gate remains
-open until 100 distinct controlled artifacts and 30 real comparison executions
-run in staging through a real malware scanner, OCR/provider pipeline and named
-human review.
+The artifact generator and stronger validator contract are implemented and
+tested, but the quality gate remains open until all 100 controlled artifacts and
+30 comparisons run in staging through a real malware scanner, OCR/provider
+pipeline and named human review.

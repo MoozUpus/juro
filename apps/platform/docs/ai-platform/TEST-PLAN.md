@@ -14,7 +14,21 @@ migration `0065`, deploy and protected provider/browser QA.
 
 Required checks for each staging vertical slice: typecheck, lint, focused unit/integration/security routes, bounded build, artifact validation, secret scan, and relevant D1/R2/queue evidence. Current regression includes auth, tenant isolation, legal-source acquisition/review, scheduled corpus logic, document boundaries, cases, handoff, and staff access.
 
-Open release tests: authenticated browser/axe/keyboard/mobile matrix, real scanner malicious/safe samples, 100 document packages/30 comparisons, legal reviewer scoring, and restore rehearsal. See `KNOWN-LIMITATIONS.md`.
+Open release tests: authenticated browser/axe/keyboard/mobile matrix, real scanner malicious/safe samples, staging execution and named review of the materialized 100 document packages/30 comparisons, legal reviewer scoring, and restore rehearsal. See `KNOWN-LIMITATIONS.md`.
+
+## Document evaluation artifact checkpoint — 2026-08-04
+
+- `npm run evaluate:documents:materialize -- --output .tmp/document-evaluation-corpus`
+  must create exactly 100 distinct real binaries and 30 reciprocal pairs.
+- Every artifact must revalidate against its manifest by safe relative path,
+  byte size, SHA-256 and expected DOCX/PDF/JPEG/PNG/ZIP magic.
+- A second materialization of representative rows must produce identical bytes.
+- `evaluate:documents:validate` requires both reviewed results and the exact
+  artifact manifest. A result cannot pass without completed staging analysis,
+  safe scan, provider/model/response, reciprocal comparison ID where applicable,
+  and timestamped named human disposition.
+- Local artifact generation is preparation evidence only. It cannot satisfy the
+  scanner, OCR/provider, legal-quality or authenticated staging gates.
 # Archive integrity checkpoint
 
 Every ZIP/DOCX security regression must cover a valid stored entry, a valid raw

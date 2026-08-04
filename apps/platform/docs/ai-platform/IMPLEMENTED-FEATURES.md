@@ -678,3 +678,19 @@ account-deletion cleanup are connected end to end. DOCX redline output includes
 explicit removed/added wording plus strike/underline marks, so meaning is not
 color-only. Synthetic tests generate and inspect both formats and deny a second
 tenant. This is local only until migration 0071 and its Worker are authorized.
+
+## Phase 5 — reproducible document evaluation artifacts (local candidate)
+
+The 100-row/30-pair evaluation manifest now materializes into actual deterministic
+DOCX, text PDF, raster-only scanned PDF, JPEG, PNG and multi-document ZIP files.
+Each run emits hashed synthetic ground truth and an artifact manifest, then
+re-reads all binaries to verify safe paths, byte counts, unique SHA-256 values
+and format magic. The verified local full run produced 100 distinct artifacts
+totaling 5,502,884 bytes with zero integrity failures.
+
+The release validator requires exact artifact-manifest binding plus real staging
+file/analysis/scan/provider evidence and timestamped named human review; it cannot
+pass rows that omit those fields. It validates consistency rather than remote ID
+or reviewer authority, so protected staging D1 evidence and an approved reviewer
+roster remain mandatory. The artifacts have not yet traversed the unavailable
+real malware scanner or staging provider pipeline.

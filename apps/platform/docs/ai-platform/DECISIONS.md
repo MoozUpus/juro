@@ -2824,3 +2824,25 @@ The UI exposes queued/processing/retrying/completed/failed states and never call
 a fake success download. Redline labels remain explicit in text and use OOXML
 strike/underline only as additional presentation. The source comparisons are not
 mutated, and no new runtime dependency is introduced.
+
+## D-136 — Document evaluation uses deterministic binaries and staging-bound evidence
+
+Status: accepted and locally verified; staging execution pending
+Date: 2026-08-04
+
+A 100-row metadata manifest is insufficient evidence that OCR, analysis or
+comparison works. The evaluation harness therefore materializes each row as a
+real deterministic binary and records a separately verified artifact manifest
+and synthetic ground truth. Generated files stay outside Git and carry no real
+personal data.
+
+Evaluation results pass only when their hash/size/format match that manifest and
+each row contains a safe scan, completed staging analysis, actual provider/model/
+response, timestamped named reviewer disposition and reciprocal comparison ID
+where required. This preserves reproducibility while preventing local fixtures,
+or unit-test rows with omitted evidence from being presented as a release quality
+score. JSON validation does not authenticate remote IDs or reviewer authority;
+the release report must pair it with a protected staging D1 export and approved
+reviewer roster. `sharp` is a direct development-only dependency because raster
+OCR fixtures require deterministic PNG/JPEG generation; it does not enter the
+application runtime bundle.
