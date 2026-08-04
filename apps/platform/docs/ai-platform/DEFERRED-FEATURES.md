@@ -39,7 +39,7 @@ unattached and rejects fail-closed until a real scanner is approved.
 
 ## Product and operations gates
 
-- Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, admin/support/status/analytics, and deletion across every future provider remain incomplete.
+- Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, broad admin/analytics, and deletion across every future provider remain incomplete. A local operator-managed public status slice now exists through `0083`, but DNS/custom-domain attachment, protected admin browser QA, synthetic component probes and an incident rehearsal remain gated.
 - Production backup/quarantine targets, operational RTO/RPO, scheduled backup automation, alert delivery, DLQ redrive UI, and full incident rehearsal remain open.
 - Policies are drafts until final RU/UZ legal approval. Production deployment and production UI replacement require separate owner confirmations.
 

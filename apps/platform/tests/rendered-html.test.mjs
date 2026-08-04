@@ -38,6 +38,42 @@ test("built Worker exposes fetch, queue, and scheduled module handlers", async (
   assert.equal(typeof worker.scheduled, "function");
 });
 
+test("public status API fails safely without D1 and status host exposes no application routes", async () => {
+  const worker = await createWorker();
+  const statusRuntime = {
+    STATUS_HOSTNAME: "status.juro.test",
+    ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },
+  };
+  const unavailable = await worker.fetch(
+    new Request("https://status.juro.test/api/status?lang=uz"),
+    statusRuntime,
+    context,
+  );
+  assert.equal(unavailable.status, 503);
+  assert.deepEqual(await unavailable.json(), { code: "STATUS_TEMPORARILY_UNAVAILABLE", locale: "uz" });
+  assert.match(unavailable.headers.get("cache-control") ?? "", /s-maxage=5/);
+  const privateRoute = await worker.fetch(
+    new Request("https://status.juro.test/ru/individual/dashboard"),
+    statusRuntime,
+    context,
+  );
+  assert.equal(privateRoute.status, 404);
+  assert.equal(await privateRoute.text(), "Not Found");
+  const disguisedAsset = await worker.fetch(
+    new Request("https://status.juro.test/api/platform/private.js"),
+    statusRuntime,
+    context,
+  );
+  assert.equal(disguisedAsset.status, 404);
+  const write = await worker.fetch(
+    new Request("https://status.juro.test/api/status", { method: "POST" }),
+    statusRuntime,
+    context,
+  );
+  assert.equal(write.status, 405);
+  assert.equal(write.headers.get("allow"), "GET, HEAD");
+});
+
 const runtime = {
   ALLOW_PLATFORM_AUTH_HEADERS: "true",
   ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) },

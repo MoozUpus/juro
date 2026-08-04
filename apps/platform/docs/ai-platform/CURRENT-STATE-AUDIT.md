@@ -57,7 +57,7 @@ No dependency downgrade is proposed.
 | `/api/platform/dashboard` without a session | `401` |
 | `/api/document-builder/bootstrap` | reports live D1 and R2 bindings |
 | `/uz/auth/login` | `404`; required target route is absent |
-| `status.juro.uz` | `502`; no working public status page |
+| `status.juro.uz` | production remains `502`/unattached; local migration `0083` and public RU/UZ status surface are not deployed |
 | security headers | CSP, HSTS, no-store, and noindex behavior present |
 | authenticated `/ru/individual/document-builder` in Chrome | rendered with one `h1`, no console warning/error, no broken images, and no horizontal overflow at 320, 360, 390, 768, 1024, 1280, or 1440 px |
 | authenticated `/uz/individual/document-builder` in Chrome | shell and `lang="uz"` are localized, but builder title, `h1`, descriptive text, cards, and categories remain Russian |

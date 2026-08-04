@@ -1,5 +1,28 @@
 # D1 migration checkpoint
 
+## 0083 — public system status incidents
+
+Status: additive local candidate; staging remains through `0068`; production is
+unchanged.
+
+`0083_system_status_incidents.sql` adds three tables for bilingual public-safe
+incidents, fixed component impact and immutable progress updates. It does not
+alter or delete existing platform data. Actor guards require a real profile;
+incidents move only forward and cannot be deleted or reopened. Public projection
+tests prove that staff, tenant and internal resource identifiers are omitted.
+
+Before staging application: create and round-trip-verify a fresh full
+`juro-staging` export in private `juro-staging-backups`, restore it into an
+isolated D1 database, and apply all pending migrations in ledger order. Postflight
+must include `quick_check`, `foreign_key_check`, table/index/trigger inspection,
+exact Worker artifact identity, negative status-host route probes and an
+operator incident create/update/resolve rehearsal.
+
+Rollback is application-first: remove or roll back the status hostname/Worker
+route while retaining the expand-only tables. Do not drop incident evidence in
+the same release. DNS/custom-domain attachment and production routing require
+separate explicit approval.
+
 ## 0082 — provider cost circuit breaker
 
 Status: additive local candidate; staging remains through `0068`; production is

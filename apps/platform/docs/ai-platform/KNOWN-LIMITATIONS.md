@@ -1,5 +1,13 @@
 # JURO known limitations checkpoint
 
+> System-status checkpoint — 2026-08-05: local migration `0083` implements a
+> bilingual public projection, immutable forward-only incident updates,
+> fresh-MFA operations console and narrow hostname boundary. Staging remains
+> through `0068`; `status.staging.juro.uz` and `status.juro.uz` are not attached,
+> no authenticated admin browser flow or operational incident rehearsal is
+> claimed, and component state is operator-reported rather than an end-to-end
+> synthetic availability probe. Production still returns 502.
+
 > Provider cost-control checkpoint — 2026-08-04: local migration `0082` adds
 > versioned administrator thresholds, provider circuits, immutable transition
 > evidence and identifiers-only operational-alert outbox delivery. Chat and

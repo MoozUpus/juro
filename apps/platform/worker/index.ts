@@ -21,6 +21,7 @@ type FrameworkEnv = PlatformJobEnv & {
   AI_PROVIDER_API_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  STATUS_HOSTNAME?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   GUEST_AI_ENABLED?: string;
@@ -75,8 +76,42 @@ function withSecurityHeaders(response: Response, url: URL): Response {
 const worker = {
   async fetch(request: Request, env: FrameworkEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    const configuredStatusHostname = env.STATUS_HOSTNAME?.trim().toLowerCase();
+    const isStatusHost = Boolean(configuredStatusHostname && url.hostname.toLowerCase() === configuredStatusHostname);
+    let routedRequest = request;
+    let routedUrl = url;
 
-    if (url.pathname === "/_vinext/image") {
+    if (isStatusHost) {
+      const isStatusAsset = url.pathname.startsWith("/_next/")
+        || /^\/(?:favicon|icon|apple-touch-icon)\.(?:png|ico)$/.test(url.pathname);
+      const allowedStatusPath = url.pathname === "/"
+        || url.pathname === "/status"
+        || url.pathname === "/ru"
+        || url.pathname === "/uz"
+        || url.pathname === "/ru/status"
+        || url.pathname === "/uz/status"
+        || url.pathname === "/api/status"
+        || isStatusAsset;
+      if (!allowedStatusPath) {
+        return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
+      }
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return withSecurityHeaders(new Response("Method Not Allowed", { status: 405, headers: { allow: "GET, HEAD" } }), url);
+      }
+      if (url.pathname === "/" || url.pathname === "/ru" || url.pathname === "/uz") {
+        const target = new URL(url);
+        if (url.pathname === "/ru" || url.pathname === "/uz") {
+          target.pathname = `${url.pathname}/status`;
+        } else {
+          target.pathname = "/status";
+          if (!target.searchParams.has("lang")) target.searchParams.set("lang", "uz");
+        }
+        routedUrl = target;
+        routedRequest = new Request(target, request);
+      }
+    }
+
+    if (routedUrl.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       const optimized = await handleImageOptimization(request, {
         fetchAsset: (path) => env.ASSETS.fetch(new Request(new URL(path, request.url))),
@@ -91,12 +126,23 @@ const worker = {
       return withSecurityHeaders(optimized, url);
     }
 
-    const response = await handler.fetch(request, env, ctx);
-    const isPrivateApi = url.pathname.startsWith("/api/document-builder/") || url.pathname.startsWith("/api/auth/") || url.pathname.startsWith("/api/platform/");
-    const isPrivateShare = url.pathname.startsWith("/document-builder/share/")
-      || url.pathname.startsWith("/document-builder/signed-share/");
+    const response = await handler.fetch(routedRequest, env, ctx);
+    const isPrivateApi = routedUrl.pathname.startsWith("/api/document-builder/") || routedUrl.pathname.startsWith("/api/auth/") || routedUrl.pathname.startsWith("/api/platform/");
+    const isPrivateShare = routedUrl.pathname.startsWith("/document-builder/share/")
+      || routedUrl.pathname.startsWith("/document-builder/signed-share/");
+    const isPublicStatus = routedUrl.pathname === "/status"
+      || routedUrl.pathname === "/api/status"
+      || /^\/(?:ru|uz)\/status$/.test(routedUrl.pathname);
     const headers = new Headers(response.headers);
-    if (isPrivateApi || isPrivateShare || (!url.pathname.startsWith("/_next/") && !url.pathname.match(/\.(?:png|webp|svg|ico|css|js|woff2?)$/))) {
+    if (isPublicStatus) {
+      headers.set(
+        "Cache-Control",
+        response.status >= 500
+          ? "public, max-age=0, s-maxage=5"
+          : "public, max-age=0, s-maxage=30, stale-while-revalidate=60",
+      );
+      headers.delete("Pragma");
+    } else if (isPrivateApi || isPrivateShare || (!routedUrl.pathname.startsWith("/_next/") && !routedUrl.pathname.match(/\.(?:png|webp|svg|ico|css|js|woff2?)$/))) {
       headers.set("Cache-Control", "private, no-store, max-age=0");
       headers.set("Pragma", "no-cache");
     }

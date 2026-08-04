@@ -29,6 +29,7 @@ export interface BuilderRuntimeEnv {
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
   OPERATIONS_ALERT_EMAIL?: string;
+  STATUS_HOSTNAME?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   GUEST_AI_ENABLED?: string;

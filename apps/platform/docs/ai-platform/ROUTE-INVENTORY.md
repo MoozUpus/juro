@@ -251,8 +251,14 @@ deployment, job, or customer-content grant is active.
 
 ### Help and status
 
-- localized article routes `/:locale/help/:articleSlug` are absent;
-- `status.juro.uz` has no DNS record and no verified status application.
+- localized public and authenticated knowledge routes now exist locally through
+  migrations `0077`–`0078`; staging/browser publication evidence remains open;
+- `/status`, `/:locale/status`, and `/api/status` are local public-safe status
+  surfaces through migration `0083`. A configured status hostname is restricted
+  at the Worker boundary to status pages/API and static assets, so it cannot
+  expose dashboard or private platform routes;
+- `status.juro.uz` still has no attached DNS/custom-domain evidence. The local
+  route and non-secret hostname configuration are not a deployment claim.
 
 ### Cinematic prototype
 

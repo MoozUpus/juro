@@ -120,6 +120,11 @@ The deployed staging source attaches only `staging-email-notifications` and `sta
 - Staging primary queues have one producer binding; email and data-retention each have one `juro-platform-staging` consumer and distinct DLQ. Other consumers remain unattached.
 - Staging Worker serves version `2ebc2ea8-6216-4f39-af96-d1b600973b74`, at 100% from commit `cd24095c8307a4c3b145549f147a823000a438e3`. Script subdomain and previews remain disabled; exactly one schedule and two reviewed staging consumers are active.
 - `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
+- The local `0083` candidate declares non-secret `STATUS_HOSTNAME` values
+  (`status.staging.juro.uz` for staging and `status.juro.uz` for production) so
+  an explicitly attached hostname can be fenced to the public status surface.
+  No DNS record, Worker custom-domain attachment, Access policy change or
+  production route is created by declaring this variable.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
 

@@ -28,7 +28,8 @@
     "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
     "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
     "EMAIL_FROM": "JURO <no-reply@juro.uz>",
-    "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com"
+    "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com",
+    "STATUS_HOSTNAME": "status.localhost"
   },
   "d1_databases": [
     {
@@ -158,6 +159,7 @@
         "EMBEDDING_MODEL": "text-embedding-3-large",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
         "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com",
+        "STATUS_HOSTNAME": "status.staging.juro.uz",
         "OPENAI_CHAT_MODEL": "gpt-5.6-sol",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
@@ -340,7 +342,8 @@
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
         "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
-        "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com"
+        "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com",
+        "STATUS_HOSTNAME": "status.juro.uz"
       },
       "d1_databases": [
         {

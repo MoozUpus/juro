@@ -270,3 +270,18 @@ silently close a circuit; recovery requires a fresh-MFA operations action with
 audit evidence. This creates an emergency stop without pretending D1 and the
 external provider share a distributed transaction. Billing reconciliation and
 remote alert/circuit rehearsal remain release gates.
+
+## D-114 — public status is an operator-approved projection behind a narrow host
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+JURO status does not infer provider, email or legal-product health from an
+unrelated process check. Operations staff publish bilingual incidents through
+the existing fresh-MFA boundary, and every state change is immutable and
+forward-only. The public projection contains fixed product component names,
+public copy, timestamps and an opaque incident reference; it excludes actor,
+tenant, resource and infrastructure identifiers. A configured status hostname
+is fenced in the Worker before application routing, so it cannot become a second
+entry point to private platform routes. Automatic probes and domain attachment
+remain separate staging gates rather than fabricated availability evidence.

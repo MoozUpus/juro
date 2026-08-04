@@ -1,5 +1,22 @@
 # JURO implemented-features checkpoint
 
+## Public system status and incident management (local candidate)
+
+- Migration `0083` adds bilingual incidents, fixed public component impacts and
+  immutable chronological updates. Incidents cannot be deleted or reopened;
+  only forward transitions from investigating to resolved are accepted.
+- `/status`, `/:locale/status` and `/api/status` project only public reference,
+  RU/UZ copy, component state and timestamps. Staff identity, tenant/resource
+  identifiers and infrastructure topology are never serialized.
+- `/:locale/admin/system-status` and its API use the existing operations
+  capability, active TOTP, fresh MFA and same-origin/CSRF boundary.
+- The configured status hostname is allowlisted to status routes and static
+  assets; application/dashboard routes return a neutral 404 and writes return
+  405. A missing/unavailable D1 produces a bounded public 503.
+- D1 lifecycle, immutability, translation, projection and host-boundary tests
+  pass locally. Migration/deploy, custom-domain/DNS attachment, protected admin
+  browser QA and an incident rehearsal remain pending; production is unchanged.
+
 ## Provider cost circuit breaker and operational alerts (local candidate)
 
 - Migration `0082` adds immutable cost-guard policy versions, provider circuit
