@@ -1,5 +1,15 @@
 # JURO D1 migrations
 
+## Pending 0068 — file scan evidence
+
+`0068_file_scan_evidence.sql` is an expand-only local candidate. It adds one
+terminal evidence table, tenant/source guard trigger, immutable-update trigger,
+unique analysis/file indexes and cascade ownership. It does not alter or
+backfill existing uploads. It has not been applied to staging. Required next
+gate: private `juro-staging-backups` export/round-trip/restore, remote migration,
+schema/FK postflight, then a separately authorized staging deploy; the scanner
+feature remains off even after the schema exists.
+
 ## Migration 0065 — guest AI sessions
 
 `0065_guest_ai_sessions.sql` additively creates `guest_ai_sessions` and

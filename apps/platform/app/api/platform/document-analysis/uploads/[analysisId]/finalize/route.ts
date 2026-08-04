@@ -1,5 +1,5 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
-import { requireD1, requireQuarantineR2 } from "../../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireQuarantineR2, runtimeEnv } from "../../../../../../../lib/document-builder/storage/runtime";
 import { ArchiveInspectionError, inspectArchiveBytes, type ArchiveInspection } from "../../../../../../../lib/document-analysis/archive-inspector";
 import {
   arrayBufferHex,
@@ -27,7 +27,11 @@ export const POST = withApiErrors(async function POST(
   const db = requireD1();
   try {
     const record = await documentAnalysisUploadForUser(db, analysisId, workspace.id, user.id);
-    if (record.status === "quarantined") return quarantinedResponse(record, true);
+    if (record.status === "quarantined") {
+      const scanQueued = scannerConfigured();
+      if (scanQueued) await ensureScanQueued(db, record, workspace.id, new Date().toISOString());
+      return quarantinedResponse(record, true, scanQueued);
+    }
     if (record.status !== "uploaded") {
       return response({ code: "UPLOAD_STATE_CONFLICT", error: "Сначала завершите загрузку файла." }, 409);
     }
@@ -73,13 +77,14 @@ export const POST = withApiErrors(async function POST(
     }
 
     const now = new Date().toISOString();
-    await db.batch([
+    const scanQueued = scannerConfigured();
+    const statements: D1PreparedStatement[] = [
       db.prepare(
         "UPDATE document_files SET kind='analysis_quarantined',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_uploaded'",
       ).bind(now, record.fileId, workspace.id, user.id),
       db.prepare(
-        "UPDATE document_analyses SET status='quarantined',error_code='MALWARE_SCANNER_UNAVAILABLE',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='uploaded'",
-      ).bind(now, analysisId, workspace.id, user.id),
+        "UPDATE document_analyses SET status='quarantined',error_code=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='uploaded'",
+      ).bind(scanQueued ? null : "MALWARE_SCANNER_UNAVAILABLE", now, analysisId, workspace.id, user.id),
       db.prepare(
         `INSERT INTO workspace_audit_events
          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
@@ -90,10 +95,16 @@ export const POST = withApiErrors(async function POST(
         archiveEntryCount: archiveInspection?.entryCount ?? null,
         archiveFileCount: archiveInspection?.fileCount ?? null,
         archiveUncompressedBytes: archiveInspection?.uncompressedBytes ?? null,
-        scannerDispatched: false,
+        scannerQueued: scanQueued,
       }), now),
-    ]);
-    return quarantinedResponse({ ...record, status: "quarantined", errorCode: "MALWARE_SCANNER_UNAVAILABLE" }, false);
+    ];
+    if (scanQueued) statements.push(scanOutboxStatement(db, record, workspace.id, now));
+    await db.batch(statements);
+    return quarantinedResponse({
+      ...record,
+      status: "quarantined",
+      errorCode: scanQueued ? null : "MALWARE_SCANNER_UNAVAILABLE",
+    }, false, scanQueued);
   } catch (error) {
     if (error instanceof DocumentAnalysisUploadError) {
       return response({ code: error.code, error: error.message }, error.status);
@@ -127,9 +138,13 @@ async function rejectFile(
   ]);
 }
 
-function quarantinedResponse(record: Awaited<ReturnType<typeof documentAnalysisUploadForUser>>, replay: boolean) {
+function quarantinedResponse(
+  record: Awaited<ReturnType<typeof documentAnalysisUploadForUser>>,
+  replay: boolean,
+  scanQueued: boolean,
+) {
   return response({
-    code: "FILE_SCAN_UNAVAILABLE",
+    code: scanQueued ? "FILE_SCAN_QUEUED" : "FILE_SCAN_UNAVAILABLE",
     analysis: {
       id: record.analysisId,
       fileId: record.fileId,
@@ -137,9 +152,51 @@ function quarantinedResponse(record: Awaited<ReturnType<typeof documentAnalysisU
       mimeType: record.mimeType,
       sizeBytes: record.sizeBytes,
       status: "quarantined",
-      errorCode: "MALWARE_SCANNER_UNAVAILABLE",
+      errorCode: scanQueued ? null : "MALWARE_SCANNER_UNAVAILABLE",
     },
     replay,
-    message: "Файл приватно загружен и помещён в карантин. Анализ не запускался: staging malware scanner ещё не подключён.",
+    message: scanQueued
+      ? "Файл приватно загружен и передан на обязательную проверку безопасности. Анализ начнётся только после чистого результата."
+      : "Файл приватно загружен и помещён в карантин. Анализ не запускался: staging malware scanner ещё не подключён.",
   }, 202);
+}
+
+function scannerConfigured(): boolean {
+  const environment = runtimeEnv();
+  return environment.MALWARE_SCAN_ENABLED === "true"
+    && Boolean(environment.MALWARE_SCANNER)
+    && Boolean(environment.MALWARE_SCAN_QUEUE);
+}
+
+async function ensureScanQueued(
+  db: D1Database,
+  record: Awaited<ReturnType<typeof documentAnalysisUploadForUser>>,
+  workspaceId: string,
+  now: string,
+): Promise<void> {
+  await scanOutboxStatement(db, record, workspaceId, now).run();
+}
+
+function scanOutboxStatement(
+  db: D1Database,
+  record: Awaited<ReturnType<typeof documentAnalysisUploadForUser>>,
+  workspaceId: string,
+  now: string,
+): D1PreparedStatement {
+  const jobId = `job-malware-${record.analysisId}`;
+  const idempotencyKey = `idem-malware-${record.analysisId}-${record.sha256.slice(0, 16)}`;
+  return db.prepare(`INSERT OR IGNORE INTO job_outbox
+    (id,queue_binding,job_type,schema_version,idempotency_key,subject_id,workspace_id,
+     correlation_id,enqueued_at,available_at,status,dispatch_attempts,created_at,updated_at)
+    VALUES (?,'MALWARE_SCAN_QUEUE','malware.scan',1,?,?,?, ?,?,?,'pending',0,?,?)`).bind(
+    jobId,
+    idempotencyKey,
+    record.analysisId,
+    workspaceId,
+    `corr-malware-${record.analysisId}`,
+    now,
+    now,
+    now,
+    now,
+  );
 }

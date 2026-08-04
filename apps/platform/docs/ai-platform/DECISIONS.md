@@ -1,5 +1,17 @@
 # JURO AI platform decision log
 
+## 2026-08-04 — Keep malware scanning service-neutral and disabled until real staging evidence
+
+Define a strict internal Fetcher/service-binding protocol and terminal D1
+evidence model, but do not attach the malware Queue or enable uploads while no
+real privacy-approved scanner is deployable. Cloudflare Containers currently
+require Workers Paid and the authenticated account is not eligible; Docker is
+absent locally. Treating archive inspection, a bucket, or a synthetic handler as
+malware scanning would violate the fail-closed release gate. Migration `0068`
+may be staged independently, but files must continue returning
+`FILE_SCAN_UNAVAILABLE` until a real service, EICAR/clean fixtures, retry/DLQ
+evidence and operator review pass.
+
 ## 2026-08-03 — Short-lived guest AI boundary
 
 The guest entry point is a separate, feature-gated legal-chat boundary. A

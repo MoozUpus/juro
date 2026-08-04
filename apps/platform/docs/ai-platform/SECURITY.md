@@ -1,5 +1,25 @@
 # JURO platform security controls
 
+## Malware scanner service boundary — local candidate
+
+The scanner is designed as a private service binding, not a public URL and not
+an API key in the browser. Queue envelopes contain only opaque analysis and
+workspace identifiers. The consumer reloads the tenant-scoped D1/R2 source,
+verifies size and SHA-256 before scanning, sends the quarantined byte stream to
+the service, rejects oversized or invalid JSON responses, requires the returned
+source hash to match, and records provider/engine/signature/scan identifiers
+plus a hash of the exact response. A clean verdict is the only path that copies
+the object to the private primary bucket and schedules document analysis. An
+infected verdict leaves the object isolated, records `FILE_UNSAFE`, and never
+enqueues OCR/AI.
+
+This boundary is disabled and unbound. The current Cloudflare account cannot
+deploy Containers because Workers Paid is unavailable, so neither ClamAV nor
+any substitute is represented as active. Before enabling it, staging must prove
+the real scanner version/signature update path, clean fixture, EICAR fixture,
+timeout/503/429/invalid-response paths, Queue retry/DLQ behavior, logs without
+content, and quarantine retention cleanup.
+
 Updated: 2026-07-30
 Status: this file records implemented controls and open gates. It does not replace `SECURITY-AUDIT.md` or `THREAT-MODEL.md`.
 

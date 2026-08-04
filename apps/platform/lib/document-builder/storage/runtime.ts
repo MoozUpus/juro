@@ -44,6 +44,9 @@ export interface BuilderRuntimeEnv {
   LEGISLATION_FEED_API_KEY?: string;
   IDENTITY_KEYRING?: string;
   IDENTITY_PROTECTION_MODE?: string;
+  MALWARE_SCANNER?: Fetcher;
+  MALWARE_SCAN_QUEUE?: Queue;
+  MALWARE_SCAN_ENABLED?: string;
 }
 
 export class ServiceUnavailableError extends Error {

@@ -2613,6 +2613,32 @@ export const documentAnalyses = sqliteTable("document_analyses", {
   ...timestamps,
 }, (table) => [index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt), uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId)]);
 
+export const fileScanResults = sqliteTable("file_scan_results", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  fileId: text("file_id").notNull().references(() => documentFiles.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  verdict: text("verdict").notNull(),
+  provider: text("provider").notNull(),
+  engine: text("engine").notNull(),
+  engineVersion: text("engine_version").notNull(),
+  signatureVersion: text("signature_version").notNull(),
+  providerScanId: text("provider_scan_id").notNull(),
+  sourceSha256: text("source_sha256").notNull(),
+  responseSha256: text("response_sha256").notNull(),
+  threatsJson: text("threats_json").notNull(),
+  completedAt: text("completed_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("file_scan_results_analysis_uidx").on(table.analysisId),
+  uniqueIndex("file_scan_results_file_uidx").on(table.fileId),
+  index("file_scan_results_workspace_created_idx").on(table.workspaceId, table.createdAt),
+  check("file_scan_results_verdict_check", sql`${table.verdict} IN ('clean','infected')`),
+  check("file_scan_results_source_sha_check", sql`length(${table.sourceSha256}) = 64`),
+  check("file_scan_results_response_sha_check", sql`length(${table.responseSha256}) = 64`),
+]);
+
 export const fileExtractions = sqliteTable("file_extractions", {
   id: text("id").primaryKey(),
   analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),

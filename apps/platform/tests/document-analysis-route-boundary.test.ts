@@ -27,6 +27,11 @@ test("secure upload routes enforce streaming, checksum, tenant, and quarantine b
   assert.match(upload, /content-length/);
   assert.match(finalize, /validateUploadMagicBytes/);
   assert.match(finalize, /MALWARE_SCANNER_UNAVAILABLE/);
+  assert.match(finalize, /MALWARE_SCAN_ENABLED/);
+  assert.match(finalize, /MALWARE_SCANNER/);
+  assert.match(finalize, /MALWARE_SCAN_QUEUE/);
+  assert.match(finalize, /FILE_SCAN_QUEUED/);
+  assert.match(finalize, /INSERT OR IGNORE INTO job_outbox/);
   assert.match(`${upload}\n${finalize}`, /requireQuarantineR2/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /requireR2\(\)/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic|status='safe'|status='ready'/);
@@ -44,6 +49,21 @@ test("dashboard and review surfaces use the secure upload client", () => {
   assert.match(uploadClient, /request\.upload\.addEventListener\("progress"/);
   assert.match(uploadClient, /x-juro-file-sha256/);
   assert.doesNotMatch(`${dashboard}\n${review}`, /new FormData\(\)/);
+});
+
+test("scanner promotion requires strict evidence and never trusts document instructions", () => {
+  const scanner = source("lib/document-analysis/malware-scanner.ts");
+  assert.match(scanner, /malwareScannerResponseSchema/);
+  assert.match(scanner, /sourceSha256 !== sourceSha256/);
+  assert.match(scanner, /checksums\.sha256/);
+  assert.match(scanner, /analysis_quarantined/);
+  assert.match(scanner, /analysis_safe/);
+  assert.match(scanner, /analysis_rejected/);
+  assert.match(scanner, /FILE_UNSAFE/);
+  assert.match(scanner, /DOCUMENT_ANALYSIS_QUEUE/);
+  assert.match(scanner, /UPDATE document_analyses SET status='ready'/);
+  assert.match(scanner, /AND status='quarantined'/);
+  assert.doesNotMatch(scanner, /UPDATE document_analyses SET status='safe'/);
 });
 
 test("AI and document processors revalidate provider citations before persistence", () => {

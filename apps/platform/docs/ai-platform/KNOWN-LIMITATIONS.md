@@ -1,5 +1,24 @@
 # JURO known limitations checkpoint
 
+> Malware-scanner local candidate — 2026-08-04: migration `0068` and a
+> provider-neutral internal service contract now cover strict response-schema
+> validation, source/R2 SHA verification, tenant fencing, immutable terminal
+> evidence, idempotent clean promotion, infected quarantine, and downstream
+> analysis enqueue only after a clean verdict. This is not a scanner claim.
+> Read-only Wrangler evidence says the current account does not have Workers
+> Paid/Cloudflare Containers access, and Docker is absent locally; therefore no
+> ClamAV image, service binding, malware Queue producer/consumer, migration
+> `0068`, or staging deployment was activated. All checked-in environments
+> remain fail-closed with no scanner binding until a real privacy-approved
+> service and EICAR/clean-file staging evidence exist.
+
+> Access redirect diagnosis — 2026-08-04: cookie-free HTTP traces for `/`, the
+> AI-new route and voice route each make exactly one expected `302` to the
+> Cloudflare Access login and finish there with `200`. DNS/Worker/Access policy
+> is therefore not the observed loop source; the loop is confined to stale
+> Chrome login state. No cookies or authentication state were modified without
+> owner confirmation.
+
 > Evaluation-harness checkpoint — 2026-08-04: the 314-scenario legal gate now
 > uses unique RU/UZ prompts, account-type coverage, explicit expected behaviors
 > and live same-host HTTPS citation verification; an allowlisted-looking but

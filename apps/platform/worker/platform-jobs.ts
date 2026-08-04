@@ -28,6 +28,10 @@ import {
   OcrProcessingError,
 } from "../lib/document-analysis/ocr-processor";
 import {
+  executeMalwareScanJob,
+  MalwareScanError,
+} from "../lib/document-analysis/malware-scanner";
+import {
   AnalysisExportError,
   executeAnalysisExportJob,
   recordAnalysisExportFailure,
@@ -158,6 +162,14 @@ type JobErrorCode =
   | "NOTIFICATION_INTEGRITY_FAILED"
   | "NOTIFICATION_PERSISTENCE_FAILED"
   | "NOTIFICATION_SOURCE_NOT_FOUND"
+  | "MALWARE_SCAN_DISABLED"
+  | "MALWARE_SCAN_INTEGRITY_FAILED"
+  | "MALWARE_SCAN_NOT_FOUND"
+  | "MALWARE_SCAN_OBJECT_FAILED"
+  | "MALWARE_SCAN_PERSISTENCE_FAILED"
+  | "MALWARE_SCAN_STATE_CONFLICT"
+  | "MALWARE_SCANNER_INVALID_RESPONSE"
+  | "MALWARE_SCANNER_UNAVAILABLE"
   | "PRIVILEGED_ACCOUNT_REVIEW_REQUIRED"
   | "STAGING_SYNTHETIC_PROBE_DISABLED"
   | "STAGING_SYNTHETIC_PROBE_D1_FAILED"
@@ -256,6 +268,8 @@ export type PlatformJobEnv = Omit<
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
   STAGING_SYNTHETIC_PROBES_ENABLED?: string;
+  MALWARE_SCANNER?: Fetcher;
+  MALWARE_SCAN_ENABLED?: string;
 };
 
 export function expectedQueueName(
@@ -711,6 +725,21 @@ async function executeJob(
       return;
     } catch (error) {
       if (error instanceof NotificationDispatchError) {
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
+  }
+  if (envelope.kind === "malware.scan" && env.MALWARE_SCAN_ENABLED === "true") {
+    try {
+      await executeMalwareScanJob(
+        env,
+        envelope.subjectId,
+        envelope.workspaceId!,
+      );
+      return;
+    } catch (error) {
+      if (error instanceof MalwareScanError) {
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;

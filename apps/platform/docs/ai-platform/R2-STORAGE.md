@@ -1,5 +1,17 @@
 # JURO R2 storage
 
+## Pending scanner promotion boundary
+
+Migration candidate `0068` defines the missing scan-evidence boundary and the
+local consumer uses immutable
+`safe-v1/{workspaceId}/{analysisId}/{fileId}` keys. Promotion verifies the
+quarantined object twice (scan and copy reads), uses conditional-create
+semantics in the primary bucket, verifies the stored SHA, and changes the D1
+key only in the terminal clean batch. A failed post-promotion quarantine delete
+leaves an inaccessible duplicate for retention cleanup rather than undoing the
+safe record. This code is not deployed and no object has been promoted by a
+real scanner.
+
 Updated: 2026-07-29
 Status: remote inventory verified. Six approved private EEUR Standard development/staging target buckets exist. `juro-staging-backups` contains 26 verified staging D1 backup/restore artifacts, including the pre/post `0030`–`0034` checkpoints; all other target buckets remain without verified application content. Production storage was unchanged.
 

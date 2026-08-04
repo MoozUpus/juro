@@ -1,5 +1,19 @@
 # JURO implemented-features checkpoint
 
+## Disabled malware-scanner integration candidate (local only)
+
+- `0068_file_scan_evidence.sql` adds tenant-bound, terminal scan evidence with
+  clean/infected invariants and immutable updates.
+- `lib/document-analysis/malware-scanner.ts` implements the internal scanner
+  protocol, strict 64 KiB response bound, SHA/R2 verification, idempotent
+  `quarantine-v2` to `safe-v1` promotion, infected isolation, audit evidence,
+  and downstream `document.analyze` enqueue after clean verdict only.
+- Upload finalize can enqueue `malware.scan` only when all three controls are
+  present: `MALWARE_SCAN_ENABLED=true`, an internal `MALWARE_SCANNER` service
+  binding, and `MALWARE_SCAN_QUEUE`.
+- No checked-in environment currently provides those controls. The existing
+  unavailable/quarantine response remains the actual runtime behavior.
+
 > Current local evaluation delta — 2026-08-04: legal release evaluation now
 > contains 314 unique RU/UZ scenarios with individual/entrepreneur/lawyer
 > coverage, expected-behavior scoring and live citation existence checks. The

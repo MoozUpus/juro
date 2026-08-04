@@ -1,5 +1,14 @@
 # JURO Cloudflare resources
 
+## Containers capability check — 2026-08-04
+
+`wrangler containers list --json` authenticated to account
+`e22babd36b65c99b69adf3de50df5227` but returned Cloudflare's explicit
+`Unauthorized: You do not have access to Cloudflare Containers; Workers Paid
+required`. Local `docker` is also unavailable. No Container, image, Durable
+Object class, service binding, Queue attachment or resource ID is claimed.
+The scanner integration remains a disabled service-binding contract.
+
 > Current checkpoint — 2026-08-04: protected staging Worker version
 > `5e85ee33-f7ec-4e5d-a726-431c67ea46f0`, deployment
 > `6156d7fb-77e6-40c3-bfaf-bc4212721ccb`, serves 100% of traffic with
