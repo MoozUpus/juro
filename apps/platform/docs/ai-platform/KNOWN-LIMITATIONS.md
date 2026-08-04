@@ -1,5 +1,13 @@
 # JURO known limitations checkpoint
 
+> Deadline-calculation checkpoint — 2026-08-04: migration `0067` and the
+> preview/confirm/task-evidence flow are local-only. The calculator has no
+> owner-approved authoritative Uzbekistan holiday-calendar feed and no reviewed
+> legal-source verification workflow, so every result is intentionally marked
+> `preliminary`. User-supplied calendar/version/legal-basis text is evidence of
+> input, not proof of law. Authenticated staging RU/UZ browser, keyboard, mobile,
+> historical-law applicability and official holiday review remain open.
+
 > Current authoritative runtime checkpoint — 2026-08-04: read-only Cloudflare
 > and D1 evidence confirms active staging Worker
 > `166f25f3-caa2-4312-b577-beabdfd1f37c` at 100% traffic and schema through

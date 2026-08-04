@@ -269,7 +269,10 @@ GET /api/platform/ai/runs/:idempotencyKey
 PATCH /api/platform/ai/facts/:factId
 GET /api/platform/dashboard
 GET,POST /api/platform/cases
+PATCH /api/platform/cases/:caseId/plan
 PATCH /api/platform/cases/:caseId/steps/:stepId
+POST /api/platform/cases/:caseId/steps/:stepId/deadline
+GET,POST /api/platform/cases/:caseId/tasks
 GET,PATCH /api/platform/archive
 GET /api/platform/history
 GET,POST /api/platform/billing
@@ -312,6 +315,14 @@ locale, and an optional destination-case UUID. It rehydrates the saved
 structured answer server-side. Without a destination it creates one new case;
 with a destination it appends an immutable version and real tasks to a
 tenant-owned non-archived case. The operation is CSRF-protected and replay-safe.
+
+`POST /api/platform/cases/:caseId/steps/:stepId/deadline` is a read-only,
+authenticated calculation preview despite using POST for a bounded structured
+payload. It checks the active workspace and never persists. The user applies a
+preview only through the existing confirmed plan PATCH. Both batch and single-step
+write routes recalculate server-side and reject a mismatched due date. The tasks
+route copies stored evidence from a confirmed step; it never upgrades
+`preliminary` evidence to a verified legal source.
 
 ### Inactive staff surface
 

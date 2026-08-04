@@ -1,7 +1,5 @@
 "use client";
 
-/* eslint-disable react-hooks/set-state-in-effect -- authenticated remote workspace state is hydrated after mount */
-
 import Link from "next/link";
 import {
   CalendarDays,
@@ -15,6 +13,10 @@ import {
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { caseScenariosForAccount } from "../../lib/platform/case-create";
+import type {
+  DeadlineCalculationInput,
+  DeadlineCalculationResult,
+} from "../../lib/platform/deadline-calculator";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
@@ -34,6 +36,12 @@ type Step = {
   description?: string;
   status: StepStatus;
   dueAt?: string;
+  sourceDate?: string;
+  safeDueAt?: string;
+  deadlineType?: "calendar_days" | "business_days";
+  calculationMethod?: string;
+  legalBasis?: string;
+  deadlineConfidence?: "unverified" | "preliminary" | "source_verified";
   actionType?: string;
   templateCode?: string;
   revision: number;
@@ -59,6 +67,22 @@ type PendingPlanChange = {
   status: StepStatus;
   dueAt: string | null;
   revision: number;
+  deadlineCalculation?: DeadlineCalculationInput | null;
+};
+
+type DeadlineDraft = {
+  sourceDate: string;
+  daysCount: string;
+  dayType: "calendar_days" | "business_days";
+  includeSourceDate: boolean;
+  rollRule: "none" | "next_business_day" | "previous_business_day";
+  holidays: string;
+  holidayCalendarVersion: string;
+  safeMarginBusinessDays: string;
+  legalBasis: string;
+  loading?: boolean;
+  error?: string;
+  result?: DeadlineCalculationResult;
 };
 
 type PlanSnapshot = {
@@ -75,6 +99,21 @@ type PlanVersion = {
   createdAt: string;
   snapshot: PlanSnapshot | null;
 };
+
+function initialDeadlineDraft(step: Step): DeadlineDraft {
+  return {
+    sourceDate: step.sourceDate?.slice(0, 10) ?? "",
+    daysCount: "",
+    dayType: step.deadlineType ?? "calendar_days",
+    includeSourceDate: false,
+    rollRule: "none",
+    holidays: "",
+    holidayCalendarVersion: "",
+    safeMarginBusinessDays: "1",
+    legalBasis: step.legalBasis ?? "",
+  };
+}
+
 export function ActionPlanClient({
   locale,
   accountType,
@@ -101,6 +140,7 @@ export function ActionPlanClient({
   const [selectedHistoryVersionByCase, setSelectedHistoryVersionByCase] = useState<Record<string, string>>({});
   const [loadingVersionsFor, setLoadingVersionsFor] = useState<string | null>(null);
   const [creatingTasksFor, setCreatingTasksFor] = useState<string | null>(null);
+  const [deadlineDrafts, setDeadlineDrafts] = useState<Record<string, DeadlineDraft>>({});
 
   const load = useCallback(async () => {
     setError("");
@@ -158,21 +198,75 @@ export function ActionPlanClient({
     }
   }
 
-  function stageStepChange(item: Case, step: Step, patch: Partial<Pick<PendingPlanChange, "status" | "dueAt">>) {
+  function stageStepChange(item: Case, step: Step, patch: Partial<Pick<PendingPlanChange, "status" | "dueAt" | "deadlineCalculation">>) {
     const current = pendingChangesByCase[item.id]?.[step.id];
     const next: PendingPlanChange = {
       id: step.id,
       status: patch.status ?? current?.status ?? step.status,
       dueAt: "dueAt" in patch ? patch.dueAt ?? null : current?.dueAt ?? step.dueAt?.slice(0, 10) ?? null,
       revision: step.revision,
+      deadlineCalculation: "deadlineCalculation" in patch
+        ? patch.deadlineCalculation
+        : current?.deadlineCalculation,
     };
-    const unchanged = next.status === step.status && next.dueAt === (step.dueAt?.slice(0, 10) ?? null);
+    const unchanged = next.status === step.status
+      && next.dueAt === (step.dueAt?.slice(0, 10) ?? null)
+      && next.deadlineCalculation === undefined;
     setPendingChangesByCase((all) => {
       const caseChanges = { ...(all[item.id] || {}) };
       if (unchanged) delete caseChanges[step.id];
       else caseChanges[step.id] = next;
       return { ...all, [item.id]: caseChanges };
     });
+  }
+
+  function updateDeadlineDraft(item: Case, step: Step, patch: Partial<DeadlineDraft>) {
+    const key = `${item.id}:${step.id}`;
+    setDeadlineDrafts((all) => ({
+      ...all,
+      [key]: { ...(all[key] ?? initialDeadlineDraft(step)), ...patch, error: "" },
+    }));
+  }
+
+  function clearDeadlineResultsForCase(caseId: string) {
+    setDeadlineDrafts((all) => Object.fromEntries(Object.entries(all).map(([key, draft]) => [
+      key,
+      key.startsWith(`${caseId}:`) ? { ...draft, result: undefined, error: "" } : draft,
+    ])));
+  }
+
+  async function previewDeadline(item: Case, step: Step) {
+    const key = `${item.id}:${step.id}`;
+    const draft = deadlineDrafts[key] ?? initialDeadlineDraft(step);
+    const holidays = draft.holidays.split(/[\s,;]+/).map((value) => value.trim()).filter(Boolean);
+    const input: DeadlineCalculationInput = {
+      sourceDate: draft.sourceDate,
+      daysCount: Number(draft.daysCount),
+      dayType: draft.dayType,
+      includeSourceDate: draft.includeSourceDate,
+      rollRule: draft.rollRule,
+      holidays,
+      holidayCalendarVersion: draft.holidayCalendarVersion.trim() || null,
+      safeMarginBusinessDays: Number(draft.safeMarginBusinessDays),
+      legalBasis: draft.legalBasis.trim() || null,
+    };
+    setDeadlineDrafts((all) => ({ ...all, [key]: { ...draft, loading: true, error: "" } }));
+    try {
+      const response = await fetch(`/api/platform/cases/${item.id}/steps/${step.id}/deadline`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify(input),
+      });
+      const data = await response.json() as { result?: DeadlineCalculationResult; error?: string };
+      if (!response.ok || !data.result) throw new Error(data.error || (ru ? "Не удалось рассчитать срок." : "Muddatni hisoblab bo‘lmadi."));
+      setDeadlineDrafts((all) => ({ ...all, [key]: { ...draft, loading: false, result: data.result } }));
+      stageStepChange(item, step, { dueAt: data.result.dueDate, deadlineCalculation: input });
+    } catch (value) {
+      setDeadlineDrafts((all) => ({
+        ...all,
+        [key]: { ...draft, loading: false, error: value instanceof Error ? value.message : String(value) },
+      }));
+    }
   }
 
   async function applyStagedChanges(item: Case) {
@@ -189,12 +283,14 @@ export function ActionPlanClient({
       const data = await response.json() as { error?: string };
       if (response.status === 409) {
         setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
+        clearDeadlineResultsForCase(item.id);
         setError(ru ? "План изменён в другой вкладке. Показаны актуальные данные." : "Reja boshqa oynada o‘zgartirilgan. Amaldagi ma’lumotlar ko‘rsatildi.");
         await load();
         return;
       }
       if (!response.ok) throw new Error(data.error || (ru ? "Не удалось применить изменения плана." : "Reja o‘zgarishlarini qo‘llab bo‘lmadi."));
       setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
+      clearDeadlineResultsForCase(item.id);
       setVersionsByCase((all) => ({ ...all, [item.id]: [] }));
       await load();
     } catch (value) {
@@ -347,7 +443,10 @@ export function ActionPlanClient({
                         })}
                       </ul>
                       <div className="plan-change-actions">
-                        <button type="button" onClick={() => setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }))}>{ru ? "Отменить" : "Bekor qilish"}</button>
+                        <button type="button" onClick={() => {
+                          setPendingChangesByCase((all) => ({ ...all, [item.id]: {} }));
+                          clearDeadlineResultsForCase(item.id);
+                        }}>{ru ? "Отменить" : "Bekor qilish"}</button>
                         <button type="button" className="plan-primary" disabled={applyingChangesFor === item.id} onClick={() => void applyStagedChanges(item)}>
                           {applyingChangesFor === item.id ? <LoaderCircle className="spin" /> : <Check />}
                           {ru ? "Подтвердить и применить" : "Tasdiqlash va qo‘llash"}
@@ -357,6 +456,8 @@ export function ActionPlanClient({
                     {item.steps.map((step) => {
                       const staged = pendingChangesByCase[item.id]?.[step.id];
                       const saving = applyingChangesFor === item.id;
+                      const deadlineDraftKey = `${item.id}:${step.id}`;
+                      const deadlineDraft = deadlineDrafts[deadlineDraftKey] ?? initialDeadlineDraft(step);
                       const builderQuery = new URLSearchParams({ caseId: item.id, stepId: step.id });
                       if (step.templateCode) builderQuery.set("template", step.templateCode);
                       return <div className={`plan-step ${step.status === "completed" ? "done" : ""}`} key={step.id}>
@@ -371,7 +472,7 @@ export function ActionPlanClient({
                             type="date"
                             value={staged?.dueAt ?? step.dueAt?.slice(0, 10) ?? ""}
                             disabled={saving}
-                            onChange={(event) => stageStepChange(item, step, { dueAt: event.target.value || null })}
+                            onChange={(event) => stageStepChange(item, step, { dueAt: event.target.value || null, deadlineCalculation: null })}
                           />
                         </label>
                         <label className="plan-step-status">
@@ -394,6 +495,80 @@ export function ActionPlanClient({
                           href={`${base}/document-builder?${builderQuery}`}
                           aria-label={ru ? `Создать документ для шага «${step.title}»` : `«${step.title}» qadami uchun hujjat yaratish`}
                         ><FilePenLine /></Link>
+                        <details className="deadline-calculator">
+                          <summary>{ru ? "Рассчитать срок" : "Muddatni hisoblash"}</summary>
+                          <div className="deadline-calculator-grid">
+                            <label>
+                              <span>{ru ? "Исходная дата" : "Boshlang‘ich sana"}</span>
+                              <input type="date" required value={deadlineDraft.sourceDate} onChange={(event) => updateDeadlineDraft(item, step, { sourceDate: event.target.value, result: undefined })} />
+                            </label>
+                            <label>
+                              <span>{ru ? "Количество дней" : "Kunlar soni"}</span>
+                              <input type="number" required min="0" max="3650" inputMode="numeric" value={deadlineDraft.daysCount} onChange={(event) => updateDeadlineDraft(item, step, { daysCount: event.target.value, result: undefined })} />
+                            </label>
+                            <label>
+                              <span>{ru ? "Тип дней" : "Kun turi"}</span>
+                              <select value={deadlineDraft.dayType} onChange={(event) => updateDeadlineDraft(item, step, { dayType: event.target.value as DeadlineDraft["dayType"], result: undefined })}>
+                                <option value="calendar_days">{ru ? "Календарные" : "Kalendar"}</option>
+                                <option value="business_days">{ru ? "Рабочие" : "Ish kunlari"}</option>
+                              </select>
+                            </label>
+                            <label>
+                              <span>{ru ? "Перенос" : "Ko‘chirish"}</span>
+                              <select value={deadlineDraft.rollRule} onChange={(event) => updateDeadlineDraft(item, step, { rollRule: event.target.value as DeadlineDraft["rollRule"], result: undefined })}>
+                                <option value="none">{ru ? "Не переносить" : "Ko‘chirmaslik"}</option>
+                                <option value="next_business_day">{ru ? "На следующий рабочий день" : "Keyingi ish kuniga"}</option>
+                                <option value="previous_business_day">{ru ? "На предыдущий рабочий день" : "Oldingi ish kuniga"}</option>
+                              </select>
+                            </label>
+                            <label>
+                              <span>{ru ? "Безопасный запас, раб. дней" : "Xavfsiz zaxira, ish kuni"}</span>
+                              <input type="number" min="0" max="30" inputMode="numeric" value={deadlineDraft.safeMarginBusinessDays} onChange={(event) => updateDeadlineDraft(item, step, { safeMarginBusinessDays: event.target.value, result: undefined })} />
+                            </label>
+                            <label className="deadline-calculator-wide">
+                              <span>{ru ? "Праздничные даты (ГГГГ-ММ-ДД)" : "Bayram sanalari (YYYY-MM-DD)"}</span>
+                              <input value={deadlineDraft.holidays} placeholder="2026-09-01, 2026-12-08" onChange={(event) => updateDeadlineDraft(item, step, { holidays: event.target.value, result: undefined })} />
+                            </label>
+                            <label className="deadline-calculator-wide">
+                              <span>{ru ? "Версия календаря, если известна" : "Kalendar versiyasi, ma’lum bo‘lsa"}</span>
+                              <input maxLength={120} value={deadlineDraft.holidayCalendarVersion} placeholder={ru ? "Это значение не подтверждает календарь" : "Bu qiymat kalendarni tasdiqlamaydi"} onChange={(event) => updateDeadlineDraft(item, step, { holidayCalendarVersion: event.target.value, result: undefined })} />
+                            </label>
+                            <label className="deadline-calculator-wide">
+                              <span>{ru ? "Правовое основание" : "Huquqiy asos"}</span>
+                              <textarea rows={2} maxLength={500} value={deadlineDraft.legalBasis} placeholder={ru ? "Укажите норму после проверки источника" : "Manba tekshirilgandan keyin normani kiriting"} onChange={(event) => updateDeadlineDraft(item, step, { legalBasis: event.target.value, result: undefined })} />
+                            </label>
+                            <label className="deadline-calculator-check">
+                              <input type="checkbox" checked={deadlineDraft.includeSourceDate} onChange={(event) => updateDeadlineDraft(item, step, { includeSourceDate: event.target.checked, result: undefined })} />
+                              <span>{ru ? "Включать исходную дату в отсчёт" : "Boshlang‘ich sanani hisobga qo‘shish"}</span>
+                            </label>
+                          </div>
+                          <button type="button" className="deadline-calculate" disabled={deadlineDraft.loading || !deadlineDraft.sourceDate || deadlineDraft.daysCount === ""} onClick={() => void previewDeadline(item, step)}>
+                            {deadlineDraft.loading ? <LoaderCircle className="spin" /> : <CalendarDays />}
+                            {ru ? "Показать проверяемый расчёт" : "Tekshiriladigan hisobni ko‘rsatish"}
+                          </button>
+                          {deadlineDraft.error && <p className="deadline-calculator-error" role="alert">{deadlineDraft.error}</p>}
+                          {deadlineDraft.result && <section className="deadline-result" aria-live="polite">
+                            <strong>{ru ? "Предварительный расчёт" : "Dastlabki hisob"}</strong>
+                            <dl>
+                              <div><dt>{ru ? "Расчётная дата" : "Hisoblangan sana"}</dt><dd>{deadlineDraft.result.dueDate}</dd></div>
+                              <div><dt>{ru ? "Безопасная дата" : "Xavfsiz sana"}</dt><dd>{deadlineDraft.result.safeEarlierDate}</dd></div>
+                              <div><dt>{ru ? "Выходных в периоде" : "Davrdagi dam olish kunlari"}</dt><dd>{deadlineDraft.result.weekendDates.length}</dd></div>
+                              <div><dt>{ru ? "Указанных праздников" : "Ko‘rsatilgan bayramlar"}</dt><dd>{deadlineDraft.result.holidayDates.length}</dd></div>
+                            </dl>
+                            <p>{ru ? "Дата добавлена в предпросмотр плана. Она сохранится только после подтверждения изменений." : "Sana reja oldindan ko‘rishiga qo‘shildi. U faqat o‘zgarishlar tasdiqlangandan keyin saqlanadi."}</p>
+                            {deadlineDraft.result.warnings.length > 0 && <ul>
+                              {deadlineDraft.result.warnings.map((warning) => <li key={warning}>{warning === "HOLIDAY_CALENDAR_UNVERIFIED"
+                                ? (ru ? "Календарь праздников не подтверждён." : "Bayramlar kalendari tasdiqlanmagan.")
+                                : warning === "LEGAL_BASIS_UNCONFIRMED"
+                                  ? (ru ? "Правовое основание не подтверждено." : "Huquqiy asos tasdiqlanmagan.")
+                                  : (ru ? "Дата приходится на нерабочий день без переноса." : "Sana ko‘chirilmasdan ish bo‘lmagan kunga to‘g‘ri keladi.")}</li>)}
+                            </ul>}
+                          </section>}
+                          {step.deadlineConfidence && step.deadlineConfidence !== "unverified" && <p className="deadline-stored-evidence">
+                            {ru ? `Сохранённый расчёт: ${step.deadlineConfidence === "preliminary" ? "предварительный" : "источник проверен"}.` : `Saqlangan hisob: ${step.deadlineConfidence === "preliminary" ? "dastlabki" : "manba tekshirilgan"}.`}
+                            {step.safeDueAt ? ` ${ru ? "Безопасная дата" : "Xavfsiz sana"}: ${step.safeDueAt.slice(0, 10)}.` : ""}
+                          </p>}
+                        </details>
                       </div>;
                     })}
                   </div>}

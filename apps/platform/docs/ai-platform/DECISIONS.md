@@ -2636,3 +2636,24 @@ not an avatar implementation; voice-with-avatar remains disabled until an
 owner-approved rig is supplied and audited. No migration or dependency is
 introduced beyond already-applied additive migration 0066. Production remains
 unchanged.
+
+## D-131 — Deadline calculation is deterministic evidence, not a legal conclusion
+
+Status: accepted for local implementation; staging migration pending
+Date: 2026-08-04
+
+The plan screen separates a read-only server preview from the confirmed plan
+write. The browser submits bounded inputs, but both write routes independently
+recalculate the date and reject a mismatched preview with
+`DEADLINE_PREVIEW_STALE`. The persisted evidence records source date, day-count
+method, inclusion rule, roll rule, supplied holidays, calendar version, legal
+basis, safe earlier date and warnings. A manual date edit clears that evidence
+instead of presenting a manual value as calculated.
+
+The application does not hard-code an official Uzbekistan holiday calendar and
+does not infer a verified legal basis from user input. The calculator therefore
+always emits `preliminary`; `source_verified` is reserved for a future reviewed
+legal-source/calendar workflow. Tasks copy the same evidence only after the user
+confirms the plan revision. Additive migration `0067` has passed local migration,
+route-boundary and end-to-end case/task smoke tests. Staging and production are
+unchanged until their separate backup/migration/deploy gates are authorized.

@@ -7,6 +7,7 @@ import {
 import { isoNow } from "../../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../../lib/document-builder/storage/runtime";
 import { actionPlanStepPatchSchema } from "../../../../../../../lib/platform/action-plan";
+import { calculateDeadline } from "../../../../../../../lib/platform/deadline-calculator";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../../../../../../../lib/platform/task-status";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
 
@@ -41,9 +42,10 @@ export const PATCH = withApiErrors(async function PATCH(
   const db = requireD1();
   const workspace = await workspaceForUser(user);
   const owned = await db.prepare(
-    "SELECT s.plan_id AS planId,p.current_revision AS planRevision FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id JOIN cases c ON c.id=p.case_id WHERE s.id=? AND c.id=? AND c.workspace_id=? LIMIT 1",
+    "SELECT s.plan_id AS planId,s.due_at AS dueAt,p.current_revision AS planRevision FROM action_plan_steps s JOIN action_plans p ON p.id=s.plan_id JOIN cases c ON c.id=p.case_id WHERE s.id=? AND c.id=? AND c.workspace_id=? LIMIT 1",
   ).bind(stepId, caseId, workspace.id).first<{
     planId: string;
+    dueAt: string | null;
     planRevision: number;
   }>();
   if (!owned) {
@@ -56,27 +58,86 @@ export const PATCH = withApiErrors(async function PATCH(
   const now = isoNow();
   const version = owned.planRevision + 1;
   const taskStatus = taskStatusForPlanStep(parsed.data.status);
+  const calculation = parsed.data.deadlineCalculation
+    ? calculateDeadline(parsed.data.deadlineCalculation)
+    : null;
+  if (calculation && parsed.data.dueAt !== calculation.dueDate) {
+    return response({
+      error: "Предпросмотр срока изменился. Выполните расчёт ещё раз.",
+      code: "DEADLINE_PREVIEW_STALE",
+    }, 409);
+  }
+  const clearCalculation = parsed.data.deadlineCalculation === null
+    || (parsed.data.deadlineCalculation === undefined && parsed.data.dueAt !== owned.dueAt);
   const reminderAt = parsed.data.dueAt && !taskStatusIsTerminal(taskStatus)
     ? defaultReminderAt(parsed.data.dueAt, now)
     : null;
   try {
-    await db.batch([
-      db.prepare(
-        "UPDATE action_plan_steps SET status=?,due_at=?,completed_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?",
+    const stepUpdate = calculation
+      ? db.prepare(
+        "UPDATE action_plan_steps SET status=?,due_at=?,deadline_type=?,deadline_source_date=?,deadline_days_count=?,deadline_include_source_date=?,deadline_roll_rule=?,holiday_calendar_version=?,safe_due_at=?,calculation_method=?,deadline_legal_basis=?,deadline_evidence_json=?,deadline_confidence=?,completed_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?",
       ).bind(
         parsed.data.status,
-        parsed.data.dueAt,
+        calculation.dueDate,
+        calculation.dayType,
+        calculation.sourceDate,
+        calculation.daysCount,
+        calculation.includeSourceDate ? 1 : 0,
+        calculation.rollRule,
+        calculation.holidayCalendarVersion,
+        calculation.safeEarlierDate,
+        calculation.calculationMethod,
+        calculation.legalBasis,
+        JSON.stringify(calculation),
+        calculation.confidence,
         parsed.data.status === "completed" ? now : null,
         now,
         stepId,
         parsed.data.revision,
-      ),
+      )
+      : clearCalculation
+        ? db.prepare(
+          "UPDATE action_plan_steps SET status=?,due_at=?,deadline_type='calendar_days',deadline_source_date=NULL,deadline_days_count=NULL,deadline_include_source_date=0,deadline_roll_rule='none',holiday_calendar_version=NULL,safe_due_at=NULL,calculation_method=NULL,deadline_legal_basis=NULL,deadline_evidence_json=NULL,deadline_confidence='unverified',completed_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?",
+        ).bind(parsed.data.status, parsed.data.dueAt, parsed.data.status === "completed" ? now : null, now, stepId, parsed.data.revision)
+        : db.prepare(
+          "UPDATE action_plan_steps SET status=?,due_at=?,completed_at=?,revision=revision+1,updated_at=? WHERE id=? AND revision=?",
+        ).bind(parsed.data.status, parsed.data.dueAt, parsed.data.status === "completed" ? now : null, now, stepId, parsed.data.revision);
+    const taskUpdate = calculation
+      ? db.prepare(
+        "UPDATE tasks SET status=?,source_date=?,due_at=?,safe_due_at=?,calculation_method=?,deadline_type=?,legal_basis=?,deadline_days_count=?,deadline_include_source_date=?,deadline_roll_rule=?,holiday_calendar_version=?,deadline_evidence_json=?,deadline_confidence=?,completed_at=?,updated_at=? WHERE plan_step_id=? AND case_id=? AND workspace_id=?",
+      ).bind(
+        taskStatus,
+        calculation.sourceDate,
+        calculation.dueDate,
+        calculation.safeEarlierDate,
+        calculation.calculationMethod,
+        calculation.dayType,
+        calculation.legalBasis,
+        calculation.daysCount,
+        calculation.includeSourceDate ? 1 : 0,
+        calculation.rollRule,
+        calculation.holidayCalendarVersion,
+        JSON.stringify(calculation),
+        calculation.confidence,
+        taskStatus === "completed" ? now : null,
+        now,
+        stepId,
+        caseId,
+        workspace.id,
+      )
+      : clearCalculation
+        ? db.prepare(
+          "UPDATE tasks SET status=?,source_date=NULL,due_at=?,safe_due_at=NULL,calculation_method=NULL,deadline_type='calendar_days',legal_basis=NULL,deadline_days_count=NULL,deadline_include_source_date=0,deadline_roll_rule='none',holiday_calendar_version=NULL,deadline_evidence_json=NULL,deadline_confidence='unverified',completed_at=?,updated_at=? WHERE plan_step_id=? AND case_id=? AND workspace_id=?",
+        ).bind(taskStatus, parsed.data.dueAt, taskStatus === "completed" ? now : null, now, stepId, caseId, workspace.id)
+        : db.prepare(
+          "UPDATE tasks SET status=?,due_at=?,completed_at=?,updated_at=? WHERE plan_step_id=? AND case_id=? AND workspace_id=?",
+        ).bind(taskStatus, parsed.data.dueAt, taskStatus === "completed" ? now : null, now, stepId, caseId, workspace.id);
+    await db.batch([
+      stepUpdate,
       db.prepare(
         "UPDATE action_plans SET progress_percent=(SELECT CASE WHEN count(*)=0 THEN 0 ELSE round(100.0*sum(CASE WHEN status='completed' THEN 1 ELSE 0 END)/count(*)) END FROM action_plan_steps WHERE plan_id=?),status=CASE WHEN (SELECT count(*) FROM action_plan_steps WHERE plan_id=? AND status<>'completed')=0 THEN 'completed' ELSE 'in_progress' END,current_revision=current_revision+1,updated_at=? WHERE id=? AND current_revision=?",
       ).bind(owned.planId, owned.planId, now, owned.planId, owned.planRevision),
-      db.prepare(
-        "UPDATE tasks SET status=?,due_at=?,completed_at=?,updated_at=? WHERE plan_step_id=? AND case_id=? AND workspace_id=?",
-      ).bind(taskStatus, parsed.data.dueAt, taskStatus === "completed" ? now : null, now, stepId, caseId, workspace.id),
+      taskUpdate,
       db.prepare(
         "UPDATE task_reminders SET status=CASE WHEN ? THEN 'pending' ELSE 'cancelled' END,reminder_at=CASE WHEN ? IS NULL THEN reminder_at ELSE ? END,updated_at=? WHERE task_id=? AND status IN ('pending','cancelled')",
       ).bind(reminderAt !== null, reminderAt, reminderAt, now, stepId),
@@ -84,7 +145,7 @@ export const PATCH = withApiErrors(async function PATCH(
         "INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) SELECT ?,id,'in_app',?,'pending',?,?,? FROM tasks WHERE id=? AND workspace_id=? AND case_id=? AND ? IS NOT NULL",
       ).bind(`${stepId}:default`, reminderAt, `${stepId}:in_app:default`, now, now, stepId, workspace.id, caseId, reminderAt),
       db.prepare(
-        "INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) SELECT ?,p.id,?,?,'step_updated',CASE WHEN (SELECT revision FROM action_plan_steps WHERE id=?)=? AND p.current_revision=? THEN json_object('version',p.current_revision,'title',p.title,'status',p.status,'progressPercent',p.progress_percent,'steps',(SELECT json_group_array(json_object('id',s.id,'ordinal',s.ordinal,'title',s.title,'description',s.description,'status',s.status,'dueAt',s.due_at,'deadlineType',s.deadline_type,'actionType',s.action_type,'templateCode',s.template_code,'revision',s.revision)) FROM (SELECT id,ordinal,title,description,status,due_at,deadline_type,action_type,template_code,revision FROM action_plan_steps WHERE plan_id=p.id ORDER BY ordinal) s)) ELSE NULL END,? FROM action_plans p WHERE p.id=?",
+        "INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) SELECT ?,p.id,?,?,'step_updated',CASE WHEN (SELECT revision FROM action_plan_steps WHERE id=?)=? AND p.current_revision=? THEN json_object('version',p.current_revision,'title',p.title,'status',p.status,'progressPercent',p.progress_percent,'steps',(SELECT json_group_array(json_object('id',s.id,'ordinal',s.ordinal,'title',s.title,'description',s.description,'status',s.status,'dueAt',s.due_at,'safeDueAt',s.safe_due_at,'sourceDate',s.deadline_source_date,'deadlineType',s.deadline_type,'calculationMethod',s.calculation_method,'deadlineConfidence',s.deadline_confidence,'actionType',s.action_type,'templateCode',s.template_code,'revision',s.revision)) FROM (SELECT id,ordinal,title,description,status,due_at,safe_due_at,deadline_source_date,deadline_type,calculation_method,deadline_confidence,action_type,template_code,revision FROM action_plan_steps WHERE plan_id=p.id ORDER BY ordinal) s)) ELSE NULL END,? FROM action_plans p WHERE p.id=?",
       ).bind(
         crypto.randomUUID(),
         version,
@@ -108,6 +169,7 @@ export const PATCH = withApiErrors(async function PATCH(
           stepId,
           status: parsed.data.status,
           dueAt: parsed.data.dueAt,
+          deadlineConfidence: calculation?.confidence ?? (clearCalculation ? "unverified" : undefined),
           planVersion: version,
         }),
         now,

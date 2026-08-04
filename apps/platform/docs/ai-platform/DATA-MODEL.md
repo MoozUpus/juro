@@ -10,6 +10,19 @@ Status: additive source schema through migration `0034`; isolated protected stag
 - Migrations use expand-contract. Code rollback may leave additive tables/columns unused; destructive down migrations are not part of this candidate.
 - Immutable or tamper-evident evidence is separated from mutable delivery/job state.
 
+## Deadline calculation evidence — local migration 0067 candidate
+
+Existing `action_plan_steps` and `tasks` retain their manual `due_at` behavior.
+Migration `0067` adds the source date, bounded day count, inclusion and roll
+rules, optional holiday-calendar version, safe earlier date, method, legal basis,
+serialized evidence and confidence. Existing rows backfill only safe defaults:
+no source or calculation is invented and confidence is `unverified`.
+
+The deterministic calculator can produce only `preliminary`. A later protected
+legal/calendar verification service may write `source_verified`, but user input
+and AI output alone cannot. Plan-version snapshots retain the readable evidence
+summary while the full calculation JSON stays on the current step/task records.
+
 ## Account deletion domain
 
 `account_deletion_challenges` stores one-time email verification evidence without retaining the code. `account_deletion_requests` stores mode, keyed subject, schedule, lease, irreversible boundary, blocker/failure code, and terminal timestamps.

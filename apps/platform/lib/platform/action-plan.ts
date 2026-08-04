@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { deadlineCalculationInputSchema } from "./deadline-calculator";
 
 export const actionPlanStepStatuses = [
   "not_started",
@@ -25,6 +26,7 @@ export const actionPlanStepPatchSchema = z.object({
   status: z.enum(actionPlanStepStatuses),
   revision: z.number().int().positive(),
   dueAt: z.union([calendarDateSchema, z.null()]),
+  deadlineCalculation: deadlineCalculationInputSchema.nullable().optional(),
 }).strict();
 
 export type ActionPlanStepPatch = z.infer<typeof actionPlanStepPatchSchema>;

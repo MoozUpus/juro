@@ -55,7 +55,20 @@ async function main() {
   assert.match(created.caseId, /^[0-9a-f-]{36}$/);
   assert.match(created.planId, /^[0-9a-f-]{36}$/);
 
-  const loaded = await json<{ cases: Array<{ id: string; title: string; planTitle: string; steps: unknown[] }> }>(
+  const loaded = await json<{ cases: Array<{
+    id: string;
+    title: string;
+    planTitle: string;
+    planRevision: number;
+    steps: Array<{
+      id: string;
+      status: string;
+      revision: number;
+      dueAt: string | null;
+      safeDueAt: string | null;
+      deadlineConfidence: string;
+    }>;
+  }> }>(
     `/api/platform/cases?caseId=${encodeURIComponent(created.caseId)}`,
     { headers: headers() },
   );
@@ -65,7 +78,88 @@ async function main() {
   assert.equal(loaded.cases[0].planTitle, `План: ${title}`);
   assert.equal(loaded.cases[0].steps.length, 4);
 
-  console.log(JSON.stringify({ ok: true, caseId: created.caseId, planId: created.planId, steps: loaded.cases[0].steps.length }, null, 2));
+  const step = loaded.cases[0].steps[0];
+  const deadlineInput = {
+    sourceDate: "2026-08-07",
+    daysCount: 3,
+    dayType: "business_days",
+    includeSourceDate: false,
+    rollRule: "next_business_day",
+    holidays: [],
+    holidayCalendarVersion: null,
+    safeMarginBusinessDays: 1,
+    legalBasis: null,
+  };
+  const preview = await json<{
+    requiresConfirmation: boolean;
+    result: { dueDate: string; safeEarlierDate: string; confidence: string; warnings: string[] };
+  }>(`/api/platform/cases/${created.caseId}/steps/${step.id}/deadline`, {
+    method: "POST",
+    headers: headers(true),
+    body: JSON.stringify(deadlineInput),
+  });
+  assert.equal(preview.requiresConfirmation, true);
+  assert.equal(preview.result.dueDate, "2026-08-12");
+  assert.equal(preview.result.safeEarlierDate, "2026-08-11");
+  assert.equal(preview.result.confidence, "preliminary");
+  assert.deepEqual(preview.result.warnings, ["HOLIDAY_CALENDAR_UNVERIFIED", "LEGAL_BASIS_UNCONFIRMED"]);
+
+  const planChange = {
+    revision: loaded.cases[0].planRevision,
+    changes: [{
+      id: step.id,
+      status: step.status,
+      revision: step.revision,
+      dueAt: preview.result.dueDate,
+      deadlineCalculation: deadlineInput,
+    }],
+  };
+  const stale = structuredClone(planChange);
+  stale.changes[0].dueAt = "2026-08-13";
+  const staleResponse = await json<{ code: string }>(`/api/platform/cases/${created.caseId}/plan`, {
+    method: "PATCH",
+    headers: headers(true),
+    body: JSON.stringify(stale),
+  }, 409);
+  assert.equal(staleResponse.code, "DEADLINE_PREVIEW_STALE");
+
+  await json(`/api/platform/cases/${created.caseId}/plan`, {
+    method: "PATCH",
+    headers: headers(true),
+    body: JSON.stringify(planChange),
+  });
+  const recalculated = await json<{ cases: Array<{ steps: Array<{ id: string; dueAt: string; safeDueAt: string; deadlineConfidence: string }> }> }>(
+    `/api/platform/cases?caseId=${encodeURIComponent(created.caseId)}`,
+    { headers: headers() },
+  );
+  const recalculatedStep = recalculated.cases[0].steps.find((value) => value.id === step.id);
+  assert.equal(recalculatedStep?.dueAt, "2026-08-12");
+  assert.equal(recalculatedStep?.safeDueAt, "2026-08-11");
+  assert.equal(recalculatedStep?.deadlineConfidence, "preliminary");
+
+  await json(`/api/platform/cases/${created.caseId}/tasks`, {
+    method: "POST",
+    headers: headers(true),
+  }, 201);
+  const tasks = await json<{ tasks: Array<{ planStepId: string; dueAt: string; safeDueAt: string; deadlineConfidence: string; deadlineEvidence: { dueDate: string } | null }> }>(
+    `/api/platform/cases/${created.caseId}/tasks`,
+    { headers: headers() },
+  );
+  const calculatedTask = tasks.tasks.find((value) => value.planStepId === step.id);
+  assert.equal(calculatedTask?.dueAt, "2026-08-12");
+  assert.equal(calculatedTask?.safeDueAt, "2026-08-11");
+  assert.equal(calculatedTask?.deadlineConfidence, "preliminary");
+  assert.equal(calculatedTask?.deadlineEvidence?.dueDate, "2026-08-12");
+
+  console.log(JSON.stringify({
+    ok: true,
+    caseId: created.caseId,
+    planId: created.planId,
+    steps: loaded.cases[0].steps.length,
+    deadlinePreview: preview.result.dueDate,
+    safeEarlierDate: preview.result.safeEarlierDate,
+    persistedTaskEvidence: calculatedTask?.deadlineEvidence?.dueDate,
+  }, null, 2));
 }
 
 await main();

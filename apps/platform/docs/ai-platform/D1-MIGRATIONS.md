@@ -955,3 +955,23 @@ staging or production. Before staging application, take and verify a private
 tests. Application rollback keeps the additive index unused by rolling the
 Worker back; index removal is deferred to a separately approved contract
 phase.
+
+## Migration 0067 — auditable deadline calculation evidence (local candidate)
+
+`0067_deadline_calculation_evidence.sql` is expand-only. It adds calculation
+inputs, safe-date output, calendar/source version and serialized evidence fields
+to existing `action_plan_steps` and `tasks`; existing manual due dates remain
+unchanged and default to `deadline_confidence='unverified'`. Bounds reject more
+than 3,650 days, invalid inclusion flags, unsupported roll rules and invented
+confidence states.
+
+The migration passed the isolated in-memory apply/constraint test and a local
+Wrangler apply to `juro-development`; Wrangler reported 17 commands successful.
+The extended local case smoke proved preview, tamper rejection, confirmed plan
+write, readback and evidence propagation to a task. It has not been applied to
+staging or production. Before staging apply: make a fresh full/schema/data D1
+export, upload and checksum-verify it in private `juro-staging-backups`, restore
+the full export into a disposable SQLite database, apply only `0067`, verify the
+ledger, `quick_check`, `foreign_key_check`, new columns/defaults, then deploy the
+staging Worker and run the authenticated RU/UZ flow. Rollback is application-first;
+the additive fields may remain unused.

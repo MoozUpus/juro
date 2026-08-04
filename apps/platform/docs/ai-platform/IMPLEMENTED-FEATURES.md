@@ -1,5 +1,16 @@
 # JURO implemented-features checkpoint
 
+> Current local delta — 2026-08-04: action-plan steps now have an authenticated,
+> tenant-scoped deadline preview and an explicit confirmation boundary. Server
+> write routes recalculate the result, reject tampering, version the plan and
+> preserve the same bounded evidence in generated tasks. Manual due-date edits
+> clear calculation evidence. RU/UZ UI exposes calendar/business-day method,
+> inclusion/roll rules, supplied holiday dates, safe earlier date and explicit
+> unverified-calendar/legal-basis warnings. Migration `0067`, focused tests,
+> typecheck, lint, full tests, Cloudflare tests/types, staging build/artifact,
+> environment matrix, builder/comparison smokes and the extended case-to-task
+> smoke pass locally. This delta is not deployed; staging remains through `0066`.
+
 > Current authoritative staging checkpoint — 2026-08-04: Worker
 > `166f25f3-caa2-4312-b577-beabdfd1f37c` receives 100% of protected staging
 > traffic and D1 is through additive migration `0066`. Guest AI persistence,

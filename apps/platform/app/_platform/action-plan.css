@@ -46,6 +46,122 @@
   border-radius: 9px;
 }
 
+.deadline-calculator {
+  grid-column: 2 / -1;
+  margin-top: 4px;
+  border: 1px solid #d7dfe7;
+  border-radius: 10px;
+  background: #fbfcfd;
+  color: #273a51;
+}
+
+.deadline-calculator > summary {
+  min-height: 44px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+.deadline-calculator > summary:focus-visible,
+.deadline-calculator input:focus-visible,
+.deadline-calculator select:focus-visible,
+.deadline-calculator textarea:focus-visible,
+.deadline-calculate:focus-visible {
+  outline: 3px solid #87631f;
+  outline-offset: 2px;
+}
+
+.deadline-calculator-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 4px 14px 12px;
+}
+
+.deadline-calculator-grid label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  color: #4a586d;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.deadline-calculator-grid input,
+.deadline-calculator-grid select,
+.deadline-calculator-grid textarea {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cbd4df;
+  border-radius: 8px;
+  background: #fff;
+  color: #142230;
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.deadline-calculator-grid textarea { resize: vertical; }
+.deadline-calculator-wide { grid-column: span 2; }
+
+.deadline-calculator-grid .deadline-calculator-check {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+.deadline-calculator-check input {
+  width: 20px;
+  min-height: 20px;
+  margin: 0;
+}
+
+.deadline-calculate {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  margin: 0 14px 14px;
+  border: 1px solid #173c60;
+  border-radius: 9px;
+  background: #173c60;
+  color: #fff;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 750;
+}
+
+.deadline-calculate svg { width: 18px; height: 18px; }
+.deadline-calculate:disabled { cursor: wait; opacity: .62; }
+.deadline-calculator-error { margin: 0 14px 14px; color: #9a3228; }
+
+.deadline-result {
+  display: grid;
+  gap: 10px;
+  margin: 0 14px 14px;
+  padding: 14px;
+  border-left: 3px solid #be974f;
+  background: #fffaf0;
+}
+
+.deadline-result dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.deadline-result dl > div { display: grid; gap: 2px; }
+.deadline-result dt { color: #657187; font-size: 12px; }
+.deadline-result dd { margin: 0; color: #172a40; font-weight: 750; }
+.deadline-result p { margin: 0; color: #4a586d; }
+.deadline-result ul { margin: 0; padding-left: 20px; color: #765617; }
+.deadline-stored-evidence { margin: 0 14px 14px; color: #4a586d; font-size: 13px; }
+
 .plan-change-preview {
   display: grid;
   gap: 14px;
@@ -112,6 +228,22 @@
   .plan-step > a {
     grid-column: 3;
     grid-row: 1;
+  }
+
+  .deadline-calculator {
+    grid-column: 1 / -1;
+  }
+
+  .deadline-calculator-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .deadline-calculator-wide {
+    grid-column: auto;
+  }
+
+  .deadline-result dl {
+    grid-template-columns: 1fr;
   }
 }
 
