@@ -1,5 +1,18 @@
 # D1 migration checkpoint
 
+## 0086 — protected platform audit access
+
+`0086_platform_audit_access.sql` adds a per-actor immutable SHA-256 chain for
+administrator access to the safe global audit projection. D1 verifies the live
+MFA session, active TOTP, current administrator assignment and 15-minute
+freshness before each query/export evidence insert. No audit metadata or user
+content is copied into the table.
+
+This migration is local-only. Before staging, create and restore-verify a fresh
+private D1 export, apply `0079`–`0086` in order, deploy the exact matching Worker
+and run authenticated query/export, denial, integrity and content-absence
+checks. Production is unchanged.
+
 ## 0085 — guarded operational job redrives
 
 Status: additive local candidate; protected staging is currently through `0078`;
@@ -12,7 +25,7 @@ expired lease and an explicit recoverable error class are verified again in D1.
 Permanent failures and broken evidence fail closed.
 
 Before staging application: take and round-trip-verify a fresh full private
-backup, restore it in isolation, apply `0079`–`0085` in order, inspect the new
+backup, restore it in isolation, apply `0079`–`0086` in order, inspect the new
 table/indexes/triggers, deploy the exact Worker and reconcile one controlled
 redrive through Queue/DLQ, domain effect, usage/cost and alert evidence.
 

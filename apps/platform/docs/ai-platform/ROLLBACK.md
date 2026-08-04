@@ -46,3 +46,17 @@ capture job/outbox/domain-effect state and either let the fenced job reach one
 terminal state or pause its consumer. Do not create a replacement job. Restore
 D1 only for demonstrated corruption after preserving the current database and
 verifying the selected private backup in isolation.
+
+## Migration 0086 / platform audit-access rollback
+
+Apply `0086` before deploying the audit console/API and record a fresh verified
+private D1 export plus prior Worker version. If authorization, safe projection,
+CSV or access-evidence behavior regresses, restore the prior Worker first. The
+additive access-evidence table may remain unused; do not drop it or delete its
+rows during an incident.
+
+If chain verification fails, preserve the affected database and application
+logs, disable the console route and investigate before any restore. This chain
+records access to the projection, so rollback must not be described as proving
+integrity of every source table. Restore D1 only for demonstrated corruption
+after isolated backup verification.

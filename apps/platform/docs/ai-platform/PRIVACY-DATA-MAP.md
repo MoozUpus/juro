@@ -33,3 +33,15 @@ High-sensitivity circumstances require explicit manual confirmation and are not
 automatically extracted. If decryption is unavailable, the settings UI reports
 memory unavailable, AI chat runs without memory, and privacy export fails closed
 instead of omitting the domain silently. Migration `0062` is not yet deployed.
+
+## Platform audit access — local candidate
+
+| Data | Storage | Protection | Scope and disclosure |
+|---|---|---|---|
+| safe event projection | computed from existing D1 evidence | POST-only, administrator audit capability, active TOTP, 15-minute fresh MFA | IDs, action, severity and timestamp only |
+| audit filters and result set | not stored verbatim | SHA-256 digests plus bounded result count | integrity/reconciliation only |
+| actor/session/assignment and access action | D1 `platform_audit_access_events` | immutable per-actor chain and D1 live-role/session guard | security administrators; retained as access-audit evidence |
+
+The audit surface does not select or return metadata JSON, IP hashes, names,
+emails, document/chat text, provider payloads, queue bodies, message IDs,
+idempotency keys or chain hashes. Migration `0086` is local-only.

@@ -157,6 +157,7 @@ const coreTestFiles = [
   "tests/checkout-service.test.ts",
   "tests/operational-feature-flags.test.ts",
   "tests/operational-jobs.test.ts",
+  "tests/platform-audit-log.test.ts",
 ];
 
 const cloudflareTestFiles = [

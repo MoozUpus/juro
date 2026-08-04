@@ -135,3 +135,17 @@ message through the existing tenant-scoped conversation read. Partial provider
 text, request hashes, prompts, internal error details, token data, and cross-
 tenant existence are not returned. Local service and rendered unauthenticated
 route tests pass; authenticated staging evidence remains pending.
+
+## Platform audit-log access boundary — local candidate
+
+The global audit route is a metadata-minimized projection rather than direct
+table access. A POST request must pass same-origin CSRF, administrator-only
+`staff.security.audit`, active TOTP and MFA freshness before any query. D1 then
+revalidates the exact user, session and assignment when the access-evidence row
+is inserted; results are not returned if that append fails.
+
+Access evidence is domain-separated, SHA-256 chained per actor and immutable.
+Verification walks predecessor relationships so equal timestamps cannot reorder
+the chain. Corruption, branching, missing genesis or an invalid hash fails
+closed. CSV cells beginning with spreadsheet formula markers are prefixed before
+download. Migration `0086` and authenticated staging probes remain pending.

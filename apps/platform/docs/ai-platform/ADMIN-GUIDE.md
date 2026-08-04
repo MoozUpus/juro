@@ -28,3 +28,18 @@ into the reason. Never mutate `job_runs`, `job_outbox` or redrive evidence by
 hand. A failed integrity banner blocks redrive and must be handled as an
 incident. After a redrive, reconcile job, outbox, domain effect, cost/usage and
 alert evidence before closing the incident.
+
+## Platform audit log
+
+Local candidate route: `/:locale/admin/audit-log`. API: `POST
+/api/platform/admin/audit-log` for both query and CSV export. There is no GET
+endpoint, so every access passes the same CSRF, administrator capability, active
+TOTP and 15-minute fresh-MFA boundary.
+
+Use source, severity, action, actor, scope and UTC date filters to narrow the
+result before export. The console intentionally shows only technical IDs and
+safe event state. It does not expose document text, user messages, provider
+bodies, email addresses, IP hashes or hidden metadata. Each successful
+query/export displays its access-event ID. A chain-integrity failure is an
+incident: stop using the console, preserve D1 evidence and do not bypass the
+guard with direct SQL.

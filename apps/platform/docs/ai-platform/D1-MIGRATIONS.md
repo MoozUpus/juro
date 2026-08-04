@@ -8,8 +8,22 @@
 > `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4` serves 100% from exact commit
 > `cff38f0`. Sections below that call `0077` or `0078` pending are retained as
 > historical candidate notes and are superseded by this checkpoint. Migrations
-> `0079`–`0085` remain local and unapplied; production is unchanged. Exact
+> `0079`–`0086` remain local and unapplied; production is unchanged. Exact
 > evidence is in root `docs/ai-platform/STAGING-0069-0078-EVIDENCE.md`.
+
+## Pending 0086 — protected platform audit access
+
+`0086_platform_audit_access.sql` additively stores immutable evidence for each
+administrator query or CSV export of the identifiers-only platform audit
+projection. D1 binds inserts to a live MFA session, active TOTP, current
+administrator assignment and 15-minute freshness. The per-actor predecessor
+chain, canonical SHA-256 hash, unique head and update/delete triggers fail
+closed. No source audit table or user content is copied.
+
+The migration is local-only. Staging requires a fresh verified private backup,
+ordered `0079`–`0086` application, exact matching Worker deploy, foreign-key and
+integrity postflight, plus authenticated administrator query/export and denial
+tests. Production is unchanged.
 
 ## Pending 0085 — guarded operational job redrives
 
@@ -21,7 +35,7 @@ expired lease, recoverable typed error, monotonic version and predecessor hash.
 
 Focused tests cover successful same-job redrive, immutable evidence, permanent
 failure, active lease, cross-environment denial and corrupted-chain fail-closed
-behavior. Staging requires a fresh private backup/restore, ordered `0079`–`0085`
+behavior. Staging requires a fresh private backup/restore, ordered `0079`–`0086`
 application, exact Worker deployment and a controlled one-effect Queue/DLQ and
 ledger reconciliation. Production is unchanged.
 

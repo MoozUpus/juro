@@ -75,3 +75,15 @@ requires a new private export with isolated restore verification, ordered
 recoverable identifiers-only job. Evidence must prove one resulting effect,
 unchanged idempotency, immutable redrive history, valid ledger reconciliation,
 expected Queue/DLQ behavior and operator alerting. Production remains unchanged.
+
+## Platform audit-log gate
+
+Migration `0086`, `/:locale/admin/audit-log` and the POST-only
+`/api/platform/admin/audit-log` endpoint are local-only. Staging activation
+requires a fresh private D1 export with isolated restore verification, ordered
+application through `0086`, exact Worker deployment and an authenticated
+administrator rehearsal for query, filter and CSV export. Evidence must confirm
+fresh-MFA denial, support-role denial, access-event chain integrity and absence
+of user/provider content in responses and downloads. The console does not make
+the older `workspace_audit_events` table globally tamper-evident; it only gives
+tamper-evident evidence of who accessed the safe projection.

@@ -532,3 +532,15 @@ Execution guards cover `POST /api/guest/ai`, authenticated AI POST/SSE, document
 The API excludes queue payloads, content, message IDs, idempotency keys and
 envelope hashes. Permanent or active-lease failures cannot be redriven. This is
 not a claim that staging Queue/DLQ delivery or alerting has been rehearsed.
+
+### Platform audit log — local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `/:locale/admin/audit-log` | Dense RU/UZ filters, safe event table and CSV export | noindex/not-found for unauthorized users; administrator audit capability; active TOTP; fresh MFA |
+| `POST /api/platform/admin/audit-log` | Queries or exports a bounded identifiers-only projection and appends access evidence before return | CSRF, strict Zod, fresh MFA, server actor/session/assignment, D1 chain and role guards |
+
+There is no GET endpoint. The API excludes metadata JSON, IP hashes, user text,
+documents, provider payloads, queue bodies, message/idempotency identifiers and
+chain hashes. Migration `0086` is local and changes no canonical user or builder
+route.

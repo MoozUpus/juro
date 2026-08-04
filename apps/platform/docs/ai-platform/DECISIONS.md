@@ -3000,3 +3000,22 @@ safe status metadata only; queue bodies, user/provider content, message IDs,
 idempotency keys and envelope hashes remain unavailable to the browser. A
 broken history chain disables further manual redrive. Staging migration and a
 controlled one-effect Queue/DLQ reconciliation require separate approval.
+
+## D-145 — The global audit console is a safe projection, not a content browser
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-05
+
+The administrator audit console aggregates only technical identifiers, action,
+severity and timestamp from existing security, staff-role, workspace and
+operational evidence. It deliberately does not create a duplicate universal
+event store and never selects workspace metadata JSON, IP hashes, document or
+message text, provider payloads, idempotency keys, queue bodies or chain hashes.
+
+Every query and CSV export requires the administrator-only
+`staff.security.audit` capability, active TOTP, MFA verified within 15 minutes
+and CSRF on the POST-only API. Results are returned only after D1 accepts a new
+immutable access-evidence event containing filter/result hashes and count. The
+per-actor SHA-256 chain is traversed by predecessor relation, not timestamp
+ordering, and corruption fails closed. Migration `0086` and the matching route
+remain local until a separately authorized backup/migration/deploy cycle.

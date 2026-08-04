@@ -937,3 +937,20 @@ for POST. Focused tests cover safe projection, immutable evidence, active-lease,
 permanent-error, cross-environment and broken-chain denial. Migration `0085`,
 authenticated staging rehearsal and any live Queue/DLQ operation remain
 separately gated; production is unchanged.
+
+## Protected platform audit log (local candidate)
+
+Migration `0086` adds immutable, actor/session/assignment-bound access evidence
+for the RU/UZ `/:locale/admin/audit-log` console. Its POST-only API projects a
+bounded union of existing security, staff-role, workspace and operational event
+tables. The projection contains only identifiers, event type, severity and time;
+metadata JSON, IP hashes, user content, provider payloads, queue envelopes,
+message IDs and hash-chain internals are never selected or returned.
+
+Both queries and CSV exports require `staff.security.audit`, active TOTP, MFA
+verified within 15 minutes and CSRF. D1 independently checks the live session
+and administrator assignment before it appends access evidence. Focused tests
+cover safe projection, query/export chaining, immutable triggers, forged support
+denial, corruption fail-closed behavior, strict filters and CSV formula
+neutralization. Migration `0086`, authenticated browser QA and staging deploy
+remain separately gated; production is unchanged.
