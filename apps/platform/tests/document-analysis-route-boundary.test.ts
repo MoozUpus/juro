@@ -26,6 +26,8 @@ test("secure upload routes enforce streaming, checksum, tenant, and quarantine b
   assert.match(upload, /sha256: record\.sha256/);
   assert.match(upload, /content-length/);
   assert.match(finalize, /validateUploadMagicBytes/);
+  assert.match(finalize, /await verifyArchiveBytes\(/);
+  assert.doesNotMatch(finalize, /inspectArchiveBytes\(/);
   assert.match(finalize, /MALWARE_SCANNER_UNAVAILABLE/);
   assert.match(finalize, /MALWARE_SCAN_ENABLED/);
   assert.match(finalize, /MALWARE_SCANNER/);
@@ -35,6 +37,16 @@ test("secure upload routes enforce streaming, checksum, tenant, and quarantine b
   assert.match(`${upload}\n${finalize}`, /requireQuarantineR2/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /requireR2\(\)/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic|status='safe'|status='ready'/);
+});
+
+test("archive finalize verifies local identity, bounded expansion, and CRC before quarantine", () => {
+  const archive = source("lib/document-analysis/archive-inspector.ts");
+  assert.match(archive, /LOCAL_SIGNATURE/);
+  assert.match(archive, /DATA_DESCRIPTOR_SIGNATURE/);
+  assert.match(archive, /ARCHIVE_POLYGLOT_REJECTED/);
+  assert.match(archive, /DecompressionStream\("deflate-raw"/);
+  assert.match(archive, /ARCHIVE_VERIFICATION_TIMEOUT/);
+  assert.match(archive, /ARCHIVE_CRC_MISMATCH/);
 });
 
 test("dashboard and review surfaces use the secure upload client", () => {

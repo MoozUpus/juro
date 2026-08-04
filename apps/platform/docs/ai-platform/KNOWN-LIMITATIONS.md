@@ -317,7 +317,15 @@ The deployed Worker now exposes both provider secret names and server-side model
   secure-upload baseline for bounded extraction, structured provider adapters,
   and report exports. It must not be read as a claim that those later slices are
   absent.
-- ZIP/DOCX now receive bounded central-directory, path, nesting, encryption, symlink, member, expansion-ratio/size, and OOXML structure checks. Local-header identity, CRC verification, decompression timeout, and the real isolated scanner/extractor must still revalidate before any derivative or AI access.
+- ZIP/DOCX now receive bounded central-directory, path, nesting, encryption,
+  symlink, member, expansion-ratio/size, and OOXML structure checks. The local
+  branch additionally requires an exact contiguous local-header layout, matching
+  path/flags/method/size metadata, verified data descriptors, streaming
+  `deflate-raw` expansion, exact output length and CRC32 within a 15-second
+  deadline before the file can enter quarantine. That deeper gate is locally
+  tested but not yet deployed. A real isolated malware scanner and actual
+  multi-file package extractor remain required before any derivative or AI
+  access.
 - The browser computes SHA-256 from one in-memory `ArrayBuffer`; this does not buffer the upload in the Worker, but a later client-side incremental hash path may improve low-memory devices.
 - Upload byte progress is surfaced through the secure XHR client on both the
   dashboard and document-review surfaces. Authenticated browser verification of

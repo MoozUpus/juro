@@ -2695,3 +2695,24 @@ all 30 comparison pairs, prompt-injection resistance and named human review.
 The validators deliberately remain red until real staging executions and human
 reviews are supplied. This change adds no migration, provider call, feature flag
 or runtime dependency and does not mutate staging or production.
+## 2026-08-04 — Deep archive integrity is verified before quarantine, not inferred from a ZIP directory
+
+Status: accepted for local implementation; staging deployment pending
+
+The central directory is attacker-controlled metadata, so a valid-looking entry
+cannot by itself authorize retention or later extraction. Finalize now maps every
+central ZIP/DOCX entry to exactly one contiguous local header starting at byte
+zero. Local path bytes, flags, method, sizes and CRC metadata must agree; deferred
+metadata must be present in a matching data descriptor. Preambles, gaps,
+overlaps, duplicate local offsets and bytes not referenced before the central
+directory are rejected as polyglot or ambiguous input.
+
+Payload verification uses the Workers-standard `DecompressionStream` with
+`deflate-raw`, which current Cloudflare runtime documentation explicitly
+supports. Output is consumed incrementally rather than materialized a second
+time, cannot exceed the declared or aggregate limits, must finish within 15
+seconds, and must match both declared length and CRC32. Stored entries use the
+same checksum boundary. This work runs before quarantine and therefore before a
+scanner, derivative, OCR or AI provider. It adds no dependency or migration.
+The real malware scanner and multi-file relationship extraction remain separate
+fail-closed gates; local tests are not staging evidence. Production is unchanged.

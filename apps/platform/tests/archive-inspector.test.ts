@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { strToU8, zipSync } from "fflate";
-import { ArchiveInspectionError, inspectArchiveBytes } from "../lib/document-analysis/archive-inspector";
+import { strToU8, Zip, ZipDeflate, zipSync } from "fflate";
+import {
+  ArchiveInspectionError,
+  inspectArchiveBytes,
+  verifyArchiveBytes,
+} from "../lib/document-analysis/archive-inspector";
 
 test("bounded ZIP packages accept only supported safe document members", () => {
   const bytes = zipSync({ "contract.pdf": strToU8("%PDF-1.7 safe"), "photo.png": strToU8("png") });
@@ -50,3 +54,71 @@ test("DOCX inspection requires core OOXML parts and rejects active content", () 
     (error) => error instanceof ArchiveInspectionError && error.code === "DOCX_ACTIVE_CONTENT",
   );
 });
+
+test("local ZIP headers must identify the exact central-directory member", () => {
+  const bytes = zipSync({ "contract.pdf": strToU8("safe payload") }, { level: 0 });
+  const tampered = bytes.slice();
+  const view = new DataView(tampered.buffer, tampered.byteOffset, tampered.byteLength);
+  const localNameLength = view.getUint16(26, true);
+  assert.ok(localNameLength > 0);
+  tampered[30] = "x".charCodeAt(0);
+  assert.throws(
+    () => inspectArchiveBytes(tampered, "application/zip"),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_LOCAL_HEADER_MISMATCH",
+  );
+
+  const prefixed = new Uint8Array(bytes.byteLength + 2);
+  prefixed.set([0x4d, 0x5a]);
+  prefixed.set(bytes, 2);
+  assert.throws(
+    () => inspectArchiveBytes(prefixed, "application/zip"),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_CORRUPT",
+  );
+});
+
+test("deep archive verification streams deflate and rejects corrupted CRC payloads", async () => {
+  const deflated = zipSync({ "contract.pdf": strToU8("A normal legal document payload repeated. ".repeat(20)) }, { level: 6 });
+  const verified = await verifyArchiveBytes(deflated, "application/zip");
+  assert.equal(verified.fileCount, 1);
+
+  const stored = zipSync({ "contract.pdf": strToU8("stored payload for crc") }, { level: 0 });
+  const corrupted = stored.slice();
+  const view = new DataView(corrupted.buffer, corrupted.byteOffset, corrupted.byteLength);
+  const dataStart = 30 + view.getUint16(26, true) + view.getUint16(28, true);
+  corrupted[dataStart] = corrupted[dataStart]! ^ 0xff;
+  await assert.rejects(
+    () => verifyArchiveBytes(corrupted, "application/zip"),
+    (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_CRC_MISMATCH",
+  );
+});
+
+test("streaming ZIP data descriptors are matched to their central-directory evidence", async () => {
+  const bytes = await streamingZip("contract.pdf", strToU8("streaming legal payload"));
+  const result = await verifyArchiveBytes(bytes, "application/zip");
+  assert.equal(result.fileCount, 1);
+});
+
+function streamingZip(name: string, payload: Uint8Array): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    const chunks: Uint8Array[] = [];
+    const archive = new Zip((error, chunk, final) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+      chunks.push(chunk);
+      if (!final) return;
+      const output = new Uint8Array(chunks.reduce((total, value) => total + value.byteLength, 0));
+      let offset = 0;
+      for (const value of chunks) {
+        output.set(value, offset);
+        offset += value.byteLength;
+      }
+      resolve(output);
+    });
+    const entry = new ZipDeflate(name, { level: 6 });
+    archive.add(entry);
+    entry.push(payload, true);
+    archive.end();
+  });
+}

@@ -77,7 +77,19 @@ The deployed staging `POST /api/platform/workspaces` creation path authenticates
 
 Document-analysis initialization requires session, active workspace membership, same-origin/CSRF proof, strict JSON, consent, a 50 MB bound, supported MIME/extension pairing, SHA-256, and a tenant-scoped idempotency key. Binary PUT repeats session/workspace/CSRF checks and requires exact content length, MIME, and checksum before streaming to private R2.
 
-Finalize rechecks the private object and bounded magic bytes. New files are unavailable from the normal download route because their kind remains `analysis_quarantined`. With no real malware scanner attached, the server records `MALWARE_SCANNER_UNAVAILABLE`, returns a recoverable `FILE_SCAN_UNAVAILABLE` state, and never invokes OCR or an AI provider. The deprecated multipart route cannot store or analyze a file. This is a fail-closed foundation, not proof of safe files; archive safety, malware scanning, OCR prompt-injection isolation, async scan/extract jobs, and authenticated staging HTTP proof remain release gates.
+Finalize rechecks the private object and bounded magic bytes. ZIP/DOCX preflight
+then requires exact central/local-header identity, contiguous referenced bytes,
+valid data descriptors, bounded streaming raw-deflate expansion, exact expanded
+length and CRC32 before quarantine; timeout or corruption deletes the private
+object and records a tenant audit rejection. New files are unavailable from the
+normal download route because their kind remains `analysis_quarantined`. With no
+real malware scanner attached, the server records `MALWARE_SCANNER_UNAVAILABLE`,
+returns a recoverable `FILE_SCAN_UNAVAILABLE` state, and never invokes OCR or an
+AI provider. The deprecated multipart route cannot store or analyze a file.
+This is still a fail-closed foundation, not proof of malware safety; a real
+scanner, actual package extraction, OCR prompt-injection isolation and
+authenticated staging HTTP proof remain release gates. The deep archive verifier
+is locally tested and not yet deployed.
 
 ## Encrypted user-memory boundary — local candidate
 

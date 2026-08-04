@@ -1,11 +1,14 @@
 const EOCD_SIGNATURE = 0x06054b50;
 const CENTRAL_SIGNATURE = 0x02014b50;
+const LOCAL_SIGNATURE = 0x04034b50;
+const DATA_DESCRIPTOR_SIGNATURE = 0x08074b50;
 const MAX_COMMENT_BYTES = 65_535;
 const MAX_ARCHIVE_ENTRIES = 200;
 const MAX_PACKAGE_FILES = 20;
 const MAX_DOCX_ENTRIES = 1_000;
 const MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
 const MAX_EXPANSION_RATIO = 100;
+const DEFAULT_VERIFICATION_TIMEOUT_MS = 15_000;
 
 const supportedPackageExtensions = new Set(["pdf", "docx", "jpg", "jpeg", "png"]);
 const nestedArchiveExtensions = new Set(["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "docm", "xlsm"]);
@@ -18,6 +21,26 @@ export type ArchiveInspection = {
   docxPackage: boolean;
 };
 
+type ArchiveEntry = {
+  name: string;
+  nameBytes: Uint8Array;
+  flags: number;
+  method: number;
+  crc32: number;
+  compressedBytes: number;
+  uncompressedBytes: number;
+  localOffset: number;
+  dataStart: number;
+  dataEnd: number;
+  extentEnd: number;
+  directory: boolean;
+};
+
+type ParsedArchive = {
+  inspection: ArchiveInspection;
+  entries: ArchiveEntry[];
+};
+
 export class ArchiveInspectionError extends Error {
   constructor(public readonly code: string, message: string) {
     super(message);
@@ -26,6 +49,48 @@ export class ArchiveInspectionError extends Error {
 }
 
 export function inspectArchiveBytes(bytes: Uint8Array, mimeType: string): ArchiveInspection {
+  return parseArchiveBytes(bytes, mimeType).inspection;
+}
+
+export async function verifyArchiveBytes(
+  bytes: Uint8Array,
+  mimeType: string,
+  options: { timeoutMs?: number } = {},
+): Promise<ArchiveInspection> {
+  const parsed = parseArchiveBytes(bytes, mimeType);
+  const timeoutMs = options.timeoutMs ?? DEFAULT_VERIFICATION_TIMEOUT_MS;
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 60_000) {
+    fail("ARCHIVE_VERIFICATION_TIMEOUT", "Archive verification timeout is invalid.");
+  }
+  const deadline = Date.now() + timeoutMs;
+  for (const entry of parsed.entries) {
+    if (entry.directory) continue;
+    ensureBeforeDeadline(deadline);
+    const compressed = bytes.subarray(entry.dataStart, entry.dataEnd);
+    let actualSize = 0;
+    let crc = 0xffffffff;
+    if (entry.method === 0) {
+      if (entry.compressedBytes !== entry.uncompressedBytes) {
+        fail("ARCHIVE_SIZE_MISMATCH", "Stored ZIP entry sizes are inconsistent.");
+      }
+      actualSize = compressed.byteLength;
+      crc = updateCrc32(crc, compressed);
+    } else {
+      const verified = await verifyDeflatedEntry(compressed, entry.uncompressedBytes, deadline);
+      actualSize = verified.size;
+      crc = verified.crc;
+    }
+    if (actualSize !== entry.uncompressedBytes) {
+      fail("ARCHIVE_SIZE_MISMATCH", "Expanded ZIP entry size does not match its signed directory metadata.");
+    }
+    if (finishCrc32(crc) !== entry.crc32) {
+      fail("ARCHIVE_CRC_MISMATCH", "ZIP entry CRC does not match its signed directory metadata.");
+    }
+  }
+  return parsed.inspection;
+}
+
+function parseArchiveBytes(bytes: Uint8Array, mimeType: string): ParsedArchive {
   if (bytes.byteLength < 22) fail("ARCHIVE_CORRUPT", "ZIP does not contain an end record.");
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const eocd = findEocd(view);
@@ -51,6 +116,7 @@ export function inspectArchiveBytes(bytes: Uint8Array, mimeType: string): Archiv
   }
 
   const names = new Set<string>();
+  const entries: ArchiveEntry[] = [];
   let position = centralOffset;
   let fileCount = 0;
   let compressedBytes = 0;
@@ -62,6 +128,7 @@ export function inspectArchiveBytes(bytes: Uint8Array, mimeType: string): Archiv
     const versionMadeBy = view.getUint16(position + 4, true);
     const flags = view.getUint16(position + 8, true);
     const method = view.getUint16(position + 10, true);
+    const crc32 = view.getUint32(position + 16, true);
     const compressed = view.getUint32(position + 20, true);
     const uncompressed = view.getUint32(position + 24, true);
     const nameLength = view.getUint16(position + 28, true);
@@ -96,12 +163,28 @@ export function inspectArchiveBytes(bytes: Uint8Array, mimeType: string): Archiv
         fail("ARCHIVE_RATIO_LIMIT", "Archive expansion ratio exceeds the safe limit.");
       }
       if (!docxPackage) validatePackageMember(name);
+    } else if (compressed !== 0 || uncompressed !== 0) {
+      fail("ARCHIVE_CORRUPT", "ZIP directory entries must not contain payload bytes.");
     }
     compressedBytes += compressed;
     uncompressedBytes += uncompressed;
     if (!Number.isSafeInteger(uncompressedBytes) || uncompressedBytes > MAX_UNCOMPRESSED_BYTES) {
       fail("ARCHIVE_EXPANDED_SIZE_LIMIT", "Expanded archive size exceeds 200 MB.");
     }
+    entries.push({
+      name,
+      nameBytes,
+      flags,
+      method,
+      crc32,
+      compressedBytes: compressed,
+      uncompressedBytes: uncompressed,
+      localOffset,
+      dataStart: 0,
+      dataEnd: 0,
+      extentEnd: 0,
+      directory,
+    });
     position = end;
   }
   if (position !== eocd) fail("ARCHIVE_CORRUPT", "ZIP central directory contains trailing ambiguity.");
@@ -110,7 +193,183 @@ export function inspectArchiveBytes(bytes: Uint8Array, mimeType: string): Archiv
   }
   if (compressedBytes > bytes.byteLength) fail("ARCHIVE_CORRUPT", "Compressed entry sizes exceed the archive size.");
   if (docxPackage) validateDocxPackage(names);
-  return { entryCount, fileCount, compressedBytes, uncompressedBytes, docxPackage };
+  validateLocalEntries(bytes, view, entries, centralOffset);
+  return {
+    inspection: { entryCount, fileCount, compressedBytes, uncompressedBytes, docxPackage },
+    entries,
+  };
+}
+
+function validateLocalEntries(bytes: Uint8Array, view: DataView, entries: ArchiveEntry[], centralOffset: number): void {
+  const ordered = [...entries].sort((left, right) => left.localOffset - right.localOffset);
+  if (ordered[0]?.localOffset !== 0) {
+    fail("ARCHIVE_POLYGLOT_REJECTED", "ZIP preambles and executable polyglots are not accepted.");
+  }
+  let expectedOffset = 0;
+  for (const entry of ordered) {
+    if (entry.localOffset !== expectedOffset || entry.localOffset + 30 > centralOffset) {
+      fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP local entry layout is ambiguous or non-contiguous.");
+    }
+    if (view.getUint32(entry.localOffset, true) !== LOCAL_SIGNATURE) {
+      fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP local header signature does not match its directory entry.");
+    }
+    const flags = view.getUint16(entry.localOffset + 6, true);
+    const method = view.getUint16(entry.localOffset + 8, true);
+    const localCrc32 = view.getUint32(entry.localOffset + 14, true);
+    const localCompressed = view.getUint32(entry.localOffset + 18, true);
+    const localUncompressed = view.getUint32(entry.localOffset + 22, true);
+    const nameLength = view.getUint16(entry.localOffset + 26, true);
+    const extraLength = view.getUint16(entry.localOffset + 28, true);
+    const nameStart = entry.localOffset + 30;
+    const dataStart = nameStart + nameLength + extraLength;
+    const dataEnd = dataStart + entry.compressedBytes;
+    if (flags !== entry.flags || method !== entry.method || nameLength !== entry.nameBytes.byteLength || dataEnd > centralOffset) {
+      fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP local entry metadata does not match its directory entry.");
+    }
+    if (!bytesEqual(bytes.subarray(nameStart, nameStart + nameLength), entry.nameBytes)) {
+      fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP local path does not match its directory path.");
+    }
+    const usesDescriptor = (entry.flags & 0x8) !== 0;
+    if (!usesDescriptor && (
+      localCrc32 !== entry.crc32 ||
+      localCompressed !== entry.compressedBytes ||
+      localUncompressed !== entry.uncompressedBytes
+    )) {
+      fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP local size or CRC does not match its directory entry.");
+    }
+    if (usesDescriptor && (
+      (localCrc32 !== 0 && localCrc32 !== entry.crc32) ||
+      (localCompressed !== 0 && localCompressed !== entry.compressedBytes) ||
+      (localUncompressed !== 0 && localUncompressed !== entry.uncompressedBytes)
+    )) {
+      fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP deferred local metadata conflicts with its directory entry.");
+    }
+    let extentEnd = dataEnd;
+    if (usesDescriptor) extentEnd = validateDataDescriptor(view, dataEnd, centralOffset, entry);
+    entry.dataStart = dataStart;
+    entry.dataEnd = dataEnd;
+    entry.extentEnd = extentEnd;
+    expectedOffset = extentEnd;
+  }
+  if (expectedOffset !== centralOffset) {
+    fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP contains unreferenced bytes before its central directory.");
+  }
+}
+
+function validateDataDescriptor(view: DataView, offset: number, centralOffset: number, entry: ArchiveEntry): number {
+  if (offset + 12 > centralOffset) fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP data descriptor is truncated.");
+  const signed = view.getUint32(offset, true) === DATA_DESCRIPTOR_SIGNATURE;
+  const payloadOffset = signed ? offset + 4 : offset;
+  if (payloadOffset + 12 > centralOffset) fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP data descriptor is truncated.");
+  if (
+    view.getUint32(payloadOffset, true) !== entry.crc32 ||
+    view.getUint32(payloadOffset + 4, true) !== entry.compressedBytes ||
+    view.getUint32(payloadOffset + 8, true) !== entry.uncompressedBytes
+  ) {
+    fail("ARCHIVE_LOCAL_HEADER_MISMATCH", "ZIP data descriptor does not match its directory entry.");
+  }
+  return payloadOffset + 12;
+}
+
+async function verifyDeflatedEntry(
+  compressed: Uint8Array,
+  expectedSize: number,
+  deadline: number,
+): Promise<{ size: number; crc: number }> {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  try {
+    const source = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(compressed);
+        controller.close();
+      },
+    });
+    const decompressor = new DecompressionStream("deflate-raw" as CompressionFormat) as unknown as ReadableWritablePair<
+      Uint8Array,
+      Uint8Array
+    >;
+    reader = source.pipeThrough(decompressor).getReader();
+    let size = 0;
+    let crc = 0xffffffff;
+    while (true) {
+      const result = await readBeforeDeadline(reader, deadline);
+      if (result.done) break;
+      size += result.value.byteLength;
+      if (size > expectedSize || size > MAX_UNCOMPRESSED_BYTES) {
+        fail("ARCHIVE_SIZE_MISMATCH", "Expanded ZIP entry exceeds its declared bounded size.");
+      }
+      crc = updateCrc32(crc, result.value);
+    }
+    return { size, crc };
+  } catch (error) {
+    if (error instanceof ArchiveInspectionError) throw error;
+    throw new ArchiveInspectionError(
+      "ARCHIVE_DECOMPRESSION_FAILED",
+      "ZIP entry could not be decompressed safely.",
+    );
+  } finally {
+    try {
+      await reader?.cancel();
+    } catch {
+      // Reader cancellation is cleanup only; the validation result remains authoritative.
+    }
+  }
+}
+
+async function readBeforeDeadline(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  deadline: number,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) fail("ARCHIVE_VERIFICATION_TIMEOUT", "Archive decompression exceeded the allowed time.");
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new ArchiveInspectionError("ARCHIVE_VERIFICATION_TIMEOUT", "Archive decompression exceeded the allowed time.")),
+          remaining,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+function ensureBeforeDeadline(deadline: number): void {
+  if (Date.now() >= deadline) fail("ARCHIVE_VERIFICATION_TIMEOUT", "Archive decompression exceeded the allowed time.");
+}
+
+const crc32Table = createCrc32Table();
+
+function createCrc32Table(): Uint32Array {
+  const table = new Uint32Array(256);
+  for (let index = 0; index < table.length; index += 1) {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) value = (value & 1) !== 0 ? (value >>> 1) ^ 0xedb88320 : value >>> 1;
+    table[index] = value >>> 0;
+  }
+  return table;
+}
+
+function updateCrc32(crc: number, bytes: Uint8Array): number {
+  let value = crc >>> 0;
+  for (const byte of bytes) value = (value >>> 8) ^ crc32Table[(value ^ byte) & 0xff]!;
+  return value >>> 0;
+}
+
+function finishCrc32(crc: number): number {
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  for (let index = 0; index < left.byteLength; index += 1) {
+    if (left[index] !== right[index]) return false;
+  }
+  return true;
 }
 
 function findEocd(view: DataView): number {
@@ -134,7 +393,7 @@ function decodeName(bytes: Uint8Array, utf8: boolean): string {
   }
 }
 
-function validatePath(name: string) {
+function validatePath(name: string): void {
   if (name.length > 512 || name.includes("\0") || name.includes("\\") || name.startsWith("/") || /^[a-z]:/iu.test(name)) {
     fail("ARCHIVE_PATH_UNSAFE", "Archive path is absolute or malformed.");
   }
@@ -144,14 +403,14 @@ function validatePath(name: string) {
   }
 }
 
-function validatePackageMember(name: string) {
+function validatePackageMember(name: string): void {
   const leaf = name.split("/").at(-1) ?? "";
   const extension = leaf.split(".").at(-1)?.toLocaleLowerCase() ?? "";
   if (nestedArchiveExtensions.has(extension)) fail("ARCHIVE_NESTED_UNSUPPORTED", "Nested archives are not accepted.");
   if (!supportedPackageExtensions.has(extension)) fail("ARCHIVE_MEMBER_UNSUPPORTED", "Archive contains an unsupported file type.");
 }
 
-function validateDocxPackage(names: Set<string>) {
+function validateDocxPackage(names: Set<string>): void {
   for (const required of ["[content_types].xml", "_rels/.rels", "word/document.xml"]) {
     if (!names.has(required)) fail("DOCX_STRUCTURE_INVALID", "DOCX package is missing a required OOXML part.");
   }

@@ -1,6 +1,6 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
 import { requireD1, requireQuarantineR2, runtimeEnv } from "../../../../../../../lib/document-builder/storage/runtime";
-import { ArchiveInspectionError, inspectArchiveBytes, type ArchiveInspection } from "../../../../../../../lib/document-analysis/archive-inspector";
+import { ArchiveInspectionError, verifyArchiveBytes, type ArchiveInspection } from "../../../../../../../lib/document-analysis/archive-inspector";
 import {
   arrayBufferHex,
   documentAnalysisUploadForUser,
@@ -64,7 +64,10 @@ export const POST = withApiErrors(async function POST(
         return response({ code: "UPLOAD_INTEGRITY_FAILED", error: "Архив не удалось прочитать после загрузки." }, 422);
       }
       try {
-        archiveInspection = inspectArchiveBytes(new Uint8Array(await archiveObject.arrayBuffer()), record.mimeType);
+        archiveInspection = await verifyArchiveBytes(
+          new Uint8Array(await archiveObject.arrayBuffer()),
+          record.mimeType,
+        );
       } catch (error) {
         if (!(error instanceof ArchiveInspectionError)) throw error;
         await rejectFile(db, bucket, record, workspace.id, user.id, error.code);
@@ -92,6 +95,8 @@ export const POST = withApiErrors(async function POST(
       ).bind(crypto.randomUUID(), workspace.id, user.id, analysisId, JSON.stringify({
         magicBytesVerified: true,
         archiveInspected: Boolean(archiveInspection),
+        archivePayloadVerified: Boolean(archiveInspection),
+        archiveCrcVerified: Boolean(archiveInspection),
         archiveEntryCount: archiveInspection?.entryCount ?? null,
         archiveFileCount: archiveInspection?.fileCount ?? null,
         archiveUncompressedBytes: archiveInspection?.uncompressedBytes ?? null,
