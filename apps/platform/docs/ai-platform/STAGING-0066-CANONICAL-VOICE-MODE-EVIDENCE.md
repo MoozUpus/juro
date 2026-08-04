@@ -72,10 +72,13 @@ The builder smoke reported `aiStatus: unavailable` in the local process because 
 ## Staging deployment
 
 - Worker: `juro-platform-staging`;
-- deployment/version ID: pending factual deployment;
-- traffic: pending factual verification;
+- Worker version ID: `19c6ab86-0039-41d3-afb1-f46ab694b087`;
+- deployment ID: `1d40d5b7-9791-4ec5-9374-23e74084b745`;
+- traffic: 100% to the version above;
+- D1 migration check: `No migrations to apply!`;
+- anonymous `https://staging.app.juro.uz/ru/individual/ai-lawyer/voice` returns HTTP 302 to Cloudflare Access with `no-store` and preserves the requested voice URL as `redirect_url`;
 - public route remains protected by Cloudflare Access;
-- production Worker `juro` is not deployed or changed by this checkpoint.
+- production Worker `juro` remains on version `91774ed4-72e9-47bb-b93a-a4208d490b24`, deployed on 2026-07-26; it was not deployed or changed by this checkpoint.
 
 ## Known limitations
 
