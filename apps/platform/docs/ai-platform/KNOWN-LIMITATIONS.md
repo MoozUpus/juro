@@ -552,3 +552,17 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 - Migrations `0069`–`0074` require a fresh authorized staging backup/restore and
   ordered apply before deployment. Authenticated RU/UZ browser, keyboard, axe,
   mobile/200% zoom and real provider-generated analysis traversal remain open.
+
+## Document-to-case link open gates
+
+- Migration `0075` and its matching Worker are local only. Protected staging
+  does not yet expose the owner-only document case selector.
+- Existing case links remain valid at revision zero. Their historical creation is
+  represented by the existing `document_created` case event; migration `0075`
+  deliberately does not invent a retroactive link event.
+- Local evidence covers move/unlink, plan-step cleanup, tenant denial, stale
+  writer fencing, idempotency, immutable evidence, collaborator projection
+  minimization and account cascade. Authenticated RU/UZ browser, keyboard, axe,
+  320-1440 px, 200% zoom and forced-colors checks remain staging gates.
+- Migrations `0069`-`0075` require a fresh authorized private staging backup,
+  restore verification and ordered application before the matching Worker deploy.

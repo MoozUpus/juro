@@ -176,7 +176,7 @@ function sectionLabel(section: CaseSection, ru: boolean) {
 }
 
 function activityLabel(eventType: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = { case_created: ["Дело создано", "Ish yaratildi"], step_updated: ["Шаг плана обновлён", "Reja qadami yangilandi"], plan_changes_confirmed: ["Изменения плана подтверждены", "Reja o‘zgarishlari tasdiqlandi"], tasks_created: ["Задачи из плана подтверждены", "Rejadagi vazifalar tasdiqlandi"], document_created: ["Документ добавлен", "Hujjat qo‘shildi"], analysis_linked: ["Анализ добавлен в дело", "Tahlil ishga qo‘shildi"], analysis_unlinked: ["Анализ удалён из дела", "Tahlil ishdan olib tashlandi"] };
+  const labels: Record<string, [string, string]> = { case_created: ["Дело создано", "Ish yaratildi"], step_updated: ["Шаг плана обновлён", "Reja qadami yangilandi"], plan_changes_confirmed: ["Изменения плана подтверждены", "Reja o‘zgarishlari tasdiqlandi"], tasks_created: ["Задачи из плана подтверждены", "Rejadagi vazifalar tasdiqlandi"], document_created: ["Документ добавлен", "Hujjat qo‘shildi"], document_linked: ["Документ добавлен в дело", "Hujjat ishga qo‘shildi"], document_unlinked: ["Документ удалён из дела", "Hujjat ishdan olib tashlandi"], analysis_linked: ["Анализ добавлен в дело", "Tahlil ishga qo‘shildi"], analysis_unlinked: ["Анализ удалён из дела", "Tahlil ishdan olib tashlandi"] };
   return labels[eventType]?.[ru ? 0 : 1] || (ru ? "Дело обновлено" : "Ish yangilandi");
 }
 

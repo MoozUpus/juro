@@ -243,3 +243,23 @@ plus color; gold is limited to focus/controlled action; every control is at leas
 partial, stale, ambiguous, accepted, rejected and applied states have explicit
 RU/UZ copy. Authenticated staging browser, 200% zoom, forced-colors and touch QA
 remain open until migration 0069 is authorized and deployed.
+
+## Document case selector review
+
+This Phase 6 surface uses the legal-work profile: design variance 3/10, motion
+2/10 and density 8/10. The control stays beside the document it changes, reuses
+the established light reading surface and native select behavior, and introduces
+no UI or motion dependency.
+
+| Before | After | Why |
+|---|---|---|
+| Existing documents could not be attached to or moved between cases | Owner-only RU/UZ case selector inside each active document row | Direct mapping keeps the action near its object and avoids a modal detour |
+| Case relation changed only during document creation | Immediate optimistic state with server confirmation, rollback and live status | Preserves agency while making failure recoverable and truthful |
+| No motion contract existed for this frequent action | No entrance or layout animation; only native focus, disabled and status feedback | A frequent keyboard-capable data operation must not wait for decorative motion |
+| Collaborator list response could have exposed a future raw relation if selected directly | Case projection is null for collaborators and the control is absent | Minimizes tenant context without implying edit authority |
+
+The purposeful-animation review rejected reveal, morph and transition effects for
+this control. Animation would not improve explanation, spatial orientation or
+confirmation beyond the native focus/disabled state and status announcement.
+Staging keyboard, touch, 200% zoom, forced-colors and screen-reader verification
+remain open and are not claimed by this local implementation.

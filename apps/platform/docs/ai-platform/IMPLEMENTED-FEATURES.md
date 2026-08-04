@@ -733,3 +733,19 @@ plus metadata-only audit are automatic. Focused tests pass upload-time linking,
 move, unlink, cross-tenant denial, stale writer, direct mutation, route boundary
 and account deletion. The migration is applied only to local development;
 staging and production are unchanged.
+
+## Phase 6 - existing builder document to case lifecycle (local candidate)
+
+The localized document list now exposes a native owner-only case selector backed
+by a real authenticated and CSRF-protected endpoint. It lists only active cases
+from the server-resolved workspace, never exposes an owner's case ID through a
+collaborator projection, and reports saving, success and recoverable error states
+to assistive technology. Archived documents cannot be reassigned.
+
+Migration `0075` makes move/unlink operations append-only, idempotent and
+race-safe. D1 rejects cross-tenant targets, direct projection mutation, actor
+substitution, stale writers and retained-event mutation. Moving a document also
+clears a plan step from the former case. Case activity and metadata-only workspace
+audit are created automatically. Focused service/UI/route tests pass 5/5 and the
+complete migration safety suite passes 57/57 locally. Staging and production are
+unchanged. Wrangler applied `0075` only to local `juro-development`.

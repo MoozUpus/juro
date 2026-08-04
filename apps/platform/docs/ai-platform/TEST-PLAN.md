@@ -109,3 +109,18 @@ call the bounded deep verifier before it records quarantine success.
 - RU/UZ UI must preserve `caseId` across review/compare tabs, preselect a valid
   case, allow explicit detach and show linked analyses in the canonical case
   route. Staging browser/keyboard/axe/mobile evidence remains separately gated.
+
+## Document-to-case link checkpoint - 2026-08-04
+
+- Strict input accepts only an active-case UUID or explicit `null`; tenant and
+  owner identifiers are always resolved from the authenticated session.
+- Service tests cover move, detach, foreign tenant, foreign case, idempotency
+  replay/conflict, stale writer, direct projection mutation, immutable evidence,
+  metadata-only audit and account cascade.
+- Moving from a document created by a plan step must atomically clear the old
+  `plan_step_id`.
+- The list API hides owner case IDs from collaborator projections. The RU/UZ
+  owner control has a visible label, native keyboard behavior, 44 px target,
+  busy announcement, success status and recoverable rollback on error.
+- Staging evidence additionally requires private D1 backup/restore, migrations
+  `0069`-`0075` in order, postflight checks and authenticated browser/axe passes.

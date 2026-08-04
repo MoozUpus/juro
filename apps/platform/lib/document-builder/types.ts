@@ -172,6 +172,8 @@ export interface DocumentRecord {
   title: string;
   category: string;
   status: DocumentStatus;
+  caseId?: string | null;
+  caseLinkRevision?: number;
   language: DocumentLanguage;
   lenderName: string | null;
   borrowerName: string | null;

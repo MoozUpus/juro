@@ -23,6 +23,8 @@ interface DocumentListRow {
   title: string;
   category: string;
   status: DocumentRecord["status"];
+  caseId: string | null;
+  caseLinkRevision: number;
   language: DocumentRecord["language"];
   lenderName: string | null;
   borrowerName: string | null;
@@ -74,7 +76,10 @@ export async function GET(request: Request): Promise<Response> {
     }
     const order = sort === "oldest" ? "d.created_at ASC" : sort === "title" ? "d.title COLLATE NOCASE ASC" : "d.updated_at DESC";
     const query = `SELECT DISTINCT d.id, d.template_id AS templateId, d.template_code AS templateCode,
-      d.template_version AS templateVersion, d.title, d.category, d.status, d.language,
+      d.template_version AS templateVersion, d.title, d.category, d.status,
+      CASE WHEN d.owner_user_id = ? THEN d.case_id ELSE NULL END AS caseId,
+      CASE WHEN d.owner_user_id = ? THEN d.case_link_revision ELSE 0 END AS caseLinkRevision,
+      d.language,
       d.lender_name AS lenderName, d.borrower_name AS borrowerName, d.is_favorite AS isFavorite,
       d.archived_at AS archivedAt, d.generated_at AS generatedAt, d.signed_file_id AS signedFileId,
       d.revision, d.created_at AS createdAt, d.updated_at AS updatedAt,
@@ -82,8 +87,11 @@ export async function GET(request: Request): Promise<Response> {
       FROM documents d LEFT JOIN document_collaborators c
         ON c.document_id = d.id AND ${ACCEPTED_COLLABORATOR_JOIN_SQL}
       WHERE ${where.join(" AND ")} ORDER BY ${order} LIMIT 250`;
-    const result = await db.prepare(query).bind(user.id, ...binds).all<DocumentListRow>();
+    const result = await db.prepare(query).bind(user.id, user.id, user.id, ...binds).all<DocumentListRow>();
     const documents = result.results.map((row) => ({ ...row, isFavorite: Boolean(row.isFavorite) }));
+    const casesResult = await db.prepare(
+      "SELECT id,title FROM cases WHERE workspace_id=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 250",
+    ).bind(workspace.id).all<{ id: string; title: string }>();
     const standaloneResult = scope.includeStandaloneFiles
       ? await db.prepare(
         `SELECT id, document_id AS documentId, kind, file_name AS fileName, mime_type AS mimeType,
@@ -94,7 +102,7 @@ export async function GET(request: Request): Promise<Response> {
          ORDER BY created_at DESC`,
       ).bind(user.id, workspace.id).all<FileRecord>()
       : { results: [] as FileRecord[] };
-    return jsonResponse({ documents, standaloneFiles: standaloneResult.results, total: documents.length + standaloneResult.results.length });
+    return jsonResponse({ documents, cases: casesResult.results, standaloneFiles: standaloneResult.results, total: documents.length + standaloneResult.results.length });
   } catch (error) {
     return apiError(error);
   }

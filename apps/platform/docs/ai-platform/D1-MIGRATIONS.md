@@ -1114,3 +1114,20 @@ application produces 176 application tables and 341 foreign keys; `quick_check`,
 `foreign_key_check`, account cascade and direct-mutation guards pass. Wrangler
 applied 17 statements only to local `juro-development`; no local migrations are
 pending. Staging and production remain unchanged.
+
+## Migration 0075 - document-to-case links (local candidate)
+
+`0075_document_case_links.sql` is expand-only. Existing document links remain at
+revision zero; future attach, move and detach transitions require an immutable
+`document_case_link_events` row. Insert and projection guards enforce the exact
+owner/workspace, active target case, old projection, monotonic revision and actor.
+The projection trigger clears any old `plan_step_id` and appends metadata-only
+case/workspace evidence.
+
+The event owns one lifecycle foreign key to `documents`; guarded historical IDs
+do not introduce SQLite cascade-order dependencies. Local clean-schema application
+produces 177 application tables and 343 foreign keys. Migration safety, foreign
+key integrity, account cascade, stale-writer and direct-mutation tests pass.
+Staging and production remain unchanged pending a separately authorized backup,
+ordered migrations `0069`-`0075` and deploy. Wrangler executed all 16 statements
+against local `juro-development`; a repeat local list reports no pending migration.

@@ -2903,3 +2903,23 @@ fence stale or replayed writers. Historical tenant/user/case identifiers are
 guarded at insert rather than connected by sibling foreign keys; this avoids
 SQLite cascade-order hazards while the owning analysis foreign key preserves
 lifecycle. No analysis text, filename or legal result is copied into audit.
+
+## D-140 - Document-to-case changes are event-projected and clear stale plan context
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+An owner may create a builder document inside a case or later attach, move or
+detach it. Migration `0075` preserves every existing `documents.case_id` value
+at revision zero and requires each later transition to originate from an
+append-only `document_case_link_events` row. The server resolves the active
+workspace and owner, while D1 independently verifies the old projection, target
+case, monotonic revision and actor before applying the change.
+
+A moved or detached document loses `plan_step_id` atomically. A plan step belongs
+to the former case and retaining it would create a false cross-case relation.
+The event produces metadata-only case activity and workspace audit records;
+document text and participant data are not copied. Scoped idempotency and a
+unique document/revision pair prevent duplicate and stale writes. Existing
+creation evidence remains in `case_events.document_created`; no historical event
+is invented for pre-migration links.

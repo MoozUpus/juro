@@ -240,6 +240,8 @@ export const documents = sqliteTable(
     status: text("status").notNull(),
     caseId: text("case_id"),
     planStepId: text("plan_step_id"),
+    caseLinkRevision: integer("case_link_revision").notNull().default(0),
+    caseLinkedByUserId: text("case_linked_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
     lenderName: text("lender_name"),
     borrowerName: text("borrower_name"),
     isFavorite: integer("is_favorite", { mode: "boolean" }).notNull().default(false),
@@ -255,9 +257,34 @@ export const documents = sqliteTable(
     index("documents_updated_idx").on(table.updatedAt),
     index("documents_workspace_updated_idx").on(table.workspaceId, table.updatedAt),
     index("documents_case_idx").on(table.caseId, table.updatedAt),
+    index("documents_workspace_case_idx").on(table.workspaceId, table.caseId, table.updatedAt),
     index("documents_plan_step_idx").on(table.planStepId),
   ],
 );
+
+export const documentCaseLinkEvents = sqliteTable("document_case_link_events", {
+  id: text("id").primaryKey(),
+  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  // The document FK owns lifecycle. Tenant/user/case IDs are immutable evidence
+  // proved by the insert guard; sibling FKs would make account cascades order-dependent.
+  workspaceId: text("workspace_id").notNull(),
+  ownerUserId: text("owner_user_id").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  fromCaseId: text("from_case_id"),
+  toCaseId: text("to_case_id"),
+  mutationVersion: integer("mutation_version").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("document_case_link_events_version_uidx").on(table.documentId, table.mutationVersion),
+  uniqueIndex("document_case_link_events_idempotency_uidx").on(table.workspaceId, table.ownerUserId, table.idempotencyKey),
+  index("document_case_link_events_case_idx").on(table.workspaceId, table.toCaseId, table.createdAt),
+  check("document_case_link_events_change_check", sql`NOT (${table.fromCaseId} IS ${table.toCaseId})`),
+  check("document_case_link_events_version_check", sql`${table.mutationVersion} >= 1`),
+  check("document_case_link_events_hash_check", sql`length(${table.requestHash}) = 64`),
+  check("document_case_link_events_idempotency_check", sql`length(${table.idempotencyKey}) BETWEEN 16 AND 180`),
+]);
 
 export const documentAnswers = sqliteTable("document_answers", {
   documentId: text("document_id").primaryKey().references(() => documents.id, { onDelete: "cascade" }),

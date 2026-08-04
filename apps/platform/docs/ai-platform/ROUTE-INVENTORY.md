@@ -359,6 +359,7 @@ GET /api/document-builder/documents/:id/files/:fileId
 POST /api/document-builder/documents/:id/generate
 POST /api/document-builder/documents/:id/share
 POST /api/document-builder/documents/:id/signed-file
+PUT /api/document-builder/documents/:id/case
 GET,POST /api/document-builder/invitations/:token
 GET,PATCH /api/document-builder/notifications
 GET,PATCH,DELETE /api/document-builder/standalone-files/:id
@@ -433,3 +434,12 @@ surface. They add no public route and do not alter document-builder URLs.
 
 The existing localized comparison screen consumes these states. Source comparison
 and document-builder routes remain unchanged.
+
+### Builder document case link - local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `PUT /api/document-builder/documents/:id/case` | Attaches, moves or detaches one active owner document | authentication, CSRF, strict UUID/null body, server-resolved workspace/owner, Idempotency-Key, D1 event projection |
+
+The localized document list consumes this additive route. Canonical builder and
+case URLs are unchanged; collaborators receive no case projection or edit control.

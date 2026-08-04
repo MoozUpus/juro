@@ -372,6 +372,10 @@
 .dbt-document-main h2 { margin: 4px 0; overflow: hidden; color: var(--dbt-navy); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .dbt-document-main p { margin: 0 0 3px; color: #52616f; font-size: 11px; }
 .dbt-document-main small { color: var(--dbt-muted); font-size: 10px; }
+.dbt-document-case { width: min(100%, 320px); margin-top: 9px; display: grid; gap: 4px; color: #52616f; font-size: 10px; font-weight: 750; }
+.dbt-document-case select { width: 100%; min-height: 44px; padding: 9px 34px 9px 10px; border: 1px solid #cbd2d7; border-radius: 7px; background: white; color: var(--dbt-navy); font: inherit; font-size: 12px; }
+.dbt-document-case select:focus-visible { outline: 3px solid color-mix(in srgb, var(--dbt-gold) 56%, white); outline-offset: 2px; }
+.dbt-document-case select:disabled { cursor: wait; opacity: .68; }
 .dbt-doc-status, .dbt-incoming { margin-right: 6px; padding: 4px 7px; display: inline-block; border-radius: 20px; background: #eef1f3; color: #596875; font-size: 9px; font-weight: 800; }
 .dbt-doc-status.status-готов, .dbt-doc-status.status-согласован, .dbt-doc-status.status-подписан { background: #e8f4ef; color: var(--dbt-green); }
 .dbt-incoming { background: #f5eeda; color: #846728; }
