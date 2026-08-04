@@ -575,6 +575,13 @@
       "when": 1785931200000,
       "tag": "0081_provider_cost_observability",
       "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "6",
+      "when": 1785934800000,
+      "tag": "0082_provider_cost_circuit_breaker",
+      "breakpoints": true
     }
   ]
 }

@@ -8,6 +8,10 @@ import {
   SecurityEmailError,
 } from "../lib/auth/security-email";
 import {
+  executeOperationalAlertEmail,
+  OperationalAlertEmailError,
+} from "../lib/operations/alert-email";
+import {
   LegalSourceAcquisitionError,
   executeLegalSourceFetchRequest,
 } from "../lib/legal/source-acquisition";
@@ -98,7 +102,6 @@ const tenantJobKinds = new Set<JobKind>([
   "document.index",
   "ocr.process",
   "document.export",
-  "email.send",
   "notification.dispatch",
   "malware.scan",
 ]);
@@ -168,6 +171,10 @@ type JobErrorCode =
   | "EMAIL_JOB_INVALID"
   | "EMAIL_PROVIDER_REJECTED"
   | "EMAIL_PROVIDER_UNAVAILABLE"
+  | "OPERATIONAL_ALERT_CONFIGURATION_UNAVAILABLE"
+  | "OPERATIONAL_ALERT_JOB_INVALID"
+  | "OPERATIONAL_ALERT_PROVIDER_REJECTED"
+  | "OPERATIONAL_ALERT_PROVIDER_UNAVAILABLE"
   | "JOB_HANDLER_NOT_ENABLED"
   | "JOB_IDEMPOTENCY_CONFLICT"
   | "JOB_LEASE_LOST"
@@ -285,6 +292,7 @@ export type PlatformJobEnv = Omit<
   AI?: Ai;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  OPERATIONS_ALERT_EMAIL?: string;
   IDENTITY_KEYRING?: string;
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
@@ -693,10 +701,20 @@ async function executeJob(
     }
   }
   if (envelope.kind === "email.send") {
+    const operationalAlert = await env.DB.prepare(
+      "SELECT 1 AS found FROM operational_alert_jobs WHERE id=? LIMIT 1",
+    ).bind(envelope.subjectId).first<{ found: number }>();
     try {
-      await executeSecurityEmailJob(env, envelope.subjectId);
+      if (operationalAlert?.found) {
+        await executeOperationalAlertEmail(env, envelope.subjectId);
+      } else {
+        await executeSecurityEmailJob(env, envelope.subjectId);
+      }
       return;
     } catch (error) {
+      if (error instanceof OperationalAlertEmailError) {
+        throw new SafeJobError(error.code, error.retryable);
+      }
       if (error instanceof SecurityEmailError) {
         throw new SafeJobError(error.code, error.retryable);
       }

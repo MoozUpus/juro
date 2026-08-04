@@ -1,4 +1,10 @@
 import { z } from "zod";
+import {
+  evaluateProviderCostControl,
+  ProviderCostControlError,
+  readProviderCostControlDashboard,
+  type ProviderCostControlDashboard,
+} from "./provider-cost-control";
 
 const PROVIDERS = ["openai", "anthropic"] as const;
 const MAX_RATE_MICROUSD = 1_000_000_000_000;
@@ -73,7 +79,7 @@ export type AiCostDashboard = {
   prices: AiModelPriceView[];
   daily: AiCostDailyView[];
   unpricedEvents: number;
-};
+} & ProviderCostControlDashboard;
 
 export class ProviderUsageError extends Error {
   constructor(readonly code: "PROVIDER_USAGE_INVALID" | "PROVIDER_USAGE_PERSISTENCE_FAILED") {
@@ -289,6 +295,19 @@ export async function recordProviderUsage(input: ProviderUsageInput): Promise<Pr
   } catch {
     throw new ProviderUsageError("PROVIDER_USAGE_PERSISTENCE_FAILED");
   }
+  try {
+    await evaluateProviderCostControl({
+      db: input.db,
+      environment: input.environment,
+      provider: input.provider,
+      now: completedAt,
+    });
+  } catch (error) {
+    if (error instanceof ProviderCostControlError) {
+      throw new ProviderUsageError("PROVIDER_USAGE_PERSISTENCE_FAILED");
+    }
+    throw error;
+  }
   return { id: eventId, priceVersionId: price?.id ?? null, estimatedCostMicrousd: cost };
 }
 
@@ -361,7 +380,7 @@ export async function readAiCostDashboard(input: {
   const days = Math.min(Math.max(input.days ?? 30, 1), 93);
   const now = input.now ?? new Date();
   const cutoff = new Date(now.getTime() - (days - 1) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  const [prices, daily, unpriced] = await Promise.all([
+  const [prices, daily, unpriced, control] = await Promise.all([
     input.db.prepare(
       `SELECT id,provider,model,operation,
         input_microusd_per_million_tokens AS inputMicrousdPerMillionTokens,
@@ -386,10 +405,12 @@ export async function readAiCostDashboard(input: {
       `SELECT count(*) AS count FROM ai_provider_usage_events
        WHERE environment=? AND status='succeeded' AND price_version_id IS NULL`,
     ).bind(input.environment).first<{ count: number }>(),
+    readProviderCostControlDashboard({ db: input.db, environment: input.environment }),
   ]);
   return {
     prices: prices.results,
     daily: daily.results,
     unpricedEvents: Number(unpriced?.count ?? 0),
+    ...control,
   };
 }

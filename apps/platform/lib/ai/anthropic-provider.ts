@@ -60,11 +60,13 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
   let usableSourceIds: Set<string>;
   try {
     model = anthropicModel();
+    await options.beforeProviderCall?.({ provider: "anthropic", model });
     await options.onProgress?.({ stage: "provider_started", provider: "anthropic", model });
     usableSourceIds = new Set(
       input.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id),
     );
-  } catch {
+  } catch (error) {
+    if (error instanceof AiUnavailableError) throw error;
     throw new AiUnavailableError(
       "Резервный AI-провайдер не смог подготовить запрос.",
       "ANTHROPIC_PREFLIGHT_FAILED",

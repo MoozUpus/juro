@@ -7,6 +7,7 @@ export function shouldUseAnthropicFallback(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { code?: unknown; retryable?: unknown };
   return candidate.code === "PROVIDER_UNAVAILABLE"
+    || candidate.code === "PROVIDER_CIRCUIT_OPEN"
     || candidate.code === "INVALID_AI_OUTPUT"
     || candidate.retryable === true;
 }

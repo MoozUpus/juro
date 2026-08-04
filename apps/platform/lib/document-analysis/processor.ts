@@ -1,4 +1,10 @@
-import type { AiStructuredResult } from "../document-builder/ai/openai";
+import { AiUnavailableError, type AiStructuredResult } from "../document-builder/ai/openai";
+import {
+  assertProviderCallAllowed,
+  parseProviderEnvironment,
+  ProviderCostControlError,
+} from "../ai/provider-cost-control";
+import { recordProviderUsage } from "../ai/provider-usage";
 import {
   ComparisonProcessingError,
   type AnalysisPackageContext,
@@ -129,6 +135,10 @@ export type DocumentAnalysisProcessorDependencies = {
     sources: VerifiedLegalRetrieval["sources"];
     legalDatabaseAsOf: string;
     requestId: string;
+    beforeProviderCall?: (input: {
+      provider: "openai" | "anthropic";
+      model: string;
+    }) => void | Promise<void>;
   }) => Promise<AiStructuredResult<DocumentAnalysisResult>>;
 };
 
@@ -137,7 +147,7 @@ const defaultDependencies: DocumentAnalysisProcessorDependencies = {
   retrieve: retrieveVerifiedLegalSources,
   analyze: async (input) => {
     const { runDocumentAnalysis } = await import("./provider");
-    return runDocumentAnalysis(input);
+    return runDocumentAnalysis(input, { beforeProviderCall: input.beforeProviderCall });
   },
 };
 
@@ -271,20 +281,118 @@ async function analyzeObject(
 
     const request = parseRequestMetadata(row.summaryJson);
     const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8, { semantic: env });
-    const ai = await deps.analyze({
-      fileName: row.fileName,
-      mimeType: row.mimeType,
-      extractedText: extracted.text,
-      detectedLanguage: extracted.detectedLanguage,
-      extractionWarnings: extracted.warningCode ? [extracted.warningCode] : [],
-      packageContext: extracted.packageContext ?? null,
-      locale: request.locale,
-      mode: request.mode,
-      userSide: null,
-      sources: retrieval.sources,
-      legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
-      requestId: `document-analysis-${row.analysisId}`,
-    });
+    const providerEnvironment = parseProviderEnvironment(env.APP_ENV);
+    const providerCalls: Array<{
+      provider: "openai" | "anthropic";
+      model: string;
+      startedAt: string;
+    }> = [];
+    let ai: AiStructuredResult<DocumentAnalysisResult>;
+    try {
+      ai = await deps.analyze({
+        fileName: row.fileName,
+        mimeType: row.mimeType,
+        extractedText: extracted.text,
+        detectedLanguage: extracted.detectedLanguage,
+        extractionWarnings: extracted.warningCode ? [extracted.warningCode] : [],
+        packageContext: extracted.packageContext ?? null,
+        locale: request.locale,
+        mode: request.mode,
+        userSide: null,
+        sources: retrieval.sources,
+        legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
+        requestId: `document-analysis-${row.analysisId}`,
+        beforeProviderCall: async (call) => {
+          try {
+            await assertProviderCallAllowed({
+              db: env.DB,
+              environment: providerEnvironment,
+              provider: call.provider,
+            });
+          } catch (error) {
+            if (error instanceof ProviderCostControlError && error.code === "PROVIDER_CIRCUIT_OPEN") {
+              throw new AiUnavailableError(
+                "AI-провайдер остановлен системой контроля расходов.",
+                "PROVIDER_CIRCUIT_OPEN",
+                false,
+              );
+            }
+            throw error;
+          }
+          providerCalls.push({ ...call, startedAt: new Date().toISOString() });
+        },
+      });
+    } catch (error) {
+      const completedAt = new Date().toISOString();
+      const errorCode = isAiProviderError(error) ? error.code : "PROVIDER_UNAVAILABLE";
+      try {
+        for (const call of providerCalls) {
+          await recordProviderUsage({
+            db: env.DB,
+            environment: providerEnvironment,
+            workspaceId: row.workspaceId,
+            userId: row.ownerUserId,
+            feature: "document_analysis",
+            operation: call.provider === "openai" ? "responses" : "messages",
+            provider: call.provider,
+            model: call.model,
+            inputTokens: 0,
+            outputTokens: 0,
+            cachedInputTokens: 0,
+            status: "failed",
+            errorCode,
+            startedAt: call.startedAt,
+            completedAt,
+            eventId: `provider_usage_document_${row.analysisId}_${call.provider}`,
+          });
+        }
+      } catch {
+        // The document analysis state remains the reconciliation source.
+      }
+      throw error;
+    }
+    if (providerCalls.length > 0) {
+      const completedAt = new Date().toISOString();
+      for (const call of providerCalls.filter((call) => call.provider !== ai.provider)) {
+        await recordProviderUsage({
+          db: env.DB,
+          environment: providerEnvironment,
+          workspaceId: row.workspaceId,
+          userId: row.ownerUserId,
+          feature: "document_analysis",
+          operation: call.provider === "openai" ? "responses" : "messages",
+          provider: call.provider,
+          model: call.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          status: "failed",
+          errorCode: "FALLBACK_USED",
+          startedAt: call.startedAt,
+          completedAt,
+          eventId: `provider_usage_document_${row.analysisId}_${call.provider}`,
+        });
+      }
+      const successfulCall = [...providerCalls].reverse().find((call) => call.provider === ai.provider)!;
+      await recordProviderUsage({
+        db: env.DB,
+        environment: providerEnvironment,
+        workspaceId: row.workspaceId,
+        userId: row.ownerUserId,
+        feature: "document_analysis",
+        operation: ai.provider === "openai" ? "responses" : "messages",
+        provider: ai.provider,
+        model: ai.model,
+        providerRequestId: ai.providerResponseId,
+        inputTokens: ai.usage.inputTokens,
+        outputTokens: ai.usage.outputTokens,
+        cachedInputTokens: ai.usage.cachedInputTokens,
+        status: "succeeded",
+        startedAt: successfulCall.startedAt,
+        completedAt,
+        eventId: `provider_usage_document_${row.analysisId}_${ai.provider}`,
+      });
+    }
     const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
     let boundedResult: DocumentAnalysisResult;
     try {
@@ -362,7 +470,7 @@ async function analyzeObject(
       const code = error.code === "INVALID_AI_OUTPUT"
         ? "DOCUMENT_ANALYSIS_INVALID_OUTPUT"
         : "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE";
-      const status = error.code === "PROVIDER_UNAVAILABLE" && !error.retryable
+      const status = (error.code === "PROVIDER_UNAVAILABLE" || error.code === "PROVIDER_CIRCUIT_OPEN") && !error.retryable
         ? "awaiting_ai_configuration"
         : error.retryable ? "retrying" : "failed";
       await setAnalysisState(env.DB, row, status, code);
@@ -616,14 +724,14 @@ async function setAnalysisState(
 }
 
 function isAiProviderError(error: unknown): error is {
-  code: "PROVIDER_UNAVAILABLE" | "PROVIDER_TIMEOUT" | "INVALID_AI_OUTPUT" | "AI_REFUSED";
+  code: "PROVIDER_UNAVAILABLE" | "PROVIDER_TIMEOUT" | "INVALID_AI_OUTPUT" | "AI_REFUSED" | "PROVIDER_CIRCUIT_OPEN";
   retryable: boolean;
 } {
   if (!error || typeof error !== "object") return false;
   const candidate = error as { name?: unknown; code?: unknown; retryable?: unknown };
   return candidate.name === "AiUnavailableError"
     && typeof candidate.retryable === "boolean"
-    && ["PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT", "INVALID_AI_OUTPUT", "AI_REFUSED"]
+    && ["PROVIDER_UNAVAILABLE", "PROVIDER_TIMEOUT", "INVALID_AI_OUTPUT", "AI_REFUSED", "PROVIDER_CIRCUIT_OPEN"]
       .includes(String(candidate.code));
 }
 

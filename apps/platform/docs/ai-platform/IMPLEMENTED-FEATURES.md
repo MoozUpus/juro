@@ -1,5 +1,24 @@
 # JURO implemented-features checkpoint
 
+## Provider cost circuit breaker and operational alerts (local candidate)
+
+- Migration `0082` adds immutable cost-guard policy versions, provider circuit
+  state, transition events and alert-delivery evidence without storing user or
+  legal content.
+- Chat and document-analysis provider calls check the circuit server-side just
+  before transport. Existing OpenAI/Anthropic fallback remains available, and a
+  fully blocked path returns a typed error without decrementing usage.
+- Actual success/failure metadata is attached to the immutable provider-usage
+  ledger. Automatic daily-cost/failure-spike openings atomically create one
+  identifiers-only alert job and outbox message; duplicate evaluation is safe.
+- The protected operations console supports immutable effective-dated policies
+  and audited manual stop/resume. Alert email uses a server-side recipient and
+  an idempotent Resend operation.
+- D1 lifecycle, immutability, failure-spike, alert-delivery and static transport
+  integration tests pass locally. Migration/deploy, real staging alert delivery,
+  billing reconciliation and circuit rehearsal remain pending; production is
+  unchanged.
+
 ## Moderated lawyer replies to reviews (local candidate)
 
 - A lawyer can answer only an approved review attached to that lawyer's own

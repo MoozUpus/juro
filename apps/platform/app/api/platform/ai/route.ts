@@ -39,6 +39,12 @@ import {
   voiceKeyring,
   type VoiceRecordingRow,
 } from "../../../../lib/ai/voice-recording";
+import {
+  assertProviderCallAllowed,
+  parseProviderEnvironment,
+  ProviderCostControlError,
+} from "../../../../lib/ai/provider-cost-control";
+import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
 
 const INSTRUCTION_VERSION = "juro-legal-chat-v1";
 
@@ -134,6 +140,7 @@ async function executePost(
   }
 
   const db = requireD1();
+  const providerEnvironment = parseProviderEnvironment(runtimeEnv().APP_ENV);
   const entitlements = await workspaceEntitlements(db, workspace.id);
   if (body?.caseId) {
     const accessible = await db.prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? LIMIT 1").bind(body.caseId, workspace.id).first();
@@ -282,6 +289,31 @@ async function executePost(
     }, 409);
   }
 
+  const providerCalls: Array<{
+    provider: "openai" | "anthropic";
+    model: string;
+    startedAt: string;
+  }> = [];
+  const beforeProviderCall = async (call: { provider: "openai" | "anthropic"; model: string }) => {
+    try {
+      await assertProviderCallAllowed({
+        db,
+        environment: providerEnvironment,
+        provider: call.provider,
+      });
+    } catch (error) {
+      if (error instanceof ProviderCostControlError && error.code === "PROVIDER_CIRCUIT_OPEN") {
+        throw new AiUnavailableError(
+          "AI-провайдер временно остановлен системой контроля расходов.",
+          "PROVIDER_CIRCUIT_OPEN",
+          false,
+        );
+      }
+      throw error;
+    }
+    providerCalls.push({ ...call, startedAt: isoNow() });
+  };
+
   let aiResult;
   try {
     aiResult = await provider.runLegalChat({
@@ -292,9 +324,34 @@ async function executePost(
         statement: memory.statement,
         scope: memory.scope,
       })),
-    }, { signal, onProgress });
+    }, { signal, onProgress, beforeProviderCall });
   } catch (error) {
     const code = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";
+    const completedAt = isoNow();
+    try {
+      for (const call of providerCalls) {
+        await recordProviderUsage({
+          db,
+          environment: providerEnvironment,
+          workspaceId: workspace.id,
+          userId: user.id,
+          feature: "legal_chat",
+          operation: call.provider === "openai" ? "responses" : "messages",
+          provider: call.provider,
+          model: call.model,
+          inputTokens: 0,
+          outputTokens: 0,
+          cachedInputTokens: 0,
+          status: "failed",
+          errorCode: code,
+          startedAt: call.startedAt,
+          completedAt,
+          eventId: `provider_usage_${reservation.runId}_${call.provider}`,
+        });
+      }
+    } catch {
+      // The durable ai_run failure below remains the reconciliation source.
+    }
     await failAiRun({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey, errorCode: code,
@@ -358,6 +415,60 @@ async function executePost(
         ? "Ответ не был сохранён: предыдущий запрос уже был безопасно закрыт. Отправьте вопрос ещё раз."
         : "Javob saqlanmadi: oldingi so‘rov xavfsiz yopilgan. Savolni yana yuboring.",
     }, 409);
+  }
+
+  try {
+    const completedAt = isoNow();
+    for (const call of providerCalls.filter((call) => call.provider !== aiResult.provider)) {
+      await recordProviderUsage({
+        db,
+        environment: providerEnvironment,
+        workspaceId: workspace.id,
+        userId: user.id,
+        feature: "legal_chat",
+        operation: call.provider === "openai" ? "responses" : "messages",
+        provider: call.provider,
+        model: call.model,
+        inputTokens: 0,
+        outputTokens: 0,
+        cachedInputTokens: 0,
+        status: "failed",
+        errorCode: "FALLBACK_USED",
+        startedAt: call.startedAt,
+        completedAt,
+        eventId: `provider_usage_${reservation.runId}_${call.provider}`,
+      });
+    }
+    const successfulCall = [...providerCalls].reverse().find((call) => call.provider === aiResult.provider);
+    await recordProviderUsage({
+      db,
+      environment: providerEnvironment,
+      workspaceId: workspace.id,
+      userId: user.id,
+      feature: "legal_chat",
+      operation: aiResult.provider === "openai" ? "responses" : "messages",
+      provider: aiResult.provider,
+      model: aiResult.model,
+      providerRequestId: aiResult.providerResponseId,
+      inputTokens: aiResult.usage.inputTokens,
+      outputTokens: aiResult.usage.outputTokens,
+      cachedInputTokens: aiResult.usage.cachedInputTokens,
+      status: "succeeded",
+      startedAt: successfulCall?.startedAt ?? completedAt,
+      completedAt,
+      eventId: `provider_usage_${reservation.runId}_${aiResult.provider}`,
+    });
+  } catch {
+    await failAiRun({
+      db, runId: reservation.runId, ledgerId: reservation.ledgerId,
+      workspaceId: workspace.id, userId: user.id, idempotencyKey,
+      errorCode: "PROVIDER_USAGE_PERSISTENCE_FAILED",
+    });
+    return response({
+      code: "PROVIDER_UNAVAILABLE",
+      correlationId: reservation.correlationId,
+      error: localizedProviderError(locale, "PROVIDER_UNAVAILABLE"),
+    }, 503);
   }
   const userMessageId = crypto.randomUUID();
   const assistantMessageId = crypto.randomUUID();
@@ -578,6 +689,7 @@ function localizedProviderError(locale: "ru" | "uz", code: string) {
     INVALID_AI_OUTPUT: "AI вернул результат, который не прошёл проверку структуры. Лимит не списан.",
     AI_REFUSED: "Запрос не был обработан AI. Лимит не списан.",
     PROVIDER_UNAVAILABLE: "AI-провайдер временно недоступен. Лимит не списан.",
+    PROVIDER_CIRCUIT_OPEN: "AI временно остановлен системой контроля расходов. Лимит не списан.",
     AI_CANCELLED: "Генерация остановлена. Лимит не списан.",
   };
   const uz: Record<string, string> = {
@@ -585,6 +697,7 @@ function localizedProviderError(locale: "ru" | "uz", code: string) {
     INVALID_AI_OUTPUT: "AI natijasi tuzilma tekshiruvidan o‘tmadi. Limit yechilmadi.",
     AI_REFUSED: "So‘rov AI tomonidan qayta ishlanmadi. Limit yechilmadi.",
     PROVIDER_UNAVAILABLE: "AI-provayder vaqtincha ishlamayapti. Limit yechilmadi.",
+    PROVIDER_CIRCUIT_OPEN: "AI xarajat nazorati tomonidan vaqtincha to‘xtatildi. Limit yechilmadi.",
     AI_CANCELLED: "Javob yaratish to‘xtatildi. Limit yechilmadi.",
   };
   return (locale === "ru" ? ru : uz)[code] || (locale === "ru" ? ru.PROVIDER_UNAVAILABLE : uz.PROVIDER_UNAVAILABLE);
@@ -597,5 +710,6 @@ function publicAiFailureCode(code: string) {
     "INVALID_AI_OUTPUT",
     "PROVIDER_TIMEOUT",
     "PROVIDER_UNAVAILABLE",
+    "PROVIDER_CIRCUIT_OPEN",
   ]).has(code) ? code : "AI_RUN_FAILED";
 }

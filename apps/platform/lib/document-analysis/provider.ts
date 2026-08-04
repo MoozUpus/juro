@@ -41,17 +41,23 @@ export function documentAnalysisProviderStatus() {
 
 export async function runDocumentAnalysis(
   input: DocumentAnalysisProviderRequest,
+  options: {
+    beforeProviderCall?: (input: {
+      provider: "openai" | "anthropic";
+      model: string;
+    }) => void | Promise<void>;
+  } = {},
 ): Promise<DocumentAnalysisProviderResult> {
   const status = documentAnalysisProviderStatus();
   if (!status.configured) {
     throw new AiUnavailableError("Провайдер анализа документов не подключён.", "PROVIDER_UNAVAILABLE", false);
   }
-  if (status.provider === "openai") return runOpenAiDocumentAnalysis(input);
+  if (status.provider === "openai") return runOpenAiDocumentAnalysis(input, options);
   try {
-    return await runAnthropicDocumentAnalysis(input);
+    return await runAnthropicDocumentAnalysis(input, options);
   } catch (error) {
     if (!hasAiConfiguration() || !documentFallbackEligible(error)) throw error;
-    const fallback = await runOpenAiDocumentAnalysis(input);
+    const fallback = await runOpenAiDocumentAnalysis(input, options);
     return { ...fallback, fallbackFromProvider: "anthropic" };
   }
 }
@@ -59,32 +65,42 @@ export async function runDocumentAnalysis(
 export function documentFallbackEligible(error: unknown): boolean {
   return error instanceof AiUnavailableError
     && error.code !== "AI_REFUSED"
-    && (error.retryable || error.code === "INVALID_AI_OUTPUT");
+    && (error.retryable || error.code === "INVALID_AI_OUTPUT" || error.code === "PROVIDER_CIRCUIT_OPEN");
 }
 
-async function runAnthropicDocumentAnalysis(input: DocumentAnalysisProviderRequest) {
+async function runAnthropicDocumentAnalysis(
+  input: DocumentAnalysisProviderRequest,
+  options: { beforeProviderCall?: (input: { provider: "openai" | "anthropic"; model: string }) => void | Promise<void> },
+) {
   const env = runtimeEnv();
+  const model = env.ANTHROPIC_DOCUMENT_MODEL || env.ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
+  await options.beforeProviderCall?.({ provider: "anthropic", model });
   const result = await callAnthropicStructured<DocumentAnalysisResult>({
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
     timeoutMs: input.mode === "expert" ? 90_000 : 60_000,
     requestId: input.requestId,
-    model: env.ANTHROPIC_DOCUMENT_MODEL || env.ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL,
+    model,
     instructions: documentAnalysisInstructions(input.locale),
     input: providerInput(input),
   });
   return constrainResult(result, input);
 }
 
-async function runOpenAiDocumentAnalysis(input: DocumentAnalysisProviderRequest) {
+async function runOpenAiDocumentAnalysis(
+  input: DocumentAnalysisProviderRequest,
+  options: { beforeProviderCall?: (input: { provider: "openai" | "anthropic"; model: string }) => void | Promise<void> },
+) {
   const env = runtimeEnv();
+  const model = env.OPENAI_DEEP_MODEL || env.OPENAI_CHAT_MODEL || env.OPENAI_MODEL || "gpt-5.6-sol";
+  await options.beforeProviderCall?.({ provider: "openai", model });
   const result = await callOpenAiStructured<DocumentAnalysisResult>({
     schemaName: "juro_document_analysis_result",
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
     timeoutMs: input.mode === "expert" ? 90_000 : 60_000,
     requestId: input.requestId,
-    model: env.OPENAI_DEEP_MODEL || env.OPENAI_CHAT_MODEL || env.OPENAI_MODEL || "gpt-5.6-sol",
+    model,
     instructions: documentAnalysisInstructions(input.locale),
     input: providerInput(input),
   });

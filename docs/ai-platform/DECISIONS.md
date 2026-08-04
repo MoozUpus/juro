@@ -255,3 +255,18 @@ workspace and moderation metadata. Notifications contain generic state text,
 not the review or reply body; a moderation result is stored in the lawyer's own
 default workspace, never in the client's workspace. This closes the product response path without
 letting the lawyer self-publish or exposing private review context.
+
+## D-113 — cost thresholds are versioned policy and circuit recovery is explicit
+
+Status: accepted and locally verified
+Date: 2026-08-04
+
+Provider pricing and cost/failure thresholds are administrator-entered,
+effective-dated policy rather than hard-coded product constants. The server
+checks an open circuit immediately before covered OpenAI or Anthropic transport,
+and an automatic threshold crossing atomically records one immutable event plus
+one identifiers-only operational alert. Automatic evaluation may open but never
+silently close a circuit; recovery requires a fresh-MFA operations action with
+audit evidence. This creates an emergency stop without pretending D1 and the
+external provider share a distributed transaction. Billing reconciliation and
+remote alert/circuit rehearsal remain release gates.

@@ -1,5 +1,14 @@
 # JURO known limitations checkpoint
 
+> Provider cost-control checkpoint — 2026-08-04: local migration `0082` adds
+> versioned administrator thresholds, provider circuits, immutable transition
+> evidence and identifiers-only operational-alert outbox delivery. Chat and
+> document-analysis transports are guarded and focused tests pass. Staging is
+> still through `0068`: no remote threshold crossing, real Resend alert,
+> provider-billing reconciliation or operator circuit rehearsal is claimed.
+> Provider call sites added later must explicitly adopt the guard; this is not
+> a global network-level kill switch. Production is unchanged.
+
 > Lawyer-review reply checkpoint — 2026-08-04: a versioned lawyer-owned reply,
 > separate fresh-MFA staff moderation queue, conservative PII screen, generic
 > in-app notifications, audit evidence and approved-only public projection are

@@ -28,6 +28,7 @@ export interface BuilderRuntimeEnv {
   AI_PROVIDER_API_KEY?: string;
   RESEND_API_KEY?: string;
   EMAIL_FROM?: string;
+  OPERATIONS_ALERT_EMAIL?: string;
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   GUEST_AI_ENABLED?: string;

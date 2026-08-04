@@ -55,6 +55,10 @@ export type LegalAiProgress =
 export type LegalAiRunOptions = {
   signal?: AbortSignal;
   onProgress?: (event: LegalAiProgress) => void | Promise<void>;
+  beforeProviderCall?: (input: {
+    provider: "openai" | "anthropic";
+    model: string;
+  }) => void | Promise<void>;
 };
 
 export type AiProviderStatus = {
@@ -76,13 +80,15 @@ class OpenAiLegalProvider implements LegalAiProvider {
     const usableSourceIds = new Set(
       input.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id),
     );
+    const model = modelForRequest(input.reasoningMode);
+    await options.beforeProviderCall?.({ provider: "openai", model });
     const result = await callOpenAiStructured<LegalChatResponse>({
       schemaName: "juro_legal_chat_response",
       schema: legalChatJsonSchema,
       parse: parseLegalChatResponse,
       timeoutMs: input.reasoningMode === "deep" ? 75_000 : 45_000,
       requestId: input.requestId,
-      model: modelForRequest(input.reasoningMode),
+      model,
       signal: options.signal,
       onProgress: options.onProgress,
       safetyIdentifier: input.safetyIdentifier,

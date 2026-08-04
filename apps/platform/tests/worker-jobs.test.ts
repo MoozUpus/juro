@@ -1232,6 +1232,14 @@ test("due in-app task reminders create one inbox notification and remain retry-s
   } finally {
     sqlite.close();
   }
+  assert.equal(
+    jobEnvelopeSchema.safeParse({
+      ...envelope("email.send"),
+      workspaceId: undefined,
+      subjectId: "operational_alert_id",
+    }).success,
+    true,
+  );
 });
 
 test("notification consumer does not reveal or deliver a reminder across workspaces", async () => {
