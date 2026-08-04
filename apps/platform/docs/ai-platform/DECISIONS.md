@@ -2884,3 +2884,22 @@ closed for retry. Account closure inventories unfinished intent keys. Bucket
 listing is never treated as an authorization source. Migration 0073 and runtime
 remain local until a fresh staging backup, ordered migrations and deploy are
 separately authorized.
+
+## D-139 — Analysis-to-case state is an event-projected tenant boundary
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+An analysis may start independently, start inside a case, move to another active
+case or be detached. A client-supplied `caseId` is only a locator: the server
+resolves the authenticated workspace and exact analysis owner before accepting
+it. Migration `0074` stores the current projection on `document_analyses` but
+permits changes only through an append-only `analysis_case_link_events` row.
+
+D1 triggers verify the old projection, monotonic mutation version, target-case
+workspace and active state, then atomically project the new case and append
+case/workspace audit evidence. Unique version and scoped idempotency indexes
+fence stale or replayed writers. Historical tenant/user/case identifiers are
+guarded at insert rather than connected by sibling foreign keys; this avoids
+SQLite cascade-order hazards while the owning analysis foreign key preserves
+lifecycle. No analysis text, filename or legal result is copied into audit.

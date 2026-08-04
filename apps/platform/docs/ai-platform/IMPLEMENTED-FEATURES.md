@@ -717,3 +717,19 @@ metadata-only audit event. Account deletion includes unfinished intents.
 Synchronized local concurrency proves one corrected-version winner and one
 reclaimed orphan while preserving both attached objects. Migration 0073 and the
 matching Worker remain local until a separately authorized staging cycle.
+
+## Phase 5/6 — document analysis inside a case (local candidate)
+
+A secure analysis upload can now begin inside a server-validated active case,
+and an existing owner analysis can be moved or detached through a dedicated
+authenticated/CSRF-protected endpoint. The RU/UZ review surface preserves case
+context in the URL, offers real workspace cases, and shows linked analyses in the
+canonical case `analyses` tab alongside comparisons.
+
+Migration `0074` makes the relation durable and race-safe: the current projection
+is trigger-owned, each change has one immutable tenant-bound event, stale writers
+cannot overwrite a winner, scoped retries are idempotent, and link/unlink activity
+plus metadata-only audit are automatic. Focused tests pass upload-time linking,
+move, unlink, cross-tenant denial, stale writer, direct mutation, route boundary
+and account deletion. The migration is applied only to local development;
+staging and production are unchanged.

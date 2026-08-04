@@ -7,6 +7,7 @@ export type SecureDocumentUploadResult = {
     sizeBytes: number;
     status: string;
     errorCode?: string | null;
+    caseId?: string | null;
   };
   message?: string;
   code?: string;
@@ -22,6 +23,7 @@ export async function uploadDocumentForAnalysis(
   file: File,
   locale: "ru" | "uz",
   onProgress?: (progress: SecureDocumentUploadProgress) => void,
+  caseId?: string | null,
 ): Promise<SecureDocumentUploadResult> {
   if (file.size <= 0 || file.size > 50 * 1024 * 1024) {
     throw new Error(locale === "ru" ? "Размер файла должен быть от 1 байта до 50 МБ." : "Fayl hajmi 1 baytdan 50 MB gacha bo‘lishi kerak.");
@@ -43,6 +45,7 @@ export async function uploadDocumentForAnalysis(
       sha256,
       locale,
       mode: "quick",
+      caseId: caseId || null,
       consent: true,
     }),
   });

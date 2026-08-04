@@ -19,6 +19,7 @@ export const documentAnalysisUploadIntentSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/i).transform((value) => value.toLowerCase()),
   locale: z.enum(["ru", "uz"]),
   mode: z.enum(["quick", "full", "expert"]).default("quick"),
+  caseId: z.string().uuid().nullable().optional().default(null),
   consent: z.literal(true),
 }).strict();
 
@@ -35,6 +36,7 @@ export type DocumentAnalysisUploadRecord = {
   fileKind: string;
   status: string;
   errorCode: string | null;
+  caseId: string | null;
 };
 
 export class DocumentAnalysisUploadError extends Error {
@@ -44,6 +46,7 @@ export class DocumentAnalysisUploadError extends Error {
       | "INVALID_IDEMPOTENCY_KEY"
       | "IDEMPOTENCY_CONFLICT"
       | "UPLOAD_NOT_FOUND"
+      | "CASE_UNAVAILABLE"
       | "UPLOAD_STATE_CONFLICT",
     message: string,
     public readonly status: number,
@@ -94,6 +97,7 @@ export async function hashUploadIntent(intent: DocumentAnalysisUploadIntent): Pr
     sha256: intent.sha256,
     locale: intent.locale,
     mode: intent.mode,
+    caseId: intent.caseId,
     consent: intent.consent,
   });
   return sha256Hex(new TextEncoder().encode(canonical));
@@ -171,6 +175,21 @@ export async function initializeDocumentAnalysisUpload(input: {
          (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,created_at,updated_at)
          VALUES (?,?,?,?,'initiated',?,NULL,'2026-07-30',?,?)`,
       ).bind(analysisId, input.workspaceId, input.userId, fileId, JSON.stringify({ mode: input.intent.mode, locale: input.intent.locale }), now, now),
+      ...(input.intent.caseId ? [input.db.prepare(
+        `INSERT INTO analysis_case_link_events
+         (id,analysis_id,workspace_id,owner_user_id,actor_user_id,from_case_id,to_case_id,mutation_version,idempotency_key,request_hash,created_at)
+         VALUES (?,?,?,?,?,NULL,?,1,?,?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        analysisId,
+        input.workspaceId,
+        input.userId,
+        input.userId,
+        input.intent.caseId,
+        `upload:${input.idempotencyKey}`,
+        input.requestHash,
+        now,
+      )] : []),
       input.db.prepare(
         `INSERT INTO consents (id,user_id,workspace_id,type,version,scope_json,granted_at)
          VALUES (?,?,?,'document_analysis','2026-07-30',?,?)`,
@@ -178,7 +197,7 @@ export async function initializeDocumentAnalysisUpload(input: {
         crypto.randomUUID(),
         input.userId,
         input.workspaceId,
-        JSON.stringify({ analysisId, fileId, fileName: input.intent.fileName, mode: input.intent.mode }),
+        JSON.stringify({ analysisId, fileId, fileName: input.intent.fileName, mode: input.intent.mode, caseId: input.intent.caseId }),
         now,
       ),
       input.db.prepare(
@@ -190,7 +209,7 @@ export async function initializeDocumentAnalysisUpload(input: {
         input.workspaceId,
         input.userId,
         analysisId,
-        JSON.stringify({ mimeType: input.intent.mimeType, sizeBytes: input.intent.sizeBytes, mode: input.intent.mode }),
+        JSON.stringify({ mimeType: input.intent.mimeType, sizeBytes: input.intent.sizeBytes, mode: input.intent.mode, caseId: input.intent.caseId }),
         now,
       ),
       input.db.prepare(
@@ -216,6 +235,7 @@ export async function initializeDocumentAnalysisUpload(input: {
       fileKind: "analysis_upload_pending",
       status: "initiated",
       errorCode: null,
+      caseId: input.intent.caseId,
     },
   };
 }
@@ -227,7 +247,7 @@ export async function documentAnalysisUploadForUser(
   userId: string,
 ): Promise<DocumentAnalysisUploadRecord> {
   const record = await db.prepare(
-    `SELECT a.id AS analysisId,a.status,a.error_code AS errorCode,
+    `SELECT a.id AS analysisId,a.status,a.error_code AS errorCode,a.case_id AS caseId,
       f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
       f.sha256,f.r2_key AS r2Key,f.kind AS fileKind
      FROM document_analyses a

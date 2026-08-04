@@ -541,3 +541,14 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 - A fresh private staging backup/restore, migrations `0069`–`0073`, authenticated
   RU/UZ browser interaction, keyboard/axe, mobile/200% zoom and visual checks are
   still required before this capability can be claimed in staging.
+
+## Analysis-to-case link open gates
+
+- Migration `0074` and its matching Worker are local only. Protected staging
+  still cannot persist or display the new standalone-analysis case projection.
+- Local evidence covers upload-time linking, later move/unlink, tenant denial,
+  stale-writer fencing, idempotency, immutable evidence, account cascade and the
+  canonical case aggregation/UI contracts.
+- Migrations `0069`–`0074` require a fresh authorized staging backup/restore and
+  ordered apply before deployment. Authenticated RU/UZ browser, keyboard, axe,
+  mobile/200% zoom and real provider-generated analysis traversal remain open.

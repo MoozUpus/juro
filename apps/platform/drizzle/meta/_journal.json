@@ -519,6 +519,13 @@
       "when": 1785902400000,
       "tag": "0073_analysis_version_object_writes",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "6",
+      "when": 1785906000000,
+      "tag": "0074_analysis_case_links",
+      "breakpoints": true
     }
   ]
 }

@@ -2607,12 +2607,44 @@ export const documentAnalyses = sqliteTable("document_analyses", {
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
   uploadedFileId: text("uploaded_file_id").notNull().references(() => documentFiles.id, { onDelete: "cascade" }),
+  caseId: text("case_id").references(() => cases.id, { onDelete: "set null" }),
+  caseLinkRevision: integer("case_link_revision").notNull().default(0),
+  caseLinkedByUserId: text("case_linked_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
   status: text("status").notNull(),
   summaryJson: text("summary_json"),
   errorCode: text("error_code"),
   consentVersion: text("consent_version").notNull(),
   ...timestamps,
-}, (table) => [index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt), uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId)]);
+}, (table) => [
+  index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt),
+  index("document_analyses_case_idx").on(table.workspaceId, table.caseId, table.updatedAt),
+  uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId),
+]);
+
+export const analysisCaseLinkEvents = sqliteTable("analysis_case_link_events", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  // The analysis FK owns lifecycle. Tenant/user/case IDs are immutable evidence
+  // proved by the insert guard; extra sibling FKs would make account cascades
+  // order-dependent in SQLite.
+  workspaceId: text("workspace_id").notNull(),
+  ownerUserId: text("owner_user_id").notNull(),
+  actorUserId: text("actor_user_id").notNull(),
+  fromCaseId: text("from_case_id"),
+  toCaseId: text("to_case_id"),
+  mutationVersion: integer("mutation_version").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  requestHash: text("request_hash").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("analysis_case_link_events_version_uidx").on(table.analysisId, table.mutationVersion),
+  uniqueIndex("analysis_case_link_events_idempotency_uidx").on(table.workspaceId, table.ownerUserId, table.idempotencyKey),
+  index("analysis_case_link_events_case_idx").on(table.workspaceId, table.toCaseId, table.createdAt),
+  check("analysis_case_link_events_change_check", sql`NOT (${table.fromCaseId} IS ${table.toCaseId})`),
+  check("analysis_case_link_events_version_check", sql`${table.mutationVersion} >= 1`),
+  check("analysis_case_link_events_hash_check", sql`length(${table.requestHash}) = 64`),
+  check("analysis_case_link_events_idempotency_check", sql`length(${table.idempotencyKey}) BETWEEN 16 AND 180`),
+]);
 
 export const analysisDocumentVersions = sqliteTable("analysis_document_versions", {
   id: text("id").primaryKey(),

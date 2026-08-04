@@ -1096,3 +1096,21 @@ source mismatch denial, lifecycle guards and foreign-key integrity. Migration
 0071 has not been applied to staging or production. Staging requires a fresh
 verified private D1 backup, migrations 0069–0071 in order, and matching Worker
 deployment under a new explicit authorization.
+
+## Migration 0074 — analysis-to-case links (local candidate)
+
+`0074_analysis_case_links.sql` is expand-only. It adds the nullable current case
+projection and monotonic revision to `document_analyses`, plus append-only
+`analysis_case_link_events`. Triggers reject direct projection changes,
+cross-workspace/archived targets, stale writers, actor substitution, mutation or
+deletion of retained evidence. Successful events atomically update the analysis
+projection and append metadata-only case/workspace audit records.
+
+The event has one lifecycle FK to its owning analysis. Workspace, actor and case
+identifiers are proven against that analysis and target case by the insert guard
+but intentionally are not sibling FKs, because simultaneous user/workspace
+account cascades otherwise become order-dependent in SQLite. Local clean-schema
+application produces 176 application tables and 341 foreign keys; `quick_check`,
+`foreign_key_check`, account cascade and direct-mutation guards pass. Wrangler
+applied 17 statements only to local `juro-development`; no local migrations are
+pending. Staging and production remain unchanged.

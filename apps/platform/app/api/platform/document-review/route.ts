@@ -10,8 +10,10 @@ function response(body: unknown, status = 200) {
 export const GET = withApiErrors(async function GET() {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
-  const rows = await requireD1().prepare(
-    `SELECT a.id,a.status,a.summary_json AS summaryJson,a.error_code AS errorCode,a.created_at AS createdAt,a.updated_at AS updatedAt,
+  const db = requireD1();
+  const [analysisRows, caseRows] = await db.batch([
+    db.prepare(
+    `SELECT a.id,a.status,a.case_id AS caseId,a.summary_json AS summaryJson,a.error_code AS errorCode,a.created_at AS createdAt,a.updated_at AS updatedAt,
       f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
       (SELECT json_group_array(json_object('id',r.id,'level',r.level,'title',r.title,'description',r.description,'excerpt',r.excerpt,'confidencePercent',r.confidence_percent,'riskType',r.risk_type,'clause',r.clause,'page',r.page,'recommendation',r.recommendation,'proposedWording',r.proposed_wording,'legalBasisSourceIds',json(r.legal_basis_source_ids_json)))
        FROM document_risks r WHERE r.analysis_id=a.id) AS risksJson,
@@ -27,13 +29,20 @@ export const GET = withApiErrors(async function GET() {
        ) e) AS exportsJson
      FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
      WHERE a.workspace_id=? AND a.owner_user_id=? ORDER BY a.created_at DESC LIMIT 50`,
-  ).bind(workspace.id, user.id).all();
+    ).bind(workspace.id, user.id),
+    db.prepare(
+      `SELECT id,title,status,updated_at AS updatedAt
+       FROM cases WHERE workspace_id=? AND archived_at IS NULL
+       ORDER BY updated_at DESC,id LIMIT 100`,
+    ).bind(workspace.id),
+  ]);
   return response({
-    analyses: rows.results.map(row => {
+    analyses: analysisRows.results.map(row => {
       const item = row as Record<string, unknown>;
       const { summaryJson, risksJson, exportsJson, ...publicItem } = item;
       return { ...publicItem, summary: parseJson(String(summaryJson || "{}"), null), risks: parseJson(String(risksJson || "[]"), []), exports: parseJson(String(exportsJson || "[]"), []) };
     }),
+    cases: caseRows.results,
   });
 });
 

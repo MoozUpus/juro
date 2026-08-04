@@ -94,3 +94,18 @@ call the bounded deep verifier before it records quarantine success.
 - Account deletion must inventory pending intent keys as well as attached version
   keys. Staging evidence remains gated on backup/restore, migrations 0069–0073,
   deploy, protected D1/R2 smoke and authenticated browser regression.
+
+## Analysis-to-case continuity checkpoint — 2026-08-04
+
+- Upload initiation may carry only a nullable UUID `caseId`; the API must resolve
+  an active target in the authenticated workspace before the D1 batch.
+- Later link/move/unlink operations require session, CSRF, strict JSON and a
+  scoped idempotency key; workspace/user identifiers never come from the body.
+- D1 must reject a foreign/archived target, stale projection version, direct
+  projection update, evidence mutation/deletion and reused key with another
+  request hash.
+- Link, move and unlink create exact case activity and metadata-only workspace
+  audit evidence. Account deletion must still cascade with zero FK violations.
+- RU/UZ UI must preserve `caseId` across review/compare tabs, preselect a valid
+  case, allow explicit detach and show linked analyses in the canonical case
+  route. Staging browser/keyboard/axe/mobile evidence remains separately gated.

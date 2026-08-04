@@ -25,6 +25,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return response({ code: "INVALID_CONTENT_TYPE", error: "Инициализация загрузки принимает только JSON." }, 415);
     }
     const intent = parseDocumentAnalysisUploadIntent(await request.json());
+    if (intent.caseId) {
+      const targetCase = await requireD1().prepare(
+        "SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1",
+      ).bind(intent.caseId, workspace.id).first<{ id: string }>();
+      if (!targetCase) {
+        throw new DocumentAnalysisUploadError("CASE_UNAVAILABLE", "Дело недоступно.", 404);
+      }
+    }
     const idempotencyKey = parseUploadIdempotencyKey(request.headers.get("idempotency-key"));
     const result = await initializeDocumentAnalysisUpload({
       db: requireD1(),
@@ -58,5 +66,6 @@ function publicRecord(record: Awaited<ReturnType<typeof initializeDocumentAnalys
     sizeBytes: record.sizeBytes,
     status: record.status,
     errorCode: record.errorCode,
+    caseId: record.caseId,
   };
 }

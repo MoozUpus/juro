@@ -124,5 +124,6 @@ function publicRecord(record: Awaited<ReturnType<typeof documentAnalysisUploadFo
     sizeBytes: record.sizeBytes,
     status: record.status,
     errorCode: record.errorCode,
+    caseId: record.caseId,
   };
 }

@@ -20,7 +20,7 @@ export const GET = withApiErrors(async function GET(
   ).bind(caseId, workspace.id).first<{ id: string }>();
   if (!owned) return response({ error: "Дело недоступно.", code: "CASE_UNAVAILABLE" }, 404);
 
-  const [documents, events, conversations, comparisons, sources, participants, lawyerRequests] = await db.batch([
+  const [documents, events, conversations, analyses, comparisons, sources, participants, lawyerRequests] = await db.batch([
     db.prepare(
       "SELECT id,title,status,language,plan_step_id AS planStepId,updated_at AS updatedAt FROM documents WHERE workspace_id=? AND case_id=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 20",
     ).bind(workspace.id, caseId),
@@ -33,6 +33,15 @@ export const GET = withApiErrors(async function GET(
        WHERE workspace_id=? AND owner_user_id=? AND case_id=?
        ORDER BY updated_at DESC LIMIT 40`,
     ).bind(workspace.id, user.id, caseId),
+    db.prepare(
+      `SELECT a.id,a.status,a.error_code AS errorCode,a.updated_at AS updatedAt,
+        f.file_name AS fileName,f.mime_type AS mimeType
+       FROM document_analyses a
+       JOIN document_files f ON f.id=a.uploaded_file_id
+       WHERE a.workspace_id=? AND a.owner_user_id=? AND a.case_id=?
+         AND f.workspace_id=? AND f.owner_user_id=? AND f.archived_at IS NULL
+       ORDER BY a.updated_at DESC LIMIT 40`,
+    ).bind(workspace.id, user.id, caseId, workspace.id, user.id),
     db.prepare(
       `SELECT id,status,stage,overall_risk AS overallRisk,error_code AS errorCode,updated_at AS updatedAt
        FROM document_comparisons
@@ -75,6 +84,7 @@ export const GET = withApiErrors(async function GET(
     })),
     conversations: conversations.results,
     comparisons: comparisons.results,
+    analyses: analyses.results,
     sources: sources.results,
     participants: participants.results.map((participant) => {
       const row = participant as Record<string, unknown>;
