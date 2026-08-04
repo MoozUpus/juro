@@ -45,3 +45,15 @@ instead of omitting the domain silently. Migration `0062` is not yet deployed.
 The audit surface does not select or return metadata JSON, IP hashes, names,
 emails, document/chat text, provider payloads, queue bodies, message IDs,
 idempotency keys or chain hashes. Migration `0086` is local-only.
+
+## AI legal quality review — local candidate
+
+| Data | Storage | Protection | Scope and disclosure |
+|---|---|---|---|
+| queue metadata | computed from `ai_feedback`/`ai_runs` | bounded POST, legal-reviewer capability, fresh MFA | no question, answer, structured output or feedback comment |
+| viewed user question/answer/comment | existing tenant content | explicit separately audited view; private/no-store response | assigned legal reviewer only |
+| reviewer notes, corrected/golden answer | D1 `ai_quality_review_contents` | immutable, cascades when feedback is deleted | legal quality operations only |
+| access/decision evidence | D1 `ai_quality_review_events` | immutable hash chain and live-role/session D1 guard | hashes, classification, opaque IDs and time; no legal text |
+
+Deleting feedback removes review content but retains content hashes and access
+classification as audit evidence. Migration `0087` is local-only.

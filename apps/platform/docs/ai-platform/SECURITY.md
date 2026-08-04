@@ -149,3 +149,14 @@ Verification walks predecessor relationships so equal timestamps cannot reorder
 the chain. Corruption, branching, missing genesis or an invalid hash fails
 closed. CSV cells beginning with spreadsheet formula markers are prefixed before
 download. Migration `0086` and authenticated staging probes remain pending.
+
+## AI quality-review access boundary — local candidate
+
+Only `legal_reviewer` has `ai.quality.review`; administrator and support roles
+do not inherit it. Query, content view and resolution use a POST-only CSRF
+boundary with active TOTP and 15-minute MFA. D1 repeats the role/session/device/
+TOTP check before accepting an event. Queue projection is metadata-only; content
+is returned only after a view event is appended. Decision versions bind the
+current feedback timestamp and reject stale writes. The per-actor SHA-256 chain
+and immutable triggers fail closed on mutation, branching or forged roles.
+Migration `0087` and authenticated staging probes remain pending.

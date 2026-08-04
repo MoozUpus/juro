@@ -1263,3 +1263,21 @@ Wrangler 4.92.0 executed 14 statements only against local `juro-development`; a
 repeat local list reports no pending migration. Staging and production remain
 unchanged pending a fresh verified private staging backup, ordered migrations
 `0069`-`0076` and separately authorized deploy.
+
+## Migration 0087 — AI legal quality review (local candidate)
+
+`0087_ai_quality_reviews.sql` additively creates deletion-coupled review content
+and retained metadata-only access/decision evidence. D1 validates the exact live
+legal-reviewer assignment, session, active TOTP, 15-minute MFA window, chain
+head, current feedback timestamp and monotonic decision version. Evidence and
+content rows are immutable; deleting user feedback cascades corrected/golden
+text while retaining hashes/classification/opaque IDs for access audit.
+
+Local SQLite tests pass clean application, foreign-key integrity, multi-version
+decisions, stale-write rejection, forged-role denial, immutable triggers,
+content cascade and hash-chain tamper detection. Staging remains through `0078`;
+production is unchanged. Before staging, take and isolated-restore a fresh full
+private backup, apply all pending migrations in ledger order through `0087`,
+run postflight integrity/trigger inspection, deploy the exact Worker and perform
+authenticated positive and negative capability/MFA/content-minimization probes.
+Rollback is application-first; retained evidence must not be dropped.

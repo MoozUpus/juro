@@ -110,3 +110,14 @@ Staging evidence:
 5. Worker version `d22705e4-446a-47f1-825e-b77f1135504d` was deployed with the repository staging script. Anonymous Access-boundary smokes passed; authenticated voice E2E remains a separate gate.
 
 Rollback is application-first: disable or roll back the Worker to the previous version. Because `0066` is expand-only, the unused table may remain safely during incident recovery. Do not drop it in the same release; data removal requires a later reviewed contract migration and a fresh backup.
+
+## 0087 — AI legal quality review
+
+Status: additive local candidate; protected staging is through `0078` and
+production is unchanged. The migration adds immutable per-reviewer query/view/
+resolve evidence and deletion-coupled corrected/golden content. D1 requires an
+active legal-reviewer assignment, live TOTP-backed session, 15-minute MFA,
+monotonic versions and the current feedback timestamp. Staging requires a fresh
+private backup with isolated restore, ordered pending migrations, postflight and
+authenticated positive/negative rehearsal before the matching Worker deploy is
+claimed.

@@ -3019,3 +3019,21 @@ immutable access-evidence event containing filter/result hashes and count. The
 per-actor SHA-256 chain is traversed by predecessor relation, not timestamp
 ordering, and corruption fails closed. Migration `0086` and the matching route
 remain local until a separately authorized backup/migration/deploy cycle.
+
+## D-146 — AI legal review separates access evidence from review content
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-05
+
+The quality queue returns technical metadata only. A legal reviewer must perform
+an explicit second action before question, answer, structured output or user
+comment is returned; that access is recorded before the response. Each decision
+is an append-only version and never changes the original AI message or feedback.
+
+Only `legal_reviewer` receives `ai.quality.review`. Application and D1 independently
+require active TOTP, a live session and MFA no older than 15 minutes. Per-actor
+SHA-256 evidence covers query, view and resolve actions; chain corruption fails
+closed. Corrected and golden answers stay in deletion-coupled content storage.
+Retained access evidence stores hashes, classification and opaque IDs only, so
+account/content deletion does not retain legal text. Migration `0087` remains
+local until a separately authorized backup, ordered migration and deploy cycle.

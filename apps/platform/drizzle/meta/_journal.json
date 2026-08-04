@@ -610,6 +610,13 @@
       "when": 1785949200000,
       "tag": "0086_platform_audit_access",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "6",
+      "when": 1785952800000,
+      "tag": "0087_ai_quality_reviews",
+      "breakpoints": true
     }
   ]
 }

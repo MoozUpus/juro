@@ -954,3 +954,19 @@ cover safe projection, query/export chaining, immutable triggers, forged support
 denial, corruption fail-closed behavior, strict filters and CSV formula
 neutralization. Migration `0086`, authenticated browser QA and staging deploy
 remain separately gated; production is unchanged.
+
+## AI legal quality-review queue (local candidate)
+
+Migration `0087` adds deletion-coupled review content and retained, immutable
+access/decision evidence. The RU/UZ `/:locale/admin/ai-quality` surface lists
+only feedback/run metadata, records a separate audited view before revealing
+question/answer/comment content, and appends versioned classifications,
+reviewer notes, optional corrected answers and optional golden answers.
+
+The POST-only API requires `ai.quality.review`, active TOTP, MFA within 15
+minutes and CSRF. D1 independently proves the live `legal_reviewer` assignment,
+session and chain head. Focused tests pass metadata minimization, explicit view,
+multi-version resolution, stale feedback detection, deletion retention, forged
+role rejection, immutable triggers, tamper detection and route boundaries.
+Migration `0087`, authenticated browser QA and staging deploy remain separately
+gated; staging is through `0078` and production is unchanged.

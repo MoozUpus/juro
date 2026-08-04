@@ -184,6 +184,18 @@ test("platform staff roles are distinct from workspace roles and grant no conten
     true,
   );
   assert.equal(
+    platformStaffRoleAllows("legal_reviewer", "ai.quality.review"),
+    true,
+  );
+  assert.equal(
+    platformStaffRoleAllows("administrator", "ai.quality.review"),
+    false,
+  );
+  assert.equal(
+    platformStaffRoleAllows("support", "ai.quality.review"),
+    false,
+  );
+  assert.equal(
     platformStaffRoleAllows("administrator", "knowledge.base.manage"),
     true,
   );

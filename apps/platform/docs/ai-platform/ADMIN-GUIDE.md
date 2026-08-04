@@ -43,3 +43,18 @@ bodies, email addresses, IP hashes or hidden metadata. Each successful
 query/export displays its access-event ID. A chain-integrity failure is an
 incident: stop using the console, preserve D1 evidence and do not bypass the
 guard with direct SQL.
+
+## AI legal quality review
+
+Local candidate route: `/:locale/admin/ai-quality`. API: `POST
+/api/platform/admin/ai-quality`. Both require the legal-reviewer-only
+`ai.quality.review` capability, active TOTP and MFA verified within 15 minutes.
+
+The initial queue intentionally omits the user's question, answer and comment.
+Open a row only when review is required; this creates access evidence before the
+content is returned. Classify the result and write a concise non-secret legal
+reason. A corrected answer explains the needed correction; a golden answer is a
+separate reusable quality reference, not a replacement for the user-visible
+message. Every save creates another immutable review version. Never edit D1
+rows directly. A stale marker means the user changed feedback after review and
+the current version must be assessed again. Any integrity failure is an incident.

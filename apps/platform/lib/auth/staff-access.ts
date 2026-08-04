@@ -19,6 +19,7 @@ export const platformStaffCapabilities = [
   "knowledge.base.manage",
   "lawyer.reviews.moderate",
   "lawyer.profiles.moderate",
+  "ai.quality.review",
 ] as const;
 
 export type PlatformStaffCapability =
@@ -45,6 +46,7 @@ const roleCapabilities: Readonly<
     "knowledge.base.manage",
     "lawyer.reviews.moderate",
     "lawyer.profiles.moderate",
+    "ai.quality.review",
   ]),
 };
 

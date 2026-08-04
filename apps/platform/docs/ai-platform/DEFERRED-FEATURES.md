@@ -87,3 +87,14 @@ fresh-MFA denial, support-role denial, access-event chain integrity and absence
 of user/provider content in responses and downloads. The console does not make
 the older `workspace_audit_events` table globally tamper-evident; it only gives
 tamper-evident evidence of who accessed the safe projection.
+
+## AI quality-review staging gate
+
+Migration `0087`, `/:locale/admin/ai-quality` and its POST-only API are local.
+Activation requires a fresh private D1 export and isolated restore, ordered
+application of every pending migration through `0087`, exact Worker deployment,
+and authenticated legal-reviewer rehearsal of query, explicit content view and
+versioned resolve. Negative evidence must cover administrator/support denial,
+expired MFA, stale feedback, chain tampering and absence of question/answer text
+from queue responses. Human legal validation of golden answers remains a product
+process; the presence of a stored review is not a legal-quality metric by itself.

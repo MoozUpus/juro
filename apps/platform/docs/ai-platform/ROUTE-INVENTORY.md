@@ -544,3 +544,14 @@ There is no GET endpoint. The API excludes metadata JSON, IP hashes, user text,
 documents, provider payloads, queue bodies, message/idempotency identifiers and
 chain hashes. Migration `0086` is local and changes no canonical user or builder
 route.
+
+### AI legal quality review — local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `/:locale/admin/ai-quality` | RU/UZ metadata queue, explicit answer inspection and versioned legal decision | noindex/not-found for unauthorized users; legal-reviewer capability; active TOTP; fresh MFA |
+| `POST /api/platform/admin/ai-quality` | Strict `query`, `view` or `resolve`; appends immutable access evidence before returning protected content | CSRF, strict Zod, fresh MFA, server actor/session/assignment, D1 role/version/hash-chain guards |
+
+There is no GET endpoint. Queue responses do not contain question, answer,
+structured output or feedback comment. Migration `0087` is local and changes no
+canonical user, AI-lawyer or document-builder route.

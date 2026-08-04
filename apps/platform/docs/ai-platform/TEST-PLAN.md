@@ -161,3 +161,18 @@ call the bounded deep verifier before it records quarantine success.
   busy announcement, success status and recoverable rollback on error.
 - Staging evidence additionally requires private D1 backup/restore, migrations
   `0069`-`0075` in order, postflight checks and authenticated browser/axe passes.
+
+## AI quality-review checkpoint — 2026-08-05
+
+- Queue responses must remain metadata-only even when a user supplied a comment.
+- Full question, answer, structured output and comment require a separate view
+  request whose immutable event is committed before response.
+- Resolve must bind the current feedback timestamp, append a monotonic version
+  and never mutate the original AI message or an older decision.
+- Legal-reviewer access requires active TOTP and 15-minute MFA in both service
+  and D1; administrator/support forgery must fail.
+- Updating feedback must mark the prior decision stale; content deletion must
+  cascade corrected/golden text while retained evidence remains verifiable.
+- Event/content mutation, chain tampering, branching and stale writes fail closed.
+- Route tests require POST-only, CSRF, strict Zod, private/no-store, RU/UZ,
+  noindex, keyboard focus transfer and no HTML injection rendering.
