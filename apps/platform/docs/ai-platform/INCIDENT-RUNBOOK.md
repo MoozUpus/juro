@@ -14,3 +14,20 @@ Current fail-closed controls: unavailable malware scanning leaves files quaranti
 6. Repair and probe the dependency. Re-enable through the same console with a recovery reason, then verify one successful synthetic flow and cost/usage reconciliation.
 
 If chain integrity fails, all covered execution is designed to fail closed. Do not extend or reconstruct the chain in place. Preserve the database, roll back the Worker if needed, and restore only from a verified private backup after the incident owner approves recovery.
+
+## Guarded job redrive (after migration 0085 is activated)
+
+1. Stop the affected feature or Queue producer and prove the dependency has
+   recovered with a synthetic, content-free probe.
+2. Open `/:locale/admin/jobs` through the protected staff session, complete
+   fresh MFA and confirm the environment and redrive-history integrity.
+3. Inspect only the safe job type, error, attempt, subject and correlation IDs.
+   If redrive is absent, do not bypass the server policy or edit D1 directly.
+4. Record a non-sensitive operational reason and submit once. The same job ID,
+   outbox row and idempotency key are reopened; no replacement logical job is
+   created.
+5. Follow safe Worker logs and reconcile exactly one domain effect, one usage/
+   cost result and the terminal job/outbox state. Confirm any configured alert.
+6. If delivery repeats, a lease is active, history integrity fails or the
+   effect cannot be reconciled, pause the Queue, preserve evidence and roll the
+   Worker back. Never delete redrive events to make the console green.

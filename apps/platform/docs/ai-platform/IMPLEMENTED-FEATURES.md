@@ -918,3 +918,22 @@ reconciliation remain unapplied/unverified in staging; production is unchanged.
 Migration `0084` and the matching server service implement per-environment, append-only controls for authenticated and guest AI chat, document-analysis ingestion, new lawyer handoff and voice processing. Server-side checks happen after authentication/tenant resolution where applicable and before provider transport, usage reservation, R2 write, queue creation or lawyer-request persistence. Disabling a feature does not block reading or deleting existing user data.
 
 Every operator transition records a real server-derived actor, bounded non-sensitive reason, monotonic version and SHA-256 predecessor chain. D1 rejects gaps, substitution, update and delete; the service re-verifies integrity before execution and before another transition. The protected RU/UZ `/:locale/admin/feature-flags` surface requires `staff.operations.manage`, fresh MFA and CSRF. It provides visible focus, a skip link, 44 px actions, direct language switching and a minimal reduced-motion-safe press response. Five focused lifecycle/security tests and type-check pass. Migration, authenticated browser rehearsal and staging deployment remain separately gated; production is unchanged.
+
+## Operational job monitor and guarded redrive (local candidate)
+
+Migration `0085` adds immutable, tamper-evident operator evidence for a bounded
+manual redrive. The protected RU/UZ `/:locale/admin/jobs` surface reads only
+identifiers and safe status/error metadata from `job_runs`, `job_outbox` and
+`scheduled_runs`; it never returns a queue body, document text, prompt,
+provider body, message ID, idempotency key or envelope hash.
+
+Redrive reopens the same identifiers-only durable job and outbox projection with
+the same idempotency key. It does not create a second logical operation. D1
+independently verifies the environment, job/outbox relationship, previous
+projection, expired lease and recoverable typed error before applying the state
+change. Permanent validation/security failures remain blocked. The API requires
+`staff.operations.manage`, active TOTP, MFA verified within 15 minutes and CSRF
+for POST. Focused tests cover safe projection, immutable evidence, active-lease,
+permanent-error, cross-environment and broken-chain denial. Migration `0085`,
+authenticated staging rehearsal and any live Queue/DLQ operation remain
+separately gated; production is unchanged.

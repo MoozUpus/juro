@@ -40,7 +40,11 @@ unattached and rejects fail-closed until a real scanner is approved.
 ## Product and operations gates
 
 - Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, broad admin/analytics, and deletion across every future provider remain incomplete. A local operator-managed public status slice now exists through `0083`, but DNS/custom-domain attachment, protected admin browser QA, synthetic component probes and an incident rehearsal remain gated.
-- Production backup/quarantine targets, operational RTO/RPO, scheduled backup automation, alert delivery, DLQ redrive UI, and full incident rehearsal remain open.
+- Production backup/quarantine targets, operational RTO/RPO, scheduled backup
+  automation, alert delivery and full incident rehearsal remain open. A local
+  fresh-MFA Queue monitor and guarded same-job redrive UI now exists through
+  `0085`, but it is not staging evidence and does not replace controlled
+  Queue/DLQ delivery, alert and ledger-reconciliation rehearsals.
 - Policies are drafts until final RU/UZ legal approval. Production deployment and production UI replacement require separate owner confirmations.
 
 ### Lawyer-directory staging gate
@@ -61,3 +65,13 @@ Staging behavior is not marked complete until migration `0030`–`0033`, exact W
 ## Operational feature-control gate
 
 The `0084` operational feature history, server guards and fresh-MFA RU/UZ console are local-only. They are not an active staging kill switch until a fresh private backup/restore, ordered migration, exact Worker deployment and authenticated disable/re-enable rehearsal prove that covered provider, usage, R2, queue and request writes remain absent while disabled. Production feature control remains unchanged.
+
+## Operational job-redrive gate
+
+Migration `0085`, `/:locale/admin/jobs` and `/api/platform/admin/jobs` are
+local-only. Do not use direct D1 updates as a substitute. Staging activation
+requires a new private export with isolated restore verification, ordered
+`0079`–`0085` migration application, exact Worker deployment and a controlled
+recoverable identifiers-only job. Evidence must prove one resulting effect,
+unchanged idempotency, immutable redrive history, valid ledger reconciliation,
+expected Queue/DLQ behavior and operator alerting. Production remains unchanged.

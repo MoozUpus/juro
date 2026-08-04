@@ -8,8 +8,22 @@
 > `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4` serves 100% from exact commit
 > `cff38f0`. Sections below that call `0077` or `0078` pending are retained as
 > historical candidate notes and are superseded by this checkpoint. Migrations
-> `0079`–`0084` remain local and unapplied; production is unchanged. Exact
+> `0079`–`0085` remain local and unapplied; production is unchanged. Exact
 > evidence is in root `docs/ai-platform/STAGING-0069-0078-EVIDENCE.md`.
+
+## Pending 0085 — guarded operational job redrives
+
+`0085_operational_job_redrives.sql` additively records immutable operator
+redrive evidence and uses a D1 projection trigger to reopen the same recoverable
+`job_runs` and `job_outbox` rows. It never creates a new idempotency key. Guards
+verify actor, environment/queue prefix, exact prior state, relationship,
+expired lease, recoverable typed error, monotonic version and predecessor hash.
+
+Focused tests cover successful same-job redrive, immutable evidence, permanent
+failure, active lease, cross-environment denial and corrupted-chain fail-closed
+behavior. Staging requires a fresh private backup/restore, ordered `0079`–`0085`
+application, exact Worker deployment and a controlled one-effect Queue/DLQ and
+ledger reconciliation. Production is unchanged.
 
 ## Pending 0081 — provider cost observability
 

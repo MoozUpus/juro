@@ -32,3 +32,17 @@ must be corrected through Cloudflare secret entry, never through chat or Git.
 Before staging activation, capture and round-trip-verify a fresh private D1 export and record the active Worker version. Apply `0084` before deploying code that queries the table. If a feature guard causes a false stop, unexpected latency or a staff-access regression, first restore traffic to the previous verified Worker. The additive immutable history table may remain unused; do not drop it or delete operator evidence during the incident.
 
 If one capability is unhealthy but the console remains trustworthy, prefer the narrow server-enforced feature stop over a whole-application rollback. If history integrity fails, covered execution fails closed: preserve D1/R2 evidence and roll back the Worker. Restore D1 only for proven corruption after recording the damaged state and validating the private backup in isolation. Production activation and rollback still require their own backup, exact production version and explicit owner approval.
+
+## Migration 0085 / operational job-redrive rollback
+
+Apply `0085` before deploying the jobs console/API. Record a fresh verified
+private D1 export and the previous Worker version. If the monitor, authorization
+boundary or redrive policy regresses, pause affected producers/consumers and
+restore traffic to the previous Worker first. The additive immutable event
+table and triggers may remain unused; do not drop them or delete evidence.
+
+A redrive may already have reopened the same outbox row. Before rollback,
+capture job/outbox/domain-effect state and either let the fenced job reach one
+terminal state or pause its consumer. Do not create a replacement job. Restore
+D1 only for demonstrated corruption after preserving the current database and
+verifying the selected private backup in isolation.

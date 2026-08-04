@@ -1,5 +1,21 @@
 # D1 migration checkpoint
 
+## 0085 — guarded operational job redrives
+
+Status: additive local candidate; protected staging is currently through `0078`;
+production is unchanged.
+
+`0085_operational_job_redrives.sql` adds an immutable, actor-bound SHA-256 event
+chain. A D1 trigger reopens only the same identifiers-only job/outbox projection
+and preserves its idempotency key. Environment, relationship, prior state,
+expired lease and an explicit recoverable error class are verified again in D1.
+Permanent failures and broken evidence fail closed.
+
+Before staging application: take and round-trip-verify a fresh full private
+backup, restore it in isolation, apply `0079`–`0085` in order, inspect the new
+table/indexes/triggers, deploy the exact Worker and reconcile one controlled
+redrive through Queue/DLQ, domain effect, usage/cost and alert evidence.
+
 ## 0084 — operational feature flags
 
 Status: additive local candidate; protected staging is currently through `0078`; production is unchanged.

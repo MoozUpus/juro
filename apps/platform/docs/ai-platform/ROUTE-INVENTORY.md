@@ -1,5 +1,12 @@
 # JURO route inventory
 
+> Local operational-jobs delta — 2026-08-05: `/:locale/admin/jobs` and
+> `/api/platform/admin/jobs` provide a noindex RU/UZ identifiers-only monitor
+> for durable jobs, outbox status, cron runs and guarded same-job redrive. Both
+> require `staff.operations.manage`, active TOTP and MFA verified within 15
+> minutes; POST also requires CSRF. Migration `0085` and staging browser/deploy
+> evidence remain pending; production is unchanged.
+
 > Local cost-observability delta — 2026-08-04: `/:locale/admin/costs` and
 > `/api/platform/admin/costs` provide a noindex RU/UZ aggregate view and immutable
 > price-version creation. Both require `staff.operations.manage`, active TOTP and
@@ -239,7 +246,10 @@ Missing:
 
 ### Admin
 
-All required `/admin` modules remain absent. The local 0020–0021 foundation
+The complete target `/admin` suite remains absent. Narrow local modules now
+cover legal-source review, knowledge authoring, provider costs, system status,
+feature controls and operational jobs under explicit capabilities and fresh
+MFA. The local 0020–0021 foundation
 defines a separate expiring platform-staff/capability boundary and an internal
 administrator grant/revoke service with fresh MFA and chained role-change
 evidence. It does not recognize workspace roles, `account_type`, or platform
@@ -510,3 +520,15 @@ unavailable.
 | `POST /api/platform/admin/feature-flags` | Appends one enable/disable version with reason | same staff/MFA boundary, CSRF, strict Zod, server actor/environment, D1 sequence/hash guards |
 
 Execution guards cover `POST /api/guest/ai`, authenticated AI POST/SSE, document-analysis initialize/URL-import/upload/finalize, new lawyer-request creation, voice initialize/upload/finalize/transcribe and speech. Voice deletion and existing-data reads remain available during a pause. No production route is changed by the local candidate.
+
+### Operational jobs — local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `/:locale/admin/jobs` | Dense RU/UZ job/outbox/cron monitor and guarded redrive form | noindex/not-found for unauthorized users; operations capability; active TOTP; fresh MFA |
+| `GET /api/platform/admin/jobs` | Returns up to 100 filtered identifiers-only jobs, counts, cron runs and verified redrive history | server environment; strict enum filters; staff/fresh-MFA; private no-store |
+| `POST /api/platform/admin/jobs` | Records one bounded operator reason and reopens the same recoverable job/outbox projection | staff/fresh-MFA, CSRF, strict Zod, server actor/environment, D1 lease/projection/hash guards |
+
+The API excludes queue payloads, content, message IDs, idempotency keys and
+envelope hashes. Permanent or active-lease failures cannot be redriven. This is
+not a claim that staging Queue/DLQ delivery or alerting has been rehearsed.

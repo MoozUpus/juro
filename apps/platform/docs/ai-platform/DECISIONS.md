@@ -2982,3 +2982,21 @@ billing and D1 cannot form a distributed transaction, so a provider-success/D1-
 failure path fails the product action and remains subject to later operational
 reconciliation. Migration `0081` and the fresh-MFA costs console remain local
 until a separately authorized backup, ordered migration and staging deploy.
+
+## D-144 — Manual redrive reopens the same durable operation
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-05
+
+An operator redrive must not invent a new job ID or idempotency key: doing so
+could duplicate provider spend, email, export, analysis or domain mutation. The
+operation therefore appends tamper-evident actor/reason/prior-state evidence and
+lets a D1 trigger reopen the exact `job_runs` and `job_outbox` projections.
+
+The server and D1 both enforce environment scope, job/outbox identity, expired
+lease and a narrow recoverable-error allowlist. Permanent validation/security
+errors stay terminal. The admin projection contains identifiers and bounded
+safe status metadata only; queue bodies, user/provider content, message IDs,
+idempotency keys and envelope hashes remain unavailable to the browser. A
+broken history chain disables further manual redrive. Staging migration and a
+controlled one-effect Queue/DLQ reconciliation require separate approval.
