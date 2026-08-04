@@ -2794,3 +2794,21 @@ strike/underline and color as supplemental cues. It does not claim source-layout
 preservation or native Word tracked changes. Existing private R2, checksum,
 idempotency, audit, download, deletion and account-purge contracts remain the
 single boundary. No new runtime dependency is introduced.
+
+## D-135 — Comparison exports are persisted jobs, not request-time downloads
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+A comparison report may be large and is a user-owned derivative. Generating it
+synchronously provided no durable state, retry evidence, checksum, deletion
+control or queue isolation. Comparison PDF/DOCX therefore use a dedicated
+`comparison_exports` ownership table while reusing the existing document-export
+queue and private R2 binding. The table is separate from analysis exports because
+its source and lifecycle authorization are a completed `document_comparisons`
+row, not a document analysis or corrected version.
+
+The UI exposes queued/processing/retrying/completed/failed states and never calls
+a fake success download. Redline labels remain explicit in text and use OOXML
+strike/underline only as additional presentation. The source comparisons are not
+mutated, and no new runtime dependency is introduced.

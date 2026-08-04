@@ -63,6 +63,20 @@ type ComparisonDetail = {
   versionTwo: ExtractedDocument;
   changes: ComparisonChange[];
   sources: Source[];
+  exports: ComparisonExport[];
+};
+
+type ComparisonExport = {
+  id: string;
+  comparisonId: string;
+  format: "pdf" | "docx";
+  status: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number | null;
+  errorCode: string | null;
+  completedAt: string | null;
+  createdAt: string;
 };
 
 type Tab = keyof typeof comparisonResultText.ru.tabs;
@@ -123,6 +137,7 @@ export function ComparisonResultClient({
   const [selectedCaseId, setSelectedCaseId] = useState("");
   const [savingCase, setSavingCase] = useState(false);
   const [caseNotice, setCaseNotice] = useState("");
+  const [exporting, setExporting] = useState<"pdf" | "docx" | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -158,7 +173,8 @@ export function ComparisonResultClient({
   }, []);
 
   useEffect(() => {
-    if (!detail || !["queued", "processing"].includes(detail.status)) return;
+    if (!detail || (!["queued", "processing"].includes(detail.status)
+      && !detail.exports.some((item) => ["queued", "processing", "retrying"].includes(item.status)))) return;
     const timer = window.setTimeout(() => void load(), 1200);
     return () => window.clearTimeout(timer);
   }, [detail, load]);
@@ -297,6 +313,46 @@ export function ComparisonResultClient({
     setSavingCase(false);
   }
 
+  async function requestExport(format: "pdf" | "docx") {
+    if (exporting) return;
+    setExporting(format);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/export`,
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-juro-csrf": "1",
+            "idempotency-key": `comparison-${comparisonId}-${format}-${crypto.randomUUID()}`,
+          },
+          body: JSON.stringify({ format }),
+        },
+      );
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || (ru ? "Экспорт не создан." : "Eksport yaratilmadi."));
+      await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setExporting(null);
+    }
+  }
+
+  async function removeExport(exportId: string) {
+    const response = await fetch(
+      `/api/platform/document-comparisons/exports/${encodeURIComponent(exportId)}`,
+      { method: "DELETE", headers: { "x-juro-csrf": "1" } },
+    );
+    if (!response.ok) {
+      const body = await response.json() as { error?: string };
+      setError(body.error || (ru ? "Экспорт не удалён." : "Eksport o‘chirilmadi."));
+      return;
+    }
+    await load();
+  }
+
   function moveTabFocus(event: React.KeyboardEvent<HTMLButtonElement>, current: Tab) {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
@@ -343,6 +399,8 @@ export function ComparisonResultClient({
   }
 
   const summary = detail.summary!;
+  const latestExports = new Map<"pdf" | "docx", ComparisonExport>();
+  for (const item of detail.exports) if (!latestExports.has(item.format)) latestExports.set(item.format, item);
   const safeSources = detail.sources.filter((source) => safeOfficialUrl(source.officialUrl));
   return (
     <div className="comparison-result-shell">
@@ -357,8 +415,36 @@ export function ComparisonResultClient({
           </div>
         </div>
         <div className="comparison-result-actions">
-          <a href={`/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/export?format=pdf`}><Download />{copy.exportPdf}</a>
-          <a href={`/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/export?format=docx`}><FileText />{copy.exportDocx}</a>
+          {(["pdf", "docx"] as const).map((format) => {
+            const item = latestExports.get(format);
+            const pending = item && ["queued", "processing", "retrying"].includes(item.status);
+            const completed = item?.status === "completed";
+            const label = completed
+              ? (format === "pdf" ? copy.exportPdf : copy.exportDocx)
+              : pending
+                ? copy.exportPreparing
+                : item?.status === "failed"
+                  ? copy.exportRetry
+                  : (format === "pdf" ? copy.exportCreatePdf : copy.exportCreateDocx);
+            return (
+              <span className="comparison-export-action" key={format}>
+                {completed ? (
+                  <a href={`/api/platform/document-comparisons/exports/${encodeURIComponent(item.id)}/file`}>
+                    {format === "pdf" ? <Download /> : <FileText />}{label}
+                  </a>
+                ) : (
+                  <button type="button" onClick={() => void requestExport(format)} disabled={Boolean(pending) || exporting === format}>
+                    {pending || exporting === format ? <LoaderCircle className="spin" /> : format === "pdf" ? <Download /> : <FileText />}{label}
+                  </button>
+                )}
+                {item && ["completed", "failed"].includes(item.status) && (
+                  <button type="button" className="comparison-export-delete" aria-label={copy.exportDelete} title={copy.exportDelete} onClick={() => void removeExport(item.id)}>
+                    <Trash2 />
+                  </button>
+                )}
+              </span>
+            );
+          })}
           <Link href={`${base}/consultations?comparisonId=${encodeURIComponent(comparisonId)}`}><UserRoundSearch />{copy.consult}</Link>
           <Link href={`${base}/document-builder`}><FileText />{copy.edit}</Link>
           <button type="button" className="danger" onClick={() => void removeComparison()}><Trash2 /><span>{copy.delete}</span></button>

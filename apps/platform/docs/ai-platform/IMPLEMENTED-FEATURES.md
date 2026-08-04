@@ -655,3 +655,14 @@ is included after the change schedule. Downloads and deletion reuse the existing
 tenant-scoped private export boundary. These exports do not claim to preserve the
 source PDF/DOCX page geometry or native Word tracked changes. Migration 0070,
 staging deployment and authenticated provider-generated verification remain open.
+
+## Phase 5 — persisted comparison exports (local candidate)
+
+Completed and partially completed comparisons now request real PDF/DOCX jobs
+instead of generating transient bytes in the request handler. D1 records,
+outbox/Queue dispatch, private R2, conditional writes, checksum verification,
+audited download/delete, idempotency, RU/UZ processing/failure/retry states and
+account-deletion cleanup are connected end to end. DOCX redline output includes
+explicit removed/added wording plus strike/underline marks, so meaning is not
+color-only. Synthetic tests generate and inspect both formats and deny a second
+tenant. This is local only until migration 0071 and its Worker are authorized.

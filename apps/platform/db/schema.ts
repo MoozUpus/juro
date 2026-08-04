@@ -2896,6 +2896,43 @@ export const comparisonChanges = sqliteTable("comparison_changes", {
   index("comparison_changes_risk_idx").on(table.comparisonId, table.riskLevel, table.riskEffect),
 ]);
 
+export const comparisonExports = sqliteTable("comparison_exports", {
+  id: text("id").primaryKey(),
+  comparisonId: text("comparison_id").notNull().references(() => documentComparisons.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  format: text("format").notNull(),
+  status: text("status").notNull(),
+  r2Key: text("r2_key"),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes"),
+  sha256: text("sha256"),
+  idempotencyKey: text("idempotency_key").notNull(),
+  errorCode: text("error_code"),
+  completedAt: text("completed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("comparison_exports_idempotency_uidx").on(table.idempotencyKey),
+  uniqueIndex("comparison_exports_r2_key_uidx").on(table.r2Key),
+  index("comparison_exports_comparison_idx").on(table.comparisonId, table.createdAt),
+  index("comparison_exports_workspace_idx").on(table.workspaceId, table.createdAt),
+  index("comparison_exports_status_idx").on(table.status, table.updatedAt),
+  check("comparison_exports_format_check", sql`${table.format} IN ('pdf','docx')`),
+  check("comparison_exports_status_check", sql`${table.status} IN ('queued','processing','retrying','completed','failed')`),
+  check("comparison_exports_mime_check", sql`
+    (${table.format}='pdf' AND ${table.mimeType}='application/pdf')
+    OR (${table.format}='docx' AND ${table.mimeType}='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+  `),
+  check("comparison_exports_size_check", sql`${table.sizeBytes} IS NULL OR ${table.sizeBytes} >= 0`),
+  check("comparison_exports_sha_check", sql`${table.sha256} IS NULL OR length(${table.sha256})=64`),
+  check("comparison_exports_completion_check", sql`
+    (${table.status}='completed' AND ${table.r2Key} IS NOT NULL AND ${table.sizeBytes} IS NOT NULL
+      AND ${table.sha256} IS NOT NULL AND ${table.completedAt} IS NOT NULL AND ${table.errorCode} IS NULL)
+    OR (${table.status}<>'completed' AND ${table.completedAt} IS NULL)
+  `),
+]);
+
 export const idempotencyKeys = sqliteTable("idempotency_keys", {
   key: text("key").primaryKey(),
   scope: text("scope").notNull(),

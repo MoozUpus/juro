@@ -192,3 +192,17 @@ key and metadata contain identifiers only. Explicit deletion and account purge
 cover these rows automatically because they remain in `analysis_report_exports`.
 No staging object of these variants is claimed before migrations 0069/0070 and
 the matching Worker are separately authorized.
+
+## Persisted document-comparison exports
+
+Local migration 0071 introduces private artifacts at:
+
+`comparison-exports/{workspaceId}/{comparisonId}/{exportId}.{pdf|docx}`
+
+The consumer renders only after a same-tenant completed comparison lookup,
+writes with `If-None-Match: *`, stores SHA-256/size evidence, and refuses an
+existing object unless both match. Downloads are backend-proxied after an owner
+lookup and a second object-integrity check. Terminal deletion removes R2 first,
+then D1, and records an immutable audit event. Account closure inventories these
+keys directly and through comparisons that reference the closing user's files.
+No staging object under this prefix is claimed before migration 0071 deployment.

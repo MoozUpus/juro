@@ -498,3 +498,12 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 - Migration 0070 and its matching Worker are local only. No staging corrected
   export, authenticated browser download, large-document pagination or assistive-
   technology evidence is claimed until 0069 and 0070 are authorized and deployed.
+
+## Comparison export open gates
+
+- Migration 0071 and its Worker are local only; staging still serves the earlier
+  comparison-export implementation until a separately authorized deploy.
+- The persisted DOCX is an explicit normalized redline, not native Word Track
+  Changes and not a layout-preserving reconstruction of either source document.
+- Authenticated staging browser download/delete, RU/UZ assistive-technology,
+  200% zoom and mobile visual evidence remain open after deployment.

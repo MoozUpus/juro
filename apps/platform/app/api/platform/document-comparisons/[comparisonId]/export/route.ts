@@ -1,79 +1,54 @@
-import { requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
-import { loadDocxTemplate, loadFooterMark, loadPdfFont } from "../../../../../../lib/document-builder/generation/assets";
-import { generateDocx } from "../../../../../../lib/document-builder/generation/docx";
-import { generatePdf } from "../../../../../../lib/document-builder/generation/pdf";
-import { sanitizeFileName } from "../../../../../../lib/document-builder/storage/files";
+import { z } from "zod";
+import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
-import { comparisonReportParagraphs } from "../../../../../../lib/document-comparison/report";
-import {
-  comparisonChanges,
-  comparisonForUser,
-  parsedSummary,
-  verifiedSourcesForChanges,
-} from "../../../../../../lib/document-comparison/storage";
+import { AnalysisExportError } from "../../../../../../lib/document-analysis/exporter";
+import { requestComparisonExport } from "../../../../../../lib/document-comparison/exporter";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
 
-function utf8Disposition(fileName: string) {
-  return `attachment; filename="juro-comparison"; filename*=UTF-8''${encodeURIComponent(fileName)}`;
-}
-
-function responseBody(bytes: Uint8Array): ArrayBuffer {
-  return Uint8Array.from(bytes).buffer;
-}
+const requestSchema = z.object({ format: z.enum(["pdf", "docx"]) }).strict();
+const response = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 
 export const GET = withApiErrors(async function GET(
-  request: Request,
+  _request: Request,
   context: { params: Promise<{ comparisonId: string }> },
 ) {
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
   const { comparisonId } = await context.params;
-  const format = new URL(request.url).searchParams.get("format") === "docx" ? "docx" : "pdf";
-  const db = requireD1();
-  const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
-  if (!comparison) return Response.json({ error: "Сравнение не найдено." }, { status: 404 });
-  if (!["completed", "completed_partial"].includes(comparison.status)) {
-    return Response.json({ error: "Дождитесь завершения сравнения." }, { status: 409 });
-  }
-  const changes = await comparisonChanges(db, comparisonId);
-  const sources = await verifiedSourcesForChanges(db, changes);
-  const paragraphs = comparisonReportParagraphs({
-    comparison,
-    summary: parsedSummary(comparison.summaryJson),
-    changes,
-    sources,
-  });
-  const ru = comparison.locale !== "uz";
-  const baseName = sanitizeFileName(
-    `${ru ? "Сравнение" : "Taqqoslash"} ${comparison.versionOneName} — ${comparison.versionTwoName}`,
-  ).replace(/\.(?:pdf|docx)$/i, "");
-  if (format === "docx") {
-    const template = await loadDocxTemplate(ru ? "ru" : "uz", request);
-    const bytes = generateDocx(template, paragraphs);
-    return new Response(responseBody(bytes), {
-      headers: {
-        "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "content-disposition": utf8Disposition(`${baseName}.docx`),
-        "cache-control": "private, no-store",
-      },
-    });
-  }
-  const [regularFont, boldFont, footerMark] = await Promise.all([
-    loadPdfFont(false, request),
-    loadPdfFont(true, request),
-    loadFooterMark(request),
-  ]);
-  const bytes = await generatePdf(paragraphs, regularFont, boldFont, footerMark, {
-    title: ru ? "JURO — отчёт о сравнении документов" : "JURO — hujjatlarni taqqoslash hisoboti",
-    producer: "JURO Document Comparison",
-    footerLabel: ru ? "Сформировано в JURO" : "JURO’da yaratildi",
-    pageLabel: ru ? "Страница" : "Sahifa",
-  });
-  return new Response(responseBody(bytes), {
-    headers: {
-      "content-type": "application/pdf",
-      "content-disposition": utf8Disposition(`${baseName}.pdf`),
-      "cache-control": "private, no-store",
-    },
-  });
+  const rows = await requireD1().prepare(
+    `SELECT id,comparison_id AS comparisonId,format,status,file_name AS fileName,mime_type AS mimeType,
+      size_bytes AS sizeBytes,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
+     FROM comparison_exports WHERE comparison_id=? AND workspace_id=? AND owner_user_id=?
+     ORDER BY created_at DESC LIMIT 20`,
+  ).bind(comparisonId, workspace.id, user.id).all();
+  return response({ exports: rows.results });
 });
+
+export const POST = withApiErrors(async function POST(
+  request: Request,
+  context: { params: Promise<{ comparisonId: string }> },
+) {
+  assertSafeWrite(request);
+  const user = await requireApiUser();
+  const workspace = await workspaceForUser(user);
+  const { comparisonId } = await context.params;
+  const parsed = requestSchema.safeParse(await request.json().catch(() => ({})));
+  if (!parsed.success) return response({ code: "ANALYSIS_EXPORT_FORMAT_INVALID", error: message("ANALYSIS_EXPORT_FORMAT_INVALID") }, 400);
+  try {
+    const result = await requestComparisonExport({
+      db: requireD1(), comparisonId, workspaceId: workspace.id, userId: user.id, format: parsed.data.format,
+      idempotencyKey: request.headers.get("idempotency-key")?.trim() ?? "",
+    });
+    return response({ export: result.record, replay: result.replay }, result.replay ? 200 : 202);
+  } catch (error) {
+    if (error instanceof AnalysisExportError) return response({ code: error.code, error: message(error.code) }, error.status);
+    throw error;
+  }
+});
+
+function message(code: string) {
+  if (code === "ANALYSIS_EXPORT_FORMAT_INVALID") return "Поддерживаются только PDF и DOCX.";
+  if (code === "ANALYSIS_EXPORT_NOT_READY") return "Экспорт доступен после завершения сравнения.";
+  if (code === "ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT") return "Idempotency-Key некорректен или уже относится к другому экспорту.";
+  return "Экспорт сравнения не удалось создать.";
+}

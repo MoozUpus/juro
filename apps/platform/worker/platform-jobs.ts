@@ -41,6 +41,10 @@ import {
   recordAnalysisReportExportFailure,
 } from "../lib/document-analysis/report-exporter";
 import {
+  executeComparisonExportJob,
+  recordComparisonExportFailure,
+} from "../lib/document-comparison/exporter";
+import {
   executeTaskReminderNotification,
   NotificationDispatchError,
 } from "../lib/notifications/task-reminder-dispatch";
@@ -618,12 +622,18 @@ async function executeJob(
     }
   }
   if (envelope.kind === "document.export") {
+    const comparisonExport = await env.DB.prepare(
+      `SELECT 1 AS found FROM comparison_exports
+       WHERE id=? AND workspace_id=? LIMIT 1`,
+    ).bind(envelope.subjectId, envelope.workspaceId!).first<{ found: number }>();
     const reportExport = await env.DB.prepare(
       `SELECT 1 AS found FROM analysis_report_exports
        WHERE id=? AND workspace_id=? LIMIT 1`,
     ).bind(envelope.subjectId, envelope.workspaceId!).first<{ found: number }>();
     try {
-      if (reportExport?.found) {
+      if (comparisonExport?.found) {
+        await executeComparisonExportJob(env, envelope.subjectId, envelope.workspaceId!);
+      } else if (reportExport?.found) {
         await executeAnalysisReportExportJob(env, envelope.subjectId, envelope.workspaceId!);
       } else {
         await executeAnalysisExportJob(env, envelope.subjectId, envelope.workspaceId!);
@@ -631,7 +641,9 @@ async function executeJob(
       return;
     } catch (error) {
       if (error instanceof AnalysisExportError) {
-        if (reportExport?.found) {
+        if (comparisonExport?.found) {
+          await recordComparisonExportFailure(env.DB, envelope.subjectId, envelope.workspaceId!, error);
+        } else if (reportExport?.found) {
           await recordAnalysisReportExportFailure(env.DB, envelope.subjectId, envelope.workspaceId!, error);
         } else {
           await recordAnalysisExportFailure(env.DB, envelope.subjectId, envelope.workspaceId!, error);

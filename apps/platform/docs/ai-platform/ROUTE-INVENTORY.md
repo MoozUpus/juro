@@ -419,3 +419,15 @@ history, case context and usage ledger. Voice-with-avatar is not enabled.
 
 These are additive API routes used by the existing localized document-review
 surface. They add no public route and do not alter document-builder URLs.
+
+### Persisted comparison exports — local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `GET /api/platform/document-comparisons/:comparisonId/export` | Lists the owner's latest persisted exports | authenticated active workspace + owner filter |
+| `POST /api/platform/document-comparisons/:comparisonId/export` | Queues PDF or DOCX generation | CSRF, strict Zod, Idempotency-Key, completed comparison tenant guard |
+| `GET /api/platform/document-comparisons/exports/:exportId/file` | Proxies one completed private artifact | tenant/owner/state lookup, R2 size/SHA-256 verification, download audit |
+| `DELETE /api/platform/document-comparisons/exports/:exportId` | Removes one terminal artifact | CSRF, tenant/owner guard, R2-first verified deletion, audit |
+
+The existing localized comparison screen consumes these states. Source comparison
+and document-builder routes remain unchanged.

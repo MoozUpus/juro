@@ -65,8 +65,18 @@ export function comparisonReportParagraphs(input: {
   for (const change of materialChanges) {
     const label = change.afterLabel || change.beforeLabel || String(change.ordinal);
     push(`${label}. ${change.summary}`, "heading", true);
-    if (change.beforeText) push(`${ru ? "Было" : "Oldin"}: ${change.beforeText}`);
-    if (change.afterText) push(`${ru ? "Стало" : "Keyin"}: ${change.afterText}`);
+    if (change.beforeText) paragraphs.push({
+      id: `comparison-report-${paragraphs.length + 1}`,
+      text: `${ru ? "Было (удалено)" : "Oldin (olib tashlangan)"}: ${change.beforeText}`,
+      kind: "body",
+      reviewMark: "deleted",
+    });
+    if (change.afterText) paragraphs.push({
+      id: `comparison-report-${paragraphs.length + 1}`,
+      text: `${ru ? "Стало (добавлено)" : "Keyin (qo‘shilgan)"}: ${change.afterText}`,
+      kind: "body",
+      reviewMark: "inserted",
+    });
     push(`${ru ? "Юридическое значение" : "Yuridik ahamiyat"}: ${change.legalEffect}`);
     push(`${ru ? "Влияние" : "Ta’sir"}: ${change.affectedParty}; ${ru ? "риск" : "xavf"} — ${change.riskLevel}.`);
     push(`${ru ? "Рекомендация" : "Tavsiya"}: ${change.recommendation}`);

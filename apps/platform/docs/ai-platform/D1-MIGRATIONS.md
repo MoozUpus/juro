@@ -1044,3 +1044,19 @@ cross-tenant denial. Migration 0070 has not been applied to staging or
 production. Staging requires a new owner authorization covering a fresh verified
 private D1 backup, migration 0069 followed by 0070, and the matching Worker
 deploy. Rollback is application-first; both additive migrations can remain unused.
+
+## Migration 0071 — durable comparison exports (local candidate)
+
+`0071_comparison_exports.sql` additively creates a tenant/owner-bound lifecycle
+for comparison PDF and DOCX artifacts. Insert guards require a completed,
+non-deleted comparison from the same workspace and owner. Identity is immutable;
+only queued → processing → retrying/completed/failed transitions are accepted.
+A completed row requires a private `comparison-exports/` key, matching MIME and
+extension, at least 1,000 bytes, SHA-256 and completion time.
+
+The matching Worker uses the existing document-export queue and does not alter
+source comparisons. Local migration tests validate 174 tables, 334 foreign keys,
+source mismatch denial, lifecycle guards and foreign-key integrity. Migration
+0071 has not been applied to staging or production. Staging requires a fresh
+verified private D1 backup, migrations 0069–0071 in order, and matching Worker
+deployment under a new explicit authorization.

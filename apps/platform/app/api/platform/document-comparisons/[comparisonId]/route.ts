@@ -28,10 +28,16 @@ export const GET = withApiErrors(async function GET(
   const comparison = await comparisonForUser(db, comparisonId, workspace.id, user.id);
   if (!comparison) return response({ error: "Сравнение не найдено." }, 404);
   const changes = await comparisonChanges(db, comparisonId);
-  const [versionOne, versionTwo, sources] = await Promise.all([
+  const [versionOne, versionTwo, sources, exportsResult] = await Promise.all([
     loadExtractedDocument(comparison.versionOneJsonKey),
     loadExtractedDocument(comparison.versionTwoJsonKey),
     verifiedSourcesForChanges(db, changes),
+    db.prepare(
+      `SELECT id,comparison_id AS comparisonId,format,status,file_name AS fileName,mime_type AS mimeType,
+        size_bytes AS sizeBytes,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
+       FROM comparison_exports WHERE comparison_id=? AND workspace_id=? AND owner_user_id=?
+       ORDER BY created_at DESC LIMIT 20`,
+    ).bind(comparisonId, workspace.id, user.id).all(),
   ]);
   return response({
     comparison: {
@@ -49,6 +55,7 @@ export const GET = withApiErrors(async function GET(
       },
       changes,
       sources,
+      exports: exportsResult.results,
     },
   });
 });
