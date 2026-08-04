@@ -14,6 +14,7 @@ import {
   PackageExtractionError,
   readAnalysisPackageMembers,
 } from "./package-extractor";
+import { DOCUMENT_ANALYSIS_PDF_PAGE_LIMIT, inspectPdfPageCount, PdfPreflightError } from "./pdf-preflight";
 
 const EXTRACTION_METHOD = "workers_ai_markdown";
 const EXTRACTION_PROVIDER = "cloudflare_workers_ai";
@@ -70,6 +71,10 @@ export class OcrProcessingError extends Error {
       | "OCR_NO_READABLE_TEXT"
       | "OCR_PACKAGE_INVALID"
       | "OCR_PACKAGE_CAPACITY_REQUIRED"
+      | "OCR_PAGE_LIMIT_EXCEEDED"
+      | "OCR_PDF_PASSWORD_PROTECTED"
+      | "OCR_PDF_PREFLIGHT_TIMEOUT"
+      | "OCR_PDF_CORRUPT"
       | "OCR_DERIVATIVE_INVALID"
       | "OCR_PERSISTENCE_FAILED",
     readonly retryable: boolean,
@@ -396,6 +401,9 @@ async function convertSourceWithWorkersAi(
   if (row.mimeType === ZIP_MIME_TYPE) return convertPackageWithWorkersAi(ai, row, sourceBytes);
 
   const name = opaqueFileName(row.mimeType);
+  const pageCount = row.mimeType === "application/pdf"
+    ? await preflightPdf(sourceBytes)
+    : row.mimeType.startsWith("image/") ? 1 : null;
   let response: ConversionResponse;
   try {
     response = await ai.toMarkdown({
@@ -416,7 +424,7 @@ async function convertSourceWithWorkersAi(
       fileName: name,
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
-      pageCount: null,
+      pageCount,
       detectedLanguage: detectDocumentLanguage(converted.text),
       textQuality: imageInput ? "limited" : "good",
       warningCode: warnings.join(","),
@@ -448,6 +456,18 @@ async function convertPackageWithWorkersAi(
     name: opaquePackageMemberName(index, member.mimeType),
     blob: new Blob([ownedArrayBuffer(member.bytes)], { type: member.mimeType }),
   }));
+  const memberPageCounts: Array<number | null> = [];
+  let knownPages = 0;
+  for (const member of members) {
+    const pageCount = member.mimeType === "application/pdf"
+      ? await preflightPdf(member.bytes, DOCUMENT_ANALYSIS_PDF_PAGE_LIMIT - knownPages)
+      : member.mimeType.startsWith("image/") ? 1 : null;
+    knownPages += pageCount ?? 0;
+    if (knownPages > DOCUMENT_ANALYSIS_PDF_PAGE_LIMIT) {
+      throw new OcrProcessingError("OCR_PAGE_LIMIT_EXCEEDED", false);
+    }
+    memberPageCounts.push(pageCount);
+  }
   let responses: ConversionResponse[];
   try {
     responses = await ai.toMarkdown(requests);
@@ -489,7 +509,7 @@ async function convertPackageWithWorkersAi(
       fileName: member.name,
       mimeType: member.mimeType,
       sizeBytes: member.bytes.byteLength,
-      pageCount: null,
+      pageCount: memberPageCounts[index] ?? null,
       detectedLanguage: detectDocumentLanguage(converted.text),
       textQuality: member.mimeType.startsWith("image/") ? "limited" : "good",
       warningCode: memberWarnings.join(","),
@@ -517,7 +537,7 @@ async function convertPackageWithWorkersAi(
       fileName: "document-package.zip",
       mimeType: row.mimeType,
       sizeBytes: row.sizeBytes,
-      pageCount: null,
+      pageCount: knownPages || null,
       detectedLanguage: detectDocumentLanguage(text),
       textQuality: limited ? "limited" : "good",
       warningCode: warnings.join(","),
@@ -526,6 +546,19 @@ async function convertPackageWithWorkersAi(
       packageContext: buildAnalysisPackageContext(memberDocuments),
     },
   };
+}
+
+async function preflightPdf(bytes: Uint8Array, limit = DOCUMENT_ANALYSIS_PDF_PAGE_LIMIT): Promise<number> {
+  if (limit < 1) throw new OcrProcessingError("OCR_PAGE_LIMIT_EXCEEDED", false);
+  try {
+    return await inspectPdfPageCount(bytes, limit);
+  } catch (error) {
+    if (!(error instanceof PdfPreflightError)) throw error;
+    if (error.code === "PDF_PAGE_LIMIT_EXCEEDED") throw new OcrProcessingError("OCR_PAGE_LIMIT_EXCEEDED", false);
+    if (error.code === "PDF_PASSWORD_PROTECTED") throw new OcrProcessingError("OCR_PDF_PASSWORD_PROTECTED", false);
+    if (error.code === "PDF_PREFLIGHT_TIMEOUT") throw new OcrProcessingError("OCR_PDF_PREFLIGHT_TIMEOUT", true);
+    throw new OcrProcessingError("OCR_PDF_CORRUPT", false);
+  }
 }
 
 function normalizeConversionResponse(

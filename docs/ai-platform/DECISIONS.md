@@ -198,3 +198,15 @@ magic-byte and archive checks must agree before the existing quarantine record i
 created. Only origin and a SHA-256 of the canonical URL are persisted in audit;
 the full URL is not logged. Imported content is user evidence, never an official
 legal source, and remains unavailable to OCR or AI until a real malware verdict.
+
+## D-109 — PDF structure and page limits are checked before OCR/provider access
+
+Status: accepted and locally verified
+Date: 2026-08-04
+
+Every safe PDF entering the Workers AI extraction path is structurally parsed
+before provider access. Password-protected, corrupt and over-500-page PDFs fail
+closed with typed durable job errors; a bounded timeout remains retryable. ZIP
+packages apply the same preflight to every PDF and enforce 500 known pages across
+PDF members and image pages before submitting a provider batch. Exact DOCX page
+count remains unknown without rendering and is not fabricated.

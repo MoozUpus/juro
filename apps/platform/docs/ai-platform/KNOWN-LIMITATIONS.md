@@ -1,5 +1,11 @@
 # JURO known limitations checkpoint
 
+> PDF preflight checkpoint — 2026-08-04: structural page count now gates single
+> and packaged PDFs before Workers AI, with typed corrupt/password/timeout/limit
+> states and a 500 known-page aggregate package cap. Images count as one known
+> page. DOCX page count and page-level OCR coordinates remain unavailable; no
+> staging provider/browser run is claimed by this local checkpoint.
+
 > Public-link import checkpoint — 2026-08-04: credential-free public HTTPS
 > document import is implemented and locally security-tested with public-IP DNS
 > checks, bounded manual redirects, post-fetch DNS recheck, no credential

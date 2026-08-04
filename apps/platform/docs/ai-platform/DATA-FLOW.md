@@ -8,4 +8,9 @@ HTTPS URL -> public DNS/IP validation -> bounded manual fetch/redirect -> DNS re
 existing tenant quarantine record -> malware gate. The canonical URL is reduced to
 origin plus a SHA-256 audit value and is never treated as verified legislation.
 
+After a safe verdict, PDF extraction begins with bounded structural preflight:
+password/corruption -> terminal failure; timeout -> retry; page count above 500
+-> terminal capacity failure; accepted count -> Workers AI conversion. Package
+PDF counts and image pages are accumulated before any provider batch.
+
 No provider key, session secret, or raw user content is sent to analytics. See `PRIVACY-DATA-MAP.md` and `R2-STORAGE.md`.

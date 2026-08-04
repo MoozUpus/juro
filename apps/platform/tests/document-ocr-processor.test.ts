@@ -338,6 +338,43 @@ test("source checksum mismatch fails closed before Workers AI", async () => {
   }
 });
 
+test("corrupt PDF structure fails closed before Workers AI", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    const source = new TextEncoder().encode("%PDF-1.7 not a complete document");
+    const sourceSha256 = await seedOcrAnalysis(sqlite, bucket, source, {
+      fileName: "contract.pdf",
+      mimeType: "application/pdf",
+    });
+    await scheduleOcrProcessing(d1, scheduleInput(sourceSha256));
+    let aiCalls = 0;
+    await assert.rejects(
+      executeOcrProcessingJob({
+        DB: d1,
+        BUCKET: bucket as unknown as R2Bucket,
+        AI: { async toMarkdown() { aiCalls += 1; throw new Error("must not run"); } } as unknown as Ai,
+      }, "analysis-a", "workspace-a"),
+      (error: unknown) => error instanceof OcrProcessingError && error.code === "OCR_PDF_CORRUPT",
+    );
+    assert.equal(aiCalls, 0);
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        `SELECT a.status AS analysisStatus,a.error_code AS analysisError,x.status AS extractionStatus,x.error_code AS extractionError
+         FROM document_analyses a JOIN file_extractions x ON x.analysis_id=a.id WHERE a.id='analysis-a'`,
+      ).get() as object },
+      {
+        analysisStatus: "failed",
+        analysisError: "OCR_PDF_CORRUPT",
+        extractionStatus: "failed",
+        extractionError: "OCR_PDF_CORRUPT",
+      },
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 async function seedOcrAnalysis(
   sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
   bucket: FakeR2Bucket,

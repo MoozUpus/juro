@@ -1,5 +1,16 @@
 # JURO implemented-features checkpoint
 
+## PDF structural/page-count preflight (local candidate)
+
+- Single PDFs are parsed before Workers AI; corrupt, password-protected and
+  over-500-page files stop with typed fail-closed states and no provider call.
+- ZIP packages preflight every PDF and cap known PDF plus image pages at 500
+  before a conversion batch. The verified count is stored in normalized
+  extraction/package metadata instead of the previous `null` placeholder.
+- DOCX pagination is not inferred because no faithful renderer is present.
+  Focused PDF/OCR/package tests pass locally; staging provider evidence remains
+  open and production is unchanged.
+
 ## SSRF-safe public document URL import (local candidate)
 
 - An authenticated RU/UZ entry form imports one public PDF, DOCX, JPG, PNG or

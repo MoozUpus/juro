@@ -465,6 +465,16 @@ function statusLabel(status: string, ru: boolean) {
 }
 
 function analysisState(status: string, errorCode: string | null, ru: boolean) {
+  const pdfFailures: Record<string, [string, string, string, string]> = {
+    OCR_PAGE_LIMIT_EXCEEDED: ["Слишком много страниц", "Sahifalar soni limitdan oshdi", "Документ или пакет содержит более 500 известных страниц. Файл не передан AI; разделите его на части.", "Hujjat yoki paketda 500 dan ortiq aniqlangan sahifa bor. Fayl AI ga yuborilmadi; uni qismlarga ajrating."],
+    OCR_PDF_PASSWORD_PROTECTED: ["PDF защищён паролем", "PDF parol bilan himoyalangan", "Снимите пароль с копии документа и загрузите её повторно. JURO не пытался обойти защиту.", "Hujjat nusxasidan parolni olib tashlang va qayta yuklang. JURO himoyani chetlab o‘tishga urinmadi."],
+    OCR_PDF_CORRUPT: ["PDF повреждён", "PDF buzilgan", "Структура PDF не прошла проверку до распознавания. Создайте новую копию файла и повторите загрузку.", "PDF tuzilishi matnni tanishdan oldingi tekshiruvdan o‘tmadi. Yangi nusxa yarating va qayta yuklang."],
+    OCR_PDF_PREFLIGHT_TIMEOUT: ["Проверка PDF не завершилась", "PDF tekshiruvi tugamadi", "Проверка структуры превысила безопасное время. Файл не передан AI; повторите попытку позже или разделите документ.", "Tuzilma tekshiruvi xavfsiz vaqt chegarasidan oshdi. Fayl AI ga yuborilmadi; keyinroq takrorlang yoki hujjatni bo‘ling."],
+  };
+  const pdfFailure = errorCode ? pdfFailures[errorCode] : undefined;
+  if (pdfFailure) {
+    return { heading: ru ? pdfFailure[0] : pdfFailure[1], message: ru ? pdfFailure[2] : pdfFailure[3] };
+  }
   if (errorCode === "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED") {
     return {
       heading: ru ? "В пакете найден скан" : "Paketda skan topildi",

@@ -20,7 +20,7 @@ This register distinguishes real implementation from planned scope. A database t
 
 ## File and communication gates
 
-- The streaming private-R2 upload, SSRF-safe public URL import, strict ZIP/DOCX integrity gate, deterministic ZIP package extraction, bounded per-member Workers AI conversion, provider prompt boundary, and adversarial document-input tests exist locally. A real fail-closed malware service, protected-staging URL/browser evidence, page coordinates and scanned-PDF page-count enforcement, over-budget streaming extraction, relationship analysis, quarantine release evidence, and the full 100-package quality gate remain deferred.
+- The streaming private-R2 upload, SSRF-safe public URL import, strict ZIP/DOCX integrity gate, PDF structure/page-count preflight, deterministic ZIP package extraction, bounded per-member Workers AI conversion, provider prompt boundary, and adversarial document-input tests exist locally. A real fail-closed malware service, protected-staging URL/browser evidence, page coordinates and faithful DOCX pagination, over-budget streaming extraction, quarantine release evidence, and the full 100-package quality gate remain deferred.
 - Realtime voice, avatar lip sync, original-audio retention automation, audio/video call provider, and call recording remain off. Text chat must not pretend these are live.
 - The approved Jurobek 3D asset still requires source-asset verification, rig/material/facial review, optimization evidence, WebGL fallback, and device testing before integration.
 
