@@ -2802,6 +2802,8 @@ export const analysisReportExports = sqliteTable("analysis_report_exports", {
   workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
   ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
   format: text("format").notNull(),
+  variant: text("variant").notNull().default("analysis_report"),
+  sourceVersionId: text("source_version_id").references(() => analysisDocumentVersions.id, { onDelete: "cascade" }),
   status: text("status").notNull(),
   r2Key: text("r2_key"),
   fileName: text("file_name").notNull(),
@@ -2818,6 +2820,7 @@ export const analysisReportExports = sqliteTable("analysis_report_exports", {
   index("analysis_report_exports_analysis_idx").on(table.analysisId, table.createdAt),
   index("analysis_report_exports_workspace_idx").on(table.workspaceId, table.createdAt),
   index("analysis_report_exports_status_idx").on(table.status, table.updatedAt),
+  index("analysis_report_exports_source_version_idx").on(table.sourceVersionId, table.variant, table.createdAt),
   check("analysis_report_exports_format_check", sql`${table.format} IN ('pdf','docx')`),
   check("analysis_report_exports_status_check", sql`${table.status} IN ('queued','processing','retrying','completed','failed')`),
   check("analysis_report_exports_mime_check", sql`

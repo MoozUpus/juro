@@ -1017,7 +1017,7 @@ corrected version that does not reference eligible suggestions. Applying a
 revision never mutates the uploaded PDF/DOCX or any document-builder row.
 
 Local evidence: all migrations apply from empty D1, `quick_check` and
-`foreign_key_check` pass, the schema contains 173 application tables and 330
+`foreign_key_check` pass, the schema contains 173 application tables and 331
 foreign keys, and integration tests cover tenant denial, exact-match application,
 ambiguous text, idempotent replay, immutability, cascade deletion, and R2 purge.
 Migration 0069 has not been applied to staging or production. Before staging,
@@ -1025,3 +1025,22 @@ take and verify a fresh private `juro-staging-backups` export, restore-check it,
 apply only 0069, verify no pending migrations/FK violations, then deploy the
 matching Worker. Rollback is application-first; the additive tables may remain
 unused until a separately approved contract phase.
+
+## Migration 0070 — corrected-version exports (local candidate)
+
+`0070_analysis_corrected_exports.sql` additively extends the existing
+`analysis_report_exports` lifecycle with an allowlisted variant and an optional
+foreign key to an immutable corrected analysis version. Existing report rows
+backfill through the non-destructive `analysis_report` default. Insert triggers
+require clean/redline rows to reference a corrected version from the same
+analysis, workspace and owner; variant/source identity is immutable afterwards.
+
+The matching Worker reuses the existing document-export queue, private R2
+namespace, checksum verification, audited download/delete path and account purge.
+Local typecheck, lint and all 456 application tests plus 102 Cloudflare contract
+tests pass. Synthetic generator tests cover clean/redline DOCX and PDF, explicit
+deleted/inserted labels, OOXML strike/underline marks, version binding and
+cross-tenant denial. Migration 0070 has not been applied to staging or
+production. Staging requires a new owner authorization covering a fresh verified
+private D1 backup, migration 0069 followed by 0070, and the matching Worker
+deploy. Rollback is application-first; both additive migrations can remain unused.

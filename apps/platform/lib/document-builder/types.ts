@@ -122,6 +122,7 @@ export interface RenderedParagraph {
   text: string;
   kind: "title" | "subtitle" | "heading" | "body" | "list" | "signature" | "spacer";
   keepWithNext?: boolean;
+  reviewMark?: "deleted" | "inserted";
 }
 
 export interface RenderedReceipt {

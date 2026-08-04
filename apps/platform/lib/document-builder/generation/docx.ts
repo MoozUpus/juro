@@ -27,10 +27,15 @@ function paragraphXml(paragraph: RenderedParagraph, index: number): string {
   const keep = paragraph.keepWithNext || isHeading || isTitle || isSubtitle ? "<w:keepNext/>" : "";
   const justification = center ? "center" : isSignature ? "left" : "both";
   const bold = isTitle || isSubtitle || isHeading ? "<w:b/><w:bCs/>" : "";
+  const review = paragraph.reviewMark === "deleted"
+    ? '<w:color w:val="9D2B21"/><w:strike/><w:shd w:val="clear" w:color="auto" w:fill="FCE8E6"/>'
+    : paragraph.reviewMark === "inserted"
+      ? '<w:color w:val="17653A"/><w:u w:val="single"/><w:shd w:val="clear" w:color="auto" w:fill="E8F5EC"/>'
+      : "";
   const preserve = /^\s|\s$/.test(listText) ? ' xml:space="preserve"' : "";
   return `<w:p w14:paraId="${(index + 1).toString(16).padStart(8, "0").toUpperCase()}">
     <w:pPr>${keep}<w:widowControl/><w:spacing w:before="${before}" w:after="${after}" w:line="276" w:lineRule="auto"/>${indentation}<w:jc w:val="${justification}"/><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${bold}<w:lang w:val="ru-RU" w:eastAsia="ru-RU" w:bidi="ru-RU"/></w:rPr></w:pPr>
-    <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${bold}<w:lang w:val="ru-RU" w:eastAsia="ru-RU" w:bidi="ru-RU"/></w:rPr><w:t${preserve}>${xmlEscape(listText)}</w:t></w:r>
+    <w:r><w:rPr><w:rFonts w:ascii="Arial" w:hAnsi="Arial" w:cs="Arial"/><w:sz w:val="${size}"/><w:szCs w:val="${size}"/>${bold}${review}<w:lang w:val="ru-RU" w:eastAsia="ru-RU" w:bidi="ru-RU"/></w:rPr><w:t${preserve}>${xmlEscape(listText)}</w:t></w:r>
   </w:p>`;
 }
 

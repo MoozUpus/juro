@@ -2775,3 +2775,22 @@ reverify size and SHA-256, decisions and applications are audited, idempotency i
 server-enforced, and account deletion inventories the derived R2 keys. Preserving
 original DOCX/PDF layout and producing visual redline artifacts remain separate
 work and are not implied by this slice.
+
+## D-134 — Corrected exports reuse the audited report pipeline
+
+Status: accepted and locally verified; staging migrations pending
+Date: 2026-08-04
+
+Clean and marked-change outputs are version-derived exports, not mutations of the
+uploaded source. They therefore extend `analysis_report_exports` instead of
+creating a parallel queue/storage lifecycle. A corrected export is valid only
+when its immutable source version belongs to the same completed analysis,
+workspace and owner. The consumer re-verifies the source object and the exact
+applied-revision membership before generating bytes.
+
+The redline is deliberately explicit and normalized: each change includes
+deleted/added labels, risk location, explanation and source identifiers, with
+strike/underline and color as supplemental cues. It does not claim source-layout
+preservation or native Word tracked changes. Existing private R2, checksum,
+idempotency, audit, download, deletion and account-purge contracts remain the
+single boundary. No new runtime dependency is introduced.

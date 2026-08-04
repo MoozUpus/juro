@@ -646,3 +646,12 @@ empty, partial, stale, ambiguous, error and success states. No mock correction i
 shown and no original PDF/DOCX is mutated. Local typecheck, lint, full tests,
 development/staging builds and artifact validation pass. Staging application and
 provider-generated end-to-end evidence remain pending migration 0069 approval.
+
+The same local surface now requests four real queued artifacts for each immutable
+corrected version: clean DOCX/PDF and DOCX/PDF with explicit change marks. The
+redline representation labels deleted and added text in words and supplements it
+with strike/underline plus accessible status color; the corrected normalized text
+is included after the change schedule. Downloads and deletion reuse the existing
+tenant-scoped private export boundary. These exports do not claim to preserve the
+source PDF/DOCX page geometry or native Word tracked changes. Migration 0070,
+staging deployment and authenticated provider-generated verification remain open.

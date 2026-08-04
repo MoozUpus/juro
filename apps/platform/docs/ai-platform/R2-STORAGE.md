@@ -177,3 +177,18 @@ proxied after owner/workspace/version lookup and object-integrity verification.
 Account deletion inventories these keys with exports and OCR derivatives. No
 staging object under this prefix is claimed until migration 0069 and its matching
 Worker are separately authorized and deployed.
+
+## Corrected-version DOCX/PDF exports
+
+Local migration 0070 reuses the existing private export prefix:
+
+`exports/{workspaceId}/{analysisId}/{exportId}.{pdf|docx}`
+
+The D1 row binds every clean or redline artifact to one immutable corrected
+version. The consumer re-verifies that version's R2 size and SHA-256, checks the
+exact applied-revision set, renders a deterministic normalized artifact, then
+uses the existing conditional create and completion-evidence path. The object
+key and metadata contain identifiers only. Explicit deletion and account purge
+cover these rows automatically because they remain in `analysis_report_exports`.
+No staging object of these variants is claimed before migrations 0069/0070 and
+the matching Worker are separately authorized.

@@ -36,19 +36,27 @@ function paragraphStyle(paragraph: RenderedParagraph): { size: number; lineHeigh
   return { size: 10.5, lineHeight: 14.2, before: 0, after: 5, bold: false, align: "justify", indent: 0 };
 }
 
-function drawJustifiedLine(page: PDFPage, line: string, x: number, y: number, width: number, font: PDFFont, size: number, justify: boolean): void {
+function drawJustifiedLine(page: PDFPage, line: string, x: number, y: number, width: number, font: PDFFont, size: number, justify: boolean, reviewMark?: "deleted" | "inserted"): void {
+  const color = reviewMark === "deleted" ? rgb(0.62, 0.17, 0.13) : reviewMark === "inserted" ? rgb(0.09, 0.4, 0.23) : rgb(0.08, 0.1, 0.12);
+  if (reviewMark) {
+    page.drawRectangle({ x: x - 3, y: y - 2, width: Math.min(width + 6, A4_WIDTH - x - MARGIN_X + 3), height: size + 5, color: reviewMark === "deleted" ? rgb(0.99, 0.91, 0.9) : rgb(0.91, 0.97, 0.93) });
+  }
   const words = line.split(" ");
   if (!justify || words.length < 2) {
-    page.drawText(line, { x, y, size, font, color: rgb(0.08, 0.1, 0.12) });
+    page.drawText(line, { x, y, size, font, color });
+    if (reviewMark === "deleted") page.drawLine({ start: { x, y: y + size * 0.38 }, end: { x: x + font.widthOfTextAtSize(line, size), y: y + size * 0.38 }, thickness: 0.7, color });
+    if (reviewMark === "inserted") page.drawLine({ start: { x, y: y - 1 }, end: { x: x + font.widthOfTextAtSize(line, size), y: y - 1 }, thickness: 0.6, color });
     return;
   }
   const wordsWidth = words.reduce((total, word) => total + font.widthOfTextAtSize(word, size), 0);
   const space = (width - wordsWidth) / (words.length - 1);
   let cursor = x;
   for (const word of words) {
-    page.drawText(word, { x: cursor, y, size, font, color: rgb(0.08, 0.1, 0.12) });
+    page.drawText(word, { x: cursor, y, size, font, color });
     cursor += font.widthOfTextAtSize(word, size) + space;
   }
+  if (reviewMark === "deleted") page.drawLine({ start: { x, y: y + size * 0.38 }, end: { x: x + width, y: y + size * 0.38 }, thickness: 0.7, color });
+  if (reviewMark === "inserted") page.drawLine({ start: { x, y: y - 1 }, end: { x: x + width, y: y - 1 }, thickness: 0.6, color });
 }
 
 function drawFooter(
@@ -108,7 +116,7 @@ export async function generatePdf(
       const lineWidth = font.widthOfTextAtSize(line, style.size);
       const x = style.align === "center" ? (A4_WIDTH - lineWidth) / 2 : MARGIN_X + style.indent;
       const isLast = lineIndex === lines.length - 1;
-      drawJustifiedLine(page, line, x, y - style.lineHeight, availableWidth, font, style.size, style.align === "justify" && !isLast && line.length > 35);
+      drawJustifiedLine(page, line, x, y - style.lineHeight, availableWidth, font, style.size, style.align === "justify" && !isLast && line.length > 35, paragraph.reviewMark);
       y -= style.lineHeight;
     });
     y -= style.after;

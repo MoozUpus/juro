@@ -483,9 +483,10 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 
 - Migration 0069 and its matching Worker are local only; no staging or production
   correction lifecycle is claimed.
-- Corrected output is normalized UTF-8 Markdown. Original DOCX/PDF formatting,
-  coordinates, tracked changes, clean DOCX/PDF export and visual redline remain
-  unimplemented and are not simulated.
+- Corrected output remains normalized rather than layout-preserving. Local clean
+  DOCX/PDF and explicit marked-change DOCX/PDF exports are implemented, but they
+  do not reproduce original DOCX/PDF coordinates, native Word tracked changes,
+  pagination, images, tables or exact styles.
 - Older completed analyses have no version-1 normalized artifact and therefore
   honestly show no applicable corrections; they are not silently backfilled.
 - A real scanner-approved, provider-generated staging analysis has not traversed
@@ -494,3 +495,6 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 - An R2 object written immediately before a losing concurrent D1 version insert
   may become an unreachable content-addressed orphan. It never becomes visible;
   bounded orphan reconciliation is still required before production readiness.
+- Migration 0070 and its matching Worker are local only. No staging corrected
+  export, authenticated browser download, large-document pagination or assistive-
+  technology evidence is claimed until 0069 and 0070 are authorized and deployed.

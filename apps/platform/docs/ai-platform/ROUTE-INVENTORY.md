@@ -412,6 +412,10 @@ history, case context and usage ledger. Voice-with-avatar is not enabled.
 | `POST /api/platform/document-analysis/:analysisId/revisions` | Applies selected/all available suggestions into a new version | CSRF, Zod, idempotency, exact text match, private R2 |
 | `PATCH /api/platform/document-analysis/:analysisId/revisions/:revisionId` | Accepts or rejects one suggestion | CSRF, tenant/owner/state guard, audit |
 | `GET /api/platform/document-analysis/:analysisId/versions/:versionId/file` | Proxies one normalized Markdown version | tenant/owner lookup, R2 size/SHA-256 verification, download audit |
+| `POST /api/platform/document-analysis/:analysisId/exports` | Queues analysis report or version-bound clean/redline DOCX/PDF | CSRF, strict Zod body, idempotency, completed-analysis and corrected-version tenant guards |
+| `GET /api/platform/document-analysis/:analysisId/exports` | Lists machine, report and corrected-version exports | authenticated active workspace + owner filter |
+| `GET /api/platform/document-analysis/exports/:exportId/file` | Proxies a completed private export | tenant/owner/state lookup, R2 size/SHA-256 verification, download audit |
+| `DELETE /api/platform/document-analysis/exports/:exportId` | Deletes a terminal corrected/report export | CSRF, tenant/owner guard, R2-first verified deletion, audit |
 
 These are additive API routes used by the existing localized document-review
 surface. They add no public route and do not alter document-builder URLs.

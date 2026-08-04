@@ -252,6 +252,64 @@ test("document export queue routes report jobs through the real PDF generator", 
   }
 });
 
+test("corrected clean and redline DOCX/PDF exports are version-bound, verified and explicit", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    seed(sqlite);
+    const correctedText = "# Договор оказания услуг\n\nСрок составляет 10 календарных дней.";
+    const correctedBytes = new TextEncoder().encode(correctedText);
+    const correctedSha = await sha256Hex(correctedBytes);
+    seedCorrectedVersion(sqlite, correctedSha, correctedBytes.byteLength);
+    await bucket.put("analysis-versions/workspace-report-a/analysis-report-a/2-corrected.md", correctedBytes, { sha256: correctedSha });
+
+    for (const variant of ["corrected_clean", "corrected_redline"] as const) {
+      for (const format of ["docx", "pdf"] as const) {
+        const requested = await requestAnalysisReportExport({
+          db: d1, analysisId: "analysis-report-a", workspaceId: "workspace-report-a", userId: "user-report-a",
+          format, variant, sourceVersionId: "analysis-version-corrected-a",
+          idempotencyKey: `corrected-${variant}-${format}-0001`,
+        });
+        assert.equal(requested.record.variant, variant);
+        assert.equal(requested.record.sourceVersionId, "analysis-version-corrected-a");
+        await executeAnalysisReportExportJob(
+          { DB: d1, BUCKET: bucket as unknown as R2Bucket, ASSETS: new FakeAssets() as unknown as Fetcher },
+          requested.record.id,
+          "workspace-report-a",
+        );
+        const own = await reportExportForDownload(d1, { exportId: requested.record.id, workspaceId: "workspace-report-a", userId: "user-report-a" });
+        const object = await verifyReportObject(bucket as unknown as R2Bucket, own);
+        const bytes = new Uint8Array(await object.arrayBuffer());
+        assert.ok(bytes.byteLength > 1_000);
+        if (format === "docx") {
+          const xml = strFromU8(unzipSync(bytes)["word/document.xml"]);
+          assert.match(xml, /Срок составляет 10 календарных дней/);
+          if (variant === "corrected_redline") {
+            assert.match(xml, /Удалено: срок определяется дополнительно/);
+            assert.match(xml, /Добавлено: Срок составляет 10 календарных дней/);
+            assert.match(xml, /w:strike/);
+            assert.match(xml, /w:u w:val="single"/);
+          } else {
+            assert.doesNotMatch(xml, /Удалено:/);
+          }
+        } else {
+          assert.equal(new TextDecoder().decode(bytes.slice(0, 4)), "%PDF");
+        }
+      }
+    }
+    await assert.rejects(
+      requestAnalysisReportExport({
+        db: d1, analysisId: "analysis-report-a", workspaceId: "workspace-report-b", userId: "user-report-b",
+        format: "pdf", variant: "corrected_clean", sourceVersionId: "analysis-version-corrected-a",
+        idempotencyKey: "corrected-cross-tenant-0001",
+      }),
+      (error: unknown) => error instanceof AnalysisExportError && error.code === "ANALYSIS_EXPORT_NOT_READY",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("analysis report migration rejects source mismatch and incomplete completion", () => {
   const { sqlite } = sqliteD1Fixture();
   try {
@@ -266,6 +324,15 @@ test("analysis report migration rejects source mismatch and incomplete completio
        (id,analysis_id,workspace_id,owner_user_id,format,status,file_name,mime_type,idempotency_key,created_at,updated_at)
        VALUES ('report-a','analysis-report-a','workspace-report-a','user-report-a','pdf','queued','report.pdf','application/pdf','report-key-0001',?,?)`,
     ).run(now, now);
+    assert.throws(
+      () => sqlite.prepare("UPDATE analysis_report_exports SET variant='corrected_clean' WHERE id='report-a'").run(),
+      /analysis_report_export_variant_immutable/,
+    );
+    assert.throws(() => sqlite.prepare(
+      `INSERT INTO analysis_report_exports
+       (id,analysis_id,workspace_id,owner_user_id,format,variant,status,file_name,mime_type,idempotency_key,created_at,updated_at)
+       VALUES ('bad-variant','analysis-report-a','workspace-report-a','user-report-a','pdf','unknown','queued','bad.pdf','application/pdf','bad-variant-key-0001',?,?)`,
+    ).run(now, now), /analysis_report_export_variant_mismatch/);
     sqlite.prepare("UPDATE analysis_report_exports SET status='processing' WHERE id='report-a'").run();
     assert.throws(
       () => sqlite.prepare("UPDATE analysis_report_exports SET status='completed' WHERE id='report-a'").run(),
@@ -299,6 +366,33 @@ function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]) {
      (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,created_at,updated_at)
      VALUES ('analysis-report-a','workspace-report-a','user-report-a','file-report-a','completed',?,NULL,'2026-07-31',?,?)`,
   ).run(JSON.stringify({ result }), now, now);
+}
+
+function seedCorrectedVersion(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"], correctedSha: string, correctedSize: number) {
+  sqlite.prepare(
+    `INSERT INTO document_risks
+     (id,analysis_id,level,title,description,excerpt,confidence_percent,created_at,risk_type,clause,page,recommendation,proposed_wording,legal_basis_source_ids_json)
+     VALUES ('risk-report-a','analysis-report-a','medium','Неясный срок','Срок не определён.','срок определяется дополнительно',90,?,'document_internal','2.1',1,'Указать точный срок.','Срок составляет 10 календарных дней.','[]')`,
+  ).run(now);
+  sqlite.prepare(
+    `INSERT INTO analysis_document_versions
+     (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,file_name,mime_type,size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,created_by_user_id,created_at)
+     VALUES ('analysis-source-report-a','analysis-report-a','workspace-report-a','user-report-a',1,NULL,'extracted','analysis-versions/workspace-report-a/analysis-report-a/1-source.md','contract-v1.md','text/markdown; charset=utf-8',32,?,NULL,NULL,'[]',NULL,?)`,
+  ).run("1".repeat(64), now);
+  sqlite.prepare(
+    `INSERT INTO suggested_revisions
+     (id,analysis_id,risk_id,source_version_id,workspace_id,owner_user_id,original_text,proposed_text,status,decided_by_user_id,decided_at,applied_version_id,created_at,updated_at)
+     VALUES ('revision-report-a','analysis-report-a','risk-report-a','analysis-source-report-a','workspace-report-a','user-report-a','срок определяется дополнительно','Срок составляет 10 календарных дней.','accepted','user-report-a',?,NULL,?,?)`,
+  ).run(now, now, now);
+  sqlite.prepare(
+    `INSERT INTO analysis_document_versions
+     (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,file_name,mime_type,size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,created_by_user_id,created_at)
+     VALUES ('analysis-version-corrected-a','analysis-report-a','workspace-report-a','user-report-a',2,'analysis-source-report-a','corrected','analysis-versions/workspace-report-a/analysis-report-a/2-corrected.md','contract-v2.md','text/markdown; charset=utf-8',?,?, 'corrected-version-idempotency-0001',?,'["revision-report-a"]','user-report-a',?)`,
+  ).run(correctedSize, correctedSha, "2".repeat(64), now);
+  sqlite.prepare(
+    `UPDATE suggested_revisions SET status='applied',applied_version_id='analysis-version-corrected-a',updated_at=?
+     WHERE id='revision-report-a'`,
+  ).run(now);
 }
 
 async function sha256Hex(value: Uint8Array): Promise<string> {

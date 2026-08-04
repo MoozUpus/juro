@@ -12,7 +12,8 @@ import { DocumentComparisonClient } from "./DocumentComparisonClient";
 
 type Risk = { id?: string; level: string; title: string; description: string; excerpt: string | null; confidencePercent: number | null; riskType?: "document_internal" | "legal_compliance"; clause?: string | null; page?: number | null; recommendation?: string | null; proposedWording?: string | null; legalBasisSourceIds?: string[] };
 type AnalysisExportFormat = "json" | "pdf" | "docx";
-type AnalysisExport = { id: string; status: string; format: AnalysisExportFormat; fileName: string; sizeBytes: number | null; errorCode: string | null; completedAt: string | null; createdAt: string };
+type AnalysisExportVariant = "analysis_report" | "corrected_clean" | "corrected_redline";
+type AnalysisExport = { id: string; status: string; format: AnalysisExportFormat; variant: AnalysisExportVariant; sourceVersionId: string | null; fileName: string; sizeBytes: number | null; errorCode: string | null; completedAt: string | null; createdAt: string };
 type Summary = {
   summary?: string; parties?: string[]; dates?: string[]; obligations?: string[]; payments?: string[];
   disputedTerms?: string[]; missingItems?: string[]; questions?: string[]; disclaimer?: string;
@@ -150,7 +151,7 @@ function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boo
   const [exportNotice, setExportNotice] = useState("");
   const formats: AnalysisExportFormat[] = ["json", "pdf", "docx"];
   const exportsByFormat = new Map<AnalysisExportFormat, AnalysisExport>();
-  for (const record of [...(analysis.exports ?? [])].sort((left, right) => right.createdAt.localeCompare(left.createdAt))) {
+  for (const record of [...(analysis.exports ?? [])].filter((item) => item.variant === "analysis_report").sort((left, right) => right.createdAt.localeCompare(left.createdAt))) {
     if (!exportsByFormat.has(record.format)) exportsByFormat.set(record.format, record);
   }
   async function requestExport(format: AnalysisExportFormat) {
@@ -195,11 +196,11 @@ function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boo
     {exportError && <p className="review-message error" role="alert"><CircleAlert />{exportError}</p>}
     {exportNotice && <p className="review-message success" role="status"><ShieldCheck />{exportNotice}</p>}
     {analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}
-    {analysis.status === "completed" && analysis.risks?.some((risk) => risk.proposedWording) ? <RevisionPanel analysisId={analysis.id} ru={ru} onAnalysisChanged={onChanged} /> : null}
+    {analysis.status === "completed" && analysis.risks?.some((risk) => risk.proposedWording) ? <RevisionPanel analysisId={analysis.id} exports={analysis.exports ?? []} ru={ru} onAnalysisChanged={onChanged} /> : null}
   </article>;
 }
 
-function RevisionPanel({ analysisId, ru, onAnalysisChanged }: { analysisId: string; ru: boolean; onAnalysisChanged: () => Promise<void> }) {
+function RevisionPanel({ analysisId, exports, ru, onAnalysisChanged }: { analysisId: string; exports: AnalysisExport[]; ru: boolean; onAnalysisChanged: () => Promise<void> }) {
   const [revisions, setRevisions] = useState<SuggestedRevision[]>([]);
   const [versions, setVersions] = useState<AnalysisDocumentVersion[]>([]);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -209,7 +210,9 @@ function RevisionPanel({ analysisId, ru, onAnalysisChanged }: { analysisId: stri
   const [confirmMode, setConfirmMode] = useState<"selected" | "all" | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  const attemptKeys = useRef<Record<string, string>>({});
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [deletingExportId, setDeletingExportId] = useState<string | null>(null);
+  const [attemptKeys, setAttemptKeys] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setError("");
@@ -252,8 +255,8 @@ function RevisionPanel({ analysisId, ru, onAnalysisChanged }: { analysisId: stri
   async function apply(mode: "selected" | "all") {
     const ids = mode === "selected" ? [...selectedIds].sort() : [];
     const attemptName = `${mode}:${ids.join("|")}`;
-    const idempotencyKey = attemptKeys.current[attemptName] ?? `analysis-revision-${crypto.randomUUID()}`;
-    attemptKeys.current[attemptName] = idempotencyKey;
+    const idempotencyKey = attemptKeys[attemptName] ?? `analysis-revision-${crypto.randomUUID()}`;
+    setAttemptKeys((current) => ({ ...current, [attemptName]: idempotencyKey }));
     setApplying(mode); setConfirmMode(null); setError(""); setNotice("");
     try {
       const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/revisions`, {
@@ -263,7 +266,7 @@ function RevisionPanel({ analysisId, ru, onAnalysisChanged }: { analysisId: stri
       });
       const body = await response.json() as { code?: string; error?: string; partial?: boolean; version?: AnalysisDocumentVersion };
       if (!response.ok) {
-        delete attemptKeys.current[attemptName];
+        setAttemptKeys((current) => withoutKey(current, attemptName));
         throw new Error(revisionError(body.code, body.error, ru));
       }
       setSelectedIds([]);
@@ -280,13 +283,52 @@ function RevisionPanel({ analysisId, ru, onAnalysisChanged }: { analysisId: stri
     }
   }
 
+  async function requestVersionExport(version: AnalysisDocumentVersion, variant: "corrected_clean" | "corrected_redline", format: "pdf" | "docx") {
+    const keyName = `${version.id}:${variant}:${format}`;
+    const existing = exports.find((item) => item.sourceVersionId === version.id && item.variant === variant && item.format === format);
+    const idempotencyKey = existing?.status === "failed" ? `analysis-version-export-${crypto.randomUUID()}` : attemptKeys[keyName] ?? `analysis-version-export-${crypto.randomUUID()}`;
+    setAttemptKeys((current) => ({ ...current, [keyName]: idempotencyKey }));
+    setExportingKey(keyName); setError(""); setNotice("");
+    try {
+      const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/exports`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey, "x-juro-csrf": "1" },
+        body: JSON.stringify({ format, variant, sourceVersionId: version.id }),
+      });
+      const body = await response.json() as { code?: string };
+      if (!response.ok) { setAttemptKeys((current) => withoutKey(current, keyName)); throw new Error(exportRequestError(body.code, ru)); }
+      setNotice(ru ? "Экспорт поставлен в защищённую очередь." : "Eksport himoyalangan navbatga qo‘yildi.");
+      await onAnalysisChanged();
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setExportingKey(null); }
+  }
+
+  async function removeVersionExport(record: AnalysisExport) {
+    if (!window.confirm(ru ? "Удалить этот экспорт?" : "Bu eksport o‘chirilsinmi?")) return;
+    setDeletingExportId(record.id); setError(""); setNotice("");
+    try {
+      const response = await fetch(`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}`, { method: "DELETE", headers: { "x-juro-csrf": "1" } });
+      const body = await response.json() as { code?: string };
+      if (!response.ok) throw new Error(exportDeleteError(body.code, ru));
+      await onAnalysisChanged();
+      setNotice(ru ? "Экспорт удалён." : "Eksport o‘chirildi.");
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setDeletingExportId(null); }
+  }
+
   const accepted = revisions.filter((item) => item.status === "accepted");
   const available = revisions.filter((item) => item.status === "pending" || item.status === "accepted");
   const correctedVersions = versions.filter((item) => item.sourceKind === "corrected");
   return <section className="review-revisions" aria-labelledby={`revision-title-${analysisId}`}>
     <div className="review-revisions-heading">
       <div><h3 id={`revision-title-${analysisId}`}>{ru ? "Предлагаемые исправления" : "Taklif etilgan tuzatishlar"}</h3><p>{ru ? "Сравните исходный и новый текст. JURO ничего не применяет без вашего действия." : "Asl va yangi matnni solishtiring. JURO sizning amalingizsiz hech narsani qo‘llamaydi."}</p></div>
-      {correctedVersions.length > 0 && <div className="review-version-downloads" aria-label={ru ? "Исправленные версии" : "Tuzatilgan nusxalar"}>{correctedVersions.map((version) => <a key={version.id} href={`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/versions/${encodeURIComponent(version.id)}/file`}><Download />{ru ? `Версия ${version.version}` : `${version.version}-nusxa`}</a>)}</div>}
+      {correctedVersions.length > 0 && <div className="review-version-downloads" aria-label={ru ? "Исправленные версии" : "Tuzatilgan nusxalar"}>{correctedVersions.map((version) => <div className="review-version-export" key={version.id}><strong>{ru ? `Версия ${version.version}` : `${version.version}-nusxa`}</strong><a href={`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/versions/${encodeURIComponent(version.id)}/file`}><Download />MD</a>{(["corrected_clean", "corrected_redline"] as const).flatMap((variant) => (["docx", "pdf"] as const).map((format) => {
+        const record = [...exports].filter((item) => item.sourceVersionId === version.id && item.variant === variant && item.format === format).sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
+        const keyName = `${version.id}:${variant}:${format}`;
+        const pending = ["queued", "processing", "retrying"].includes(record?.status ?? "");
+        const label = `${variant === "corrected_clean" ? (ru ? "Чистая" : "Toza") : (ru ? "С отметками" : "Belgilar bilan")} ${format.toUpperCase()}`;
+        return <span key={`${variant}-${format}`}>{record?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}/file`}><Download />{label}</a> : <button type="button" disabled={pending || exportingKey !== null || deletingExportId !== null} aria-busy={pending || exportingKey === keyName} onClick={() => void requestVersionExport(version, variant, format)}>{pending || exportingKey === keyName ? <LoaderCircle className="spin" /> : record?.status === "failed" ? <RefreshCw /> : <Download />}{label}</button>}{record && ["completed", "failed"].includes(record.status) && <button type="button" className="icon" aria-label={ru ? `Удалить ${label}` : `${label}ni o‘chirish`} disabled={deletingExportId !== null || exportingKey !== null} onClick={() => void removeVersionExport(record)}>{deletingExportId === record.id ? <LoaderCircle className="spin" /> : <Trash2 />}</button>}</span>;
+      }))}</div>)}</div>}
     </div>
     <p className="review-normalized-note"><FileText />{ru ? "Исправления создают отдельный нормализованный Markdown-файл. Исходный PDF или DOCX и его форматирование не изменяются." : "Tuzatishlar alohida normallashtirilgan Markdown faylini yaratadi. Asl PDF yoki DOCX va uning formatlanishi o‘zgarmaydi."}</p>
     {error && <p className="review-message error" role="alert"><CircleAlert />{error}<button type="button" onClick={() => void load()}>{ru ? "Повторить" : "Takrorlash"}</button></p>}

@@ -15,8 +15,16 @@ export const GET = withApiErrors(async function GET() {
       f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
       (SELECT json_group_array(json_object('id',r.id,'level',r.level,'title',r.title,'description',r.description,'excerpt',r.excerpt,'confidencePercent',r.confidence_percent,'riskType',r.risk_type,'clause',r.clause,'page',r.page,'recommendation',r.recommendation,'proposedWording',r.proposed_wording,'legalBasisSourceIds',json(r.legal_basis_source_ids_json)))
        FROM document_risks r WHERE r.analysis_id=a.id) AS risksJson,
-      (SELECT json_group_array(json_object('id',e.id,'status',e.status,'format',e.format,'fileName',e.file_name,'sizeBytes',e.size_bytes,'errorCode',e.error_code,'completedAt',e.completed_at,'createdAt',e.created_at))
-       FROM analysis_exports e WHERE e.analysis_id=a.id AND e.workspace_id=a.workspace_id AND e.owner_user_id=a.owner_user_id) AS exportsJson
+      (SELECT json_group_array(json_object('id',e.id,'status',e.status,'format',e.format,'variant',e.variant,'sourceVersionId',e.sourceVersionId,'fileName',e.fileName,'sizeBytes',e.sizeBytes,'errorCode',e.errorCode,'completedAt',e.completedAt,'createdAt',e.createdAt))
+       FROM (
+         SELECT id,status,format,'analysis_report' AS variant,NULL AS sourceVersionId,file_name AS fileName,
+           size_bytes AS sizeBytes,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
+         FROM analysis_exports WHERE analysis_id=a.id AND workspace_id=a.workspace_id AND owner_user_id=a.owner_user_id
+         UNION ALL
+         SELECT id,status,format,variant,source_version_id AS sourceVersionId,file_name AS fileName,
+           size_bytes AS sizeBytes,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
+         FROM analysis_report_exports WHERE analysis_id=a.id AND workspace_id=a.workspace_id AND owner_user_id=a.owner_user_id
+       ) e) AS exportsJson
      FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
      WHERE a.workspace_id=? AND a.owner_user_id=? ORDER BY a.created_at DESC LIMIT 50`,
   ).bind(workspace.id, user.id).all();

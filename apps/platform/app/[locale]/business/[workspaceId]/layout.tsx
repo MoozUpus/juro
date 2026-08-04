@@ -17,6 +17,7 @@ import "../../../_platform/checkout.css";
 import "../../../_platform/profile-settings.css";
 import "../../../_platform/consultations.css";
 import "../../../_platform/document-review.css";
+import "../../../_platform/document-review-exports.css";
 import "../../../_platform/document-comparison.css";
 import "../../../_platform/history-archive.css";
 import "../../../_platform/help.css";

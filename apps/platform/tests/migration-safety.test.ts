@@ -2841,7 +2841,7 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
     );
 
     assert.equal(tableDefinitions(db).size, 173);
-    assert.equal(foreignKeyCount(db), 330);
+    assert.equal(foreignKeyCount(db), 331);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3344,7 +3344,7 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       /published legal source chunks are immutable/,
     );
     assert.equal(tableDefinitions(db).size, 173);
-    assert.equal(foreignKeyCount(db), 330);
+    assert.equal(foreignKeyCount(db), 331);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3908,7 +3908,7 @@ test("0033 prevents lifecycle forks, evidence mutation, cancellation after purge
       /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
     );
     assert.equal(tableDefinitions(db).size, 173);
-    assert.equal(foreignKeyCount(db), 330);
+    assert.equal(foreignKeyCount(db), 331);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

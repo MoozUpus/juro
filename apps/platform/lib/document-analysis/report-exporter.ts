@@ -1,15 +1,20 @@
 import { generateDocx } from "../document-builder/generation/docx";
 import { generatePdf } from "../document-builder/generation/pdf";
+import { correctedVersionParagraphs, type AppliedRevisionForExport, type CorrectedExportVariant } from "./corrected-export";
 import { AnalysisExportError } from "./exporter";
 import { analysisReportParagraphs } from "./report";
+import { analysisVersionForDownload, verifiedAnalysisVersionObject } from "./revisions";
 import { documentAnalysisResultSchema } from "./schema";
 
 export type AnalysisReportFormat = "pdf" | "docx";
+export type AnalysisReportVariant = "analysis_report" | CorrectedExportVariant;
 
 export type AnalysisReportExportRecord = {
   id: string;
   analysisId: string;
   format: AnalysisReportFormat;
+  variant: AnalysisReportVariant;
+  sourceVersionId: string | null;
   status: string;
   fileName: string;
   mimeType: string;
@@ -26,6 +31,8 @@ type ReportDownloadRow = {
   workspaceId: string;
   ownerUserId: string;
   format: AnalysisReportFormat;
+  variant: AnalysisReportVariant;
+  sourceVersionId: string | null;
   status: string;
   r2Key: string | null;
   fileName: string;
@@ -43,7 +50,7 @@ type SourceRow = ReportDownloadRow & {
 
 type DeleteRow = Pick<
   ReportDownloadRow,
-  "id" | "analysisId" | "workspaceId" | "ownerUserId" | "format" | "status" | "r2Key"
+  "id" | "analysisId" | "workspaceId" | "ownerUserId" | "format" | "variant" | "sourceVersionId" | "status" | "r2Key"
 >;
 
 const formatInfo = {
@@ -60,8 +67,12 @@ export async function requestAnalysisReportExport(input: {
   workspaceId: string;
   userId: string;
   format: AnalysisReportFormat;
+  variant?: AnalysisReportVariant;
+  sourceVersionId?: string | null;
   idempotencyKey: string;
 }): Promise<{ record: AnalysisReportExportRecord; replay: boolean }> {
+  const variant = input.variant ?? "analysis_report";
+  const sourceVersionId = input.sourceVersionId ?? null;
   if (!/^[A-Za-z0-9._:-]{16,128}$/.test(input.idempotencyKey)) {
     throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 400);
   }
@@ -72,35 +83,47 @@ export async function requestAnalysisReportExport(input: {
     input.userId,
   );
   if (existing) {
-    if (existing.analysisId !== input.analysisId || existing.format !== input.format) {
+    if (existing.analysisId !== input.analysisId || existing.format !== input.format || existing.variant !== variant || existing.sourceVersionId !== sourceVersionId) {
       throw new AnalysisExportError("ANALYSIS_EXPORT_IDEMPOTENCY_CONFLICT", false, 409);
     }
     return { record: existing, replay: true };
   }
   const source = await input.db.prepare(
-    `SELECT id FROM document_analyses
-     WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='completed' LIMIT 1`,
-  ).bind(input.analysisId, input.workspaceId, input.userId).first<{ id: string }>();
+    `SELECT analysis.id FROM document_analyses analysis
+     WHERE analysis.id=? AND analysis.workspace_id=? AND analysis.owner_user_id=? AND analysis.status='completed'
+       AND (
+         (?='analysis_report' AND ? IS NULL)
+         OR (? IN ('corrected_clean','corrected_redline') AND EXISTS (
+           SELECT 1 FROM analysis_document_versions version
+           WHERE version.id=? AND version.analysis_id=analysis.id
+             AND version.workspace_id=analysis.workspace_id AND version.owner_user_id=analysis.owner_user_id
+             AND version.source_kind='corrected'
+         ))
+       ) LIMIT 1`,
+  ).bind(input.analysisId, input.workspaceId, input.userId, variant, sourceVersionId, variant, sourceVersionId).first<{ id: string }>();
   if (!source) throw new AnalysisExportError("ANALYSIS_EXPORT_NOT_READY", false, 409);
 
   const id = crypto.randomUUID();
   const outboxId = crypto.randomUUID();
   const now = new Date().toISOString();
   const info = formatInfo[input.format];
-  const fileName = `juro-analysis-${input.analysisId}.${info.extension}`;
+  const variantName = variant === "analysis_report" ? "analysis" : variant === "corrected_clean" ? "corrected" : "redline";
+  const fileName = `juro-${variantName}-${input.analysisId}.${info.extension}`;
   try {
     await input.db.batch([
       input.db.prepare(
         `INSERT INTO analysis_report_exports
-         (id,analysis_id,workspace_id,owner_user_id,format,status,r2_key,file_name,mime_type,
+         (id,analysis_id,workspace_id,owner_user_id,format,variant,source_version_id,status,r2_key,file_name,mime_type,
           size_bytes,sha256,idempotency_key,error_code,completed_at,created_at,updated_at)
-         VALUES (?,?,?,?,?,'queued',NULL,?,?,NULL,NULL,?,NULL,NULL,?,?)`,
+         VALUES (?,?,?,?,?,?,?,'queued',NULL,?,?,NULL,NULL,?,NULL,NULL,?,?)`,
       ).bind(
         id,
         input.analysisId,
         input.workspaceId,
         input.userId,
         input.format,
+        variant,
+        sourceVersionId,
         fileName,
         info.mimeType,
         input.idempotencyKey,
@@ -133,7 +156,7 @@ export async function requestAnalysisReportExport(input: {
         input.workspaceId,
         input.userId,
         id,
-        JSON.stringify({ analysisId: input.analysisId, format: input.format }),
+        JSON.stringify({ analysisId: input.analysisId, format: input.format, variant, sourceVersionId }),
         now,
       ),
     ]);
@@ -144,7 +167,7 @@ export async function requestAnalysisReportExport(input: {
       input.workspaceId,
       input.userId,
     );
-    if (raced?.analysisId === input.analysisId && raced.format === input.format) {
+    if (raced?.analysisId === input.analysisId && raced.format === input.format && raced.variant === variant && raced.sourceVersionId === sourceVersionId) {
       return { record: raced, replay: true };
     }
     if (error instanceof Error && /unique constraint/i.test(error.message)) {
@@ -158,6 +181,8 @@ export async function requestAnalysisReportExport(input: {
       id,
       analysisId: input.analysisId,
       format: input.format,
+      variant,
+      sourceVersionId,
       status: "queued",
       fileName,
       mimeType: info.mimeType,
@@ -193,11 +218,9 @@ export async function executeAnalysisReportExportJob(
   }
 
   const result = normalizedResult(row.summaryJson);
-  const paragraphs = analysisReportParagraphs({
-    result,
-    sourceFileName: row.sourceFileName,
-    generatedAt: row.createdAt,
-  });
+  const paragraphs = row.variant === "analysis_report"
+    ? analysisReportParagraphs({ result, sourceFileName: row.sourceFileName, generatedAt: row.createdAt })
+    : await correctedParagraphs(env, row, result.outputLanguage);
   const bytes = row.format === "pdf"
     ? await generatePdf(
       paragraphs,
@@ -205,9 +228,7 @@ export async function executeAnalysisReportExportJob(
       await asset(env.ASSETS, "/document-templates/DejaVuSans-Bold-JURO.ttf"),
       await asset(env.ASSETS, "/document-templates/juro-mark-footer.png"),
       {
-        title: result.outputLanguage === "ru"
-          ? "JURO — отчёт об анализе документа"
-          : "JURO — hujjat tahlili hisoboti",
+        title: pdfTitle(row.variant, result.outputLanguage),
         producer: "JURO Document Analysis",
         footerLabel: result.outputLanguage === "ru" ? "Сформировано в JURO" : "JURO’da yaratildi",
         pageLabel: result.outputLanguage === "ru" ? "Страница" : "Sahifa",
@@ -240,6 +261,8 @@ export async function executeAnalysisReportExportJob(
         analysisId: row.analysisId,
         exportId: row.id,
         format: row.format,
+        variant: row.variant,
+        ...(row.sourceVersionId ? { sourceVersionId: row.sourceVersionId } : {}),
       },
     });
     if (!stored || stored.size !== bytes.byteLength || hex(stored.checksums.sha256) !== sha256) {
@@ -262,7 +285,7 @@ export async function executeAnalysisReportExportJob(
       row.workspaceId,
       row.ownerUserId,
       row.id,
-      JSON.stringify({ analysisId: row.analysisId, format: row.format, sizeBytes: bytes.byteLength, sha256 }),
+      JSON.stringify({ analysisId: row.analysisId, format: row.format, variant: row.variant, sourceVersionId: row.sourceVersionId, sizeBytes: bytes.byteLength, sha256 }),
       now,
     ),
   ]);
@@ -311,7 +334,7 @@ export async function reportExportForDownload(
 ): Promise<ReportDownloadRow> {
   const row = await db.prepare(
     `SELECT id,analysis_id AS analysisId,workspace_id AS workspaceId,owner_user_id AS ownerUserId,
-      format,status,r2_key AS r2Key,file_name AS fileName,mime_type AS mimeType,size_bytes AS sizeBytes,sha256
+      format,variant,source_version_id AS sourceVersionId,status,r2_key AS r2Key,file_name AS fileName,mime_type AS mimeType,size_bytes AS sizeBytes,sha256
      FROM analysis_report_exports WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
   ).bind(input.exportId, input.workspaceId, input.userId).first<ReportDownloadRow>();
   if (!row) throw new AnalysisExportError("ANALYSIS_EXPORT_NOT_FOUND", false, 404);
@@ -349,6 +372,8 @@ export async function recordAnalysisReportDownload(
     JSON.stringify({
       analysisId: row.analysisId,
       format: row.format,
+      variant: row.variant,
+      sourceVersionId: row.sourceVersionId,
       sizeBytes: row.sizeBytes,
       sha256: row.sha256,
     }),
@@ -363,7 +388,7 @@ export async function deleteAnalysisReportExport(
   const auditId = `analysis-export-deleted:${input.exportId}`;
   const row = await env.DB.prepare(
     `SELECT id,analysis_id AS analysisId,workspace_id AS workspaceId,
-       owner_user_id AS ownerUserId,format,status,r2_key AS r2Key
+       owner_user_id AS ownerUserId,format,variant,source_version_id AS sourceVersionId,status,r2_key AS r2Key
      FROM analysis_report_exports
      WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
   ).bind(input.exportId, input.workspaceId, input.userId).first<DeleteRow>();
@@ -401,7 +426,7 @@ export async function deleteAnalysisReportExport(
         row.workspaceId,
         row.ownerUserId,
         row.id,
-        JSON.stringify({ analysisId: row.analysisId, format: row.format, priorStatus: row.status }),
+        JSON.stringify({ analysisId: row.analysisId, format: row.format, variant: row.variant, sourceVersionId: row.sourceVersionId, priorStatus: row.status }),
         now,
       ),
     ]);
@@ -424,7 +449,7 @@ async function sourceRow(
 ): Promise<SourceRow | null> {
   return db.prepare(
     `SELECT e.id,e.analysis_id AS analysisId,e.workspace_id AS workspaceId,e.owner_user_id AS ownerUserId,
-      e.format,e.status,e.r2_key AS r2Key,e.file_name AS fileName,e.mime_type AS mimeType,
+      e.format,e.variant,e.source_version_id AS sourceVersionId,e.status,e.r2_key AS r2Key,e.file_name AS fileName,e.mime_type AS mimeType,
       e.size_bytes AS sizeBytes,e.sha256,e.created_at AS createdAt,a.status AS analysisStatus,
       a.summary_json AS summaryJson,f.file_name AS sourceFileName
      FROM analysis_report_exports e JOIN document_analyses a ON a.id=e.analysis_id
@@ -441,7 +466,7 @@ async function byIdempotency(
   userId: string,
 ): Promise<AnalysisReportExportRecord | null> {
   return db.prepare(
-    `SELECT id,analysis_id AS analysisId,format,status,file_name AS fileName,mime_type AS mimeType,
+    `SELECT id,analysis_id AS analysisId,format,variant,source_version_id AS sourceVersionId,status,file_name AS fileName,mime_type AS mimeType,
       size_bytes AS sizeBytes,sha256,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
      FROM analysis_report_exports WHERE idempotency_key=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
   ).bind(key, workspaceId, userId).first<AnalysisReportExportRecord>();
@@ -474,6 +499,95 @@ function normalizedResult(summaryJson: string) {
   const parsed = documentAnalysisResultSchema.safeParse(candidate);
   if (!parsed.success) throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false);
   return parsed.data;
+}
+
+async function correctedParagraphs(
+  env: { DB: D1Database; BUCKET: R2Bucket },
+  row: SourceRow,
+  language: "ru" | "uz",
+) {
+  if (row.variant === "analysis_report" || !row.sourceVersionId) {
+    throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false);
+  }
+  const version = await analysisVersionForDownload(env.DB, {
+    analysisId: row.analysisId,
+    versionId: row.sourceVersionId,
+    workspaceId: row.workspaceId,
+    userId: row.ownerUserId,
+  }).catch(() => { throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false); });
+  if (version.sourceKind !== "corrected") throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false);
+  const object = await verifiedAnalysisVersionObject(env.BUCKET, version)
+    .catch(() => { throw new AnalysisExportError("ANALYSIS_EXPORT_OBJECT_FAILED", false, 422); });
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(await object.arrayBuffer());
+  } catch {
+    throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false);
+  }
+  const versionMetadata = await env.DB.prepare(
+    `SELECT version,revision_ids_json AS revisionIdsJson,created_at AS createdAt
+     FROM analysis_document_versions
+     WHERE id=? AND analysis_id=? AND workspace_id=? AND owner_user_id=? AND source_kind='corrected' LIMIT 1`,
+  ).bind(row.sourceVersionId, row.analysisId, row.workspaceId, row.ownerUserId).first<{
+    version: number; revisionIdsJson: string; createdAt: string;
+  }>();
+  if (!versionMetadata) throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false);
+  const revisionIds = parseStringArray(versionMetadata.revisionIdsJson);
+  if (revisionIds.length === 0) throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false);
+  const revisionRows = await env.DB.prepare(
+    `SELECT revision.id,revision.original_text AS originalText,revision.proposed_text AS proposedText,
+      risk.level AS riskLevel,risk.title AS riskTitle,risk.clause,risk.page,risk.recommendation,
+      risk.legal_basis_source_ids_json AS legalBasisSourceIdsJson
+     FROM suggested_revisions revision
+     JOIN document_risks risk ON risk.id=revision.risk_id AND risk.analysis_id=revision.analysis_id
+     WHERE revision.analysis_id=? AND revision.workspace_id=? AND revision.owner_user_id=?
+       AND revision.applied_version_id=? AND revision.status='applied'
+     ORDER BY revision.created_at,revision.id`,
+  ).bind(row.analysisId, row.workspaceId, row.ownerUserId, row.sourceVersionId).all<{
+    id: string; originalText: string; proposedText: string; riskLevel: string; riskTitle: string;
+    clause: string | null; page: number | null; recommendation: string | null; legalBasisSourceIdsJson: string;
+  }>();
+  const selected = new Set(revisionIds);
+  if (revisionRows.results.length !== selected.size || revisionRows.results.some((revision) => !selected.has(revision.id))) {
+    throw new AnalysisExportError("ANALYSIS_EXPORT_INVALID_SOURCE", false);
+  }
+  const revisions: AppliedRevisionForExport[] = revisionRows.results.map((revision) => ({
+    id: revision.id,
+    originalText: revision.originalText,
+    proposedText: revision.proposedText,
+    riskLevel: revision.riskLevel,
+    riskTitle: revision.riskTitle,
+    clause: revision.clause,
+    page: revision.page,
+    recommendation: revision.recommendation,
+    legalBasisSourceIds: parseStringArray(revision.legalBasisSourceIdsJson),
+  }));
+  return correctedVersionParagraphs({
+    text,
+    version: versionMetadata.version,
+    sourceFileName: row.sourceFileName,
+    generatedAt: versionMetadata.createdAt,
+    language,
+    variant: row.variant,
+    revisions,
+  });
+}
+
+function parseStringArray(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) && parsed.every((item) => typeof item === "string")
+      ? [...new Set(parsed)]
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function pdfTitle(variant: AnalysisReportVariant, language: "ru" | "uz"): string {
+  if (variant === "corrected_clean") return language === "ru" ? "JURO — исправленная версия" : "JURO — tuzatilgan nusxa";
+  if (variant === "corrected_redline") return language === "ru" ? "JURO — версия с отметками изменений" : "JURO — o‘zgarishlar belgilangan nusxa";
+  return language === "ru" ? "JURO — отчёт об анализе документа" : "JURO — hujjat tahlili hisoboti";
 }
 
 async function asset(fetcher: Fetcher, path: string): Promise<ArrayBuffer> {
