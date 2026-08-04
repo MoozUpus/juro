@@ -1,5 +1,20 @@
 # JURO platform design system
 
+## Help and knowledge-base surface
+
+Help uses `Read` mode inside the existing application shell. Search and article
+metadata lead; long text is constrained to `72ch`, uses the light reading
+surface and separates sections with rules rather than nested cards. The public
+index shares the same typography and navy/gold identity without importing a
+marketing hero into the product.
+
+The purposeful-animation pass rejected page-load reveals, stagger, accordion
+motion and decorative cinematic effects. Only existing press feedback and a
+fine-pointer arrow translation remain; reduced motion removes the translation.
+Search, retry, related links and helpfulness controls are at least 44 px, have
+visible focus, text labels and live status. Loading, no-result and recoverable
+error states are explicit in both languages.
+
 Updated: 2026-07-30
 Status: implemented as a scoped staging-only prototype; production UI is unchanged and replacement is not authorized.
 

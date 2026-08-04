@@ -1,5 +1,12 @@
 # JURO route inventory
 
+> Local knowledge-base delta — 2026-08-04: public `/:locale/help` and
+> `/:locale/help/:articleSlug`, personal `/:locale/:accountType/help/:articleSlug`
+> and explicit business `/:locale/business/:workspaceId/help/:articleSlug` are
+> implemented against published D1 versions. Public reads contain no tenant
+> data; helpfulness uses the authenticated platform API. Migration `0077` and
+> staging deployment remain pending; production is unchanged.
+
 Audit date: 2026-07-28
 Production Sites revision: `4031078` (v20)
 Integration branch baseline: remote `8ab1693` plus the current local Phase 2 checkpoint
@@ -48,6 +55,9 @@ Current route shells:
 /:locale/:accountType/notifications
 /:locale/:accountType/settings/privacy
 /:locale/:accountType/settings/security
+/:locale/:accountType/help/:articleSlug
+/:locale/help
+/:locale/help/:articleSlug
 ```
 
 `cases/:caseId` is now an object-specific, tenant-backed overview. Its validated

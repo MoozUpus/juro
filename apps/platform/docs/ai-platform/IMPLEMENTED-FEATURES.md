@@ -1,5 +1,20 @@
 # JURO implemented-features checkpoint
 
+## Versioned RU/UZ knowledge base (local candidate)
+
+- Public `/:locale/help` and `/:locale/help/:articleSlug` routes expose only the
+  latest published immutable version; authenticated personal and explicit
+  business routes preserve the platform shell and tenant context.
+- Search is bounded, locale-aware and D1-backed. Article pages show version,
+  update date, structured text and ordered related articles without raw HTML.
+- Authenticated helpful/not-helpful feedback derives user/workspace scope from
+  the server session, requires CSRF and idempotency evidence, keeps a revisioned
+  projection and appends metadata-only audit events.
+- Loading, empty, recoverable error, retry, keyboard focus, 44 px controls and
+  RU/UZ states are implemented without a new UI or motion dependency.
+- Focused tests pass locally. Migration `0077`, protected staging browser QA and
+  deployment remain pending; production is unchanged.
+
 ## PDF structural/page-count preflight (local candidate)
 
 - Single PDFs are parsed before Workers AI; corrupt, password-protected and

@@ -1,5 +1,19 @@
 # Test plan
 
+## Knowledge-base gate — local candidate
+
+`tests/knowledge-base.test.ts` verifies bounded query/feedback schemas, RU/UZ
+search and copy selection, latest-published selection, draft exclusion,
+structured-body parsing, deterministic related-article order, canonical content
+SHA-256, immutable published versions, tenant-derived feedback, idempotent replay,
+revision changes, append-only audit, neutral unavailable versions, CSRF/auth route
+guards, semantic search/status controls, 44 px targets, reduced motion and the
+absence of raw HTML rendering. It is part of the standard platform test list.
+
+Staging additionally requires public HTTP smokes, authenticated helpfulness D1
+evidence, keyboard and screen-reader navigation, RU/UZ at 320/360/390/768/1024/
+1280/1440+, 200% zoom, forced/reduced motion checks and browser console review.
+
 ## Guest AI local gate — 2026-08-03
 
 Focused coverage includes encrypted persistence, absence of plaintext schema

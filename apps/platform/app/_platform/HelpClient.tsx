@@ -2,13 +2,14 @@
 
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import Link from "next/link";
-import { BookOpenCheck, Bot, ExternalLink, FilePenLine, HelpCircle, LoaderCircle, Scale, ShieldCheck } from "lucide-react";
+import { ArrowRight, BookOpenCheck, Bot, ExternalLink, FilePenLine, HelpCircle, LoaderCircle, Scale, Search, ShieldCheck } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 type SupportCategory = "technical" | "ai_error" | "wrong_norm" | "document" | "ocr" | "tariff" | "lawyer" | "privacy" | "security" | "deletion" | "workspace" | "feedback" | "other";
 type SupportSeverity = "low" | "normal" | "high" | "critical";
 type SupportStatus = "open" | "waiting_user" | "resolved";
+type KnowledgeArticle = { slug: string; category: string; versionNumber: number; title: string; summary: string; updatedAt: string };
 
 const supportCopy = {
   ru: { category: "Категория", severity: "Срочность", technical: "Техническая проблема", ai_error: "Ошибка AI", wrong_norm: "Неверная норма", document: "Документ", ocr: "Распознавание", tariff: "Тариф", lawyer: "Юрист", privacy: "Приватность", security: "Безопасность", deletion: "Удаление данных", workspace: "Рабочее пространство", feedback: "Отзыв", other: "Другое", low: "Низкая", normal: "Обычная", high: "Высокая", critical: "Критическая", open: "Открыто", waiting_user: "Ожидается ваш ответ", resolved: "Решено", historyLoading: "Загружаем обращения…", historyUpdated: "Список обращений обновлён", detailsLoaded: "Детали обращения загружены" },
@@ -26,8 +27,26 @@ export function HelpClient({ locale }: { locale: PlatformLocale; accountType: Ac
   const [tickets, setTickets] = useState<Array<{ id: string; subject: string; status: SupportStatus }>>([]);
   const [selectedTicket, setSelectedTicket] = useState<{ id: string; subject: string; status: SupportStatus; messages: Array<{ id: string; authorType: "requester" | "staff"; body: string }> } | null>(null);
   const [reply, setReply] = useState(""); const [replying, setReplying] = useState(false);
+  const [knowledgeQuery, setKnowledgeQuery] = useState("");
+  const [knowledgeArticles, setKnowledgeArticles] = useState<KnowledgeArticle[]>([]);
+  const [loadingKnowledge, setLoadingKnowledge] = useState(true);
+  const [knowledgeError, setKnowledgeError] = useState("");
+  const loadKnowledge = useCallback(async (query = "") => {
+    setLoadingKnowledge(true); setKnowledgeError("");
+    try {
+      const params = new URLSearchParams({ locale });
+      if (query.trim()) params.set("q", query.trim());
+      const response = await fetch(`/api/help/articles?${params.toString()}`, { cache: "no-store" });
+      const body = await response.json() as { articles?: KnowledgeArticle[]; error?: string };
+      if (!response.ok) throw new Error(body.error || "Knowledge base unavailable");
+      setKnowledgeArticles(body.articles ?? []);
+    } catch {
+      setKnowledgeError(ru ? "Не удалось загрузить базу знаний. Повторите попытку." : "Bilimlar bazasini yuklab bo‘lmadi. Qayta urinib ko‘ring.");
+    } finally { setLoadingKnowledge(false); }
+  }, [locale, ru]);
   const loadTickets = useCallback(async () => { setLoadingTickets(true); try { const response = await fetch("/api/platform/support-tickets", { cache: "no-store" }); const body = await response.json() as { tickets?: Array<{ id: string; subject: string; status: SupportStatus }> }; if (!response.ok) throw new Error(); setTickets(body.tickets ?? []); setSupportStatus(support.historyUpdated); } catch { setSupportStatus(ru ? "Не удалось загрузить обращения." : "Murojaatlarni yuklab bo‘lmadi."); } finally { setLoadingTickets(false); } }, [ru, support.historyUpdated]);
   useEffect(() => { const timer = window.setTimeout(() => void loadTickets(), 0); return () => window.clearTimeout(timer); }, [loadTickets]);
+  useEffect(() => { const timer = window.setTimeout(() => void loadKnowledge(), 0); return () => window.clearTimeout(timer); }, [loadKnowledge]);
   async function openTicket(ticketId: string) { setLoadingTickets(true); try { const response = await fetch(`/api/platform/support-tickets/${encodeURIComponent(ticketId)}`, { cache: "no-store" }); const body = await response.json() as { ticket?: { id: string; subject: string; status: SupportStatus }; messages?: Array<{ id: string; authorType: "requester" | "staff"; body: string }> }; if (!response.ok || !body.ticket) throw new Error(); setSelectedTicket({ ...body.ticket, messages: body.messages ?? [] }); setReply(""); setSupportStatus(support.detailsLoaded); } catch { setSupportStatus(ru ? "Не удалось открыть обращение." : "Murojaatni ochib bo‘lmadi."); } finally { setLoadingTickets(false); } }
 
   async function submitSupport(event: FormEvent<HTMLFormElement>) { event.preventDefault(); setSending(true); setSupportStatus(""); try { const response = await fetch("/api/platform/support-tickets", { method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ category, severity, subject, message, locale }) }); const body = await response.json() as { error?: string }; if (!response.ok) throw new Error(body.error || "Ошибка"); setSubject(""); setMessage(""); setSupportStatus(ru ? "Обращение отправлено." : "Murojaat yuborildi."); await loadTickets(); } catch (value) { setSupportStatus(value instanceof Error ? value.message : String(value)); } finally { setSending(false); } }
@@ -42,6 +61,32 @@ export function HelpClient({ locale }: { locale: PlatformLocale; accountType: Ac
           <p>{ru ? "Короткие маршруты к рабочим функциям и правилам платформы — без декоративных кнопок и вымышленного статуса поддержки." : "Ish funksiyalari va platforma qoidalariga qisqa yo‘llar — bezak tugmalari va soxta qo‘llab-quvvatlash holatisiz."}</p>
         </div>
       </header>
+      <section className="help-knowledge" aria-labelledby="knowledge-title">
+        <div className="help-knowledge-heading">
+          <div>
+            <h2 id="knowledge-title">{ru ? "База знаний" : "Bilimlar bazasi"}</h2>
+            <p>{ru ? "Проверенные инструкции по функциям JURO. У каждой статьи есть версия и дата обновления." : "JURO funksiyalari bo‘yicha tekshirilgan yo‘riqnomalar. Har bir maqolada versiya va yangilanish sanasi bor."}</p>
+          </div>
+          <form role="search" onSubmit={(event) => { event.preventDefault(); void loadKnowledge(knowledgeQuery); }}>
+            <label className="sr-only" htmlFor="knowledge-search">{ru ? "Поиск по базе знаний" : "Bilimlar bazasidan qidirish"}</label>
+            <Search aria-hidden="true" />
+            <input id="knowledge-search" type="search" value={knowledgeQuery} maxLength={120} onChange={(event) => setKnowledgeQuery(event.target.value)} placeholder={ru ? "Например, источники или 2FA" : "Masalan, manbalar yoki 2FA"} />
+            <button type="submit" disabled={loadingKnowledge}>{ru ? "Найти" : "Qidirish"}</button>
+          </form>
+        </div>
+        <div className="help-knowledge-status" role="status" aria-live="polite">
+          {loadingKnowledge ? (ru ? "Загружаем статьи…" : "Maqolalar yuklanmoqda…") : knowledgeError || (knowledgeArticles.length === 0 ? (ru ? "По вашему запросу статей нет." : "So‘rovingiz bo‘yicha maqola topilmadi.") : "")}
+        </div>
+        {!loadingKnowledge && knowledgeError && <button className="help-retry" type="button" onClick={() => void loadKnowledge(knowledgeQuery)}>{ru ? "Повторить" : "Qayta urinish"}</button>}
+        {!loadingKnowledge && !knowledgeError && knowledgeArticles.length > 0 && <ul className="help-knowledge-list">
+          {knowledgeArticles.map((article) => <li key={article.slug}>
+            <Link href={`${base}/help/${article.slug}`}>
+              <span><strong>{article.title}</strong><small>{article.summary}</small></span>
+              <span className="help-knowledge-meta">{ru ? `Версия ${article.versionNumber} · ${formatKnowledgeDate(article.updatedAt, locale)}` : `${article.versionNumber}-versiya · ${formatKnowledgeDate(article.updatedAt, locale)}`}<ArrowRight aria-hidden="true" /></span>
+            </Link>
+          </li>)}
+        </ul>}
+      </section>
       <div className="help-grid">
         <article>
           <Bot />
@@ -95,4 +140,10 @@ export function HelpClient({ locale }: { locale: PlatformLocale; accountType: Ac
       </aside>
     </section>
   );
+}
+
+function formatKnowledgeDate(value: string, locale: PlatformLocale): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", { day: "2-digit", month: "short", year: "numeric" }).format(date);
 }

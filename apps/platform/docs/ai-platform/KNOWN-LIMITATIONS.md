@@ -1,5 +1,12 @@
 # JURO known limitations checkpoint
 
+> Knowledge-base local checkpoint — 2026-08-04: D1-backed RU/UZ list/search,
+> public and authenticated article routes, immutable version/hash evidence,
+> related articles and tenant-bound helpfulness are implemented through local
+> migration `0077`. There is no staff authoring/publish UI yet; new versions are
+> migration-managed. `0077` is not applied to staging or production, and browser
+> responsive/zoom/screen-reader QA is not claimed by the local code tests.
+
 > PDF preflight checkpoint — 2026-08-04: structural page count now gates single
 > and packaged PDFs before Workers AI, with typed corrupt/password/timeout/limit
 > states and a 500 known-page aggregate package cap. Images count as one known

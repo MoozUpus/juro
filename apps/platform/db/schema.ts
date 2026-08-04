@@ -1532,6 +1532,72 @@ export const supportTickets = sqliteTable("support_tickets", {
 export const supportMessages = sqliteTable("support_messages", {
   id: text("id").primaryKey(), ticketId: text("ticket_id").notNull().references(() => supportTickets.id, { onDelete: "cascade" }), authorUserId: text("author_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), authorType: text("author_type").notNull(), body: text("body").notNull(), createdAt: text("created_at").notNull(),
 }, (table) => [index("support_messages_ticket_idx").on(table.ticketId, table.createdAt)]);
+export const knowledgeBaseArticles = sqliteTable("knowledge_base_articles", {
+  id: text("id").primaryKey(),
+  slug: text("slug").notNull(),
+  category: text("category").notNull(),
+  status: text("status").notNull().default("draft"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  publishedAt: text("published_at"),
+}, (table) => [
+  uniqueIndex("knowledge_base_articles_slug_uidx").on(table.slug),
+  index("knowledge_base_articles_status_idx").on(table.status, table.updatedAt),
+  check("knowledge_base_articles_status_check", sql`${table.status} IN ('draft','published','archived')`),
+]);
+export const knowledgeBaseArticleVersions = sqliteTable("knowledge_base_article_versions", {
+  id: text("id").primaryKey(),
+  articleId: text("article_id").notNull().references(() => knowledgeBaseArticles.id, { onDelete: "cascade" }),
+  versionNumber: integer("version_number").notNull(),
+  titleRu: text("title_ru").notNull(),
+  titleUz: text("title_uz").notNull(),
+  summaryRu: text("summary_ru").notNull(),
+  summaryUz: text("summary_uz").notNull(),
+  bodyRuJson: text("body_ru_json").notNull(),
+  bodyUzJson: text("body_uz_json").notNull(),
+  relatedSlugsJson: text("related_slugs_json").notNull().default("[]"),
+  contentSha256: text("content_sha256").notNull(),
+  createdAt: text("created_at").notNull(),
+  publishedAt: text("published_at"),
+}, (table) => [
+  uniqueIndex("knowledge_base_article_versions_number_uidx").on(table.articleId, table.versionNumber),
+  index("knowledge_base_article_versions_published_idx").on(table.articleId, table.publishedAt, table.versionNumber),
+  check("knowledge_base_article_versions_number_check", sql`${table.versionNumber} >= 1`),
+  check("knowledge_base_article_versions_hash_check", sql`length(${table.contentSha256}) = 64`),
+]);
+export const knowledgeBaseFeedback = sqliteTable("knowledge_base_feedback", {
+  id: text("id").primaryKey(),
+  articleId: text("article_id").notNull().references(() => knowledgeBaseArticles.id, { onDelete: "cascade" }),
+  versionId: text("version_id").notNull().references(() => knowledgeBaseArticleVersions.id, { onDelete: "restrict" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  helpful: integer("helpful").notNull(),
+  revision: integer("revision").notNull().default(1),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("knowledge_base_feedback_scope_uidx").on(table.articleId, table.versionId, table.workspaceId, table.userId),
+  index("knowledge_base_feedback_article_idx").on(table.articleId, table.versionId, table.updatedAt),
+  check("knowledge_base_feedback_helpful_check", sql`${table.helpful} IN (0,1)`),
+  check("knowledge_base_feedback_revision_check", sql`${table.revision} >= 1`),
+]);
+export const knowledgeBaseFeedbackEvents = sqliteTable("knowledge_base_feedback_events", {
+  id: text("id").primaryKey(),
+  feedbackId: text("feedback_id").notNull().references(() => knowledgeBaseFeedback.id, { onDelete: "cascade" }),
+  articleId: text("article_id").notNull(),
+  versionId: text("version_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  userId: text("user_id").notNull(),
+  helpful: integer("helpful").notNull(),
+  revision: integer("revision").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("knowledge_base_feedback_events_revision_uidx").on(table.feedbackId, table.revision),
+  uniqueIndex("knowledge_base_feedback_events_idempotency_uidx").on(table.workspaceId, table.userId, table.idempotencyKey),
+  check("knowledge_base_feedback_events_helpful_check", sql`${table.helpful} IN (0,1)`),
+  check("knowledge_base_feedback_events_revision_check", sql`${table.revision} >= 1`),
+]);
 export const consultationSlots = sqliteTable("consultation_slots", {
   id: text("id").primaryKey(), specialistType: text("specialist_type").notNull(), startsAt: text("starts_at").notNull(), endsAt: text("ends_at").notNull(), timezone: text("timezone").notNull().default("Asia/Tashkent"),
   status: text("status").notNull().default("available"), ...timestamps,

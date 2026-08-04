@@ -1,5 +1,19 @@
 # Decisions
 
+## D-110 — product help is published as immutable bilingual versions
+
+Status: accepted and locally verified
+Date: 2026-08-04
+
+Help articles use one version that contains equivalent RU and UZ bodies, a
+canonical content SHA-256 and an ordered related-article set. Public reads select
+only the latest published version and contain no tenant data. Helpfulness is a
+separate authenticated, tenant-derived, idempotent projection with append-only
+metadata audit; it never copies case, chat or document content. Published
+versions are immutable, so corrections create a later version rather than
+rewriting text already shown to users. Staff authoring remains a separate future
+surface and no draft is exposed through the public API.
+
 ## D-103 — case navigation is URL-addressable and workspace-scoped
 
 Status: accepted and staging-deployed

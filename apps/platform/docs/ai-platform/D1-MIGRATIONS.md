@@ -1,5 +1,21 @@
 # JURO D1 migrations
 
+## Pending 0077 — versioned RU/UZ knowledge base
+
+`0077_knowledge_base.sql` is an additive local candidate. It creates published
+article/version projections, immutable published versions, tenant-bound
+helpfulness projections and append-only feedback events mirrored into the
+existing workspace audit. Four truthful RU/UZ product-help articles are seeded;
+their SHA-256 values are computed from canonical RU body, UZ body and related
+slug JSON and verified by the focused test suite.
+
+The migration has not been applied to staging or production. Before staging,
+take and restore-verify a fresh private `juro-staging-backups` export, apply the
+complete ordered pending set `0069`–`0077`, verify the ledger, hashes, triggers,
+`foreign_key_check` and public/authenticated route boundaries, then deploy the
+matching Worker only under a new explicit authorization. Rollback is
+application-first; the additive tables may remain unused.
+
 ## Current staging checkpoint and pending local migrations
 
 Isolated `juro-staging` is through `0068_file_scan_evidence.sql`. Its verified
@@ -10,10 +26,11 @@ foreign-key postflight passed, and Worker version
 Production is unchanged. Exact evidence is in
 `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
 
-Migrations `0069`–`0073` are local additive candidates and have not been applied
+Migrations `0069`–`0077` are local additive candidates and have not been applied
 to staging or production. They cover immutable analysis corrections, corrected
 exports, comparison exports, per-change review decisions and fenced R2 write
-reconciliation respectively.
+reconciliation, analysis/document case links, legal bookmarks and the versioned
+knowledge base respectively.
 
 ## Pending 0073 — analysis-version R2 write intents
 
