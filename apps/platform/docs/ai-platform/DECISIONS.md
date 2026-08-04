@@ -2639,7 +2639,7 @@ unchanged.
 
 ## D-131 — Deadline calculation is deterministic evidence, not a legal conclusion
 
-Status: accepted for local implementation; staging migration pending
+Status: accepted and deployed to protected staging; authenticated browser gate pending
 Date: 2026-08-04
 
 The plan screen separates a read-only server preview from the confirmed plan
@@ -2654,6 +2654,11 @@ The application does not hard-code an official Uzbekistan holiday calendar and
 does not infer a verified legal basis from user input. The calculator therefore
 always emits `preliminary`; `source_verified` is reserved for a future reviewed
 legal-source/calendar workflow. Tasks copy the same evidence only after the user
-confirms the plan revision. Additive migration `0067` has passed local migration,
-route-boundary and end-to-end case/task smoke tests. Staging and production are
-unchanged until their separate backup/migration/deploy gates are authorized.
+confirms the plan revision. Additive migration `0067` passed local migration,
+route-boundary and end-to-end case/task smoke tests. After explicit owner
+authorization, a private-R2 backup/round-trip/restore was verified and only
+`0067` was applied to staging; Worker version
+`5e85ee33-f7ec-4e5d-a726-431c67ea46f0` now serves the protected environment.
+Anonymous Access boundary smoke passes, while authenticated RU/UZ browser
+validation remains open. Production is unchanged and still requires a separate
+authorization.

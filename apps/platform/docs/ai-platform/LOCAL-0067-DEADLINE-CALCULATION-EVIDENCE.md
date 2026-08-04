@@ -36,7 +36,9 @@ result remains `preliminary` even when a user supplies descriptive source text.
 
 ## Staging gate
 
-Staging is still through migration `0066`. A new owner authorization is required
-for a private D1 backup/round-trip/restore, migration `0067`, staging deploy and
-authenticated RU/UZ browser verification. Production remains explicitly out of
-scope without separate functional-deploy and UI-replacement approvals.
+The owner subsequently authorized and completed the private backup/round-trip
+restore, migration `0067` and staging deploy. See
+`STAGING-0067-DEADLINE-CALCULATION-EVIDENCE.md` for authoritative remote
+evidence. Authenticated RU/UZ browser verification remains open. Production
+remains explicitly out of scope without separate functional-deploy and
+UI-replacement approvals.

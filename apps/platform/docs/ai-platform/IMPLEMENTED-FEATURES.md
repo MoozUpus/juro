@@ -1,6 +1,6 @@
 # JURO implemented-features checkpoint
 
-> Current local delta — 2026-08-04: action-plan steps now have an authenticated,
+> Current staging delta — 2026-08-04: action-plan steps now have an authenticated,
 > tenant-scoped deadline preview and an explicit confirmation boundary. Server
 > write routes recalculate the result, reject tampering, version the plan and
 > preserve the same bounded evidence in generated tasks. Manual due-date edits
@@ -9,11 +9,15 @@
 > unverified-calendar/legal-basis warnings. Migration `0067`, focused tests,
 > typecheck, lint, full tests, Cloudflare tests/types, staging build/artifact,
 > environment matrix, builder/comparison smokes and the extended case-to-task
-> smoke pass locally. This delta is not deployed; staging remains through `0066`.
+> smoke pass locally. A verified private-R2 backup/round-trip/restore preceded
+> application of only `0067` to `juro-staging`; Worker version
+> `5e85ee33-f7ec-4e5d-a726-431c67ea46f0` now serves 100% of protected staging
+> traffic. Anonymous Access boundary smokes pass. Authenticated RU/UZ browser,
+> holiday-authority and legal-review gates remain open; production is unchanged.
 
 > Current authoritative staging checkpoint — 2026-08-04: Worker
-> `166f25f3-caa2-4312-b577-beabdfd1f37c` receives 100% of protected staging
-> traffic and D1 is through additive migration `0066`. Guest AI persistence,
+> `5e85ee33-f7ec-4e5d-a726-431c67ea46f0` receives 100% of protected staging
+> traffic and D1 is through additive migration `0067`. Guest AI persistence,
 > voice-message storage/retention, task-reminder outbox dispatch and all seven
 > reviewed Queue consumers are deployed. The notification consumer passed a
 > remote identifiers-only delivery probe and its synthetic rows were removed.

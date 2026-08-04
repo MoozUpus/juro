@@ -1,5 +1,15 @@
 # JURO Cloudflare resources
 
+> Current checkpoint — 2026-08-04: protected staging Worker version
+> `5e85ee33-f7ec-4e5d-a726-431c67ea46f0`, deployment
+> `6156d7fb-77e6-40c3-bfaf-bc4212721ccb`, serves 100% of traffic with
+> `APP_ENV=staging`. `juro-staging` is through additive migration `0067` after a
+> full/schema/data export, private `juro-staging-backups` SHA-256 round trip and
+> disposable restore (`quick_check=ok`, zero FK violations). Cloudflare Access
+> protects root and canonical AI routes. Production Worker `juro` remains
+> unchanged at `91774ed4-72e9-47bb-b93a-a4208d490b24`. See
+> `STAGING-0067-DEADLINE-CALCULATION-EVIDENCE.md`.
+
 > Phase 5 OCR candidate — 2026-07-31: source now declares the Workers AI binding
 > `AI` in development, staging, and production profiles and attaches the already
 > provisioned `OCR_PROCESSING_QUEUE` to a real identifiers-only consumer.

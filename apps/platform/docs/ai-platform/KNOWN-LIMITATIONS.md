@@ -1,7 +1,8 @@
 # JURO known limitations checkpoint
 
 > Deadline-calculation checkpoint — 2026-08-04: migration `0067` and the
-> preview/confirm/task-evidence flow are local-only. The calculator has no
+> preview/confirm/task-evidence flow are deployed to protected staging after a
+> verified private-R2 backup/round-trip/restore. The calculator has no
 > owner-approved authoritative Uzbekistan holiday-calendar feed and no reviewed
 > legal-source verification workflow, so every result is intentionally marked
 > `preliminary`. User-supplied calendar/version/legal-basis text is evidence of
@@ -10,8 +11,8 @@
 
 > Current authoritative runtime checkpoint — 2026-08-04: read-only Cloudflare
 > and D1 evidence confirms active staging Worker
-> `166f25f3-caa2-4312-b577-beabdfd1f37c` at 100% traffic and schema through
-> `0066`; guest and voice migrations are applied. Provider transport is no
+> `5e85ee33-f7ec-4e5d-a726-431c67ea46f0` at 100% traffic and schema through
+> `0067`; guest and voice migrations are applied. Provider transport is no
 > longer the cause of the earlier unavailable state: the latest closed OpenAI
 > and Anthropic probes succeeded, and aggregate `ai_runs` metadata contains
 > completed runs for both providers after the last historical OpenAI failure.

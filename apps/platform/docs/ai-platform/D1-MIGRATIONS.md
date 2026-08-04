@@ -956,7 +956,7 @@ tests. Application rollback keeps the additive index unused by rolling the
 Worker back; index removal is deferred to a separately approved contract
 phase.
 
-## Migration 0067 — auditable deadline calculation evidence (local candidate)
+## Migration 0067 — auditable deadline calculation evidence (staging applied)
 
 `0067_deadline_calculation_evidence.sql` is expand-only. It adds calculation
 inputs, safe-date output, calendar/source version and serialized evidence fields
@@ -965,13 +965,14 @@ unchanged and default to `deadline_confidence='unverified'`. Bounds reject more
 than 3,650 days, invalid inclusion flags, unsupported roll rules and invented
 confidence states.
 
-The migration passed the isolated in-memory apply/constraint test and a local
-Wrangler apply to `juro-development`; Wrangler reported 17 commands successful.
-The extended local case smoke proved preview, tamper rejection, confirmed plan
-write, readback and evidence propagation to a task. It has not been applied to
-staging or production. Before staging apply: make a fresh full/schema/data D1
-export, upload and checksum-verify it in private `juro-staging-backups`, restore
-the full export into a disposable SQLite database, apply only `0067`, verify the
-ledger, `quick_check`, `foreign_key_check`, new columns/defaults, then deploy the
-staging Worker and run the authenticated RU/UZ flow. Rollback is application-first;
-the additive fields may remain unused.
+The migration passed the isolated in-memory apply/constraint test and local
+Wrangler apply to `juro-development`. On 2026-08-04 a fresh full/schema/data
+staging export was uploaded to private `juro-staging-backups`, downloaded with
+matching SHA-256 hashes and restored into disposable SQLite with
+`quick_check=ok` and zero FK violations. Wrangler then applied only `0067` to
+`juro-staging`; the ledger records id `68`, no migrations remain pending, the
+new columns/defaults are present and remote `foreign_key_check` returns no rows.
+The staging Worker was deployed at version `5e85ee33-f7ec-4e5d-a726-431c67ea46f0`.
+Authenticated RU/UZ browser verification remains open. Production has not
+received `0067`. Rollback is application-first; the additive fields may remain
+unused. Full evidence is in `STAGING-0067-DEADLINE-CALCULATION-EVIDENCE.md`.
