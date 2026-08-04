@@ -1,7 +1,9 @@
 # Secure document upload pipeline
 
 Updated: 2026-08-04
-Status: fail-closed upload and post-safe OCR/analysis pipeline implemented locally; real malware promotion remains disabled.
+Status: fail-closed upload and post-safe OCR/analysis pipeline deployed to
+protected staging. The immutable scan-evidence schema is applied, but real
+malware promotion remains disabled and contains no verdict rows.
 
 ## Implemented lifecycle
 

@@ -10,14 +10,15 @@ Object class, service binding, Queue attachment or resource ID is claimed.
 The scanner integration remains a disabled service-binding contract.
 
 > Current checkpoint — 2026-08-04: protected staging Worker version
-> `5e85ee33-f7ec-4e5d-a726-431c67ea46f0`, deployment
-> `6156d7fb-77e6-40c3-bfaf-bc4212721ccb`, serves 100% of traffic with
-> `APP_ENV=staging`. `juro-staging` is through additive migration `0067` after a
+> `030e3db0-6de5-455f-a90b-0350d346f5cf`, deployment
+> `b2de852d-18fd-4bef-a86e-9532537a2f1e`, serves 100% of traffic with
+> `APP_ENV=staging`. `juro-staging` is through additive migration `0068` after a
 > full/schema/data export, private `juro-staging-backups` SHA-256 round trip and
 > disposable restore (`quick_check=ok`, zero FK violations). Cloudflare Access
 > protects root and canonical AI routes. Production Worker `juro` remains
 > unchanged at `91774ed4-72e9-47bb-b93a-a4208d490b24`. See
-> `STAGING-0067-DEADLINE-CALCULATION-EVIDENCE.md`.
+> `STAGING-0068-FILE-SCAN-EVIDENCE.md`. The evidence schema is deployed, but no
+> malware scanner binding or clean verdict exists; uploads remain fail-closed.
 
 > Phase 5 OCR candidate — 2026-07-31: source now declares the Workers AI binding
 > `AI` in development, staging, and production profiles and attaches the already

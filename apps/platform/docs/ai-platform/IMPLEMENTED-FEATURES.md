@@ -1,6 +1,6 @@
 # JURO implemented-features checkpoint
 
-## Verified text ZIP-package extraction candidate (local only)
+## Verified text ZIP-package extraction (protected staging)
 
 - Document analysis now repeats deep ZIP verification before extraction, then
   processes every PDF/DOCX member in deterministic order while preserving the
@@ -13,10 +13,12 @@
 - A package containing an image receives the truthful
   `DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED` state. The opaque ZIP is never sent to
   Workers AI, OpenAI or Anthropic; RU/UZ UI explains the recovery path.
-- This slice adds no migration, dependency, binding or external runtime change.
-  It is locally tested and is not yet deployed to staging or production.
+- This slice adds no dependency or new provider runtime. It is deployed only to
+  protected staging in Worker version
+  `030e3db0-6de5-455f-a90b-0350d346f5cf`; no eligible user file can reach it
+  while the real malware gate remains closed. Production is unchanged.
 
-## Disabled malware-scanner integration candidate (local only)
+## Disabled malware-scanner integration contract (schema staged, scanner absent)
 
 - `0068_file_scan_evidence.sql` adds tenant-bound, terminal scan evidence with
   clean/infected invariants and immutable updates.
@@ -27,8 +29,11 @@
 - Upload finalize can enqueue `malware.scan` only when all three controls are
   present: `MALWARE_SCAN_ENABLED=true`, an internal `MALWARE_SCANNER` service
   binding, and `MALWARE_SCAN_QUEUE`.
-- No checked-in environment currently provides those controls. The existing
-  unavailable/quarantine response remains the actual runtime behavior.
+- Migration `0068` is applied only to `juro-staging` after a verified private-R2
+  backup and restore. No checked-in environment provides the three runtime
+  controls, the evidence table contains zero rows, and the existing
+  unavailable/quarantine response remains the actual behavior. See
+  `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
 
 > Current local evaluation delta — 2026-08-04: legal release evaluation now
 > contains 314 unique RU/UZ scenarios with individual/entrepreneur/lawyer

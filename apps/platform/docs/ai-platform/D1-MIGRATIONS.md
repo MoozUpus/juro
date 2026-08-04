@@ -986,3 +986,22 @@ The staging Worker was deployed at version `5e85ee33-f7ec-4e5d-a726-431c67ea46f0
 Authenticated RU/UZ browser verification remains open. Production has not
 received `0067`. Rollback is application-first; the additive fields may remain
 unused. Full evidence is in `STAGING-0067-DEADLINE-CALCULATION-EVIDENCE.md`.
+
+## Migration 0068 — immutable file-scan evidence (staging applied)
+
+`0068_file_scan_evidence.sql` is expand-only. It adds a terminal
+`file_scan_results` evidence table, two one-to-one indexes, a tenant/time index,
+strict clean/infected JSON invariants, a source SHA/tenant/quarantine guard and
+an immutable-update trigger. It does not create a scanner, clean a file or
+enable provider access.
+
+On 2026-08-04 a fresh full/schema/data export was uploaded to private
+`juro-staging-backups`, independently downloaded with identical SHA-256 hashes
+and restored into disposable SQLite with `quick_check=ok` and zero FK
+violations. Wrangler then applied only `0068` to `juro-staging`; the ledger
+records id `69`, the six expected schema objects are present, evidence-row count
+is zero, remote `foreign_key_check` is empty and no migrations remain pending.
+Protected staging now runs Worker version
+`030e3db0-6de5-455f-a90b-0350d346f5cf`. Production has not received `0068`.
+Application rollback leaves this additive empty table unused. Full evidence is
+in `STAGING-0068-FILE-SCAN-EVIDENCE.md`.

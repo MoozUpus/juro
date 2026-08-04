@@ -303,3 +303,20 @@ Both private exports were independently downloaded and matched their local
 hash. A routine Worker rollback leaves the additive diagnostic table unused;
 Time Travel is reserved for demonstrated database corruption. Production is out
 of scope.
+
+## Migration 0068 staging pre-change recovery set — 2026-08-04
+
+Before `0068`, three portable exports were retained under private R2 prefix
+`d1/juro-staging/20260804-080310-0068/`: full (1,282,399 bytes, SHA-256
+`D4AB329DA17BF49A6D2192A91777C8A29417897C42BAFE89E37906AD76BA5E6B`),
+schema (258,604 bytes, SHA-256
+`06C1FF6212DFA5E28DE5694B840D48F9F25A9D05673FDD71FFC7C86D14F00A00`)
+and data (1,023,827 bytes, SHA-256
+`530ECAC84ED2D6520B29EE374249C076A0DE3189C048D347C46925F41018C8D1`).
+
+All three were downloaded from private R2 and matched byte-for-byte. The
+downloaded schema/data restored into a fresh 4,005,888-byte SQLite database with
+171 tables, 345 indexes, 126 triggers, `quick_check=ok` and zero FK violations.
+Routine rollback restores the preceding staging Worker and leaves the additive
+empty scan-evidence table unused. Restore from R2 is reserved for demonstrated
+D1 corruption. Exact evidence is in `STAGING-0068-FILE-SCAN-EVIDENCE.md`.

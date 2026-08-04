@@ -15,6 +15,12 @@ real scanner.
 Updated: 2026-07-29
 Status: remote inventory verified. Six approved private EEUR Standard development/staging target buckets exist. `juro-staging-backups` contains 26 verified staging D1 backup/restore artifacts, including the pre/post `0030`–`0034` checkpoints; all other target buckets remain without verified application content. Production storage was unchanged.
 
+Current checkpoint — 2026-08-04: private prefix
+`d1/juro-staging/20260804-080310-0068/` contains full/schema/data exports whose
+three independent download hashes matched and whose schema/data restored with
+`quick_check=ok` and zero FK violations. This backup proves recovery evidence
+for migration `0068`; it does not prove malware clearance or user-file backup.
+
 ## Verified remote state
 
 | Role | Bucket | State |

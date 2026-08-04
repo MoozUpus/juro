@@ -8,7 +8,9 @@ real privacy-approved scanner is deployable. Cloudflare Containers currently
 require Workers Paid and the authenticated account is not eligible; Docker is
 absent locally. Treating archive inspection, a bucket, or a synthetic handler as
 malware scanning would violate the fail-closed release gate. Migration `0068`
-may be staged independently, but files must continue returning
+was staged independently on 2026-08-04 after a verified private-R2
+backup/round-trip/restore; its table contains zero verdict rows. Files must
+continue returning
 `FILE_SCAN_UNAVAILABLE` until a real service, EICAR/clean fixtures, retry/DLQ
 evidence and operator review pass.
 

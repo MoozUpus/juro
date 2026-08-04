@@ -1,16 +1,17 @@
 # JURO known limitations checkpoint
 
-> Malware-scanner local candidate — 2026-08-04: migration `0068` and a
+> Malware-scanner staging boundary — 2026-08-04: migration `0068` and a
 > provider-neutral internal service contract now cover strict response-schema
 > validation, source/R2 SHA verification, tenant fencing, immutable terminal
 > evidence, idempotent clean promotion, infected quarantine, and downstream
 > analysis enqueue only after a clean verdict. This is not a scanner claim.
 > Read-only Wrangler evidence says the current account does not have Workers
-> Paid/Cloudflare Containers access, and Docker is absent locally; therefore no
-> ClamAV image, service binding, malware Queue producer/consumer, migration
-> `0068`, or staging deployment was activated. All checked-in environments
-> remain fail-closed with no scanner binding until a real privacy-approved
-> service and EICAR/clean-file staging evidence exist.
+> Paid/Cloudflare Containers access, and Docker is absent locally. The additive
+> evidence schema is now applied to `juro-staging` and Worker version
+> `030e3db0-6de5-455f-a90b-0350d346f5cf` is deployed behind Access, but no
+> ClamAV image, scanner service binding, malware Queue producer/consumer or scan
+> verdict was activated. All checked-in environments remain fail-closed until a
+> real privacy-approved service and EICAR/clean-file staging evidence exist.
 
 > Access redirect diagnosis — 2026-08-04: cookie-free HTTP traces for `/`, the
 > AI-new route and voice route each make exactly one expected `302` to the
