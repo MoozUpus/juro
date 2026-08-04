@@ -457,3 +457,14 @@ case URLs are unchanged; collaborators receive no case projection or edit contro
 The AI source panel exposes a RU/UZ native form for personal or case-scoped
 bookmarks. It does not accept workspace/user/version from the browser and does
 not create source-change notifications.
+
+### Public document URL import — local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `POST /api/platform/document-analysis/url-import` | Fetches one public PDF, DOCX, JPG, PNG or ZIP into the existing document-analysis quarantine pipeline | authenticated tenant, CSRF, strict Zod, idempotency, optional tenant case guard, HTTPS/port/DNS/IP/redirect/time/size/MIME/SHA/magic/archive checks, private R2 |
+
+The localized document-analysis entry presents a native RU/UZ URL form. It does
+not accept private links or credentials, persist the full source URL, label the
+material as legislation, or report analysis success while malware scanning is
+unavailable.

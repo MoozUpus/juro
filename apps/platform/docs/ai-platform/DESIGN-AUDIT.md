@@ -48,6 +48,11 @@ The official upstream Impeccable (Apache-2.0), Emil Kowalski skills (MIT), and T
 | simulated/ephemeral AI and `202` completion states | durable processing states, job progress, normalized result, retry, and accessible announcements | prevent false success and preserve user agency |
 | small controls and 7–11 px metadata declarations | readable type floor, 44×44 targets, 200% zoom-safe layouts | WCAG 2.2 AA and mobile usability |
 | static Jurobek raster used as if an avatar foundation existed | use the approved rigged 3D asset only after it is supplied and audited; retain a static fallback meanwhile | avoid inventing identity, rigging, microphone, or voice behavior |
+| file-only analysis entry hid the supported public-material workflow | a separate native RU/UZ HTTPS-link form shares case context and explicit consent, with honest quarantine/error status | make the capability discoverable without pretending private cabinets, authentication forwarding or completed analysis work |
+
+The link form adds no decorative reveal or scroll motion. It uses visible focus,
+44 px controls, pointer-only hover and a 140 ms press response; reduced-motion
+removes the transform. This keeps a frequent legal-work action immediate.
 
 ## Scorecard
 

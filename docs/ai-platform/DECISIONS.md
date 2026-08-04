@@ -182,3 +182,19 @@ Retries and duplicate queue deliveries cannot create a second notification. No t
 title, message body or other user content is placed in the queue envelope or logs.
 Staging deployment `eef56269-2980-42b8-bc76-9a348f6d187b` attached the reviewed
 consumer and a synthetic neutral-rejection probe confirmed end-to-end delivery.
+
+## D-108 — public document links cross a strictly-public quarantine boundary
+
+Status: accepted and locally verified
+Date: 2026-08-04
+
+A public-link import accepts only credential-free HTTPS URLs on port 443 and
+uses the Workers `global_fetch_strictly_public` compatibility flag. The server
+resolves and rejects non-public IPv4/IPv6 targets before every request, follows
+at most three manual redirects, rechecks DNS after response headers, forwards no
+authorization or browser credentials, requires a declared 1-byte-to-50-MB
+identity-encoded body and streams it directly to private R2. R2 size/SHA-256,
+magic-byte and archive checks must agree before the existing quarantine record is
+created. Only origin and a SHA-256 of the canonical URL are persisted in audit;
+the full URL is not logged. Imported content is user evidence, never an official
+legal source, and remains unavailable to OCR or AI until a real malware verdict.

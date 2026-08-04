@@ -99,6 +99,15 @@ Backups use protected manifests and checksums without object keys, filenames, si
 
 `juro-private-documents` is not renamed or replaced. No production object copy, backup/quarantine bucket creation, binding change, signed-URL change, or deletion occurs before staging evidence and the later explicit functional production approval.
 
+## Public URL import prefix — local candidate
+
+Public-link bytes first stream to `url-import-v1/{workspaceId}/{opaqueId}` with
+private/no-store metadata. The object name contains no source filename, URL or
+PII. After declared size, R2 SHA-256, file magic and archive checks agree, the
+route copies the stream to the existing opaque quarantine key and removes the
+temporary object. Error and replay paths remove uncommitted objects. No object
+can enter OCR or provider processing until the scanner records a safe verdict.
+
 ## Phase 5 upload prefix
 
 New analysis uploads use `quarantine-v2/{workspaceId}/{analysisId}/{fileId}` in the dedicated environment private quarantine bucket. The key is server-generated and contains no filename. The Worker streams the binary body to R2, supplies the expected SHA-256, then verifies size, stored SHA-256, and format magic during finalize.

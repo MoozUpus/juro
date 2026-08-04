@@ -1,5 +1,13 @@
 # JURO known limitations checkpoint
 
+> Public-link import checkpoint — 2026-08-04: credential-free public HTTPS
+> document import is implemented and locally security-tested with public-IP DNS
+> checks, bounded manual redirects, post-fetch DNS recheck, no credential
+> forwarding, strict size/MIME/encoding, streamed private-R2 quarantine and
+> size/SHA/magic/archive verification. It is not deployed or browser-tested in
+> staging. Imported material remains quarantined because the real malware
+> scanner is unavailable, so no OCR/AI success is claimed.
+
 > Legal-bookmark local checkpoint — 2026-08-04: version-pinned personal/case
 > bookmarks, bounded comments, immutable metadata-only events and RU/UZ controls
 > are implemented through local migration `0076`. They have not been migrated

@@ -2,11 +2,11 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated analysis data is hydrated after the first browser render */
 
-import { AlertTriangle, Check, CheckCircle2, CircleAlert, Download, Eye, FileCheck2, FileDiff, FileText, LoaderCircle, RefreshCw, ShieldCheck, Trash2, Upload, X } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, CircleAlert, Download, Eye, FileCheck2, FileDiff, FileText, Link2, LoaderCircle, RefreshCw, ShieldCheck, Trash2, Upload, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { comparisonText } from "../../content/platform-ui";
-import { uploadDocumentForAnalysis } from "../../lib/document-analysis/client-upload";
+import { importDocumentUrlForAnalysis, uploadDocumentForAnalysis } from "../../lib/document-analysis/client-upload";
 import type { AnalysisPackageContext, AnalysisPackageMemberRole, AnalysisPackageRelationshipKind } from "../../lib/document-comparison/types";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { DocumentComparisonClient } from "./DocumentComparisonClient";
@@ -86,6 +86,7 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId }: { lo
   const [uploadCaseId, setUploadCaseId] = useState(initialCaseId ?? "");
   const [selected, setSelected] = useState<Analysis | null>(null);
   const [file, setFile] = useState<File | null>(null);
+  const [publicUrl, setPublicUrl] = useState("");
   const [consent, setConsent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -134,6 +135,24 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId }: { lo
     finally { setUploading(false); setUploadProgress(null); }
   }
 
+  async function importUrl(event: FormEvent) {
+    event.preventDefault();
+    if (!publicUrl.trim() || !consent) return;
+    setUploading(true);
+    setUploadProgress(null);
+    setError("");
+    setNotice("");
+    try {
+      const body = await importDocumentUrlForAnalysis(publicUrl, locale, uploadCaseId || null);
+      setNotice(body.message || (ru ? "Файл импортирован в приватный карантин." : "Fayl shaxsiy karantinga import qilindi."));
+      setPublicUrl("");
+      setConsent(false);
+      await load();
+      if (body.analysis) setSelected(body.analysis);
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setUploading(false); }
+  }
+
   const uploadPercent = uploadProgress?.phase === "uploading" && uploadProgress.total > 0
     ? Math.round((uploadProgress.loaded / uploadProgress.total) * 100)
     : null;
@@ -148,7 +167,12 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId }: { lo
   return <>
     {error && <p className="review-message error" role="alert"><CircleAlert />{error}</p>}
     {notice && <p className="review-message success" role="status"><ShieldCheck />{notice}</p>}
-    <form className="review-upload" onSubmit={upload}><div className="review-drop"><Upload /><div><strong>{file?.name || (ru ? "PDF, DOCX, JPG, PNG или ZIP" : "PDF, DOCX, JPG, PNG yoki ZIP")}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : (ru ? "До 50 МБ · потоковая загрузка с SHA-256" : "50 MB gacha · SHA-256 bilan oqimli yuklash")}</span></div><input ref={inputRef} type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></div><label className="review-upload-case"><span>{ru ? "Добавить анализ в дело" : "Tahlilni ishga qo‘shish"}</span><select value={uploadCaseId} onChange={event => setUploadCaseId(event.target.value)} disabled={uploading}><option value="">{ru ? "Без дела" : "Ishsiz"}</option>{cases.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>{uploadProgress && <div className="review-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div>}<p className="review-upload-status" aria-live="polite">{uploadStatus}</p><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /><span>{ru ? "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла. Понимаю, что результат нужно проверить." : "Tanlangan faylni maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman."}</span></label><button disabled={!file || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Загрузить и проверить" : "Yuklash va tekshirish"}</button></form>
+    <form className="review-upload" onSubmit={upload}><div className="review-drop"><Upload /><div><strong>{file?.name || (ru ? "PDF, DOCX, JPG, PNG или ZIP" : "PDF, DOCX, JPG, PNG yoki ZIP")}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : (ru ? "До 50 МБ · потоковая загрузка с SHA-256" : "50 MB gacha · SHA-256 bilan oqimli yuklash")}</span></div><input ref={inputRef} type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></div><label className="review-upload-case"><span>{ru ? "Добавить анализ в дело" : "Tahlilni ishga qo‘shish"}</span><select value={uploadCaseId} onChange={event => setUploadCaseId(event.target.value)} disabled={uploading}><option value="">{ru ? "Без дела" : "Ishsiz"}</option>{cases.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>{uploadProgress && <div className="review-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div>}<p className="review-upload-status" aria-live="polite">{uploadStatus}</p><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /><span>{ru ? "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла или публичной ссылки. Понимаю, что результат нужно проверить." : "Tanlangan fayl yoki ommaviy havolani maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman."}</span></label><button disabled={!file || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Загрузить и проверить" : "Yuklash va tekshirish"}</button></form>
+    <form className="review-url-import" onSubmit={importUrl}>
+      <div><Link2 /><label htmlFor="review-public-url"><strong>{ru ? "Импортировать публичную ссылку" : "Ommaviy havolani import qilish"}</strong><span>{ru ? "Только HTTPS · без паролей и закрытых кабинетов · PDF, DOCX, JPG, PNG или ZIP" : "Faqat HTTPS · parol va yopiq kabinetlarsiz · PDF, DOCX, JPG, PNG yoki ZIP"}</span></label></div>
+      <input id="review-public-url" type="url" inputMode="url" autoComplete="url" maxLength={2048} placeholder="https://example.uz/document.pdf" value={publicUrl} onChange={event => setPublicUrl(event.target.value)} disabled={uploading} />
+      <button type="submit" disabled={!publicUrl.trim() || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <Link2 />}{ru ? "Импортировать" : "Import qilish"}</button>
+    </form>
     {loading ? <div className="review-loading"><LoaderCircle className="spin" /></div> : <div className="review-layout"><aside><h2>{ru ? "Последние файлы" : "So‘nggi fayllar"}</h2>{analyses.length ? analyses.map(item => <button className={selected?.id === item.id ? "active" : ""} key={item.id} onClick={() => setSelected(item)}><FileCheck2 /><span><strong>{item.fileName}</strong><small>{statusLabel(item.status, ru)}</small></span></button>) : <p>{ru ? "Загруженных файлов пока нет." : "Hozircha yuklangan fayllar yo‘q."}</p>}</aside><main>{selected ? <AnalysisView analysis={selected} cases={cases} ru={ru} onChanged={load} /> : <div className="review-empty"><FileCheck2 /><h2>{ru ? "Выберите файл для анализа" : "Tahlil uchun faylni tanlang"}</h2></div>}</main></div>}
   </>;
 }

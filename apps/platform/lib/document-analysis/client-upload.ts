@@ -64,6 +64,26 @@ export async function uploadDocumentForAnalysis(
   );
 }
 
+export async function importDocumentUrlForAnalysis(
+  url: string,
+  locale: "ru" | "uz",
+  caseId?: string | null,
+): Promise<SecureDocumentUploadResult> {
+  return jsonRequest<SecureDocumentUploadResult>(
+    "/api/platform/document-analysis/url-import",
+    {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": `url-import-${crypto.randomUUID()}`,
+        "x-juro-csrf": "1",
+      },
+      body: JSON.stringify({ url: url.trim(), locale, mode: "quick", caseId: caseId || null, consent: true }),
+    },
+    [202],
+  );
+}
+
 function putFileWithProgress(
   url: string,
   file: File,

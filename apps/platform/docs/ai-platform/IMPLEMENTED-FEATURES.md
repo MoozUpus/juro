@@ -1,5 +1,20 @@
 # JURO implemented-features checkpoint
 
+## SSRF-safe public document URL import (local candidate)
+
+- An authenticated RU/UZ entry form imports one public PDF, DOCX, JPG, PNG or
+  ZIP through a real server route; it does not simulate analysis completion.
+- The route enforces same-origin writes, active tenant/case ownership and
+  idempotency, credential-free HTTPS on port 443, public DNS/IP checks before
+  each request, manual redirects, DNS recheck, timeout, declared 50 MB limit,
+  identity encoding, MIME, R2 size/SHA-256, magic bytes and archive structure.
+- Bytes stream into private R2 and join the existing quarantine/scan pipeline.
+  Only source origin and a canonical-URL hash enter audit metadata. The full URL
+  is neither persisted nor promoted to an official legal source.
+- Focused route/security tests, typecheck and lint pass locally. Staging deploy,
+  protected browser QA and a real malware verdict remain open; production is
+  unchanged.
+
 ## Verified text ZIP-package extraction (protected staging)
 
 - Document analysis now repeats deep ZIP verification before extraction, then
