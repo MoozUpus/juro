@@ -26,3 +26,9 @@ unused and no down migration is required. Do not delete the tables during an
 incident. Restore D1 only for demonstrated corruption after preserving current
 evidence. A malformed `IDENTITY_KEYRING` keeps memory unavailable by design and
 must be corrected through Cloudflare secret entry, never through chat or Git.
+
+## Migration 0084 / operational feature-control rollback
+
+Before staging activation, capture and round-trip-verify a fresh private D1 export and record the active Worker version. Apply `0084` before deploying code that queries the table. If a feature guard causes a false stop, unexpected latency or a staff-access regression, first restore traffic to the previous verified Worker. The additive immutable history table may remain unused; do not drop it or delete operator evidence during the incident.
+
+If one capability is unhealthy but the console remains trustworthy, prefer the narrow server-enforced feature stop over a whole-application rollback. If history integrity fails, covered execution fails closed: preserve D1/R2 evidence and roll back the Worker. Restore D1 only for proven corruption after recording the damaged state and validating the private backup in isolation. Production activation and rollback still require their own backup, exact production version and explicit owner approval.

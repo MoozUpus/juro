@@ -1,5 +1,15 @@
 # JURO Cloudflare resources
 
+> Current checkpoint — 2026-08-05: protected staging Worker
+> `juro-platform-staging` version `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4`
+> serves 100% from commit `cff38f0`. `juro-staging` is through additive
+> migration `0078` with 79 ledger rows. The pre-migration private-R2 backup and
+> post-migration isolated restore passed checksum/integrity verification; direct
+> remote integrity pragmas exceeded the D1 query memory ceiling and are not
+> claimed. Root and canonical protected routes return Access `302` anonymously.
+> Production was not targeted. See root
+> `docs/ai-platform/STAGING-0069-0078-EVIDENCE.md`.
+
 ## Containers capability check — 2026-08-04
 
 `wrangler containers list --json` authenticated to account

@@ -3,8 +3,9 @@ import { z } from "zod";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import { synthesizeAssistantSpeech } from "../../../../../lib/ai/voice-recording";
-import { voiceErrorResponse, voiceLocale, voiceProblem } from "../../../../../lib/ai/voice-http";
+import { voiceErrorResponse, voiceLocale, voiceProblem, voiceResponse } from "../../../../../lib/ai/voice-http";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../../lib/operations/operational-feature-flags";
 
 const requestSchema = z.object({
   assistantMessageId: z.string().uuid(),
@@ -19,7 +20,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const parsed = requestSchema.safeParse(await request.json().catch(() => null));
   const locale = parsed.success ? parsed.data.locale : voiceLocale(request);
   if (!parsed.success) return voiceProblem("INVALID_VOICE_REQUEST", 400, locale);
-  const message = await requireD1().prepare(`SELECT m.content
+  const db = requireD1();
+  try {
+    await assertOperationalFeatureEnabled({ db, environment: operationalEnvironment(runtimeEnv().APP_ENV), key: "voice_mode" });
+  } catch (error) {
+    if (!(error instanceof OperationalFeatureError)) throw error;
+    return voiceResponse({ code: error.code, error: operationalFeatureMessage(locale) }, 503);
+  }
+  const message = await db.prepare(`SELECT m.content
     FROM conversation_messages m JOIN conversations c ON c.id=m.conversation_id
     WHERE m.id=? AND m.author_type='assistant' AND c.workspace_id=? AND c.owner_user_id=? LIMIT 1`)
     .bind(parsed.data.assistantMessageId, workspace.id, user.id).first<{ content: string }>();

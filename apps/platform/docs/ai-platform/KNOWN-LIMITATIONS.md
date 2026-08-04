@@ -2,8 +2,8 @@
 
 > System-status checkpoint — 2026-08-05: local migration `0083` implements a
 > bilingual public projection, immutable forward-only incident updates,
-> fresh-MFA operations console and narrow hostname boundary. Staging remains
-> through `0068`; `status.staging.juro.uz` and `status.juro.uz` are not attached,
+> fresh-MFA operations console and narrow hostname boundary. Staging is through
+> `0078`; `status.staging.juro.uz` and `status.juro.uz` are not attached,
 > no authenticated admin browser flow or operational incident rehearsal is
 > claimed, and component state is operator-reported rather than an end-to-end
 > synthetic availability probe. Production still returns 502.
@@ -29,8 +29,9 @@
 > public and authenticated article routes, immutable version/hash evidence,
 > related articles and tenant-bound helpfulness are implemented through local
 > migration `0077`. A fresh-MFA staff editor, dedicated capability and
-> append-only D1 authoring evidence are implemented through local migration
-> `0078`. Neither migration is applied to staging or production, and browser
+> append-only D1 authoring evidence are implemented through migration
+> `0078`. Both migrations are applied to protected staging from exact commit
+> `cff38f0`, but production is unchanged and browser
 > responsive/zoom/screen-reader QA is not claimed by the local code tests.
 
 > PDF preflight checkpoint — 2026-08-04: structural page count now gates single

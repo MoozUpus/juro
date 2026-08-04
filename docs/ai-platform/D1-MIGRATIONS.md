@@ -1,8 +1,26 @@
 # D1 migration checkpoint
 
+## 0084 — operational feature flags
+
+Status: additive local candidate; protected staging is currently through `0078`; production is unchanged.
+
+`0084_operational_feature_flags.sql` adds one append-only, per-environment version history for `ai_chat`, `document_analysis_upload`, `lawyer_handoff` and `voice_mode`. D1 rejects missing actors, gaps, predecessor-hash mismatches, updates and deletes. The service verifies the SHA-256 chain before reads that control execution and before appending a new version. Missing history preserves the pre-existing enabled behavior; a recorded disabled state or a broken chain fails closed before provider calls, upload writes or handoff creation.
+
+The protected RU/UZ operator route `/:locale/admin/feature-flags` and its API require `staff.operations.manage`, fresh MFA and CSRF for writes. The kill switches cover authenticated and guest AI, document upload/import/finalize, new lawyer handoff, and voice upload/finalize/transcription/speech. Data-management operations such as deleting an existing voice recording remain available during a pause.
+
+Before staging application: create and round-trip-verify a new full `juro-staging` export in private `juro-staging-backups`, restore it in isolation, then apply all pending migrations in ledger order. Postflight must include an independent post-migration restore, ledger/table/index/trigger inspection, exact Worker identity, Access-boundary probes and an authenticated operator disable/re-enable rehearsal proving that no usage, provider call, R2 write or request row is created while disabled.
+
+Rollback is application-first. Restore the prior Worker version; the additive immutable history table may remain. Do not delete operator evidence during recovery.
+
+## 0069–0078 — protected staging checkpoint
+
+Status: applied and independently restore-verified in protected staging on 2026-08-05; production is unchanged.
+
+The pre-migration private R2 backup, exact ledger, post-migration restore, Worker version and Access-boundary evidence are recorded in `STAGING-0069-0078-EVIDENCE.md`. Direct remote integrity pragmas exceeded the D1 query memory ceiling, so the report relies on fresh exported schema/data restored into isolated SQLite and explicitly does not claim those remote pragmas passed.
+
 ## 0083 — public system status incidents
 
-Status: additive local candidate; staging remains through `0068`; production is
+Status: additive local candidate; staging remains through `0078`; production is
 unchanged.
 
 `0083_system_status_incidents.sql` adds three tables for bilingual public-safe
@@ -25,7 +43,7 @@ separate explicit approval.
 
 ## 0082 — provider cost circuit breaker
 
-Status: additive local candidate; staging remains through `0068`; production is
+Status: additive local candidate; staging remains through `0078`; production is
 unchanged.
 
 `0082_provider_cost_circuit_breaker.sql` adds versioned cost-guard policies,

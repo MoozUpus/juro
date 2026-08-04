@@ -1,11 +1,18 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
-import { requireD1, requireQuarantineR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireQuarantineR2, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import {
   arrayBufferHex,
   documentAnalysisUploadForUser,
   DocumentAnalysisUploadError,
 } from "../../../../../../lib/document-analysis/upload-pipeline";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import {
+  assertOperationalFeatureEnabled,
+  operationalEnvironment,
+  OperationalFeatureError,
+  operationalLocaleFromRequest,
+  operationalFeatureMessage,
+} from "../../../../../../lib/operations/operational-feature-flags";
 
 type Context = { params: Promise<{ analysisId: string }> };
 
@@ -35,6 +42,11 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
   const { analysisId } = await context.params;
   const db = requireD1();
   try {
+    await assertOperationalFeatureEnabled({
+      db,
+      environment: operationalEnvironment(runtimeEnv().APP_ENV),
+      key: "document_analysis_upload",
+    });
     const record = await documentAnalysisUploadForUser(db, analysisId, workspace.id, user.id);
     if (["uploaded", "quarantined"].includes(record.status)) {
       const existing = await requireQuarantineR2().head(record.r2Key);
@@ -104,6 +116,12 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
     ]);
     return response({ analysis: { ...publicRecord(record), status: "uploaded", errorCode: null } });
   } catch (error) {
+    if (error instanceof OperationalFeatureError) {
+      return response({
+        code: error.code,
+        error: operationalFeatureMessage(operationalLocaleFromRequest(request)),
+      }, 503);
+    }
     return uploadError(error);
   }
 });

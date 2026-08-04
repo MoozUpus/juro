@@ -1,6 +1,6 @@
 # Cost control
 
-Status: local candidate through migration `0082`; staging remains through `0068`.
+Status: local candidate through migration `0082`; staging is through `0078`.
 
 Provider and queue actions are server-side and record bounded technical/cost
 metadata where implemented. Synthetic provider probes are one-time, staging-only,

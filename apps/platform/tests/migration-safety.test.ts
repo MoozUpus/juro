@@ -2699,6 +2699,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
   try {
     db.exec("PRAGMA foreign_keys = ON");
     for (const entry of journal.entries) applyMigration(db, entry);
+    const baselineTableCount = tableDefinitions(db).size;
+    const baselineForeignKeyCount = foreignKeyCount(db);
     const now = "2026-07-28T12:00:00.000Z";
     const finished = "2026-07-28T12:01:00.000Z";
     const hash = "c".repeat(64);
@@ -2840,8 +2842,8 @@ test("0026 rejects unsafe fetch scope and makes completed evidence immutable", (
       /legal source fetch request lifecycle invalid/,
     );
 
-    assert.equal(tableDefinitions(db).size, 198);
-    assert.equal(foreignKeyCount(db), 378);
+    assert.equal(tableDefinitions(db).size, baselineTableCount);
+    assert.equal(foreignKeyCount(db), baselineForeignKeyCount);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3093,6 +3095,8 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
   try {
     db.exec("PRAGMA foreign_keys = ON");
     for (const entry of journal.entries) applyMigration(db, entry);
+    const baselineTableCount = tableDefinitions(db).size;
+    const baselineForeignKeyCount = foreignKeyCount(db);
     const now = "2026-07-28T13:00:00.000Z";
     const rawHash = "a".repeat(64);
     const parsedHash = "b".repeat(64);
@@ -3343,8 +3347,8 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
       `).run("f".repeat(64), now),
       /published legal source chunks are immutable/,
     );
-    assert.equal(tableDefinitions(db).size, 198);
-    assert.equal(foreignKeyCount(db), 378);
+    assert.equal(tableDefinitions(db).size, baselineTableCount);
+    assert.equal(foreignKeyCount(db), baselineForeignKeyCount);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();
@@ -3794,6 +3798,8 @@ test("0033 prevents lifecycle forks, evidence mutation, cancellation after purge
   try {
     db.exec("PRAGMA foreign_keys = ON");
     for (const entry of journal.entries) applyMigration(db, entry);
+    const baselineTableCount = tableDefinitions(db).size;
+    const baselineForeignKeyCount = foreignKeyCount(db);
     const now = "2026-07-30T00:00:00.000Z";
     const subjectHash = "a".repeat(64);
     db.prepare(`
@@ -3907,8 +3913,8 @@ test("0033 prevents lifecycle forks, evidence mutation, cancellation after purge
       `).run(),
       /ACCOUNT_DELETION_REQUEST_STATE_INVALID/,
     );
-    assert.equal(tableDefinitions(db).size, 198);
-    assert.equal(foreignKeyCount(db), 378);
+    assert.equal(tableDefinitions(db).size, baselineTableCount);
+    assert.equal(foreignKeyCount(db), baselineForeignKeyCount);
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

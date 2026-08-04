@@ -285,3 +285,12 @@ tenant, resource and infrastructure identifiers. A configured status hostname
 is fenced in the Worker before application routing, so it cannot become a second
 entry point to private platform routes. Automatic probes and domain attachment
 remain separate staging gates rather than fabricated availability evidence.
+
+## D-115 — operational feature stops are immutable environment-scoped decisions
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+Emergency controls are not dashboard variables or client-side presentation flags. Every change is a per-environment append-only D1 version with a real staff actor, bounded reason, predecessor hash and canonical SHA-256 event hash. D1 enforces ordering and immutability; the application verifies the chain before it permits execution or another write. A disabled or corrupted chain fails closed before a provider call, new upload write, voice processing step or lawyer-request creation. Existing user data remains readable and deletable so an incident stop cannot trap personal content.
+
+Only an operations-capable staff member with fresh MFA can view or change the flags, and mutation remains CSRF-protected. The browser never supplies environment or actor identity. Environment comes from server runtime configuration and malformed values are rejected rather than silently treated as production or staging. Migration `0084` and the matching Worker remain local until a separately authorized backup/migration/deploy cycle.

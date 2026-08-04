@@ -1,5 +1,16 @@
 # JURO D1 migrations
 
+> Current checkpoint — 2026-08-05: protected `juro-staging` is through
+> `0078_knowledge_base_authoring.sql` with 79 ledger rows. A fresh pre-change
+> full/schema/data export round-tripped through private `juro-staging-backups`,
+> and both the pre-change and post-migration exports restored in isolation with
+> `quick_check=ok` and zero foreign-key violations. Worker
+> `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4` serves 100% from exact commit
+> `cff38f0`. Sections below that call `0077` or `0078` pending are retained as
+> historical candidate notes and are superseded by this checkpoint. Migrations
+> `0079`–`0084` remain local and unapplied; production is unchanged. Exact
+> evidence is in root `docs/ai-platform/STAGING-0069-0078-EVIDENCE.md`.
+
 ## Pending 0081 — provider cost observability
 
 `0081_provider_cost_observability.sql` additively creates immutable provider

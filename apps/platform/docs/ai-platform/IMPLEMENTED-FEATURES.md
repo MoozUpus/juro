@@ -912,3 +912,9 @@ duplicate event rollback, immutable events/prices, provider-bound source URLs,
 account-deletion retention without content, staff-role separation and the admin
 route boundary. Migration `0081`, official price configuration and remote
 reconciliation remain unapplied/unverified in staging; production is unchanged.
+
+## Operational feature stops (local candidate)
+
+Migration `0084` and the matching server service implement per-environment, append-only controls for authenticated and guest AI chat, document-analysis ingestion, new lawyer handoff and voice processing. Server-side checks happen after authentication/tenant resolution where applicable and before provider transport, usage reservation, R2 write, queue creation or lawyer-request persistence. Disabling a feature does not block reading or deleting existing user data.
+
+Every operator transition records a real server-derived actor, bounded non-sensitive reason, monotonic version and SHA-256 predecessor chain. D1 rejects gaps, substitution, update and delete; the service re-verifies integrity before execution and before another transition. The protected RU/UZ `/:locale/admin/feature-flags` surface requires `staff.operations.manage`, fresh MFA and CSRF. It provides visible focus, a skip link, 44 px actions, direct language switching and a minimal reduced-motion-safe press response. Five focused lifecycle/security tests and type-check pass. Migration, authenticated browser rehearsal and staging deployment remain separately gated; production is unchanged.

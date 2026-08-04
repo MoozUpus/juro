@@ -1,5 +1,5 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
-import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import {
   hashVoiceIntent,
   initializeVoiceRecording,
@@ -8,6 +8,7 @@ import {
 } from "../../../../../lib/ai/voice-recording";
 import { publicVoiceRecording, voiceErrorResponse, voiceLocale, voiceProblem, voiceResponse } from "../../../../../lib/ai/voice-http";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../../lib/operations/operational-feature-flags";
 
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
@@ -15,6 +16,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const workspace = await workspaceForUser(user);
   const locale = voiceLocale(request);
   try {
+    try {
+      await assertOperationalFeatureEnabled({ db: requireD1(), environment: operationalEnvironment(runtimeEnv().APP_ENV), key: "voice_mode" });
+    } catch (error) {
+      if (!(error instanceof OperationalFeatureError)) throw error;
+      return voiceResponse({ code: error.code, error: operationalFeatureMessage(locale) }, 503);
+    }
     if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
       return voiceProblem("INVALID_CONTENT_TYPE", 415, locale);
     }

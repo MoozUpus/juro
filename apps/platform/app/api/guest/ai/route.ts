@@ -46,6 +46,12 @@ import {
   type GuestAiRun,
   type GuestAiSession,
 } from "../../../../lib/ai/guest-session";
+import {
+  assertOperationalFeatureEnabled,
+  operationalEnvironment,
+  OperationalFeatureError,
+  operationalFeatureMessage,
+} from "../../../../lib/operations/operational-feature-flags";
 
 const GUEST_INSTRUCTION_VERSION = "juro-guest-legal-chat-v1";
 const requestSchema = z.object({
@@ -100,6 +106,12 @@ function publicError(
     return json({
       code: "GUEST_CONFIGURATION_UNAVAILABLE",
       error: copy(locale, "Гостевой AI временно недоступен.", "Mehmon AI vaqtincha mavjud emas."),
+    }, 503);
+  }
+  if (error instanceof OperationalFeatureError) {
+    return json({
+      code: error.code,
+      error: operationalFeatureMessage(locale),
     }, 503);
   }
   if (error instanceof ApiAuthError) {
@@ -256,7 +268,12 @@ export async function POST(request: Request): Promise<Response> {
     }
     locale = parsed.data.locale;
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
-    const { db, keyring } = configuration();
+    const { env, db, keyring } = configuration();
+    await assertOperationalFeatureEnabled({
+      db,
+      environment: operationalEnvironment(env.APP_ENV),
+      key: "ai_chat",
+    });
     const sessionContext = await sessionForRequest({
       request,
       db,

@@ -2,9 +2,10 @@ import { parseJsonRequest } from "../../../../lib/auth/input";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
-import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { lawyerRequestSchema, localizedHandoffError } from "../../../../lib/platform/lawyer-request";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../lib/operations/operational-feature-flags";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -44,6 +45,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
 
   const db = requireD1();
+  try {
+    await assertOperationalFeatureEnabled({ db, environment: operationalEnvironment(runtimeEnv().APP_ENV), key: "lawyer_handoff" });
+  } catch (error) {
+    if (!(error instanceof OperationalFeatureError)) throw error;
+    return response({ code: error.code, error: operationalFeatureMessage(locale) }, 503);
+  }
   const entitlements = await workspaceEntitlements(db, workspace.id);
   if (!entitlements.lawyerHandoff) {
     return response({ code: "PLAN_LIMIT", error: localizedHandoffError(locale, "PLAN_LIMIT") }, 403);

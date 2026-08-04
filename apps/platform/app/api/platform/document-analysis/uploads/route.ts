@@ -1,5 +1,5 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
-import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import {
   DocumentAnalysisUploadError,
   hashUploadIntent,
@@ -8,6 +8,7 @@ import {
   parseUploadIdempotencyKey,
 } from "../../../../../lib/document-analysis/upload-pipeline";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
+import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../../lib/operations/operational-feature-flags";
 
 function response(body: unknown, status = 200, headers?: HeadersInit) {
   return Response.json(body, {
@@ -25,8 +26,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
       return response({ code: "INVALID_CONTENT_TYPE", error: "Инициализация загрузки принимает только JSON." }, 415);
     }
     const intent = parseDocumentAnalysisUploadIntent(await request.json());
+    const db = requireD1();
+    try {
+      await assertOperationalFeatureEnabled({ db, environment: operationalEnvironment(runtimeEnv().APP_ENV), key: "document_analysis_upload" });
+    } catch (error) {
+      if (!(error instanceof OperationalFeatureError)) throw error;
+      return response({ code: error.code, error: operationalFeatureMessage(intent.locale) }, 503);
+    }
     if (intent.caseId) {
-      const targetCase = await requireD1().prepare(
+      const targetCase = await db.prepare(
         "SELECT id FROM cases WHERE id=? AND workspace_id=? AND archived_at IS NULL LIMIT 1",
       ).bind(intent.caseId, workspace.id).first<{ id: string }>();
       if (!targetCase) {
@@ -35,7 +43,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     }
     const idempotencyKey = parseUploadIdempotencyKey(request.headers.get("idempotency-key"));
     const result = await initializeDocumentAnalysisUpload({
-      db: requireD1(),
+      db,
       workspaceId: workspace.id,
       userId: user.id,
       idempotencyKey,

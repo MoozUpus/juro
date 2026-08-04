@@ -500,3 +500,13 @@ The localized document-analysis entry presents a native RU/UZ URL form. It does
 not accept private links or credentials, persist the full source URL, label the
 material as legislation, or report analysis success while malware scanning is
 unavailable.
+
+### Operational feature controls — local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `/:locale/admin/feature-flags` | Dense RU/UZ environment status, change form and immutable history | hidden behind not-found for unauthorized users; `staff.operations.manage`; fresh MFA |
+| `GET /api/platform/admin/feature-flags` | Reads server environment, current states and verified history | staff operations capability; fresh MFA; private no-store response |
+| `POST /api/platform/admin/feature-flags` | Appends one enable/disable version with reason | same staff/MFA boundary, CSRF, strict Zod, server actor/environment, D1 sequence/hash guards |
+
+Execution guards cover `POST /api/guest/ai`, authenticated AI POST/SSE, document-analysis initialize/URL-import/upload/finalize, new lawyer-request creation, voice initialize/upload/finalize/transcribe and speech. Voice deletion and existing-data reads remain available during a pause. No production route is changed by the local candidate.

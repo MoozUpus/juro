@@ -57,3 +57,7 @@ deferred; profiles can carry only a self-declared advocate state.
 The local deletion slice covers D1/R2 operational content present in the current schema, cancellation, blockers, retry, tombstoning, retained evidence, queue/cron execution, RU/UZ settings UI, and the `0080` user-document Vectorize ledger. It submits idempotent vector deletion before D1 cascade and fails closed if indexed rows exist without a binding. This remains local evidence; provider-side AI retention deletion, guest purge, voice-audio purge, and legal-hold adjudication are still not claimed.
 
 Staging behavior is not marked complete until migration `0030`–`0033`, exact Worker deployment, Access-protected synthetic end-to-end testing, logs, queue/DLQ, cron, and post-migration backup checks pass. Production remains unchanged.
+
+## Operational feature-control gate
+
+The `0084` operational feature history, server guards and fresh-MFA RU/UZ console are local-only. They are not an active staging kill switch until a fresh private backup/restore, ordered migration, exact Worker deployment and authenticated disable/re-enable rehearsal prove that covered provider, usage, R2, queue and request writes remain absent while disabled. Production feature control remains unchanged.

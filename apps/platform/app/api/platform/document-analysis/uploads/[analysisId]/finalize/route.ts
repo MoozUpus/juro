@@ -8,6 +8,13 @@ import {
   validateUploadMagicBytes,
 } from "../../../../../../../lib/document-analysis/upload-pipeline";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
+import {
+  assertOperationalFeatureEnabled,
+  operationalEnvironment,
+  OperationalFeatureError,
+  operationalLocaleFromRequest,
+  operationalFeatureMessage,
+} from "../../../../../../../lib/operations/operational-feature-flags";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -26,6 +33,11 @@ export const POST = withApiErrors(async function POST(
   const { analysisId } = await context.params;
   const db = requireD1();
   try {
+    await assertOperationalFeatureEnabled({
+      db,
+      environment: operationalEnvironment(runtimeEnv().APP_ENV),
+      key: "document_analysis_upload",
+    });
     const record = await documentAnalysisUploadForUser(db, analysisId, workspace.id, user.id);
     if (record.status === "quarantined") {
       const scanQueued = scannerConfigured();
@@ -111,6 +123,12 @@ export const POST = withApiErrors(async function POST(
       errorCode: scanQueued ? null : "MALWARE_SCANNER_UNAVAILABLE",
     }, false, scanQueued);
   } catch (error) {
+    if (error instanceof OperationalFeatureError) {
+      return response({
+        code: error.code,
+        error: operationalFeatureMessage(operationalLocaleFromRequest(request)),
+      }, 503);
+    }
     if (error instanceof DocumentAnalysisUploadError) {
       return response({ code: error.code, error: error.message }, error.status);
     }

@@ -10,6 +10,12 @@ import {
 } from "../../../../../../lib/ai/voice-recording";
 import { publicVoiceRecording, voiceErrorResponse, voiceLocale, voiceProblem, voiceResponse } from "../../../../../../lib/ai/voice-http";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import {
+  assertOperationalFeatureEnabled,
+  operationalEnvironment,
+  OperationalFeatureError,
+  operationalFeatureMessage,
+} from "../../../../../../lib/operations/operational-feature-flags";
 
 type Context = { params: Promise<{ recordingId: string }> };
 
@@ -27,6 +33,11 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
   const locale = voiceLocale(request, state.recording?.locale === "uz" ? "uz" : "ru");
   if (!state.recording) return voiceProblem("VOICE_RECORDING_NOT_FOUND", 404, locale);
   try {
+    await assertOperationalFeatureEnabled({
+      db: requireD1(),
+      environment: operationalEnvironment(runtimeEnv().APP_ENV),
+      key: "voice_mode",
+    });
     const contentType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
     const declaredLength = request.headers.get("content-length");
     const contentLength = declaredLength === null ? null : Number(declaredLength);
@@ -58,6 +69,9 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
     const updated = await voiceRecordingForUser(requireD1(), state.recording.id, state.workspace.id, state.user.id);
     return voiceResponse({ recording: updated ? publicVoiceRecording(updated) : publicVoiceRecording(state.recording) });
   } catch (error) {
+    if (error instanceof OperationalFeatureError) {
+      return voiceResponse({ code: error.code, error: operationalFeatureMessage(locale) }, 503);
+    }
     return voiceErrorResponse(error, locale) ?? Promise.reject(error);
   }
 });

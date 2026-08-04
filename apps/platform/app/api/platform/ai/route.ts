@@ -45,6 +45,12 @@ import {
   ProviderCostControlError,
 } from "../../../../lib/ai/provider-cost-control";
 import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
+import {
+  assertOperationalFeatureEnabled,
+  operationalEnvironment,
+  OperationalFeatureError,
+  operationalFeatureMessage,
+} from "../../../../lib/operations/operational-feature-flags";
 
 const INSTRUCTION_VERSION = "juro-legal-chat-v1";
 
@@ -111,6 +117,13 @@ async function executePost(
     voiceRecordingId?: string;
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
+  const db = requireD1();
+  try {
+    await assertOperationalFeatureEnabled({ db, environment: operationalEnvironment(runtimeEnv().APP_ENV), key: "ai_chat" });
+  } catch (error) {
+    if (!(error instanceof OperationalFeatureError)) throw error;
+    return response({ code: error.code, error: operationalFeatureMessage(locale) }, 503);
+  }
   const submittedQuestion = body?.question?.trim();
   const answerMode = body?.answerMode === "short" ? "short" : "detailed";
   const reasoningMode = body?.reasoningMode === "deep" ? "deep" : "fast";
@@ -139,7 +152,6 @@ async function executePost(
     }, 503);
   }
 
-  const db = requireD1();
   const providerEnvironment = parseProviderEnvironment(runtimeEnv().APP_ENV);
   const entitlements = await workspaceEntitlements(db, workspace.id);
   if (body?.caseId) {
