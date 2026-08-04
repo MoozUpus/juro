@@ -1,17 +1,27 @@
 # JURO legal evaluation
 
-Updated: 2026-08-02
+Updated: 2026-08-04
 
 ## Reproducible corpus harness
 
-`evaluation/legal-evaluation-corpus.ts` defines 314 synthetic **inputs** for release evaluation: 132 base Russian scenarios, 132 Uzbek-Latin base scenarios, and 50 additional intentionally ambiguous scenarios (25 per language). Each priority legal area is represented in both languages. The corpus covers historical applicability, deadlines, urgent situations, missing Advice scenarios, Advice/Lex conflicts, unofficial-source attempts, and incomplete facts.
+`evaluation/legal-evaluation-corpus.ts` defines 314 unique synthetic **inputs**
+for release evaluation: 132 base Russian scenarios, 132 Uzbek-Latin base
+scenarios, and 50 additional intentionally ambiguous scenarios (25 per
+language). Each priority legal area and each individual/entrepreneur/lawyer
+account context is represented in both languages. The prompts now encode the
+actual historical, deadline, urgent, Advice-missing, Advice/Lex-conflict,
+unofficial-source, incomplete-facts, foreign-element and evidence-quality
+situations instead of relying on tags attached to repeated generic text.
 
 These records intentionally contain no invented legal answer, act, article, link, or
 success score. `scripts/validate-legal-evaluation.ts --results
-<reviewed-results.json>` accepts only one result per scenario and rejects a result
-set when any citation is outside `lex.uz`/`advice.uz`, a declared source type does
-not match its host, a human reviewer is absent, RU/UZ reviewer quality is below
-95/100, or fewer than 98% of the explicit critical-deadline scenarios are detected.
+<reviewed-results.json>` accepts only one result per scenario. Public citations
+are fetched by the release validator with bounded same-host HTTPS redirects;
+host shape alone is insufficient. Each citation also needs a successful status,
+check timestamp and snapshot hash. Internal materials require staging-DB
+evidence. The validator rejects missing expected behaviors, language or
+jurisdiction mismatch, unreviewed output, reviewer language quality below
+95/100, any unproven citation, or critical-deadline detection below 98%.
 Therefore a passing report still requires real reviewed output and cannot be
 fabricated by the synthetic corpus.
 ## Current automated evidence
@@ -40,6 +50,7 @@ legal correctness or coverage of a real corpus.
 - a tracked human-reviewed subset with reviewer identity, source version,
   applicable date, expected answer, result, and remediation.
 
-The corpus and automated gate are implemented. A release-quality percentage is
-still not claimed until reviewed results with real existing source URLs and human
-review evidence are supplied through the validator.
+The corpus and fail-closed automated gate are implemented. Unit fixtures only
+exercise the validator and are never legal ground truth. A release-quality
+percentage is still not claimed until all 314 real outputs, current live-link
+checks and named human reviews are supplied through the validator.

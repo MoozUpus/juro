@@ -4,6 +4,23 @@ import {
   validateLegalEvaluationResults,
   type LegalEvaluationResult,
 } from "../evaluation/legal-evaluation-corpus";
+import { verifyPublicCitation } from "../evaluation/legal-citation-live-check";
+
+async function verifyCitationUrls(results: readonly LegalEvaluationResult[]): Promise<Map<string, boolean>> {
+  const urls = [...new Set(results.flatMap((result) =>
+    Array.isArray(result.citations)
+      ? result.citations.filter((citation) => citation.sourceType !== "internal").map((citation) => citation.url)
+      : [],
+  ))];
+  const verified = new Map<string, boolean>();
+  const concurrency = 6;
+  for (let offset = 0; offset < urls.length; offset += concurrency) {
+    const batch = urls.slice(offset, offset + concurrency);
+    const outcomes = await Promise.all(batch.map(async (url) => [url, await verifyPublicCitation(url)] as const));
+    for (const [url, exists] of outcomes) verified.set(url, exists);
+  }
+  return verified;
+}
 
 const flagIndex = process.argv.indexOf("--results");
 const path = flagIndex >= 0 ? process.argv[flagIndex + 1] : undefined;
@@ -22,7 +39,8 @@ if (!path) {
     results = [];
   }
   if (process.exitCode !== 2) {
-    const verdict = validateLegalEvaluationResults(results, legalEvaluationCorpus);
+    const liveVerifiedUrls = await verifyCitationUrls(results);
+    const verdict = validateLegalEvaluationResults(results, legalEvaluationCorpus, liveVerifiedUrls);
     console.log(JSON.stringify({
       corpusSize: legalEvaluationCorpus.length,
       resultCount: results.length,

@@ -2662,3 +2662,24 @@ authorization, a private-R2 backup/round-trip/restore was verified and only
 Anonymous Access boundary smoke passes, while authenticated RU/UZ browser
 validation remains open. Production is unchanged and still requires a separate
 authorization.
+
+## D-132 — Evaluation manifests cannot be mistaken for release evidence
+
+Status: accepted for local implementation; reviewed staging result sets pending
+Date: 2026-08-04
+
+The legal corpus remains synthetic input, but its 314 prompts are unique and
+encode the actual account type, legal area and historical/urgent/conflict/source
+condition being evaluated. Each scenario declares observable expected behavior.
+A public citation is not accepted merely because its string uses an allowlisted
+host: the release validator performs a bounded same-host HTTPS request and also
+requires status, timestamp and content hash evidence. Internal materials require
+staging-DB evidence. Unit fixtures test this contract but are never legal truth.
+
+The document manifest likewise cannot pass without 100 distinct artifact hashes
+and non-zero sizes. Aggregate gates now directly enforce document type, critical
+risk detection, user-side confirmation, dates/sums extraction, clean-scan OCR,
+all 30 comparison pairs, prompt-injection resistance and named human review.
+The validators deliberately remain red until real staging executions and human
+reviews are supplied. This change adds no migration, provider call, feature flag
+or runtime dependency and does not mutate staging or production.

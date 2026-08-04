@@ -1,5 +1,14 @@
 # JURO implemented-features checkpoint
 
+> Current local evaluation delta — 2026-08-04: legal release evaluation now
+> contains 314 unique RU/UZ scenarios with individual/entrepreneur/lawyer
+> coverage, expected-behavior scoring and live citation existence checks. The
+> document validator requires 100 unique artifact evidence records and enforces
+> format, document type, critical risk, side confirmation, dates/sums, clean OCR,
+> 30 comparison-pair, injection-resistance and human-review gates. Focused tests
+> and typecheck pass. No legal/document quality percentage is claimed and no
+> staging or production runtime was changed by this local delta.
+
 > Current staging delta — 2026-08-04: action-plan steps now have an authenticated,
 > tenant-scoped deadline preview and an explicit confirmation boundary. Server
 > write routes recalculate the result, reject tampering, version the plan and

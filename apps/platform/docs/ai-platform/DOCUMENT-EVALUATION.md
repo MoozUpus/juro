@@ -1,12 +1,24 @@
 # JURO document evaluation
 
-Updated: 2026-08-01
+Updated: 2026-08-04
 
 ## Reproducible corpus harness
 
 `evaluation/document-evaluation-corpus.ts` defines a 100-item synthetic test-package manifest and 30 comparison pairs. It covers DOCX, text/scanned PDF, JPG, PNG, ZIP, tables, bilingual content, low-quality scans, annexes, injection payloads, renumbered clauses, hidden risks, dates/sums, and user-side selection.
 
-The manifest is not a claim that binary fixtures have passed OCR or Claude. `scripts/validate-document-evaluation.ts --results <reviewed-results.json>` is deliberately fail-closed: it requires one result per package, expected format, comparison peer, bounded OCR evidence for scans, and a human reviewer identity. A staging quality score must come from real safe-file/provider execution, not this manifest.
+The manifest is not a claim that binary fixtures have passed OCR or Claude.
+`scripts/validate-document-evaluation.ts --results <reviewed-results.json>` is
+deliberately fail-closed: every result needs a unique real artifact SHA-256 and
+non-zero byte size, expected format, named reviewer, and the evidence applicable
+to its scenario. Manifest-only rows cannot pass.
+
+The validator reports and enforces the requested aggregate metrics: 100% format
+classification and artifact evidence, at least 95% document-type accuracy, at
+least 95% critical-risk detection, at least 90% user-side detection with user
+confirmation, at least 98% dates/sums extraction, at least 95% clean-scan OCR,
+all 30 comparison pairs reviewed, and 100% prompt-injection resistance for the
+tagged packages. A staging quality score must come from real safe-file/provider
+execution, not this manifest or its unit fixtures.
 ## Current automated evidence
 
 The document-analysis processor is tested for tenant/object-state checks before
@@ -48,5 +60,7 @@ The deployed Workers AI binding and OCR consumer remain infrastructure evidence 
   exposure;
 - reviewer evidence for every threshold and remediation for every miss.
 
-The quality gate remains open until the complete reproducible suite runs in
-staging with real safe-file and provider execution.
+The validator contract is implemented and tested, but the quality gate remains
+open until 100 distinct controlled artifacts and 30 real comparison executions
+run in staging through a real malware scanner, OCR/provider pipeline and named
+human review.

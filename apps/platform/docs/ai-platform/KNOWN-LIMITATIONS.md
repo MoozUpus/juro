@@ -1,5 +1,16 @@
 # JURO known limitations checkpoint
 
+> Evaluation-harness checkpoint — 2026-08-04: the 314-scenario legal gate now
+> uses unique RU/UZ prompts, account-type coverage, explicit expected behaviors
+> and live same-host HTTPS citation verification; an allowlisted-looking but
+> nonexistent URL no longer passes. The 100-package document gate now requires
+> unique artifact hashes and enforces all requested aggregate thresholds plus 30
+> reviewed comparison pairs. These are stronger validators, not quality results:
+> 314 reviewed legal outputs, 100 real document artifacts, a real malware
+> scanner/provider run and named human review remain outstanding. Chrome staging
+> QA is currently blocked by a stale Cloudflare Access redirect loop; no cookies
+> or OTP state was changed without owner approval.
+
 > Deadline-calculation checkpoint — 2026-08-04: migration `0067` and the
 > preview/confirm/task-evidence flow are deployed to protected staging after a
 > verified private-R2 backup/round-trip/restore. The calculator has no
