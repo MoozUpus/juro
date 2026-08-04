@@ -9,7 +9,11 @@ import {
   storeInitialAnalysisDocumentVersion,
   suggestedRevisionId,
 } from "../lib/document-analysis/revisions";
-import { sqliteD1Fixture } from "./helpers/sqlite-d1";
+import {
+  createAnalysisVersionObjectWrite,
+  reconcileAnalysisVersionObjectWrites,
+} from "../lib/document-analysis/version-object-write";
+import { batchBarrier, sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const now = "2026-08-04T09:00:00.000Z";
 
@@ -47,6 +51,10 @@ class FakeR2Bucket {
     const stored = { bytes, sha256 };
     this.objects.set(key, stored);
     return this.metadata(key, stored);
+  }
+
+  async delete(keys: string | string[]) {
+    for (const key of Array.isArray(keys) ? keys : [keys]) this.objects.delete(key);
   }
 
   private metadata(key: string, value: { bytes: Uint8Array; sha256: string }) {
@@ -102,7 +110,10 @@ test("analysis revisions are tenant-scoped, reviewable, idempotent and create im
     const applied = await applySuggestedRevisions({ DB: d1, BUCKET: bucket as unknown as R2Bucket }, input);
     assert.equal(applied.version.version, 2);
     assert.equal(applied.partial, false);
-    const stored = bucket.objects.get([...bucket.objects.keys()].find((key) => key.includes("/2-"))!);
+    const correctedKey = (sqlite.prepare(
+      "SELECT r2_key AS r2Key FROM analysis_document_versions WHERE id=?",
+    ).get(applied.version.id) as { r2Key: string }).r2Key;
+    const stored = bucket.objects.get(correctedKey);
     assert.ok(stored);
     assert.equal(
       new TextDecoder().decode(stored.bytes),
@@ -118,10 +129,117 @@ test("analysis revisions are tenant-scoped, reviewable, idempotent and create im
     assert.equal(replay.version.id, applied.version.id);
     assert.equal((sqlite.prepare("SELECT count(*) AS count FROM analysis_document_versions WHERE analysis_id='analysis-a'").get() as { count: number }).count, 2);
     assert.equal((sqlite.prepare("SELECT count(*) AS count FROM workspace_audit_events WHERE action='analysis_revisions_applied'").get() as { count: number }).count, 1);
+    assert.equal((sqlite.prepare("SELECT count(*) AS count FROM analysis_version_object_writes WHERE status='attached'").get() as { count: number }).count, 2);
+    assert.equal((sqlite.prepare("SELECT count(*) AS count FROM analysis_document_versions WHERE object_write_id IS NOT NULL").get() as { count: number }).count, 2);
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
     sqlite.prepare("DELETE FROM document_analyses WHERE id='analysis-a'").run();
     assert.equal((sqlite.prepare("SELECT count(*) AS count FROM analysis_document_versions WHERE analysis_id='analysis-a'").get() as { count: number }).count, 0);
     assert.equal((sqlite.prepare("SELECT count(*) AS count FROM suggested_revisions WHERE analysis_id='analysis-a'").get() as { count: number }).count, 0);
+    assert.equal((sqlite.prepare("SELECT count(*) AS count FROM analysis_version_object_writes WHERE analysis_id='analysis-a'").get() as { count: number }).count, 0);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("stale unattached analysis version objects are fenced, deleted, and audited", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    seedTenant(sqlite, "user-a", "workspace-a", "analysis-a", "file-a");
+    const bytes = new TextEncoder().encode("unattached corrected document");
+    const sha256 = await sha256Hex(bytes);
+    const write = await createAnalysisVersionObjectWrite(d1, {
+      analysisId: "analysis-a",
+      workspaceId: "workspace-a",
+      ownerUserId: "user-a",
+      targetVersion: 2,
+      sourceKind: "corrected",
+      sizeBytes: bytes.byteLength,
+      sha256,
+    });
+    await bucket.put(write.r2Key, bytes, { sha256 });
+    const reconciliationNow = new Date(Date.parse(write.updatedAt) + 60 * 60 * 1_000).toISOString();
+
+    const result = await reconcileAnalysisVersionObjectWrites({
+      db: d1,
+      bucket: bucket as unknown as R2Bucket,
+      now: reconciliationNow,
+      graceMs: 60_000,
+    });
+    assert.deepEqual(result, { eligible: 1, claimed: 1, attached: 0, deleted: 1, retrying: 0 });
+    assert.equal(bucket.objects.has(write.r2Key), false);
+    const state = sqlite.prepare(
+      "SELECT status,attempt_count AS attemptCount,reconciled_at AS reconciledAt FROM analysis_version_object_writes WHERE id=?",
+    ).get(write.id) as { status: string; attemptCount: number; reconciledAt: string | null };
+    assert.equal(state.status, "deleted");
+    assert.equal(state.attemptCount, 1);
+    assert.equal(state.reconciledAt, reconciliationNow);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS count FROM workspace_audit_events WHERE entity_id=? AND action='orphan_object_deleted'",
+    ).get(write.id) as { count: number }).count, 1);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("concurrent correction writers leave one attached version and a reclaimable orphan", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  try {
+    seedTenant(sqlite, "user-a", "workspace-a", "analysis-a", "file-a");
+    await storeInitialAnalysisDocumentVersion(
+      { DB: d1, BUCKET: bucket as unknown as R2Bucket },
+      { analysisId: "analysis-a", workspaceId: "workspace-a", ownerUserId: "user-a", fileName: "contract.pdf", text: "Срок определяется дополнительно." },
+    );
+    sqlite.prepare("UPDATE document_analyses SET status='completed' WHERE id='analysis-a'").run();
+    seedRevision(sqlite, {
+      analysisId: "analysis-a", workspaceId: "workspace-a", userId: "user-a", riskId: "risk-a",
+      originalText: "Срок определяется дополнительно.", proposedText: "Срок исполнения составляет 10 календарных дней.",
+    });
+    const revisionId = suggestedRevisionId("risk-a");
+    await decideSuggestedRevision(d1, {
+      analysisId: "analysis-a", revisionId, workspaceId: "workspace-a", userId: "user-a", decision: "accepted",
+    });
+    const synchronized = batchBarrier(d1, 2);
+    const outcomes = await Promise.allSettled([
+      applySuggestedRevisions(
+        { DB: synchronized, BUCKET: bucket as unknown as R2Bucket },
+        { analysisId: "analysis-a", workspaceId: "workspace-a", userId: "user-a", mode: "selected", revisionIds: [revisionId], idempotencyKey: "analysis-race-writer-one-0001" },
+      ),
+      applySuggestedRevisions(
+        { DB: synchronized, BUCKET: bucket as unknown as R2Bucket },
+        { analysisId: "analysis-a", workspaceId: "workspace-a", userId: "user-a", mode: "selected", revisionIds: [revisionId], idempotencyKey: "analysis-race-writer-two-0001" },
+      ),
+    ]);
+    assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+    assert.equal(outcomes.filter((outcome) => outcome.status === "rejected").length, 1);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS count FROM analysis_document_versions WHERE analysis_id='analysis-a' AND version=2",
+    ).get() as { count: number }).count, 1);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS count FROM analysis_version_object_writes WHERE analysis_id='analysis-a' AND status='attached'",
+    ).get() as { count: number }).count, 2);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS count FROM analysis_version_object_writes WHERE analysis_id='analysis-a' AND status='pending'",
+    ).get() as { count: number }).count, 1);
+    assert.equal(bucket.objects.size, 3);
+
+    const latestUpdate = (sqlite.prepare(
+      "SELECT max(updated_at) AS updatedAt FROM analysis_version_object_writes WHERE status='pending'",
+    ).get() as { updatedAt: string }).updatedAt;
+    const result = await reconcileAnalysisVersionObjectWrites({
+      db: d1,
+      bucket: bucket as unknown as R2Bucket,
+      now: new Date(Date.parse(latestUpdate) + 60 * 60 * 1_000).toISOString(),
+      graceMs: 60_000,
+    });
+    assert.equal(result.deleted, 1);
+    assert.equal(bucket.objects.size, 2);
+    assert.equal((sqlite.prepare(
+      "SELECT count(*) AS count FROM analysis_version_object_writes WHERE analysis_id='analysis-a' AND status='deleted'",
+    ).get() as { count: number }).count, 1);
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     sqlite.close();
@@ -156,11 +274,46 @@ test("ambiguous excerpts fail closed without a corrected version", async () => {
   }
 });
 
-test("0069 rejects cross-tenant and unreviewed corrected-version links", async () => {
+test("0069 and 0073 reject cross-tenant, unreviewed, and mismatched object evidence", async () => {
   const { sqlite } = sqliteD1Fixture();
   try {
     seedTenant(sqlite, "user-a", "workspace-a", "analysis-a", "file-a");
     seedTenant(sqlite, "user-b", "workspace-b", "analysis-b", "file-b");
+    assert.throws(
+      () => sqlite.prepare(`INSERT INTO analysis_version_object_writes
+        (id,analysis_id,workspace_id,owner_user_id,target_version,source_kind,r2_key,size_bytes,sha256,
+         status,version_id,attempt_count,last_error_code,created_at,updated_at,reconciled_at)
+        VALUES ('cross-write','analysis-a','workspace-b','user-b',1,'extracted',
+          'analysis-versions/workspace-b/analysis-a/cross-write-1-source.md',10,?,'pending',NULL,0,NULL,?,?,NULL)`).run(
+        "9".repeat(64), now, now,
+      ),
+      /analysis_version_object_write_source_mismatch/,
+    );
+    sqlite.prepare(`INSERT INTO analysis_version_object_writes
+      (id,analysis_id,workspace_id,owner_user_id,target_version,source_kind,r2_key,size_bytes,sha256,
+       status,version_id,attempt_count,last_error_code,created_at,updated_at,reconciled_at)
+      VALUES ('write-b','analysis-b','workspace-b','user-b',1,'extracted',
+        'analysis-versions/workspace-b/analysis-b/write-b-1-source.md',10,?,'pending',NULL,0,NULL,?,?,NULL)`).run(
+      "8".repeat(64), now, now,
+    );
+    assert.throws(
+      () => sqlite.prepare(
+        "UPDATE analysis_version_object_writes SET r2_key='analysis-versions/workspace-b/analysis-b/replaced.md' WHERE id='write-b'",
+      ).run(),
+      /analysis_version_object_write_(identity_immutable|transition_invalid)/,
+    );
+    sqlite.prepare(
+      "UPDATE analysis_version_object_writes SET status='attaching',updated_at=? WHERE id='write-b'",
+    ).run(now);
+    assert.throws(
+      () => sqlite.prepare(`INSERT INTO analysis_document_versions
+        (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,object_write_id,
+         file_name,mime_type,size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,created_by_user_id,created_at)
+        VALUES ('bad-object-version','analysis-b','workspace-b','user-b',1,NULL,'extracted',
+          'analysis-versions/workspace-b/analysis-b/write-b-1-source.md','write-b','source.md',
+          'text/markdown; charset=utf-8',10,?,NULL,NULL,'[]',NULL,?)`).run("7".repeat(64), now),
+      /analysis_document_version_object_write_mismatch/,
+    );
     sqlite.prepare(`INSERT INTO analysis_document_versions
       (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,file_name,mime_type,
        size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,created_by_user_id,created_at)

@@ -2625,6 +2625,7 @@ export const analysisDocumentVersions = sqliteTable("analysis_document_versions"
   ),
   sourceKind: text("source_kind").notNull(),
   r2Key: text("r2_key").notNull(),
+  objectWriteId: text("object_write_id"),
   fileName: text("file_name").notNull(),
   mimeType: text("mime_type").notNull(),
   sizeBytes: integer("size_bytes").notNull(),
@@ -2637,6 +2638,9 @@ export const analysisDocumentVersions = sqliteTable("analysis_document_versions"
 }, (table) => [
   uniqueIndex("analysis_document_versions_number_uidx").on(table.analysisId, table.version),
   uniqueIndex("analysis_document_versions_r2_key_uidx").on(table.r2Key),
+  uniqueIndex("analysis_document_versions_object_write_uidx")
+    .on(table.objectWriteId)
+    .where(sql`${table.objectWriteId} IS NOT NULL`),
   uniqueIndex("analysis_document_versions_idempotency_uidx")
     .on(table.idempotencyKey)
     .where(sql`${table.idempotencyKey} IS NOT NULL`),
@@ -2648,6 +2652,38 @@ export const analysisDocumentVersions = sqliteTable("analysis_document_versions"
   check("analysis_document_versions_sha_check", sql`length(${table.sha256}) = 64`),
   check("analysis_document_versions_selection_check", sql`${table.selectionSha256} IS NULL OR length(${table.selectionSha256}) = 64`),
   check("analysis_document_versions_revisions_check", sql`json_valid(${table.revisionIdsJson}) AND json_type(${table.revisionIdsJson}) = 'array'`),
+]);
+
+export const analysisVersionObjectWrites = sqliteTable("analysis_version_object_writes", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  targetVersion: integer("target_version").notNull(),
+  sourceKind: text("source_kind").notNull(),
+  r2Key: text("r2_key").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  sha256: text("sha256").notNull(),
+  status: text("status").notNull().default("pending"),
+  versionId: text("version_id"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  lastErrorCode: text("last_error_code"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  reconciledAt: text("reconciled_at"),
+}, (table) => [
+  uniqueIndex("analysis_version_object_writes_r2_uidx").on(table.r2Key),
+  uniqueIndex("analysis_version_object_writes_version_uidx")
+    .on(table.versionId)
+    .where(sql`${table.versionId} IS NOT NULL`),
+  index("analysis_version_object_writes_reconcile_idx").on(table.status, table.updatedAt, table.id),
+  index("analysis_version_object_writes_owner_idx").on(table.ownerUserId, table.createdAt),
+  check("analysis_version_object_writes_version_check", sql`${table.targetVersion} >= 1`),
+  check("analysis_version_object_writes_kind_check", sql`${table.sourceKind} IN ('extracted','corrected')`),
+  check("analysis_version_object_writes_size_check", sql`${table.sizeBytes} > 0`),
+  check("analysis_version_object_writes_sha_check", sql`length(${table.sha256}) = 64`),
+  check("analysis_version_object_writes_attempt_check", sql`${table.attemptCount} >= 0`),
+  check("analysis_version_object_writes_status_check", sql`${table.status} IN ('pending','attaching','attached','deleting','deleted')`),
 ]);
 
 export const fileScanResults = sqliteTable("file_scan_results", {

@@ -2865,3 +2865,22 @@ document text. Clearing returns the change to pending while preserving its
 independent `reviewed_at` evidence. RU/UZ controls expose text labels and
 `aria-pressed`; color is supplemental. Staging and production remain unchanged
 until a separately authorized backup, migration and deployment.
+
+## D-138 — Immutable analysis R2 writes use fenced intents and exact-key cleanup
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+D1 cannot roll back an R2 put. Analysis-version writers therefore create a
+tenant-bound intent with a unique server-generated key before uploading. The
+subsequent D1 batch compare-and-swaps `pending` to `attaching`, inserts the exact
+version evidence, and a trigger marks the intent attached. A concurrent loser
+cannot attach or delete the winner because its key contains its own intent ID.
+
+The five-minute scheduled lifecycle claims stale pending/attaching intents as
+`deleting` before inspecting R2. It deletes only when size and SHA-256 match,
+verifies absence, and records metadata-only audit evidence; mismatches fail
+closed for retry. Account closure inventories unfinished intent keys. Bucket
+listing is never treated as an authorization source. Migration 0073 and runtime
+remain local until a fresh staging backup, ordered migrations and deploy are
+separately authorized.

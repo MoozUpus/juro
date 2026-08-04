@@ -168,7 +168,7 @@ malware scanning, or a completed document analysis.
 
 Local migration 0069 and its Worker candidate use the private primary bucket:
 
-`analysis-versions/{workspaceId}/{analysisId}/{version}-{sha256}.md`
+`analysis-versions/{workspaceId}/{analysisId}/{writeIntentId}-{version}-{sha256}.md`
 
 Keys are server-generated and contain no source filename or document text.
 Writes use `If-None-Match: *`, exact SHA-256 and `private, no-store`; an existing
@@ -177,6 +177,14 @@ proxied after owner/workspace/version lookup and object-integrity verification.
 Account deletion inventories these keys with exports and OCR derivatives. No
 staging object under this prefix is claimed until migration 0069 and its matching
 Worker are separately authorized and deployed.
+
+Local migration 0073 adds a durable D1 write-intent ledger. Writers create the
+intent before R2, then attach the exact key/size/SHA/version in one D1 batch.
+The five-minute scheduler claims stale unattached intents before exact-key R2
+deletion, verifies deletion, and records metadata-only audit evidence. Unique
+intent IDs prevent a losing writer from sharing the winner's object key. Pending
+intent keys are also included in account deletion. No bucket listing is used as
+authorization or ownership evidence.
 
 ## Corrected-version DOCX/PDF exports
 

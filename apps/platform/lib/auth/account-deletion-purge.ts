@@ -378,8 +378,12 @@ async function userObjectKeys(
       UNION
       SELECT r2_key AS objectKey
       FROM analysis_document_versions
-      WHERE owner_user_id=? AND r2_key IS NOT NULL`,
-  ).bind(userId, userId, userId, userId, userId, userId, userId, userId, userId).all<ObjectKeyRow>();
+      WHERE owner_user_id=? AND r2_key IS NOT NULL
+      UNION
+      SELECT r2_key AS objectKey
+      FROM analysis_version_object_writes
+      WHERE owner_user_id=? AND status IN ('pending','attaching','deleting')`,
+  ).bind(userId, userId, userId, userId, userId, userId, userId, userId, userId, userId).all<ObjectKeyRow>();
   const keys = [...new Set(
     rows.results
       .map(row => row.objectKey)
@@ -416,6 +420,7 @@ async function inventory(
          (SELECT count(*) FROM documents WHERE owner_user_id=?) +
          (SELECT count(*) FROM document_files WHERE owner_user_id=?) +
          (SELECT count(*) FROM document_analyses WHERE owner_user_id=?) +
+         (SELECT count(*) FROM analysis_version_object_writes WHERE owner_user_id=?) +
          (SELECT count(*) FROM file_extractions WHERE owner_user_id=?) +
          (SELECT count(*) FROM analysis_exports WHERE owner_user_id=?) +
          (SELECT count(*) FROM document_comparisons WHERE owner_user_id=?) +
@@ -468,7 +473,7 @@ async function inventory(
          )
        ) AS retainedFinancialRecords`,
   ).bind(
-    ...Array.from({ length: 36 }, () => userId),
+    ...Array.from({ length: 37 }, () => userId),
   ).first<Record<keyof PurgeInventory, number>>();
   if (!row) {
     throw new AccountDeletionPurgeError(

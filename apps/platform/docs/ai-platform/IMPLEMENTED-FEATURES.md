@@ -705,3 +705,15 @@ pass rows that omit those fields. It validates consistency rather than remote ID
 or reviewer authority, so protected staging D1 evidence and an approved reviewer
 roster remain mandatory. The artifacts have not yet traversed the unavailable
 real malware scanner or staging provider pipeline.
+
+## Phase 5 — reconciled immutable analysis objects (local candidate)
+
+Every initial or corrected normalized analysis version now creates a durable,
+tenant-bound write intent before its private R2 write. The D1 version insert is
+fenced by exact key, size, SHA-256, source kind and target version; a trigger
+attaches the intent atomically. A scheduled reconciler claims stale losing
+writers, deletes only their unique exact key, verifies absence and appends a
+metadata-only audit event. Account deletion includes unfinished intents.
+Synchronized local concurrency proves one corrected-version winner and one
+reclaimed orphan while preserving both attached objects. Migration 0073 and the
+matching Worker remain local until a separately authorized staging cycle.

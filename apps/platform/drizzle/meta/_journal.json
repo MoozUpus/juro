@@ -512,6 +512,13 @@
       "when": 1785898800000,
       "tag": "0072_comparison_change_decisions",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "6",
+      "when": 1785902400000,
+      "tag": "0073_analysis_version_object_writes",
+      "breakpoints": true
     }
   ]
 }

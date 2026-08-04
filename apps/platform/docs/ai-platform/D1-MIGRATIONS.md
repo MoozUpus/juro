@@ -10,9 +10,27 @@ foreign-key postflight passed, and Worker version
 Production is unchanged. Exact evidence is in
 `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
 
-Migrations `0069`–`0072` are local additive candidates and have not been applied
+Migrations `0069`–`0073` are local additive candidates and have not been applied
 to staging or production. They cover immutable analysis corrections, corrected
-exports, comparison exports and per-change review decisions respectively.
+exports, comparison exports, per-change review decisions and fenced R2 write
+reconciliation respectively.
+
+## Pending 0073 — analysis-version R2 write intents
+
+`0073_analysis_version_object_writes.sql` additively records a unique write
+intent before every normalized analysis-version R2 write. A D1 batch moves the
+intent to `attaching` and inserts the immutable version; triggers verify exact
+tenant/version/key/size/SHA identity and atomically mark it `attached`. Losing
+concurrent writers remain non-visible and become eligible for the bounded
+scheduled reconciler, which claims the intent before deleting its exact key.
+Account deletion inventories both attached versions and pending intents.
+
+Local migrations apply cleanly with 175 tables, 338 foreign keys and no FK
+violations. Tests cover normal attachment, synchronized concurrent correction
+writers, orphan deletion, audit minimization and account-purge inventory. Before
+staging, take and restore-verify a fresh private backup, then apply the complete
+ordered pending set `0069`–`0073` and deploy the matching Worker under a new
+explicit authorization.
 
 ## Pending 0072 — comparison change decisions
 
@@ -24,7 +42,7 @@ pending through nullable/default columns; neither source document is changed.
 
 Rollback is application-first: disable or roll back the Worker and leave the
 unused columns/indexes/triggers in place. Before staging, make and restore-verify
-a fresh private D1 backup, apply the whole pending ordered set `0069`–`0072`,
+a fresh private D1 backup, apply the whole pending ordered set `0069`–`0073`,
 then verify the ledger, trigger/index inventory, `foreign_key_check`, decision
 service smoke and existing document-builder regression before deployment.
 

@@ -99,6 +99,7 @@ const coreTestFiles = [
   "tests/document-analysis-route-boundary.test.ts",
   "tests/document-analysis-provider.test.ts",
   "tests/document-analysis-processor.test.ts",
+  "tests/document-analysis-revisions.test.ts",
   "tests/document-analysis-package-extractor.test.ts",
   "tests/document-ocr-processor.test.ts",
   "tests/analysis-report-export.test.ts",

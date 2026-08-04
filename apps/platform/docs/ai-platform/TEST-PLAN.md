@@ -81,3 +81,16 @@ call the bounded deep verifier before it records quarantine success.
   page-coordinate quality gates because Workers AI conversion supplies neither.
 - Focused extractor/scheduler/OCR suites pass 14/14 locally; full regression,
   artifact, staging, scanner, and reviewed 100-package gates remain required.
+
+## Analysis-version object reconciliation checkpoint — 2026-08-04
+
+- Migration 0073 must apply additively and reject cross-tenant, mismatched,
+  mutable or illegally transitioned write evidence.
+- Initial and corrected versions must end with one exact attached intent.
+- Two synchronized correction writers must produce one visible version; the
+  losing unique object must remain ledgered and be removed by reconciliation.
+- Reconciliation must claim before delete, verify size/SHA and post-delete
+  absence, retry mismatches/failures, and audit identifiers without document text.
+- Account deletion must inventory pending intent keys as well as attached version
+  keys. Staging evidence remains gated on backup/restore, migrations 0069–0073,
+  deploy, protected D1/R2 smoke and authenticated browser regression.

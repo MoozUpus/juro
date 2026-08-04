@@ -181,6 +181,24 @@ function createDatabase(): {
   // scheduled reminder contracts without coupling every worker test to all UI
   // schema migrations.
   sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS analysis_version_object_writes (
+      id text PRIMARY KEY NOT NULL,
+      analysis_id text NOT NULL,
+      workspace_id text NOT NULL,
+      owner_user_id text NOT NULL,
+      target_version integer NOT NULL,
+      source_kind text NOT NULL,
+      r2_key text NOT NULL UNIQUE,
+      size_bytes integer NOT NULL,
+      sha256 text NOT NULL,
+      status text NOT NULL,
+      version_id text,
+      attempt_count integer NOT NULL DEFAULT 0,
+      last_error_code text,
+      created_at text NOT NULL,
+      updated_at text NOT NULL,
+      reconciled_at text
+    );
     CREATE TABLE IF NOT EXISTS cases (
       id text PRIMARY KEY NOT NULL,
       workspace_id text,

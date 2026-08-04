@@ -513,9 +513,11 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 - A real scanner-approved, provider-generated staging analysis has not traversed
   accept/reject/apply/download end to end. Authenticated RU/UZ browser, axe,
   200% zoom, forced-colors, touch and visual regression checks remain open.
-- An R2 object written immediately before a losing concurrent D1 version insert
-  may become an unreachable content-addressed orphan. It never becomes visible;
-  bounded orphan reconciliation is still required before production readiness.
+- Local migration 0073 now fences every R2 analysis-version write with a durable
+  D1 intent and a scheduled exact-key reconciler; synchronized concurrency tests
+  prove that a losing writer is deleted without touching the attached version.
+  This is not yet staging evidence: migrations 0069–0073 and the matching Worker
+  still require a new authorized backup/migration/deploy cycle.
 - Migration 0070 and its matching Worker are local only. No staging corrected
   export, authenticated browser download, large-document pagination or assistive-
   technology evidence is claimed until 0069 and 0070 are authorized and deployed.
@@ -536,6 +538,6 @@ Canonical manual case creation is deployed to protected staging and passes a rea
 - Local evidence covers tenant denial, invalid transitions, accept/reject/clear,
   idempotent replay, same-state concurrency, audit minimization and the absence
   of an automatically merged third version.
-- A fresh private staging backup/restore, migrations `0069`–`0072`, authenticated
+- A fresh private staging backup/restore, migrations `0069`–`0073`, authenticated
   RU/UZ browser interaction, keyboard/axe, mobile/200% zoom and visual checks are
   still required before this capability can be claimed in staging.

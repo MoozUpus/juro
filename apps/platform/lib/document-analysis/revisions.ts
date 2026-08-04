@@ -1,3 +1,10 @@
+import {
+  beginAnalysisVersionObjectAttachment,
+  createAnalysisVersionObjectWrite,
+  recordAnalysisVersionObjectWriteFailure,
+  requireAttachedAnalysisVersionObjectWrite,
+} from "./version-object-write";
+
 export type AnalysisDocumentVersion = {
   id: string;
   analysisId: string;
@@ -103,30 +110,50 @@ export async function storeInitialAnalysisDocumentVersion(
   }
 
   const id = analysisSourceVersionId(input.analysisId);
-  const r2Key = `analysis-versions/${input.workspaceId}/${input.analysisId}/1-${sha256}.md`;
-  await putImmutableText(env.BUCKET, r2Key, bytes, sha256, {
+  const objectWrite = await createAnalysisVersionObjectWrite(env.DB, {
     analysisId: input.analysisId,
-    version: "1",
+    workspaceId: input.workspaceId,
+    ownerUserId: input.ownerUserId,
+    targetVersion: 1,
     sourceKind: "extracted",
+    sizeBytes: bytes.byteLength,
+    sha256,
   });
+  const r2Key = objectWrite.r2Key;
+  try {
+    await putImmutableText(env.BUCKET, r2Key, bytes, sha256, {
+      analysisId: input.analysisId,
+      version: "1",
+      sourceKind: "extracted",
+      objectWriteId: objectWrite.id,
+    });
+  } catch (error) {
+    await recordAnalysisVersionObjectWriteFailure(env.DB, objectWrite, "R2_PUT_FAILED").catch(() => undefined);
+    throw error;
+  }
   const now = new Date().toISOString();
   const fileName = normalizedFileName(input.fileName, 1);
   try {
-    await env.DB.prepare(
-      `INSERT INTO analysis_document_versions
-       (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,
+    await env.DB.batch([
+      beginAnalysisVersionObjectAttachment(env.DB, objectWrite, now),
+      env.DB.prepare(
+        `INSERT INTO analysis_document_versions
+       (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,object_write_id,
         file_name,mime_type,size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,
         created_by_user_id,created_at)
-       VALUES (?,?,?,?,1,NULL,'extracted',?,?,'text/markdown; charset=utf-8',?,?,NULL,NULL,'[]',NULL,?)`,
-    ).bind(
-      id, input.analysisId, input.workspaceId, input.ownerUserId,
-      r2Key, fileName, bytes.byteLength, sha256, now,
-    ).run();
+       VALUES (?,?,?,?,1,NULL,'extracted',?, ?,?,'text/markdown; charset=utf-8',?,?,NULL,NULL,'[]',NULL,?)`,
+      ).bind(
+        id, input.analysisId, input.workspaceId, input.ownerUserId,
+        r2Key, objectWrite.id, fileName, bytes.byteLength, sha256, now,
+      ),
+    ]);
   } catch (error) {
+    await recordAnalysisVersionObjectWriteFailure(env.DB, objectWrite, "D1_ATTACH_CONFLICT").catch(() => undefined);
     const raced = await versionByNumber(env.DB, input.analysisId, input.workspaceId, input.ownerUserId, 1);
     if (!raced || raced.sha256 !== sha256 || raced.sizeBytes !== bytes.byteLength) throw error;
     return publicVersion(raced);
   }
+  await requireAttachedAnalysisVersionObjectWrite(env.DB, objectWrite.id, id);
   return { id, analysisId: input.analysisId, version: 1, sourceKind: "extracted", fileName, mimeType: "text/markdown; charset=utf-8", sizeBytes: bytes.byteLength, sha256, createdAt: now };
 }
 
@@ -307,25 +334,41 @@ export async function applySuggestedRevisions(
   const sha256 = await sha256Hex(bytes);
   const nextVersion = latest.version + 1;
   const versionId = `analysis-version-${crypto.randomUUID()}`;
-  const r2Key = `analysis-versions/${input.workspaceId}/${input.analysisId}/${nextVersion}-${sha256}.md`;
-  const appliedRevisionIds = valid.map((item) => item.revision.id).sort();
-  await putImmutableText(env.BUCKET, r2Key, bytes, sha256, {
+  const objectWrite = await createAnalysisVersionObjectWrite(env.DB, {
     analysisId: input.analysisId,
-    version: String(nextVersion),
+    workspaceId: input.workspaceId,
+    ownerUserId: input.userId,
+    targetVersion: nextVersion,
     sourceKind: "corrected",
+    sizeBytes: bytes.byteLength,
+    sha256,
   });
+  const r2Key = objectWrite.r2Key;
+  const appliedRevisionIds = valid.map((item) => item.revision.id).sort();
+  try {
+    await putImmutableText(env.BUCKET, r2Key, bytes, sha256, {
+      analysisId: input.analysisId,
+      version: String(nextVersion),
+      sourceKind: "corrected",
+      objectWriteId: objectWrite.id,
+    });
+  } catch (error) {
+    await recordAnalysisVersionObjectWriteFailure(env.DB, objectWrite, "R2_PUT_FAILED").catch(() => undefined);
+    throw error;
+  }
   const now = new Date().toISOString();
   const fileName = normalizedFileName(latest.fileName, nextVersion);
   const statements: D1PreparedStatement[] = [
+    beginAnalysisVersionObjectAttachment(env.DB, objectWrite, now),
     env.DB.prepare(
       `INSERT INTO analysis_document_versions
-       (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,
+       (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,object_write_id,
         file_name,mime_type,size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,
         created_by_user_id,created_at)
-       VALUES (?,?,?,?,?,?,'corrected',?,?,'text/markdown; charset=utf-8',?,?,?,?,?,?,?)`,
+       VALUES (?,?,?,?,?,?,'corrected',?, ?,?,'text/markdown; charset=utf-8',?,?,?,?,?,?,?)`,
     ).bind(
       versionId, input.analysisId, input.workspaceId, input.userId, nextVersion, latest.id,
-      r2Key, fileName, bytes.byteLength, sha256, idempotencyKey, selectionSha256,
+      r2Key, objectWrite.id, fileName, bytes.byteLength, sha256, idempotencyKey, selectionSha256,
       JSON.stringify(appliedRevisionIds), input.userId, now,
     ),
     ...valid.map((item) => env.DB.prepare(
@@ -357,10 +400,12 @@ export async function applySuggestedRevisions(
   try {
     await env.DB.batch(statements);
   } catch (error) {
+    await recordAnalysisVersionObjectWriteFailure(env.DB, objectWrite, "D1_ATTACH_CONFLICT").catch(() => undefined);
     const conflict = new AnalysisRevisionError("ANALYSIS_REVISION_CONFLICT", 409) as AnalysisRevisionError & { cause?: unknown };
     conflict.cause = error;
     throw conflict;
   }
+  await requireAttachedAnalysisVersionObjectWrite(env.DB, objectWrite.id, versionId);
   return {
     version: { id: versionId, analysisId: input.analysisId, version: nextVersion, sourceKind: "corrected", fileName, mimeType: "text/markdown; charset=utf-8", sizeBytes: bytes.byteLength, sha256, createdAt: now },
     appliedRevisionIds,

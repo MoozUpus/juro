@@ -7,6 +7,7 @@ import {
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
+import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/version-object-write";
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
 import type { PlatformJobEnv } from "./platform-jobs";
 
@@ -257,6 +258,12 @@ export async function handleScheduled(
       quarantineBucket: env.QUARANTINE_BUCKET,
       now,
     });
+    failureCode = "ANALYSIS_VERSION_OBJECT_RECONCILIATION_FAILED";
+    const analysisVersionObjects = await reconcileAnalysisVersionObjectWrites({
+      db: env.DB,
+      bucket: env.BUCKET,
+      now,
+    });
     failureCode = "PROVIDER_PROBE_FAILED";
     const providerProbe = await maybeRunStagingProviderProbes(env);
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
@@ -283,6 +290,11 @@ export async function handleScheduled(
       guestAiReservationsReleased: guestAiRetention.reservationsReleased,
       voiceRetentionEligible: voiceRetention.eligible,
       voiceRetentionPurged: voiceRetention.purged,
+      analysisVersionObjectsEligible: analysisVersionObjects.eligible,
+      analysisVersionObjectsClaimed: analysisVersionObjects.claimed,
+      analysisVersionObjectsAttached: analysisVersionObjects.attached,
+      analysisVersionObjectsDeleted: analysisVersionObjects.deleted,
+      analysisVersionObjectsRetrying: analysisVersionObjects.retrying,
       providerProbeAttempted: providerProbe?.attempted ?? 0,
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,
