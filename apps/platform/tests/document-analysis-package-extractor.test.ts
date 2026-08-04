@@ -5,6 +5,7 @@ import PizZip from "pizzip";
 
 import {
   extractAnalysisDocument,
+  isAnalysisPackageContext,
   PackageExtractionError,
 } from "../lib/document-analysis/package-extractor";
 
@@ -55,6 +56,122 @@ test("document analysis extracts every text member and preserves deterministic f
   assert.match(extracted.text, /Buyurtmachi natijani/);
   assert.ok(extracted.sections.some((section) => section.heading?.startsWith("01-contract.docx")));
   assert.ok(extracted.sections.some((section) => section.heading?.startsWith("02-annex.docx")));
+  assert.equal(extracted.packageContext?.primaryMemberId, "package-member-01");
+  assert.deepEqual(extracted.packageContext?.members.map(({ id, role }) => ({ id, role })), [
+    { id: "package-member-01", role: "primary" },
+    { id: "package-member-02", role: "annex" },
+  ]);
+  assert.ok(extracted.packageContext?.relationships.some((relationship) =>
+    relationship.fromMemberId === "package-member-02"
+    && relationship.toMemberId === "package-member-01"
+    && relationship.kind === "annex_to"
+    && relationship.confidence === "high"));
+});
+
+test("package context records explicit references and exact duplicate evidence deterministically", async () => {
+  const repeated = [
+    "АКТ ПРИЁМКИ",
+    "Настоящий документ относится к 01-contract.docx и подтверждает исполнение обязательств.",
+    "Стороны подтверждают объём, срок и результат оказанных услуг без замечаний.",
+  ];
+  const bytes = packageBytes({
+    "01-contract.docx": docxBytes(["ДОГОВОР", "Основной договор оказания услуг между сторонами."]),
+    "02-act.docx": docxBytes(repeated),
+    "03-act-copy.docx": docxBytes(repeated),
+  });
+  const extracted = await extractAnalysisDocument({
+    bytes,
+    fileName: "related.zip",
+    mimeType: zipMime,
+    sizeBytes: bytes.byteLength,
+  });
+
+  assert.deepEqual(extracted.packageContext?.members.map(({ role }) => role), [
+    "primary", "acceptance_act", "acceptance_act",
+  ]);
+  assert.ok(extracted.packageContext?.relationships.some((relationship) =>
+    relationship.fromMemberId === "package-member-02"
+    && relationship.toMemberId === "package-member-01"
+    && relationship.kind === "references"
+    && relationship.evidence.includes("filename_reference")));
+  assert.ok(extracted.packageContext?.relationships.some((relationship) =>
+    relationship.fromMemberId === "package-member-03"
+    && relationship.toMemberId === "package-member-02"
+    && relationship.kind === "possible_duplicate"
+    && relationship.evidence.includes("normalized_text_match")));
+});
+
+test("package context validator rejects self-links and unknown members", () => {
+  const member = {
+    id: "package-member-01",
+    name: "contract.docx",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    role: "primary",
+    detectedLanguage: "ru",
+    pageCount: 1,
+    sectionCount: 1,
+  };
+  assert.equal(isAnalysisPackageContext({
+    schemaVersion: 1,
+    primaryMemberId: member.id,
+    members: [member],
+    relationships: [],
+  }), true);
+  assert.equal(isAnalysisPackageContext({
+    schemaVersion: 1,
+    primaryMemberId: member.id,
+    members: [member],
+    relationships: [{
+      fromMemberId: member.id,
+      toMemberId: member.id,
+      kind: "references",
+      confidence: "high",
+      evidence: ["filename_reference"],
+    }],
+  }), false);
+  assert.equal(isAnalysisPackageContext({
+    schemaVersion: 1,
+    primaryMemberId: "package-member-99",
+    members: [member],
+    relationships: [],
+  }), false);
+});
+
+test("package context does not invent a primary document for supplement-only packages", async () => {
+  const bytes = packageBytes({
+    "Приложение 1.docx": docxBytes(["ПРИЛОЖЕНИЕ", "Подробный перечень работ, сроков, этапов и результатов исполнения обязательств сторонами."]),
+    "Акт выполненных работ.docx": docxBytes(["АКТ", "Стороны подтверждают выполнение, передачу и приёмку предусмотренных договором работ без замечаний."]),
+  });
+  const extracted = await extractAnalysisDocument({
+    bytes,
+    fileName: "supplements.zip",
+    mimeType: zipMime,
+    sizeBytes: bytes.byteLength,
+  });
+
+  assert.equal(extracted.packageContext?.primaryMemberId, null);
+  assert.deepEqual(extracted.packageContext?.members.map(({ role }) => role), [
+    "acceptance_act", "annex",
+  ]);
+  assert.deepEqual(extracted.packageContext?.relationships, []);
+});
+
+test("a contract filename remains primary when its body mentions an annex", async () => {
+  const bytes = packageBytes({
+    "Договор услуг.docx": docxBytes(["ДОГОВОР", "Приложение является его неотъемлемой частью и подробно определяет согласованный сторонами объём услуг."]),
+    "Приложение 1.docx": docxBytes(["ПРИЛОЖЕНИЕ", "Подробный перечень работ, сроков, этапов и результатов исполнения обязательств сторонами."]),
+  });
+  const extracted = await extractAnalysisDocument({
+    bytes,
+    fileName: "contract-with-annex.zip",
+    mimeType: zipMime,
+    sizeBytes: bytes.byteLength,
+  });
+
+  assert.equal(extracted.packageContext?.primaryMemberId, "package-member-01");
+  assert.deepEqual(extracted.packageContext?.members.map(({ role }) => role), [
+    "primary", "annex",
+  ]);
 });
 
 test("an oversized expanded member stops before PDF parsing or provider access", async () => {

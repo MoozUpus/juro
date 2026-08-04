@@ -9,6 +9,8 @@ import {
 } from "../document-comparison/types";
 import { ArchiveInspectionError } from "./archive-inspector";
 import {
+  buildAnalysisPackageContext,
+  isAnalysisPackageContext,
   PackageExtractionError,
   readAnalysisPackageMembers,
 } from "./package-extractor";
@@ -466,6 +468,7 @@ async function convertPackageWithWorkersAi(
 
   const texts: string[] = [];
   const sections: ExtractedSection[] = [];
+  const memberDocuments: ExtractedDocument[] = [];
   let tokenEstimate = 0;
   let limited = false;
   for (const [index, member] of members.entries()) {
@@ -480,6 +483,19 @@ async function convertPackageWithWorkersAi(
     }
     texts.push(`===== ФАЙЛ: ${JSON.stringify(member.name)} =====\n\n${converted.text}`);
     const memberSections = structureDocument(converted.text);
+    const memberWarnings = ["CLOUDFLARE_CONVERSION_USED"];
+    if (member.mimeType.startsWith("image/")) memberWarnings.push("AI_OCR_REVIEW_REQUIRED");
+    memberDocuments.push({
+      fileName: member.name,
+      mimeType: member.mimeType,
+      sizeBytes: member.bytes.byteLength,
+      pageCount: null,
+      detectedLanguage: detectDocumentLanguage(converted.text),
+      textQuality: member.mimeType.startsWith("image/") ? "limited" : "good",
+      warningCode: memberWarnings.join(","),
+      text: converted.text,
+      sections: memberSections,
+    });
     for (const section of memberSections) {
       sections.push({
         ...section,
@@ -507,6 +523,7 @@ async function convertPackageWithWorkersAi(
       warningCode: warnings.join(","),
       text,
       sections,
+      packageContext: buildAnalysisPackageContext(memberDocuments),
     },
   };
 }
@@ -612,7 +629,9 @@ function parseStoredExtraction(
     stored.workspaceId !== expected.workspaceId || stored.fileId !== expected.fileId ||
     stored.sourceSha256 !== expected.sourceSha256 || stored.provider !== EXTRACTION_PROVIDER ||
     stored.model !== EXTRACTION_MODEL || !stored.extracted || typeof stored.extracted.text !== "string" ||
-    !Array.isArray(stored.extracted.sections)
+    !Array.isArray(stored.extracted.sections) ||
+    (stored.extracted.packageContext !== undefined && stored.extracted.packageContext !== null
+      && !isAnalysisPackageContext(stored.extracted.packageContext))
   ) {
     throw new OcrProcessingError("OCR_DERIVATIVE_INVALID", false);
   }

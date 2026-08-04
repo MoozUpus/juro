@@ -1,5 +1,17 @@
 # JURO AI platform decision log
 
+## 2026-08-04 — Package relationships are bounded hypotheses, not legal facts
+
+After safe extraction, JURO may infer a tentative primary document and links
+between annexes, amendments, acceptance acts, correspondence and evidence. The
+inference is deterministic, capped, backed only by member role, explicit
+filename reference or exact normalized-text match, and validates again when an
+OCR derivative is loaded. It is persisted for audit and shown to the user, but
+travels to AI only inside `untrustedDocument.packageContext`; provider prompts
+must not treat it as proven legal evidence. This closes the missing structural
+contract without inventing scanner clearance, OCR coordinates or provider
+success. Status: accepted and locally verified; staging deployment pending.
+
 ## 2026-08-04 — Keep malware scanning service-neutral and disabled until real staging evidence
 
 Define a strict internal Fetcher/service-binding protocol and terminal D1

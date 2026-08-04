@@ -1,5 +1,9 @@
 import type { AiStructuredResult } from "../document-builder/ai/openai";
-import { ComparisonProcessingError, type ExtractedDocument } from "../document-comparison/types";
+import {
+  ComparisonProcessingError,
+  type AnalysisPackageContext,
+  type ExtractedDocument,
+} from "../document-comparison/types";
 import type { LegalSemanticSearchEnv } from "../legal/semantic-retrieval";
 import {
   legalDatabaseFreshnessFromAsOf,
@@ -19,7 +23,11 @@ import {
   OcrProcessingError,
   scheduleOcrProcessing,
 } from "./ocr-processor";
-import { extractAnalysisDocument, PackageExtractionError } from "./package-extractor";
+import {
+  extractAnalysisDocument,
+  isAnalysisPackageContext,
+  PackageExtractionError,
+} from "./package-extractor";
 import {
   AnalysisRevisionError,
   analysisSourceVersionId,
@@ -68,6 +76,7 @@ type PersistedAnalysis = {
     detectedLanguage: string;
     pageCount: number | null;
     textQuality: string;
+    packageContext: AnalysisPackageContext | null;
   };
 };
 
@@ -112,6 +121,7 @@ export type DocumentAnalysisProcessorDependencies = {
     extractedText: string;
     detectedLanguage: string;
     extractionWarnings: string[];
+    packageContext: AnalysisPackageContext | null;
     locale: "ru" | "uz";
     mode: "quick" | "full" | "expert";
     userSide: string | null;
@@ -263,6 +273,7 @@ async function analyzeObject(
       extractedText: extracted.text,
       detectedLanguage: extracted.detectedLanguage,
       extractionWarnings: extracted.warningCode ? [extracted.warningCode] : [],
+      packageContext: extracted.packageContext ?? null,
       locale: request.locale,
       mode: request.mode,
       userSide: null,
@@ -317,6 +328,7 @@ async function analyzeObject(
         detectedLanguage: extracted.detectedLanguage,
         pageCount: extracted.pageCount,
         textQuality: extracted.textQuality,
+        packageContext: extracted.packageContext ?? null,
       },
     };
   } catch (error) {
@@ -522,9 +534,18 @@ function parsePersistedAnalysis(value: string | null): PersistedAnalysis {
   try {
     const parsed = JSON.parse(value || "{}") as PersistedAnalysis;
     const result = documentAnalysisResultSchema.parse(parsed.result);
+    if (parsed.extraction?.packageContext !== null
+      && parsed.extraction?.packageContext !== undefined
+      && !isAnalysisPackageContext(parsed.extraction.packageContext)) {
+      throw new Error("INVALID_PACKAGE_CONTEXT");
+    }
     return {
       ...parsed,
       result,
+      extraction: {
+        ...parsed.extraction,
+        packageContext: parsed.extraction?.packageContext ?? null,
+      },
       sourceFreshness: parsed.sourceFreshness
         ?? legalDatabaseFreshnessFromAsOf(result.legalDatabaseAsOf),
     };

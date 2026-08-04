@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
+  type DocumentAnalysisProcessorDependencies,
   DocumentAnalysisProcessingError,
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
@@ -70,8 +71,17 @@ test("safe document analysis persists normalized result, usage, audit and is ide
   const fixture = await databaseFixture("ready", "analysis_safe");
   const bytes = new TextEncoder().encode("Сторона А. срок определяется дополнительно");
   const sha256 = await sha256Hex(bytes);
-  fixture.sqlite.prepare("UPDATE document_files SET size_bytes=?,sha256=? WHERE id='file-a'").run(bytes.byteLength, sha256);
+  fixture.sqlite.prepare("UPDATE document_files SET file_name='package.zip',mime_type='application/zip',size_bytes=?,sha256=? WHERE id='file-a'").run(bytes.byteLength, sha256);
   let aiCalls = 0;
+  const packageContext = {
+    schemaVersion: 1 as const,
+    primaryMemberId: "package-member-01",
+    members: [
+      { id: "package-member-01", name: "contract.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", role: "primary" as const, detectedLanguage: "ru" as const, pageCount: 1, sectionCount: 1 },
+      { id: "package-member-02", name: "annex.docx", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", role: "annex" as const, detectedLanguage: "ru" as const, pageCount: 1, sectionCount: 1 },
+    ],
+    relationships: [{ fromMemberId: "package-member-02", toMemberId: "package-member-01", kind: "annex_to" as const, confidence: "high" as const, evidence: ["member_role"] }],
+  };
   const derived = new Map<string, { bytes: Uint8Array; sha256: string }>();
   const env = {
     DB: fixture.db,
@@ -100,8 +110,8 @@ test("safe document analysis persists normalized result, usage, audit and is ide
   };
   const dependencies = {
     extract: async () => ({
-      fileName: "contract.pdf",
-      mimeType: "application/pdf",
+      fileName: "package.zip",
+      mimeType: "application/zip",
       sizeBytes: bytes.byteLength,
       pageCount: 1,
       detectedLanguage: "ru" as const,
@@ -109,6 +119,7 @@ test("safe document analysis persists normalized result, usage, audit and is ide
       warningCode: null,
       text: new TextDecoder().decode(bytes),
       sections: [],
+      packageContext,
     }),
     retrieve: async () => ({
       sources: [],
@@ -123,8 +134,9 @@ test("safe document analysis persists normalized result, usage, audit and is ide
       retrievalMode: "lexical" as const,
       semanticStatus: "unavailable" as const,
     }),
-    analyze: async () => {
+    analyze: async (input: Parameters<DocumentAnalysisProcessorDependencies["analyze"]>[0]) => {
       aiCalls += 1;
+      assert.deepEqual(input.packageContext, packageContext);
       return {
         data: result,
         provider: "anthropic" as const,
@@ -144,6 +156,8 @@ test("safe document analysis persists normalized result, usage, audit and is ide
     .get() as { status: string; errorCode: string | null };
   assert.equal(analysis.status, "completed");
   assert.equal(analysis.errorCode, null);
+  const persistedSummary = JSON.parse((fixture.sqlite.prepare("SELECT summary_json AS summaryJson FROM document_analyses WHERE id='analysis-a'").get() as { summaryJson: string }).summaryJson) as { extraction: { packageContext: typeof packageContext } };
+  assert.deepEqual(persistedSummary.extraction.packageContext, packageContext);
 
   assert.equal((fixture.sqlite.prepare("SELECT count(*) AS count FROM document_risks").get() as { count: number }).count, 1);
   assert.equal((fixture.sqlite.prepare("SELECT feature,status FROM ai_usage_ledger").get() as { feature: string; status: string }).feature, "document_analysis");

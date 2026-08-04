@@ -51,6 +51,13 @@ opaque identities, expected MIME, bounded token evidence, and non-empty text.
 Reordered results are safe; duplicates, omissions, or unexpected identities
 fail closed before derivative creation. Original filenames are restored only as
 quoted untrusted text boundaries in the deterministic combined derivative.
+For every bounded package, JURO also derives a deterministic review context:
+one tentative primary document, member roles, role-based links, explicit
+filename references and exact normalized-text duplicate evidence. The graph is
+capped at 120 prioritized edges, validated when the immutable derivative is
+reloaded, persisted with the normalized analysis and sent only inside
+`untrustedDocument.packageContext`. The RU/UZ result surface explains that these
+links are hypotheses to verify, not legal facts.
 Packages above 20 MB compressed input, 20 MB per expanded member, or 50 MB total
 expanded working set remain in `awaiting_external_extraction`. Scanned-PDF page
 count and page coordinates are not supplied by `toMarkdown` and remain release
@@ -69,7 +76,7 @@ MIME and extension must agree at initialization. Finalization checks PDF, PNG, J
 ## Evidence
 
 - TypeScript and generated Cloudflare types pass.
-- Targeted package extractor/analysis scheduler/OCR processor tests for this local slice: 14/14.
+- Targeted package extractor/analysis processor/provider/OCR tests for the current local slice: 24/24.
 - Cloudflare config/migration/Queue regression tests: 84/84.
 - OCR tests prove tenant denial before R2/provider access, source-integrity
   failure, retryable provider absence, immutable derivative creation, and replay.
@@ -81,9 +88,9 @@ Authenticated staging package OCR/provider execution is not claimed.
 ## Next gates
 
 1. Connect a privacy-approved real malware scanner; production must fail closed while it is unavailable.
-2. Apply pending migration `0068`, deploy protected staging, and execute an eligible safe-file OCR/provider smoke test only after scanner clearance exists.
+2. After scanner clearance, execute an eligible safe-file OCR/provider/package-relationship smoke test through protected staging. Migration `0068` is already applied; no scan verdict is fabricated.
 3. Run the complete 100-package/30-comparison reviewed evaluation, including clean-scan OCR quality.
-4. Add page coordinates and scanned-PDF page-count evidence, over-budget streaming extraction, corrections, and redline artifacts.
+4. Add page coordinates and scanned-PDF page-count evidence plus over-budget streaming extraction; deploy and verify the separately pending corrections/redline/export candidates only after their own migration authorization.
 
 ## Reviewable corrections — local candidate
 

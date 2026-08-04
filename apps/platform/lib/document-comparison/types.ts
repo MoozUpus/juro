@@ -48,6 +48,48 @@ export type ExtractedSection = {
   semanticText: string;
 };
 
+export type AnalysisPackageMemberRole =
+  | "primary"
+  | "annex"
+  | "amendment"
+  | "acceptance_act"
+  | "correspondence"
+  | "evidence"
+  | "unknown";
+
+export type AnalysisPackageRelationshipKind =
+  | "annex_to"
+  | "amends"
+  | "acceptance_for"
+  | "supports"
+  | "references"
+  | "possible_duplicate";
+
+export type AnalysisPackageMemberContext = {
+  id: string;
+  name: string;
+  mimeType: string;
+  role: AnalysisPackageMemberRole;
+  detectedLanguage: ExtractedDocument["detectedLanguage"];
+  pageCount: number | null;
+  sectionCount: number;
+};
+
+export type AnalysisPackageRelationship = {
+  fromMemberId: string;
+  toMemberId: string;
+  kind: AnalysisPackageRelationshipKind;
+  confidence: "high" | "medium" | "low";
+  evidence: string[];
+};
+
+export type AnalysisPackageContext = {
+  schemaVersion: 1;
+  primaryMemberId: string | null;
+  members: AnalysisPackageMemberContext[];
+  relationships: AnalysisPackageRelationship[];
+};
+
 export type ExtractedDocument = {
   fileName: string;
   mimeType: string;
@@ -58,6 +100,7 @@ export type ExtractedDocument = {
   warningCode: string | null;
   text: string;
   sections: ExtractedSection[];
+  packageContext?: AnalysisPackageContext | null;
 };
 
 export type WordDiffPart = {

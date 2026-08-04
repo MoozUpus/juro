@@ -333,6 +333,18 @@ Limits are 20 files, 20 MB compressed input, 20 MB per expanded member, and
 50 MB total expanded working set. Targeted tests pass 14/14. This candidate is
 not deployed and does not bypass the absent malware scanner.
 
+The next local package slice adds a bounded, deterministic relationship context
+without treating filenames as legal evidence. Each verified member receives an
+opaque stable ID and a tentative role (`primary`, `annex`, `amendment`,
+`acceptance_act`, `correspondence`, `evidence`, or `unknown`). JURO records
+role-based links, explicit filename references and exact normalized-text
+duplicates, caps the graph at 120 prioritized edges, and validates every member
+and edge when an OCR derivative is reloaded. The context is persisted with the
+analysis, included only inside the provider's `untrustedDocument` envelope, and
+shown in the RU/UZ review surface with confidence and a mandatory verification
+notice. Targeted extraction/OCR/processor/provider tests pass 24/24. This slice
+is local only; it does not mark any file safe or claim staging provider output.
+
 ## Phase 5 async analysis consumer
 
 Protected staging now contains the real, fail-closed processing boundary after secure upload:

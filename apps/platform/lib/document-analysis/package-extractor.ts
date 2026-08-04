@@ -6,6 +6,10 @@ import {
 } from "../document-comparison/extract";
 import {
   ComparisonProcessingError,
+  type AnalysisPackageContext,
+  type AnalysisPackageMemberRole,
+  type AnalysisPackageRelationship,
+  type AnalysisPackageRelationshipKind,
   type ExtractedDocument,
   type ExtractedSection,
 } from "../document-comparison/types";
@@ -17,6 +21,8 @@ const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordproces
 const MAX_PACKAGE_PAGES = 500;
 const MAX_INLINE_MEMBER_BYTES = 20 * 1024 * 1024;
 const MAX_INLINE_PACKAGE_BYTES = 50 * 1024 * 1024;
+const MAX_RELATIONSHIP_EVIDENCE = 4;
+const MAX_PACKAGE_RELATIONSHIPS = 120;
 
 const memberMimeTypes = new Map([
   ["pdf", "application/pdf"],
@@ -40,6 +46,131 @@ export type AnalysisPackageMember = {
   mimeType: string;
   bytes: Uint8Array;
 };
+
+const rolePatterns: ReadonlyArray<{
+  role: Exclude<AnalysisPackageMemberRole, "primary" | "unknown">;
+  pattern: RegExp;
+}> = [
+  { role: "amendment", pattern: /(?:amendment|addendum|доп(?:олнительное)?\s+соглаш|qo['‘’]?shimcha\s+kelish)/iu },
+  { role: "annex", pattern: /(?:annex|appendix|приложен|ilova)/iu },
+  { role: "acceptance_act", pattern: /(?:acceptance|completion|акт(?:\s+при[её]м|\s+выполн)|dalolatnoma)/iu },
+  { role: "correspondence", pattern: /(?:letter|notice|claim|претензи|письм|уведомлен|xat|bildirish)/iu },
+  { role: "evidence", pattern: /(?:invoice|receipt|сч[её]т|квитан|чек|hisob|to['‘’]?lov)/iu },
+];
+const primaryPattern = /(?:contract|agreement|договор|контракт|shartnoma)/iu;
+
+export function buildAnalysisPackageContext(
+  documents: readonly ExtractedDocument[],
+): AnalysisPackageContext {
+  const provisionalRoles = documents.map(classifyPackageMemberRole);
+  const explicitPrimaryIndex = provisionalRoles.findIndex((role) => role === "primary");
+  const unknownIndex = provisionalRoles.findIndex((role) => role === "unknown");
+  const primaryIndex = explicitPrimaryIndex >= 0 ? explicitPrimaryIndex : unknownIndex;
+  const members = documents.map((document, index) => ({
+    id: packageMemberId(index),
+    name: document.fileName,
+    mimeType: document.mimeType,
+    role: index === primaryIndex ? "primary" as const : provisionalRoles[index]!,
+    detectedLanguage: document.detectedLanguage,
+    pageCount: document.pageCount,
+    sectionCount: document.sections.length,
+  }));
+  const relationships: AnalysisPackageRelationship[] = [];
+  const edgeKeys = new Set<string>();
+  const primaryMemberId = primaryIndex >= 0 ? packageMemberId(primaryIndex) : null;
+
+  function addRelationship(
+    fromIndex: number,
+    toIndex: number,
+    kind: AnalysisPackageRelationshipKind,
+    confidence: AnalysisPackageRelationship["confidence"],
+    evidence: string[],
+  ) {
+    if (fromIndex === toIndex) return;
+    const edge: AnalysisPackageRelationship = {
+      fromMemberId: packageMemberId(fromIndex),
+      toMemberId: packageMemberId(toIndex),
+      kind,
+      confidence,
+      evidence: [...new Set(evidence)].slice(0, MAX_RELATIONSHIP_EVIDENCE),
+    };
+    const key = `${edge.fromMemberId}:${edge.toMemberId}:${edge.kind}`;
+    if (edgeKeys.has(key)) return;
+    edgeKeys.add(key);
+    relationships.push(edge);
+  }
+
+  if (primaryIndex >= 0) {
+    for (const [index, role] of provisionalRoles.entries()) {
+      if (index === primaryIndex) continue;
+      const inferred = roleRelationship(role);
+      if (inferred) addRelationship(index, primaryIndex, inferred.kind, inferred.confidence, ["member_role"]);
+    }
+  }
+
+  for (const [fromIndex, document] of documents.entries()) {
+    const normalizedText = normalizeFileReferenceText(document.text);
+    for (const [toIndex, target] of documents.entries()) {
+      if (fromIndex === toIndex) continue;
+      const targetStem = normalizedFileStem(target.fileName);
+      if (targetStem.length >= 4 && normalizedText.includes(targetStem)) {
+        addRelationship(fromIndex, toIndex, "references", "high", ["filename_reference"]);
+      }
+    }
+  }
+
+  for (let left = 0; left < documents.length; left += 1) {
+    const leftText = normalizeComparableText(documents[left]!.text);
+    if (leftText.length < 80) continue;
+    for (let right = left + 1; right < documents.length; right += 1) {
+      if (leftText === normalizeComparableText(documents[right]!.text)) {
+        addRelationship(right, left, "possible_duplicate", "high", ["normalized_text_match"]);
+      }
+    }
+  }
+
+  relationships.sort((left, right) =>
+    relationshipPriority(left).localeCompare(relationshipPriority(right))
+    || left.fromMemberId.localeCompare(right.fromMemberId)
+    || left.toMemberId.localeCompare(right.toMemberId)
+    || left.kind.localeCompare(right.kind));
+  return {
+    schemaVersion: 1,
+    primaryMemberId,
+    members,
+    relationships: relationships.slice(0, MAX_PACKAGE_RELATIONSHIPS),
+  };
+}
+
+export function isAnalysisPackageContext(value: unknown): value is AnalysisPackageContext {
+  if (!value || typeof value !== "object") return false;
+  const context = value as Partial<AnalysisPackageContext>;
+  if (context.schemaVersion !== 1 || !Array.isArray(context.members) || !Array.isArray(context.relationships)) return false;
+  if (context.members.length > 20 || context.relationships.length > MAX_PACKAGE_RELATIONSHIPS) return false;
+  const ids = new Set<string>();
+  for (const member of context.members) {
+    if (!member || typeof member !== "object" || !/^package-member-\d{2}$/.test(member.id)
+      || typeof member.name !== "string" || member.name.length < 1 || member.name.length > 240
+      || typeof member.mimeType !== "string" || member.mimeType.length > 160
+      || !["primary", "annex", "amendment", "acceptance_act", "correspondence", "evidence", "unknown"].includes(member.role)
+      || !["ru", "uz", "mixed", "unknown"].includes(member.detectedLanguage)
+      || (member.pageCount !== null && (!Number.isInteger(member.pageCount) || member.pageCount < 0 || member.pageCount > MAX_PACKAGE_PAGES))
+      || !Number.isInteger(member.sectionCount) || member.sectionCount < 0 || member.sectionCount > 10_000) return false;
+    if (ids.has(member.id)) return false;
+    ids.add(member.id);
+  }
+  if (context.primaryMemberId !== null && (typeof context.primaryMemberId !== "string" || !ids.has(context.primaryMemberId))) return false;
+  for (const relationship of context.relationships) {
+    if (!relationship || typeof relationship !== "object"
+      || !ids.has(relationship.fromMemberId) || !ids.has(relationship.toMemberId)
+      || relationship.fromMemberId === relationship.toMemberId
+      || !["annex_to", "amends", "acceptance_for", "supports", "references", "possible_duplicate"].includes(relationship.kind)
+      || !["high", "medium", "low"].includes(relationship.confidence)
+      || !Array.isArray(relationship.evidence) || relationship.evidence.length > MAX_RELATIONSHIP_EVIDENCE
+      || relationship.evidence.some((item) => typeof item !== "string" || item.length < 1 || item.length > 80)) return false;
+  }
+  return true;
+}
 
 export async function readAnalysisPackageMembers(input: {
   bytes: Uint8Array;
@@ -144,5 +275,60 @@ export async function extractAnalysisDocument(input: {
     warningCode: ["PACKAGE_MULTI_DOCUMENT", ...warnings].join(","),
     text,
     sections,
+    packageContext: buildAnalysisPackageContext(documents),
   };
+}
+
+function classifyPackageMemberRole(document: ExtractedDocument): AnalysisPackageMemberRole {
+  for (const candidate of rolePatterns) {
+    if (candidate.pattern.test(document.fileName)) return candidate.role;
+  }
+  if (primaryPattern.test(document.fileName)) return "primary";
+
+  const evidence = document.text.slice(0, 500);
+  for (const candidate of rolePatterns) {
+    if (candidate.pattern.test(evidence)) return candidate.role;
+  }
+  return primaryPattern.test(evidence) ? "primary" : "unknown";
+}
+
+function roleRelationship(role: AnalysisPackageMemberRole): {
+  kind: AnalysisPackageRelationshipKind;
+  confidence: AnalysisPackageRelationship["confidence"];
+} | null {
+  if (role === "annex") return { kind: "annex_to", confidence: "high" };
+  if (role === "amendment") return { kind: "amends", confidence: "high" };
+  if (role === "acceptance_act") return { kind: "acceptance_for", confidence: "medium" };
+  if (role === "correspondence") return { kind: "references", confidence: "low" };
+  if (role === "evidence") return { kind: "supports", confidence: "medium" };
+  return null;
+}
+
+function relationshipPriority(relationship: AnalysisPackageRelationship): string {
+  const confidence = { high: "0", medium: "1", low: "2" }[relationship.confidence];
+  const kind = {
+    amends: "0", annex_to: "1", acceptance_for: "2", supports: "3",
+    possible_duplicate: "4", references: "5",
+  }[relationship.kind];
+  return `${confidence}${kind}`;
+}
+
+function packageMemberId(index: number): string {
+  return `package-member-${String(index + 1).padStart(2, "0")}`;
+}
+
+function normalizedFileStem(name: string): string {
+  return normalizeFileReferenceText(name.replace(/\.[^.]+$/u, ""));
+}
+
+function normalizeRelationshipText(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase().replace(/\s+/gu, " ");
+}
+
+function normalizeFileReferenceText(value: string): string {
+  return normalizeRelationshipText(value).replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+}
+
+function normalizeComparableText(value: string): string {
+  return normalizeRelationshipText(value).replace(/[^\p{L}\p{N}]+/gu, "");
 }

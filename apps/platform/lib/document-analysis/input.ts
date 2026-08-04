@@ -1,4 +1,5 @@
 import type { LegalSourceContext } from "../ai/provider";
+import type { AnalysisPackageContext } from "../document-comparison/types";
 
 export type DocumentAnalysisProviderRequest = {
   fileName: string;
@@ -6,6 +7,7 @@ export type DocumentAnalysisProviderRequest = {
   extractedText: string;
   detectedLanguage: string;
   extractionWarnings: string[];
+  packageContext: AnalysisPackageContext | null;
   locale: "ru" | "uz";
   mode: "quick" | "full" | "expert";
   userSide: string | null;
@@ -41,6 +43,7 @@ export function buildDocumentAnalysisProviderInput(input: DocumentAnalysisProvid
       mimeType: input.mimeType,
       detectedLanguage: input.detectedLanguage,
       extractionWarnings: input.extractionWarnings,
+      packageContext: input.packageContext,
       declaredUserSide: input.userSide,
       documentText: input.extractedText,
     },

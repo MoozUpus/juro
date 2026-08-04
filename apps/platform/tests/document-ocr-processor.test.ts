@@ -194,6 +194,12 @@ test("OCR queue converts every verified ZIP member in one bounded provider batch
     assert.match(extracted?.text ?? "", /ФАЙЛ: "01-contract\.docx"/);
     assert.match(extracted?.text ?? "", /ФАЙЛ: "02-ilova\.png"/);
     assert.ok(extracted?.sections.some((section) => section.heading?.startsWith("02-ilova.png")));
+    assert.equal(extracted?.packageContext?.primaryMemberId, "package-member-01");
+    assert.deepEqual(extracted?.packageContext?.members.map(({ role }) => role), ["primary", "annex"]);
+    assert.ok(extracted?.packageContext?.relationships.some((relationship) =>
+      relationship.fromMemberId === "package-member-02"
+      && relationship.toMemberId === "package-member-01"
+      && relationship.kind === "annex_to"));
     assert.equal(
       (sqlite.prepare("SELECT token_estimate AS tokenEstimate FROM file_extractions").get() as { tokenEstimate: number }).tokenEstimate,
       21,

@@ -169,6 +169,20 @@ test("document-analysis payload labels every user-controlled document field as u
     extractedText: injection,
     detectedLanguage: "ru",
     extractionWarnings: [injection],
+    packageContext: {
+      schemaVersion: 1,
+      primaryMemberId: "package-member-01",
+      members: [{
+        id: "package-member-01",
+        name: injection,
+        mimeType: "application/pdf",
+        role: "primary",
+        detectedLanguage: "ru",
+        pageCount: 1,
+        sectionCount: 1,
+      }],
+      relationships: [],
+    },
     locale: "ru",
     mode: "quick",
     userSide: injection,
@@ -182,8 +196,11 @@ test("document-analysis payload labels every user-controlled document field as u
     mimeType: "application/pdf",
     detectedLanguage: "ru",
     extractionWarnings: [injection],
+    packageContext: payload.untrustedDocument.packageContext,
     declaredUserSide: injection,
     documentText: injection,
   });
+  assert.equal(payload.untrustedDocument.packageContext?.members[0]?.name, injection);
   assert.equal("documentText" in payload, false);
+  assert.equal("packageContext" in payload, false);
 });

@@ -330,8 +330,13 @@ The deployed Worker now exposes both provider secret names and server-side model
   member / 50 MB inline expanded working-set budget. The current local candidate
   queues packages containing scans for bounded per-member Workers AI conversion;
   it never sends the opaque ZIP. Exact opaque result identity, MIME, token, and
-  text evidence is required before one deterministic derivative is stored. This
-  is not staging evidence, does not provide page coordinates or scanned-PDF page
+  text evidence is required before one deterministic derivative is stored. The
+  local branch also derives a bounded tentative package graph from member role,
+  explicit filename references and exact normalized-text matches. The graph is
+  validated on derivative reload, passed only as untrusted provider metadata and
+  displayed with confidence plus a human-verification notice. It is not a legal
+  conclusion and has not been exercised through an authenticated staging flow.
+  This is not staging evidence, does not provide page coordinates or scanned-PDF page
   counts, and does not bypass the real isolated malware-scanner requirement.
   Packages above 20 MB compressed input, 20 MB per expanded member, or 50 MB
   expanded working set still require an external streaming extractor.
@@ -367,7 +372,7 @@ The following gates remain open:
 - Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
 - No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.
 - real OpenAI RU/UZ no-source lifecycle and Anthropic fallback provider calls are proven in protected staging, including bounded token/latency evidence and D1 run/ledger semantics; an Access-authenticated browser flow, verified-source live answer, and provider cost reconciliation remain unproven;
-- scanned/image OCR and bounded ZIP/multi-file conversion exist as local post-safe paths; relationship analysis, scanned-PDF page-count/coordinate evidence, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
+- scanned/image OCR and bounded ZIP/multi-file conversion exist as local post-safe paths; deterministic package relationships are now a local reviewable hypothesis, while authenticated staging evidence, scanned-PDF page-count/coordinate evidence, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
 - live indexed-corpus and reranking evidence remain open; the implemented hybrid
   D1/Vectorize retrieval still revalidates every candidate citation server-side;
 - corrections, redline, exports, the 100-package evaluation, DLQ redrive, and full performance/security/browser gates remain incomplete.
