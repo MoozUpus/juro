@@ -547,6 +547,13 @@
       "when": 1785916800000,
       "tag": "0077_knowledge_base",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "6",
+      "when": 1785920400000,
+      "tag": "0078_knowledge_base_authoring",
+      "breakpoints": true
     }
   ]
 }

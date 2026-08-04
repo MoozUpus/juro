@@ -1540,6 +1540,10 @@ export const knowledgeBaseArticles = sqliteTable("knowledge_base_articles", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
   publishedAt: text("published_at"),
+  createdByUserId: text("created_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  updatedByUserId: text("updated_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  statusChangedByUserId: text("status_changed_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  statusChangedAt: text("status_changed_at"),
 }, (table) => [
   uniqueIndex("knowledge_base_articles_slug_uidx").on(table.slug),
   index("knowledge_base_articles_status_idx").on(table.status, table.updatedAt),
@@ -1559,6 +1563,11 @@ export const knowledgeBaseArticleVersions = sqliteTable("knowledge_base_article_
   contentSha256: text("content_sha256").notNull(),
   createdAt: text("created_at").notNull(),
   publishedAt: text("published_at"),
+  createdByUserId: text("created_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  updatedByUserId: text("updated_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  publishedByUserId: text("published_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  updatedAt: text("updated_at"),
+  contentHashVersion: text("content_hash_version").notNull().default("body-v1"),
 }, (table) => [
   uniqueIndex("knowledge_base_article_versions_number_uidx").on(table.articleId, table.versionNumber),
   index("knowledge_base_article_versions_published_idx").on(table.articleId, table.publishedAt, table.versionNumber),
@@ -1597,6 +1606,22 @@ export const knowledgeBaseFeedbackEvents = sqliteTable("knowledge_base_feedback_
   uniqueIndex("knowledge_base_feedback_events_idempotency_uidx").on(table.workspaceId, table.userId, table.idempotencyKey),
   check("knowledge_base_feedback_events_helpful_check", sql`${table.helpful} IN (0,1)`),
   check("knowledge_base_feedback_events_revision_check", sql`${table.revision} >= 1`),
+]);
+export const knowledgeBaseAuthoringEvents = sqliteTable("knowledge_base_authoring_events", {
+  id: text("id").primaryKey(),
+  articleId: text("article_id").notNull().references(() => knowledgeBaseArticles.id, { onDelete: "restrict" }),
+  versionId: text("version_id").references(() => knowledgeBaseArticleVersions.id, { onDelete: "restrict" }),
+  actorUserId: text("actor_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  action: text("action").notNull(),
+  previousStatus: text("previous_status"),
+  newStatus: text("new_status"),
+  contentSha256: text("content_sha256"),
+  metadataJson: text("metadata_json").notNull().default("{}"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("knowledge_base_authoring_events_article_idx").on(table.articleId, table.createdAt),
+  index("knowledge_base_authoring_events_actor_idx").on(table.actorUserId, table.createdAt),
+  check("knowledge_base_authoring_events_hash_check", sql`${table.contentSha256} IS NULL OR length(${table.contentSha256}) = 64`),
 ]);
 export const consultationSlots = sqliteTable("consultation_slots", {
   id: text("id").primaryKey(), specialistType: text("specialist_type").notNull(), startsAt: text("starts_at").notNull(), endsAt: text("ends_at").notNull(), timezone: text("timezone").notNull().default("Asia/Tashkent"),

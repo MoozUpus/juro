@@ -12,7 +12,15 @@
   projection and appends metadata-only audit events.
 - Loading, empty, recoverable error, retry, keyboard focus, 44 px controls and
   RU/UZ states are implemented without a new UI or motion dependency.
-- Focused tests pass locally. Migration `0077`, protected staging browser QA and
+- `/:locale/admin/knowledge-base` provides a dense RU/UZ staff editor for new
+  articles, draft updates, explicit publish confirmation, archive/restore and
+  helpful/not-helpful counts. The route and API require the dedicated
+  `knowledge.base.manage` capability, active TOTP and MFA verified within 15
+  minutes.
+- Migration `0078` records new articles/versions, draft edits, publications and
+  lifecycle changes as append-only actor evidence. Published versions cannot be
+  updated and articles, versions and evidence cannot be deleted.
+- Focused tests pass locally. Migrations `0077`–`0078`, protected staging browser QA and
   deployment remain pending; production is unchanged.
 
 ## PDF structural/page-count preflight (local candidate)

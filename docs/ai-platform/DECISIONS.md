@@ -1,5 +1,21 @@
 # Decisions
 
+## D-111 — Knowledge Base publication requires fresh MFA and D1 actor evidence
+
+Status: accepted and locally verified
+Date: 2026-08-04
+
+Knowledge Base draft and publication operations are restricted to a dedicated
+staff capability held by administrators and legal reviewers. Both page and API
+require active TOTP-backed staff assignment and MFA verified within 15 minutes;
+the request body cannot select the actor. D1 triggers append actor/content/status
+evidence for article/version creation, draft edits, publication and lifecycle
+changes. Published versions are immutable, and articles, versions and evidence
+are archived or superseded rather than deleted. Existing 0077 seed versions are
+not rewritten to invent historical actors. Their hash is explicitly marked
+`body-v1`; all new authoring versions use `full-v2` over titles, summaries, both
+localized bodies and related slugs.
+
 ## D-110 — product help is published as immutable bilingual versions
 
 Status: accepted and locally verified
@@ -11,8 +27,8 @@ only the latest published version and contain no tenant data. Helpfulness is a
 separate authenticated, tenant-derived, idempotent projection with append-only
 metadata audit; it never copies case, chat or document content. Published
 versions are immutable, so corrections create a later version rather than
-rewriting text already shown to users. Staff authoring remains a separate future
-surface and no draft is exposed through the public API.
+rewriting text already shown to users. Staff authoring is a separate protected
+surface from public reads, and no draft is exposed through the public API.
 
 ## D-103 — case navigation is URL-addressable and workspace-scoped
 

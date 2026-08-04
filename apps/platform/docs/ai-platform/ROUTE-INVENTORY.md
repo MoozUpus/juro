@@ -4,8 +4,9 @@
 > `/:locale/help/:articleSlug`, personal `/:locale/:accountType/help/:articleSlug`
 > and explicit business `/:locale/business/:workspaceId/help/:articleSlug` are
 > implemented against published D1 versions. Public reads contain no tenant
-> data; helpfulness uses the authenticated platform API. Migration `0077` and
-> staging deployment remain pending; production is unchanged.
+> data; helpfulness uses the authenticated platform API. The fresh-MFA staff
+> editor at `/:locale/admin/knowledge-base` uses local migrations `0077`–`0078`;
+> staging deployment remains pending and production is unchanged.
 
 Audit date: 2026-07-28
 Production Sites revision: `4031078` (v20)
@@ -58,6 +59,7 @@ Current route shells:
 /:locale/:accountType/help/:articleSlug
 /:locale/help
 /:locale/help/:articleSlug
+/:locale/admin/knowledge-base
 ```
 
 `cases/:caseId` is now an object-specific, tenant-backed overview. Its validated

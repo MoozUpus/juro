@@ -16,6 +16,7 @@ export const platformStaffCapabilities = [
   "support.tickets.manage",
   "legal.sources.review",
   "legal.sources.publish",
+  "knowledge.base.manage",
   "lawyer.reviews.moderate",
   "lawyer.profiles.moderate",
 ] as const;
@@ -31,6 +32,7 @@ const roleCapabilities: Readonly<
     "staff.roles.manage",
     "staff.security.audit",
     "staff.operations.manage",
+    "knowledge.base.manage",
   ]),
   support: new Set([
     "staff.console.view",
@@ -40,8 +42,9 @@ const roleCapabilities: Readonly<
     "staff.console.view",
     "legal.sources.review",
     "legal.sources.publish",
-  "lawyer.reviews.moderate",
-  "lawyer.profiles.moderate",
+    "knowledge.base.manage",
+    "lawyer.reviews.moderate",
+    "lawyer.profiles.moderate",
   ]),
 };
 

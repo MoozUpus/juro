@@ -15,6 +15,13 @@ Search, retry, related links and helpfulness controls are at least 44 px, have
 visible focus, text labels and live status. Loading, no-result and recoverable
 error states are explicit in both languages.
 
+The staff authoring surface uses the existing dense Admin/Operate visual mode:
+sticky article index, light bilingual editing columns, explicit version/status
+evidence and a reading-first section editor. Publish/archive/restore require a
+visible confirmation region; no dialog animation or decorative cinematic
+motion is added. At narrow widths the index and language columns stack, while
+all controls retain visible focus and 44 px minimum height.
+
 Updated: 2026-07-30
 Status: implemented as a scoped staging-only prototype; production UI is unchanged and replacement is not authorized.
 

@@ -10,6 +10,14 @@ revision changes, append-only audit, neutral unavailable versions, CSRF/auth rou
 guards, semantic search/status controls, 44 px targets, reduced motion and the
 absence of raw HTML rendering. It is part of the standard platform test list.
 
+`tests/knowledge-base-admin.test.ts` additionally verifies strict bilingual
+authoring input, server-derived staff actor identity, dedicated capability and
+fresh-MFA boundaries, draft creation/update, immutable publication, public
+version switching, related-article publication checks, archive/restore,
+append-only actor evidence, delete guards, responsive editor contracts and
+explicit confirmation. `tests/migration-safety.test.ts` replays 0078 with exact
+table/FK inventory.
+
 Staging additionally requires public HTTP smokes, authenticated helpfulness D1
 evidence, keyboard and screen-reader navigation, RU/UZ at 320/360/390/768/1024/
 1280/1440+, 200% zoom, forced/reduced motion checks and browser console review.

@@ -104,6 +104,7 @@ const coreTestFiles = [
   "tests/document-case-link.test.ts",
   "tests/legal-bookmarks.test.ts",
   "tests/knowledge-base.test.ts",
+  "tests/knowledge-base-admin.test.ts",
   "tests/url-import.test.ts",
   "tests/pdf-preflight.test.ts",
   "tests/document-analysis-package-extractor.test.ts",

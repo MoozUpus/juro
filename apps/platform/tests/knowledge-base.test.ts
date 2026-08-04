@@ -51,10 +51,11 @@ test("published RU/UZ articles support search, related content and immutable ver
       assert.equal(version.hash, createHash("sha256").update(canonical).digest("hex"));
     }
 
-    sqlite.prepare("INSERT INTO knowledge_base_articles(id,slug,category,status,created_at,updated_at) VALUES ('draft','draft-help','ai','draft',?,?)").run(NOW, NOW);
+    seedTenant(sqlite, "kb-author", "kb-author-workspace");
+    sqlite.prepare("INSERT INTO knowledge_base_articles(id,slug,category,status,created_at,updated_at,created_by_user_id,updated_by_user_id) VALUES ('draft','draft-help','ai','draft',?,?,?,?)").run(NOW, NOW, "kb-author", "kb-author");
     sqlite.prepare(`INSERT INTO knowledge_base_article_versions
-      (id,article_id,version_number,title_ru,title_uz,summary_ru,summary_uz,body_ru_json,body_uz_json,related_slugs_json,content_sha256,created_at)
-      VALUES ('draft-v1','draft',1,'Черновик','Qoralama','Не опубликовано','Nashr etilmagan','[]','[]','[]',?,?)`).run("e".repeat(64), NOW);
+      (id,article_id,version_number,title_ru,title_uz,summary_ru,summary_uz,body_ru_json,body_uz_json,related_slugs_json,content_sha256,content_hash_version,created_at,created_by_user_id,updated_by_user_id,updated_at)
+      VALUES ('draft-v1','draft',1,'Черновик','Qoralama','Не опубликовано','Nashr etilmagan','[]','[]','[]',?,'full-v2',?,?,?,?)`).run("e".repeat(64), NOW, "kb-author", "kb-author", NOW);
     assert.equal((await listKnowledgeBaseArticles({ db: d1, locale: "ru", q: "Черновик" })).length, 0);
     assert.throws(
       () => sqlite.prepare("UPDATE knowledge_base_article_versions SET title_ru='Изменено' WHERE id='kbv-ai-sources-1'").run(),

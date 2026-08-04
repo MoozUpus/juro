@@ -3,8 +3,9 @@
 > Knowledge-base local checkpoint — 2026-08-04: D1-backed RU/UZ list/search,
 > public and authenticated article routes, immutable version/hash evidence,
 > related articles and tenant-bound helpfulness are implemented through local
-> migration `0077`. There is no staff authoring/publish UI yet; new versions are
-> migration-managed. `0077` is not applied to staging or production, and browser
+> migration `0077`. A fresh-MFA staff editor, dedicated capability and
+> append-only D1 authoring evidence are implemented through local migration
+> `0078`. Neither migration is applied to staging or production, and browser
 > responsive/zoom/screen-reader QA is not claimed by the local code tests.
 
 > PDF preflight checkpoint — 2026-08-04: structural page count now gates single

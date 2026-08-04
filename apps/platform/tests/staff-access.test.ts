@@ -183,6 +183,18 @@ test("platform staff roles are distinct from workspace roles and grant no conten
     platformStaffRoleAllows("legal_reviewer", "lawyer.reviews.moderate"),
     true,
   );
+  assert.equal(
+    platformStaffRoleAllows("administrator", "knowledge.base.manage"),
+    true,
+  );
+  assert.equal(
+    platformStaffRoleAllows("legal_reviewer", "knowledge.base.manage"),
+    true,
+  );
+  assert.equal(
+    platformStaffRoleAllows("support", "knowledge.base.manage"),
+    false,
+  );
 });
 
 test("active platform assignment requires a live local MFA session and active TOTP", async () => {

@@ -1,5 +1,22 @@
 # JURO D1 migrations
 
+## Pending 0078 — MFA-bound Knowledge Base authoring
+
+`0078_knowledge_base_authoring.sql` additively attaches nullable actor evidence
+to the 0077 article/version projections and creates append-only authoring
+events. D1 triggers require an actor/timestamp for every new article/version,
+draft edit, publication and status transition; published versions and all
+article/version/event deletes remain fail-closed. Existing seeded published
+versions retain their `body-v1` hash evidence and are not backfilled or mutated;
+new staff versions use `full-v2`, covering titles, summaries, both language
+bodies and related slugs.
+
+The migration replays locally with 184 tables, 364 foreign keys and no FK
+violations. Before staging, take and restore-verify a fresh private
+`juro-staging-backups` export, apply the complete ordered pending set
+`0069`–`0078`, verify the ledger/triggers/FKs and deploy the matching Worker only
+under new explicit authorization.
+
 ## Pending 0077 — versioned RU/UZ knowledge base
 
 `0077_knowledge_base.sql` is an additive local candidate. It creates published
@@ -11,7 +28,7 @@ slug JSON and verified by the focused test suite.
 
 The migration has not been applied to staging or production. Before staging,
 take and restore-verify a fresh private `juro-staging-backups` export, apply the
-complete ordered pending set `0069`–`0077`, verify the ledger, hashes, triggers,
+complete ordered pending set `0069`–`0078`, verify the ledger, hashes, triggers,
 `foreign_key_check` and public/authenticated route boundaries, then deploy the
 matching Worker only under a new explicit authorization. Rollback is
 application-first; the additive tables may remain unused.
@@ -26,11 +43,11 @@ foreign-key postflight passed, and Worker version
 Production is unchanged. Exact evidence is in
 `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
 
-Migrations `0069`–`0077` are local additive candidates and have not been applied
+Migrations `0069`–`0078` are local additive candidates and have not been applied
 to staging or production. They cover immutable analysis corrections, corrected
 exports, comparison exports, per-change review decisions and fenced R2 write
 reconciliation, analysis/document case links, legal bookmarks and the versioned
-knowledge base respectively.
+knowledge base and protected staff authoring respectively.
 
 ## Pending 0073 — analysis-version R2 write intents
 

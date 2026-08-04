@@ -3,13 +3,13 @@ import { z } from "zod";
 import type { PlatformLocale } from "./routing";
 
 const slugPattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
-const articleSectionSchema = z.object({
+export const knowledgeBaseArticleSectionSchema = z.object({
   heading: z.string().min(1).max(180),
   paragraphs: z.array(z.string().min(1).max(2_000)).min(1).max(8),
 }).strict();
 
-const articleBodySchema = z.array(articleSectionSchema).min(1).max(20);
-const relatedSlugsSchema = z.array(z.string().regex(slugPattern)).max(12);
+export const knowledgeBaseArticleBodySchema = z.array(knowledgeBaseArticleSectionSchema).min(1).max(20);
+export const knowledgeBaseRelatedSlugsSchema = z.array(z.string().regex(slugPattern)).max(12);
 
 export const knowledgeBaseQuerySchema = z.object({
   locale: z.enum(["ru", "uz"]),
@@ -40,7 +40,7 @@ type ArticleRow = {
 export type KnowledgeBaseArticleSummary = Omit<ArticleRow, "bodyJson" | "relatedSlugsJson">;
 
 export type KnowledgeBaseArticle = KnowledgeBaseArticleSummary & {
-  sections: z.infer<typeof articleBodySchema>;
+  sections: z.infer<typeof knowledgeBaseArticleBodySchema>;
   related: KnowledgeBaseArticleSummary[];
 };
 
@@ -136,8 +136,8 @@ export async function getKnowledgeBaseArticle(input: {
        ) LIMIT 1`,
   ).bind(input.slug).first<ArticleRow>();
   if (!row) return null;
-  const sections = articleBodySchema.safeParse(JSON.parse(row.bodyJson));
-  const relatedSlugs = relatedSlugsSchema.safeParse(JSON.parse(row.relatedSlugsJson));
+  const sections = knowledgeBaseArticleBodySchema.safeParse(JSON.parse(row.bodyJson));
+  const relatedSlugs = knowledgeBaseRelatedSlugsSchema.safeParse(JSON.parse(row.relatedSlugsJson));
   if (!sections.success || !relatedSlugs.success) return null;
   const related = await relatedArticles(input.db, language, relatedSlugs.data);
   return { ...summaryFromRow(row), sections: sections.data, related };
