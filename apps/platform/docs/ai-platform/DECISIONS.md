@@ -2756,3 +2756,22 @@ packages remain `awaiting_external_extraction`. Workers AI conversion does not
 prove a 500-page aggregate for scanned PDFs because the API response has no page
 count, so that release gate remains open. No migration, dependency, remote
 resource, staging deployment, or production change is introduced.
+
+## D-133 — Analysis corrections create normalized immutable artifacts
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+Deep-analysis suggestions do not edit the source PDF/DOCX and do not reuse the
+document-builder revision schema. The analysis domain stores the provider-checked
+extracted text as immutable version 1 in private R2, requires an explicit user
+accept/reject decision or an explicit confirmed “apply all” action, and creates a
+new immutable normalized Markdown version for every successful application.
+
+Automatic replacement is exact and fail-closed: a missing fragment is stale;
+multiple occurrences or overlapping suggestions are ambiguous. The original
+object remains unchanged. Every read/write is owner/workspace scoped, downloads
+reverify size and SHA-256, decisions and applications are audited, idempotency is
+server-enforced, and account deletion inventories the derived R2 keys. Preserving
+original DOCX/PDF layout and producing visual redline artifacts remain separate
+work and are not implied by this slice.

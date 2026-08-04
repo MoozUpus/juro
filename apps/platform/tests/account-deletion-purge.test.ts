@@ -245,6 +245,16 @@ function seedContent(
        'application/pdf','ru','good','[]',NULL,?,?,?)`,
   ).run(WORKSPACE_ID, USER_ID, "e".repeat(64), "f".repeat(64), NOW, NOW, NOW);
   bucket.objects.add("derivatives/purge-workspace/purge-analysis/purge-file.json");
+  sqlite.prepare(
+    `INSERT INTO analysis_document_versions (
+       id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,
+       source_kind,r2_key,file_name,mime_type,size_bytes,sha256,
+       idempotency_key,selection_sha256,revision_ids_json,created_by_user_id,created_at
+     ) VALUES ('purge-analysis-version','purge-analysis',?,?,1,NULL,'extracted',
+       'analysis-versions/purge-workspace/purge-analysis/1-source.md',
+       'document-v1.md','text/markdown; charset=utf-8',2,?,NULL,NULL,'[]',NULL,?)`,
+  ).run(WORKSPACE_ID, USER_ID, "a".repeat(64), NOW);
+  bucket.objects.add("analysis-versions/purge-workspace/purge-analysis/1-source.md");
   assert.equal(
     (sqlite.prepare("SELECT count(*) AS total FROM file_extractions WHERE owner_user_id=?").get(USER_ID) as { total: number }).total,
     1,
@@ -348,9 +358,10 @@ test("purge removes D1/R2 content, redacts shared comments, and retains immutabl
     assert.deepEqual(result, {
       status: "completed",
       requestId: REQUEST_ID,
-      r2DeletedCount: 6,
+      r2DeletedCount: 7,
     });
     assert.deepEqual(bucket.deleted.sort(), [
+      "analysis-versions/purge-workspace/purge-analysis/1-source.md",
       "comparisons/purge/one.json",
       "comparisons/purge/two.json",
       "derivatives/purge-workspace/purge-analysis/purge-file.json",
@@ -377,6 +388,10 @@ test("purge removes D1/R2 content, redacts shared comments, and retains immutabl
     );
     assert.equal(
       (sqlite.prepare("SELECT count(*) AS total FROM analysis_report_exports WHERE id='purge-report-export'").get() as { total: number }).total,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS total FROM analysis_document_versions WHERE id='purge-analysis-version'").get() as { total: number }).total,
       0,
     );
     assert.equal(
@@ -428,7 +443,7 @@ test("purge removes D1/R2 content, redacts shared comments, and retains immutabl
       evidenceHash: string;
     };
     assert.match(evidence.subjectHash, /^[a-f0-9]{64}$/);
-    assert.equal(evidence.r2DeletedCount, 6);
+    assert.equal(evidence.r2DeletedCount, 7);
     assert.equal(evidence.redactedCount, 1);
     assert.match(evidence.evidenceHash, /^[a-f0-9]{64}$/);
     const lifecycleRows = sqlite.prepare(

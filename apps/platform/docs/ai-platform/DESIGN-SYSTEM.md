@@ -231,3 +231,15 @@ error/error-surface `6.51:1`, warning/warning-surface `4.94:1`, and
 success/success-surface `5.27:1`. The light-surface focus outline is `6.34:1`
 against white; the topbar focus outline is `11.77:1` against navy. These
 calculations cover declared pairs, not a complete browser contrast audit.
+
+## Document correction review surface
+
+The analysis correction candidate follows the legal-work profile: design
+variance 3/10, motion 2/10 and density 8/10. It keeps the cinematic shell outside
+the reading canvas, uses a warm light work surface, side-by-side old/new text on
+wide screens and a single column on narrow screens. Status is expressed by text
+plus color; gold is limited to focus/controlled action; every control is at least
+44 px and has a visible focus ring. Loading, empty, recoverable error, success,
+partial, stale, ambiguous, accepted, rejected and applied states have explicit
+RU/UZ copy. Authenticated staging browser, 200% zoom, forced-colors and touch QA
+remain open until migration 0069 is authorized and deployed.

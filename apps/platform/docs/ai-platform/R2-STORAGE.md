@@ -163,3 +163,17 @@ temporary key and local fixture were removed after the check.
 This proves only staging R2 write/read/integrity/delete behavior for an isolated
 synthetic object. It does not prove application authorization, file promotion,
 malware scanning, or a completed document analysis.
+
+## Immutable normalized analysis versions
+
+Local migration 0069 and its Worker candidate use the private primary bucket:
+
+`analysis-versions/{workspaceId}/{analysisId}/{version}-{sha256}.md`
+
+Keys are server-generated and contain no source filename or document text.
+Writes use `If-None-Match: *`, exact SHA-256 and `private, no-store`; an existing
+object is accepted only when size and checksum match. Authorized downloads are
+proxied after owner/workspace/version lookup and object-integrity verification.
+Account deletion inventories these keys with exports and OCR derivatives. No
+staging object under this prefix is claimed until migration 0069 and its matching
+Worker are separately authorized and deployed.

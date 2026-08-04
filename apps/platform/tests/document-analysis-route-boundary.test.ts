@@ -63,6 +63,23 @@ test("dashboard and review surfaces use the secure upload client", () => {
   assert.doesNotMatch(`${dashboard}\n${review}`, /new FormData\(\)/);
 });
 
+test("analysis revision routes preserve auth, tenant, idempotency, and object-integrity boundaries", () => {
+  const collection = source("app/api/platform/document-analysis/[analysisId]/revisions/route.ts");
+  const decision = source("app/api/platform/document-analysis/[analysisId]/revisions/[revisionId]/route.ts");
+  const download = source("app/api/platform/document-analysis/[analysisId]/versions/[versionId]/file/route.ts");
+  for (const route of [collection, decision, download]) {
+    assert.match(route, /requireApiUser/);
+    assert.match(route, /workspaceForUser/);
+    assert.doesNotMatch(route, /OPENAI_API_KEY|ANTHROPIC_API_KEY|callOpenAiJson|callAnthropic/);
+  }
+  assert.match(collection, /idempotency-key/);
+  assert.match(collection, /applySuggestedRevisions/);
+  assert.match(decision, /decideSuggestedRevision/);
+  assert.match(download, /verifiedAnalysisVersionObject/);
+  assert.match(download, /analysisVersionForDownload/);
+  assert.match(download, /content-disposition/);
+});
+
 test("scanner promotion requires strict evidence and never trusts document instructions", () => {
   const scanner = source("lib/document-analysis/malware-scanner.ts");
   assert.match(scanner, /malwareScannerResponseSchema/);

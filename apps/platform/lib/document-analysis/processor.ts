@@ -20,6 +20,12 @@ import {
   scheduleOcrProcessing,
 } from "./ocr-processor";
 import { extractAnalysisDocument, PackageExtractionError } from "./package-extractor";
+import {
+  AnalysisRevisionError,
+  analysisSourceVersionId,
+  storeInitialAnalysisDocumentVersion,
+  suggestedRevisionId,
+} from "./revisions";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
@@ -241,6 +247,14 @@ async function analyzeObject(
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
     }
 
+    await storeInitialAnalysisDocumentVersion(env, {
+      analysisId: row.analysisId,
+      workspaceId: row.workspaceId,
+      ownerUserId: row.ownerUserId,
+      fileName: row.fileName,
+      text: extracted.text,
+    });
+
     const request = parseRequestMetadata(row.summaryJson);
     const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8, { semantic: env });
     const ai = await deps.analyze({
@@ -316,6 +330,10 @@ async function analyzeObject(
       await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
     }
+    if (error instanceof AnalysisRevisionError) {
+      await setAnalysisState(env.DB, row, "retrying", "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED");
+      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PERSISTENCE_FAILED", true);
+    }
     if (error instanceof ComparisonProcessingError) {
       const waiting = error.code === "OCR_REQUIRED" ? "awaiting_ocr" : "failed";
       const code = error.code === "OCR_REQUIRED"
@@ -347,27 +365,49 @@ async function persistNormalizedAnalysis(
   const now = new Date().toISOString();
   const summary = legacyCompatibleSummary(persisted);
   await db.prepare("DELETE FROM document_risks WHERE analysis_id=?").bind(row.analysisId).run();
+  let revisionCount = 0;
   for (let offset = 0; offset < persisted.result.risks.length; offset += 20) {
-    await db.batch(persisted.result.risks.slice(offset, offset + 20).map((risk) => db.prepare(
-      `INSERT INTO document_risks
-       (id,analysis_id,level,title,description,excerpt,confidence_percent,risk_type,clause,page,recommendation,proposed_wording,legal_basis_source_ids_json,created_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    ).bind(
-      crypto.randomUUID(),
-      row.analysisId,
-      risk.severity,
-      risk.title,
-      [risk.problem, risk.consequence, risk.recommendation].join("\n\n"),
-      risk.exactExcerpt,
-      risk.confidence === "high" ? 90 : risk.confidence === "medium" ? 70 : 45,
-      risk.riskType,
-      risk.clause,
-      risk.page,
-      risk.recommendation,
-      risk.proposedWording,
-      JSON.stringify(risk.legalBasisSourceIds),
-      now,
-    )));
+    const statements: D1PreparedStatement[] = [];
+    for (const risk of persisted.result.risks.slice(offset, offset + 20)) {
+      const riskId = crypto.randomUUID();
+      statements.push(db.prepare(
+        `INSERT INTO document_risks
+         (id,analysis_id,level,title,description,excerpt,confidence_percent,risk_type,clause,page,recommendation,proposed_wording,legal_basis_source_ids_json,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ).bind(
+        riskId,
+        row.analysisId,
+        risk.severity,
+        risk.title,
+        [risk.problem, risk.consequence, risk.recommendation].join("\n\n"),
+        risk.exactExcerpt,
+        risk.confidence === "high" ? 90 : risk.confidence === "medium" ? 70 : 45,
+        risk.riskType,
+        risk.clause,
+        risk.page,
+        risk.recommendation,
+        risk.proposedWording,
+        JSON.stringify(risk.legalBasisSourceIds),
+        now,
+      ));
+      if (
+        risk.exactExcerpt?.trim()
+        && risk.proposedWording?.trim()
+        && risk.exactExcerpt !== risk.proposedWording
+      ) {
+        statements.push(db.prepare(
+          `INSERT INTO suggested_revisions
+           (id,analysis_id,risk_id,source_version_id,workspace_id,owner_user_id,original_text,
+            proposed_text,status,decided_by_user_id,decided_at,applied_version_id,created_at,updated_at)
+           VALUES (?,?,?,?,?,?,?,?,'pending',NULL,NULL,NULL,?,?)`,
+        ).bind(
+          suggestedRevisionId(riskId), row.analysisId, riskId, analysisSourceVersionId(row.analysisId),
+          row.workspaceId, row.ownerUserId, risk.exactExcerpt, risk.proposedWording, now, now,
+        ));
+        revisionCount += 1;
+      }
+    }
+    await db.batch(statements);
   }
 
   const runId = `document-analysis-run-${row.analysisId}`;
@@ -434,6 +474,7 @@ async function persistNormalizedAnalysis(
         fallbackFromProvider: persisted.technical.fallbackFromProvider,
         riskCount: persisted.result.risks.length,
         sourceCount: persisted.result.sources.length,
+        revisionCount,
         sourceFreshnessStatus: persisted.sourceFreshness.status,
         sourceFreshnessAsOf: persisted.sourceFreshness.asOf,
       }),

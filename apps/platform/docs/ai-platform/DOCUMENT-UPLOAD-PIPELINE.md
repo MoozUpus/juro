@@ -84,3 +84,19 @@ Authenticated staging package OCR/provider execution is not claimed.
 2. Apply pending migration `0068`, deploy protected staging, and execute an eligible safe-file OCR/provider smoke test only after scanner clearance exists.
 3. Run the complete 100-package/30-comparison reviewed evaluation, including clean-scan OCR quality.
 4. Add page coordinates and scanned-PDF page-count evidence, over-budget streaming extraction, corrections, and redline artifacts.
+
+## Reviewable corrections — local candidate
+
+After extraction capacity checks and before provider analysis, the normalized
+text is stored once as an immutable content-addressed private R2 artifact. A
+validated provider risk becomes a reviewable suggestion only when it contains a
+non-empty exact excerpt and distinct proposed wording. The RU/UZ review surface
+shows old/new text, reason, linked source identifiers and explicit accept/reject
+controls. Applying selected or all available suggestions creates a new Markdown
+artifact and never overwrites the upload.
+
+Missing, repeated and overlapping excerpts fail closed as stale or ambiguous.
+The API is authenticated, CSRF-protected for writes, tenant-scoped, bounded by
+Zod, idempotent and checksum-verifying on download. This does not yet preserve
+DOCX/PDF layout, emit a visual redline, or prove provider-generated corrections
+in staging; those claims remain open.

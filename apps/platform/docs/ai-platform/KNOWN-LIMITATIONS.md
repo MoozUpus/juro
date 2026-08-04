@@ -478,3 +478,19 @@ unauthenticated and does not change production.
 ## Canonical case creation open gate
 
 Canonical manual case creation is deployed to protected staging and passes a real local HTTP/D1 create/read smoke. A remote authenticated staging create/read, RU/UZ visual pass, mobile/keyboard/axe pass and cleanup of any resulting synthetic case still require an Access-authorized test session.
+
+## Analysis correction open gates
+
+- Migration 0069 and its matching Worker are local only; no staging or production
+  correction lifecycle is claimed.
+- Corrected output is normalized UTF-8 Markdown. Original DOCX/PDF formatting,
+  coordinates, tracked changes, clean DOCX/PDF export and visual redline remain
+  unimplemented and are not simulated.
+- Older completed analyses have no version-1 normalized artifact and therefore
+  honestly show no applicable corrections; they are not silently backfilled.
+- A real scanner-approved, provider-generated staging analysis has not traversed
+  accept/reject/apply/download end to end. Authenticated RU/UZ browser, axe,
+  200% zoom, forced-colors, touch and visual regression checks remain open.
+- An R2 object written immediately before a losing concurrent D1 version insert
+  may become an unreachable content-addressed orphan. It never becomes visible;
+  bounded orphan reconciliation is still required before production readiness.

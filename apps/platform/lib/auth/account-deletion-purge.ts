@@ -364,8 +364,12 @@ async function userObjectKeys(
       UNION
       SELECT r2_key AS objectKey
       FROM analysis_report_exports
+      WHERE owner_user_id=? AND r2_key IS NOT NULL
+      UNION
+      SELECT r2_key AS objectKey
+      FROM analysis_document_versions
       WHERE owner_user_id=? AND r2_key IS NOT NULL`,
-  ).bind(userId, userId, userId, userId, userId, userId, userId).all<ObjectKeyRow>();
+  ).bind(userId, userId, userId, userId, userId, userId, userId, userId).all<ObjectKeyRow>();
   const keys = [...new Set(
     rows.results
       .map(row => row.objectKey)

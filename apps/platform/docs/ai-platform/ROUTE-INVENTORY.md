@@ -403,3 +403,15 @@ history, case context and usage ledger. Voice-with-avatar is not enabled.
 6. Add route and security tests for every redirect.
 7. Re-run `/ru/individual/document-builder` regression after every routing change.
 8. Keep the staging prototype `noindex`, inaccessible from production navigation, and backed only by isolated staging resources.
+
+### Analysis corrections — local candidate
+
+| Route | Behavior | Boundary |
+|---|---|---|
+| `GET /api/platform/document-analysis/:analysisId/revisions` | Lists reviewable suggestions and immutable versions | authenticated active workspace + owner filter |
+| `POST /api/platform/document-analysis/:analysisId/revisions` | Applies selected/all available suggestions into a new version | CSRF, Zod, idempotency, exact text match, private R2 |
+| `PATCH /api/platform/document-analysis/:analysisId/revisions/:revisionId` | Accepts or rejects one suggestion | CSRF, tenant/owner/state guard, audit |
+| `GET /api/platform/document-analysis/:analysisId/versions/:versionId/file` | Proxies one normalized Markdown version | tenant/owner lookup, R2 size/SHA-256 verification, download audit |
+
+These are additive API routes used by the existing localized document-review
+surface. They add no public route and do not alter document-builder URLs.

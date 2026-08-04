@@ -66,3 +66,19 @@ originating conversation/message. Source deletion uses `SET NULL`; memory and
 user deletion cascade. Human-readable memory text is never stored in source or
 workspace audit metadata. Migration `0062_nervous_shinko_yamashiro.sql` is
 additive and local-only until the staging backup/restore/migration gate passes.
+
+## Analysis correction domain — local migration 0069 candidate
+
+`analysis_document_versions` is an immutable chain under one completed analysis.
+Version 1 is the normalized extracted Markdown; later versions reference their
+immediate parent, a canonical idempotency/selection hash, and a unique set of
+applied revision IDs. Content lives in private R2 and D1 stores its opaque key,
+byte length and SHA-256.
+
+`suggested_revisions` binds one risk, its version-1 excerpt and proposed wording
+to the same owner/workspace/analysis. Statuses are pending, accepted, rejected,
+applied, stale or ambiguous. Applied rows point to the resulting corrected
+version. D1 triggers enforce identity immutability, legal state transitions,
+tenant/source agreement and corrected-version membership. Cascading analysis or
+account deletion removes D1 rows; the purge service deletes the inventoried R2
+objects before crossing its D1 deletion boundary.

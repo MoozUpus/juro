@@ -635,3 +635,14 @@ is a static poster only; voice-with-avatar remains disabled without an approved
 rig. Focused route, D1/R2/provider-contract and UI-state tests pass 11/11.
 Protected staging deployment and authenticated browser/provider evidence remain
 open. Production is unchanged.
+
+## Phase 5 — reviewable analysis corrections (local candidate)
+
+Completed analyses now have a real server-backed suggestion lifecycle: exact
+old/new text review, accept/reject, selected/all application, immutable normalized
+versions, authenticated checksum-verified downloads, audit, idempotency and
+account-deletion R2 cleanup. The existing RU/UZ analysis screen exposes loading,
+empty, partial, stale, ambiguous, error and success states. No mock correction is
+shown and no original PDF/DOCX is mutated. Local typecheck, lint, full tests,
+development/staging builds and artifact validation pass. Staging application and
+provider-generated end-to-end evidence remain pending migration 0069 approval.

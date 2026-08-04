@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  AnySQLiteColumn,
   check,
   index,
   integer,
@@ -2613,6 +2614,42 @@ export const documentAnalyses = sqliteTable("document_analyses", {
   ...timestamps,
 }, (table) => [index("document_analyses_workspace_idx").on(table.workspaceId, table.createdAt), uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId)]);
 
+export const analysisDocumentVersions = sqliteTable("analysis_document_versions", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  parentVersionId: text("parent_version_id").references(
+    (): AnySQLiteColumn => analysisDocumentVersions.id,
+  ),
+  sourceKind: text("source_kind").notNull(),
+  r2Key: text("r2_key").notNull(),
+  fileName: text("file_name").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  sha256: text("sha256").notNull(),
+  idempotencyKey: text("idempotency_key"),
+  selectionSha256: text("selection_sha256"),
+  revisionIdsJson: text("revision_ids_json").notNull().default("[]"),
+  createdByUserId: text("created_by_user_id").references(() => userProfiles.id),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("analysis_document_versions_number_uidx").on(table.analysisId, table.version),
+  uniqueIndex("analysis_document_versions_r2_key_uidx").on(table.r2Key),
+  uniqueIndex("analysis_document_versions_idempotency_uidx")
+    .on(table.idempotencyKey)
+    .where(sql`${table.idempotencyKey} IS NOT NULL`),
+  index("analysis_document_versions_workspace_idx").on(table.workspaceId, table.createdAt),
+  check("analysis_document_versions_version_check", sql`${table.version} >= 1`),
+  check("analysis_document_versions_kind_check", sql`${table.sourceKind} IN ('extracted','corrected')`),
+  check("analysis_document_versions_mime_check", sql`${table.mimeType} = 'text/markdown; charset=utf-8'`),
+  check("analysis_document_versions_size_check", sql`${table.sizeBytes} > 0`),
+  check("analysis_document_versions_sha_check", sql`length(${table.sha256}) = 64`),
+  check("analysis_document_versions_selection_check", sql`${table.selectionSha256} IS NULL OR length(${table.selectionSha256}) = 64`),
+  check("analysis_document_versions_revisions_check", sql`json_valid(${table.revisionIdsJson}) AND json_type(${table.revisionIdsJson}) = 'array'`),
+]);
+
 export const fileScanResults = sqliteTable("file_scan_results", {
   id: text("id").primaryKey(),
   analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
@@ -2693,6 +2730,35 @@ export const documentRisks = sqliteTable("document_risks", {
   index("document_risks_analysis_idx").on(table.analysisId, table.level),
   check("document_risks_type_check", sql`${table.riskType} IN ('document_internal','legal_compliance')`),
   check("document_risks_page_check", sql`${table.page} IS NULL OR ${table.page} > 0`),
+]);
+
+export const suggestedRevisions = sqliteTable("suggested_revisions", {
+  id: text("id").primaryKey(),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  riskId: text("risk_id").notNull().references(() => documentRisks.id, { onDelete: "cascade" }),
+  sourceVersionId: text("source_version_id").notNull().references(() => analysisDocumentVersions.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  originalText: text("original_text").notNull(),
+  proposedText: text("proposed_text").notNull(),
+  status: text("status").notNull().default("pending"),
+  decidedByUserId: text("decided_by_user_id").references(() => userProfiles.id),
+  decidedAt: text("decided_at"),
+  appliedVersionId: text("applied_version_id").references(() => analysisDocumentVersions.id),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("suggested_revisions_risk_uidx").on(table.riskId),
+  index("suggested_revisions_analysis_status_idx").on(table.analysisId, table.status, table.createdAt),
+  index("suggested_revisions_workspace_idx").on(table.workspaceId, table.updatedAt),
+  check("suggested_revisions_status_check", sql`${table.status} IN ('pending','accepted','rejected','applied','stale','ambiguous')`),
+  check("suggested_revisions_original_check", sql`length(trim(${table.originalText})) > 0`),
+  check("suggested_revisions_proposed_check", sql`length(trim(${table.proposedText})) > 0`),
+  check("suggested_revisions_decision_check", sql`
+    (${table.status} = 'pending' AND ${table.decidedByUserId} IS NULL AND ${table.decidedAt} IS NULL AND ${table.appliedVersionId} IS NULL)
+    OR (${table.status} IN ('accepted','rejected') AND ${table.decidedByUserId} IS NOT NULL AND ${table.decidedAt} IS NOT NULL AND ${table.appliedVersionId} IS NULL)
+    OR (${table.status} = 'applied' AND ${table.decidedByUserId} IS NOT NULL AND ${table.decidedAt} IS NOT NULL AND ${table.appliedVersionId} IS NOT NULL)
+    OR (${table.status} IN ('stale','ambiguous') AND ${table.decidedByUserId} IS NULL AND ${table.decidedAt} IS NOT NULL AND ${table.appliedVersionId} IS NULL)
+  `),
 ]);
 
 export const analysisExports = sqliteTable("analysis_exports", {

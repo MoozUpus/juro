@@ -1005,3 +1005,23 @@ Protected staging now runs Worker version
 `030e3db0-6de5-455f-a90b-0350d346f5cf`. Production has not received `0068`.
 Application rollback leaves this additive empty table unused. Full evidence is
 in `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
+
+## Migration 0069 — immutable analysis corrections (local candidate)
+
+`0069_analysis_document_revisions.sql` is expand-only. It adds
+`analysis_document_versions` for immutable normalized text artifacts and
+`suggested_revisions` for the pending → accepted/rejected → applied lifecycle.
+Tenant/source/parent/revision triggers reject cross-analysis links, duplicate
+revision IDs, invalid state transitions, mutation of a stored version, and a
+corrected version that does not reference eligible suggestions. Applying a
+revision never mutates the uploaded PDF/DOCX or any document-builder row.
+
+Local evidence: all migrations apply from empty D1, `quick_check` and
+`foreign_key_check` pass, the schema contains 173 application tables and 330
+foreign keys, and integration tests cover tenant denial, exact-match application,
+ambiguous text, idempotent replay, immutability, cascade deletion, and R2 purge.
+Migration 0069 has not been applied to staging or production. Before staging,
+take and verify a fresh private `juro-staging-backups` export, restore-check it,
+apply only 0069, verify no pending migrations/FK violations, then deploy the
+matching Worker. Rollback is application-first; the additive tables may remain
+unused until a separately approved contract phase.

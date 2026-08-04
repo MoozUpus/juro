@@ -2,7 +2,7 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated analysis data is hydrated after the first browser render */
 
-import { AlertTriangle, CheckCircle2, CircleAlert, Download, Eye, FileCheck2, FileDiff, LoaderCircle, RefreshCw, ShieldCheck, Trash2, Upload } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, CircleAlert, Download, Eye, FileCheck2, FileDiff, FileText, LoaderCircle, RefreshCw, ShieldCheck, Trash2, Upload, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { comparisonText } from "../../content/platform-ui";
@@ -20,6 +20,17 @@ type Summary = {
 type Analysis = {
   id: string; status: string; errorCode?: string | null; createdAt?: string; updatedAt?: string;
   fileId: string; fileName: string; mimeType: string; sizeBytes: number; summary?: Summary | null; risks?: Risk[]; exports?: AnalysisExport[];
+};
+type RevisionStatus = "pending" | "accepted" | "rejected" | "applied" | "stale" | "ambiguous";
+type SuggestedRevision = {
+  id: string; analysisId: string; riskId: string; status: RevisionStatus; originalText: string; proposedText: string;
+  decidedAt: string | null; appliedVersionId: string | null; riskLevel: string; riskTitle: string;
+  riskDescription: string; clause: string | null; page: number | null; recommendation: string | null;
+  legalBasisSourceIds: string[];
+};
+type AnalysisDocumentVersion = {
+  id: string; analysisId: string; version: number; sourceKind: "extracted" | "corrected"; fileName: string;
+  mimeType: string; sizeBytes: number; sha256: string; createdAt: string;
 };
 
 export function DocumentReviewClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
@@ -184,8 +195,120 @@ function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boo
     {exportError && <p className="review-message error" role="alert"><CircleAlert />{exportError}</p>}
     {exportNotice && <p className="review-message success" role="status"><ShieldCheck />{exportNotice}</p>}
     {analysis.status !== "completed" ? <div className="review-awaiting" aria-live="polite"><AlertTriangle /><div><h3>{state.heading}</h3><p>{state.message}</p></div></div> : <><section><h3>{ru ? "Краткое резюме" : "Qisqa xulosa"}</h3><p>{summary?.summary}</p></section><div className="review-summary-grid"><ListBlock title={ru ? "Стороны" : "Tomonlar"} items={summary?.parties} /><ListBlock title={ru ? "Даты" : "Sanalar"} items={summary?.dates} /><ListBlock title={ru ? "Обязательства" : "Majburiyatlar"} items={summary?.obligations} /><ListBlock title={ru ? "Платежи" : "To‘lovlar"} items={summary?.payments} /></div><section><h3>{ru ? "Риски" : "Xavflar"}</h3>{analysis.risks?.length ? <div className="review-risks">{analysis.risks.map((risk, index) => <article key={risk.id || `${risk.title}-${index}`} data-level={risk.level}><span>{riskLabel(risk.level, ru)}</span><h4>{risk.title}</h4><p>{risk.description}</p>{risk.excerpt && <blockquote>{risk.excerpt}</blockquote>}{risk.confidencePercent !== null && <small>{ru ? "Уверенность" : "Ishonch"}: {risk.confidencePercent}%</small>}</article>)}</div> : <p>{ru ? "Структурированные риски не найдены." : "Tuzilgan xavflar topilmadi."}</p>}</section><div className="review-summary-grid"><ListBlock title={ru ? "Не хватает" : "Yetishmaydi"} items={summary?.missingItems} /><ListBlock title={ru ? "Вопросы пользователю" : "Foydalanuvchiga savollar"} items={summary?.questions} /></div><p className="review-disclaimer"><CheckCircle2 />{summary?.disclaimer || (ru ? "Автоматический анализ не заменяет проверку юриста." : "Avtomatik tahlil yurist tekshiruvini almashtirmaydi.")}</p></>}
-    {analysis.status === "completed" && analysis.risks?.some((risk) => risk.proposedWording) ? <section className="review-proposed-wording"><h3>{ru ? "Предлагаемые редакции" : "Taklif etilgan tahrirlar"}</h3>{(analysis.risks ?? []).filter((risk) => risk.proposedWording).map((risk, index) => <article key={`proposal-${risk.id || index}`}><h4>{risk.title}</h4>{risk.clause && <small>{risk.clause}</small>}<p>{risk.proposedWording}</p>{risk.recommendation && <p><strong>{ru ? "Почему:" : "Sababi:"}</strong> {risk.recommendation}</p>}{risk.legalBasisSourceIds?.length ? <small>{ru ? "Проверенные источники:" : "Tasdiqlangan manbalar:"} {risk.legalBasisSourceIds.join(", ")}</small> : null}</article>)}</section> : null}
+    {analysis.status === "completed" && analysis.risks?.some((risk) => risk.proposedWording) ? <RevisionPanel analysisId={analysis.id} ru={ru} onAnalysisChanged={onChanged} /> : null}
   </article>;
+}
+
+function RevisionPanel({ analysisId, ru, onAnalysisChanged }: { analysisId: string; ru: boolean; onAnalysisChanged: () => Promise<void> }) {
+  const [revisions, setRevisions] = useState<SuggestedRevision[]>([]);
+  const [versions, setVersions] = useState<AnalysisDocumentVersion[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [applying, setApplying] = useState<"selected" | "all" | null>(null);
+  const [confirmMode, setConfirmMode] = useState<"selected" | "all" | null>(null);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const attemptKeys = useRef<Record<string, string>>({});
+
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/revisions`, { cache: "no-store" });
+      const body = await response.json() as { revisions?: SuggestedRevision[]; versions?: AnalysisDocumentVersion[]; code?: string; error?: string };
+      if (!response.ok) throw new Error(revisionError(body.code, body.error, ru));
+      setRevisions(body.revisions ?? []);
+      setVersions(body.versions ?? []);
+      setSelectedIds((current) => current.filter((id) => (body.revisions ?? []).some((item) => item.id === id && item.status === "accepted")));
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setLoading(false);
+    }
+  }, [analysisId, ru]);
+
+  useEffect(() => { setLoading(true); void load(); }, [load]);
+
+  async function decide(revision: SuggestedRevision, decision: "accepted" | "rejected") {
+    setBusyId(revision.id); setError(""); setNotice("");
+    try {
+      const response = await fetch(
+        `/api/platform/document-analysis/${encodeURIComponent(analysisId)}/revisions/${encodeURIComponent(revision.id)}`,
+        { method: "PATCH", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ decision }) },
+      );
+      const body = await response.json() as { code?: string; error?: string };
+      if (!response.ok) throw new Error(revisionError(body.code, body.error, ru));
+      setSelectedIds((current) => decision === "accepted"
+        ? [...new Set([...current, revision.id])]
+        : current.filter((id) => id !== revision.id));
+      await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function apply(mode: "selected" | "all") {
+    const ids = mode === "selected" ? [...selectedIds].sort() : [];
+    const attemptName = `${mode}:${ids.join("|")}`;
+    const idempotencyKey = attemptKeys.current[attemptName] ?? `analysis-revision-${crypto.randomUUID()}`;
+    attemptKeys.current[attemptName] = idempotencyKey;
+    setApplying(mode); setConfirmMode(null); setError(""); setNotice("");
+    try {
+      const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/revisions`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey, "x-juro-csrf": "1" },
+        body: JSON.stringify({ mode, revisionIds: ids }),
+      });
+      const body = await response.json() as { code?: string; error?: string; partial?: boolean; version?: AnalysisDocumentVersion };
+      if (!response.ok) {
+        delete attemptKeys.current[attemptName];
+        throw new Error(revisionError(body.code, body.error, ru));
+      }
+      setSelectedIds([]);
+      setNotice(body.partial
+        ? (ru ? "Новая версия создана. Неоднозначные или устаревшие фрагменты пропущены." : "Yangi nusxa yaratildi. Noaniq yoki eskirgan parchalar o‘tkazib yuborildi.")
+        : (ru ? `Нормализованная версия ${body.version?.version ?? ""} создана.` : `${body.version?.version ?? ""}-normallashtirilgan nusxa yaratildi.`));
+      await load();
+      await onAnalysisChanged().catch(() => undefined);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+      await load();
+    } finally {
+      setApplying(null);
+    }
+  }
+
+  const accepted = revisions.filter((item) => item.status === "accepted");
+  const available = revisions.filter((item) => item.status === "pending" || item.status === "accepted");
+  const correctedVersions = versions.filter((item) => item.sourceKind === "corrected");
+  return <section className="review-revisions" aria-labelledby={`revision-title-${analysisId}`}>
+    <div className="review-revisions-heading">
+      <div><h3 id={`revision-title-${analysisId}`}>{ru ? "Предлагаемые исправления" : "Taklif etilgan tuzatishlar"}</h3><p>{ru ? "Сравните исходный и новый текст. JURO ничего не применяет без вашего действия." : "Asl va yangi matnni solishtiring. JURO sizning amalingizsiz hech narsani qo‘llamaydi."}</p></div>
+      {correctedVersions.length > 0 && <div className="review-version-downloads" aria-label={ru ? "Исправленные версии" : "Tuzatilgan nusxalar"}>{correctedVersions.map((version) => <a key={version.id} href={`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/versions/${encodeURIComponent(version.id)}/file`}><Download />{ru ? `Версия ${version.version}` : `${version.version}-nusxa`}</a>)}</div>}
+    </div>
+    <p className="review-normalized-note"><FileText />{ru ? "Исправления создают отдельный нормализованный Markdown-файл. Исходный PDF или DOCX и его форматирование не изменяются." : "Tuzatishlar alohida normallashtirilgan Markdown faylini yaratadi. Asl PDF yoki DOCX va uning formatlanishi o‘zgarmaydi."}</p>
+    {error && <p className="review-message error" role="alert"><CircleAlert />{error}<button type="button" onClick={() => void load()}>{ru ? "Повторить" : "Takrorlash"}</button></p>}
+    {notice && <p className="review-message success" role="status"><CheckCircle2 />{notice}</p>}
+    {loading ? <div className="review-revision-skeleton" aria-label={ru ? "Загружаем исправления" : "Tuzatishlar yuklanmoqda"}><i /><i /><i /></div> : revisions.length === 0 ? <div className="review-revision-empty"><FileText /><h4>{ru ? "Для этого анализа нет применимых исправлений" : "Bu tahlil uchun qo‘llanadigan tuzatishlar yo‘q"}</h4><p>{ru ? "Старые анализы могут не иметь нормализованной исходной версии. Новый анализ создаёт её автоматически." : "Eski tahlillarda normallashtirilgan manba nusxasi bo‘lmasligi mumkin. Yangi tahlil uni avtomatik yaratadi."}</p></div> : <div className="review-revision-list">{revisions.map((revision) => {
+      const terminal = ["applied", "stale", "ambiguous"].includes(revision.status);
+      const busy = busyId === revision.id;
+      const selected = selectedIds.includes(revision.id);
+      return <article key={revision.id} data-status={revision.status}>
+        <header><div><span>{riskLabel(revision.riskLevel, ru)}</span><h4>{revision.riskTitle}</h4>{revision.clause && <small>{revision.clause}{revision.page ? ` · ${ru ? "стр." : "sah."} ${revision.page}` : ""}</small>}</div><strong>{revisionStatusLabel(revision.status, ru)}</strong></header>
+        <div className="review-revision-diff"><div><small>{ru ? "Исходный текст" : "Asl matn"}</small><p>{revision.originalText}</p></div><div><small>{ru ? "Предлагаемый текст" : "Taklif etilgan matn"}</small><p>{revision.proposedText}</p></div></div>
+        {revision.recommendation && <p><b>{ru ? "Обоснование:" : "Asos:"}</b> {revision.recommendation}</p>}
+        {revision.legalBasisSourceIds.length > 0 && <p className="review-revision-sources"><b>{ru ? "Связанные источники:" : "Bog‘langan manbalar:"}</b> {revision.legalBasisSourceIds.join(", ")}</p>}
+        {!terminal && <footer><label><input type="checkbox" checked={selected} disabled={revision.status !== "accepted" || busy} onChange={(event) => setSelectedIds((current) => event.target.checked ? [...new Set([...current, revision.id])] : current.filter((id) => id !== revision.id))} /><span>{ru ? "Включить в выбранные" : "Tanlanganlarga qo‘shish"}</span></label><div><button type="button" disabled={busy} aria-busy={busy} className={revision.status === "rejected" ? "active" : ""} onClick={() => void decide(revision, "rejected")}>{busy ? <LoaderCircle className="spin" /> : <X />}{ru ? "Отклонить" : "Rad etish"}</button><button type="button" disabled={busy} aria-busy={busy} className={revision.status === "accepted" ? "active primary" : "primary"} onClick={() => void decide(revision, "accepted")}>{busy ? <LoaderCircle className="spin" /> : <Check />}{ru ? "Принять" : "Qabul qilish"}</button></div></footer>}
+      </article>;
+    })}</div>}
+    {!loading && revisions.length > 0 && <div className="review-revision-apply">
+      <div><strong>{ru ? `Принято: ${accepted.length}. Выбрано: ${selectedIds.length}.` : `Qabul qilindi: ${accepted.length}. Tanlandi: ${selectedIds.length}.`}</strong><span>{ru ? "Каждое применение создаёт новую неизменяемую версию." : "Har bir qo‘llash yangi o‘zgarmas nusxani yaratadi."}</span></div>
+      <div><button type="button" disabled={selectedIds.length === 0 || applying !== null} onClick={() => setConfirmMode("selected")}>{applying === "selected" ? <LoaderCircle className="spin" /> : <Check />}{ru ? "Применить выбранные" : "Tanlanganlarni qo‘llash"}</button><button type="button" className="primary" disabled={available.length === 0 || applying !== null} onClick={() => setConfirmMode("all")}>{applying === "all" ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Применить все доступные" : "Barcha mavjudlarini qo‘llash"}</button></div>
+    </div>}
+    {confirmMode && <div className="review-revision-confirm" aria-labelledby={`revision-confirm-${analysisId}`}><div><h4 id={`revision-confirm-${analysisId}`}>{ru ? "Создать новую нормализованную версию?" : "Yangi normallashtirilgan nusxa yaratilsinmi?"}</h4><p>{confirmMode === "all" ? (ru ? `Будут применены все доступные исправления: ${available.length}.` : `Barcha mavjud tuzatishlar qo‘llanadi: ${available.length}.`) : (ru ? `Будут применены выбранные исправления: ${selectedIds.length}.` : `Tanlangan tuzatishlar qo‘llanadi: ${selectedIds.length}.`)}</p></div><div><button type="button" onClick={() => setConfirmMode(null)}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" className="primary" onClick={() => void apply(confirmMode)}>{ru ? "Создать версию" : "Nusxa yaratish"}</button></div></div>}
+  </section>;
 }
 
 function ListBlock({ title, items }: { title: string; items?: string[] }) {
@@ -235,6 +358,34 @@ function analysisState(status: string, errorCode: string | null, ru: boolean) {
 function riskLabel(level: string, ru: boolean) {
   const labels: Record<string, [string, string]> = { high: ["Высокий", "Yuqori"], medium: ["Средний", "O‘rta"], low: ["Низкий", "Past"], information: ["Информация", "Ma’lumot"] };
   return labels[level]?.[ru ? 0 : 1] ?? level;
+}
+
+function revisionStatusLabel(status: RevisionStatus, ru: boolean) {
+  const labels: Record<RevisionStatus, [string, string]> = {
+    pending: ["Ожидает решения", "Qaror kutilmoqda"],
+    accepted: ["Принято", "Qabul qilindi"],
+    rejected: ["Отклонено", "Rad etildi"],
+    applied: ["Применено", "Qo‘llandi"],
+    stale: ["Фрагмент изменился", "Parcha o‘zgargan"],
+    ambiguous: ["Нужно выбрать вручную", "Qo‘lda tanlash kerak"],
+  };
+  return labels[status][ru ? 0 : 1];
+}
+
+function revisionError(code: string | undefined, fallback: string | undefined, ru: boolean) {
+  const messages: Record<string, [string, string]> = {
+    ANALYSIS_REVISION_NOT_FOUND: ["Исправления не найдены.", "Tuzatishlar topilmadi."],
+    ANALYSIS_REVISION_NOT_READY: ["Исправления доступны после завершения анализа.", "Tuzatishlar tahlil yakunlangandan keyin mavjud."],
+    ANALYSIS_REVISION_INVALID_DECISION: ["Это исправление уже нельзя изменить.", "Bu tuzatishni endi o‘zgartirib bo‘lmaydi."],
+    ANALYSIS_REVISION_INVALID_SELECTION: ["Выбранные исправления недоступны для применения.", "Tanlangan tuzatishlarni qo‘llab bo‘lmaydi."],
+    ANALYSIS_REVISION_IDEMPOTENCY_CONFLICT: ["Запрос устарел. Обновите страницу и повторите действие.", "So‘rov eskirgan. Sahifani yangilang va amalni takrorlang."],
+    ANALYSIS_REVISION_SOURCE_INVALID: ["Нормализованный текст недоступен или повреждён.", "Normallashtirilgan matn mavjud emas yoki buzilgan."],
+    ANALYSIS_REVISION_NO_APPLICABLE_CHANGES: ["Фрагменты изменились или встречаются несколько раз. Автоматическое применение остановлено.", "Parchalar o‘zgargan yoki bir necha marta uchraydi. Avtomatik qo‘llash to‘xtatildi."],
+    ANALYSIS_REVISION_CONFLICT: ["Версия изменилась. Обновите страницу и повторите действие.", "Nusxa o‘zgardi. Sahifani yangilang va amalni takrorlang."],
+    ANALYSIS_REVISION_STORAGE_FAILED: ["Версия не сохранена. Исходный документ не изменён.", "Nusxa saqlanmadi. Asl hujjat o‘zgarmadi."],
+  };
+  const message = code ? messages[code] : undefined;
+  return message?.[ru ? 0 : 1] ?? fallback ?? (ru ? "Действие не выполнено." : "Amal bajarilmadi.");
 }
 
 function exportRequestError(code: string | undefined, ru: boolean) {
