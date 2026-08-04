@@ -24,6 +24,10 @@ import {
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
 import {
+  executeUserDocumentIndexJob,
+  UserDocumentVectorError,
+} from "../lib/document-analysis/user-document-vectors";
+import {
   executeOcrProcessingJob,
   OcrProcessingError,
 } from "../lib/document-analysis/ocr-processor";
@@ -56,6 +60,7 @@ import {
 
 export const JOB_KINDS = [
   "document.analyze",
+  "document.index",
   "ocr.process",
   "document.export",
   "email.send",
@@ -90,6 +95,7 @@ const identifierSchema = z
  */
 const tenantJobKinds = new Set<JobKind>([
   "document.analyze",
+  "document.index",
   "ocr.process",
   "document.export",
   "email.send",
@@ -123,6 +129,7 @@ type JobErrorCode =
   | "ACCOUNT_DELETION_NOT_DUE"
   | "ACCOUNT_DELETION_PURGE_DISABLED"
   | "ACCOUNT_DELETION_R2_FAILED"
+  | "ACCOUNT_DELETION_VECTOR_FAILED"
   | "ACCOUNT_DELETION_REQUEST_INVALID"
   | "ACCOUNT_DELETION_STATE_CONFLICT"
   | "ASYNC_RUNTIME_DISABLED"
@@ -137,6 +144,7 @@ type JobErrorCode =
   | "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED"
   | "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED"
   | "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
+  | "USER_DOCUMENT_INDEX_FAILED"
   | "OCR_ANALYSIS_NOT_FOUND"
   | "OCR_DERIVATIVE_INVALID"
   | "OCR_FILE_UNSAFE"
@@ -205,6 +213,7 @@ class SafeJobError extends Error {
 
 const queueStemByKind: Record<JobKind, string> = {
   "document.analyze": "document-analysis",
+  "document.index": "document-analysis",
   "ocr.process": "ocr-processing",
   "document.export": "document-export",
   "email.send": "email-notifications",
@@ -218,6 +227,7 @@ const queueStemByKind: Record<JobKind, string> = {
 
 export const QUEUE_BINDING_BY_KIND = {
   "document.analyze": "DOCUMENT_ANALYSIS_QUEUE",
+  "document.index": "DOCUMENT_ANALYSIS_QUEUE",
   "ocr.process": "OCR_PROCESSING_QUEUE",
   "document.export": "DOCUMENT_EXPORT_QUEUE",
   "email.send": "EMAIL_NOTIFICATIONS_QUEUE",
@@ -606,6 +616,21 @@ async function executeJob(
           return;
         }
         throw new SafeJobError(error.code, error.retryable);
+      }
+      throw error;
+    }
+  }
+  if (envelope.kind === "document.index") {
+    try {
+      await executeUserDocumentIndexJob(
+        env,
+        envelope.subjectId,
+        envelope.workspaceId!,
+      );
+      return;
+    } catch (error) {
+      if (error instanceof UserDocumentVectorError) {
+        throw new SafeJobError("USER_DOCUMENT_INDEX_FAILED", error.retryable);
       }
       throw error;
     }

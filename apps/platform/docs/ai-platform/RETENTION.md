@@ -73,7 +73,7 @@ Minimum records retained for documented security, consent, access-audit, confirm
 
 ## Known boundaries
 
-User-document Vectorize deletion is not yet connected because user-document indexing is not an enabled product feature. It must be added before that index accepts tenant content. Provider-side AI deletion, guest cleanup, voice-audio cleanup, legal holds, and production retention automation remain deferred and feature-gated.
+Migration `0080` and the local Worker candidate connect owner-scoped user-document vectors to account deletion. The purge loads vector IDs from D1, submits bounded Vectorize deletions before deleting D1/R2 content, records mutation evidence when available, and releases the deletion request for retry on failure. No remote index contains tenant vectors at this checkpoint, and this behavior is not claimed in staging until `0080` and the exact Worker are deployed and tested. Provider-side AI deletion, guest cleanup, voice-audio cleanup, legal holds, and production retention automation remain deferred and feature-gated.
 
 ## User memory lifecycle — locally verified candidate
 

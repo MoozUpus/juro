@@ -16,7 +16,7 @@ This register distinguishes real implementation from planned scope. A database t
 - OpenAI legal chat, structured legal output, streaming/branching/memory, model routing, cost controls, and evaluated RU/UZ legal quality are not staging-ready.
 - Anthropic document analysis, OCR, comparison quality gates, redline/correction, and provider fallback are not staging-ready.
 - Advice/Lex ingestion, version-aware hybrid retrieval, citation verification, daily sync, legal editor, and the 250-scenario human-reviewed legal evaluation remain gated.
-- Existing Vectorize indexes are empty foundation resources. User-document indexing and deletion are disabled.
+- Remote development/staging user-document indexes remain empty at this checkpoint. The local `0080` candidate now implements immutable-version indexing, owner-scoped semantic search, superseded-vector deletion, and account-purge deletion, but it is not active until a separately authorized migration/deploy and protected staging evidence.
 
 ## File and communication gates
 
@@ -54,6 +54,6 @@ deferred; profiles can carry only a self-declared advocate state.
 
 ## Current account-deletion limitations
 
-The local deletion slice covers D1/R2 operational content present in the current schema, cancellation, blockers, retry, tombstoning, retained evidence, queue/cron execution, and RU/UZ settings UI. It does not yet delete user-document Vectorize entries because tenant document indexing is not active. It also does not claim provider-side AI retention deletion, guest purge, voice-audio purge, or legal-hold adjudication.
+The local deletion slice covers D1/R2 operational content present in the current schema, cancellation, blockers, retry, tombstoning, retained evidence, queue/cron execution, RU/UZ settings UI, and the `0080` user-document Vectorize ledger. It submits idempotent vector deletion before D1 cascade and fails closed if indexed rows exist without a binding. This remains local evidence; provider-side AI retention deletion, guest purge, voice-audio purge, and legal-hold adjudication are still not claimed.
 
 Staging behavior is not marked complete until migration `0030`–`0033`, exact Worker deployment, Access-protected synthetic end-to-end testing, logs, queue/DLQ, cron, and post-migration backup checks pass. Production remains unchanged.

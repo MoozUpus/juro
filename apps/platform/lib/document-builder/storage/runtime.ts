@@ -9,6 +9,7 @@ export interface BuilderRuntimeEnv {
   PLATFORM_ANALYTICS?: AnalyticsEngineDataset;
   LEX_UZ_INDEX?: VectorizeIndex;
   ADVICE_UZ_INDEX?: VectorizeIndex;
+  USER_DOCUMENTS_INDEX?: VectorizeIndex;
   EMBEDDING_MODEL?: string;
   LEGAL_ADVICE_INGESTION_ENABLED?: string;
   LEGAL_SOURCE_STAFF_API_ENABLED?: string;

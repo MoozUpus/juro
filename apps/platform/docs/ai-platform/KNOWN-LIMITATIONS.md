@@ -602,3 +602,21 @@ Canonical manual case creation is deployed to protected staging and passes a rea
   320-1440 px, 200% zoom and forced-colors checks remain staging gates.
 - Migrations `0069`-`0075` require a fresh authorized private staging backup,
   restore verification and ordered application before the matching Worker deploy.
+
+## User-document semantic search open gates
+
+- Migration `0080` and the matching Worker/API changes are local only. They have
+  not been applied or deployed to staging or production.
+- The first bounded implementation indexes immutable normalized document-analysis
+  versions only. Builder documents, OCR page coordinates and shared-workspace
+  access scopes are intentionally excluded until their authorization contracts
+  are implemented and tested.
+- Access is conservatively owner-only. Vectorize metadata is never treated as an
+  authorization decision: every result is revalidated against D1 membership,
+  ownership, latest-version identity and the checksum-verified private R2 object.
+- Development and staging user-document indexes currently have no metadata
+  indexes. Workspace namespaces plus D1 post-authorization preserve isolation,
+  but remote scale and latency must be measured before broader rollout.
+- Query-embedding cost is not yet projected into the unified AI usage ledger.
+  Remote two-account isolation, deletion propagation, cost accounting and search
+  latency remain staging gates after an authorized backup, migration and deploy.

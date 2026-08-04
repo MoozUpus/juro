@@ -123,7 +123,7 @@ The deployed staging source attaches only `staging-email-notifications` and `sta
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
 
-The source declares the approved Vectorize bindings and exact names (`{environment}-lex-uz`, `{environment}-advice-uz`, `{environment}-internal-legal-materials`, and `{environment}-user-documents`). The empty remote indexes now match that shape. Model/dimensions are documented below; indexed metadata, legal evaluation, tenant checks, ingestion, and query authorization remain gated.
+The source declares the approved Vectorize bindings and exact names (`{environment}-lex-uz`, `{environment}-advice-uz`, `{environment}-internal-legal-materials`, and `{environment}-user-documents`). The empty remote indexes now match that shape. The local `0080` candidate uses `text-embedding-3-large` with `dimensions: 1536`, stores all required user-document metadata, and adds D1-authoritative pre/post tenant checks; remote ingestion/query activation and staging evidence remain gated.
 
 ### Runtime bindings and secrets
 

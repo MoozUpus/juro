@@ -4,6 +4,7 @@ import {
   recordAnalysisVersionObjectWriteFailure,
   requireAttachedAnalysisVersionObjectWrite,
 } from "./version-object-write";
+import { scheduleUserDocumentIndexStatements } from "./user-document-vectors";
 
 export type AnalysisDocumentVersion = {
   id: string;
@@ -358,6 +359,14 @@ export async function applySuggestedRevisions(
   }
   const now = new Date().toISOString();
   const fileName = normalizedFileName(latest.fileName, nextVersion);
+  const inheritedLanguage = await env.DB.prepare(
+    `SELECT job.language FROM user_document_index_jobs job
+     JOIN analysis_document_versions version ON version.id=job.document_version_id
+     WHERE job.analysis_id=? AND job.workspace_id=? AND job.owner_user_id=?
+     ORDER BY version.version DESC LIMIT 1`,
+  ).bind(input.analysisId, input.workspaceId, input.userId).first<{
+    language: "ru" | "uz" | "mixed" | "unknown";
+  }>();
   const statements: D1PreparedStatement[] = [
     beginAnalysisVersionObjectAttachment(env.DB, objectWrite, now),
     env.DB.prepare(
@@ -371,6 +380,15 @@ export async function applySuggestedRevisions(
       r2Key, objectWrite.id, fileName, bytes.byteLength, sha256, idempotencyKey, selectionSha256,
       JSON.stringify(appliedRevisionIds), input.userId, now,
     ),
+    ...scheduleUserDocumentIndexStatements(env.DB, {
+      analysisId: input.analysisId,
+      documentVersionId: versionId,
+      workspaceId: input.workspaceId,
+      ownerUserId: input.userId,
+      sourceHash: sha256,
+      language: inheritedLanguage?.language ?? "unknown",
+      now,
+    }),
     ...valid.map((item) => env.DB.prepare(
       `UPDATE suggested_revisions SET status='applied',decided_by_user_id=?,decided_at=?,
         applied_version_id=?,updated_at=?

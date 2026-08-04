@@ -2942,3 +2942,23 @@ append immutable event and metadata-only workspace/case evidence. The user's
 comment remains only in the cascade-deletable bookmark projection; audit stores
 its SHA-256, not the text. No source-change or retrospective-answer notification
 is emitted because that product behavior remains explicitly disabled.
+
+## D-142 - D1 authorizes user-document vector retrieval
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+Vectorize is an eventually consistent retrieval aid, never the access-control
+database. Only immutable, checksum-verified analysis document versions are
+indexed after the analysis reaches `completed`. Queue messages contain the
+index-job and workspace identifiers only; normalized text remains in private R2.
+
+Each environment uses its separate `USER_DOCUMENTS_INDEX`; each vector also uses
+the workspace ID as its namespace and carries the complete required metadata.
+Search proves current membership before querying, then joins every returned ID
+back to an active D1 job/version/analysis, applies owner scope and latest-version
+rules, checks all metadata fields for equality, and verifies R2 size/SHA-256
+before returning a bounded excerpt. Metadata indexes and filters may improve
+performance later but cannot weaken these checks. Superseded and account-owned
+vectors are deleted by bounded, retryable mutations whose state is recorded in
+D1. Migration/deploy and two-account staging proof require separate approval.

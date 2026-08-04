@@ -8,6 +8,10 @@ import {
   type AccountDeletionLifecycleInput,
   type AccountDeletionMode,
 } from "./account-deletion-lifecycle";
+import {
+  deleteUserDocumentVectorsForOwner,
+  UserDocumentVectorError,
+} from "../document-analysis/user-document-vectors";
 
 const PURGE_LEASE_MS = 5 * 60 * 1_000;
 const R2_DELETE_BATCH = 1_000;
@@ -16,6 +20,7 @@ type PurgeEnv = {
   DB: D1Database;
   BUCKET: R2Bucket;
   QUARANTINE_BUCKET?: R2Bucket;
+  USER_DOCUMENTS_INDEX?: VectorizeIndex;
   ACCOUNT_DELETION_PURGE_ENABLED?: string;
   IDENTITY_KEYRING?: string;
 };
@@ -62,6 +67,7 @@ export class AccountDeletionPurgeError extends Error {
       | "ACCOUNT_DELETION_NOT_DUE"
       | "ACCOUNT_DELETION_STATE_CONFLICT"
       | "ACCOUNT_DELETION_R2_FAILED"
+      | "ACCOUNT_DELETION_VECTOR_FAILED"
       | "ACCOUNT_DELETION_D1_FAILED"
       | "WORKSPACE_OWNERSHIP_TRANSFER_REQUIRED"
       | "PRIVILEGED_ACCOUNT_REVIEW_REQUIRED",
@@ -181,7 +187,7 @@ async function appendBlockedEvent(
 async function releaseForRetry(
   db: D1Database,
   request: DeletionRequestRow,
-  code: "ACCOUNT_DELETION_R2_FAILED" | "ACCOUNT_DELETION_D1_FAILED",
+  code: "ACCOUNT_DELETION_R2_FAILED" | "ACCOUNT_DELETION_VECTOR_FAILED" | "ACCOUNT_DELETION_D1_FAILED",
   now: string,
 ): Promise<void> {
   if (!request.subjectHash || !request.subjectKeyVersion) return;
@@ -696,6 +702,19 @@ export async function executeAccountDeletionPurge(
   await markPurgeIrreversible(env.DB, request, now);
   const objectKeys = await userObjectKeys(env.DB, request.userId);
   const purgeInventory = await inventory(env.DB, request.userId);
+  try {
+    await deleteUserDocumentVectorsForOwner(env, request.userId, now);
+  } catch (error) {
+    if (error instanceof UserDocumentVectorError) {
+      try {
+        await releaseForRetry(env.DB, request, "ACCOUNT_DELETION_VECTOR_FAILED", now);
+      } catch {
+        // The bounded lease still makes the request recoverable.
+      }
+      throw new AccountDeletionPurgeError("ACCOUNT_DELETION_VECTOR_FAILED", true);
+    }
+    throw error;
+  }
   try {
     await deleteR2Objects(env.BUCKET, objectKeys.primary);
     if (objectKeys.quarantine.length > 0) {

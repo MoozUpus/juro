@@ -34,6 +34,7 @@ import {
   storeInitialAnalysisDocumentVersion,
   suggestedRevisionId,
 } from "./revisions";
+import { scheduleUserDocumentIndexStatements } from "./user-document-vectors";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
@@ -175,7 +176,10 @@ export async function executeDocumentAnalysisJob(
     return { status: "completed", analysisId };
   } catch (error) {
     if (error instanceof DocumentAnalysisProcessingError) throw error;
-    throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PERSISTENCE_FAILED", true);
+    const failure = new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PERSISTENCE_FAILED", true) as
+      DocumentAnalysisProcessingError & { cause?: unknown };
+    failure.cause = error;
+    throw failure;
   }
 }
 
@@ -430,6 +434,23 @@ async function persistNormalizedAnalysis(
     persisted.result.sources.map((source) => `${source.sourceId}:${source.verifiedAt}`).sort().join("|"),
   ));
   const instructionHash = await sha256Hex(new TextEncoder().encode("juro-document-analysis-v1"));
+  const sourceVersion = await db.prepare(
+    `SELECT id,sha256 FROM analysis_document_versions
+     WHERE id=? AND analysis_id=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
+  ).bind(
+    analysisSourceVersionId(row.analysisId),
+    row.analysisId,
+    row.workspaceId,
+    row.ownerUserId,
+  ).first<{ id: string; sha256: string }>();
+  if (!sourceVersion) {
+    throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PERSISTENCE_FAILED", true);
+  }
+  const detectedLanguage = (["ru", "uz", "mixed", "unknown"] as const).includes(
+    persisted.extraction.detectedLanguage as "ru" | "uz" | "mixed" | "unknown",
+  )
+    ? persisted.extraction.detectedLanguage as "ru" | "uz" | "mixed" | "unknown"
+    : "unknown";
   await db.batch([
     db.prepare(
       `INSERT INTO ai_runs
@@ -474,6 +495,15 @@ async function persistNormalizedAnalysis(
     db.prepare(
       "UPDATE document_analyses SET status='completed',summary_json=?,error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status='persisting'",
     ).bind(JSON.stringify(summary), now, row.analysisId, row.workspaceId),
+    ...scheduleUserDocumentIndexStatements(db, {
+      analysisId: row.analysisId,
+      documentVersionId: sourceVersion.id,
+      workspaceId: row.workspaceId,
+      ownerUserId: row.ownerUserId,
+      sourceHash: sourceVersion.sha256,
+      language: detectedLanguage,
+      now,
+    }),
     db.prepare(
       `INSERT INTO workspace_audit_events
        (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)

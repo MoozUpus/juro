@@ -829,3 +829,29 @@ clears a plan step from the former case. Case activity and metadata-only workspa
 audit are created automatically. Focused service/UI/route tests pass 5/5 and the
 complete migration safety suite passes 57/57 locally. Staging and production are
 unchanged. Wrangler applied `0075` only to local `juro-development`.
+
+## Tenant-safe user-document Vectorize retrieval (local candidate)
+
+Migration `0080` adds a D1 source-of-truth ledger for immutable analysis
+document versions and their vector chunks; no document text is stored in the
+ledger or queue envelope. Completed analysis and corrected-version transactions
+create an identifiers-only `document.index` outbox intent. The existing
+document-analysis consumer verifies the exact private-R2 object size and
+SHA-256, creates bounded 1,536-dimensional OpenAI embeddings, and upserts each
+chunk into the environment-specific `USER_DOCUMENTS_INDEX` under the workspace
+namespace with the required user/workspace/case/document/version/scope/language/
+page/source-hash metadata.
+
+Global search first proves active workspace membership, then queries only that
+namespace. Every match is independently joined to D1, restricted to the owner
+and latest immutable version, compared field-by-field with returned metadata,
+and re-read from checksum-verified private R2 before a snippet is returned.
+Vector metadata is never an authorization decision. A newer corrected version
+submits deletion of older vectors, and account purge submits bounded deletion
+before D1/R2 removal, failing closed when indexed rows exist without Vectorize.
+
+Focused tests prove deterministic overlap chunking, exact metadata, owner-only
+search, cross-workspace denial, denial to a non-owner workspace member, metadata
+tampering rejection, D1 trigger fencing, purge deletion, and foreign-key
+integrity. Remote indexes are still empty and migration `0080` is unapplied;
+therefore this section is a local candidate, not staging or production evidence.

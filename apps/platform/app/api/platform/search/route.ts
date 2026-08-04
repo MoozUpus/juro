@@ -1,7 +1,8 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
-import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { filterTrustedVerifiedLegalSources } from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { searchUserDocuments } from "../../../../lib/document-analysis/user-document-vectors";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -106,6 +107,25 @@ export const GET = withApiErrors(async function GET(request: Request) {
        ORDER BY last_checked_at DESC LIMIT 6`,
     ).bind(locale, like, like),
   ]);
+  const bindings = runtimeEnv();
+  const documentContent = bindings.USER_DOCUMENTS_INDEX
+    && bindings.BUCKET
+    && bindings.OPENAI_API_KEY
+    && bindings.APP_ENV
+    ? await searchUserDocuments({
+        APP_ENV: bindings.APP_ENV,
+        DB: db,
+        BUCKET: bindings.BUCKET,
+        USER_DOCUMENTS_INDEX: bindings.USER_DOCUMENTS_INDEX,
+        OPENAI_API_KEY: bindings.OPENAI_API_KEY,
+        EMBEDDING_MODEL: bindings.EMBEDDING_MODEL,
+      }, {
+        workspaceId: workspace.id,
+        userId: user.id,
+        query,
+        limit: 6,
+      }).catch(() => [])
+    : [];
   const withType = (type: string, rows: unknown[]) => rows.map((item) => ({ ...(item as object), type }));
   return response({
     query,
@@ -116,6 +136,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
       ...withType("comparison", comparisons.results),
       ...withType("task", tasks.results),
       ...withType("analysis", analyses.results),
+      ...documentContent,
       ...withType("template", templates.results),
       ...withType("lawyer", lawyers.results),
       ...withType(

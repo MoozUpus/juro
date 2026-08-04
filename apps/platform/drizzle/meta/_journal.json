@@ -561,6 +561,13 @@
       "when": 1785924000000,
       "tag": "0079_lawyer_review_replies",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "6",
+      "when": 1785927600000,
+      "tag": "0080_user_document_vectors",
+      "breakpoints": true
     }
   ]
 }

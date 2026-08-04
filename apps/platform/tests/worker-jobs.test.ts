@@ -401,6 +401,7 @@ function envelope(
 ): JobEnvelope {
   const tenantKind = new Set<JobKind>([
     "document.analyze",
+    "document.index",
     "ocr.process",
     "document.export",
     "email.send",
@@ -445,6 +446,7 @@ test("routes only v2 task kinds and compatibility-blocks legacy kinds", () => {
     ]),
     [
       ["document.analyze", "DOCUMENT_ANALYSIS_QUEUE", "staging-document-analysis"],
+      ["document.index", "DOCUMENT_ANALYSIS_QUEUE", "staging-document-analysis"],
       ["ocr.process", "OCR_PROCESSING_QUEUE", "staging-ocr-processing"],
       ["document.export", "DOCUMENT_EXPORT_QUEUE", "staging-document-export"],
       ["email.send", "EMAIL_NOTIFICATIONS_QUEUE", "staging-email-notifications"],
