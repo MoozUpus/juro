@@ -21,6 +21,13 @@ export const GET = withApiErrors(async function GET() {
       CASE WHEN g.id IS NOT NULL THEN (SELECT o.scope_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerScopeDescription,
       CASE WHEN g.id IS NOT NULL THEN (SELECT o.price_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerPriceDescription,
       CASE WHEN g.id IS NOT NULL THEN (SELECT o.duration_description FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) END AS offerDurationDescription
+      ,(SELECT review.id FROM lawyer_reviews review JOIN lawyer_review_moderation moderation ON moderation.review_id=review.id AND moderation.decision='approved' WHERE review.lawyer_request_id=r.id AND review.status='approved' LIMIT 1) AS reviewId
+      ,(SELECT review.overall_rating FROM lawyer_reviews review JOIN lawyer_review_moderation moderation ON moderation.review_id=review.id AND moderation.decision='approved' WHERE review.lawyer_request_id=r.id AND review.status='approved' LIMIT 1) AS reviewOverallRating
+      ,(SELECT COALESCE(moderation.moderated_body,review.body) FROM lawyer_reviews review JOIN lawyer_review_moderation moderation ON moderation.review_id=review.id AND moderation.decision='approved' WHERE review.lawyer_request_id=r.id AND review.status='approved' LIMIT 1) AS reviewBody
+      ,(SELECT reply.id FROM lawyer_review_replies reply JOIN lawyer_reviews review ON review.id=reply.review_id WHERE review.lawyer_request_id=r.id ORDER BY reply.version DESC LIMIT 1) AS reviewReplyId
+      ,(SELECT reply.status FROM lawyer_review_replies reply JOIN lawyer_reviews review ON review.id=reply.review_id WHERE review.lawyer_request_id=r.id ORDER BY reply.version DESC LIMIT 1) AS reviewReplyStatus
+      ,(SELECT reply.body FROM lawyer_review_replies reply JOIN lawyer_reviews review ON review.id=reply.review_id WHERE review.lawyer_request_id=r.id ORDER BY reply.version DESC LIMIT 1) AS reviewReplyBody
+      ,(SELECT reply.version FROM lawyer_review_replies reply JOIN lawyer_reviews review ON review.id=reply.review_id WHERE review.lawyer_request_id=r.id ORDER BY reply.version DESC LIMIT 1) AS reviewReplyVersion
      FROM lawyer_requests r
      JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
      JOIN conflict_checks c ON c.lawyer_request_id=r.id AND c.lawyer_profile_id=p.id

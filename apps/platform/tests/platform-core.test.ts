@@ -30,19 +30,19 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
     [{ id: "lawyer-1", displayName: "Юрист JURO", specialtiesJson: '["contracts"]', languagesJson: '["ru","uz"]', experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика" }],
     [{ lawyerProfileId: "lawyer-1", reviewCount: 2, overallAverage: 4.666, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 }],
     [
-      { lawyerProfileId: "lawyer-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" },
-      { lawyerProfileId: "lawyer-1", overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z" },
-      { lawyerProfileId: "lawyer-1", overallRating: 4, body: "Третий", createdAt: "2026-07-31T00:00:00.000Z" },
-      { lawyerProfileId: "lawyer-1", overallRating: 3, body: "Скрытый четвёртый", createdAt: "2026-07-30T00:00:00.000Z" },
+      { reviewId: "review-1", lawyerProfileId: "lawyer-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z", replyBody: "Одобренный ответ", replyCreatedAt: "2026-08-03T00:00:00.000Z" },
+      { reviewId: "review-2", lawyerProfileId: "lawyer-1", overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z", replyBody: null, replyCreatedAt: null },
+      { reviewId: "review-3", lawyerProfileId: "lawyer-1", overallRating: 4, body: "Третий", createdAt: "2026-07-31T00:00:00.000Z", replyBody: null, replyCreatedAt: null },
+      { reviewId: "review-4", lawyerProfileId: "lawyer-1", overallRating: 3, body: "Скрытый четвёртый", createdAt: "2026-07-30T00:00:00.000Z", replyBody: null, replyCreatedAt: null },
     ],
   );
   assert.deepEqual(directory, [{
     id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
     rating: { reviewCount: 2, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
     reviews: [
-      { overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z" },
-      { overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z" },
-      { overallRating: 4, body: "Третий", createdAt: "2026-07-31T00:00:00.000Z" },
+      { id: "review-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z", reply: { body: "Одобренный ответ", createdAt: "2026-08-03T00:00:00.000Z" } },
+      { id: "review-2", overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z", reply: null },
+      { id: "review-3", overallRating: 4, body: "Третий", createdAt: "2026-07-31T00:00:00.000Z", reply: null },
     ],
   }]);
   assert.equal(projectPublicLawyerDirectory([{ id: "lawyer-2", displayName: "Без отзывов", specialtiesJson: "[]", languagesJson: "[]", experienceYears: null, priceDescription: null, availabilityStatus: "unknown", nextAvailableAt: null, advocateStatus: "not_declared", firmName: null, bio: null }], [], [])[0]?.rating.reviewCount, 0);

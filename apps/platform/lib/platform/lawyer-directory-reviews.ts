@@ -22,10 +22,13 @@ export type ApprovedReviewAggregateRow = {
 };
 
 export type ApprovedPublicReviewRow = {
+  reviewId?: string;
   lawyerProfileId: string;
   overallRating: number;
   body: string | null;
   createdAt: string;
+  replyBody?: string | null;
+  replyCreatedAt?: string | null;
 };
 
 function stringList(value: unknown) {
@@ -77,9 +80,11 @@ export function projectPublicLawyerDirectory(
         communicationAverage: rounded(aggregate.communicationAverage),
       } : { reviewCount: 0, overallAverage: null, speedAverage: null, qualityAverage: null, communicationAverage: null },
       reviews: (reviewsByLawyer.get(lawyer.id) ?? []).slice(0, 3).map((review) => ({
+        id: review.reviewId ?? `${review.lawyerProfileId}:${review.createdAt}`,
         overallRating: review.overallRating,
         body: review.body,
         createdAt: review.createdAt,
+        reply: review.replyBody ? { body: review.replyBody, createdAt: review.replyCreatedAt } : null,
       })),
     };
   });

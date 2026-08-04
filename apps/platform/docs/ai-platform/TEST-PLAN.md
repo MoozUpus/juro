@@ -1,5 +1,20 @@
 # Test plan
 
+## Lawyer review reply gate — local candidate
+
+`tests/lawyer-review-replies.test.ts` executes the full D1 lifecycle: strict
+input, server-owned actor identity, lawyer/profile binding, client-request
+idempotency, one-open-reply fencing, PII rejection, immutable rejected version,
+corrected v2, separate staff approval, approved-only public projection, generic
+notifications, metadata-only audit and FK integrity. Static route/UI assertions
+cover CSRF, fresh MFA, RU/UZ, accessible status and the absence of unsafe HTML.
+`tests/migration-safety.test.ts` replays 0079 and the complete chain with exact
+186-table/369-FK evidence and rejects remote-D1-incompatible trigger syntax.
+
+Staging still requires a fresh backup/restore, migrations `0069`–`0079`, an
+Access-authenticated lawyer→moderator→public-detail journey, D1 evidence, mobile,
+keyboard, 200% zoom, screen-reader and browser-console checks.
+
 ## Knowledge-base gate — local candidate
 
 `tests/knowledge-base.test.ts` verifies bounded query/feedback schemas, RU/UZ

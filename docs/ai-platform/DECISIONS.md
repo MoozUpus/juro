@@ -240,3 +240,18 @@ closed with typed durable job errors; a bounded timeout remains retryable. ZIP
 packages apply the same preflight to every PDF and enforce 500 known pages across
 PDF members and image pages before submitting a provider batch. Exact DOCX page
 count remains unknown without rendering and is not fabricated.
+
+## D-112 — lawyer replies require their own immutable moderation evidence
+
+Status: accepted and locally verified
+Date: 2026-08-04
+
+A public-approved lawyer may respond only to an already approved review linked
+to that exact profile. The reply does not inherit the review's moderation: every
+version starts pending and requires a separate fresh-MFA staff decision. Pending
+or approved replies cannot be overwritten; rejection permits a new immutable
+version. Public APIs project only the latest approved reply and omit actor,
+workspace and moderation metadata. Notifications contain generic state text,
+not the review or reply body; a moderation result is stored in the lawyer's own
+default workspace, never in the client's workspace. This closes the product response path without
+letting the lawyer self-publish or exposing private review context.

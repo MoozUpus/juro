@@ -1,5 +1,13 @@
 # JURO known limitations checkpoint
 
+> Lawyer-review reply checkpoint — 2026-08-04: a versioned lawyer-owned reply,
+> separate fresh-MFA staff moderation queue, conservative PII screen, generic
+> in-app notifications, audit evidence and approved-only public projection are
+> implemented locally through migration `0079`. Migrations `0069`–`0079` are not
+> applied to staging; authenticated RU/UZ browser/assistive-technology QA is not
+> claimed. Moderation appeal and human review beyond the conservative detector
+> remain open.
+
 > Knowledge-base local checkpoint — 2026-08-04: D1-backed RU/UZ list/search,
 > public and authenticated article routes, immutable version/hash evidence,
 > related articles and tenant-bound helpfulness are implemented through local
@@ -496,7 +504,7 @@ No Phase 5 production-readiness claim is made.
 A bounded implementation exists but is disabled in development, staging, and production through `LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED=false`. It follows only public robots-declared `advice.uz` sitemap files, submits no more than 20 exact canonical document URLs per run, and remains review-only. There is no live staging sitemap-run evidence, policy/load approval, or claim that this has indexed the Advice corpus.
 ## Lawyer review moderation — protected staging limits
 
-Migrations `0055` and `0056` are applied to `juro-staging` after a checksum-verified private R2 checkpoint. The authenticated lawyer picker now projects approved aggregates and at most three approved texts, but staging contains no approved review rows and no authenticated browser traversal is claimed. Reviewer reply, comprehensive PII review beyond the conservative contact/PINFL screen, public unauthenticated directory rendering, and rating moderation appeal remain open.
+Migrations `0055` and `0056` are applied to `juro-staging` after a checksum-verified private R2 checkpoint. The authenticated lawyer picker now projects approved aggregates and at most three approved texts, but staging contains no approved review rows and no authenticated browser traversal is claimed. Lawyer replies are implemented only in the local `0079` candidate; comprehensive PII review beyond the conservative contact/PINFL screen, public unauthenticated directory rendering, and rating/reply moderation appeal remain open.
 
 Migration `0057_calm_rating_guard.sql` is applied to `juro-staging` after a checksum-verified private R2 checkpoint. Both rating triggers exist remotely. Authenticated browser verification of review submission and moderation remains open because Cloudflare Access is not bypassed.
 

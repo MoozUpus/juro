@@ -554,6 +554,13 @@
       "when": 1785920400000,
       "tag": "0078_knowledge_base_authoring",
       "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "6",
+      "when": 1785924000000,
+      "tag": "0079_lawyer_review_replies",
+      "breakpoints": true
     }
   ]
 }

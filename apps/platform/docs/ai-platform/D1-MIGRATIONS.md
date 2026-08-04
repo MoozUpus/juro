@@ -1,5 +1,20 @@
 # JURO D1 migrations
 
+## Pending 0079 — moderated lawyer review replies
+
+`0079_lawyer_review_replies.sql` additively introduces versioned lawyer replies
+and a separate immutable moderation record. D1 accepts a reply only when the
+review and its original moderation are approved and the actor owns the matching
+public-approved lawyer profile. A review may have one pending or approved reply;
+after rejection the lawyer can submit the next immutable version. Only an
+approved reply with its own moderation evidence enters the public projection.
+
+The complete migration chain replays locally with 186 tables, 369 foreign keys
+and no FK violations. Before staging, take and restore-verify a fresh private
+`juro-staging-backups` export, apply `0069`–`0079` in order, verify the reply
+guards/moderation/public projection, then deploy the matching Worker only under
+new explicit authorization.
+
 ## Pending 0078 — MFA-bound Knowledge Base authoring
 
 `0078_knowledge_base_authoring.sql` additively attaches nullable actor evidence
@@ -11,10 +26,10 @@ versions retain their `body-v1` hash evidence and are not backfilled or mutated;
 new staff versions use `full-v2`, covering titles, summaries, both language
 bodies and related slugs.
 
-The migration replays locally with 184 tables, 364 foreign keys and no FK
+The migration and the later 0079 candidate replay locally with 186 tables, 369 foreign keys and no FK
 violations. Before staging, take and restore-verify a fresh private
 `juro-staging-backups` export, apply the complete ordered pending set
-`0069`–`0078`, verify the ledger/triggers/FKs and deploy the matching Worker only
+`0069`–`0079`, verify the ledger/triggers/FKs and deploy the matching Worker only
 under new explicit authorization.
 
 ## Pending 0077 — versioned RU/UZ knowledge base
@@ -28,7 +43,7 @@ slug JSON and verified by the focused test suite.
 
 The migration has not been applied to staging or production. Before staging,
 take and restore-verify a fresh private `juro-staging-backups` export, apply the
-complete ordered pending set `0069`–`0078`, verify the ledger, hashes, triggers,
+complete ordered pending set `0069`–`0079`, verify the ledger, hashes, triggers,
 `foreign_key_check` and public/authenticated route boundaries, then deploy the
 matching Worker only under a new explicit authorization. Rollback is
 application-first; the additive tables may remain unused.
@@ -43,11 +58,11 @@ foreign-key postflight passed, and Worker version
 Production is unchanged. Exact evidence is in
 `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
 
-Migrations `0069`–`0078` are local additive candidates and have not been applied
+Migrations `0069`–`0079` are local additive candidates and have not been applied
 to staging or production. They cover immutable analysis corrections, corrected
 exports, comparison exports, per-change review decisions and fenced R2 write
 reconciliation, analysis/document case links, legal bookmarks and the versioned
-knowledge base and protected staff authoring respectively.
+knowledge base, protected staff authoring and moderated lawyer-review replies respectively.
 
 ## Pending 0073 — analysis-version R2 write intents
 

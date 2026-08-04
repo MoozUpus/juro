@@ -1,5 +1,12 @@
 # JURO route inventory
 
+> Local lawyer-review reply delta — 2026-08-04: an approved review can receive a
+> versioned response through `POST /api/platform/lawyer-reviews/:reviewId/reply`.
+> Staff list/decision APIs and `/:locale/admin/lawyer-review-replies` require
+> `lawyer.reviews.moderate` plus fresh MFA. Authenticated lawyer list/detail APIs
+> project only separately approved reply text. Migration `0079` and staging QA
+> remain pending; production is unchanged.
+
 > Local knowledge-base delta — 2026-08-04: public `/:locale/help` and
 > `/:locale/help/:articleSlug`, personal `/:locale/:accountType/help/:articleSlug`
 > and explicit business `/:locale/business/:workspaceId/help/:articleSlug` are

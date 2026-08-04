@@ -1509,6 +1509,38 @@ export const lawyerReviews = sqliteTable("lawyer_reviews", {
   overallRating: integer("overall_rating").notNull(), speedRating: integer("speed_rating").notNull(), qualityRating: integer("quality_rating").notNull(), communicationRating: integer("communication_rating").notNull(),
   body: text("body"), status: text("status").notNull().default("pending"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("lawyer_reviews_request_uidx").on(table.lawyerRequestId), index("lawyer_reviews_lawyer_status_idx").on(table.lawyerProfileId, table.status, table.createdAt)]);
+export const lawyerReviewReplies = sqliteTable("lawyer_review_replies", {
+  id: text("id").primaryKey(),
+  reviewId: text("review_id").notNull().references(() => lawyerReviews.id, { onDelete: "cascade" }),
+  version: integer("version").notNull(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  authorUserId: text("author_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  clientRequestId: text("client_request_id").notNull(),
+  body: text("body").notNull(),
+  status: text("status").notNull().default("pending"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("lawyer_review_replies_review_version_uidx").on(table.reviewId, table.version),
+  uniqueIndex("lawyer_review_replies_author_request_uidx").on(table.authorUserId, table.clientRequestId),
+  uniqueIndex("lawyer_review_replies_one_open_uidx").on(table.reviewId).where(sql`${table.status} IN ('pending','approved')`),
+  index("lawyer_review_replies_profile_status_idx").on(table.lawyerProfileId, table.status, table.createdAt),
+]);
+export const lawyerReviewReplyModeration = sqliteTable("lawyer_review_reply_moderation", {
+  id: text("id").primaryKey(),
+  replyId: text("reply_id").notNull().references(() => lawyerReviewReplies.id, { onDelete: "cascade" }),
+  moderatorUserId: text("moderator_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  decision: text("decision").notNull(),
+  moderatedBody: text("moderated_body"),
+  reason: text("reason").notNull(),
+  originalBodySha256: text("original_body_sha256").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("lawyer_review_reply_moderation_reply_uidx").on(table.replyId),
+  index("lawyer_review_reply_moderation_moderator_idx").on(table.moderatorUserId, table.createdAt),
+  check("lawyer_review_reply_moderation_decision_check", sql`${table.decision} IN ('approved','rejected')`),
+  check("lawyer_review_reply_moderation_sha_check", sql`length(${table.originalBodySha256}) = 64`),
+]);
 export const lawyerReviewModeration = sqliteTable("lawyer_review_moderation", {
   id: text("id").primaryKey(),
   reviewId: text("review_id").notNull().references(() => lawyerReviews.id, { onDelete: "cascade" }),

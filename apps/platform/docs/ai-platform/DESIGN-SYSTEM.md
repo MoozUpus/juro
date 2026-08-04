@@ -1,5 +1,15 @@
 # JURO platform design system
 
+## Lawyer review replies
+
+Review text remains the primary reading surface; the lawyer response is a
+visually subordinate inset region with an explicit text label, so meaning never
+depends on color. Lawyer and moderator actions use existing 44 px controls,
+visible focus, RU/UZ copy, inline live status and responsive single-column form
+behavior. No animation or dependency was added: reply authoring and moderation
+are frequent legal-operational actions where immediate state feedback is more
+useful than cinematic motion.
+
 ## Help and knowledge-base surface
 
 Help uses `Read` mode inside the existing application shell. Search and article

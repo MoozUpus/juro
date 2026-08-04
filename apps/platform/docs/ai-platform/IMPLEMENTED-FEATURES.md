@@ -1,5 +1,23 @@
 # JURO implemented-features checkpoint
 
+## Moderated lawyer replies to reviews (local candidate)
+
+- A lawyer can answer only an approved review attached to that lawyer's own
+  public-approved profile. The server derives the actor; client-supplied actor,
+  profile or workspace identifiers are not accepted.
+- Submission is CSRF-protected and idempotent. Rejected text remains immutable
+  evidence and a corrected answer becomes the next version; pending or approved
+  answers cannot be overwritten.
+- `/:locale/admin/lawyer-review-replies` and its API require the existing
+  `lawyer.reviews.moderate` capability, active TOTP and MFA verified within 15
+  minutes. Approval is blocked by the conservative contact/phone/PINFL screen.
+- The authenticated lawyer directory/detail projection returns only a separately
+  approved reply. Pending and rejected replies, moderator identity/reason and
+  requester/workspace identity are never serialized publicly.
+- RU/UZ lawyer/staff interfaces, generic in-app notifications, metadata-only
+  workspace audit and executable D1 lifecycle tests are included. Migration
+  `0079`, browser QA and staging deployment remain pending; production is unchanged.
+
 ## Versioned RU/UZ knowledge base (local candidate)
 
 - Public `/:locale/help` and `/:locale/help/:articleSlug` routes expose only the
