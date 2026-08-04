@@ -323,9 +323,13 @@ The deployed Worker now exposes both provider secret names and server-side model
   path/flags/method/size metadata, verified data descriptors, streaming
   `deflate-raw` expansion, exact output length and CRC32 within a 15-second
   deadline before the file can enter quarantine. That deeper gate is locally
-  tested but not yet deployed. A real isolated malware scanner and actual
-  multi-file package extractor remain required before any derivative or AI
-  access.
+  tested but not yet deployed. The local downstream extractor now repeats the
+  deep check, extracts text PDF/DOCX members in deterministic order, preserves
+  member boundaries, caps known PDF pages at 500, and enforces a 20 MB member /
+  50 MB inline expanded working-set budget. ZIP packages containing an
+  image fail closed without sending the opaque archive to OCR/AI. Per-member OCR
+  and a real isolated malware scanner remain required before scanned packages or
+  over-budget packages can reach AI.
 - The browser computes SHA-256 from one in-memory `ArrayBuffer`; this does not buffer the upload in the Worker, but a later client-side incremental hash path may improve low-memory devices.
 - Upload byte progress is surfaced through the secure XHR client on both the
   dashboard and document-review surfaces. Authenticated browser verification of

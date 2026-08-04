@@ -1,6 +1,6 @@
 # Secure document upload pipeline
 
-Updated: 2026-07-31
+Updated: 2026-08-04
 Status: fail-closed upload and post-safe OCR/analysis pipeline implemented locally; real malware promotion remains disabled.
 
 ## Implemented lifecycle
@@ -9,7 +9,7 @@ The single-document review UI and dashboard use a three-request lifecycle:
 
 1. `POST /api/platform/document-analysis/uploads` validates strict JSON metadata, consent, file type, the 50 MB limit, SHA-256, session, workspace, CSRF, and a tenant-scoped `Idempotency-Key`. D1 creates the `document_files`, `document_analyses`, consent, and audit records.
 2. `PUT /api/platform/document-analysis/uploads/:analysisId` sends the binary request body directly to private R2. The Worker requires exact `Content-Length`, MIME, and SHA-256 evidence and asks R2 to verify SHA-256 while streaming. The R2 key is server-generated under `quarantine/{workspaceId}/{analysisId}/{fileId}` and never contains the source filename.
-3. `POST /api/platform/document-analysis/uploads/:analysisId/finalize` rechecks R2 size and SHA-256, performs a bounded magic-byte check, and moves the record to `quarantined`.
+3. `POST /api/platform/document-analysis/uploads/:analysisId/finalize` rechecks R2 size and SHA-256 plus bounded magic bytes. ZIP/DOCX additionally require central/local-header identity, safe paths and members, exact data descriptors, streaming bounded decompression, output size and CRC32 before the record can move to `quarantined`.
 
 Every route re-resolves the authenticated user and active workspace. A mismatched `workspaceId`, `userId`, or `analysisId` returns the same not-found boundary. Replayed initialization with the same request hash returns the original upload; a changed payload under the same key is rejected.
 
@@ -19,7 +19,7 @@ The staging malware scanner is not connected. Finalization therefore records `MA
 
 The previous multipart `POST /api/platform/document-review` no longer stores a file or invokes AI. It returns `SECURE_UPLOAD_REQUIRED`. `GET /api/platform/document-review` remains for the existing analysis list and previously completed records.
 
-The quarantine object currently uses a safe prefix in the environment primary private bucket rather than the separate quarantine binding. This preserves the existing account-deletion R2 inventory/purge path. Moving quarantine to its dedicated bucket requires a cross-bucket purge manifest and restore test first.
+New staging quarantine objects use the separate private quarantine binding and opaque `quarantine-v2` keys. Legacy objects remain readable only through the backward-compatible inventory/deletion path; no automatic cross-bucket move is claimed.
 
 ## Post-safe extraction and OCR
 
@@ -33,6 +33,16 @@ The normalized result is written to an immutable private R2 derivative and
 recorded in `file_extractions`; successful replay verifies the same bytes without
 a second provider call. The consumer then returns the analysis to `ready` and
 enqueues the existing Anthropic-primary/OpenAI-fallback analysis. Image-derived
+text remains explicitly marked for review.
+
+For `application/zip`, the document-analysis extractor repeats the deep archive
+verification, processes text PDF/DOCX members in deterministic order, preserves
+file boundaries in the untrusted provider input, caps known PDF pages at 500,
+and limits inline expanded members to 20 MB / the package working set to 50 MB.
+An image member fails closed as `DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED`; the
+opaque ZIP is never sent to OCR or an AI provider. Per-member OCR is still gated.
+Packages beyond the inline memory budget remain in
+`awaiting_external_extraction` for a future streaming worker.
 
 ## Supported intake formats
 
@@ -42,7 +52,7 @@ enqueues the existing Anthropic-primary/OpenAI-fallback analysis. Image-derived
 - PNG;
 - ZIP.
 
-MIME and extension must agree at initialization. Finalization checks PDF, PNG, JPEG, and ZIP-container signatures. A DOCX container is not treated as structurally valid or safe merely because it starts with ZIP magic; archive traversal, decompression ratio, nested archive, file-count, timeout, and `[Content_Types].xml` checks belong after a real malware scan and remain an open gate.
+MIME and extension must agree at initialization. Finalization checks PDF, PNG, JPEG, and ZIP-container signatures. A DOCX container is not treated as structurally valid merely because it starts with ZIP magic; its OOXML structure and archive integrity are verified before quarantine. Malware clearance remains a separate mandatory gate.
 
 ## Evidence
 
@@ -61,4 +71,4 @@ Authenticated staging OCR/provider execution is not claimed until migration
 1. Connect a privacy-approved real malware scanner; production must fail closed while it is unavailable.
 2. Apply `0042`, deploy protected staging, and execute an eligible safe-file OCR/provider smoke test.
 3. Run the complete 100-package/30-comparison reviewed evaluation, including clean-scan OCR quality.
-4. Add multi-file/ZIP package extraction, 500-page accounting, coordinates, corrections, and redline artifacts.
+4. Add per-member OCR/coordinates for scanned ZIP packages, corrections, and redline artifacts.

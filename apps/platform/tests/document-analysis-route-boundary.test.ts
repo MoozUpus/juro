@@ -95,3 +95,16 @@ test("AI and document processors revalidate provider citations before persistenc
     /setAnalysisState\(env\.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT"\)/,
   );
 });
+
+test("ZIP analysis uses the verified package extractor and never sends an opaque archive to OCR", () => {
+  const processor = source("lib/document-analysis/processor.ts");
+  const extractor = source("lib/document-analysis/package-extractor.ts");
+  assert.match(processor, /extract:\s*extractAnalysisDocument/);
+  assert.match(processor, /row\.mimeType === "application\/zip"/);
+  assert.match(processor, /DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED/);
+  assert.match(extractor, /await verifyArchiveBytes\(input\.bytes, input\.mimeType\)/);
+  assert.match(extractor, /MAX_PACKAGE_PAGES = 500/);
+  assert.match(extractor, /MAX_INLINE_MEMBER_BYTES = 20 \* 1024 \* 1024/);
+  assert.match(extractor, /MAX_INLINE_PACKAGE_BYTES = 50 \* 1024 \* 1024/);
+  assert.match(extractor, /PACKAGE_MULTI_DOCUMENT/);
+});

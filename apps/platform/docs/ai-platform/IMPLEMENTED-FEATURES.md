@@ -1,5 +1,21 @@
 # JURO implemented-features checkpoint
 
+## Verified text ZIP-package extraction candidate (local only)
+
+- Document analysis now repeats deep ZIP verification before extraction, then
+  processes every PDF/DOCX member in deterministic order while preserving the
+  source-file boundary in untrusted provider context.
+- Known PDF pages are capped at 500 across the package. Inline expansion is
+  additionally bounded to 20 MB per member and 50 MB for the decoded package;
+  over-budget packages wait for external extraction instead of risking Worker
+  memory. Existing archive limits still cap members, aggregate expanded bytes,
+  ratios, nesting, methods, paths and time.
+- A package containing an image receives the truthful
+  `DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED` state. The opaque ZIP is never sent to
+  Workers AI, OpenAI or Anthropic; RU/UZ UI explains the recovery path.
+- This slice adds no migration, dependency, binding or external runtime change.
+  It is locally tested and is not yet deployed to staging or production.
+
 ## Disabled malware-scanner integration candidate (local only)
 
 - `0068_file_scan_evidence.sql` adds tenant-bound, terminal scan evidence with

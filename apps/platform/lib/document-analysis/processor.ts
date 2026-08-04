@@ -1,5 +1,4 @@
 import type { AiStructuredResult } from "../document-builder/ai/openai";
-import { extractDocument } from "../document-comparison/extract";
 import { ComparisonProcessingError, type ExtractedDocument } from "../document-comparison/types";
 import type { LegalSemanticSearchEnv } from "../legal/semantic-retrieval";
 import {
@@ -20,6 +19,7 @@ import {
   OcrProcessingError,
   scheduleOcrProcessing,
 } from "./ocr-processor";
+import { extractAnalysisDocument, PackageExtractionError } from "./package-extractor";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
@@ -74,6 +74,7 @@ export class DocumentAnalysisProcessingError extends Error {
       | "DOCUMENT_ANALYSIS_INTEGRITY_FAILED"
       | "DOCUMENT_ANALYSIS_EXTRACTION_FAILED"
       | "DOCUMENT_ANALYSIS_OCR_REQUIRED"
+      | "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED"
       | "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED"
       | "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
       | "DOCUMENT_ANALYSIS_INVALID_OUTPUT"
@@ -115,7 +116,7 @@ export type DocumentAnalysisProcessorDependencies = {
 };
 
 const defaultDependencies: DocumentAnalysisProcessorDependencies = {
-  extract: extractDocument,
+  extract: extractAnalysisDocument,
   retrieve: retrieveVerifiedLegalSources,
   analyze: async (input) => {
     const { runDocumentAnalysis } = await import("./provider");
@@ -180,6 +181,10 @@ async function analyzeObject(
     });
     if (!extracted) {
       if (row.sizeBytes > DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT) {
+        if (row.mimeType === "application/zip") {
+          await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+          throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
+        }
         await scheduleOcrProcessing(env.DB, {
           analysisId: row.analysisId,
           fileId: row.fileId,
@@ -206,10 +211,23 @@ async function analyzeObject(
           sizeBytes: row.sizeBytes,
         });
       } catch (error) {
+        if (error instanceof PackageExtractionError) {
+          await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+          throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
+        }
         if (
           error instanceof ComparisonProcessingError &&
           (error.code === "OCR_REQUIRED" || error.code === "NO_READABLE_TEXT")
         ) {
+          if (row.mimeType === "application/zip") {
+            await setAnalysisState(
+              env.DB,
+              row,
+              "awaiting_external_extraction",
+              "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED",
+            );
+            throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED", false);
+          }
           await scheduleOcrProcessing(env.DB, {
             analysisId: row.analysisId,
             fileId: row.fileId,
@@ -297,6 +315,10 @@ async function analyzeObject(
       const status = error.retryable ? "retrying" : "failed";
       await setAnalysisState(env.DB, row, status, error.code);
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_EXTRACTION_FAILED", error.retryable);
+    }
+    if (error instanceof PackageExtractionError) {
+      await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
     }
     if (error instanceof ComparisonProcessingError) {
       const waiting = error.code === "OCR_REQUIRED" ? "awaiting_ocr" : "failed";

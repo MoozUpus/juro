@@ -132,7 +132,7 @@ function AnalysisView({ analysis, ru, onChanged }: { analysis: Analysis; ru: boo
   const summary = analysis.summary;
   const [exportAttemptKeys, setExportAttemptKeys] = useState<Record<string, string>>({});
   const canOpen = analysis.status === "completed";
-  const state = analysisState(analysis.status, ru);
+  const state = analysisState(analysis.status, analysis.errorCode ?? null, ru);
   const [exportingFormat, setExportingFormat] = useState<AnalysisExportFormat | null>(null);
   const [deletingExportId, setDeletingExportId] = useState<string | null>(null);
   const [exportError, setExportError] = useState("");
@@ -208,7 +208,15 @@ function statusLabel(status: string, ru: boolean) {
   return ru ? "Файл сохранён" : "Fayl saqlandi";
 }
 
-function analysisState(status: string, ru: boolean) {
+function analysisState(status: string, errorCode: string | null, ru: boolean) {
+  if (errorCode === "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED") {
+    return {
+      heading: ru ? "В пакете найден скан" : "Paketda skan topildi",
+      message: ru
+        ? "Пакет не передан AI. Загрузите скан отдельно для OCR или соберите ZIP только из текстовых PDF и DOCX."
+        : "Paket AI ga yuborilmadi. Skan faylni OCR uchun alohida yuklang yoki ZIP paketini faqat matnli PDF va DOCX fayllaridan tuzing.",
+    };
+  }
   const states: Record<string, [string, string, string, string]> = {
     quarantined: ["Анализ не запущен", "Tahlil ishga tushirilmadi", "Файл помещён в карантин и не передан AI: staging-сканер вредоносного содержимого ещё не подключён.", "Fayl karantinga joylandi va AI ga yuborilmadi: staging zararli fayl skaneri hali ulanmagan."],
     processing: ["Идёт анализ", "Tahlil ketmoqda", "JURO извлекает структуру документа и проверяет выводы. Можно покинуть страницу и вернуться позже.", "JURO hujjat tuzilishini ajratmoqda va xulosalarni tekshirmoqda. Sahifadan chiqib, keyin qaytish mumkin."],

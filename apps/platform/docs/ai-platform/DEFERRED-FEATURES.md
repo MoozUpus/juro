@@ -20,7 +20,7 @@ This register distinguishes real implementation from planned scope. A database t
 
 ## File and communication gates
 
-- Direct multipart R2 upload, fail-closed malware scanning, ZIP defenses, OCR bounding boxes, quarantine release, SSRF-safe URL ingestion, and adversarial prompt-injection tests remain deferred.
+- The streaming private-R2 upload, strict ZIP/DOCX integrity gate, text-only ZIP package extraction, provider prompt boundary, and adversarial document-input tests exist locally. A real fail-closed malware service, per-member ZIP OCR/coordinates, quarantine release evidence, SSRF-safe URL ingestion, and the full 100-package quality gate remain deferred.
 - Realtime voice, avatar lip sync, original-audio retention automation, audio/video call provider, and call recording remain off. Text chat must not pretend these are live.
 - The approved Jurobek 3D asset still requires source-asset verification, rig/material/facial review, optimization evidence, WebGL fallback, and device testing before integration.
 

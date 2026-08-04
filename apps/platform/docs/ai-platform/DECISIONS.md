@@ -2716,3 +2716,14 @@ same checksum boundary. This work runs before quarantine and therefore before a
 scanner, derivative, OCR or AI provider. It adds no dependency or migration.
 The real malware scanner and multi-file relationship extraction remain separate
 fail-closed gates; local tests are not staging evidence. Production is unchanged.
+# 2026-08-04 — ZIP packages are expanded only after repeated integrity verification
+
+A ZIP accepted at upload is not trusted merely because finalization previously
+checked it. The document-analysis consumer repeats the complete archive gate,
+then extracts only text PDF/DOCX members in deterministic order and preserves
+their file boundaries in the untrusted model input. Known PDF pages are capped
+at 500; inline decoded bytes are capped at 20 MB per member and 50 MB per
+package. Larger packages wait for a future streaming extractor. If any member
+needs OCR, JURO stops in an explicit package-OCR state and
+does not send the opaque archive to an OCR or language-model provider. This is a
+fail-closed intermediate capability until privacy-approved per-member OCR exists.

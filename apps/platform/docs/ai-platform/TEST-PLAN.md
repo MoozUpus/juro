@@ -23,3 +23,15 @@ leading polyglot bytes, CRC corruption, traversal, unsupported nesting,
 encryption, expansion ratio, member count and required OOXML parts. Passing
 central-directory inspection alone is insufficient: the finalize boundary must
 call the bounded deep verifier before it records quarantine success.
+# Local ZIP-package extraction checkpoint — 2026-08-04
+
+- A text-only ZIP fixture must preserve deterministic member boundaries and
+  extract both Russian and Uzbek Latin content.
+- The analysis processor must use the package extractor rather than pass an
+  opaque archive to the single-document extractor.
+- A package containing an image must stop with
+  `DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED` and must not enqueue raw ZIP OCR.
+- The extractor must repeat deep archive verification and retain the 500-page
+  aggregate PDF limit before provider access.
+- A member above 20 MB or decoded package above 50 MB must stop before PDF/DOCX
+  parsing and persist the external-extraction state without provider access.
