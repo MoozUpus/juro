@@ -95,7 +95,8 @@ export async function comparisonChanges(
       after_text AS afterText,word_diff_json AS wordDiffJson,summary,legal_effect AS legalEffect,
       affected_party AS affectedParty,risk_effect AS riskEffect,risk_level AS riskLevel,
       recommendation,source_ids_json AS sourceIdsJson,confidence_percent AS confidencePercent,
-      reviewed_at AS reviewedAt,extraction_warning AS extractionWarning
+      reviewed_at AS reviewedAt,review_decision AS reviewDecision,decided_at AS decidedAt,
+      review_decision_version AS reviewDecisionVersion,extraction_warning AS extractionWarning
      FROM comparison_changes WHERE comparison_id=? ORDER BY ordinal`,
   ).bind(comparisonId).all();
   return rows.results.map((raw) => {
@@ -122,6 +123,11 @@ export async function comparisonChanges(
       sourceIds: parseJson<string[]>(String(row.sourceIdsJson || "[]"), []),
       confidencePercent: row.confidencePercent === null ? null : Number(row.confidencePercent),
       reviewedAt: row.reviewedAt ? String(row.reviewedAt) : null,
+      reviewDecision: row.reviewDecision
+        ? String(row.reviewDecision) as ComparisonChange["reviewDecision"]
+        : null,
+      decidedAt: row.decidedAt ? String(row.decidedAt) : null,
+      reviewDecisionVersion: Number(row.reviewDecisionVersion ?? 0),
       extractionWarning: Boolean(row.extractionWarning),
     };
   });

@@ -279,6 +279,7 @@ GET,POST /api/platform/billing
 GET,POST /api/platform/consultations
 GET,POST /api/platform/document-comparisons
 GET,PATCH,DELETE /api/platform/document-comparisons/:comparisonId
+PATCH /api/platform/document-comparisons/:comparisonId/changes/:changeId
 POST /api/platform/document-comparisons/:comparisonId/process
 GET /api/platform/document-comparisons/:comparisonId/files/:version
 GET /api/platform/document-comparisons/:comparisonId/export
@@ -428,6 +429,7 @@ surface. They add no public route and do not alter document-builder URLs.
 | `POST /api/platform/document-comparisons/:comparisonId/export` | Queues PDF or DOCX generation | CSRF, strict Zod, Idempotency-Key, completed comparison tenant guard |
 | `GET /api/platform/document-comparisons/exports/:exportId/file` | Proxies one completed private artifact | tenant/owner/state lookup, R2 size/SHA-256 verification, download audit |
 | `DELETE /api/platform/document-comparisons/exports/:exportId` | Removes one terminal artifact | CSRF, tenant/owner guard, R2-first verified deletion, audit |
+| `PATCH /api/platform/document-comparisons/:comparisonId/changes/:changeId` | Accepts, rejects, or clears one review decision | CSRF, strict Zod, tenant/owner terminal-state guard, optimistic version, metadata-only audit |
 
 The existing localized comparison screen consumes these states. Source comparison
 and document-builder routes remain unchanged.

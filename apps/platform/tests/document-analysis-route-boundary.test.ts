@@ -80,6 +80,28 @@ test("analysis revision routes preserve auth, tenant, idempotency, and object-in
   assert.match(download, /content-disposition/);
 });
 
+test("comparison change decisions are validated, tenant-scoped, audited, and do not merge documents", () => {
+  const route = source("app/api/platform/document-comparisons/[comparisonId]/changes/[changeId]/route.ts");
+  const service = source("lib/document-comparison/review-decision.ts");
+  const client = source("app/_platform/ComparisonResultClient.tsx");
+  assert.match(route, /decisionSchema/);
+  assert.match(route, /locale: z\.enum\(\["ru", "uz"\]\)/);
+  assert.match(route, /O‘zgarish topilmadi/);
+  assert.match(route, /assertSafeWrite/);
+  assert.match(route, /requireApiUser/);
+  assert.match(route, /workspaceForUser/);
+  assert.match(route, /decideComparisonChange/);
+  assert.match(service, /comparison\.workspace_id=\?/);
+  assert.match(service, /comparison\.owner_user_id=\?/);
+  assert.match(service, /comparison_change_accepted/);
+  assert.match(service, /comparison_change_rejected/);
+  assert.match(service, /comparison_change_decision_cleared/);
+  assert.doesNotMatch(`${route}\n${service}`, /INSERT INTO document_versions|callOpenAiJson|callAnthropic/);
+  assert.match(client, /aria-pressed/);
+  assert.match(client, /decisionSaving/);
+  assert.match(client, /decision \?\? "pending"/);
+});
+
 test("scanner promotion requires strict evidence and never trusts document instructions", () => {
   const scanner = source("lib/document-analysis/malware-scanner.ts");
   assert.match(scanner, /malwareScannerResponseSchema/);

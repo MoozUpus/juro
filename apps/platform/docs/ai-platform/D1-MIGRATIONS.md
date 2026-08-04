@@ -1,14 +1,32 @@
 # JURO D1 migrations
 
-## Pending 0068 — file scan evidence
+## Current staging checkpoint and pending local migrations
 
-`0068_file_scan_evidence.sql` is an expand-only local candidate. It adds one
-terminal evidence table, tenant/source guard trigger, immutable-update trigger,
-unique analysis/file indexes and cascade ownership. It does not alter or
-backfill existing uploads. It has not been applied to staging. Required next
-gate: private `juro-staging-backups` export/round-trip/restore, remote migration,
-schema/FK postflight, then a separately authorized staging deploy; the scanner
-feature remains off even after the schema exists.
+Isolated `juro-staging` is through `0068_file_scan_evidence.sql`. Its verified
+pre-migration full/schema/data exports remain in private
+`juro-staging-backups/d1/juro-staging/20260804-080310-0068/`; migration and
+foreign-key postflight passed, and Worker version
+`030e3db0-6de5-455f-a90b-0350d346f5cf` has 100% protected staging traffic.
+Production is unchanged. Exact evidence is in
+`STAGING-0068-FILE-SCAN-EVIDENCE.md`.
+
+Migrations `0069`–`0072` are local additive candidates and have not been applied
+to staging or production. They cover immutable analysis corrections, corrected
+exports, comparison exports and per-change review decisions respectively.
+
+## Pending 0072 — comparison change decisions
+
+`0072_comparison_change_decisions.sql` additively extends existing comparison
+rows with nullable `accepted`/`rejected` state, decision actor/time, optimistic
+version and unique event identity. Insert/transition/tenant triggers reject
+preset, partial, malformed and cross-owner decisions. Existing rows backfill to
+pending through nullable/default columns; neither source document is changed.
+
+Rollback is application-first: disable or roll back the Worker and leave the
+unused columns/indexes/triggers in place. Before staging, make and restore-verify
+a fresh private D1 backup, apply the whole pending ordered set `0069`–`0072`,
+then verify the ledger, trigger/index inventory, `foreign_key_check`, decision
+service smoke and existing document-builder regression before deployment.
 
 ## Migration 0065 — guest AI sessions
 

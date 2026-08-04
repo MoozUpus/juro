@@ -92,6 +92,7 @@ const coreTestFiles = [
   "tests/document-builder.test.ts",
   "tests/document-comparison.test.ts",
   "tests/comparison-export.test.ts",
+  "tests/comparison-change-decision.test.ts",
   "tests/document-registry.test.ts",
   "tests/document-access.test.ts",
   "tests/document-analysis-upload.test.ts",

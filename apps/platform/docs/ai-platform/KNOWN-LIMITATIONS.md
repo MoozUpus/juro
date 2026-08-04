@@ -528,3 +528,14 @@ Canonical manual case creation is deployed to protected staging and passes a rea
   Changes and not a layout-preserving reconstruction of either source document.
 - Authenticated staging browser download/delete, RU/UZ assistive-technology,
   200% zoom and mobile visual evidence remain open after deployment.
+
+## Comparison change decision open gates
+
+- Migration `0072` and its matching Worker are local only. Staging does not yet
+  persist per-change accept/reject decisions.
+- Local evidence covers tenant denial, invalid transitions, accept/reject/clear,
+  idempotent replay, same-state concurrency, audit minimization and the absence
+  of an automatically merged third version.
+- A fresh private staging backup/restore, migrations `0069`–`0072`, authenticated
+  RU/UZ browser interaction, keyboard/axe, mobile/200% zoom and visual checks are
+  still required before this capability can be claimed in staging.

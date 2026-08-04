@@ -15,10 +15,12 @@ import {
   FileText,
   LoaderCircle,
   RefreshCcw,
+  RotateCcw,
   Scale,
   ShieldAlert,
   Trash2,
   UserRoundSearch,
+  XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -138,6 +140,7 @@ export function ComparisonResultClient({
   const [savingCase, setSavingCase] = useState(false);
   const [caseNotice, setCaseNotice] = useState("");
   const [exporting, setExporting] = useState<"pdf" | "docx" | null>(null);
+  const [decisionSavingId, setDecisionSavingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -311,6 +314,42 @@ export function ComparisonResultClient({
       setCaseNotice(copy.caseSaved);
     }
     setSavingCase(false);
+  }
+
+  async function decideChange(
+    change: ComparisonChange,
+    decision: ComparisonChange["reviewDecision"],
+  ) {
+    if (decisionSavingId) return;
+    setDecisionSavingId(change.id);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/platform/document-comparisons/${encodeURIComponent(comparisonId)}/changes/${encodeURIComponent(change.id)}`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+          body: JSON.stringify({ decision: decision ?? "pending", locale }),
+        },
+      );
+      const body = await response.json() as {
+        change?: Pick<ComparisonChange, "id" | "reviewDecision" | "decidedAt" | "reviewedAt" | "reviewDecisionVersion">;
+        error?: string;
+      };
+      if (!response.ok || !body.change) {
+        throw new Error(body.error || copy.decisionSaveError);
+      }
+      setDetail((current) => current ? {
+        ...current,
+        changes: current.changes.map((item) => item.id === change.id
+          ? { ...item, ...body.change }
+          : item),
+      } : current);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : copy.decisionSaveError);
+    } finally {
+      setDecisionSavingId(null);
+    }
   }
 
   async function requestExport(format: "pdf" | "docx") {
@@ -572,6 +611,8 @@ export function ComparisonResultClient({
                         copy={copy}
                         source={change.sourceIds.map((id) => sourcesById.get(id)).find(Boolean)}
                         onReviewed={() => void markReviewed(change)}
+                        onDecision={(decision) => void decideChange(change, decision)}
+                        decisionSaving={decisionSavingId === change.id}
                       />
                     )}
                 />
@@ -674,15 +715,28 @@ function ChangeCard({
   copy,
   source,
   onReviewed,
+  onDecision,
+  decisionSaving,
 }: {
   change: ComparisonChange;
   copy: typeof comparisonResultText.ru | typeof comparisonResultText.uz;
   source?: Source;
   onReviewed: () => void;
+  onDecision: (decision: ComparisonChange["reviewDecision"]) => void;
+  decisionSaving: boolean;
 }) {
   const label = change.afterLabel || change.beforeLabel || `#${change.ordinal}`;
+  const decisionStatus = change.reviewDecision === "accepted"
+    ? copy.decisionAccepted
+    : change.reviewDecision === "rejected"
+      ? copy.decisionRejected
+      : copy.decisionPending;
   return (
-    <article className="comparison-change-card" data-risk={change.riskLevel}>
+    <article
+      className="comparison-change-card"
+      data-risk={change.riskLevel}
+      data-decision={change.reviewDecision ?? "pending"}
+    >
       <header>
         <div><span className={`change-type type-${change.changeType}`}>{copy.changeLabels[change.changeType]}</span><h2>{label}{(change.afterHeading || change.beforeHeading) ? ` · ${change.afterHeading || change.beforeHeading}` : ""}</h2></div>
         <span className={`comparison-risk risk-${change.riskLevel}`}>{copy.riskLabels[change.riskLevel]}</span>
@@ -707,6 +761,41 @@ function ChangeCard({
         {source && safeOfficialUrl(source.officialUrl) ? (
           <a href={source.officialUrl} target="_blank" rel="noreferrer"><ExternalLink />{source.actTitle}</a>
         ) : <span className="comparison-unverified"><ShieldAlert />{copy.sourceUnavailable}</span>}
+        <div className="comparison-decision">
+          <span aria-live="polite">
+            {decisionSaving ? copy.decisionSaving : decisionStatus}
+          </span>
+          <div role="group" aria-label={copy.decisionLabel}>
+            <button
+              type="button"
+              className={change.reviewDecision === "accepted" ? "accepted" : ""}
+              aria-pressed={change.reviewDecision === "accepted"}
+              disabled={decisionSaving}
+              onClick={() => onDecision("accepted")}
+            >
+              <CheckCircle2 />{copy.acceptChange}
+            </button>
+            <button
+              type="button"
+              className={change.reviewDecision === "rejected" ? "rejected" : ""}
+              aria-pressed={change.reviewDecision === "rejected"}
+              disabled={decisionSaving}
+              onClick={() => onDecision("rejected")}
+            >
+              <XCircle />{copy.rejectChange}
+            </button>
+            {change.reviewDecision && (
+              <button
+                type="button"
+                className="clear"
+                disabled={decisionSaving}
+                onClick={() => onDecision(null)}
+              >
+                <RotateCcw />{copy.clearDecision}
+              </button>
+            )}
+          </div>
+        </div>
         <button type="button" className={change.reviewedAt ? "reviewed" : ""} onClick={onReviewed}>
           {change.reviewedAt ? <CheckCircle2 /> : <Check />}{change.reviewedAt ? copy.reviewed : copy.markReviewed}
         </button>

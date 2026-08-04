@@ -130,6 +130,9 @@ export type ComparisonChange = {
   sourceIds: string[];
   confidencePercent: number | null;
   reviewedAt: string | null;
+  reviewDecision: "accepted" | "rejected" | null;
+  decidedAt: string | null;
+  reviewDecisionVersion: number;
   extractionWarning: boolean;
 };
 

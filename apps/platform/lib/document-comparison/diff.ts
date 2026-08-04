@@ -116,7 +116,7 @@ function baseChange(
       legalEffect: ru ? "Последствия нового условия требуют проверки." : "Yangi shart oqibatlari tekshirilishi kerak.",
       affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "requires_review",
       riskLevel: "medium", recommendation: ru ? "Проверьте новое условие в контексте прав и обязанностей сторон." : "Yangi shartni tomonlarning huquq va majburiyatlari kontekstida tekshiring.",
-      sourceIds: [], confidencePercent: 96, reviewedAt: null, extractionWarning: false,
+      sourceIds: [], confidencePercent: 96, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
   if (before && !after) {
@@ -128,7 +128,7 @@ function baseChange(
       legalEffect: ru ? "Удаление может прекратить право, обязанность или защитный механизм." : "Olib tashlash huquq, majburiyat yoki himoya mexanizmini bekor qilishi mumkin.",
       affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "requires_review",
       riskLevel: "high", recommendation: ru ? "Убедитесь, что удалённое условие не было существенной защитой." : "Olib tashlangan shart muhim himoya bo‘lmaganini tekshiring.",
-      sourceIds: [], confidencePercent: 96, reviewedAt: null, extractionWarning: false,
+      sourceIds: [], confidencePercent: 96, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
   if (!before || !after) throw new Error("INVALID_CHANGE_PAIR");
@@ -146,7 +146,7 @@ function baseChange(
       legalEffect: ru ? "Смысл текста не изменился." : "Matn mazmuni o‘zgarmagan.",
       affectedParty: ru ? "Не влияет" : "Ta’sir qilmaydi", riskEffect: "neutral", riskLevel: "information",
       recommendation: ru ? "Проверьте внутренние ссылки на номер пункта." : "Band raqamiga ichki havolalarni tekshiring.",
-      sourceIds: [], confidencePercent: 98, reviewedAt: null, extractionWarning: false,
+      sourceIds: [], confidencePercent: 98, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
   if (sameNormalized && moved) {
@@ -158,7 +158,7 @@ function baseChange(
       legalEffect: ru ? "Прямого изменения смысла не обнаружено; проверьте контекст нового раздела." : "Bevosita ma’no o‘zgarishi topilmadi; yangi bo‘lim kontekstini tekshiring.",
       affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "neutral", riskLevel: "information",
       recommendation: ru ? "Проверьте связи пункта с соседними условиями." : "Bandning qo‘shni shartlar bilan aloqasini tekshiring.",
-      sourceIds: [], confidencePercent: 95, reviewedAt: null, extractionWarning: false,
+      sourceIds: [], confidencePercent: 95, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
   if (sameSemantic && !sameNormalized) {
@@ -170,7 +170,7 @@ function baseChange(
       legalEffect: ru ? "Юридически значимое изменение не обнаружено." : "Yuridik ahamiyatli o‘zgarish topilmadi.",
       affectedParty: ru ? "Не влияет" : "Ta’sir qilmaydi", riskEffect: "neutral", riskLevel: "information",
       recommendation: ru ? "Дополнительное действие не требуется." : "Qo‘shimcha harakat talab qilinmaydi.",
-      sourceIds: [], confidencePercent: 94, reviewedAt: null, extractionWarning: false,
+      sourceIds: [], confidencePercent: 94, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
   if (sameNormalized) {
@@ -182,7 +182,7 @@ function baseChange(
       legalEffect: ru ? "Изменений не обнаружено." : "O‘zgarish topilmadi.",
       affectedParty: ru ? "Не влияет" : "Ta’sir qilmaydi", riskEffect: "neutral", riskLevel: "information",
       recommendation: ru ? "Действие не требуется." : "Harakat talab qilinmaydi.",
-      sourceIds: [], confidencePercent: 100, reviewedAt: null, extractionWarning: false,
+      sourceIds: [], confidencePercent: 100, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
     };
   }
   const description = describeChange(before.text, after.text, locale);
@@ -193,7 +193,7 @@ function baseChange(
     summary: description.summary, legalEffect: description.legalEffect,
     affectedParty: ru ? "Не определено" : "Aniqlanmagan", riskEffect: "requires_review",
     riskLevel: description.riskLevel, recommendation: description.recommendation,
-    sourceIds: [], confidencePercent: description.confidencePercent, reviewedAt: null, extractionWarning: false,
+    sourceIds: [], confidencePercent: description.confidencePercent, reviewedAt: null, reviewDecision: null, decidedAt: null, reviewDecisionVersion: 0, extractionWarning: false,
   };
 }
 

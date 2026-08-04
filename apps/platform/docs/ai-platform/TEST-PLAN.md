@@ -29,6 +29,20 @@ Open release tests: authenticated browser/axe/keyboard/mobile matrix, real scann
   and timestamped named human disposition.
 - Local artifact generation is preparation evidence only. It cannot satisfy the
   scanner, OCR/provider, legal-quality or authenticated staging gates.
+
+## Comparison change decision checkpoint — 2026-08-04
+
+- Migration `0072` must reject preset, partial, malformed and cross-owner
+  decisions while accepting existing undecided rows unchanged.
+- The service must deny a second tenant neutrally, persist accept/reject/clear,
+  preserve reviewed evidence after clear, and append no document text to audit.
+- Same-state replay and synchronized concurrent requests must create one version
+  transition and one audit event.
+- UI/API contract checks require CSRF, authentication, workspace resolution,
+  strict RU/UZ decision copy, `aria-pressed`, pending state and no AI provider or
+  document-version mutation.
+- Staging evidence additionally requires backup/restore, migration, authenticated
+  RU/UZ browser/keyboard/mobile/axe checks and postflight foreign-key validation.
 # Archive integrity checkpoint
 
 Every ZIP/DOCX security regression must cover a valid stored entry, a valid raw

@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { mkdir, writeFile } from "node:fs/promises";
 import PizZip from "pizzip";
 
 const baseUrl = process.env.JURO_SMOKE_BASE_URL ?? "http://127.0.0.1:4180";
@@ -178,6 +177,27 @@ async function main() {
 
   const firstChange = detail.data.comparison.changes.find(change => change.changeType !== "unchanged");
   assert.ok(firstChange);
+  const accepted = await api<{
+    change: { id: string; reviewDecision: string; reviewDecisionVersion: number };
+    replay: boolean;
+  }>(`/api/platform/document-comparisons/${comparisonId}/changes/${firstChange.id}`, {
+    method: "PATCH",
+    user: ownerEmail,
+    json: { decision: "accepted", locale: "ru" },
+  });
+  assert.equal(accepted.data.change.reviewDecision, "accepted");
+  assert.equal(accepted.data.change.reviewDecisionVersion, 1);
+  assert.equal(accepted.data.replay, false);
+  const acceptedReplay = await api<{
+    change: { id: string; reviewDecision: string; reviewDecisionVersion: number };
+    replay: boolean;
+  }>(`/api/platform/document-comparisons/${comparisonId}/changes/${firstChange.id}`, {
+    method: "PATCH",
+    user: ownerEmail,
+    json: { decision: "accepted", locale: "ru" },
+  });
+  assert.equal(acceptedReplay.data.change.reviewDecisionVersion, 1);
+  assert.equal(acceptedReplay.data.replay, true);
   await api(`/api/platform/document-comparisons/${comparisonId}`, {
     method: "PATCH",
     user: ownerEmail,
@@ -189,19 +209,49 @@ async function main() {
   assert.match(sourceOne.response.headers.get("cache-control") || "", /private.*no-store/);
   assert.deepEqual(Array.from(sourceOne.bytes.slice(0, 2)), [0x50, 0x4b]);
 
-  const pdf = await download(`/api/platform/document-comparisons/${comparisonId}/export?format=pdf`, ownerEmail);
-  const editable = await download(`/api/platform/document-comparisons/${comparisonId}/export?format=docx`, ownerEmail);
-  assert.equal(pdf.response.status, 200);
-  assert.equal(new TextDecoder().decode(pdf.bytes.slice(0, 5)), "%PDF-");
-  assert.equal(editable.response.status, 200);
-  assert.deepEqual(Array.from(editable.bytes.slice(0, 2)), [0x50, 0x4b]);
-  assert.ok(pdf.bytes.byteLength > 5_000);
-  assert.ok(editable.bytes.byteLength > 5_000);
-  await mkdir("outputs/smoke", { recursive: true });
-  await Promise.all([
-    writeFile("outputs/smoke/comparison-report-ru.pdf", pdf.bytes),
-    writeFile("outputs/smoke/comparison-redline-ru.docx", editable.bytes),
-  ]);
+  const pdfExport = await api<{
+    export: { id: string; comparisonId: string; format: string; status: string };
+    replay: boolean;
+  }>(`/api/platform/document-comparisons/${comparisonId}/export`, {
+    method: "POST",
+    user: ownerEmail,
+    headers: { "idempotency-key": `comparison-export-pdf-${comparisonId}` },
+    json: { format: "pdf" },
+    expected: 202,
+  });
+  assert.equal(pdfExport.data.export.comparisonId, comparisonId);
+  assert.equal(pdfExport.data.export.format, "pdf");
+  assert.equal(pdfExport.data.export.status, "queued");
+  assert.equal(pdfExport.data.replay, false);
+  const pdfReplay = await api<{
+    export: { id: string; status: string };
+    replay: boolean;
+  }>(`/api/platform/document-comparisons/${comparisonId}/export`, {
+    method: "POST",
+    user: ownerEmail,
+    headers: { "idempotency-key": `comparison-export-pdf-${comparisonId}` },
+    json: { format: "pdf" },
+  });
+  assert.equal(pdfReplay.data.export.id, pdfExport.data.export.id);
+  assert.equal(pdfReplay.data.replay, true);
+
+  const docxExport = await api<{
+    export: { id: string; comparisonId: string; format: string; status: string };
+    replay: boolean;
+  }>(`/api/platform/document-comparisons/${comparisonId}/export`, {
+    method: "POST",
+    user: ownerEmail,
+    headers: { "idempotency-key": `comparison-export-docx-${comparisonId}` },
+    json: { format: "docx" },
+    expected: 202,
+  });
+  assert.equal(docxExport.data.export.format, "docx");
+  assert.equal(docxExport.data.export.status, "queued");
+  const exportList = await api<{
+    exports: Array<{ id: string; format: string; status: string }>;
+  }>(`/api/platform/document-comparisons/${comparisonId}/export`, { user: ownerEmail });
+  assert.ok(exportList.data.exports.some(item => item.id === pdfExport.data.export.id && item.format === "pdf"));
+  assert.ok(exportList.data.exports.some(item => item.id === docxExport.data.export.id && item.format === "docx"));
 
   const identical = await createComparison(first, first, "identical");
   assert.ok(identical.data.warning);
@@ -297,8 +347,9 @@ async function main() {
     ok: true,
     comparisonId,
     changedCount: processed.data.comparison.summary.totalChanges,
-    pdfBytes: pdf.bytes.byteLength,
-    docxBytes: editable.bytes.byteLength,
+    acceptedChangeId: firstChange.id,
+    pdfExportId: pdfExport.data.export.id,
+    docxExportId: docxExport.data.export.id,
   }, null, 2));
 }
 

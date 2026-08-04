@@ -679,6 +679,17 @@ explicit removed/added wording plus strike/underline marks, so meaning is not
 color-only. Synthetic tests generate and inspect both formats and deny a second
 tenant. This is local only until migration 0071 and its Worker are authorized.
 
+## Phase 5 — review decisions for comparison changes (local candidate)
+
+Every detected change now supports an explicit owner decision: accept, reject,
+or clear back to pending. The RU/UZ reading-first change card persists through a
+strict Zod/CSRF route and shows a textual state with accessible pressed buttons.
+The backend rechecks comparison, workspace and owner, uses optimistic transition
+versions plus unique event IDs for concurrent/idempotent writes, and appends a
+metadata-only audit event. A decision marks the row reviewed but never creates a
+merged document or mutates either source version. Migration `0072`, protected
+staging browser evidence and deployment remain separately gated.
+
 ## Phase 5 — reproducible document evaluation artifacts (local candidate)
 
 The 100-row/30-pair evaluation manifest now materializes into actual deterministic

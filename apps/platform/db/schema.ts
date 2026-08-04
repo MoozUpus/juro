@@ -2888,12 +2888,21 @@ export const comparisonChanges = sqliteTable("comparison_changes", {
   sourceIdsJson: text("source_ids_json").notNull().default("[]"),
   confidencePercent: integer("confidence_percent"),
   reviewedAt: text("reviewed_at"),
+  reviewDecision: text("review_decision"),
+  decidedByUserId: text("decided_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  decidedAt: text("decided_at"),
+  reviewDecisionVersion: integer("review_decision_version").notNull().default(0),
+  reviewDecisionEventId: text("review_decision_event_id"),
   extractionWarning: integer("extraction_warning", { mode: "boolean" }).notNull().default(false),
   createdAt: text("created_at").notNull(),
 }, (table) => [
   uniqueIndex("comparison_changes_order_uidx").on(table.comparisonId, table.ordinal),
+  uniqueIndex("comparison_changes_decision_event_uidx")
+    .on(table.reviewDecisionEventId)
+    .where(sql`${table.reviewDecisionEventId} IS NOT NULL`),
   index("comparison_changes_type_idx").on(table.comparisonId, table.changeType),
   index("comparison_changes_risk_idx").on(table.comparisonId, table.riskLevel, table.riskEffect),
+  index("comparison_changes_decision_idx").on(table.comparisonId, table.reviewDecision, table.ordinal),
 ]);
 
 export const comparisonExports = sqliteTable("comparison_exports", {

@@ -2846,3 +2846,22 @@ the release report must pair it with a protected staging D1 export and approved
 reviewer roster. `sharp` is a direct development-only dependency because raster
 OCR fixtures require deterministic PNG/JPEG generation; it does not enter the
 application runtime bundle.
+
+## D-137 — Comparison review decisions are explicit state, not document mutation
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-04
+
+Accepting or rejecting one detected comparison change records the owner's review
+intent only. It must never synthesize a merged third version. Migration `0072`
+therefore adds nullable `accepted`/`rejected` state, actor/time evidence, an
+optimistic version and a unique transition event to `comparison_changes`.
+
+The service authorizes the comparison, workspace, owner and terminal processing
+state before a compare-and-swap update. The same requested state is an
+idempotent replay; competing state changes fail with a conflict. Every actual
+transition appends metadata-only workspace audit evidence without copying
+document text. Clearing returns the change to pending while preserving its
+independent `reviewed_at` evidence. RU/UZ controls expose text labels and
+`aria-pressed`; color is supplemental. Staging and production remain unchanged
+until a separately authorized backup, migration and deployment.
