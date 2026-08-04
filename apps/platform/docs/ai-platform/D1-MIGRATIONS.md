@@ -1281,3 +1281,17 @@ private backup, apply all pending migrations in ledger order through `0087`,
 run postflight integrity/trigger inspection, deploy the exact Worker and perform
 authenticated positive and negative capability/MFA/content-minimization probes.
 Rollback is application-first; retained evidence must not be dropped.
+## Pending 0088 — protected AI runtime settings
+
+`0088_ai_runtime_settings.sql` adds an immutable per-environment configuration
+history for deployment-allowlisted OpenAI/Anthropic models and the fixed
+`clear|formal|concise` response-tone policy. D1 enforces sequential versions,
+an environment hash chain, administrator assignment, a live device/session,
+active TOTP and MFA verified within 15 minutes. Update/delete are prohibited.
+Jurisdiction, legal-source allowlist, privacy, retention, authorization and
+prompt-injection controls are deliberately absent from the mutable schema.
+
+Status: local additive candidate. Protected staging remains through `0078`;
+production is unchanged. Before staging application, take and independently
+checksum/restore a fresh export in private `juro-staging-backups`, then apply
+the complete pending ledger in order rather than cherry-picking `0088`.

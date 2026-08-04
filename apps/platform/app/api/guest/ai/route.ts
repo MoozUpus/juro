@@ -46,6 +46,7 @@ import {
   type GuestAiRun,
   type GuestAiSession,
 } from "../../../../lib/ai/guest-session";
+import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -314,9 +315,11 @@ export async function POST(request: Request): Promise<Response> {
       answerMode: "short",
       reasoningMode: "fast",
     });
+    const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
     const instructionHash = await sha256Json({
       version: GUEST_INSTRUCTION_VERSION,
       jurisdiction: "UZ",
+      runtimeConfigHash: runtimeSettings.configHash,
     });
     const sourceVersionHash = await sha256Json({
       freshness: retrieval.freshness,
@@ -333,7 +336,9 @@ export async function POST(request: Request): Promise<Response> {
       idempotencyKey,
       requestHash,
       provider: provider.name,
-      model: providerStatus.model,
+      model: provider.name === "openai"
+        ? runtimeSettings.openaiChatModel
+        : runtimeSettings.anthropicChatFallbackModel,
       legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
       instructionHash,
       sourceVersionHash,
@@ -372,6 +377,7 @@ export async function POST(request: Request): Promise<Response> {
           scope: "guest-openai-safety-v1",
           sessionId: sessionContext.session.id,
         }),
+        runtimeSettings,
       }, { signal: request.signal });
     } catch (error) {
       const code = error instanceof AiUnavailableError

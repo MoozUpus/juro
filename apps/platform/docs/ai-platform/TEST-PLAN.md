@@ -176,3 +176,11 @@ call the bounded deep verifier before it records quarantine success.
 - Event/content mutation, chain tampering, branching and stale writes fail closed.
 - Route tests require POST-only, CSRF, strict Zod, private/no-store, RU/UZ,
   noindex, keyboard focus transfer and no HTML injection rendering.
+## AI runtime settings gate
+
+`tests/ai-runtime-settings.test.ts` verifies environment defaults, allowed-model
+activation, immutable D1 versions, stale-write rejection, forged-role denial,
+hash-chain corruption fail-closed behavior, protected-field exclusion,
+POST-only CSRF/fresh-MFA route contracts, RU/UZ UI accessibility hooks and the
+chat/document instruction-hash integration. `tests/migration-safety.test.ts`
+replays `0088` with the full ordered schema.

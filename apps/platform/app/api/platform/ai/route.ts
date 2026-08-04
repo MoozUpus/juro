@@ -45,6 +45,7 @@ import {
   ProviderCostControlError,
 } from "../../../../lib/ai/provider-cost-control";
 import { recordProviderUsage } from "../../../../lib/ai/provider-usage";
+import { resolveAiRuntimeSettings } from "../../../../lib/ai/runtime-settings";
 import {
   assertOperationalFeatureEnabled,
   operationalEnvironment,
@@ -245,7 +246,12 @@ async function executePost(
     })),
   });
   const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
-  const instructionHash = await sha256Json({ version: INSTRUCTION_VERSION, jurisdiction: "UZ" });
+  const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
+  const instructionHash = await sha256Json({
+    version: INSTRUCTION_VERSION,
+    jurisdiction: "UZ",
+    runtimeConfigHash: runtimeSettings.configHash,
+  });
   const sourceVersionHash = await sha256Json({
     freshness,
     evidence,
@@ -259,7 +265,11 @@ async function executePost(
     reservation = await reserveAiRun({
       db, workspaceId: workspace.id, userId: user.id, idempotencyKey, requestHash,
       conversationId: existingConversation ? conversationId : null,
-      provider: provider.name, model: providerStatus.model, answerMode, reasoningMode,
+      provider: provider.name,
+      model: provider.name === "openai"
+        ? (reasoningMode === "deep" ? runtimeSettings.openaiDeepModel : runtimeSettings.openaiChatModel)
+        : runtimeSettings.anthropicChatFallbackModel,
+      answerMode, reasoningMode,
       legalDatabaseAsOf, instructionHash, sourceVersionHash,
       monthlyLimit: entitlements.aiAnswerCyclesMonthly,
     });
@@ -336,6 +346,7 @@ async function executePost(
         statement: memory.statement,
         scope: memory.scope,
       })),
+      runtimeSettings,
     }, { signal, onProgress, beforeProviderCall });
   } catch (error) {
     const code = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";

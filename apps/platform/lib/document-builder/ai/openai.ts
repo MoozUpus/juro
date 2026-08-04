@@ -1,6 +1,7 @@
 import { runtimeEnv } from "../storage/runtime";
 import { readResponsesSse, ResponsesSseError } from "../../ai/responses-sse";
 import { openAiCompatibleJsonSchema } from "../../ai/openai-schema";
+import { resolveAiRuntimeSettings } from "../../ai/runtime-settings";
 
 export type AiProviderErrorCode =
   | "PROVIDER_UNAVAILABLE"
@@ -116,7 +117,10 @@ export async function callOpenAiStructured<T>(options: {
   if (!apiKey) {
     throw new AiUnavailableError("AI-модель не подключена: отсутствует серверный ключ провайдера.");
   }
-  const model = options.model || configuration.OPENAI_CHAT_MODEL || configuration.OPENAI_MODEL || "gpt-5.6-sol";
+  const model = options.model || (await resolveAiRuntimeSettings({
+    db: configuration.DB,
+    env: configuration,
+  })).openaiChatModel;
   const startedAt = Date.now();
   const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const maxAttempts = options.maxAttempts ?? 2;

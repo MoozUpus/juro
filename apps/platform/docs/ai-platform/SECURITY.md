@@ -160,3 +160,13 @@ is returned only after a view event is appended. Decision versions bind the
 current feedback timestamp and reject stale writes. The per-actor SHA-256 chain
 and immutable triggers fail closed on mutation, branching or forged roles.
 Migration `0087` and authenticated staging probes remain pending.
+## AI runtime configuration boundary
+
+AI model changes are limited to the server-controlled environment allowlist and
+require a current administrator assignment plus active TOTP and MFA no older
+than 15 minutes. D1 independently repeats that authorization check and rejects
+history forks, stale version writes, updates and deletes. Runtime refuses a
+present but corrupt configuration chain; absence of the `0088` table falls back
+to deployment variables only to preserve expand-migration compatibility.
+Secrets, prompts, jurisdiction, source allowlists and privacy/security rules are
+not mutable settings.

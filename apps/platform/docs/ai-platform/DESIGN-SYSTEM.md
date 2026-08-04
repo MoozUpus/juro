@@ -295,3 +295,11 @@ this control. Animation would not improve explanation, spatial orientation or
 confirmation beyond the native focus/disabled state and status announcement.
 Staging keyboard, touch, 200% zoom, forced-colors and screen-reader verification
 remain open and are not claimed by this local implementation.
+## AI settings admin surface
+
+The model console follows the dense admin profile: one stable shell, restrained
+motion, native selects, explicit protected-invariant panel, visible focus and
+mobile single-column reflow. Gold is not used as a generic border. The surface
+has no animated background, marketing hero, hidden hover-only action or
+free-form model input; reduced motion removes press transforms without hiding
+state feedback.

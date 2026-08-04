@@ -1,6 +1,6 @@
-import { DEFAULT_ANTHROPIC_MODEL } from "../../ai/provider-models";
 import { anthropicCompatibleJsonSchema } from "../../ai/anthropic-schema";
 import { runtimeEnv } from "../storage/runtime";
+import { resolveAiRuntimeSettings } from "../../ai/runtime-settings";
 import {
   AiUnavailableError,
   type AiProviderUsage,
@@ -64,7 +64,10 @@ export async function callAnthropicStructured<T>(options: {
   if (!apiKey) {
     throw new AiUnavailableError("Резервный AI-провайдер не подключён: отсутствует серверный ключ.");
   }
-  const model = options.model || configuration.ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
+  const model = options.model || (await resolveAiRuntimeSettings({
+    db: configuration.DB,
+    env: configuration,
+  })).anthropicChatFallbackModel;
   const startedAt = Date.now();
   const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const maxAttempts = options.maxAttempts ?? 2;

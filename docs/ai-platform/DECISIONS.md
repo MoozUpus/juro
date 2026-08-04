@@ -307,3 +307,13 @@ contains only hashes, classification and opaque identifiers. Access is limited
 to a legal reviewer with active TOTP and MFA verified within 15 minutes. The
 application and migration `0087` both enforce this boundary; staging remains
 through `0078` and production is unchanged.
+## 2026-08-05 — AI runtime settings are allowlist-only and immutable
+
+Decision: expose only deployment-allowlisted model choices and a fixed response
+tone enum through an administrator/fresh-MFA console. Store changes as additive,
+hash-chained D1 versions and bind the selected config hash into each chat or
+document-analysis instruction hash. Keep jurisdiction, official-source rules,
+privacy, retention, tenant authorization and injection defenses protected in
+code/config. A missing table may use deployment defaults during expand rollout;
+a present invalid chain fails closed. Migration `0088` remains local pending a
+new staging backup/migration/deploy authorization; production is unchanged.

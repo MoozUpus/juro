@@ -41,11 +41,13 @@ import {
   suggestedRevisionId,
 } from "./revisions";
 import { scheduleUserDocumentIndexStatements } from "./user-document-vectors";
+import { resolveAiRuntimeSettings, type AiRuntimeSettings } from "../ai/runtime-settings";
+import type { BuilderRuntimeEnv } from "../document-builder/storage/runtime";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
 
-export type DocumentAnalysisProcessorEnv = LegalSemanticSearchEnv & {
+export type DocumentAnalysisProcessorEnv = LegalSemanticSearchEnv & BuilderRuntimeEnv & {
   DB: D1Database;
   BUCKET: R2Bucket;
 };
@@ -78,6 +80,7 @@ type PersistedAnalysis = {
     inputTokens: number;
     outputTokens: number;
     cachedInputTokens: number;
+    runtimeConfigHash: string;
   };
   extraction: {
     detectedLanguage: string;
@@ -139,6 +142,7 @@ export type DocumentAnalysisProcessorDependencies = {
       provider: "openai" | "anthropic";
       model: string;
     }) => void | Promise<void>;
+    runtimeSettings?: AiRuntimeSettings;
   }) => Promise<AiStructuredResult<DocumentAnalysisResult>>;
 };
 
@@ -147,7 +151,10 @@ const defaultDependencies: DocumentAnalysisProcessorDependencies = {
   retrieve: retrieveVerifiedLegalSources,
   analyze: async (input) => {
     const { runDocumentAnalysis } = await import("./provider");
-    return runDocumentAnalysis(input, { beforeProviderCall: input.beforeProviderCall });
+    return runDocumentAnalysis(input, {
+      beforeProviderCall: input.beforeProviderCall,
+      runtimeSettings: input.runtimeSettings,
+    });
   },
 };
 
@@ -282,6 +289,7 @@ async function analyzeObject(
     const request = parseRequestMetadata(row.summaryJson);
     const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8, { semantic: env });
     const providerEnvironment = parseProviderEnvironment(env.APP_ENV);
+    const runtimeSettings = await resolveAiRuntimeSettings({ db: env.DB, env });
     const providerCalls: Array<{
       provider: "openai" | "anthropic";
       model: string;
@@ -302,6 +310,7 @@ async function analyzeObject(
         sources: retrieval.sources,
         legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
         requestId: `document-analysis-${row.analysisId}`,
+        runtimeSettings,
         beforeProviderCall: async (call) => {
           try {
             await assertProviderCallAllowed({
@@ -435,6 +444,7 @@ async function analyzeObject(
         inputTokens: ai.usage.inputTokens,
         outputTokens: ai.usage.outputTokens,
         cachedInputTokens: ai.usage.cachedInputTokens,
+        runtimeConfigHash: runtimeSettings.configHash,
       },
       extraction: {
         detectedLanguage: extracted.detectedLanguage,
@@ -541,7 +551,9 @@ async function persistNormalizedAnalysis(
   const sourceVersionHash = await sha256Hex(new TextEncoder().encode(
     persisted.result.sources.map((source) => `${source.sourceId}:${source.verifiedAt}`).sort().join("|"),
   ));
-  const instructionHash = await sha256Hex(new TextEncoder().encode("juro-document-analysis-v1"));
+  const instructionHash = await sha256Hex(new TextEncoder().encode(
+    JSON.stringify({ version: "juro-document-analysis-v1", runtimeConfigHash: persisted.technical.runtimeConfigHash }),
+  ));
   const sourceVersion = await db.prepare(
     `SELECT id,sha256 FROM analysis_document_versions
      WHERE id=? AND analysis_id=? AND workspace_id=? AND owner_user_id=? LIMIT 1`,
@@ -679,6 +691,12 @@ function parsePersistedAnalysis(value: string | null): PersistedAnalysis {
     }
     return {
       ...parsed,
+      technical: {
+        ...parsed.technical,
+        runtimeConfigHash: /^[a-f0-9]{64}$/.test(parsed.technical?.runtimeConfigHash ?? "")
+          ? parsed.technical.runtimeConfigHash
+          : "0".repeat(64),
+      },
       result,
       extraction: {
         ...parsed.extraction,

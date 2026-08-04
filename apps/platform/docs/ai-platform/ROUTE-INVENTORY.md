@@ -555,3 +555,12 @@ route.
 There is no GET endpoint. Queue responses do not contain question, answer,
 structured output or feedback comment. Migration `0087` is local and changes no
 canonical user, AI-lawyer or document-builder route.
+## Local protected AI settings route
+
+| Route | Method | Boundary | Status |
+|---|---|---|---|
+| `/:locale/admin/ai-settings` | GET page | local session, administrator capability, active TOTP, MFA ≤15 min, noindex | local candidate |
+| `/api/platform/admin/ai-settings` | POST only | same staff boundary, CSRF/origin write guard, strict 16 KiB payload | local candidate |
+
+The query action returns only model identifiers, hashes, reasons and actor IDs;
+no provider secret or user content is stored or returned.

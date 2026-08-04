@@ -970,3 +970,17 @@ multi-version resolution, stale feedback detection, deletion retention, forged
 role rejection, immutable triggers, tamper detection and route boundaries.
 Migration `0087`, authenticated browser QA and staging deploy remain separately
 gated; staging is through `0078` and production is unchanged.
+## Protected AI runtime settings (local candidate)
+
+- `/:locale/admin/ai-settings` and `POST /api/platform/admin/ai-settings`
+  provide RU/UZ, noindex, fresh-MFA administrator-only model selection.
+- The UI contains selects only. Values must already exist in Cloudflare
+  server variables; arbitrary model names and protected system rules cannot be
+  submitted through the strict API schema.
+- Every accepted change creates an immutable, sequential, hash-chained D1
+  version with actor/session/assignment/MFA evidence and an operator reason.
+- Registered chat, guest chat, document analysis and builder provider adapters
+  resolve the active version. Chat and analysis `ai_runs.instruction_hash`
+  binds the exact runtime config hash used for the provider call.
+- Focused security and migration verification passes 64/64. Migration `0088`
+  is not applied to staging; staging remains through `0078`.

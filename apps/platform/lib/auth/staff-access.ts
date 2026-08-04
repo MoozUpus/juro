@@ -20,6 +20,7 @@ export const platformStaffCapabilities = [
   "lawyer.reviews.moderate",
   "lawyer.profiles.moderate",
   "ai.quality.review",
+  "ai.settings.manage",
 ] as const;
 
 export type PlatformStaffCapability =
@@ -34,6 +35,7 @@ const roleCapabilities: Readonly<
     "staff.security.audit",
     "staff.operations.manage",
     "knowledge.base.manage",
+    "ai.settings.manage",
   ]),
   support: new Set([
     "staff.console.view",

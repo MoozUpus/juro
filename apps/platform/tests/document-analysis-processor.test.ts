@@ -279,6 +279,13 @@ class TestStatement {
   constructor(private readonly sqlite: DatabaseSync, private readonly sql: string, private readonly values: unknown[] = []) {}
   bind(...values: unknown[]) { return new TestStatement(this.sqlite, this.sql, values); }
   first<T>(): T | null { return (this.sqlite.prepare(this.sql).get(...this.bindings()) as T | undefined) ?? null; }
+  all<T>() {
+    return {
+      results: this.sqlite.prepare(this.sql).all(...this.bindings()) as T[],
+      success: true as const,
+      meta: { changes: 0 },
+    };
+  }
   run() {
     const result = this.sqlite.prepare(this.sql).run(...this.bindings());
     return { results: [], success: true as const, meta: { changes: Number(result.changes) } };
