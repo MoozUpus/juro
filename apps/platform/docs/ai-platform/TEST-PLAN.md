@@ -21,7 +21,8 @@ verified version is the only successful freshness path.
 strict bounded result schema, canonical Lex/Advice document routes,
 same-document redirects, 2xx HTML response evidence, exact source
 classification and rejection of provider/user-invented fields. The CLI is
-`npm run evaluate:legal:validate -- --results <reviewed-results.json>`.
+`npm run evaluate:legal:validate -- --packet <packet-directory> --results
+<reviewed-results.json>`.
 Internal citations are not accepted from result JSON alone. Passing still
 requires all real outputs, current public link checks and named human review;
 unit fixtures are not legal ground truth.

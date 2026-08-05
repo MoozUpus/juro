@@ -166,6 +166,12 @@ export const legalCitationEvidenceSchema = z.object({
 
 export const legalEvaluationResultSchema = z.object({
   scenarioId: evidenceIdentifierSchema,
+  aiRunId: evidenceIdentifierSchema,
+  provider: z.enum(["openai", "anthropic"]),
+  model: z.string().trim().min(1).max(160).regex(/^[A-Za-z0-9._:/-]+$/),
+  instructionHash: z.string().regex(/^[a-f0-9]{64}$/),
+  legalDatabaseVersion: evidenceIdentifierSchema,
+  completedAt: z.string().datetime({ offset: true }),
   answerLanguage: z.enum(["ru", "uz"]),
   jurisdiction: z.literal("UZ"),
   confirmedFindingCount: z.number().int().min(0).max(100),
@@ -173,8 +179,10 @@ export const legalEvaluationResultSchema = z.object({
   observedBehaviors: z.array(z.enum(LEGAL_EVALUATION_BEHAVIORS))
     .max(LEGAL_EVALUATION_BEHAVIORS.length),
   criticalDeadlineDetected: z.boolean().optional(),
-  reviewedLanguageQuality: z.number().min(0).max(100).optional(),
-  humanReviewerId: evidenceIdentifierSchema.optional(),
+  reviewedLanguageQuality: z.number().min(0).max(100),
+  humanReviewerId: evidenceIdentifierSchema,
+  reviewedAt: z.string().datetime({ offset: true }),
+  reviewEvidenceHash: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
 
 export const legalEvaluationResultsSchema = z.array(legalEvaluationResultSchema)

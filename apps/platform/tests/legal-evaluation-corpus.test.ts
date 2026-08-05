@@ -5,8 +5,11 @@ import { join } from "node:path";
 import test from "node:test";
 import { verifyPublicCitation } from "../evaluation/legal-citation-live-check";
 import {
+  createLegalEvaluationResultsEnvelope,
+  legalEvaluationResultsEnvelopeSchema,
   materializeLegalEvaluationArtifacts,
   verifyLegalEvaluationArtifactManifest,
+  verifyLegalEvaluationResultsEnvelope,
 } from "../evaluation/legal-evaluation-artifacts";
 import {
   LEGAL_EVALUATION_ACCOUNT_TYPES,
@@ -25,6 +28,12 @@ const unitLiveEvidence = new Map([[unitCitationUrl, true]]);
 function reviewedResult(scenario: (typeof legalEvaluationCorpus)[number]): LegalEvaluationResult {
   return {
     scenarioId: scenario.id,
+    aiRunId: `run:${scenario.id}`,
+    provider: "openai",
+    model: "unit-model",
+    instructionHash: "d".repeat(64),
+    legalDatabaseVersion: "unit-db-1",
+    completedAt: "2026-08-04T00:01:00.000Z",
     answerLanguage: scenario.locale,
     jurisdiction: "UZ",
     confirmedFindingCount: 1,
@@ -42,6 +51,8 @@ function reviewedResult(scenario: (typeof legalEvaluationCorpus)[number]): Legal
     criticalDeadlineDetected: scenario.tags.includes("critical_deadline"),
     reviewedLanguageQuality: MIN_REVIEWED_LANGUAGE_QUALITY,
     humanReviewerId: "unit_reviewer_fixture",
+    reviewedAt: "2026-08-04T01:00:00.000Z",
+    reviewEvidenceHash: "e".repeat(64),
   };
 }
 
@@ -80,6 +91,19 @@ test("legal review packet materializes deterministically and detects tampering",
     const scenarios = JSON.parse(await readFile(join(directory, "scenarios.json"), "utf8")) as unknown[];
     assert.equal(scenarios.length, 314);
     assert.equal(Object.hasOwn(scenarios[0] as object, "answer"), false);
+    const envelope = createLegalEvaluationResultsEnvelope({
+      manifest: first,
+      applicationCommit: "f".repeat(40),
+      evaluationRunId: "unit-run-001",
+      generatedAt: "2026-08-04T02:00:00.000Z",
+      results: legalEvaluationCorpus.map(reviewedResult),
+    });
+    assert.equal(legalEvaluationResultsEnvelopeSchema.safeParse(envelope).success, true);
+    assert.deepEqual(verifyLegalEvaluationResultsEnvelope(envelope, first), []);
+    assert.ok(verifyLegalEvaluationResultsEnvelope({
+      ...envelope,
+      corpusSha256: "0".repeat(64),
+    }, first).includes("LEGAL_RESULTS_CORPUS_HASH_MISMATCH"));
     await writeFile(join(directory, "artifact-manifest.json"), "{}\n", "utf8");
     assert.ok((await verifyLegalEvaluationArtifactManifest(directory, first)).includes(
       "LEGAL_ARTIFACT_MANIFEST_INTEGRITY_MISMATCH",
@@ -94,7 +118,7 @@ test("legal review packet materializes deterministically and detects tampering",
   }
 });
 
-test("evaluation validator refuses fabricated allowlisted URLs, incomplete results, and missing review", () => {
+test("evaluation validator refuses fabricated allowlisted URLs and incomplete result sets", () => {
   const one = legalEvaluationCorpus[0]!;
   const result = validateLegalEvaluationResults([{
     ...reviewedResult(one),
@@ -108,13 +132,11 @@ test("evaluation validator refuses fabricated allowlisted URLs, incomplete resul
       sourceHash: "b".repeat(64),
       verificationMethod: "http",
     }],
-    humanReviewerId: undefined,
   }]);
   assert.equal(result.passed, false);
   assert.ok(result.failures.includes("RESULT_COUNT_MISMATCH"));
   assert.ok(result.failures.includes(`CITATION_SOURCE_EVIDENCE_INVALID:${one.id}:fabricated`));
   assert.ok(result.failures.includes(`CITATION_EXISTENCE_UNPROVEN:${one.id}:fabricated`));
-  assert.ok(result.failures.includes(`HUMAN_REVIEW_MISSING:${one.id}`));
 });
 
 test("evaluation validator enforces live source type, language, expected behaviors, and deadline rates", () => {
@@ -250,5 +272,13 @@ test("legal evaluation input schema is bounded, strict, and fail-closed", () => 
   assert.equal(legalEvaluationResultsSchema.safeParse([{
     ...valid,
     observedBehaviors: ["invent_a_source"],
+  }]).success, false);
+  assert.equal(legalEvaluationResultsSchema.safeParse([{
+    ...valid,
+    provider: "unknown",
+  }]).success, false);
+  assert.equal(legalEvaluationResultsSchema.safeParse([{
+    ...valid,
+    humanReviewerId: undefined,
   }]).success, false);
 });

@@ -17,8 +17,9 @@ These records intentionally contain no invented legal answer, act, article, link
 or success score. `npm run evaluate:legal:materialize -- --output <directory>`
 creates a versioned review packet with `scenarios.json`, reviewer instructions
 and a SHA-256 manifest; it still creates no answer or score.
-`npm run evaluate:legal:validate -- --results
-<reviewed-results.json>` accepts only one strictly schema-valid result per
+`npm run evaluate:legal:validate -- --packet <packet-directory> --results
+<reviewed-results.json>` accepts only a strict staging envelope bound to the
+packet corpus version and SHA-256, with one schema-valid result per
 scenario. Public citations must use the exact canonical Lex or Advice document
 path without credentials, query, fragment or alternate port. Live checking
 permits only bounded redirects that retain the same source kind, locale and
@@ -31,6 +32,12 @@ jurisdiction mismatch, unreviewed output, reviewer language quality below
 95/100, any unproven citation, or critical-deadline detection below 98%.
 Therefore a passing report still requires real reviewed output and cannot be
 fabricated by the synthetic corpus.
+
+Each reviewed result also records the persisted AI run, actual provider/model,
+instruction hash, legal-database version, completion time, reviewer, review
+time and a hash reference to separately retained review evidence. These fields
+make a gate reproducible; they do not themselves prove that human review
+occurred or that the legal answer is correct.
 ## Current automated evidence
 
 The current integration branch tests exact Lex/Advice host and type trust,

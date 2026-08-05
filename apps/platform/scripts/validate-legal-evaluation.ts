@@ -1,10 +1,15 @@
 import { readFile } from "node:fs/promises";
 import {
   legalEvaluationCorpus,
-  legalEvaluationResultsSchema,
   validateLegalEvaluationResults,
   type LegalEvaluationResult,
 } from "../evaluation/legal-evaluation-corpus";
+import {
+  legalEvaluationResultsEnvelopeSchema,
+  readLegalEvaluationArtifactManifest,
+  verifyLegalEvaluationArtifactManifest,
+  verifyLegalEvaluationResultsEnvelope,
+} from "../evaluation/legal-evaluation-artifacts";
 import { verifyPublicCitation } from "../evaluation/legal-citation-live-check";
 
 async function verifyCitationUrls(results: readonly LegalEvaluationResult[]): Promise<Map<string, boolean>> {
@@ -25,17 +30,27 @@ async function verifyCitationUrls(results: readonly LegalEvaluationResult[]): Pr
 
 const flagIndex = process.argv.indexOf("--results");
 const path = flagIndex >= 0 ? process.argv[flagIndex + 1] : undefined;
-if (!path) {
-  console.error("Usage: npx tsx scripts/validate-legal-evaluation.ts --results <reviewed-results.json>");
+const packetFlagIndex = process.argv.indexOf("--packet");
+const packetDirectory = packetFlagIndex >= 0 ? process.argv[packetFlagIndex + 1] : undefined;
+if (!path || !packetDirectory) {
+  console.error("Usage: npx tsx scripts/validate-legal-evaluation.ts --packet <packet-directory> --results <reviewed-results.json>");
   process.exitCode = 2;
 } else {
-  let results: LegalEvaluationResult[];
+  let results: LegalEvaluationResult[] = [];
+  let evaluationRunId = "invalid";
+  let applicationCommit = "invalid";
   try {
+    const manifest = await readLegalEvaluationArtifactManifest(packetDirectory);
+    const packetFailures = await verifyLegalEvaluationArtifactManifest(packetDirectory, manifest);
+    if (packetFailures.length > 0) throw new TypeError(packetFailures.join(","));
     const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
-    if (!Array.isArray(parsed)) throw new TypeError("RESULTS_NOT_ARRAY");
-    const validated = legalEvaluationResultsSchema.safeParse(parsed);
+    const validated = legalEvaluationResultsEnvelopeSchema.safeParse(parsed);
     if (!validated.success) throw new TypeError("RESULTS_SCHEMA_INVALID");
-    results = validated.data;
+    const bindingFailures = verifyLegalEvaluationResultsEnvelope(validated.data, manifest);
+    if (bindingFailures.length > 0) throw new TypeError(bindingFailures.join(","));
+    results = validated.data.results;
+    evaluationRunId = validated.data.evaluationRunId;
+    applicationCommit = validated.data.applicationCommit;
   } catch (error) {
     console.error(JSON.stringify({ code: "RESULTS_FILE_INVALID", detail: error instanceof Error ? error.message : "unknown" }));
     process.exitCode = 2;
@@ -47,6 +62,8 @@ if (!path) {
     console.log(JSON.stringify({
       corpusSize: legalEvaluationCorpus.length,
       resultCount: results.length,
+      evaluationRunId,
+      applicationCommit,
       ...verdict,
     }, null, 2));
     if (!verdict.passed) process.exitCode = 1;
