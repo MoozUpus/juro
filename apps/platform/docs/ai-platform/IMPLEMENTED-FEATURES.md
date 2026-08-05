@@ -18,6 +18,18 @@
   No controlled remote alert/Queue receipt, real email or production change is
   claimed.
 
+## Verified corpus freshness guard (staging checkpoint)
+
+- Migration `0091` requires every successful full corpus run to cover at least
+  one discovered item and to fetch and verify all discovered items without a
+  changed pending-review version or error.
+- D1 insert/update guards enforce the same counter predicate as the Worker;
+  terminal run evidence is immutable and cannot be deleted.
+- Private backup round-trip, isolated pre/post restore, exact migration,
+  GitHub CI and exact commit `81de7bb` staging deployment passed. Controlled
+  corpus execution, Queue/email evidence and named legal review remain open;
+  production is unchanged.
+
 ## Bounded Lex RU/UZ RSS discovery (local candidate)
 
 - The daily corpus run is claimed atomically before network discovery, so an

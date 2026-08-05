@@ -3,8 +3,9 @@
 > Corpus alert checkpoint — 2026-08-05: migration `0089`, bounded failure/stale
 > evaluation and idempotent Resend delivery are deployed to protected staging
 > from exact commit `1aadfc6`. No controlled remote alert row, Queue/DLQ log or
-> received test email is claimed. Local migration `0091` additionally prevents
-> unreviewed fetches from claiming freshness but is not yet applied. Operational
+> received test email is claimed. Migration `0091` additionally prevents
+> unreviewed fetches from claiming freshness and is deployed to protected
+> staging from exact `81de7bb`. Operational
 > freshness does not prove corpus completeness or legal correctness.
 
 > Lex discovery checkpoint — 2026-08-05: the local candidate discovers only

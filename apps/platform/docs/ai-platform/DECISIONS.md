@@ -3051,7 +3051,7 @@ local until a separately authorized backup, ordered migration and deploy cycle.
 
 ## D-147 — Corpus freshness requires activated verified coverage
 
-Status: accepted and locally verified; staging migration pending
+Status: accepted and deployed to protected staging
 Date: 2026-08-05
 
 A successful HTTP fetch is acquisition evidence, not legal-freshness evidence.
@@ -3065,8 +3065,8 @@ D1 guards enforce the counter and success invariants independently of Worker
 code; terminal run evidence is immutable and cannot be deleted. Freshness,
 source-health and operational-alert readers repeat the exact predicate so a
 legacy unverified success cannot silently restore a healthy state. Migration
-`0091` preserves legacy rows for audit and remains local until separately
-authorized backup, migration and exact staging deployment.
+`0091` preserves legacy rows for audit and is deployed to protected staging
+under `STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`.
 
 ## D-148 — Evaluation citations are canonical and independently replayed
 
@@ -3086,3 +3086,14 @@ invalid hashes/timestamps/enums, oversized arrays, redirect-to-another-document
 and provider-invented paths are release failures. These checks prove evidence
 shape and replayability, not legal correctness; named human review of all real
 outputs remains mandatory.
+
+## D-149 — Verified corpus freshness is active only in protected staging
+
+Status: accepted and deployed to protected staging
+Date: 2026-08-05
+
+Migration `0091` and exact commit `81de7bb` are active in staging after a
+private backup round-trip and isolated pre/post restore. Operational freshness
+now fails closed against changed, incomplete or unverified corpus coverage.
+Production remains unchanged. Deployment and schema evidence do not replace a
+controlled corpus run, Queue/email proof or named legal review.

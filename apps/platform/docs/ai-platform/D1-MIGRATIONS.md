@@ -1,14 +1,14 @@
 # JURO D1 migrations
 
 > Current checkpoint — 2026-08-05: protected `juro-staging` is through
-> `0090_legal_source_applicability.sql` with 91 ledger rows. A fresh pre-change
+> `0091_verified_corpus_freshness.sql` with 92 ledger rows. A fresh pre-change
 > full/schema/data export round-tripped through private `juro-staging-backups`
 > and restored in isolation with `quick_check=ok` and zero foreign-key
-> violations. Worker `81ba33a4-2f12-4672-a25a-d28cd31a2434` is the exact
-> `1aadfc6` artifact. Sections below that describe earlier migrations as pending
+> violations. Worker `3625c4b0-5bd9-4220-94b0-81ee3480acec` is the exact
+> `81de7bb` artifact. Sections below that describe earlier migrations as pending
 > are historical candidate notes and are superseded by this checkpoint.
-> Migration `0091` remains local and unapplied; production is unchanged. Exact
-> evidence is in `STAGING-0089-0090-EVIDENCE.md`.
+> are historical notes superseded by this checkpoint. Production is unchanged.
+> Exact evidence is in `STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`.
 
 ## Migration 0089 — legal corpus operational alerts (staging applied)
 
@@ -29,15 +29,16 @@ reviewer-bound status and effective-interval evidence for an exact legal source
 version. Staging application, schema/FK postflight and exact Worker deployment
 passed with `0089`; production is unchanged.
 
-## Pending 0091 — verified corpus freshness
+## Migration 0091 — verified corpus freshness (staging applied)
 
 `0091_verified_corpus_freshness.sql` replaces only the existing insert/update
 guards and adds a delete guard for `source_sync_runs`. A corpus success must
 cover every fetched source with the current activated, staff-published verified
 version; otherwise the run is `partial` or `failed` and cannot satisfy freshness
-queries. Legacy rows are preserved for audit. The migration and matching Worker
-remain local pending a fresh verified staging backup and a new explicit
-migration/deploy authorization.
+queries. Legacy rows are preserved for audit. Private backup round-trip,
+isolated pre/post restores, migration and exact Worker deployment passed on
+2026-08-05. Controlled corpus/Queue/email and authenticated reviewer gates
+remain open.
 
 ## Pending 0086 — protected platform audit access
 

@@ -362,7 +362,7 @@ When a successor is activated, the predecessor ends at the earlier of its review
 
 ## D-122 — legal freshness requires verified activated coverage
 
-Status: accepted and locally verified; staging migration pending
+Status: accepted and deployed to protected staging
 Date: 2026-08-05
 
 A successful fetch is acquisition evidence, not legal-freshness evidence. Full
@@ -371,7 +371,8 @@ to match their current staff-published, activated, verified versions. Changed or
 new pending-review versions close as `partial` and cannot refresh the database
 timestamp. D1 enforces the counters and immutable terminal evidence; application
 freshness, health and alert readers repeat the predicate. Migration `0091`
-preserves legacy rows and remains local pending separate authorization.
+preserves legacy rows and is deployed to protected staging under
+`STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`.
 
 ## D-123 — evaluation citations require canonical live evidence
 
@@ -384,3 +385,9 @@ same-document redirects and terminal 2xx HTML/XHTML. Strict bounded Zod input
 rejects provider-invented or malformed evidence. Internal citations require a
 separate staging-DB proof and fail closed in the standalone CLI. This gate does
 not replace named human legal review of all real evaluation outputs.
+
+## D-124 — verified corpus freshness deployed only to staging
+
+Migration `0091` and exact commit `81de7bb` are deployed to protected staging
+after verified private backup and isolated restore. Production remains
+unchanged. See `STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`.

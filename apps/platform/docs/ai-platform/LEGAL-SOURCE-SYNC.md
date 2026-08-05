@@ -10,11 +10,12 @@
 > from exact commit `1aadfc6`; a controlled alert-delivery rehearsal and
 > received test email remain pending. Production is unchanged.
 
-> Local fail-closed candidate — 2026-08-05: migration `0091` requires a corpus
+> Staging fail-closed checkpoint — 2026-08-05: migration `0091` requires a corpus
 > success to match every fetched item to its current activated, staff-published
 > verified version. New or changed pending-review content becomes `partial` and
-> cannot update legal-database freshness. The migration is tested locally but
-> is not applied to staging or production.
+> cannot update legal-database freshness. Migration and exact commit `81de7bb`
+> are deployed to protected staging under
+> `STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`; production is unchanged.
 
 > Local candidate — 2026-08-05: the nightly scheduler can discover at most 40
 > recent canonical Lex documents from the official RU and UZ RSS feeds. It

@@ -4,9 +4,9 @@ Current read-only verification: 2026-08-05. Staging resources below were queried
 
 ## Staging
 
-- Worker: `juro-platform-staging`; deployed version `81ba33a4-2f12-4672-a25a-d28cd31a2434` was published from exact commit `1aadfc6`.
-- D1: `juro-staging`, ID `bb716a96-b2fb-4823-90d6-6c228fed181a`, through additive migration `0090`; postflight contains 207 tables, 447 non-system indexes and 256 triggers with `quick_check=ok` and zero foreign-key violations.
-- Private R2: `juro-staging-files`, `juro-staging-backups` and `juro-staging-quarantine`. The 2026-08-05 D1 checkpoint was round-trip verified under private prefix `d1/juro-staging/20260805-102216/`; mutable object counts are not treated as application invariants.
+- Worker: `juro-platform-staging`; deployed version `3625c4b0-5bd9-4220-94b0-81ee3480acec` was published from exact commit `81de7bb`.
+- D1: `juro-staging`, ID `bb716a96-b2fb-4823-90d6-6c228fed181a`, through additive migration `0091`; postflight contains 207 tables, 447 non-system indexes and 257 triggers with `quick_check=ok` and zero foreign-key violations.
+- Private R2: `juro-staging-files`, `juro-staging-backups` and `juro-staging-quarantine`. The 2026-08-05 D1 checkpoint was round-trip verified under private prefix `d1/juro-staging/20260805-115908-0091/`; mutable object counts are not treated as application invariants.
 - Vectorize: `staging-lex-uz`, `staging-advice-uz`, `staging-internal-legal-materials`, and `staging-user-documents`; each exists with 1,536 dimensions and cosine distance.
 - Analytics Engine dataset: `juro-platform-staging` is present in the validated Worker binding artifact.
 
@@ -34,4 +34,4 @@ The objective also names malware scanning as conditional. No malware queue is at
 
 The generated staging artifact has `APP_ENV=staging` and the repository validator confirms its D1/R2/Queue/Vectorize bindings and packaged migrations. Deployment must use `npm run deploy:staging`; direct deployment from a stale `dist` directory is prohibited. Anonymous staging routes are protected by Cloudflare Access. Production deployment and production UI replacement remain separate owner approvals.
 
-The full backup, restore, migration, CI, deployment and boundary evidence for the current checkpoint is in `STAGING-0089-0090-EVIDENCE.md`. Authenticated operator behavior is still a distinct gate.
+The full backup, restore, migration, CI, deployment and boundary evidence for the current checkpoint is in `STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`. Authenticated operator behavior is still a distinct gate.

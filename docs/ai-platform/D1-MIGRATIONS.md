@@ -13,15 +13,17 @@ historical preflight notes superseded by this checkpoint.
 
 ## 0091 — verified corpus freshness
 
-Status: additive local candidate; protected staging is through `0090`;
-production is unchanged.
+Status: applied and independently restore-verified in protected staging on
+2026-08-05; production is unchanged.
 
 `0091_verified_corpus_freshness.sql` makes legal freshness fail closed. A full
 corpus run may be `success` only when every discovered item was fetched and
 matches an activated, staff-published verified version. New or changed
 pending-review material closes the run as `partial`. Terminal run evidence is
 immutable; legacy rows are preserved for audit. A new private backup,
-restore-check, explicit migration authorization and exact deploy are required.
+restore-check, exact migration and exact Worker deploy passed under
+`STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`. Authenticated reviewer,
+controlled corpus-run and Queue/email evidence remain separate gates.
 
 ## 0079–0088 — protected staging checkpoint
 
