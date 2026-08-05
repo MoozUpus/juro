@@ -8,6 +8,17 @@
 > or downgrade the active schema. The remaining items in this register remain
 > release gates until their stated evidence exists.
 
+> **Migration-ledger clarification — 2026-08-06.** A direct read-only query
+> of `juro-staging` confirmed that ledger rows 80–100 apply migrations
+> `0079_lawyer_review_replies.sql` through
+> `0099_staging_email_delivery_probe.sql`. Consequently, any lower historical
+> sentence saying one of those migrations was “local-only”, “unapplied” or
+> “not deployed” must not be used to describe the active staging schema. It
+> remains valid only as time-stamped implementation history. Applying a schema
+> migration is not, by itself, evidence of an authenticated user journey,
+> provider operation, scanner verdict, legal-quality result, queue rehearsal or
+> human review; those release gates remain open unless separately evidenced.
+
 > Current checkpoint — 2026-08-06: protected staging provider evidence now
 > proves the current OpenAI and Anthropic transports with fixed, content-free
 > input; one separately gated, content-free Resend probe now also has an API
