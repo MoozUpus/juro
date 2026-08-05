@@ -167,7 +167,7 @@
   `030e3db0-6de5-455f-a90b-0350d346f5cf`; no eligible user file can reach it
   while the real malware gate remains closed. Production is unchanged.
 
-## Disabled malware-scanner integration contract (schema staged, scanner absent)
+## Private staging malware scanner (infected path verified)
 
 - `0068_file_scan_evidence.sql` adds tenant-bound, terminal scan evidence with
   clean/infected invariants and immutable updates.
@@ -179,10 +179,14 @@
   present: `MALWARE_SCAN_ENABLED=true`, an internal `MALWARE_SCANNER` service
   binding, and `MALWARE_SCAN_QUEUE`.
 - Migration `0068` is applied only to `juro-staging` after a verified private-R2
-  backup and restore. No checked-in environment provides the three runtime
-  controls, the evidence table contains zero rows, and the existing
-  unavailable/quarantine response remains the actual behavior. See
-  `STAGING-0068-FILE-SCAN-EVIDENCE.md`.
+  backup and restore. Staging alone provides all three runtime controls through
+  a private service binding, dedicated Queue/DLQ and pinned ClamAV Container;
+  development and production remain deliberately unbound.
+- A staging-only EICAR probe traversed private quarantine R2, the regular
+  scanner service, ClamAV and D1. It required an immutable `infected` verdict,
+  then removed all synthetic rows and R2 data. This is evidence for the
+  infected terminal path only: no clean user-file promotion, provider analysis,
+  document-quality score or production behavior is claimed.
 
 > Current local evaluation delta — 2026-08-04: legal release evaluation now
 > contains 314 unique RU/UZ scenarios with individual/entrepreneur/lawyer

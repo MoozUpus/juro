@@ -1,16 +1,18 @@
 # JURO R2 storage
 
-## Pending scanner promotion boundary
+## Staging scanner promotion boundary
 
-Migration candidate `0068` defines the missing scan-evidence boundary and the
-local consumer uses immutable
+Migration `0068` defines the immutable scan-evidence boundary and the staging
+consumer uses immutable
 `safe-v1/{workspaceId}/{analysisId}/{fileId}` keys. Promotion verifies the
 quarantined object twice (scan and copy reads), uses conditional-create
 semantics in the primary bucket, verifies the stored SHA, and changes the D1
 key only in the terminal clean batch. A failed post-promotion quarantine delete
 leaves an inaccessible duplicate for retention cleanup rather than undoing the
-safe record. This code is not deployed and no object has been promoted by a
-real scanner.
+safe record. A private ClamAV Container is attached only in staging. The
+staging EICAR probe proved the infected terminal path and then removed all
+synthetic R2/D1 state; no clean user-file promotion or production promotion is
+claimed.
 
 Updated: 2026-07-29
 Status: remote inventory verified. Six approved private EEUR Standard development/staging target buckets exist. `juro-staging-backups` contains 26 verified staging D1 backup/restore artifacts, including the pre/post `0030`–`0034` checkpoints; all other target buckets remain without verified application content. Production storage was unchanged.
@@ -89,7 +91,12 @@ Legacy backup objects are retained under backup policy rather than blindly copie
 
 ## Upload and quarantine gate
 
-Production upload is not considered safe until the direct/multipart R2 flow, magic-byte validation, archive limits, real malware scanner adapter, quarantine state, fail-closed policy, async job evidence, and provider `safe/ready` boundary are implemented and staged. A bucket named “quarantine” is not a scanner and must never be used as evidence that a file is safe.
+Production upload is not considered safe until the staging scanner has a
+clean-file/provider journey, the production scanner binding and resources are
+separately approved, and the existing direct/multipart R2, magic-byte,
+archive-limit, quarantine, async-job and `safe/ready` boundaries are rechecked
+there. A bucket named “quarantine” is not a scanner and must never be used as
+evidence that a file is safe.
 
 ## Backup and deletion
 
@@ -112,7 +119,7 @@ can enter OCR or provider processing until the scanner records a safe verdict.
 
 New analysis uploads use `quarantine-v2/{workspaceId}/{analysisId}/{fileId}` in the dedicated environment private quarantine bucket. The key is server-generated and contains no filename. The Worker streams the binary body to R2, supplies the expected SHA-256, then verifies size, stored SHA-256, and format magic during finalize.
 
-New document-analysis uploads use the separate quarantine bucket with the versioned `quarantine-v2/` prefix. Account-deletion purge inventories both buckets and routes legacy `quarantine/` keys to the primary bucket while routing `quarantine-v2/` keys to the quarantine bucket. A safe prefix and separate bucket are not a malware scanner: no object is promoted to `safe` or `ready` until a real scanner produces verified evidence.
+New document-analysis uploads use the separate quarantine bucket with the versioned `quarantine-v2/` prefix. Account-deletion purge inventories both buckets and routes legacy `quarantine/` keys to the primary bucket while routing `quarantine-v2/` keys to the quarantine bucket. In protected staging, a real scanner must produce verified evidence before promotion; this proof has not yet been extended to production.
 
 ## Completed-analysis export objects
 

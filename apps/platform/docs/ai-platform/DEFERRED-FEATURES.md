@@ -62,7 +62,7 @@ This register distinguishes real implementation from planned scope. A database t
 
 ## File and communication gates
 
-- The streaming private-R2 upload, SSRF-safe public URL import, strict ZIP/DOCX integrity gate, PDF structure/page-count preflight, deterministic ZIP package extraction, bounded per-member Workers AI conversion, provider prompt boundary, and adversarial document-input tests exist locally. A real fail-closed malware service, protected-staging URL/browser evidence, page coordinates and faithful DOCX pagination, over-budget streaming extraction, quarantine release evidence, and the full 100-package quality gate remain deferred.
+- The streaming private-R2 upload, SSRF-safe public URL import, strict ZIP/DOCX integrity gate, PDF structure/page-count preflight, deterministic ZIP package extraction, bounded per-member Workers AI conversion, provider prompt boundary, adversarial document-input tests, and private fail-closed ClamAV scanner exist in protected staging. The scanner has only passed a synthetic infected-file EICAR path. Protected-staging clean-file OCR/provider evidence, page coordinates and faithful DOCX pagination, over-budget streaming extraction, quarantine promotion evidence, and the full 100-package quality gate remain deferred.
 - Realtime voice, avatar lip sync, original-audio retention automation, audio/video call provider, and call recording remain off. Text chat must not pretend these are live.
 - The approved Jurobek 3D asset still requires source-asset verification, rig/material/facial review, optimization evidence, WebGL fallback, and device testing before integration.
 
@@ -76,8 +76,9 @@ provider, scanner, or delivery result: the queue/DLQ operational matrix still
 needs controlled staging messages, logs, alert delivery, redrive, and ledger
 reconciliation. `notification.dispatch` now has an outbox producer and a
 tenant-safe, idempotent staging consumer; a controlled identifiers-only message
-proved remote handler execution and was cleaned up. `malware.scan` remains
-unattached and rejects fail-closed until a real scanner is approved.
+proved remote handler execution and was cleaned up. `malware.scan` is attached
+only in staging to the private ClamAV service and its dedicated Queue/DLQ.
+Development and production remain unattached and fail closed.
 
 ## Product and operations gates
 
@@ -146,7 +147,7 @@ process; the presence of a stored review is not a legal-quality metric by itself
 Migration `0092` and `POST /api/platform/admin/document-evaluation` are local.
 Activation requires a fresh private `juro-staging` backup with isolated restore,
 ordered migration application, exact Worker deployment and authenticated
-legal-reviewer probes. The actual gate additionally requires a privacy-approved
-fail-closed scanner, all 100 materialized packages, 30 comparisons, real OCR and
-provider runs, named review and threshold remediation. Until then no document
+legal-reviewer probes. The actual gate additionally requires all 100
+materialized packages, 30 comparisons, real OCR and provider runs, named review
+and threshold remediation. Until then no document
 quality metric is claimed and the feature remains outside production readiness.

@@ -20,7 +20,10 @@ Status: not production-ready; no production approval requested.
    chat/fallback journey with citations, real user email delivery and a
    scanner-approved document-analysis flow remain unverified; document analysis
    therefore remains fail-closed.
-2. No real malware scanner can promote quarantined uploads to safe; analysis remains fail-closed.
+2. A real private scanner is proven only for the staging infected-file path.
+   A clean-file OCR/provider run, reviewed bulk evaluation and the separately
+   approved production scanner resources remain required; production analysis
+   is still fail-closed.
 3. Legal-source coverage, Advice ingestion, historical revisions, hybrid retrieval, citation revalidation, and the 250+50 legal evaluation gate are incomplete.
 4. The 100-package/30-comparison document evaluation and required quality thresholds are incomplete.
 5. Complete chat streaming/history/memory/voice, OCR, export/redline, cases/deadlines, lawyer marketplace/access, admin/support/status, billing, and data-lifecycle flows are incomplete.

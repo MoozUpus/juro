@@ -51,8 +51,10 @@ Scope: implemented integration-branch controls. This file does not claim live Op
 - Hybrid Vectorize retrieval, citation semantic validation, 250+50 legal
   scenarios, 100 document packages, 30 comparisons, and human legal review
   thresholds remain incomplete.
-- Real malware scanning is absent; uploaded files remain quarantined and never
-  reach an AI provider.
+- A real private ClamAV scanner is deployed only in staging. Its tested EICAR
+  path is fail-closed: an infected upload remains unavailable and cannot reach
+  an AI provider. Production does not yet have this binding or a scanner-safe
+  document-analysis journey.
 
 These limits are fail-closed and do not authorize a production deployment.
 ## Stale reservation recovery

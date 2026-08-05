@@ -1,9 +1,11 @@
 # Secure document upload pipeline
 
-Updated: 2026-08-04
+Updated: 2026-08-06
 Status: fail-closed upload and post-safe OCR/analysis pipeline deployed to
-protected staging. The immutable scan-evidence schema is applied, but real
-malware promotion remains disabled and contains no verdict rows.
+protected staging. The private ClamAV scanner, immutable scan-evidence schema
+and malware Queue/DLQ are attached there. An EICAR probe proved the infected
+terminal path; it does not prove a clean user-file analysis or any production
+behavior.
 
 ## Implemented lifecycle
 
@@ -17,7 +19,14 @@ Every route re-resolves the authenticated user and active workspace. A mismatche
 
 ## Fail-closed boundary
 
-The staging malware scanner is not connected. Finalization therefore records `MALWARE_SCANNER_UNAVAILABLE`, keeps the object unavailable through the normal download route, and returns `FILE_SCAN_UNAVAILABLE`. No OCR, OpenAI, Anthropic, document extraction, or analysis job is started.
+Staging finalization enqueues `malware.scan` only after all R2 integrity and
+format checks pass. The Worker streams the quarantined object through a private
+service binding to ClamAV. A clean, schema-valid verdict atomically promotes an
+opaque `safe-v1` object, records immutable scan evidence and enqueues
+`document.analyze`. An unavailable, malformed, inconsistent or infected verdict
+keeps the object unavailable; no OCR, OpenAI, Anthropic, extraction or analysis
+is started from that path. Production remains fail-closed because it has no
+scanner binding.
 
 The previous multipart `POST /api/platform/document-review` no longer stores a file or invokes AI. It returns `SECURE_UPLOAD_REQUIRED`. `GET /api/platform/document-review` remains for the existing analysis list and previously completed records.
 
@@ -87,10 +96,15 @@ Authenticated staging package OCR/provider execution is not claimed.
 
 ## Next gates
 
-1. Connect a privacy-approved real malware scanner; production must fail closed while it is unavailable.
-2. After scanner clearance, execute an eligible safe-file OCR/provider/package-relationship smoke test through protected staging. Migration `0068` is already applied; no scan verdict is fabricated.
-3. Run the complete 100-package/30-comparison reviewed evaluation, including clean-scan OCR quality.
-4. Add page coordinates and scanned-PDF page-count evidence plus over-budget streaming extraction; deploy and verify the separately pending corrections/redline/export candidates only after their own migration authorization.
+1. Execute an eligible clean synthetic file through scanner clearance, OCR and
+   provider analysis in protected staging; the EICAR proof intentionally covers
+   the infected path only.
+2. Run the complete 100-package/30-comparison reviewed evaluation, including
+   clean-scan OCR quality.
+3. Add page coordinates and scanned-PDF page-count evidence plus over-budget
+   streaming extraction; deploy and verify the separately pending
+   corrections/redline/export candidates only after their own migration
+   authorization.
 
 ## Reviewable corrections — local candidate
 
