@@ -2,10 +2,11 @@
 
 > Current checkpoint — 2026-08-06: protected staging provider evidence now
 > proves the current OpenAI and Anthropic transports with fixed, content-free
-> input. The temporary probe flag was restored to `false` at 100% traffic.
-> This does not substitute for authenticated RU/UZ journeys, citations, legal
-> quality, a scanner-approved analysis, or human review. No avatar work is in
-> the currently authorised scope.
+> input; one separately gated, content-free Resend probe now also has an API
+> acceptance receipt. Each temporary probe flag was restored to `false` at 100%
+> traffic. This does not substitute for authenticated RU/UZ journeys, actual
+> mailbox delivery, citations, legal quality, a scanner-approved analysis, or
+> human review. No avatar work is in the currently authorised scope.
 
 Updated: 2026-07-30
 
@@ -20,6 +21,10 @@ This register distinguishes real implementation from planned scope. A database t
 - Anthropic staging transport has a completed content-free structured-output
   probe on the configured model. Document analysis, OCR, comparison quality,
   redline/correction and scanner-approved analysis remain gated.
+- Resend accepted one fixed staging-only technical email and its immutable
+  content-free receipt is deployed. Real deadline notification delivery,
+  sender-domain verification, Queue/DLQ recovery and inbox-placement evidence
+  remain gated.
 - Exact Lex/Advice acquisition, review-only normalization, citation-boundary
   verification and a daily revisit scheduler exist. A bounded recent Lex RU/UZ
   RSS discovery path is now a local candidate, but it is not deployed. Broad

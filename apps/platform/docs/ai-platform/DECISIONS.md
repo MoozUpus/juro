@@ -3273,3 +3273,22 @@ a separate 100%-traffic deployment.
 The evidence proves connectivity and the bounded structured-output contract;
 it never substitutes for a citation, legal-quality, document-analysis,
 authenticated-user, email-delivery, or production gate.
+
+## D-160 — staging email acceptance is content-free and one-shot
+
+Status: accepted and verified in protected staging
+Date: 2026-08-06
+
+Resend provider acceptance must be evidenced separately from reminder logic,
+but a technical probe must never copy a recipient, email body, task, case,
+workspace, user or provider response into an operational database. Migration
+`0099` therefore stores only a fixed probe key, lifecycle, attempt count,
+provider receipt identifier, safe error code and timestamps. D1 transition and
+immutability guards prevent rewriting a terminal receipt.
+
+The Worker runs this code only for `APP_ENV=staging` while the explicit
+synthetic-probe switch is `true`, has no HTTP entry point, and uses a stable
+provider idempotency key. The switch was active for one cron cycle and restored
+by a separate 100%-traffic staging deployment. A `sent` row proves Resend API
+acceptance, not inbox placement, recipient reading, sender-domain status, a
+real task notification, or production readiness.

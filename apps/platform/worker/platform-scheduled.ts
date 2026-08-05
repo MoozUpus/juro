@@ -43,6 +43,15 @@ async function maybeRunStagingProviderProbes(env: PlatformJobEnv) {
   const { runStagingProviderProbes } = await import("./staging-provider-probe");
   return runStagingProviderProbes(env);
 }
+
+async function maybeRunStagingEmailDeliveryProbe(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "staging"
+    || (env as Record<string, unknown>).STAGING_SYNTHETIC_PROBES_ENABLED !== "true"
+  ) return null;
+  const { runStagingEmailDeliveryProbe } = await import("./staging-email-delivery-probe");
+  return runStagingEmailDeliveryProbe(env);
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -311,6 +320,8 @@ export async function handleScheduled(
     });
     failureCode = "PROVIDER_PROBE_FAILED";
     const providerProbe = await maybeRunStagingProviderProbes(env);
+    failureCode = "EMAIL_DELIVERY_PROBE_FAILED";
+    const emailDeliveryProbe = await maybeRunStagingEmailDeliveryProbe(env);
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
     const corpusRunsCompleted =
       env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
@@ -353,6 +364,11 @@ export async function handleScheduled(
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,
       providerProbeSkipped: providerProbe?.skipped ?? 0,
+      emailDeliveryProbeAttempted: emailDeliveryProbe?.attempted ?? 0,
+      emailDeliveryProbeAccepted: emailDeliveryProbe?.accepted ?? 0,
+      emailDeliveryProbeFailed: emailDeliveryProbe?.failed ?? 0,
+      emailDeliveryProbeSkipped: emailDeliveryProbe?.skipped ?? 0,
+      emailDeliveryProbeAlreadyAccepted: emailDeliveryProbe?.alreadyAccepted ?? 0,
       corpusRunsCompleted,
       corpusAlertsCreated: corpusAlerts.created,
       corpusFailedRunAlerts: corpusAlerts.failedRuns,

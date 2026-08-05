@@ -1,5 +1,14 @@
 # JURO known limitations checkpoint
 
+> Email acceptance checkpoint — 2026-08-06: migration `0099` is deployed to
+> protected staging after a private full/schema/data R2 backup, independent
+> SHA-256 round trip and isolated restore (`quick_check=ok`, zero FK errors).
+> One staging-only, content-free probe received a Resend API receipt and the
+> safety flag was separately restored to `false` in Worker
+> `bd6e6725-f74e-48fb-bcc8-ffcca7a4cddc`. This is provider acceptance evidence,
+> not proof of inbox placement, a real user deadline email, authenticated UI
+> behavior or production readiness. See `STAGING-0099-EMAIL-DELIVERY-PROBE-EVIDENCE.md`.
+
 > Provider transport checkpoint — 2026-08-06: a controlled staging-only
 > five-minute window on Worker `a90fb469-bbfa-41b3-a594-e5c7b967b622` ran no
 > user content. Existing OpenAI v26 RU/UZ lifecycle evidence remained
@@ -730,16 +739,16 @@ still open. Production remains unchanged.
 
 ## Deadline email reminder checkpoint — 2026-08-06
 
-Migration `0098` and the matching scheduler/consumer are local only. They do
-not backfill email reminders for existing tasks, intentionally avoiding
-unexpected retroactive mail. New and subsequently revised confirmed tasks get
-both in-app and email channels.
+Migration `0098`, its scheduler/consumer and the content-free `0099` Resend
+receipt boundary are deployed to protected staging. They do not backfill email
+reminders for existing tasks, intentionally avoiding unexpected retroactive
+mail. New and subsequently revised confirmed tasks get both in-app and email
+channels.
 
-The local suite uses a synthetic Resend response; it does not prove sender
-authorization or real mailbox delivery. A fresh private staging backup with
-isolated restore verification, `0098` application, exact Worker
-deploy, queue observation and a test email to an owner-controlled staging
-account remain required. Production is unchanged.
+The controlled probe proves one API acceptance receipt, not sender-domain
+authorization beyond that response, mailbox delivery, a deadline reminder tied
+to a real user/task, queue retry/DLQ behavior or authenticated UI. Those
+release gates remain open. Production is unchanged.
 
 ## Lawyer phone-contact checkpoint — 2026-08-06
 
