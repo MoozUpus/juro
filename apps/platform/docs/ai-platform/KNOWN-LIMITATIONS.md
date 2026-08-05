@@ -656,3 +656,12 @@ Canonical manual case creation is deployed to protected staging and passes a rea
   search latency remain staging gates after an authorized backup, ordered
   migrations and deploy. Provider billing and D1 are not one distributed
   transaction, so provider-success/D1-failure reconciliation remains open.
+## Historical applicability checkpoint after migration 0089
+
+The AI chat and retrieval contract can now select and visibly label an archived
+verified version for an explicit event date. The path is fail-closed and was
+tested locally across a replacement publication. It is not yet staging evidence.
+Existing acquisition does not infer normative effective dates from source text;
+therefore historical confirmation depends on reviewed `effective_at` metadata.
+Broad historical Lex ingestion, a protected reviewer control for those dates,
+and the human legal evaluation gate remain incomplete.

@@ -10,6 +10,7 @@ import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryReques
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import { uzbekistanCalendarDate } from "../../lib/legal/applicability-date";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 import { AssistantSpeechControls, VoiceMessageControls } from "./VoiceMessageControls";
 
@@ -49,6 +50,7 @@ type AiRequestPayload = {
   operation: AiMessageOperation;
   sourceMessageId?: string;
   voiceRecordingId?: string;
+  legalContextDate?: string;
 };
 type AiFeedbackType = "helpful" | "not_helpful" | "wrong_norm" | "broken_link" | "outdated" | "incomplete" | "language" | "unsafe" | "ignored_facts";
 type AiFeedback = { feedbackType: AiFeedbackType; comment: string | null; updatedAt: string };
@@ -75,6 +77,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [question, setQuestion] = useState(() => (searchParams.get("prompt") || "").slice(0, 4_000));
   const [answerMode, setAnswerMode] = useState<"short" | "detailed">("detailed");
   const [reasoningMode, setReasoningMode] = useState<"fast" | "deep">("fast");
+  const [legalContextDate, setLegalContextDate] = useState("");
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -195,6 +198,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       locale,
       answerMode,
       reasoningMode,
+      legalContextDate: legalContextDate || undefined,
       conversationId: answer?.conversationId || selectedConversationId || undefined,
       operation,
       sourceMessageId,
@@ -468,6 +472,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           <div className="ai-modes">
             <label>{ru ? "Ответ" : "Javob"}<select value={answerMode} onChange={(event) => setAnswerMode(event.target.value as "short" | "detailed")}><option value="short">{ru ? "Кратко" : "Qisqa"}</option><option value="detailed">{ru ? "Подробно" : "Batafsil"}</option></select></label>
             <label>{ru ? "Режим" : "Rejim"}<select value={reasoningMode} onChange={(event) => setReasoningMode(event.target.value as "fast" | "deep")}><option value="fast">{ru ? "Быстро" : "Tez"}</option><option value="deep">{ru ? "Глубоко" : "Chuqur"}</option></select></label>
+            <label>{ru ? "Дата события — если важна редакция закона" : "Voqea sanasi — qonun tahriri muhim bo‘lsa"}<input type="date" value={legalContextDate} max={uzbekistanCalendarDate()} onChange={(event) => { pendingAiRequestRef.current = null; setCanRetry(false); setLegalContextDate(event.target.value); }} /></label>
           </div>
           <VoiceMessageControls
             locale={locale}
@@ -483,13 +488,15 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           {sending
             ? <button type="button" onClick={() => streamAbortRef.current?.abort()} aria-label={ru ? "Остановить генерацию" : "Javob yaratishni to‘xtatish"}><Square /></button>
             : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}
-          <small role={sending ? "status" : undefined}>{streamStatus || (ru ? "Подтверждённые выводы строятся только на опубликованных источниках JURO." : "Tasdiqlangan xulosalar faqat JUROda e’lon qilingan manbalarga asoslanadi.")}</small>
+          <small role={sending ? "status" : undefined}>{streamStatus || (legalContextDate
+            ? (ru ? `Проверяется редакция права на ${legalContextDate}.` : `${legalContextDate} sanasidagi qonun tahriri tekshiriladi.`)
+            : (ru ? "Подтверждённые выводы строятся только на опубликованных источниках JURO." : "Tasdiqlangan xulosalar faqat JUROda e’lon qilingan manbalarga asoslanadi."))}</small>
         </form>
       </main>
       <aside className="ai-context">
         <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
         <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence"><h2>{ru ? "Источники" : "Manbalar"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <article className="ai-source-card" key={`${source.sourceId}:${source.article || "source"}`}><a href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba")}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`}</em></a><SourceBookmarkControl source={source} cases={cases} locale={locale} /></article> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
+        <section className="ai-evidence"><h2>{ru ? "Источники" : "Manbalar"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <article className="ai-source-card" key={`${source.sourceId}:${source.article || "source"}`}><a href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.status === "historical" ? (ru ? "Историческая редакция" : "Tarixiy tahrir") : (source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba"))}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`}</em></a><SourceBookmarkControl source={source} cases={cases} locale={locale} /></article> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );

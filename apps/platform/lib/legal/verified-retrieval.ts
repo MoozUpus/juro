@@ -6,6 +6,7 @@ import {
   semanticLegalChunkRanks,
   type LegalSemanticSearchEnv,
 } from "./semantic-retrieval";
+import { uzbekistanCalendarDate } from "./applicability-date";
 
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_FRESHNESS_AGE_DAYS = 7;
@@ -38,6 +39,7 @@ export type VerifiedLegalRetrieval = {
   legalDatabaseAsOf: string;
   retrievalMode: "hybrid" | "lexical";
   semanticStatus: "used" | "unavailable" | "failed";
+  applicableAt: string;
 };
 
 export type CorpusSyncRow = {
@@ -265,6 +267,7 @@ export async function validateVerifiedLegalSourceEvidence(
   row: VerifiedLegalSourceEvidenceRow,
   readingRows: readonly PublishedReadingEvidenceRow[],
   now = new Date(),
+  applicability: "current" | "historical" = "current",
 ): Promise<{ source: LegalSourceContext; evidence: VerifiedLegalSourceEvidence } | null> {
   const publication = legalSourcePublicationEvidenceSchema.safeParse(
     parseJson(row.publicationEvidenceJson),
@@ -272,7 +275,9 @@ export async function validateVerifiedLegalSourceEvidence(
   const lifecycle = legalSourceLifecycleEvidenceSchema.safeParse(
     parseJson(row.lifecycleEvidenceJson),
   );
-  const effectiveAt = row.versionEffectiveAt ?? row.sourceEffectiveAt;
+  const effectiveAt = applicability === "historical"
+    ? row.versionEffectiveAt
+    : row.versionEffectiveAt ?? row.sourceEffectiveAt;
   const expiresAt = row.versionExpiresAt ?? row.sourceExpiresAt;
   const effectiveTime = effectiveAt ? validTime(effectiveAt) : null;
   const expiresTime = expiresAt ? validTime(expiresAt) : null;
@@ -281,18 +286,20 @@ export async function validateVerifiedLegalSourceEvidence(
     || !lifecycle.success
     || row.status !== "verified"
     || row.verificationState !== "verified"
-    || row.versionStatus !== "verified"
+    || (applicability === "current"
+      ? row.versionStatus !== "verified"
+      : row.versionStatus !== "verified" && row.versionStatus !== "archived")
     || row.versionLanguage !== row.locale
     || !row.canonicalId
     || !row.sourceVerifiedAt
     || !row.sourceVerifiedByUserId
-    || row.sourceContentSha256 !== row.versionContentSha256
-    || row.sourceContentSha256 !== row.publicationRawContentSha256
-    || row.sourceVerifiedAt !== row.publicationPublishedAt
+    || row.versionContentSha256 !== row.publicationRawContentSha256
+    || (applicability === "current" && row.sourceContentSha256 !== row.versionContentSha256)
+    || (applicability === "current" && row.sourceVerifiedAt !== row.publicationPublishedAt)
     || row.versionVerifiedAt !== row.publicationPublishedAt
-    || row.sourceVerifiedByUserId !== row.publishedByUserId
+    || (applicability === "current" && row.sourceVerifiedByUserId !== row.publishedByUserId)
     || row.versionVerifiedByUserId !== row.publishedByUserId
-    || row.sourceVerificationNotes !== `publication:${row.publicationId}`
+    || (applicability === "current" && row.sourceVerificationNotes !== `publication:${row.publicationId}`)
     || await sha256Text(row.publicationEvidenceJson) !== row.publicationEvidenceSha256
     || await sha256Text(row.lifecycleEvidenceJson) !== row.lifecycleEvidenceSha256
     || (effectiveAt !== null && effectiveTime === null)
@@ -354,11 +361,12 @@ export async function validateVerifiedLegalSourceEvidence(
     sourceType: row.sourceType,
     status: row.status,
     verificationState: row.verificationState,
-    verifiedAt: row.sourceVerifiedAt,
-    contentSha256: row.sourceContentSha256,
+    verifiedAt: row.versionVerifiedAt,
+    contentSha256: row.versionContentSha256,
     article: row.article,
     excerpt: row.bodyText.slice(0, 1_200),
     effectiveDate: effectiveAt,
+    applicabilityStatus: applicability,
   };
   if (filterTrustedVerifiedLegalSources([source]).length !== 1) return null;
   return {
@@ -441,12 +449,14 @@ export async function retrieveVerifiedLegalSources(
   query: string,
   locale: "ru" | "uz",
   limit = 8,
-  options: { now?: Date; semantic?: LegalSemanticSearchEnv } = {},
+  options: { now?: Date; applicableAt?: Date; semantic?: LegalSemanticSearchEnv } = {},
 ): Promise<VerifiedLegalRetrieval> {
   const now = options.now ?? new Date();
+  const applicableAt = options.applicableAt ?? now;
+  const historical = uzbekistanCalendarDate(applicableAt) < uzbekistanCalendarDate(now);
   const freshness = await retrieveCorpusFreshness(db, now);
   const keywords = legalSearchKeywords(query, locale);
-  const semantic = await hasIndexedVerifiedSource(db, locale)
+  const semantic = !historical && await hasIndexedVerifiedSource(db, locale)
     ? await semanticLegalChunkRanks(options.semantic, query, locale)
     : { status: "unavailable" as const, vectorRanks: new Map<string, number>() };
   const semanticVectorIds = [...semantic.vectorRanks.keys()];
@@ -458,6 +468,7 @@ export async function retrieveVerifiedLegalSources(
       legalDatabaseAsOf: freshness.asOf,
       retrievalMode: "lexical",
       semanticStatus: semantic.status,
+      applicableAt: applicableAt.toISOString(),
     };
   }
 
@@ -508,8 +519,8 @@ export async function retrieveVerifiedLegalSources(
       publication.publication_evidence_json AS publicationEvidenceJson,
       publication.publication_evidence_sha256 AS publicationEvidenceSha256,
       publication.published_at AS publicationPublishedAt,
-      activation.activated_by_user_id AS activationActivatedByUserId,
-      activation.activated_at AS activationActivatedAt,
+      ${historical ? "lifecycle.acted_by_user_id" : "activation.activated_by_user_id"} AS activationActivatedByUserId,
+      ${historical ? "lifecycle.occurred_at" : "activation.activated_at"} AS activationActivatedAt,
       lifecycle.id AS lifecycleEventId,lifecycle.event_type AS lifecycleEventType,
       lifecycle.previous_publication_id AS lifecyclePreviousPublicationId,
       lifecycle.previous_version_id AS lifecyclePreviousVersionId,
@@ -533,13 +544,13 @@ export async function retrieveVerifiedLegalSources(
       (SELECT count(*) FROM legal_source_chunks counted_chunk
         WHERE counted_chunk.version_id=version.id) AS chunkCount
     FROM legal_sources source
-    INNER JOIN legal_source_current_activations activation
-      ON activation.source_id=source.id
+    ${historical ? "" : "INNER JOIN legal_source_current_activations activation ON activation.source_id=source.id"}
     INNER JOIN legal_source_versions version
-      ON version.id=activation.version_id AND version.source_id=source.id
+      ON version.source_id=source.id
+     ${historical ? "" : "AND version.id=activation.version_id"}
     INNER JOIN legal_source_publications publication
-      ON publication.id=activation.publication_id
-     AND publication.version_id=version.id AND publication.source_id=source.id
+      ON publication.version_id=version.id AND publication.source_id=source.id
+     ${historical ? "" : "AND publication.id=activation.publication_id"}
     INNER JOIN legal_source_lifecycle_events lifecycle
       ON lifecycle.publication_id=publication.id
      AND lifecycle.version_id=version.id AND lifecycle.source_id=source.id
@@ -548,12 +559,18 @@ export async function retrieveVerifiedLegalSources(
     INNER JOIN legal_source_chunks chunk
       ON chunk.section_id=section.id AND chunk.version_id=version.id
     WHERE source.status='verified' AND source.verification_state='verified'
-      AND version.status='verified' AND source.locale=?
+      AND version.status ${historical ? "IN ('verified','archived')" : "='verified'"}
+      AND source.locale=?
+      AND ${historical
+        ? "version.effective_at IS NOT NULL AND version.effective_at<=? AND (version.expires_at IS NULL OR version.expires_at>?)"
+        : "1=1"}
       AND (${conditions})
-    ORDER BY source.last_checked_at DESC,section.sequence ASC
+    ORDER BY ${historical ? "version.effective_at DESC," : ""}
+      source.last_checked_at DESC,section.sequence ASC
     LIMIT 48
   `).bind(
     locale,
+    ...(historical ? [applicableAt.toISOString(), applicableAt.toISOString()] : []),
     ...lexicalBindings,
     ...semanticVectorIds,
   ).all<VerifiedLegalSourceEvidenceRow>();
@@ -579,7 +596,12 @@ export async function retrieveVerifiedLegalSources(
     if (attempted.has(row.id)) continue;
     attempted.add(row.id);
     const readingRows = await loadPublishedReadingRows(db, row.versionId);
-    const result = await validateVerifiedLegalSourceEvidence(row, readingRows, now);
+    const result = await validateVerifiedLegalSourceEvidence(
+      row,
+      readingRows,
+      applicableAt,
+      historical ? "historical" : "current",
+    );
     if (result) validated.push(result);
     if (validated.length >= maxResults) break;
   }
@@ -590,5 +612,6 @@ export async function retrieveVerifiedLegalSources(
     legalDatabaseAsOf: freshness.asOf,
     retrievalMode: semantic.status === "used" ? "hybrid" : "lexical",
     semanticStatus: semantic.status,
+    applicableAt: applicableAt.toISOString(),
   };
 }

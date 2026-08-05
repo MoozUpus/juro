@@ -1016,3 +1016,16 @@ gated; staging is through `0078` and production is unchanged.
   binds the exact runtime config hash used for the provider call.
 - Focused security and migration verification passes 64/64. Migration `0088`
   is not applied to staging; staging remains through `0078`.
+## Historical legal applicability (local checkpoint after migration 0089)
+
+Authenticated and guest AI request contracts now accept an explicit Uzbekistan
+calendar date. Retrieval uses the current verified publication by default and a
+lexical-only, evidence-revalidated archived version for a historical date. The
+AI provider receives the exact applicability instant, and returned citations
+are labelled `historical` rather than `current`. Historical retrieval never
+uses the Vectorize index that contains current publications only.
+
+This is code and local-test evidence, not staging activation. It produces a
+confirmed historical source only when a human-reviewed version already has an
+`effective_at` interval; broad historical Lex backfill and reviewer date-entry
+UI remain open.

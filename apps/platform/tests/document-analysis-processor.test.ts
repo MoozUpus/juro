@@ -133,6 +133,7 @@ test("safe document analysis persists normalized result, usage, audit and is ide
       legalDatabaseAsOf: "unavailable",
       retrievalMode: "lexical" as const,
       semanticStatus: "unavailable" as const,
+      applicableAt: "2026-07-30T10:00:00.000Z",
     }),
     analyze: async (input: Parameters<DocumentAnalysisProcessorDependencies["analyze"]>[0]) => {
       aiCalls += 1;

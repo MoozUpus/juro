@@ -3037,3 +3037,14 @@ closed. Corrected and golden answers stay in deletion-coupled content storage.
 Retained access evidence stores hashes, classification and opaque IDs only, so
 account/content deletion does not retain legal text. Migration `0087` remains
 local until a separately authorized backup, ordered migration and deploy cycle.
+## D-120 — Historical retrieval is explicit, lexical-only and interval-bound
+
+- **Decision:** accept a validated Uzbekistan `YYYY-MM-DD` event date, select
+  only verified/archived publications whose reviewed version interval contains
+  it, and label provider/output citations as historical.
+- **Safety boundary:** do not parse or guess a legally operative date from free
+  text; do not query current-only Vectorize indexes for historical law; reject
+  versions without explicit reviewed `effective_at` metadata.
+- **Evidence:** local replacement-publication regression proves the archived
+  first version is returned for a 2025 date while the current second version is
+  returned for the present date. Staging remains unchanged.

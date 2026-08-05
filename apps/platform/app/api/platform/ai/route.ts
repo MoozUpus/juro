@@ -22,6 +22,7 @@ import {
   legalDatabaseFreshnessFromAsOf,
   retrieveVerifiedLegalSources,
 } from "../../../../lib/legal/verified-retrieval";
+import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 import {
@@ -116,6 +117,7 @@ async function executePost(
     answerMode?: string;
     reasoningMode?: string;
     voiceRecordingId?: string;
+    legalContextDate?: string;
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
   const db = requireD1();
@@ -128,6 +130,17 @@ async function executePost(
   const submittedQuestion = body?.question?.trim();
   const answerMode = body?.answerMode === "short" ? "short" : "detailed";
   const reasoningMode = body?.reasoningMode === "deep" ? "deep" : "fast";
+  const applicableAt = body?.legalContextDate
+    ? parseLegalApplicabilityDate(body.legalContextDate)
+    : null;
+  if (body?.legalContextDate && !applicableAt) {
+    return response({
+      code: "INVALID_LEGAL_CONTEXT_DATE",
+      error: locale === "ru"
+        ? "Укажите существующую дату события не позднее сегодняшнего дня."
+        : "Bugungi kundan kech bo‘lmagan haqiqiy voqea sanasini kiriting.",
+    }, 400);
+  }
   const idempotencyKey = request.headers.get("idempotency-key")?.trim() || "";
   if (!/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
     return response({
@@ -226,13 +239,17 @@ async function executePost(
       workspaceIdHash: await sha256Json({ workspaceId: workspace.id }),
     });
   }
-  const retrieval = await retrieveVerifiedLegalSources(db, question, locale, 8, { semantic: runtimeEnv() });
+  const retrieval = await retrieveVerifiedLegalSources(db, question, locale, 8, {
+    semantic: runtimeEnv(),
+    applicableAt: applicableAt ?? undefined,
+  });
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({
     question,
     locale,
     answerMode,
     reasoningMode,
+    legalContextDate: body?.legalContextDate || null,
     conversationId: body?.conversationId || null,
     caseId: body?.caseId || null,
     operation: branchInput.operation,
@@ -340,6 +357,7 @@ async function executePost(
   try {
     aiResult = await provider.runLegalChat({
       question, locale, answerMode, reasoningMode, sources, legalDatabaseAsOf,
+      applicableAt: applicableAt?.toISOString(),
       requestId: reservation.correlationId, safetyIdentifier,
       memories: memories.map((memory) => ({
         category: memory.category,

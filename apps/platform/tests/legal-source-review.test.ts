@@ -1319,6 +1319,9 @@ test("replacement publication atomically archives the previous current version",
       "replacement-publisher",
       "legal_reviewer",
     );
+    sqlite.prepare(
+      "UPDATE legal_source_versions SET effective_at=? WHERE id=? AND status='pending_review'",
+    ).run("2020-01-01T00:00:00.000Z", first.fixture.versionId);
     const firstPublication = await publishApprovedLegalSource(
       env,
       publisher,
@@ -1342,6 +1345,9 @@ test("replacement publication atomically archives the previous current version",
       ),
       "_replacement",
     );
+    sqlite.prepare(
+      "UPDATE legal_source_versions SET effective_at=? WHERE id=? AND status='pending_review'",
+    ).run("2026-01-01T00:00:00.000Z", second.fixture.versionId);
     const secondPublication = await publishApprovedLegalSource(
       env,
       publisher,
@@ -1353,6 +1359,33 @@ test("replacement publication atomically archives the previous current version",
       { now: new Date("2026-07-28T01:14:00.000Z") },
     );
     assert.equal(secondPublication.activationType, "activated_replacement");
+
+    const historical = await retrieveVerifiedLegalSources(
+      d1,
+      "Первая проверенная редакция нормы",
+      "ru",
+      8,
+      {
+        now: new Date("2026-08-05T12:00:00.000Z"),
+        applicableAt: new Date("2025-06-01T07:00:00.000Z"),
+      },
+    );
+    assert.equal(historical.retrievalMode, "lexical");
+    assert.equal(historical.semanticStatus, "unavailable");
+    assert.equal(historical.sources.length, 1);
+    assert.equal(historical.sources[0]?.applicabilityStatus, "historical");
+    assert.equal(historical.evidence[0]?.versionId, firstPublication.versionId);
+
+    const current = await retrieveVerifiedLegalSources(
+      d1,
+      "Вторая проверенная редакция нормы",
+      "ru",
+      8,
+      { now: new Date("2026-08-05T12:00:00.000Z") },
+    );
+    assert.equal(current.sources.length, 1);
+    assert.equal(current.sources[0]?.applicabilityStatus, "current");
+    assert.equal(current.evidence[0]?.versionId, secondPublication.versionId);
 
     assert.deepEqual({
       ...sqlite.prepare(`

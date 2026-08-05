@@ -28,6 +28,7 @@ import {
   legalDatabaseFreshnessFromAsOf,
   retrieveVerifiedLegalSources,
 } from "../../../../lib/legal/verified-retrieval";
+import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { sha256Json } from "../../../../lib/ai/run-store";
 import {
   GuestAiError,
@@ -59,6 +60,7 @@ const requestSchema = z.object({
   question: z.string().trim().min(5).max(4_000),
   locale: z.enum(["ru", "uz"]),
   turnstileToken: z.string().trim().max(2_048).optional(),
+  legalContextDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 }).strict();
 
 function json(
@@ -268,6 +270,15 @@ export async function POST(request: Request): Promise<Response> {
       }, 400);
     }
     locale = parsed.data.locale;
+    const applicableAt = parsed.data.legalContextDate
+      ? parseLegalApplicabilityDate(parsed.data.legalContextDate)
+      : null;
+    if (parsed.data.legalContextDate && !applicableAt) {
+      return json({ code: "INVALID_LEGAL_CONTEXT_DATE", error: copy(locale,
+        "Укажите существующую дату события не позднее сегодняшнего дня.",
+        "Bugungi kundan kech bo‘lmagan haqiqiy voqea sanasini kiriting.",
+      ) }, 400);
+    }
     const idempotencyKey = request.headers.get("idempotency-key")?.trim() ?? "";
     const { env, db, keyring } = configuration();
     await assertOperationalFeatureEnabled({
@@ -307,13 +318,14 @@ export async function POST(request: Request): Promise<Response> {
       effectiveQuestion,
       locale,
       8,
-      { semantic: runtimeEnv() },
+      { semantic: runtimeEnv(), applicableAt: applicableAt ?? undefined },
     );
     const requestHash = await sha256Json({
       question: effectiveQuestion,
       locale,
       answerMode: "short",
       reasoningMode: "fast",
+      legalContextDate: parsed.data.legalContextDate ?? null,
     });
     const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
     const instructionHash = await sha256Json({
@@ -372,6 +384,7 @@ export async function POST(request: Request): Promise<Response> {
         reasoningMode: "fast",
         sources: retrieval.sources,
         legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
+        applicableAt: applicableAt?.toISOString(),
         requestId: reservation.run.correlationId,
         safetyIdentifier: await sha256Json({
           scope: "guest-openai-safety-v1",

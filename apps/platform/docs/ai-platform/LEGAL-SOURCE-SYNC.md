@@ -78,3 +78,15 @@ AI routes filter for exact verified source state, verified timestamp, and conten
 - reproducible 250-scenario RU/UZ legal evaluation with human-reviewed ground truth.
 
 None of these remaining items is represented as working until its own staging evidence passes.
+## Historical retrieval contract
+
+An explicit `legalContextDate` switches retrieval from the current activation to
+verified or archived publications whose reviewed version interval contains that
+date. Semantic retrieval is intentionally disabled for this path because the
+current Vectorize indexes contain only current activations. Every selected
+historical row is reloaded from D1 and revalidated against publication,
+lifecycle, section and chunk hashes before it can enter an AI prompt.
+
+Dates are not inferred from fetched HTML. Missing `effective_at` metadata causes
+the source to be excluded, so the AI must clarify rather than invent historical
+applicability.
