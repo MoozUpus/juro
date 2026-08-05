@@ -15,6 +15,21 @@
 > authenticated UI, inbox placement, legal quality, a safe-file scan, or
 > production readiness.
 
+> **Release-gate recheck — 2026-08-06.** PR #3 head `7902608` passed GitHub
+> Actions run `31047312603` for both application packages. A fresh local pass
+> of tests, type-check, lint, generated Cloudflare types, environment matrix
+> and production-dependency audit also succeeded. The protected status host
+> returned `200` for HTML and localized JSON and returned `404` for an
+> application route, confirming the hostname fence. These checks do not prove
+> an authenticated user flow. Cloudflare Containers remains unavailable to the
+> account (`Unauthorized`; Workers Paid plan required), so no actual scanner
+> service can be provisioned there. The platform therefore continues to fail
+> closed: no `MALWARE_SCANNER` service binding, no malware queue, and no
+> scanner-approved file may reach OCR or AI. The official browser-control
+> runtime again failed before connection because an external user-profile
+> `package.json` marks its generated CommonJS kernel as ESM; this repository
+> does not alter that unrelated host configuration.
+
 > Staging status-host checkpoint — 2026-08-06: Cloudflare Workers domain
 > `status.staging.juro.uz` is attached only to `juro-platform-staging` (domain
 > ID `dc23f52d4c2ad8b32d2aab7df752b02d59dc0a27`). Public HTTPS smoke checks
