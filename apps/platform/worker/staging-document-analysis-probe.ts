@@ -19,7 +19,10 @@ export type StagingDocumentAnalysisProbeSummary = {
   completed: number;
   failed: number;
   skipped: number;
+  errorCode?: string;
 };
+
+type ProbeStage = "prepare" | "seed" | "scan" | "analysis" | "verify" | "cleanup";
 
 export function stagingDocumentAnalysisProbeEnabled(
   env: Pick<PlatformJobEnv, "APP_ENV"> & { STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED?: string },
@@ -217,22 +220,39 @@ export async function runStagingDocumentAnalysisProbe(
     return { attempted: 0, completed: 0, failed: 0, skipped: 1 };
   }
   if (env.MALWARE_SCAN_ENABLED !== "true" || !env.MALWARE_SCANNER) {
-    return { attempted: 1, completed: 0, failed: 1, skipped: 0 };
+    return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode: "DOCUMENT_ANALYSIS_PROBE_SCANNER_DISABLED" };
   }
+  let stage: ProbeStage = "prepare";
   try {
     await cleanup(env);
     await assertCleanup(env);
+    stage = "seed";
     await seedSyntheticAnalysis(env);
+    stage = "scan";
     const scan = await executeMalwareScanJob(env, probeIds.analysisId, probeIds.workspaceId);
     if (scan.status !== "safe") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_SCAN_FAILED");
+    stage = "analysis";
     const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId);
     if (analysis.status !== "completed") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_ANALYSIS_FAILED");
+    stage = "verify";
     await assertCompleted(env);
     return { attempted: 1, completed: 1, failed: 0, skipped: 0 };
   } catch {
-    return { attempted: 1, completed: 0, failed: 1, skipped: 0 };
+    const errorCode = `DOCUMENT_ANALYSIS_PROBE_${stage.toUpperCase()}_FAILED`;
+    console.error(JSON.stringify({ event: "staging.document_analysis_probe_failed", stage, errorCode }));
+    return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode };
   } finally {
-    await cleanup(env);
-    await assertCleanup(env);
+    try {
+      stage = "cleanup";
+      await cleanup(env);
+      await assertCleanup(env);
+    } catch {
+      console.error(JSON.stringify({
+        event: "staging.document_analysis_probe_cleanup_failed",
+        stage,
+        errorCode: "DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED",
+      }));
+      throw new Error("DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED");
+    }
   }
 }
