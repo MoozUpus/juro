@@ -1,6 +1,9 @@
 import PizZip from "pizzip";
 import { executeMalwareScanJob } from "../lib/document-analysis/malware-scanner";
-import { executeDocumentAnalysisJob } from "../lib/document-analysis/processor";
+import {
+  DocumentAnalysisProcessingError,
+  executeDocumentAnalysisJob,
+} from "../lib/document-analysis/processor";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const probeKey = "staging-document-analysis-v1";
@@ -237,8 +240,13 @@ export async function runStagingDocumentAnalysisProbe(
     stage = "verify";
     await assertCompleted(env);
     return { attempted: 1, completed: 1, failed: 0, skipped: 0 };
-  } catch {
-    const errorCode = `DOCUMENT_ANALYSIS_PROBE_${stage.toUpperCase()}_FAILED`;
+  } catch (error) {
+    const processorCode = error instanceof DocumentAnalysisProcessingError
+      ? error.code
+      : null;
+    const errorCode = stage === "analysis" && processorCode
+      ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorCode}`
+      : `DOCUMENT_ANALYSIS_PROBE_${stage.toUpperCase()}_FAILED`;
     console.error(JSON.stringify({ event: "staging.document_analysis_probe_failed", stage, errorCode }));
     return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode };
   } finally {
