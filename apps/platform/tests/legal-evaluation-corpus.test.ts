@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 import { verifyPublicCitation } from "../evaluation/legal-citation-live-check";
+import {
+  materializeLegalEvaluationArtifacts,
+  verifyLegalEvaluationArtifactManifest,
+} from "../evaluation/legal-evaluation-artifacts";
 import {
   LEGAL_EVALUATION_ACCOUNT_TYPES,
   LEGAL_EVALUATION_AREAS,
@@ -55,6 +62,35 @@ test("legal evaluation corpus covers unique bilingual, account-type, and behavio
     for (const tag of ["historical", "deadline", "critical_deadline", "urgent", "advice_missing", "advice_lex_conflict", "unofficial_source"]) {
       assert.ok(entries.some((scenario) => scenario.tags.includes(tag)), `${locale}:${tag}`);
     }
+  }
+});
+
+test("legal review packet materializes deterministically and detects tampering", async () => {
+  const directory = await mkdtemp(join(tmpdir(), "juro-legal-evaluation-"));
+  try {
+    const first = await materializeLegalEvaluationArtifacts(directory);
+    assert.deepEqual(await verifyLegalEvaluationArtifactManifest(directory, first), []);
+    const second = await materializeLegalEvaluationArtifacts(directory);
+    assert.deepEqual(second, first);
+    assert.equal(first.corpusSize, 314);
+    assert.equal(first.russianScenarioCount, 157);
+    assert.equal(first.uzbekScenarioCount, 157);
+    assert.equal(first.ambiguousScenarioCount, 50);
+    assert.equal(first.legalAreaCount, 12);
+    const scenarios = JSON.parse(await readFile(join(directory, "scenarios.json"), "utf8")) as unknown[];
+    assert.equal(scenarios.length, 314);
+    assert.equal(Object.hasOwn(scenarios[0] as object, "answer"), false);
+    await writeFile(join(directory, "artifact-manifest.json"), "{}\n", "utf8");
+    assert.ok((await verifyLegalEvaluationArtifactManifest(directory, first)).includes(
+      "LEGAL_ARTIFACT_MANIFEST_INTEGRITY_MISMATCH",
+    ));
+    await materializeLegalEvaluationArtifacts(directory);
+    await writeFile(join(directory, "scenarios.json"), "[]\n", "utf8");
+    assert.ok((await verifyLegalEvaluationArtifactManifest(directory, first)).includes(
+      "LEGAL_ARTIFACT_SCENARIOS_INTEGRITY_MISMATCH",
+    ));
+  } finally {
+    await rm(directory, { recursive: true, force: true });
   }
 });
 

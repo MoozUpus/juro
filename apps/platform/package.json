@@ -18,6 +18,7 @@
     "smoke:document-builder": "node scripts/platform-tasks.mjs smoke-document-builder",
     "smoke:document-comparison": "node scripts/platform-tasks.mjs smoke-document-comparison",
     "smoke:case-create": "node scripts/platform-tasks.mjs smoke-case-create",
+    "evaluate:legal:materialize": "tsx scripts/materialize-legal-evaluation.ts",
     "evaluate:legal:validate": "tsx scripts/validate-legal-evaluation.ts",
     "evaluate:documents:materialize": "tsx scripts/materialize-document-evaluation.ts",
     "evaluate:documents:validate": "tsx scripts/validate-document-evaluation.ts",
