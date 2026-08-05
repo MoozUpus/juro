@@ -76,7 +76,7 @@ export async function runDocumentAnalysis(
 export function documentFallbackEligible(error: unknown): boolean {
   return error instanceof AiUnavailableError
     && error.code !== "AI_REFUSED"
-    && (error.retryable || error.code === "INVALID_AI_OUTPUT" || error.code === "PROVIDER_CIRCUIT_OPEN");
+    && error.code !== "AI_CANCELLED";
 }
 
 async function runAnthropicDocumentAnalysis(
@@ -93,6 +93,11 @@ async function runAnthropicDocumentAnalysis(
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings),
     input: providerInput(input),
+    // The analysis contract contains nested legal findings and revisions. The
+    // Anthropic tool envelope keeps the provider request shallow while the
+    // complete result is still parsed and fail-closed against the same Zod
+    // schema below. This avoids provider-side rejection of a deep JSON schema.
+    strictOutput: false,
   });
   return constrainResult(result, input);
 }

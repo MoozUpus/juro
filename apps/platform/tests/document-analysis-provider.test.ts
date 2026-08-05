@@ -8,6 +8,8 @@ import {
   parseDocumentAnalysisResult,
 } from "../lib/document-analysis/schema";
 import { buildDocumentAnalysisProviderInput } from "../lib/document-analysis/input";
+import { documentFallbackEligible } from "../lib/document-analysis/provider";
+import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
 const base = {
   documentType: "Договор оказания услуг",
@@ -203,4 +205,17 @@ test("document-analysis payload labels every user-controlled document field as u
   assert.equal(payload.untrustedDocument.packageContext?.members[0]?.name, injection);
   assert.equal("documentText" in payload, false);
   assert.equal("packageContext" in payload, false);
+});
+
+test("document analysis fails over from an unavailable Anthropic request but never overrides refusal or cancellation", () => {
+  assert.equal(
+    documentFallbackEligible(new AiUnavailableError("provider schema rejected", "PROVIDER_UNAVAILABLE", false, 400)),
+    true,
+  );
+  assert.equal(
+    documentFallbackEligible(new AiUnavailableError("invalid result", "INVALID_AI_OUTPUT", false)),
+    true,
+  );
+  assert.equal(documentFallbackEligible(new AiUnavailableError("refused", "AI_REFUSED", false)), false);
+  assert.equal(documentFallbackEligible(new AiUnavailableError("cancelled", "AI_CANCELLED", false)), false);
 });
