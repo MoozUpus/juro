@@ -1490,6 +1490,38 @@ test("lawyer request messages require active participant access and are workspac
   assert.match(client, /x-juro-csrf/);
   assert.match(migration, /CREATE TABLE `lawyer_request_messages`/);
 });
+test("lawyer phone contact is explicit, active-grant scoped and audited without the phone", async () => {
+  const [route, service, client, ownerClient, lawyerClient] = await Promise.all([
+    readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/phone/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/lawyer-phone-contact.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerPhoneContact.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /runtimeIdentityProtection\(\)/);
+  assert.match(service, /g\.revoked_at IS NULL/);
+  assert.match(service, /g\.expires_at IS NULL OR g\.expires_at>\?/);
+  assert.match(service, /g\.lawyer_user_id=p\.user_id/);
+  assert.match(service, /owner_consent\.type='lawyer_case_access'/);
+  assert.match(service, /lawyer_consent\.type='lawyer_phone_contact_sharing'/);
+  assert.match(service, /lawyer_phone_contact_revealed/);
+  assert.doesNotMatch(service, /metadata_json[^\n]+phone/iu);
+  assert.match(client, /method: "POST"/);
+  assert.match(client, /x-juro-csrf/);
+  assert.match(client, /href=\{phone\.href\}/);
+  assert.match(client, /JURO не записывает обычный телефонный звонок/);
+  assert.match(ownerClient, /<LawyerPhoneContact/);
+  assert.match(lawyerClient, /<LawyerPhoneContact/);
+  assert.match(lawyerClient, /согласен на контакт/);
+  assert.match(ownerClient, /взаимное раскрытие наших номеров телефона/);
+  const grantRoute = await readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts", import.meta.url), "utf8");
+  assert.match(grantRoute, /'lawyer_case_access','2026-08-06'/);
+  assert.match(grantRoute, /reciprocalPhoneDisclosure: true/);
+  const conflictRoute = await readFile(new URL("../app/api/platform/lawyer-requests/[requestId]/conflict-check/route.ts", import.meta.url), "utf8");
+  assert.match(conflictRoute, /lawyer_phone_contact_sharing','2026-08-06'/);
+  assert.match(conflictRoute, /reciprocalPhoneDisclosure: true/);
+});
 test("completed lawyer services gate private owner reviews and moderation", async () => {
   assert.equal(lawyerReviewSchema.safeParse({ overallRating: 5, speedRating: 4, qualityRating: 5, communicationRating: 5, locale: "ru" }).success, true);
   assert.equal(lawyerReviewSchema.safeParse({ overallRating: 6, speedRating: 4, qualityRating: 5, communicationRating: 5, locale: "ru" }).success, false);

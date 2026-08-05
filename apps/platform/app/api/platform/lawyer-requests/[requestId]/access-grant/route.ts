@@ -48,11 +48,11 @@ export const POST = withApiErrors(async function POST(request: Request, context:
     db.prepare("UPDATE lawyer_requests SET status='access_granted',updated_at=? WHERE id=? AND status='awaiting_user_consent'")
       .bind(now, handoff.id),
     db.prepare(
-      "INSERT INTO consents (id,user_id,workspace_id,type,version,scope_json,granted_at) VALUES (?,?,?,'lawyer_case_access','2026-07-31',?,?)",
-    ).bind(crypto.randomUUID(), user.id, workspace.id, JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId }), now),
+      "INSERT INTO consents (id,user_id,workspace_id,type,version,scope_json,granted_at) VALUES (?,?,?,'lawyer_case_access','2026-08-06',?,?)",
+    ).bind(crypto.randomUUID(), user.id, workspace.id, JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId, phoneContact: true, reciprocalPhoneDisclosure: true }), now),
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_access_grant',?,'lawyer_case_access_granted',?,?)",
-    ).bind(crypto.randomUUID(), workspace.id, user.id, grantId, JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId }), now),
+    ).bind(crypto.randomUUID(), workspace.id, user.id, grantId, JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId, phoneContact: true, reciprocalPhoneDisclosure: true }), now),
   ]);
   return response({ ok: true, grantId, status: "access_granted" }, 201);
 });

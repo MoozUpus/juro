@@ -108,6 +108,7 @@ const coreTestFiles = [
   "tests/knowledge-base.test.ts",
   "tests/knowledge-base-admin.test.ts",
   "tests/lawyer-review-replies.test.ts",
+  "tests/lawyer-phone-contact.test.ts",
   "tests/ai-feedback.test.ts",
   "tests/ai-quality-review.test.ts",
   "tests/url-import.test.ts",

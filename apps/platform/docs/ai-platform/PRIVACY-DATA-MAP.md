@@ -57,3 +57,17 @@ idempotency keys or chain hashes. Migration `0086` is local-only.
 
 Deleting feedback removes review content but retains content hashes and access
 classification as audit evidence. Migration `0087` is local-only.
+
+## Lawyer participant phone contact — local candidate
+
+| Data | Storage | Protection | Scope and disclosure |
+|---|---|---|---|
+| participant phone | existing protected identity record | server-side identity protection; never copied into lawyer-request or audit tables | revealed on explicit POST only to the assigned lawyer or owning requester after both consents and an active grant |
+| owner contact consent | D1 `consents` | versioned scope, user/workspace/request binding, revocable | case access plus reciprocal ordinary-call phone disclosure |
+| lawyer contact consent | D1 `consents` | recorded only on an explicit clear conflict decision; user/workspace/request binding | reciprocal ordinary-call phone disclosure after the owner separately grants access |
+| reveal event | D1 `workspace_audit_events` | actor, request and role metadata only | no phone, email or call content |
+
+The browser receives the phone only after reveal and uses a native `tel:` URL.
+JURO does not proxy or record the call. Revoked/expired access, missing either
+consent, inactive participants, wrong tenant and unavailable identity
+protection all fail closed.

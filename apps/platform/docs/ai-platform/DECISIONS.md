@@ -3220,8 +3220,8 @@ handles stale unreferenced R2 objects.
 Analysis correction return is explicit, owner scoped and valid only for the
 unchanged Builder revision captured by the original handoff. This prevents a
 reviewed old correction from overwriting newer manual work. Migration `0097`
-and its Worker/UI candidate are local only pending separately authorized
-staging backup, migration, deployment and authenticated lifecycle proof.
+and its Worker/UI candidate are deployed to protected staging after private
+backup/restore; authenticated lifecycle proof remains open.
 
 ## D-157 — deadline email reminders resolve identity only at delivery
 
@@ -3239,3 +3239,21 @@ email rows; sent evidence is never reset. Existing tasks are not retroactively
 enrolled. Provider retries use one stable idempotency key. Migration `0098` is
 local only pending a separately authorized staging backup, ordered migration
 and exact Worker deploy.
+
+## D-158 — participant phone disclosure requires two explicit consents
+
+Status: accepted and locally verified
+Date: 2026-08-06
+
+An active lawyer access grant alone is insufficient to reveal either
+participant's phone. The lawyer records a request-scoped sharing consent when
+clearing the conflict check, and the owner records a separate reciprocal
+disclosure scope when granting case access. The reveal query requires both
+unrevoked consents plus the active grant and participant/tenant identity, so
+legacy grants remain closed.
+
+Phone values stay in the protected identity domain and are resolved only for
+the explicit POST response. Audit evidence stores roles and opaque IDs, never
+the phone. The browser hands the `tel:` URI to the device; JURO does not claim
+to place or record the call. This local candidate adds no schema migration and
+has not been deployed.

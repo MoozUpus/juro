@@ -1154,7 +1154,10 @@ content-changing gaps without a post-mutation false-success window:
 - focused migration, service, route/UI and complete
   Builder→Analysis→Builder roundtrip tests pass locally.
 
-`0097` and the matching Worker candidate are not yet deployed to staging.
+`0097` and the matching Worker from commit `16964b7` are deployed to protected
+staging as version `6b035237-0eef-4a3e-b0a4-11005f58b09b` after a private R2
+backup round-trip and isolated restore. Authenticated proposal/correction
+lifecycle proof remains open; production is unchanged.
 
 ## Phase 6 — deadline reminder email delivery (local candidate)
 
@@ -1172,3 +1175,20 @@ content-changing gaps without a post-mutation false-success window:
 - Migration `0098` and its Worker are local only. Synthetic migration,
   provider, retry, tenant and queue tests pass; no real email or deploy is
   claimed.
+
+## Phase 7 — audited participant phone contact (local candidate)
+
+- An owner and the assigned lawyer can explicitly reveal only the other
+  participant's current protected phone after conflict clearance and an active,
+  non-expired case access grant.
+- Disclosure requires two separate consent records: the lawyer's contact-
+  sharing consent at a clear conflict decision and the owner's case access/
+  contact consent. Legacy grants without both scopes fail closed.
+- The POST-only route is authenticated, CSRF-protected, no-store, tenant and
+  participant scoped. Phone values are resolved through the protected identity
+  boundary only at reveal time and never copied to audit metadata.
+- RU/UZ controls expose a native `tel:` action with 44 px targets, visible
+  focus, mobile layout and explicit notice that JURO does not record the
+  ordinary telephone call.
+- Focused integration/security tests pass 77/77. No schema migration or call
+  provider was added; staging and production are unchanged.

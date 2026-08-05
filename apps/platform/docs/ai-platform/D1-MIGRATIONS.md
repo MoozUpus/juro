@@ -1394,8 +1394,8 @@ production remains unchanged. Full evidence is in
 
 ## Migration 0097 — projected Builder version object writes
 
-`0097_builder_document_version_object_writes.sql` is an expand-only local
-candidate. It adds metadata-only R2 write intents and an optional immutable
+`0097_builder_document_version_object_writes.sql` is an expand-only staging
+migration. It adds metadata-only R2 write intents and an optional immutable
 `object_write_id` link on Builder versions. Insert/transition/attachment
 triggers bind the intent to the active owner/workspace/document, exact source
 and target revisions, accepted collaboration proposal or corrected Analysis
@@ -1409,8 +1409,11 @@ roll back and the pending intent is retryable; scheduled reconciliation removes
 only an unreferenced object after an identity check.
 
 Local SQLite/R2 tests cover proposal success/replay, D1 attach rollback, orphan
-cleanup and Builder→Analysis→Builder corrected-version return. `0097` is not
-applied to staging or production.
+cleanup and Builder→Analysis→Builder corrected-version return. Commit
+`16964b7` and migration `0097` are deployed to protected staging as Worker
+version `6b035237-0eef-4a3e-b0a4-11005f58b09b` after a private backup and
+isolated restore. Authenticated proposal/correction lifecycle proof remains
+open. Production is unchanged.
 
 ## Migration 0098 — task reminder email delivery evidence
 

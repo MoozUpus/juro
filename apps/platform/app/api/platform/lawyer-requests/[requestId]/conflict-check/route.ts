@@ -57,9 +57,18 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   await db.batch([
     db.prepare("UPDATE lawyer_requests SET status=?,updated_at=? WHERE id=? AND status='conflict_check_pending'")
       .bind(requestStatus, now, check.requestId),
+    ...(parsed.data.decision === "clear" ? [db.prepare(
+      "INSERT INTO consents (id,user_id,workspace_id,type,version,scope_json,granted_at) VALUES (?,?,?,'lawyer_phone_contact_sharing','2026-08-06',?,?)",
+    ).bind(
+      crypto.randomUUID(),
+      user.id,
+      check.workspaceId,
+      JSON.stringify({ requestId: check.requestId, reciprocalPhoneDisclosure: true }),
+      now,
+    )] : []),
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_request',?,'conflict_check_completed',?,?)",
-    ).bind(crypto.randomUUID(), check.workspaceId, user.id, check.requestId, JSON.stringify({ result: conflictStatus }), now),
+    ).bind(crypto.randomUUID(), check.workspaceId, user.id, check.requestId, JSON.stringify({ result: conflictStatus, reciprocalPhoneDisclosure: parsed.data.decision === "clear" }), now),
   ]);
   return response({ ok: true, status: requestStatus });
 });

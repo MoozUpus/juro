@@ -712,11 +712,11 @@ approval, internal signing and signed-PDF upload. Restore produces a normal
 immutable revision/evidence row.
 
 Automatic post-change checkpoints for accepted suggestions and Claude/analysis
-corrections are implemented only in the local `0097` candidate. The contract
+corrections are deployed in the protected staging `0097` candidate. The contract
 writes the projected snapshot before a revision-fenced D1 attachment and has a
-scheduled orphan reconciler. It is not staging evidence until a fresh private
-backup, ordered `0097` migration, exact Worker deployment and authenticated
-proposal/correction lifecycle tests pass. Production remains unchanged.
+scheduled orphan reconciler. Private backup/restore, the exact migration and
+Worker deployment pass; authenticated proposal/correction lifecycle tests are
+still open. Production remains unchanged.
 
 ## Deadline email reminder checkpoint — 2026-08-06
 
@@ -727,6 +727,19 @@ both in-app and email channels.
 
 The local suite uses a synthetic Resend response; it does not prove sender
 authorization or real mailbox delivery. A fresh private staging backup with
-isolated restore verification, ordered `0097`–`0098` application, exact Worker
+isolated restore verification, `0098` application, exact Worker
 deploy, queue observation and a test email to an owner-controlled staging
 account remain required. Production is unchanged.
+
+## Lawyer phone-contact checkpoint — 2026-08-06
+
+The local candidate opens the device's ordinary dialer through a `tel:` link;
+JURO does not place, proxy or record the call and cannot prove that a call was
+completed. Audio/video calling, realtime presence and call recording remain
+disabled until a separately selected and privacy-approved provider is
+integrated. A participant without a dialable protected phone receives an
+explicit unavailable state.
+
+The feature is not staging evidence yet. It requires deployment of the exact
+candidate followed by authenticated owner/lawyer RU/UZ tests, revocation tests
+and mobile-dialer verification. Production remains unchanged.
