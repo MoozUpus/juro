@@ -300,6 +300,7 @@ export type PlatformJobEnv = Omit<
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
   STAGING_SYNTHETIC_PROBES_ENABLED?: string;
+  STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED?: string;
   MALWARE_SCANNER?: Fetcher;
   MALWARE_SCAN_ENABLED?: string;
 };

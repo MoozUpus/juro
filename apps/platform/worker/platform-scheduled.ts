@@ -63,6 +63,17 @@ async function maybeRunStagingMalwareScannerProbe(env: PlatformJobEnv) {
   if (summary.failed > 0) throw new Error("STAGING_MALWARE_SCANNER_PROBE_FAILED");
   return summary;
 }
+
+async function maybeRunStagingDocumentAnalysisProbe(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "staging"
+    || (env as Record<string, unknown>).STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED !== "true"
+  ) return null;
+  const { runStagingDocumentAnalysisProbe } = await import("./staging-document-analysis-probe");
+  const summary = await runStagingDocumentAnalysisProbe(env);
+  if (summary.failed > 0) throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_FAILED");
+  return summary;
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -335,6 +346,8 @@ export async function handleScheduled(
     const emailDeliveryProbe = await maybeRunStagingEmailDeliveryProbe(env);
     failureCode = "MALWARE_SCANNER_PROBE_FAILED";
     const malwareScannerProbe = await maybeRunStagingMalwareScannerProbe(env);
+    failureCode = "DOCUMENT_ANALYSIS_PROBE_FAILED";
+    const documentAnalysisProbe = await maybeRunStagingDocumentAnalysisProbe(env);
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
     const corpusRunsCompleted =
       env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
@@ -386,6 +399,10 @@ export async function handleScheduled(
       malwareScannerProbeDetected: malwareScannerProbe?.detected ?? 0,
       malwareScannerProbeFailed: malwareScannerProbe?.failed ?? 0,
       malwareScannerProbeSkipped: malwareScannerProbe?.skipped ?? 0,
+      documentAnalysisProbeAttempted: documentAnalysisProbe?.attempted ?? 0,
+      documentAnalysisProbeCompleted: documentAnalysisProbe?.completed ?? 0,
+      documentAnalysisProbeFailed: documentAnalysisProbe?.failed ?? 0,
+      documentAnalysisProbeSkipped: documentAnalysisProbe?.skipped ?? 0,
       corpusRunsCompleted,
       corpusAlertsCreated: corpusAlerts.created,
       corpusFailedRunAlerts: corpusAlerts.failedRuns,
