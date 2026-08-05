@@ -11,6 +11,7 @@ import { calculateQuestionnaireProgress, conditionMatches, createQuestionnaireAn
 import type { GenericStoredDocument } from "../../../lib/document-builder/types";
 import { builderNavigationPaths } from "../../../lib/platform/builder-paths";
 import { DocumentPreview } from "./DocumentPreview";
+import { BuilderAnalysisLauncher } from "./BuilderAnalysisLauncher";
 import type { BuilderUser } from "./BuilderHeader";
 import { apiFetch, downloadAuthenticatedFile } from "./api-client";
 import { useDebouncedEffect } from "../_hooks/useDebouncedEffect";
@@ -128,15 +129,19 @@ export function ConfigurableDocumentBuilder({ definition, initialUser, signInPat
     return createPromise.current;
   }, [answers, caseId, definition, documentId, finalText, hydrate, initialUser, language, manuallyEdited, planStepId, title]);
 
-  const save = useCallback(async () => {
-    if (!initialUser || !documentId || !hydrated) return;
+  const save = useCallback(async (targetDocumentId = documentId) => {
+    if (!initialUser || !targetDocumentId || !hydrated) return;
     setSaveState("saving");
     try {
-      const result = await apiFetch<{ revision: number }>(`/api/document-builder/configured-documents/${documentId}`, { method: "PUT", body: JSON.stringify({ language, title, answers, autoContent: rendered.plainText, finalContent: finalText, manuallyEdited, revision: revisionRef.current }) });
+      const result = await apiFetch<{ revision: number }>(`/api/document-builder/configured-documents/${targetDocumentId}`, { method: "PUT", body: JSON.stringify({ language, title, answers, autoContent: rendered.plainText, finalContent: finalText, manuallyEdited, revision: revisionRef.current }) });
       revisionRef.current = result.revision; setSaveState("saved");
-    } catch (caught) { setSaveState("error"); setError(caught instanceof Error ? caught.message : "Не удалось сохранить документ."); }
+    } catch (caught) {
+      setSaveState("error");
+      setError(caught instanceof Error ? caught.message : "Не удалось сохранить документ.");
+      throw caught;
+    }
   }, [answers, documentId, finalText, hydrated, initialUser, language, manuallyEdited, rendered.plainText, title]);
-  useDebouncedEffect(() => { void save(); }, [answers, language, title, finalText, manuallyEdited, documentId], 700);
+  useDebouncedEffect(() => { void save().catch(() => undefined); }, [answers, language, title, finalText, manuallyEdited, documentId], 700);
 
   const start = async () => { setPhase("builder"); if (initialUser) { try { await ensureDocument(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось создать черновик."); } } };
   const update = (field: QuestionnaireField, value: unknown) => { setAnswers((current) => setAnswer(current, field.id, value as never)); setErrors((current) => { const next = { ...current }; delete next[field.id]; return next; }); };
@@ -152,7 +157,7 @@ export function ConfigurableDocumentBuilder({ definition, initialUser, signInPat
     if (Object.keys(validation).length) { setError(language === "uz" ? "Hujjat yaratishdan oldin majburiy maydonlarni to‘ldiring." : "Перед созданием заполните обязательные поля."); return; }
     if (!initialUser) { window.location.assign(signInPath); return; }
     setGenerating(true); setError("");
-    try { const id = await ensureDocument(); await save(); const result = await apiFetch<GenerationResult>(`/api/document-builder/configured-documents/${id}/generate`, { method: "POST", body: "{}" }); setFiles(result.files); setPhase("success"); }
+    try { const id = await ensureDocument(); await save(id); const result = await apiFetch<GenerationResult>(`/api/document-builder/configured-documents/${id}/generate`, { method: "POST", body: "{}" }); setFiles(result.files); setPhase("success"); }
     catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось сформировать файлы."); }
     finally { setGenerating(false); }
   };
@@ -169,5 +174,14 @@ export function ConfigurableDocumentBuilder({ definition, initialUser, signInPat
       {initialUser && <details className="dbt-config-editor"><summary>{language === "uz" ? "Hujjat matnini qo‘lda tahrirlash" : "Редактировать весь текст вручную"}</summary><p>{language === "uz" ? "Tuzilma saqlanadi; qo‘lda o‘zgartirish uchun foydalanuvchi javobgar." : "Оформление сохраняется; за ручные изменения отвечает пользователь."}</p><textarea rows={18} value={finalText} onChange={(event) => { setFinalText(event.target.value); setManuallyEdited(true); }}/><button type="button" onClick={() => { setFinalText(rendered.plainText); setManuallyEdited(false); }}><RotateCcw size={16}/>{language === "uz" ? "Dastlabki matnni qaytarish" : "Вернуть исходный текст"}</button></details>}
       {!initialUser && <div className="dbt-privacy-note"><LockKeyhole size={18}/><p>{language === "uz" ? "Javoblar hozir faqat ushbu brauzer oynasida saqlanadi. Serverda saqlash, matnni tahrirlash va fayllarni yuklab olish uchun tizimga kiring." : "Ответы пока сохраняются только в этой вкладке браузера. Войдите для серверного сохранения, редактирования текста и скачивания файлов."}</p></div>}
       <div className="dbt-config-navigation"><button type="button" disabled={step === 0} onClick={() => setStep((value) => Math.max(0, value - 1))}><ArrowLeft size={17}/>{language === "uz" ? "Orqaga" : "Назад"}</button>{step < definition.questionnaire.length - 1 ? <button type="button" className="primary" onClick={goNext}>{language === "uz" ? "Davom etish" : "Продолжить"}<ArrowRight size={17}/></button> : <button type="button" className="primary" disabled={generating} onClick={() => void generate()}>{generating ? <LoaderCircle size={17}/> : <FileCheck2 size={17}/>} {initialUser ? (language === "uz" ? "Hujjat va fayllarni yaratish" : "Создать документ и файлы") : (language === "uz" ? "Kirish va yaratish" : "Войти и создать")}</button>}</div>
+      {initialUser && step === definition.questionnaire.length - 1 && <BuilderAnalysisLauncher
+        locale={language}
+        reviewPath={paths.documentReview}
+        onPrepare={async () => {
+          const id = await ensureDocument();
+          await save(id);
+          return id;
+        }}
+      />}
     </section><DocumentPreview document={visibleDocument}/></div><button type="button" className="dbt-mobile-preview-button" onClick={() => setMobilePreview(true)}><Eye size={18}/>{language === "uz" ? "Ko‘rib chiqish" : "Предпросмотр"}</button>{mobilePreview && <DocumentPreview document={visibleDocument} mobileOpen onClose={() => setMobilePreview(false)}/>}</div>;
 }

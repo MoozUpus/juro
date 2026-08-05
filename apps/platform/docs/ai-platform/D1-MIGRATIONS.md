@@ -1356,3 +1356,21 @@ Worker is active, so applying `0093` before deploy cannot break the old archive
 route. Local tests pass the full migration chain, tenant denial, idempotent
 replay, invalid counts, immutable events and the four-state lifecycle. Staging
 remains through `0091`; production is unchanged.
+
+## Migration 0095 — Builder document-analysis handoff (local candidate)
+
+`0095_builder_document_analysis_handoffs.sql` is expand-only. It adds a
+content-free handoff ledger that binds an active owner, exact Builder revision,
+private file SHA-256, analysis ID, RU/UZ mode and SHA-256 of the request key.
+Insert and transition triggers independently reject cross-tenant identities,
+stale revisions, non-private/non-safe file states and a ready state without the
+matching pending `document.analyze` outbox row. User-data deletion cascades the
+handoff; there is no retained document text in this table.
+
+Local migration and service tests pass private R2 integrity, atomic D1/outbox
+state, exact replay, idempotency conflicts, tenant denial, plan limits and
+fail-closed R2 retry. Staging is currently through `0094`; migration `0095` is
+not applied. Before staging, create and isolated-restore a fresh private backup,
+apply only the ordered pending migration, run foreign-key/trigger postflight,
+deploy the exact commit and execute the authenticated Builder smoke twice with
+the same request key. Production is unchanged.

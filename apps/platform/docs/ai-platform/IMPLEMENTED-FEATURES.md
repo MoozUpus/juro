@@ -1094,3 +1094,17 @@ migration application or deployment is claimed; production is unchanged.
   evidence and D1 ownership guards. It permits cascade deletion with user data.
 - Focused integration/migration tests pass 7/7. Staging and production are
   unchanged.
+
+## Phase 6 — Document Builder to durable analysis pipeline (local candidate)
+
+- The last Builder step offers quick/full/expert review in RU/UZ and first
+  persists the exact current revision. A save failure aborts the handoff.
+- The owner-only API writes an immutable UTF-8 snapshot directly to private R2,
+  verifies size and SHA-256, creates the analysis and queues the existing
+  `document.analyze` job through the D1 outbox.
+- Free workspaces receive quick analysis; full/expert remain server-enforced
+  paid entitlements. The UI exposes busy/error states, prevents double submit,
+  announces progress and supports reduced motion.
+- The legacy inline receipt-review route remains available for compatibility.
+- Focused migration/service/security checks pass 6/6. Migration `0095`, staging
+  smoke and browser evidence remain separately gated; production is unchanged.

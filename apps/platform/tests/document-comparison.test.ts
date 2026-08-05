@@ -165,6 +165,19 @@ test("DOCX extraction supports Russian and Uzbek text, tables and appendices", a
   assert.equal(result.detectedLanguage, "mixed");
 });
 
+test("Builder Markdown snapshot enters the same structured analysis pipeline", async () => {
+  const bytes = new TextEncoder().encode("ДОГОВОР\n\n1. Исполнитель оказывает услуги.\n\n2. Заказчик оплачивает услуги в течение 10 дней.");
+  const result = await extractDocument({
+    bytes,
+    fileName: "contract.snapshot-r2.md",
+    mimeType: "text/markdown; charset=utf-8",
+    sizeBytes: bytes.byteLength,
+  });
+  assert.match(result.text, /Заказчик оплачивает/u);
+  assert.ok(result.sections.length >= 2);
+  assert.equal(result.detectedLanguage, "ru");
+});
+
 test("PDF and DOCX use the same structured comparison pipeline", async () => {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);

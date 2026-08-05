@@ -11,6 +11,7 @@ export type BuilderNavigationPaths = {
   builder: string;
   library: string;
   documents: string;
+  documentReview: string;
   contacts: string;
   notifications: string;
   category: (categorySlug: string) => string;
@@ -88,6 +89,7 @@ export function builderNavigationPaths(
       builder: withBuilderContext(builder, context),
       library: withBuilderContext(builder, context),
       documents: `${base}/documents`,
+      documentReview: `${base}/document-review`,
       contacts: `${base}/contacts`,
       notifications: `${base}/notifications`,
       category: (categorySlug) => withBuilderContext(
@@ -112,6 +114,7 @@ export function builderNavigationPaths(
     builder: withBuilderContext(builder, context),
     library: withBuilderContext(`${builder}/library`, context),
     documents: `${builder}/documents`,
+    documentReview: `${builder}/document-review`,
     contacts: `${builder}/contacts`,
     notifications: `${builder}/notifications`,
     category: (categorySlug) => withBuilderContext(

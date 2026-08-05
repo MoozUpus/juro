@@ -132,6 +132,33 @@ async function main(): Promise<void> {
   });
   assert.equal(saved.data.revision, 2);
 
+  const analysisKey = `builder-analysis-smoke-${crypto.randomUUID()}`;
+  const analysis = await api<{ analysisId: string; documentId: string; documentRevision: number; status: string; replayed: boolean }>(
+    `/api/document-builder/documents/${documentId}/analysis`,
+    {
+      method: "POST",
+      user: ownerEmail,
+      headers: { "idempotency-key": analysisKey },
+      json: { mode: "quick", locale: "ru" },
+      expected: 202,
+    },
+  );
+  assert.equal(analysis.data.documentId, documentId);
+  assert.equal(analysis.data.documentRevision, 2);
+  assert.equal(analysis.data.status, "queued");
+  assert.equal(analysis.data.replayed, false);
+  const analysisReplay = await api<{ analysisId: string; replayed: boolean }>(
+    `/api/document-builder/documents/${documentId}/analysis`,
+    {
+      method: "POST",
+      user: ownerEmail,
+      headers: { "idempotency-key": analysisKey },
+      json: { mode: "quick", locale: "ru" },
+    },
+  );
+  assert.equal(analysisReplay.data.analysisId, analysis.data.analysisId);
+  assert.equal(analysisReplay.data.replayed, true);
+
   const review = await api<{ status: string; issues: unknown[]; quality: { legalCompleteness: number } }>("/api/document-builder/ai-review", {
     method: "POST",
     user: ownerEmail,
@@ -366,7 +393,8 @@ async function main(): Promise<void> {
       zip: zip.bytes.byteLength,
     },
     aiStatus: review.data.status,
-    scenarios: 34,
+    builderAnalysisId: analysis.data.analysisId,
+    scenarios: 36,
   }, null, 2));
 }
 

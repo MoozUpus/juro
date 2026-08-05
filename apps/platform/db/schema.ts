@@ -2868,6 +2868,35 @@ export const documentAnalyses = sqliteTable("document_analyses", {
   uniqueIndex("document_analyses_file_uidx").on(table.uploadedFileId),
 ]);
 
+export const builderDocumentAnalysisHandoffs = sqliteTable("builder_document_analysis_handoffs", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  documentRevision: integer("document_revision").notNull(),
+  documentContentSha256: text("document_content_sha256").notNull(),
+  fileId: text("file_id").notNull().references(() => documentFiles.id, { onDelete: "cascade" }),
+  analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),
+  mode: text("mode").notNull(),
+  locale: text("locale").notNull(),
+  idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+  status: text("status").notNull().default("pending"),
+  attemptCount: integer("attempt_count").notNull().default(0),
+  lastErrorCode: text("last_error_code"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  uniqueIndex("builder_analysis_request_uidx").on(table.workspaceId, table.userId, table.idempotencyKeySha256),
+  uniqueIndex("builder_analysis_file_uidx").on(table.fileId),
+  uniqueIndex("builder_analysis_analysis_uidx").on(table.analysisId),
+  index("builder_analysis_document_idx").on(table.documentId, table.createdAt),
+  check("builder_analysis_revision_check", sql`${table.documentRevision}>0`),
+  check("builder_analysis_mode_check", sql`${table.mode} IN ('quick','full','expert')`),
+  check("builder_analysis_locale_check", sql`${table.locale} IN ('ru','uz')`),
+  check("builder_analysis_status_check", sql`${table.status} IN ('pending','ready')`),
+  check("builder_analysis_attempt_check", sql`${table.attemptCount}>=0`),
+]);
+
 export const analysisCaseLinkEvents = sqliteTable("analysis_case_link_events", {
   id: text("id").primaryKey(),
   analysisId: text("analysis_id").notNull().references(() => documentAnalyses.id, { onDelete: "cascade" }),

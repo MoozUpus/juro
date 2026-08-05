@@ -385,6 +385,7 @@ development, staging, or production configuration.
 ```text
 GET,PATCH /api/document-builder/bootstrap
 POST /api/document-builder/ai-review
+POST /api/document-builder/documents/:id/analysis
 POST /api/document-builder/attachment-analysis
 POST /api/document-builder/configured-drafts
 GET,PUT /api/document-builder/configured-documents/:id
@@ -409,6 +410,15 @@ GET,POST /api/document-builder/standalone-files/:id/share
 POST /api/document-builder/standalone-signed-shares/:token/verify
 GET /api/document-builder/standalone-signed-shares/:token/file
 ```
+
+`POST /api/document-builder/ai-review` remains as the legacy inline receipt
+review contract. The Builder UI now starts the durable pipeline through
+`POST /api/document-builder/documents/:id/analysis`: same-origin/CSRF,
+authenticated owner and active-workspace checks, strict RU/UZ quick/full/expert
+input, a bounded idempotency key, server-side entitlement enforcement, a private
+immutable R2 snapshot, D1 evidence and `DOCUMENT_ANALYSIS_QUEUE` outbox. The
+route returns only IDs, revision and queue state; document text and the raw
+idempotency key are not stored in the handoff ledger.
 
 ## Migration rules
 

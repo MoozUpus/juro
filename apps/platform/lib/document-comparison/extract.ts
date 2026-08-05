@@ -181,6 +181,12 @@ export async function extractDocument(input: {
     pageCount = pdf.pageCount;
   } else if (input.mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     text = extractDocxText(input.bytes);
+  } else if (input.mimeType === "text/markdown; charset=utf-8") {
+    try {
+      text = normalizeText(new TextDecoder("utf-8", { fatal: true }).decode(input.bytes));
+    } catch {
+      throw new ComparisonProcessingError("CORRUPT_FILE", "Текстовый снимок документа повреждён.");
+    }
   } else if (input.mimeType === "image/jpeg" || input.mimeType === "image/png") {
     throw new ComparisonProcessingError(
       "OCR_REQUIRED",

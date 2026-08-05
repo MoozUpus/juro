@@ -3150,3 +3150,21 @@ Migration `0093` is the expand step. It adds the immutable tenant/revision/count
 guarded ledger and atomic projection without blocking the previously deployed
 Worker during rollout. A direct-projection contract trigger is intentionally a
 later migration after staging proves the new Worker and rollback path.
+
+## D-153 — Builder analysis uses an immutable private snapshot
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+A mutable Builder document cannot safely be handed to an asynchronous analyzer
+by document ID alone. The confirmed design saves the current revision first,
+normalizes it once, writes a content-addressed private R2 snapshot and binds its
+SHA-256 plus revision to a content-free D1 handoff. The existing document
+analysis queue consumes that immutable file; retries reuse the same analysis and
+cannot duplicate the outbox job.
+
+The browser cannot select a workspace or user. The route derives both from the
+authenticated owner boundary, enforces entitlements server-side and preserves
+the legacy inline receipt review. R2 failure is fail-closed and retryable; no
+success is returned until the verified object, analysis state and outbox evidence
+exist. Migration `0095` and staging activation remain separately gated.

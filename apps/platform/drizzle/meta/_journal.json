@@ -666,6 +666,13 @@
       "when": 1785978000000,
       "tag": "0094_ai_document_prefill_handoffs",
       "breakpoints": true
+    },
+    {
+      "idx": 95,
+      "version": "6",
+      "when": 1785981600000,
+      "tag": "0095_builder_document_analysis_handoffs",
+      "breakpoints": true
     }
   ]
 }

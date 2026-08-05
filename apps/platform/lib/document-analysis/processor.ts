@@ -29,6 +29,7 @@ import {
   OcrProcessingError,
   scheduleOcrProcessing,
 } from "./ocr-processor";
+import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
 import {
   extractAnalysisDocument,
   isAnalysisPackageContext,
@@ -45,7 +46,7 @@ import { resolveAiRuntimeSettings, type AiRuntimeSettings } from "../ai/runtime-
 import type { BuilderRuntimeEnv } from "../document-builder/storage/runtime";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
-export const DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT = 160_000;
+export { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
 
 export type DocumentAnalysisProcessorEnv = LegalSemanticSearchEnv & BuilderRuntimeEnv & {
   DB: D1Database;
