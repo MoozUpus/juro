@@ -10,6 +10,7 @@ import { addActivity, isoNow } from "../../../../../../lib/document-builder/stor
 import { putPrivateObject, sanitizeFileName } from "../../../../../../lib/document-builder/storage/files";
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
 import { renderReceipt } from "../../../../../../lib/document-builder/templates/receipt";
+import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
 
 export const dynamic = "force-dynamic";
 
@@ -58,6 +59,11 @@ export async function POST(request: Request, context: Context): Promise<Response
     const docxKey = `${prefix}/${docxId}.docx`;
     const pdfKey = `${prefix}/${pdfId}.pdf`;
     const zipKey = `${prefix}/${zipId}.zip`;
+    await createDocumentVersion({
+      db, bucket, documentId: id, workspaceId: ownerAccess.workspaceId,
+      ownerUserId: user.id, revision: document.revision, source: "finalize",
+      idempotencyKey: `builder-auto-finalize-${id}-${document.revision}-${user.id}`,
+    });
     await Promise.all([
       putPrivateObject(docxKey, docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", { documentId: id, kind: "docx" }),
       putPrivateObject(pdfKey, pdf, "application/pdf", { documentId: id, kind: "pdf" }),

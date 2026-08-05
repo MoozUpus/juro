@@ -1,6 +1,7 @@
 import { ApiAuthError } from "./api";
 import { IdentityProtectionError } from "../../auth/identity-protection";
 import { ServiceUnavailableError } from "../storage/runtime";
+import { DocumentVersionError } from "../document-versions";
 
 export function jsonResponse(data: unknown, init: ResponseInit = {}): Response {
   const headers = new Headers(init.headers);
@@ -18,6 +19,19 @@ export function apiError(error: unknown): Response {
   }
   if (error instanceof ServiceUnavailableError) {
     return jsonResponse({ error: error.message, code: error.code }, { status: 503 });
+  }
+  if (error instanceof DocumentVersionError) {
+    const messages: Record<DocumentVersionError["code"], string> = {
+      DOCUMENT_NOT_FOUND: "Документ не найден.",
+      DOCUMENT_ARCHIVED: "Сначала восстановите документ из архива.",
+      REVISION_CONFLICT: "Документ изменён в другой вкладке. Обновите страницу.",
+      IDEMPOTENCY_CONFLICT: "Повторный запрос не совпадает с исходной операцией.",
+      VERSION_NOT_FOUND: "Версия документа не найдена.",
+      VERSION_NOT_READY: "Версия документа ещё не готова.",
+      VERSION_OBJECT_INVALID: "Снимок версии повреждён или не прошёл проверку.",
+      VERSION_STORAGE_FAILED: "Хранилище версий временно недоступно. Изменение не применено.",
+    };
+    return jsonResponse({ error: messages[error.code], code: error.code }, { status: error.status });
   }
   if (error instanceof IdentityProtectionError) {
     return jsonResponse({

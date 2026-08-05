@@ -13,7 +13,7 @@ const sourceLabels: Record<Locale, Record<string, string>> = {
   uz: { user_checkpoint: "Qo‘lda saqlandi", restore_checkpoint: "Tiklashdan keyin", analysis_correction: "Tahlil tuzatishi", suggestion: "Taklif", review: "Tekshiruvga", approval: "Kelishuv", signature: "Imzolash", finalize: "Yakuniy versiya" },
 };
 
-export function BuilderVersionHistory({ documentId, locale, onPrepare, onRestored }: { documentId: string; locale: Locale; onPrepare: () => Promise<{ documentId: string; revision: number }>; onRestored: () => Promise<void> }) {
+export function BuilderVersionHistory({ documentId, locale, refreshKey, onPrepare, onRestored }: { documentId: string; locale: Locale; refreshKey?: number; onPrepare: () => Promise<{ documentId: string; revision: number }>; onRestored: () => Promise<void> }) {
   const [versions, setVersions] = useState<Version[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -30,7 +30,7 @@ export function BuilderVersionHistory({ documentId, locale, onPrepare, onRestore
     catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось загрузить версии."); }
     finally { setLoading(false); }
   }, [documentId]);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); }, [load, refreshKey]);
 
   const saveVersion = async () => {
     setBusy("save"); setMessage(""); setError("");

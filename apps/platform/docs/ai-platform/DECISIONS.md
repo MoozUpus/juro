@@ -3183,4 +3183,23 @@ Restore never rewrites the source checkpoint. After object verification it
 projects the snapshot as the next revision and appends immutable restore
 evidence. An old approved or signed state is not restored as legal evidence: a
 non-draft snapshot returns as `Готов` and must pass current review/signature
-controls again. Migration `0096` remains local pending the staging gate.
+controls again. Migration `0096` is deployed to protected staging; production
+is unchanged and authenticated owner restore proof remains open.
+
+## D-155 — unchanged-content legal transitions checkpoint before mutation
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+Finalization, approval, internal signing and signed-PDF upload change
+status/evidence but not the persisted legal text. Their immutable checkpoint is
+therefore created and checksum-verified before the transition. Storage failure
+aborts the transition; generation and signed-PDF upload have not yet started
+output-object writes. A signed object is removed if its atomic D1 registration
+batch fails. A pre-existing exact revision checkpoint is reused rather than
+duplicating user content.
+
+Accepted suggestions and analysis corrections change the legal text. They are
+excluded from this rule until a projected-snapshot/write-intent transaction can
+prevent D1-success/R2-failure divergence. This distinction is intentional and
+must remain visible in known limitations.

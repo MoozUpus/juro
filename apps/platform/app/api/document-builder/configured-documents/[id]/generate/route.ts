@@ -12,6 +12,7 @@ import { loadConfiguredDocument } from "../../../../../../lib/document-builder/s
 import { addActivity, isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { putPrivateObject, sanitizeFileName } from "../../../../../../lib/document-builder/storage/files";
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ id: string }> };
@@ -44,6 +45,12 @@ export async function POST(request: Request, context: Context): Promise<Response
     const files = { docx: crypto.randomUUID(), pdf: crypto.randomUUID(), zip: crypto.randomUUID() };
     const prefix = `users/${user.id}/documents/${id}/generated`;
     const keys = { docx: `${prefix}/${files.docx}.docx`, pdf: `${prefix}/${files.pdf}.pdf`, zip: `${prefix}/${files.zip}.zip` };
+    const bucket = requireR2();
+    await createDocumentVersion({
+      db, bucket, documentId: id, workspaceId: access.workspaceId,
+      ownerUserId: user.id, revision: document.revision, source: "finalize",
+      idempotencyKey: `builder-auto-finalize-${id}-${document.revision}-${user.id}`,
+    });
     await Promise.all([
       putPrivateObject(keys.docx, docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", { documentId: id, kind: "docx", templateCode: definition.code }),
       putPrivateObject(keys.pdf, pdf, "application/pdf", { documentId: id, kind: "pdf", templateCode: definition.code }),
@@ -59,7 +66,7 @@ export async function POST(request: Request, context: Context): Promise<Response
         .bind(files.zip, access.workspaceId, id, user.id, keys.zip, `${baseName}.zip`, zip.byteLength, now, now),
       db.prepare("UPDATE documents SET status = 'Готов', generated_at = ?, revision = revision + 1, updated_at = ? WHERE id = ?").bind(now, now, id),
     ]);
-    if (old.results.length) await requireR2().delete(old.results.map((file) => file.r2Key));
+    if (old.results.length) await bucket.delete(old.results.map((file) => file.r2Key));
     await addActivity(id, user.id, "document_generated", { templateCode: definition.code, templateVersion: definition.version });
     const url = (fileId: string) => `/api/document-builder/documents/${id}/files/${fileId}`;
     return jsonResponse({ status: "Готов", files: {

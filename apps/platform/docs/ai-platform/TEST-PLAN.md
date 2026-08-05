@@ -281,3 +281,8 @@ replays `0088` with the full ordered schema.
   idempotency, RU/UZ, visible busy/error/success states, 44 px touch targets and
   reduced-motion handling. Protected staging additionally requires browser,
   axe, responsive and real private-R2 evidence after backup/migration/deploy.
+- Receipt/configurable finalization, owner/collaborator approval, internal
+  signing and signed-PDF upload must checkpoint before the status mutation. A
+  forced R2 failure must preserve the prior status; generation/upload must not
+  begin output-object writes. A D1 failure after signed upload must remove the
+  new object. The API must return a typed no-store storage error.

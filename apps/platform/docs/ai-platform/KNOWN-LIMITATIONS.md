@@ -700,15 +700,19 @@ not a claim of final database-boundary enforcement.
 
 ## Builder version-history checkpoint — 2026-08-05
 
-Migration `0096`, private-R2 checkpoints, owner APIs and RU/UZ controls are
-locally implemented and tested. They are not applied or deployed to staging or
-production. Authenticated browser, keyboard, axe, 320–1440 px, 200% zoom and
-private-R2 staging rehearsal remain release gates.
+Migration `0096`, private-R2 checkpoints, owner APIs and RU/UZ controls from
+commit `8433b94` are deployed to protected staging after private pre/post
+backup/restore verification. Production is unchanged. Authenticated browser,
+keyboard, axe, 320–1440 px and 200% zoom remain release gates.
 
 The current slice creates checkpoints only through the explicit **Save
-version** action. Restore produces a normal immutable revision/evidence row,
-but automatic checkpoint creation for accepted suggestions, AI corrections,
-review, approval, signing and finalization remains deliberately unclaimed.
-Those lifecycle integrations must reuse the same service or a separately
-reviewed server-side source, without creating versions from client-supplied
-content.
+version** action in staging. The next local candidate additionally checkpoints
+immediately before receipt/configurable finalization, owner/collaborator
+approval, internal signing and signed-PDF upload. Restore produces a normal
+immutable revision/evidence row.
+
+Automatic post-change checkpoints for accepted suggestions and Claude/analysis
+corrections remain deliberately unclaimed. Those operations alter document
+content and require a transactional projected-snapshot/write-intent contract;
+calling R2 only after a successful D1 content mutation would create a false
+success window and is not accepted as an implementation.

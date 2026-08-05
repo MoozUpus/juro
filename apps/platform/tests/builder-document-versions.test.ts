@@ -45,6 +45,9 @@ test("Builder checkpoints are immutable, owner-scoped, idempotent and restorable
     const restoreReplay = await restoreDocumentVersion({ ...base, versionId: created.version.id, revision: 2, idempotencyKey: "builder-restore-test-0001" });
     assert.equal(restoreReplay.replayed, true); assert.equal((sqlite.prepare("SELECT count(*) AS total FROM builder_document_version_restore_events").get() as { total: number }).total, 1);
     assert.equal((sqlite.prepare("SELECT source FROM document_revisions WHERE document_id=? AND revision=3").get(documentId) as { source: string }).source, "restore_version");
+    const signingCheckpoint = await createDocumentVersion({ ...base, revision: 3, source: "signature", idempotencyKey: "builder-auto-signature-test-0001" });
+    assert.equal(signingCheckpoint.version.source, "signature");
+    assert.equal(signingCheckpoint.version.documentRevision, 3);
   } finally { sqlite.close(); }
 });
 
@@ -61,11 +64,17 @@ test("Builder versions fail closed across tenants and retry R2 with the same key
 
 test("Builder version routes and RU/UZ UI retain owner, CSRF and recovery contracts", async () => {
   const root = new URL("../", import.meta.url);
-  const [versionsRoute, restoreRoute, component, configured] = await Promise.all([
+  const [versionsRoute, restoreRoute, component, configured, statusRoute, receiptGenerate, configuredGenerate, collaboration, signedFile, responses] = await Promise.all([
     readFile(new URL("app/api/document-builder/documents/[id]/versions/route.ts", root), "utf8"),
     readFile(new URL("app/api/document-builder/documents/[id]/versions/[versionId]/restore/route.ts", root), "utf8"),
     readFile(new URL("app/_document-builder/_components/BuilderVersionHistory.tsx", root), "utf8"),
     readFile(new URL("app/_document-builder/_components/ConfigurableDocumentBuilder.tsx", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/generate/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/configured-documents/[id]/generate/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/collaboration/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/documents/[id]/signed-file/route.ts", root), "utf8"),
+    readFile(new URL("lib/document-builder/auth/responses.ts", root), "utf8"),
   ]);
   for (const route of [versionsRoute, restoreRoute]) {
     assert.match(route, /assertSafeWrite/);
@@ -79,6 +88,20 @@ test("Builder version routes and RU/UZ UI retain owner, CSRF and recovery contra
   assert.match(component, /window\.confirm/);
   assert.match(configured, /saveQueue/);
   assert.match(configured, /skipNextAutosave/);
+  assert.ok(statusRoute.indexOf('source: "approval"') < statusRoute.indexOf("SET status = 'Согласован'"));
+  assert.ok(statusRoute.indexOf('source: "signature"') < statusRoute.indexOf("SET status = 'Подписан'"));
+  for (const route of [receiptGenerate, configuredGenerate]) {
+    assert.match(route, /source: "finalize"/);
+    const checkpointIndex = route.indexOf('source: "finalize"');
+    assert.ok(checkpointIndex < route.indexOf("UPDATE documents SET status = 'Готов'"));
+    assert.ok(checkpointIndex < route.indexOf("await Promise.all([", checkpointIndex));
+  }
+  assert.ok(collaboration.indexOf('source: "approval"') < collaboration.indexOf("INSERT INTO document_approvals"));
+  assert.ok(signedFile.indexOf('source: "signature"') < signedFile.indexOf("await putPrivateObject"));
+  assert.ok(signedFile.indexOf('source: "signature"') < signedFile.indexOf("SET signed_file_id"));
+  assert.match(signedFile, /await bucket\.delete\(key\)\.catch/);
+  assert.match(responses, /VERSION_STORAGE_FAILED/);
+  assert.match(responses, /Изменение не применено/);
 });
 
 function seed() {

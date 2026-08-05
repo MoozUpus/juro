@@ -1374,7 +1374,7 @@ private backup and isolated restore; the matching Worker was deployed and
 anonymous Access boundaries passed. Authenticated Builder/R2/queue browser
 evidence remains open. Production is unchanged.
 
-## Migration 0096 — immutable Builder document versions (local candidate)
+## Migration 0096 — immutable Builder document versions
 
 `0096_builder_document_versions.sql` adds metadata-only private-object
 checkpoints and append-only restore evidence. D1 guards active membership,
@@ -1383,9 +1383,11 @@ same-tenant source version. Identity is immutable; only bounded pending retry
 or pending-to-ready object lifecycle transitions are accepted. No answers,
 title, party data, legal text or raw idempotency key is stored in the tables.
 
-Before staging application: export `juro-staging` to private
-`juro-staging-backups`, verify the uploaded SHA-256, restore it into isolated D1
-and pass integrity/FK checks. Apply `0096`, inspect ledger/tables/triggers, then
-deploy the exact tested commit and run authenticated synthetic
-create/list/restore/replay. Rollback is application-first; production remains
-unchanged.
+Applied to protected staging on 2026-08-05 after private pre/post exports,
+uploaded SHA-256 round trips and isolated restore/integrity verification. The
+remote ledger ends at id 97, schema/FK postflight passed and exact commit
+`8433b94` is deployed as Worker version
+`f7bc9745-1641-449b-9e34-d6ffdd1d23cf`. Authenticated synthetic
+create/list/restore/replay remains open. Rollback is application-first;
+production remains unchanged. Full evidence is in
+`STAGING-0096-BUILDER-VERSIONS-EVIDENCE.md`.

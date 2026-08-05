@@ -14,6 +14,8 @@ import { getDocumentAccess, hasDocumentPermission, loadStoredDocument } from "..
 import type { ParticipantRole } from "../../../../../../lib/document-builder/registry";
 import { addActivity, addNotification, isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
 import { addDays, randomToken, sha256 } from "../../../../../../lib/document-builder/share-links/crypto";
 
 export const dynamic = "force-dynamic";
@@ -389,6 +391,12 @@ export async function POST(request: Request, context: Context): Promise<Response
 
     if (action === "confirm_data") {
       if (access.role !== "collaborator" || !hasDocumentPermission(access, "approve_document")) return forbidden();
+      if (!access.workspaceId) return forbidden();
+      await createDocumentVersion({
+        db, bucket: requireR2(), documentId: id, workspaceId: access.workspaceId,
+        ownerUserId: document.ownerUserId, revision: document.revision, source: "approval",
+        idempotencyKey: `builder-auto-collaborator-approval-${id}-${document.revision}-${user.id}`,
+      });
       await db.batch([
         db.prepare("UPDATE document_collaborators SET confirmed_at = ?, approval_status = 'approved', status = 'confirmed', joined_at = COALESCE(joined_at, ?), updated_at = ? WHERE document_id = ? AND user_id = ?")
           .bind(now, now, now, id, user.id),

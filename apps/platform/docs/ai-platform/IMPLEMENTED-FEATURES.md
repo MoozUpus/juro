@@ -1109,7 +1109,7 @@ migration application or deployment is claimed; production is unchanged.
 - Focused migration/service/security checks pass 6/6. Migration `0095`, staging
   smoke and browser evidence remain separately gated; production is unchanged.
 
-## Phase 6 — immutable Builder checkpoints and restore (local candidate)
+## Phase 6 — immutable Builder checkpoints and restore
 
 - Both receipt and configurable Builder surfaces expose an owner-only RU/UZ
   version history. An explicit save first drains the ordinary autosave queue.
@@ -1124,6 +1124,18 @@ migration application or deployment is claimed; production is unchanged.
 - Writes are conditional, fail closed and replay through a hashed
   `Idempotency-Key`. Focused service/migration tests pass 4/4; the mandatory
   platform test runner passes after registering the new tests.
-- This is local code only. Migration `0096`, protected staging browser proof
-  and automatic checkpoints for approval/signature/finalization remain open;
-  production is unchanged.
+- Migration `0096` and the explicit owner create/list/restore foundation from
+  commit `8433b94` are deployed to protected staging after verified private
+  backup/restore. Authenticated browser proof and automatic checkpoints for
+  accepted suggestions/analysis corrections remain open; production is
+  unchanged.
+
+The same local candidate now creates or reuses the exact persisted checkpoint
+before receipt/configurable finalization, owner approval, collaborator approval,
+internal signing and signed-PDF upload. A checkpoint/R2 failure prevents the
+status mutation. If version storage fails during generation or signed upload,
+the new output write has not started. A signed object is removed if its atomic
+D1 registration batch fails.
+A revision change refreshes owner history without a page reload. This
+integration is the next local candidate and adds no route or migration beyond
+`0096`.
