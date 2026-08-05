@@ -13,13 +13,17 @@ actual historical, deadline, urgent, Advice-missing, Advice/Lex-conflict,
 unofficial-source, incomplete-facts, foreign-element and evidence-quality
 situations instead of relying on tags attached to repeated generic text.
 
-These records intentionally contain no invented legal answer, act, article, link, or
-success score. `scripts/validate-legal-evaluation.ts --results
-<reviewed-results.json>` accepts only one result per scenario. Public citations
-are fetched by the release validator with bounded same-host HTTPS redirects;
-host shape alone is insufficient. Each citation also needs a successful status,
-check timestamp and snapshot hash. Internal materials require staging-DB
-evidence. The validator rejects missing expected behaviors, language or
+These records intentionally contain no invented legal answer, act, article, link,
+or success score. `npm run evaluate:legal:validate -- --results
+<reviewed-results.json>` accepts only one strictly schema-valid result per
+scenario. Public citations must use the exact canonical Lex or Advice document
+path without credentials, query, fragment or alternate port. Live checking
+permits only bounded redirects that retain the same source kind, locale and
+canonical document ID, and requires a 2xx HTML/XHTML response. Host shape alone
+is insufficient. Each citation also needs a check timestamp and snapshot hash.
+Internal materials fail closed unless the caller supplies separate staging-DB
+verification evidence; the CLI does not infer it from result JSON. The validator
+rejects unknown or oversized fields, missing expected behaviors, language or
 jurisdiction mismatch, unreviewed output, reviewer language quality below
 95/100, any unproven citation, or critical-deadline detection below 98%.
 Therefore a passing report still requires real reviewed output and cannot be

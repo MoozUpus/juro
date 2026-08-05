@@ -1,3 +1,6 @@
+import { z } from "zod";
+import { classifyLegalSourceUrl } from "../lib/legal/source-fetch";
+
 export const LEGAL_EVALUATION_AREAS = [
   "civil", "contracts", "labor", "family", "entrepreneurship", "tax",
   "consumer", "real_estate", "administrative", "litigation", "banking_finance", "data_it",
@@ -147,28 +150,38 @@ export const legalEvaluationCorpus: readonly LegalEvaluationScenario[] = [
   ...buildBase("ru"), ...buildBase("uz"), ...buildAmbiguous("ru"), ...buildAmbiguous("uz"),
 ];
 
-export type LegalCitationEvidence = {
-  sourceId: string;
-  sourceType: "lex" | "advice" | "internal";
-  url: string;
-  exists: boolean;
-  httpStatus: number | null;
-  checkedAt: string;
-  sourceHash: string;
-  verificationMethod: "http" | "staging_db";
-};
+const evidenceIdentifierSchema = z.string().trim().min(1).max(160)
+  .regex(/^[A-Za-z0-9._:-]+$/);
 
-export type LegalEvaluationResult = {
-  scenarioId: string;
-  answerLanguage: LegalEvaluationLocale;
-  jurisdiction: "UZ";
-  confirmedFindingCount: number;
-  citations: readonly LegalCitationEvidence[];
-  observedBehaviors: readonly LegalEvaluationBehavior[];
-  criticalDeadlineDetected?: boolean;
-  reviewedLanguageQuality?: number;
-  humanReviewerId?: string;
-};
+export const legalCitationEvidenceSchema = z.object({
+  sourceId: evidenceIdentifierSchema,
+  sourceType: z.enum(["lex", "advice", "internal"]),
+  url: z.string().trim().min(1).max(2_048),
+  exists: z.boolean(),
+  httpStatus: z.number().int().min(100).max(599).nullable(),
+  checkedAt: z.string().datetime({ offset: true }),
+  sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+  verificationMethod: z.enum(["http", "staging_db"]),
+}).strict();
+
+export const legalEvaluationResultSchema = z.object({
+  scenarioId: evidenceIdentifierSchema,
+  answerLanguage: z.enum(["ru", "uz"]),
+  jurisdiction: z.literal("UZ"),
+  confirmedFindingCount: z.number().int().min(0).max(100),
+  citations: z.array(legalCitationEvidenceSchema).max(50),
+  observedBehaviors: z.array(z.enum(LEGAL_EVALUATION_BEHAVIORS))
+    .max(LEGAL_EVALUATION_BEHAVIORS.length),
+  criticalDeadlineDetected: z.boolean().optional(),
+  reviewedLanguageQuality: z.number().min(0).max(100).optional(),
+  humanReviewerId: evidenceIdentifierSchema.optional(),
+}).strict();
+
+export const legalEvaluationResultsSchema = z.array(legalEvaluationResultSchema)
+  .max(legalEvaluationCorpus.length);
+
+export type LegalCitationEvidence = z.infer<typeof legalCitationEvidenceSchema>;
+export type LegalEvaluationResult = z.infer<typeof legalEvaluationResultSchema>;
 
 export type LegalEvaluationMetrics = {
   scenarioCount: number;
@@ -188,12 +201,8 @@ function isIsoDate(value: unknown): value is string {
 
 function expectedPublicSourceType(url: string): "lex" | "advice" | null {
   try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== "https:") return null;
-    const host = parsed.hostname.toLowerCase().replace(/^www\./, "");
-    if (host === "lex.uz") return "lex";
-    if (host === "advice.uz") return "advice";
-    return null;
+    const reference = classifyLegalSourceUrl(url);
+    return reference.canonicalUrl === url ? reference.sourceKind : null;
   } catch {
     return null;
   }
@@ -252,13 +261,14 @@ export function validateLegalEvaluationResults(
       const internalValid = citation.sourceType === "internal"
         && citation.verificationMethod === "staging_db"
         && citation.url.startsWith("internal://")
-        && citation.httpStatus === null;
+        && citation.httpStatus === null
+        && liveVerifiedUrls.get(citation.url) === true;
       const publicValid = (citation.sourceType === "lex" || citation.sourceType === "advice")
         && citation.verificationMethod === "http"
         && publicType === citation.sourceType
         && typeof citation.httpStatus === "number"
         && citation.httpStatus >= 200
-        && citation.httpStatus < 400
+        && citation.httpStatus < 300
         && liveVerifiedUrls.get(citation.url) === true;
       if (internalValid || publicValid) correctlyClassifiedCitationCount += 1;
       else failures.push(`CITATION_SOURCE_EVIDENCE_INVALID:${result.scenarioId}:${citation.sourceId}`);

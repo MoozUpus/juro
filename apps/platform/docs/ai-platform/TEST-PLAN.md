@@ -15,6 +15,17 @@ content-free test email. `tests/legal-scheduled-corpus-lifecycle.test.ts` proves
 that pending-review changes end as `partial` while an unchanged, activated and
 verified version is the only successful freshness path.
 
+## Legal evaluation citation gate
+
+`tests/legal-evaluation-corpus.test.ts` covers the 314-scenario RU/UZ corpus,
+strict bounded result schema, canonical Lex/Advice document routes,
+same-document redirects, 2xx HTML response evidence, exact source
+classification and rejection of provider/user-invented fields. The CLI is
+`npm run evaluate:legal:validate -- --results <reviewed-results.json>`.
+Internal citations are not accepted from result JSON alone. Passing still
+requires all real outputs, current public link checks and named human review;
+unit fixtures are not legal ground truth.
+
 ## Lex RSS discovery gate — local candidate
 
 `tests/legal-source-discovery.test.ts` covers exact official endpoints,

@@ -3067,3 +3067,22 @@ source-health and operational-alert readers repeat the exact predicate so a
 legacy unverified success cannot silently restore a healthy state. Migration
 `0091` preserves legacy rows for audit and remains local until separately
 authorized backup, migration and exact staging deployment.
+
+## D-148 — Evaluation citations are canonical and independently replayed
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+The 314-scenario release evaluator must not treat an allowlisted hostname or
+fields inside a result JSON as proof that a citation exists. Public evidence is
+accepted only for the exact canonical Lex/Advice document path, after a bounded
+live request whose redirects retain source kind, locale and document ID and
+whose terminal response is 2xx HTML/XHTML. Internal-material evidence requires
+a separate staging-DB proof supplied by the caller; the standalone CLI fails
+closed instead of trusting `verificationMethod: staging_db` in the result.
+
+The entire reviewed-result file is strict, bounded Zod input. Unknown fields,
+invalid hashes/timestamps/enums, oversized arrays, redirect-to-another-document
+and provider-invented paths are release failures. These checks prove evidence
+shape and replayability, not legal correctness; named human review of all real
+outputs remains mandatory.

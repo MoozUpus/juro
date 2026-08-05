@@ -372,3 +372,15 @@ new pending-review versions close as `partial` and cannot refresh the database
 timestamp. D1 enforces the counters and immutable terminal evidence; application
 freshness, health and alert readers repeat the predicate. Migration `0091`
 preserves legacy rows and remains local pending separate authorization.
+
+## D-123 — evaluation citations require canonical live evidence
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+An allowlisted hostname or self-declared result field is not citation proof.
+The release validator accepts only exact canonical Lex/Advice document URLs,
+same-document redirects and terminal 2xx HTML/XHTML. Strict bounded Zod input
+rejects provider-invented or malformed evidence. Internal citations require a
+separate staging-DB proof and fail closed in the standalone CLI. This gate does
+not replace named human legal review of all real evaluation outputs.
