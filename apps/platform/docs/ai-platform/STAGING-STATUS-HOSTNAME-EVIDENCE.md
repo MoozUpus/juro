@@ -32,6 +32,14 @@ The JSON projection contains only the eight public component keys, public
 incident state and localized copy. It does not expose user, tenant, staff,
 resource-ID or secret data.
 
+The host fence also rejected two negative probes, each retaining the noindex
+header:
+
+| Request | Expected boundary | Observed result |
+| --- | --- | --- |
+| `GET /ru/individual/ai-lawyer/new` | the application must not be reachable on the public status hostname | `404 Not Found` |
+| `POST /api/status` | public status is read-only | `405 Method Not Allowed`; `Allow: GET, HEAD` |
+
 ## What this does not prove
 
 Component values are operator-reported status, not proof that OpenAI,
