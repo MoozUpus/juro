@@ -15,6 +15,16 @@
 > authenticated UI, inbox placement, legal quality, a safe-file scan, or
 > production readiness.
 
+> Staging status-host checkpoint — 2026-08-06: Cloudflare Workers domain
+> `status.staging.juro.uz` is attached only to `juro-platform-staging` (domain
+> ID `dc23f52d4c2ad8b32d2aab7df752b02d59dc0a27`). Public HTTPS smoke checks
+> returned `200` for `/` and `/api/status?lang=uz`, each with
+> `X-Robots-Tag: noindex, nofollow, noarchive` and the bounded public status
+> cache policy. This validates the hostname fence and public-safe projection;
+> its operational component values remain operator-reported, not synthetic
+> end-to-end availability evidence. `status.juro.uz` remains unattached.
+> See `STAGING-STATUS-HOSTNAME-EVIDENCE.md`.
+
 > Email acceptance checkpoint — 2026-08-06: migration `0099` is deployed to
 > protected staging after a private full/schema/data R2 backup, independent
 > SHA-256 round trip and isolated restore (`quick_check=ok`, zero FK errors).
@@ -49,13 +59,13 @@
 > cycle is not claimed. No claim is made for corpus completeness, nightly remote
 > execution, citation entailment quality or the 250-scenario evaluation gate.
 
-> System-status checkpoint — 2026-08-05: local migration `0083` implements a
-> bilingual public projection, immutable forward-only incident updates,
-> fresh-MFA operations console and narrow hostname boundary. Staging is through
-> `0078`; `status.staging.juro.uz` and `status.juro.uz` are not attached,
-> no authenticated admin browser flow or operational incident rehearsal is
-> claimed, and component state is operator-reported rather than an end-to-end
-> synthetic availability probe. Production still returns 502.
+> Historical system-status checkpoint — 2026-08-05: local migration `0083`
+> implemented a bilingual public projection, immutable forward-only incident
+> updates, fresh-MFA operations console and narrow hostname boundary. Its
+> hostname-attachment assertion was superseded on 2026-08-06 by the staging
+> checkpoint above. No authenticated admin browser flow or operational incident
+> rehearsal is claimed, and component state is operator-reported rather than an
+> end-to-end synthetic availability probe. Production remains unchanged.
 
 > Provider cost-control checkpoint — 2026-08-04: local migration `0082` adds
 > versioned administrator thresholds, provider circuits, immutable transition

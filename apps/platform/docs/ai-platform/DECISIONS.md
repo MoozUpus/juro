@@ -1,5 +1,17 @@
 # JURO AI platform decision log
 
+## 2026-08-06 — expose status only on a dedicated staging hostname
+
+The public status projection is intentionally not served through the
+Access-protected application hostname. `status.staging.juro.uz` is attached
+only to `juro-platform-staging` and the existing Worker host fence admits only
+status routes, necessary assets and `GET`/`HEAD`; every response is marked
+`noindex, nofollow, noarchive`. This permits a useful public incident surface
+without turning the staging application or internal routes public. The status
+model is operator-reported, so it must not be treated as an end-to-end health
+probe. `status.juro.uz` remains unattached until a separate production release
+approval and routing review.
+
 ## 2026-08-04 — Package relationships are bounded hypotheses, not legal facts
 
 After safe extraction, JURO may infer a tentative primary document and links

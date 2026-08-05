@@ -147,12 +147,12 @@ The deployed staging source attaches only `staging-email-notifications` and `sta
 - Logpush/metrics export/observability destinations: none verified.
 - Staging primary queues have one producer binding; email and data-retention each have one `juro-platform-staging` consumer and distinct DLQ. Other consumers remain unattached.
 - Staging Worker serves version `2ebc2ea8-6216-4f39-af96-d1b600973b74`, at 100% from commit `cd24095c8307a4c3b145549f147a823000a438e3`. Script subdomain and previews remain disabled; exactly one schedule and two reviewed staging consumers are active.
-- `staging.app.juro.uz` is the only attached staging custom domain and is protected by the Access boundary documented below; `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
-- The local `0083` candidate declares non-secret `STATUS_HOSTNAME` values
-  (`status.staging.juro.uz` for staging and `status.juro.uz` for production) so
-  an explicitly attached hostname can be fenced to the public status surface.
-  No DNS record, Worker custom-domain attachment, Access policy change or
-  production route is created by declaring this variable.
+- `staging.app.juro.uz` remains protected by the Access boundary documented below. The separate public-safe hostname `status.staging.juro.uz` is attached only to `juro-platform-staging` through Cloudflare Workers Domains ID `dc23f52d4c2ad8b32d2aab7df752b02d59dc0a27`; it permits only the status surface and static assets, and every response carries `X-Robots-Tag: noindex, nofollow, noarchive`. `staging.juro.uz`, `status.juro.uz`, and `api.juro.uz` remain unattached by this work.
+- The deployed `0083` status boundary declares non-secret `STATUS_HOSTNAME`
+  values (`status.staging.juro.uz` for staging and `status.juro.uz` for
+  production). The staging hostname is now explicitly attached and fenced to
+  the public status surface; no Access policy change or production route was
+  created. The production hostname remains deliberately unattached.
 - DNS zone `juro.uz`: `877b1c7d333a3f6957e8e23ea95c8e19`.
 - Cloudflare Access is enabled for staging with one exact owner-only policy; an anonymous request receives a no-store Access redirect before application content.
 

@@ -70,7 +70,7 @@ unattached and rejects fail-closed until a real scanner is approved.
 
 ## Product and operations gates
 
-- Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, broad admin/analytics, and deletion across every future provider remain incomplete. A local operator-managed public status slice now exists through `0083`, but DNS/custom-domain attachment, protected admin browser QA, synthetic component probes and an incident rehearsal remain gated.
+- Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, broad admin/analytics, and deletion across every future provider remain incomplete. The public operator-managed status slice is deployed on the staging-only hostname `status.staging.juro.uz`, with a narrow route fence and `noindex` header verified by HTTPS smoke checks. Protected admin browser QA, synthetic component probes, an incident rehearsal and any production hostname remain gated.
 - Production backup/quarantine targets, operational RTO/RPO, scheduled backup
   automation, alert delivery and full incident rehearsal remain open. A local
   fresh-MFA Queue monitor and guarded same-job redrive UI now exists through
