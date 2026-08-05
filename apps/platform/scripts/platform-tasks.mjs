@@ -102,6 +102,8 @@ const coreTestFiles = [
   "tests/document-analysis-revisions.test.ts",
   "tests/document-analysis-case-link.test.ts",
   "tests/document-case-link.test.ts",
+  "tests/builder-document-analysis.test.ts",
+  "tests/builder-document-versions.test.ts",
   "tests/legal-bookmarks.test.ts",
   "tests/knowledge-base.test.ts",
   "tests/knowledge-base-admin.test.ts",
@@ -173,6 +175,8 @@ const cloudflareTestFiles = [
   "tests/migration-0062-ai-memory.test.ts",
   "tests/migration-0065-guest-ai.test.ts",
   "tests/migration-0094-ai-document-prefill.test.ts",
+  "tests/migration-0095-builder-document-analysis.test.ts",
+  "tests/migration-0096-builder-document-versions.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 

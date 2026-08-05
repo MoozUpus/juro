@@ -27,6 +27,7 @@ import { DocumentAssetsPanel } from "./_components/DocumentAssetsPanel";
 import { FinalSuccess, type GeneratedFile } from "./_components/FinalSuccess";
 import { ManualEditor } from "./_components/ManualEditor";
 import { BuilderAnalysisLauncher } from "./_components/BuilderAnalysisLauncher";
+import { BuilderVersionHistory } from "./_components/BuilderVersionHistory";
 import { apiFetch, downloadAuthenticatedFile } from "./_components/api-client";
 import { useDebouncedEffect } from "./_hooks/useDebouncedEffect";
 import { builderNavigationPaths } from "../../lib/platform/builder-paths";
@@ -121,6 +122,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
   const createPromise = useRef<Promise<string> | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const agreementWarningShown = useRef(false);
+  const skipNextAutosave = useRef(false);
 
   const rendered = useMemo(() => renderReceipt(answers), [answers]);
   const autoText = rendered.plainText;
@@ -266,6 +268,7 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
 
   useDebouncedEffect(() => {
     if (!hydrated || !user || !documentId || accessRole !== "owner" || phase !== "builder") return;
+    if (skipNextAutosave.current) { skipNextAutosave.current = false; return; }
     void persist(documentId);
   }, [hydrated, user, documentId, accessRole, phase, title, answers, autoText, finalText, manuallyEdited], 900);
 
@@ -458,6 +461,6 @@ export function DocumentBuilderClient({ initialUser, signInPath, initialDocument
     <button type="button" className="dbt-mobile-preview-button" onClick={() => setMobilePreview(true)}><Eye size={18}/>Предпросмотр</button>
     <div className="dbt-workspace"><div className="dbt-form-column"><BuilderQuestionnaire answers={answers} onChange={changeAnswers} step={step} profile={profile} contacts={contacts} onSaveProfile={saveProfile} onUpdateContact={updateContact}/><div className="dbt-form-nav"><button type="button" onClick={() => setStep(Math.max(0, step - 1))} disabled={step === 0}><ArrowLeft size={17}/>Назад</button>{step < 4 ? <button type="button" className="primary" onClick={() => setStep(Math.min(4, step + 1))}>Продолжить<ArrowRight size={17}/></button> : <button type="button" className="primary" onClick={() => void generate()} disabled={generating}>{generating ? <><LoaderCircle className="spin" size={18}/>Формируем DOCX, PDF и ZIP…</> : user ? <>Создать файлы<FileCheck2 size={18}/></> : <>Войти и создать файлы<LockKeyhole size={18}/></>}</button>}</div>{user && step === 4 && <BuilderAnalysisLauncher locale={answers.language === "ru" ? "ru" : "uz"} reviewPath={paths.documentReview} onPrepare={async () => { const id = await createDraft(); await persist(id); return id; }}/>}</div><DocumentPreview document={visibleReceipt} mobileOpen={mobilePreview} onClose={() => setMobilePreview(false)}/></div>
     <div className="dbt-editor-wrap"><div className="dbt-editor-heading"><button type="button" onClick={() => setEditorOpen(!editorOpen)}><PenLine size={17}/>{editorOpen ? "Скрыть ручной редактор" : "Открыть ручной редактор"}</button>{!user && <span>Доступен после входа</span>}</div>{editorOpen && <ManualEditor value={finalText || autoText} onChange={editFinalText} onUndo={undo} onRedo={redo} onReset={resetText} canUndo={undoStack.length > 0} canRedo={redoStack.length > 0} locked={!user}/>}</div>
-    {documentId && user && <><DocumentAssetsPanel documentId={documentId} onDocumentChange={syncDocumentMetadata}/><CollaborationPanel documentId={documentId} accessRole="owner" finalText={finalText || autoText} currentUserEmail={user.email} signedFileId={signedFileId} onApplied={() => window.location.reload()}/></>}
+    {documentId && user && <><BuilderVersionHistory documentId={documentId} locale={answers.language === "ru" ? "ru" : "uz"} onPrepare={async () => { await persist(documentId); return { documentId, revision: revisionRef.current }; }} onRestored={async () => { const result = await apiFetch<{ document: StoredDocument }>(`/api/document-builder/documents/${documentId}`); skipNextAutosave.current = true; hydrateDocument(result.document); }}/><DocumentAssetsPanel documentId={documentId} onDocumentChange={syncDocumentMetadata}/><CollaborationPanel documentId={documentId} accessRole="owner" finalText={finalText || autoText} currentUserEmail={user.email} signedFileId={signedFileId} onApplied={() => window.location.reload()}/></>}
   </div></div>;
 }

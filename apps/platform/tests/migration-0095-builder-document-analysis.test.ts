@@ -9,10 +9,11 @@ const journal = JSON.parse(readFileSync(new URL("../drizzle/meta/_journal.json",
 };
 
 test("migration 0095 is additive, D1-compatible and stores no document text or raw idempotency key", () => {
-  assert.deepEqual(journal.entries.at(-1), {
+  const entry = journal.entries.find((item) => item.tag === "0095_builder_document_analysis_handoffs");
+  assert.deepEqual(entry, {
     idx: 95,
     version: "6",
-    when: journal.entries.at(-1)?.when,
+    when: entry?.when,
     tag: "0095_builder_document_analysis_handoffs",
     breakpoints: true,
   });

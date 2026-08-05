@@ -445,3 +445,19 @@ Provenance intentionally excludes field values and cascades with the deletable
 message/document/account graph. This preserves privacy deletion while retaining
 enough scoped evidence for replay and conflict detection. Migration `0094` is
 local only; staging requires a new backup/isolated restore and explicit rollout.
+
+## D-129 — Builder checkpoints use private R2 and restore by new revision
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+Full Builder checkpoints are sensitive user content and are not duplicated in
+a D1 audit table. The server snapshots already-persisted document state into a
+conditional private R2 object; D1 retains tenant/revision/object identity only.
+List APIs expose metadata, never snapshot content.
+
+Restore never rewrites the source checkpoint. After object verification it
+projects the snapshot as the next revision and appends immutable restore
+evidence. An old approved or signed state is not restored as legal evidence: a
+non-draft snapshot returns as `Готов` and must pass current review/signature
+controls again. Migration `0096` remains local pending the staging gate.

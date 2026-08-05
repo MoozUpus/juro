@@ -3168,3 +3168,19 @@ authenticated owner boundary, enforces entitlements server-side and preserves
 the legacy inline receipt review. R2 failure is fail-closed and retryable; no
 success is returned until the verified object, analysis state and outbox evidence
 exist. Migration `0095` and staging activation remain separately gated.
+
+## D-154 — Builder checkpoints use private R2 and restore by new revision
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+Full Builder checkpoints are sensitive user content and are not duplicated in
+a D1 audit table. The server snapshots already-persisted document state into a
+conditional private R2 object; D1 retains tenant/revision/object identity only.
+List APIs expose metadata, never snapshot content.
+
+Restore never rewrites the source checkpoint. After object verification it
+projects the snapshot as the next revision and appends immutable restore
+evidence. An old approved or signed state is not restored as legal evidence: a
+non-draft snapshot returns as `Готов` and must pass current review/signature
+controls again. Migration `0096` remains local pending the staging gate.

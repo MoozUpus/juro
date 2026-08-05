@@ -1369,8 +1369,23 @@ handoff; there is no retained document text in this table.
 
 Local migration and service tests pass private R2 integrity, atomic D1/outbox
 state, exact replay, idempotency conflicts, tenant denial, plan limits and
-fail-closed R2 retry. Staging is currently through `0094`; migration `0095` is
-not applied. Before staging, create and isolated-restore a fresh private backup,
-apply only the ordered pending migration, run foreign-key/trigger postflight,
-deploy the exact commit and execute the authenticated Builder smoke twice with
-the same request key. Production is unchanged.
+fail-closed R2 retry. Migration `0095` was applied to protected staging after a
+private backup and isolated restore; the matching Worker was deployed and
+anonymous Access boundaries passed. Authenticated Builder/R2/queue browser
+evidence remains open. Production is unchanged.
+
+## Migration 0096 — immutable Builder document versions (local candidate)
+
+`0096_builder_document_versions.sql` adds metadata-only private-object
+checkpoints and append-only restore evidence. D1 guards active membership,
+exact owner/workspace/document identity, current source revision and a ready
+same-tenant source version. Identity is immutable; only bounded pending retry
+or pending-to-ready object lifecycle transitions are accepted. No answers,
+title, party data, legal text or raw idempotency key is stored in the tables.
+
+Before staging application: export `juro-staging` to private
+`juro-staging-backups`, verify the uploaded SHA-256, restore it into isolated D1
+and pass integrity/FK checks. Apply `0096`, inspect ledger/tables/triggers, then
+deploy the exact tested commit and run authenticated synthetic
+create/list/restore/replay. Rollback is application-first; production remains
+unchanged.

@@ -12,6 +12,7 @@ import type { GenericStoredDocument } from "../../../lib/document-builder/types"
 import { builderNavigationPaths } from "../../../lib/platform/builder-paths";
 import { DocumentPreview } from "./DocumentPreview";
 import { BuilderAnalysisLauncher } from "./BuilderAnalysisLauncher";
+import { BuilderVersionHistory } from "./BuilderVersionHistory";
 import type { BuilderUser } from "./BuilderHeader";
 import { apiFetch, downloadAuthenticatedFile } from "./api-client";
 import { useDebouncedEffect } from "../_hooks/useDebouncedEffect";
@@ -89,6 +90,8 @@ export function ConfigurableDocumentBuilder({ definition, initialUser, signInPat
   const [files, setFiles] = useState<GenerationResult["files"] | null>(null);
   const [hydrated, setHydrated] = useState(false);
   const createPromise = useRef<Promise<string> | null>(null);
+  const saveQueue = useRef<Promise<void>>(Promise.resolve());
+  const skipNextAutosave = useRef(false);
   const rendered = useMemo(() => renderConfiguredDocument(definition, answers, language), [definition, answers, language]);
   const visibleDocument = useMemo(() => manuallyEdited ? { ...rendered, paragraphs: finalText.split(/\n{2,}/).map((text, index) => ({ id: `manual-${index}`, kind: index === 0 ? "title" as const : "body" as const, text })), plainText: finalText } : rendered, [rendered, manuallyEdited, finalText]);
   const progress = calculateQuestionnaireProgress(definition, answers);
@@ -129,19 +132,23 @@ export function ConfigurableDocumentBuilder({ definition, initialUser, signInPat
     return createPromise.current;
   }, [answers, caseId, definition, documentId, finalText, hydrate, initialUser, language, manuallyEdited, planStepId, title]);
 
-  const save = useCallback(async (targetDocumentId = documentId) => {
-    if (!initialUser || !targetDocumentId || !hydrated) return;
-    setSaveState("saving");
-    try {
-      const result = await apiFetch<{ revision: number }>(`/api/document-builder/configured-documents/${targetDocumentId}`, { method: "PUT", body: JSON.stringify({ language, title, answers, autoContent: rendered.plainText, finalContent: finalText, manuallyEdited, revision: revisionRef.current }) });
-      revisionRef.current = result.revision; setSaveState("saved");
-    } catch (caught) {
-      setSaveState("error");
-      setError(caught instanceof Error ? caught.message : "Не удалось сохранить документ.");
-      throw caught;
-    }
+  const save = useCallback((targetDocumentId = documentId): Promise<void> => {
+    if (!initialUser || !targetDocumentId || !hydrated) return Promise.resolve();
+    const run = async () => {
+      setSaveState("saving");
+      try {
+        const result = await apiFetch<{ revision: number }>(`/api/document-builder/configured-documents/${targetDocumentId}`, { method: "PUT", body: JSON.stringify({ language, title, answers, autoContent: rendered.plainText, finalContent: finalText, manuallyEdited, revision: revisionRef.current }) });
+        revisionRef.current = result.revision; setSaveState("saved");
+      } catch (caught) {
+        setSaveState("error");
+        setError(caught instanceof Error ? caught.message : "Не удалось сохранить документ.");
+        throw caught;
+      }
+    };
+    saveQueue.current = saveQueue.current.catch(() => undefined).then(run);
+    return saveQueue.current;
   }, [answers, documentId, finalText, hydrated, initialUser, language, manuallyEdited, rendered.plainText, title]);
-  useDebouncedEffect(() => { void save().catch(() => undefined); }, [answers, language, title, finalText, manuallyEdited, documentId], 700);
+  useDebouncedEffect(() => { if (skipNextAutosave.current) { skipNextAutosave.current = false; return; } void save().catch(() => undefined); }, [answers, language, title, finalText, manuallyEdited, documentId], 700);
 
   const start = async () => { setPhase("builder"); if (initialUser) { try { await ensureDocument(); } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось создать черновик."); } } };
   const update = (field: QuestionnaireField, value: unknown) => { setAnswers((current) => setAnswer(current, field.id, value as never)); setErrors((current) => { const next = { ...current }; delete next[field.id]; return next; }); };
@@ -183,5 +190,5 @@ export function ConfigurableDocumentBuilder({ definition, initialUser, signInPat
           return id;
         }}
       />}
-    </section><DocumentPreview document={visibleDocument}/></div><button type="button" className="dbt-mobile-preview-button" onClick={() => setMobilePreview(true)}><Eye size={18}/>{language === "uz" ? "Ko‘rib chiqish" : "Предпросмотр"}</button>{mobilePreview && <DocumentPreview document={visibleDocument} mobileOpen onClose={() => setMobilePreview(false)}/>}</div>;
+    </section><DocumentPreview document={visibleDocument}/></div>{documentId && initialUser && <BuilderVersionHistory documentId={documentId} locale={language} onPrepare={async () => { await save(documentId); return { documentId, revision: revisionRef.current }; }} onRestored={async () => { const result = await apiFetch<{ document: GenericStoredDocument }>(`/api/document-builder/configured-documents/${documentId}`); skipNextAutosave.current = true; hydrate(result.document); }}/>}<button type="button" className="dbt-mobile-preview-button" onClick={() => setMobilePreview(true)}><Eye size={18}/>{language === "uz" ? "Ko‘rib chiqish" : "Предпросмотр"}</button>{mobilePreview && <DocumentPreview document={visibleDocument} mobileOpen onClose={() => setMobilePreview(false)}/>}</div>;
 }

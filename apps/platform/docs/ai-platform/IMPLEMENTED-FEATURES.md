@@ -1108,3 +1108,22 @@ migration application or deployment is claimed; production is unchanged.
 - The legacy inline receipt-review route remains available for compatibility.
 - Focused migration/service/security checks pass 6/6. Migration `0095`, staging
   smoke and browser evidence remain separately gated; production is unchanged.
+
+## Phase 6 — immutable Builder checkpoints and restore (local candidate)
+
+- Both receipt and configurable Builder surfaces expose an owner-only RU/UZ
+  version history. An explicit save first drains the ordinary autosave queue.
+- `GET/POST /api/document-builder/documents/:id/versions` lists metadata or
+  creates one immutable checkpoint for the exact current revision.
+- `POST /api/document-builder/documents/:id/versions/:versionId/restore`
+  verifies the private R2 object size/SHA-256 and restores answers/content as a
+  new monotonic document revision; it never overwrites an old version.
+- Full snapshots live only under a server-generated private R2 key. Migration
+  `0096` stores metadata-only object identity and append-only restore evidence,
+  with active-member, owner, tenant and revision guards in D1.
+- Writes are conditional, fail closed and replay through a hashed
+  `Idempotency-Key`. Focused service/migration tests pass 4/4; the mandatory
+  platform test runner passes after registering the new tests.
+- This is local code only. Migration `0096`, protected staging browser proof
+  and automatic checkpoints for approval/signature/finalization remain open;
+  production is unchanged.

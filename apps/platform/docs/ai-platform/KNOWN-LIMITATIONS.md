@@ -697,3 +697,18 @@ ledger-only, direct legacy SQL updates are not yet globally rejected. A later
 contract migration may install that projection guard only after the old Worker
 can no longer receive traffic. This is a documented rollout safety trade-off,
 not a claim of final database-boundary enforcement.
+
+## Builder version-history checkpoint — 2026-08-05
+
+Migration `0096`, private-R2 checkpoints, owner APIs and RU/UZ controls are
+locally implemented and tested. They are not applied or deployed to staging or
+production. Authenticated browser, keyboard, axe, 320–1440 px, 200% zoom and
+private-R2 staging rehearsal remain release gates.
+
+The current slice creates checkpoints only through the explicit **Save
+version** action. Restore produces a normal immutable revision/evidence row,
+but automatic checkpoint creation for accepted suggestions, AI corrections,
+review, approval, signing and finalization remains deliberately unclaimed.
+Those lifecycle integrations must reuse the same service or a separately
+reviewed server-side source, without creating versions from client-supplied
+content.

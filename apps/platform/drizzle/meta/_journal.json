@@ -673,6 +673,13 @@
       "when": 1785981600000,
       "tag": "0095_builder_document_analysis_handoffs",
       "breakpoints": true
+    },
+    {
+      "idx": 96,
+      "version": "6",
+      "when": 1785985200000,
+      "tag": "0096_builder_document_versions",
+      "breakpoints": true
     }
   ]
 }

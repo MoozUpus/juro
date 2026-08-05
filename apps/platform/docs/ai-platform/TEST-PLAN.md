@@ -262,3 +262,22 @@ replays `0088` with the full ordered schema.
   RU/UZ copy, confirmation, visible alert and retry-safe archive restoration.
 - Staging still needs authenticated desktop/mobile, keyboard, axe and audit-log
   rehearsal after private backup, ordered migrations and exact deploy.
+
+## Builder immutable-version checkpoint — 2026-08-05
+
+- Apply the full migration journal and require metadata-only version/restore
+  tables, D1 owner/revision guards, immutable identity and zero FK violations.
+- Create a checkpoint, verify conditional private-R2 write and exact SHA-256,
+  replay the same idempotency key without a second object or row, and list no
+  content.
+- Force an R2 error: the request must fail closed, retain retry metadata and
+  succeed with the same key only after storage recovers.
+- Reject foreign tenant/owner identity and stale revision without revealing the
+  document or version.
+- Change the document, restore the checkpoint and require a new revision,
+  restored answers/content, a metadata-only `document_revisions` record and one
+  append-only restore event. A replay must not create another event.
+- Static/API checks require session, owner, CSRF, strict Zod, hashed
+  idempotency, RU/UZ, visible busy/error/success states, 44 px touch targets and
+  reduced-motion handling. Protected staging additionally requires browser,
+  axe, responsive and real private-R2 evidence after backup/migration/deploy.

@@ -476,6 +476,55 @@ export const documentRevisions = sqliteTable(
   (table) => [uniqueIndex("document_revisions_uidx").on(table.documentId, table.revision)],
 );
 
+export const builderDocumentVersions = sqliteTable(
+  "builder_document_versions",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+    documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    documentRevision: integer("document_revision").notNull(),
+    source: text("source").notNull(),
+    r2Key: text("r2_key").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    sha256: text("sha256").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    status: text("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    lastErrorCode: text("last_error_code"),
+    ...timestamps,
+  },
+  (table) => [
+    uniqueIndex("builder_document_versions_number_uidx").on(table.documentId, table.version),
+    uniqueIndex("builder_document_versions_revision_uidx").on(table.documentId, table.documentRevision),
+    uniqueIndex("builder_document_versions_r2_uidx").on(table.r2Key),
+    uniqueIndex("builder_document_versions_request_uidx").on(table.workspaceId, table.ownerUserId, table.idempotencyKeySha256),
+    index("builder_document_versions_list_idx").on(table.documentId, table.status, table.version),
+  ],
+);
+
+export const builderDocumentVersionRestoreEvents = sqliteTable(
+  "builder_document_version_restore_events",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+    ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+    documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+    sourceVersionId: text("source_version_id").notNull().references(() => builderDocumentVersions.id, { onDelete: "restrict" }),
+    fromRevision: integer("from_revision").notNull(),
+    toRevision: integer("to_revision").notNull(),
+    contentSha256: text("content_sha256").notNull(),
+    idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("builder_document_version_restore_request_uidx").on(table.workspaceId, table.ownerUserId, table.idempotencyKeySha256),
+    uniqueIndex("builder_document_version_restore_revision_uidx").on(table.documentId, table.toRevision),
+    index("builder_document_version_restore_document_idx").on(table.documentId, table.createdAt),
+  ],
+);
+
 export const documentApprovals = sqliteTable(
   "document_approvals",
   {

@@ -223,3 +223,22 @@ lookup and a second object-integrity check. Terminal deletion removes R2 first,
 then D1, and records an immutable audit event. Account closure inventories these
 keys directly and through comparisons that reference the closing user's files.
 No staging object under this prefix is claimed before migration 0071 deployment.
+
+## Immutable Document Builder checkpoints
+
+Migration `0096` and the matching local Worker candidate use:
+
+`builder-document-versions/{workspaceId}/{documentId}/{versionId}.json`
+
+The key is generated only by the server and contains no original filename,
+title, party name or document text. The JSON snapshot is bounded and validated,
+then written with `If-None-Match: *`, exact SHA-256 and `private, no-store`.
+D1 stores only tenant/object identity, byte length, digest, source and lifecycle
+metadata. Listing never reads or returns snapshot content. Restore requires an
+owner lookup and independently re-verifies R2 size, checksum, JSON schema,
+document ID and source revision before one atomic D1 revision transition.
+
+The current candidate has not written this prefix in staging or production.
+Before staging use, apply `0096` only after a fresh private D1 backup and
+isolated restore, then verify create/list/restore/replay and R2 integrity with a
+synthetic authenticated document.

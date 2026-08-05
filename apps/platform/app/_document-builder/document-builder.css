@@ -210,7 +210,7 @@
 .dbt-form-nav button.primary { margin-left: auto; background: var(--dbt-navy); border-color: var(--dbt-navy); color: white; }
 .dbt-form-nav button:disabled { opacity: .45; cursor: not-allowed; }
 
-.dbt-review-panel, .dbt-editor, .dbt-collaboration, .dbt-assets { margin-top: 20px; padding: 20px; background: white; border: 1px solid var(--dbt-line); border-radius: 15px; box-shadow: 0 5px 18px rgba(6,40,68,.05); }
+.dbt-review-panel, .dbt-editor, .dbt-collaboration, .dbt-assets, .dbt-versions { margin-top: 20px; padding: 20px; background: white; border: 1px solid var(--dbt-line); border-radius: 15px; box-shadow: 0 5px 18px rgba(6,40,68,.05); }
 .dbt-review-panel > header, .dbt-collaboration > header, .dbt-assets > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .dbt-review-panel > header > div, .dbt-collaboration > header, .dbt-assets > header { color: var(--dbt-navy); }
 .dbt-review-panel > header > div { display: flex; align-items: center; gap: 9px; }
@@ -244,6 +244,28 @@
 .dbt-review-disclaimer { margin: 13px 0 0; color: var(--dbt-muted); font-size: 10px; }
 
 .dbt-editor-wrap, .dbt-collaboration, .dbt-assets { width: min(1100px, 100%); margin-left: auto; margin-right: auto; }
+.dbt-versions { width: min(1100px, 100%); margin-left: auto; margin-right: auto; }
+.dbt-versions > header { display: flex; align-items: flex-start; gap: 10px; color: var(--dbt-navy); }
+.dbt-versions > header > div { flex: 1; }
+.dbt-versions h2 { margin: 0; font-size: 18px; }
+.dbt-versions header p { margin: 4px 0 0; color: var(--dbt-muted); font-size: 12px; }
+.dbt-versions button { min-height: 44px; padding: 9px 12px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid #b9c4cb; border-radius: 9px; background: white; color: var(--dbt-navy); font-weight: 800; cursor: pointer; transition: border-color 160ms ease, background-color 160ms ease, transform 120ms var(--ease-out, cubic-bezier(.23,1,.32,1)); }
+.dbt-versions button:active { transform: scale(.98); }
+.dbt-versions button:disabled { cursor: wait; opacity: .65; }
+.dbt-version-status { min-height: 24px; margin-top: 10px; font-size: 12px; }
+.dbt-version-status span { display: inline-flex; align-items: center; gap: 5px; }
+.dbt-version-status .success { color: var(--dbt-green); }
+.dbt-version-status .error { color: var(--dbt-red); }
+.dbt-version-empty, .dbt-version-loading { margin: 4px 0 0; padding: 14px; border-radius: 9px; background: #f6f8f9; color: var(--dbt-muted); }
+.dbt-version-list { margin: 0; padding: 0; display: grid; gap: 7px; list-style: none; }
+.dbt-version-list li { min-height: 58px; padding: 9px 10px; display: flex; align-items: center; gap: 12px; border: 1px solid var(--dbt-line); border-radius: 10px; background: #fbfcfc; }
+.dbt-version-list li > div { flex: 1; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 2px 9px; }
+.dbt-version-list strong { color: var(--dbt-navy); }
+.dbt-version-list span { color: #364e60; font-size: 12px; }
+.dbt-version-list small { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 4px; color: var(--dbt-muted); }
+.dbt-version-list .pending { display: inline-flex; align-items: center; gap: 5px; color: var(--dbt-muted); }
+@media (hover: hover) and (pointer: fine) { .dbt-versions button:hover { border-color: var(--dbt-navy); background: #f6f8f9; } }
+@media (prefers-reduced-motion: reduce) { .dbt-versions button { transition-duration: 1ms; } .dbt-versions button:active { transform: none; } }
 .dbt-editor-heading { margin: 22px auto 0; display: flex; justify-content: space-between; align-items: center; }
 .dbt-editor-heading button { padding: 9px 12px; display: flex; align-items: center; gap: 6px; border: 1px solid #cbd2d7; border-radius: 9px; background: white; color: var(--dbt-navy); font-weight: 800; cursor: pointer; }
 .dbt-editor-heading span { color: var(--dbt-muted); font-size: 11px; }
@@ -524,6 +546,10 @@
 }
 
 @media (max-width: 620px) {
+  .dbt-versions > header { flex-wrap: wrap; }
+  .dbt-versions > header button { width: 100%; }
+  .dbt-version-list li { align-items: flex-start; flex-direction: column; }
+  .dbt-version-list li > button { width: 100%; }
   .dbt-header nav a:first-child { display: none; }
   .dbt-sign-in { padding: 8px 10px; font-size: 0; }
   .dbt-sign-in svg { width: 19px; }

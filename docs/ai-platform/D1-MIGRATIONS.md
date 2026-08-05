@@ -196,3 +196,18 @@ isolated D1 database and pass `quick_check`/`foreign_key_check`. Apply pending
 migrations in order, inspect the table/indexes/triggers, deploy the exact tested
 commit and perform authenticated RU/UZ preview/confirm/replay/delete proof.
 Rollback is application-first; the expand-only table may remain unused.
+
+## 0096 — immutable Builder document versions
+
+Status: additive local candidate; protected staging is through `0095` and
+production is unchanged.
+
+The migration adds metadata-only private-object checkpoints and append-only
+restore evidence. D1 guards active membership, exact owner/workspace/document
+identity, current source revision and a ready same-tenant source version. No
+answers, title, party data, legal text or raw idempotency key is stored.
+
+Staging requires a fresh private backup with uploaded SHA-256 verification,
+isolated restore/integrity checks, ordered `0096` application, schema/FK
+postflight, exact Worker deploy and authenticated synthetic
+create/list/restore/replay. Rollback is application-first.
