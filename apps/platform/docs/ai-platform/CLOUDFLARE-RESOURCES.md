@@ -1,5 +1,16 @@
 # JURO Cloudflare resources
 
+> **Authoritative remote state — 2026-08-06.** Cloudflare's deployments API
+> reports protected Worker `juro-platform-staging` deployment
+> `ea1ded08-03a8-46a9-83c8-279c468b4541` with version
+> `bd6e6725-f74e-48fb-bcc8-ffcca7a4cddc` at 100% traffic. Remote
+> `juro-staging` (ID `bb716a96-b2fb-4823-90d6-6c228fed181a`) has 100 migration
+> ledger rows; the latest is `0099_staging_email_delivery_probe.sql`, applied
+> at `2026-08-05 19:59:01`. The active Worker has
+> `STAGING_SYNTHETIC_PROBES_ENABLED=false`. Production was not read or changed
+> by this checkpoint. Older deployment/version summaries below are retained as
+> historical evidence and must not be treated as active state.
+
 > Local candidate — 2026-08-05: `LEGAL_LEX_RSS_DISCOVERY_ENABLED` is `true`
 > only in the checked-in staging environment candidate and `false` in
 > development/production. No binding or remote resource is added. The deployed

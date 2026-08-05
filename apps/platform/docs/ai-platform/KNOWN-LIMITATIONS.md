@@ -1,5 +1,20 @@
 # JURO known limitations checkpoint
 
+> **Authoritative remote state — 2026-08-06.** This section supersedes every
+> older "current checkpoint" below; those entries remain historical evidence,
+> not a description of the active staging release. Cloudflare's deployments
+> API reports Worker `juro-platform-staging` deployment
+> `ea1ded08-03a8-46a9-83c8-279c468b4541` at 100% on version
+> `bd6e6725-f74e-48fb-bcc8-ffcca7a4cddc`. Remote `juro-staging`
+> `d1_migrations` ledger row 100 is
+> `0099_staging_email_delivery_probe.sql` (`2026-08-05 19:59:01`). The active
+> Worker has `STAGING_SYNTHETIC_PROBES_ENABLED=false`; no production Worker,
+> D1 or R2 binding was changed. Anonymous root, canonical AI-lawyer and
+> document-builder requests are stopped by Cloudflare Access before app
+> content. This is staging infrastructure evidence only: it does not prove
+> authenticated UI, inbox placement, legal quality, a safe-file scan, or
+> production readiness.
+
 > Email acceptance checkpoint — 2026-08-06: migration `0099` is deployed to
 > protected staging after a private full/schema/data R2 backup, independent
 > SHA-256 round trip and isolated restore (`quick_check=ok`, zero FK errors).

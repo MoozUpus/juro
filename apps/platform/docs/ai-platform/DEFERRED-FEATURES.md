@@ -1,5 +1,13 @@
 # JURO deferred and gated features
 
+> **Authoritative remote state — 2026-08-06.** Protected staging is Worker
+> `juro-platform-staging` version `bd6e6725-f74e-48fb-bcc8-ffcca7a4cddc` at
+> 100% traffic; `juro-staging` has D1 migration ledger row 100
+> (`0099_staging_email_delivery_probe.sql`). Older local-only and earlier
+> staging checkpoint labels below are historical and do not reopen a feature
+> or downgrade the active schema. The remaining items in this register remain
+> release gates until their stated evidence exists.
+
 > Current checkpoint — 2026-08-06: protected staging provider evidence now
 > proves the current OpenAI and Anthropic transports with fixed, content-free
 > input; one separately gated, content-free Resend probe now also has an API
