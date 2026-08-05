@@ -22,10 +22,17 @@ strict bounded result schema, canonical Lex/Advice document routes,
 same-document redirects, 2xx HTML response evidence, exact source
 classification and rejection of provider/user-invented fields. The CLI is
 `npm run evaluate:legal:validate -- --packet <packet-directory> --results
-<reviewed-results.json>`.
+<reviewed-results.json> --evidence <staging-persisted-evidence.json>`.
 Internal citations are not accepted from result JSON alone. Passing still
 requires all real outputs, current public link checks and named human review;
 unit fixtures are not legal ground truth.
+
+`tests/legal-evaluation-persisted-evidence.test.ts` additionally executes the
+real SQLite/D1 run → message → feedback → MFA legal-review chain. It proves that
+the content-free export matches persisted structured sources and rejects
+self-declared model metadata, changed content after review, malformed endpoint
+input and tampered evidence metadata. Static route checks enforce POST-only,
+same-origin/CSRF, `ai.quality.review`, fresh MFA and private/no-store behavior.
 
 ## Lex RSS discovery gate — local candidate
 

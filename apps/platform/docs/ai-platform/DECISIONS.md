@@ -3097,3 +3097,24 @@ private backup round-trip and isolated pre/post restore. Operational freshness
 now fails closed against changed, incomplete or unverified corpus coverage.
 Production remains unchanged. Deployment and schema evidence do not replace a
 controlled corpus run, Queue/email proof or named legal review.
+
+## D-150 — Legal evaluation needs D1-backed review evidence
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+A results JSON can describe an AI run and reviewer without proving either exists.
+The release CLI therefore requires a separate staging evidence artifact. A
+fresh-MFA legal reviewer requests the export; the server replays the immutable
+quality-review chain, resolves each completed `ai_run`, compares the exact corpus
+prompt and current answer hashes with the review event, parses the stored strict
+chat schema and checks result source IDs/URLs against that structured output.
+
+The artifact deliberately excludes content, tenant data and email. It binds the
+SHA-256 of the strict results envelope, so reviewer scores and dispositions
+cannot change after authenticated export. Its digest and separate access-event
+receipt expose later mutation but are not a public-key
+attestation and do not prove legal correctness. A passing quality gate still
+requires 314 actual staging runs, current citation replay and named human review.
+No migration, dependency, staging deploy or production change is part of this
+local decision.

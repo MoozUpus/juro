@@ -100,6 +100,13 @@
 > QA is currently blocked by a stale Cloudflare Access redirect loop; no cookies
 > or OTP state was changed without owner approval.
 
+> Persisted-evidence checkpoint — 2026-08-05: the evaluator no longer accepts a
+> reviewed-results file by itself. A local candidate exports content-free proof
+> from completed `ai_runs`, persisted structured output and immutable MFA-backed
+> quality-review events, then makes that artifact mandatory in the CLI. This does
+> not mean 314 staging runs or reviews exist. The endpoint is not deployed and no
+> legal-quality score is claimed until the real corpus is executed and reviewed.
+
 > Deadline-calculation checkpoint — 2026-08-04: migration `0067` and the
 > preview/confirm/task-evidence flow are deployed to protected staging after a
 > verified private-R2 backup/round-trip/restore. The calculator has no

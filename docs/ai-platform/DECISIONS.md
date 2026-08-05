@@ -391,3 +391,16 @@ not replace named human legal review of all real evaluation outputs.
 Migration `0091` and exact commit `81de7bb` are deployed to protected staging
 after verified private backup and isolated restore. Production remains
 unchanged. See `STAGING-0091-VERIFIED-CORPUS-FRESHNESS-EVIDENCE.md`.
+
+## D-125 — legal evaluation requires persisted-run evidence
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+The release CLI must receive a separate content-free evidence export from the
+fresh-MFA staging legal-review endpoint. The exporter binds each scenario to the
+actual completed D1 run, exact prompt, stored structured output and immutable
+`correct` review event, plus the SHA-256 of the complete results envelope;
+result JSON alone is insufficient. The export retains
+hashes and opaque identifiers, not answer, question, workspace or email. This is
+local code only and does not satisfy the still-open 314-run human-review gate.

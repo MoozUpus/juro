@@ -1,50 +1,31 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { z } from "zod";
 
 import {
   legalEvaluationCorpus,
-  legalEvaluationResultsSchema,
   type LegalEvaluationResult,
   type LegalEvaluationScenario,
 } from "./legal-evaluation-corpus";
+import {
+  LEGAL_EVALUATION_CORPUS_VERSION,
+  LEGAL_EVALUATION_MANIFEST_VERSION,
+  LEGAL_EVALUATION_RESULTS_ENVELOPE_VERSION,
+  legalEvaluationArtifactManifestSchema,
+  legalEvaluationResultsEnvelopeSchema,
+  type LegalEvaluationArtifactManifest,
+  type LegalEvaluationResultsEnvelope,
+} from "./legal-evaluation-contract";
 
-export const LEGAL_EVALUATION_CORPUS_VERSION = "2026-08-05.1";
-export const LEGAL_EVALUATION_MANIFEST_VERSION = 1;
-export const LEGAL_EVALUATION_RESULTS_ENVELOPE_VERSION = 1;
-
-const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/);
-const evidenceIdentifierSchema = z.string().trim().min(1).max(160)
-  .regex(/^[A-Za-z0-9._:-]+$/);
-
-export const legalEvaluationArtifactManifestSchema = z.object({
-  schemaVersion: z.literal(LEGAL_EVALUATION_MANIFEST_VERSION),
-  corpusVersion: z.literal(LEGAL_EVALUATION_CORPUS_VERSION),
-  corpusSize: z.number().int().positive().max(10_000),
-  russianScenarioCount: z.number().int().nonnegative().max(10_000),
-  uzbekScenarioCount: z.number().int().nonnegative().max(10_000),
-  ambiguousScenarioCount: z.number().int().nonnegative().max(10_000),
-  legalAreaCount: z.number().int().positive().max(100),
-  scenariosRelativePath: z.literal("scenarios.json"),
-  scenariosSha256: sha256Schema,
-  instructionsRelativePath: z.literal("review-instructions.md"),
-  instructionsSha256: sha256Schema,
-}).strict();
-
-export const legalEvaluationResultsEnvelopeSchema = z.object({
-  schemaVersion: z.literal(LEGAL_EVALUATION_RESULTS_ENVELOPE_VERSION),
-  corpusVersion: z.literal(LEGAL_EVALUATION_CORPUS_VERSION),
-  corpusSha256: sha256Schema,
-  environment: z.literal("staging"),
-  applicationCommit: z.string().regex(/^[a-f0-9]{40}$/),
-  evaluationRunId: evidenceIdentifierSchema,
-  generatedAt: z.string().datetime({ offset: true }),
-  results: legalEvaluationResultsSchema,
-}).strict();
-
-export type LegalEvaluationArtifactManifest = z.infer<typeof legalEvaluationArtifactManifestSchema>;
-export type LegalEvaluationResultsEnvelope = z.infer<typeof legalEvaluationResultsEnvelopeSchema>;
+export {
+  LEGAL_EVALUATION_CORPUS_VERSION,
+  LEGAL_EVALUATION_MANIFEST_VERSION,
+  LEGAL_EVALUATION_RESULTS_ENVELOPE_VERSION,
+  legalEvaluationArtifactManifestSchema,
+  legalEvaluationResultsEnvelopeSchema,
+  type LegalEvaluationArtifactManifest,
+  type LegalEvaluationResultsEnvelope,
+} from "./legal-evaluation-contract";
 
 const reviewInstructions = `# JURO legal evaluation review packet
 
@@ -54,7 +35,7 @@ legal conclusion, source, score or ground truth.
 For every scenario, run the real staging AI flow and create one independently
 reviewed result matching the strict schema enforced by:
 
-    npm run evaluate:legal:validate -- --packet <packet-directory> --results <reviewed-results.json>
+    npm run evaluate:legal:validate -- --packet <packet-directory> --results <reviewed-results.json> --evidence <staging-persisted-evidence.json>
 
 Do not mark a source as existing from memory or hostname shape. Public
 Lex/Advice links are replayed live by the validator. Internal-material citations
@@ -65,8 +46,12 @@ The reviewed-results file must be a strict staging envelope bound to this
 packet's corpus version and SHA-256. Every result must identify its persisted
 AI run, actual provider/model, instruction hash, legal-database version,
 completion time, reviewer, review time and a review-evidence hash reference.
-The referenced review evidence must be retained separately; a hash value alone
-does not prove that human review occurred or that the conclusion is correct.
+The evidence file must be exported by the fresh-MFA protected staging endpoint
+after the results file is prepared. It binds every scenario to the completed
+persisted AI run, stored structured output and immutable legal-review event
+without exporting question/answer content. Retain the response receipt: a hash
+value or a locally fabricated JSON file does not prove human review or legal
+correctness.
 `;
 
 export async function materializeLegalEvaluationArtifacts(

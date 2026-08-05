@@ -20,7 +20,10 @@ This register distinguishes real implementation from planned scope. A database t
   RSS discovery path is now a local candidate, but it is not deployed. Broad
   historical priority-area backfill, Advice discovery activation, human
   publication at corpus scale, version-aware hybrid retrieval and the
-  250-scenario human-reviewed legal evaluation remain gated.
+  314-scenario human-reviewed legal evaluation remains gated. A local
+  persisted-run/review evidence exporter prevents self-declared JSON from
+  satisfying the gate, but it has not been deployed or populated with real
+  staging evaluation runs.
 - Migrations `0089` and `0091` and their exact Workers are deployed to protected staging after
   a verified private backup/restore. A controlled failed/stale run, Queue/DLQ
   log and real Resend receipt are still required. `0091` fail-closes freshness

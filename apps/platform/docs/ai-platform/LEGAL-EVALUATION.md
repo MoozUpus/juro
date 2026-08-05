@@ -18,7 +18,8 @@ or success score. `npm run evaluate:legal:materialize -- --output <directory>`
 creates a versioned review packet with `scenarios.json`, reviewer instructions
 and a SHA-256 manifest; it still creates no answer or score.
 `npm run evaluate:legal:validate -- --packet <packet-directory> --results
-<reviewed-results.json>` accepts only a strict staging envelope bound to the
+<reviewed-results.json> --evidence <staging-persisted-evidence.json>` accepts
+only a strict staging envelope bound to the
 packet corpus version and SHA-256, with one schema-valid result per
 scenario. Public citations must use the exact canonical Lex or Advice document
 path without credentials, query, fragment or alternate port. Live checking
@@ -35,9 +36,47 @@ fabricated by the synthetic corpus.
 
 Each reviewed result also records the persisted AI run, actual provider/model,
 instruction hash, legal-database version, completion time, reviewer, review
-time and a hash reference to separately retained review evidence. These fields
-make a gate reproducible; they do not themselves prove that human review
-occurred or that the legal answer is correct.
+time and a hash reference to separately retained review evidence. The required
+evidence file is produced only by the staging POST endpoint
+`/api/platform/admin/ai-quality/evaluation-evidence` after session, CSRF,
+`legal_reviewer`, active TOTP and MFA-freshness checks. The exporter independently
+loads the completed `ai_runs` row, exact user/assistant messages, structured JSON,
+latest immutable `correct` review event and review chain. It rejects a prompt
+that is not byte-identical to the scenario, changed reviewed content, mismatched
+provider/model/hash/timestamps, result citations that do not match persisted
+structured sources, duplicate runs/reviews and a non-correct review decision.
+
+The exported artifact contains hashes and opaque IDs only: no question, answer,
+workspace, user email or feedback text. Its digest detects later file mutation,
+the evidence binds the SHA-256 of the complete strict results envelope, and the
+endpoint separately appends a content-free quality-review access event that
+commits both hashes. Changing a reviewer score or behavior disposition after
+export therefore invalidates the gate.
+The owner must retain the complete authenticated response receipt. A copied hash
+or locally fabricated JSON remains insufficient proof that human review occurred
+or that the legal conclusion is correct.
+
+## Staging execution order
+
+1. Materialize the packet and retain its manifest.
+2. Submit every exact scenario prompt through the real authenticated staging chat
+   and retain each completed `aiRunId`.
+3. Create feedback for that response and have an authorized legal reviewer open
+   and resolve it through the AI-quality console. Only a `correct` decision is
+   eligible for a passing result; corrected or partially incorrect output remains
+   a release failure for that run.
+4. Assemble the strict reviewed-results envelope from the persisted metadata and
+   reviewer judgments.
+5. While signed in as the same fresh-MFA legal reviewer, POST
+   `{ "resultsEnvelope": ... }` with the normal same-origin CSRF header to
+   `/api/platform/admin/ai-quality/evaluation-evidence`. Store `evidence` as the
+   evidence JSON and retain the separate `receipt` with the evaluation record.
+6. Run the validator with `--packet`, `--results` and `--evidence`. Do not edit
+   the exported artifact; its digest and field bindings will fail closed.
+
+The endpoint does not accept a reviewer identity, tenant ID or review decision
+from a separate client field. Those values are resolved from D1 and the
+MFA-authorized immutable review event.
 ## Current automated evidence
 
 The current integration branch tests exact Lex/Advice host and type trust,

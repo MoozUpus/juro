@@ -11,6 +11,10 @@ import {
   verifyLegalEvaluationResultsEnvelope,
 } from "../evaluation/legal-evaluation-artifacts";
 import { verifyPublicCitation } from "../evaluation/legal-citation-live-check";
+import {
+  legalEvaluationPersistedEvidenceSchema,
+  verifyLegalEvaluationPersistedEvidence,
+} from "../evaluation/legal-evaluation-persisted-evidence";
 
 async function verifyCitationUrls(results: readonly LegalEvaluationResult[]): Promise<Map<string, boolean>> {
   const urls = [...new Set(results.flatMap((result) =>
@@ -32,8 +36,10 @@ const flagIndex = process.argv.indexOf("--results");
 const path = flagIndex >= 0 ? process.argv[flagIndex + 1] : undefined;
 const packetFlagIndex = process.argv.indexOf("--packet");
 const packetDirectory = packetFlagIndex >= 0 ? process.argv[packetFlagIndex + 1] : undefined;
-if (!path || !packetDirectory) {
-  console.error("Usage: npx tsx scripts/validate-legal-evaluation.ts --packet <packet-directory> --results <reviewed-results.json>");
+const evidenceFlagIndex = process.argv.indexOf("--evidence");
+const evidencePath = evidenceFlagIndex >= 0 ? process.argv[evidenceFlagIndex + 1] : undefined;
+if (!path || !packetDirectory || !evidencePath) {
+  console.error("Usage: npx tsx scripts/validate-legal-evaluation.ts --packet <packet-directory> --results <reviewed-results.json> --evidence <staging-persisted-evidence.json>");
   process.exitCode = 2;
 } else {
   let results: LegalEvaluationResult[] = [];
@@ -48,6 +54,14 @@ if (!path || !packetDirectory) {
     if (!validated.success) throw new TypeError("RESULTS_SCHEMA_INVALID");
     const bindingFailures = verifyLegalEvaluationResultsEnvelope(validated.data, manifest);
     if (bindingFailures.length > 0) throw new TypeError(bindingFailures.join(","));
+    const evidenceParsed: unknown = JSON.parse(await readFile(evidencePath, "utf8"));
+    const evidence = legalEvaluationPersistedEvidenceSchema.safeParse(evidenceParsed);
+    if (!evidence.success) throw new TypeError("PERSISTED_EVIDENCE_SCHEMA_INVALID");
+    const evidenceFailures = await verifyLegalEvaluationPersistedEvidence(
+      evidence.data,
+      validated.data,
+    );
+    if (evidenceFailures.length > 0) throw new TypeError(evidenceFailures.join(","));
     results = validated.data.results;
     evaluationRunId = validated.data.evaluationRunId;
     applicationCommit = validated.data.applicationCommit;

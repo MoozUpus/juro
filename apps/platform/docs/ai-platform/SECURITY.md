@@ -69,6 +69,12 @@ Protected staging must still prove the deployed version, migration ledger, queue
 ## Open security gates
 
 Malware scanning, complete OCR/file prompt-injection evaluation, remote Vectorize tenant evidence, realtime voice, complete lawyer case access, support/admin content access, full OWASP/IDOR/load testing, production key separation, and final legal/privacy approval remain incomplete or disabled. The local `0080` candidate namespaces user vectors by workspace, derives identity from D1, enforces membership before search, rechecks owner/latest-version/R2 hash after search, rejects tampered metadata, and deletes vectors during account purge; no staging activation is claimed. A strictly-public, credential-free SSRF-protected document URL import exists locally, but it remains behind the fail-closed malware gate and has no staging/browser evidence. No absent control is represented as working.
+
+The local legal-evaluation evidence endpoint authenticates and checks fresh MFA
+before parsing its bounded POST body, uses strict Zod, returns private/no-store,
+exports no question/answer/workspace/email, and records a content-free immutable
+quality-review access event. It has no staging activation yet; an artifact digest
+is tamper evidence, not a remote attestation or proof of legal correctness.
 ## Business workspace creation boundary
 
 The deployed staging `POST /api/platform/workspaces` creation path authenticates before body handling, enforces same-origin/CSRF and a strict 2 KiB Zod union, and writes no user-controlled identifier. A client UUID is used only as a bounded idempotency key; workspace, membership, and audit IDs are deterministic opaque derivatives. The D1 batch grants owner access only when creator and request evidence match. Exact replay is safe; cross-user or changed-payload replay returns conflict without disclosing another tenant. Migration `0034`, one synthetic owner workspace, canonical personal/business routing, RU/UZ browser behavior, and D1 audit/FK evidence are verified in owner-only staging; cross-account remote proof remains open.

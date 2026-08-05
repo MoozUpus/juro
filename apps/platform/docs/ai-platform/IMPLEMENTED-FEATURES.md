@@ -193,6 +193,14 @@
 > and typecheck pass. No legal/document quality percentage is claimed and no
 > staging or production runtime was changed by this local delta.
 
+> Current local persisted-evidence delta — 2026-08-05: legal evaluation now
+> requires a second content-free artifact exported through a fresh-MFA protected
+> legal-reviewer endpoint. It binds each result to the actual completed D1 AI run,
+> byte-identical corpus prompt, stored structured output, matching source IDs/URLs
+> and immutable `correct` review event. Tampered metadata or post-review content
+> fails closed. This code is local only; no 314-run evaluation, staging deploy or
+> legal-quality percentage is claimed.
+
 > Current staging delta — 2026-08-04: action-plan steps now have an authenticated,
 > tenant-scoped deadline preview and an explicit confirmation boundary. Server
 > write routes recalculate the result, reject tampering, version the plan and

@@ -467,3 +467,75 @@ export async function executeAiQualityReview(input: {
     classification: input.request.classification, accessEventId: event.id, accessIntegrity,
   };
 }
+
+export async function recordAiQualityEvaluationEvidenceExport(input: {
+  db: D1Database;
+  staff: PlatformStaffAccess;
+  evaluationRunId: string;
+  applicationCommit: string;
+  corpusSha256: string;
+  resultsEnvelopeSha256: string;
+  exportDigest: string;
+  recordCount: number;
+  now?: Date;
+}): Promise<{
+  accessEventId: string;
+  accessEventHash: string;
+  accessIntegrity: { valid: boolean; checked: number };
+}> {
+  const now = input.now ?? new Date();
+  if (
+    !Number.isFinite(now.getTime())
+    || !Number.isSafeInteger(input.recordCount)
+    || input.recordCount < 1
+    || input.recordCount > 10_000
+    || !/^[A-Za-z0-9._:-]{1,160}$/.test(input.evaluationRunId)
+    || !/^[a-f0-9]{40}$/.test(input.applicationCommit)
+    || !/^[a-f0-9]{64}$/.test(input.corpusSha256)
+    || !/^[a-f0-9]{64}$/.test(input.resultsEnvelopeSha256)
+    || !/^[a-f0-9]{64}$/.test(input.exportDigest)
+  ) throw new AiQualityReviewError("AI_QUALITY_REVIEW_INVALID");
+  const summary = {
+    purpose: "legal_evaluation_persisted_evidence",
+    evaluationRunId: input.evaluationRunId,
+    applicationCommit: input.applicationCommit,
+    corpusSha256: input.corpusSha256,
+    resultsEnvelopeSha256: input.resultsEnvelopeSha256,
+    exportDigest: input.exportDigest,
+    recordCount: input.recordCount,
+  };
+  const event = await appendEvent({
+    db: input.db,
+    staff: input.staff,
+    action: "query",
+    feedbackId: null,
+    reviewVersion: 0,
+    classification: null,
+    filters: {
+      purpose: summary.purpose,
+      evaluationRunId: summary.evaluationRunId,
+      applicationCommit: summary.applicationCommit,
+      corpusSha256: summary.corpusSha256,
+      resultsEnvelopeSha256: summary.resultsEnvelopeSha256,
+    },
+    result: summary,
+    resultCount: 1,
+    feedbackUpdatedAt: null,
+    question: "",
+    answer: "",
+    comment: "",
+    notes: "",
+    correctedAnswer: null,
+    goldenAnswer: null,
+    now,
+  });
+  const accessIntegrity = await verifyAiQualityReviewHistory(input.db, input.staff.userId);
+  if (!accessIntegrity.valid) {
+    throw new AiQualityReviewError("AI_QUALITY_REVIEW_ACCESS_INTEGRITY_FAILED");
+  }
+  return {
+    accessEventId: event.id,
+    accessEventHash: event.eventHash.toLowerCase(),
+    accessIntegrity,
+  };
+}
