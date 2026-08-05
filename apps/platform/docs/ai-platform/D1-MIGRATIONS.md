@@ -1324,3 +1324,19 @@ Status: local additive candidate. Protected staging remains through `0078`;
 production is unchanged. Before staging application, take and independently
 checksum/restore a fresh export in private `juro-staging-backups`, then apply
 the complete pending ledger in order rather than cherry-picking `0088`.
+
+## Migration 0092 — document evaluation review evidence (local candidate)
+
+`0092_document_evaluation_reviews.sql` additively adds a nullable SHA-256 for
+normalized completed analysis output and a content-free, immutable review/export
+event ledger. Runtime completion writes the hash in the same state transition.
+D1 validates the live legal-reviewer assignment, active TOTP, 15-minute MFA,
+chain head, private file SHA/size, clean scan, completed analysis/provider run,
+critical-risk count and completed comparison membership. Export events bind the
+application commit, artifact-manifest SHA-256 and latest-review digest.
+
+Local ordered migration, foreign-key, immutable-trigger, forged-role, stale
+provider and evidence-tamper tests pass. Staging remains through `0091`; before
+`0092`, create and independently restore/checksum a private staging backup,
+apply only the ordered pending migration, run D1 postflight and deploy the exact
+Worker. Production is unchanged.

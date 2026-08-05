@@ -67,6 +67,7 @@ const legalSourceAdviceUrlGuardEntry = journal.entries.find(
 const legalCorpusAlertsEntry = journal.entries.find(({ idx }) => idx === 89);
 const legalSourceApplicabilityEntry = journal.entries.find(({ idx }) => idx === 90);
 const verifiedCorpusFreshnessEntry = journal.entries.find(({ idx }) => idx === 91);
+const documentEvaluationReviewsEntry = journal.entries.find(({ idx }) => idx === 92);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -173,6 +174,10 @@ assert.ok(
 assert.ok(
   verifiedCorpusFreshnessEntry,
   "Drizzle journal must contain migration 0091",
+);
+assert.ok(
+  documentEvaluationReviewsEntry,
+  "Drizzle journal must contain migration 0092",
 );
 
 

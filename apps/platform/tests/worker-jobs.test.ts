@@ -831,7 +831,7 @@ test("document analysis queue refuses quarantined tenant rows before R2 or AI ac
       CREATE TABLE document_analyses (
         id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
         uploaded_file_id TEXT NOT NULL, status TEXT NOT NULL, summary_json TEXT,
-        error_code TEXT, consent_version TEXT NOT NULL, created_at TEXT NOT NULL,
+        result_sha256 TEXT, error_code TEXT, consent_version TEXT NOT NULL, created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
       INSERT INTO document_files VALUES (
@@ -841,7 +841,7 @@ test("document analysis queue refuses quarantined tenant rows before R2 or AI ac
       );
       INSERT INTO document_analyses VALUES (
         'analysis_unsafe','ws_test','user_test','file_unsafe','quarantined',
-        '{"mode":"quick","locale":"ru"}','MALWARE_SCANNER_UNAVAILABLE','2026-07-30',
+        '{"mode":"quick","locale":"ru"}',NULL,'MALWARE_SCANNER_UNAVAILABLE','2026-07-30',
         '2026-07-26T00:00:00.000Z','2026-07-26T00:00:00.000Z'
       );
     `);

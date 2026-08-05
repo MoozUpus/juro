@@ -498,6 +498,8 @@ async function persistNormalizedAnalysis(
 ): Promise<void> {
   const now = new Date().toISOString();
   const summary = legacyCompatibleSummary(persisted);
+  const summaryJson = JSON.stringify(summary);
+  const resultSha256 = await sha256Hex(new TextEncoder().encode(summaryJson));
   await db.prepare("DELETE FROM document_risks WHERE analysis_id=?").bind(row.analysisId).run();
   let revisionCount = 0;
   for (let offset = 0; offset < persisted.result.risks.length; offset += 20) {
@@ -613,8 +615,8 @@ async function persistNormalizedAnalysis(
       persisted.technical.cachedInputTokens, now, now, now,
     ),
     db.prepare(
-      "UPDATE document_analyses SET status='completed',summary_json=?,error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status='persisting'",
-    ).bind(JSON.stringify(summary), now, row.analysisId, row.workspaceId),
+      "UPDATE document_analyses SET status='completed',summary_json=?,result_sha256=?,error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status='persisting'",
+    ).bind(summaryJson, resultSha256, now, row.analysisId, row.workspaceId),
     ...scheduleUserDocumentIndexStatements(db, {
       analysisId: row.analysisId,
       documentVersionId: sourceVersion.id,

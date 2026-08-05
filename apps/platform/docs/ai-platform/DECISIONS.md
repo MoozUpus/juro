@@ -3118,3 +3118,19 @@ attestation and do not prove legal correctness. A passing quality gate still
 requires 314 actual staging runs, current citation replay and named human review.
 No migration, dependency, staging deploy or production change is part of this
 local decision.
+
+## D-151 — Document evaluation cannot trust self-declared run/reviewer IDs
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+The 100-package validator now accepts only a content-free evidence export from
+the fresh-MFA staging review boundary. Migration `0092` binds each review to the
+actual safe file, clean scan, completed analysis-result hash, provider run,
+critical-risk rows and optional completed comparison. Provider metadata is
+server-derived. Export revalidates current records, rejects incomplete reciprocal
+pairs and commits the latest-review digest in an immutable hash-chain event.
+
+This closes a false-positive evidence path but does not close the quality gate.
+No staging migration/deploy, real scanner run, 100 analyses, 30 comparisons or
+human quality result is claimed. Production remains unchanged.

@@ -112,3 +112,18 @@ updated atomically with each event. Price/event rows intentionally have no user
 or workspace foreign key so required financial evidence can survive content and
 account deletion; opaque tenant IDs are subject to the documented retention
 policy.
+
+## Document evaluation evidence — local migration 0092 candidate
+
+Completed `document_analyses` receive `result_sha256`, computed over the exact
+normalized `summary_json` persisted by the processor. The completed result
+tuple becomes immutable while unrelated case linkage remains available.
+
+`document_evaluation_review_events` is append-only and content-free. Review rows
+bind a corpus package to file, clean scan, analysis result hash, provider run,
+measured outcomes and reviewer/MFA identity. Export rows bind an application
+commit and materialized-manifest hash to the digest of the latest review for
+each package. Per-actor predecessor hashes provide tamper evidence. User content
+is referenced only by opaque IDs and hashes; the evaluation ledger deliberately
+has no foreign key to deletable user content, while each insert/export rechecks
+the live records.

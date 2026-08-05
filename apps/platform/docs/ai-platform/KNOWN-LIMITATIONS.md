@@ -674,3 +674,13 @@ Existing acquisition does not infer normative effective dates from source text;
 therefore historical confirmation depends on reviewed `effective_at` metadata.
 Broad historical Lex ingestion, a protected reviewer control for those dates,
 and the human legal evaluation gate remain incomplete.
+
+## Authoritative document evaluation checkpoint — 2026-08-05
+
+Migration `0092`, the fresh-MFA review/export route and the evidence-only CLI
+contract are locally implemented. They prevent a fabricated file/scan/provider
+ID or altered normalized analysis result from satisfying the release validator.
+They are not applied to staging. The real scanner, 100 protected-staging
+analyses, 30 reciprocal comparisons, named reviews, OCR measurements and every
+required quality threshold remain incomplete. A hash-chain/digest proves
+integrity of recorded evidence, not correctness of the legal review.

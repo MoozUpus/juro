@@ -564,3 +564,15 @@ canonical user, AI-lawyer or document-builder route.
 
 The query action returns only model identifiers, hashes, reasons and actor IDs;
 no provider secret or user content is stored or returned.
+
+### Document evaluation evidence — local candidate
+
+| Route | Method | Behavior | Boundary |
+|---|---|---|---|
+| `/api/platform/admin/document-evaluation` | POST only | Records one immutable package review or exports the latest persisted evidence for a controlled run | same-origin CSRF, strict 120 KiB Zod input, `ai.quality.review`, active TOTP, MFA ≤15 min, D1 actor/chain and authoritative file/scan/analysis/provider guards, private/no-store |
+
+There is no GET endpoint and no bulk content upload. Provider/scan metadata and
+critical-risk count are resolved server-side rather than accepted from the
+request. The exported JSON is content-free and cannot replace the required
+100-package/30-comparison named review. Migration `0092` and the route are not
+deployed to staging or production.

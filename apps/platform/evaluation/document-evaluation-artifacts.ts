@@ -14,9 +14,10 @@ import {
   type DocumentEvaluationResult,
   type DocumentEvaluationType,
 } from "./document-evaluation-corpus";
+import { DOCUMENT_EVALUATION_CORPUS_VERSION } from "./document-evaluation-contract";
 
 export const DOCUMENT_ARTIFACT_MANIFEST_VERSION = 1;
-export const DOCUMENT_CORPUS_VERSION = "2026-08-04.1";
+export const DOCUMENT_CORPUS_VERSION = DOCUMENT_EVALUATION_CORPUS_VERSION;
 
 const fixedDate = new Date("2026-08-04T00:00:00.000Z");
 const fontPath = new URL("../public/document-templates/DejaVuSans-JURO.ttf", import.meta.url);

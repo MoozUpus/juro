@@ -404,3 +404,16 @@ actual completed D1 run, exact prompt, stored structured output and immutable
 result JSON alone is insufficient. The export retains
 hashes and opaque identifiers, not answer, question, workspace or email. This is
 local code only and does not satisfy the still-open 314-run human-review gate.
+
+## D-126 — document quality evidence must be derived from persisted staging state
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+The document release CLI no longer accepts a reviewed-results JSON with
+self-declared remote IDs. It requires the exact artifact manifest plus a
+content-free, MFA-authenticated evidence export. Additive migration `0092`
+records immutable review/export events and binds them to current D1 file, scan,
+analysis-result hash, provider run, critical-risk and comparison state. The
+100-package/30-comparison execution and quality thresholds remain open; this
+decision changes no staging or production resource by itself.

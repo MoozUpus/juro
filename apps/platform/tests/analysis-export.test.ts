@@ -340,6 +340,9 @@ test("invalid normalized analysis fails closed and records safe audit evidence",
   const bucket = new FakeR2Bucket();
   try {
     seedCompletedAnalysis(sqlite);
+    // Simulate storage corruption beneath the 0092 terminal-result guard so
+    // the exporter keeps its independent fail-closed validation coverage.
+    sqlite.exec("DROP TRIGGER document_analyses_completed_result_guard");
     sqlite.prepare("UPDATE document_analyses SET summary_json='{}' WHERE id='analysis-a'").run();
     const requested = await requestAnalysisExport({
       db: d1,

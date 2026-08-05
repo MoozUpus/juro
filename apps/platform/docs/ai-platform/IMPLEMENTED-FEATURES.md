@@ -1051,3 +1051,18 @@ This is code and local-test evidence, not staging activation. It produces a
 confirmed historical source only when a human-reviewed version already has an
 `effective_at` interval; broad historical Lex backfill and reviewer date-entry
 UI remain open.
+
+## Phase 5 — authoritative document evaluation evidence (local candidate)
+
+Migration `0092` and `POST /api/platform/admin/document-evaluation` replace
+self-declared evaluation IDs with immutable D1 evidence. Review events bind the
+materialized artifact to the live safe file, clean scanner result, normalized
+analysis-result SHA-256, completed provider run and persisted critical-risk
+count. Provider metadata is server-derived. Export rechecks live evidence,
+requires reciprocal comparison pairing, verifies the reviewer hash chain and
+commits the latest-record digest in a separate MFA-authenticated event.
+
+The release CLI now requires `--evidence` and verifies the exact raw
+artifact-manifest SHA-256 before applying the existing 100-package thresholds.
+Focused migration/evaluation tests pass locally. No staging run, quality score,
+migration application or deployment is claimed; production is unchanged.

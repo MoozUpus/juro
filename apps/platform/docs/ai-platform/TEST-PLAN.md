@@ -107,10 +107,11 @@ Open release tests: authenticated browser/axe/keyboard/mobile matrix, real scann
 - Every artifact must revalidate against its manifest by safe relative path,
   byte size, SHA-256 and expected DOCX/PDF/JPEG/PNG/ZIP magic.
 - A second materialization of representative rows must produce identical bytes.
-- `evaluate:documents:validate` requires both reviewed results and the exact
-  artifact manifest. A result cannot pass without completed staging analysis,
-  safe scan, provider/model/response, reciprocal comparison ID where applicable,
-  and timestamped named human disposition.
+- `evaluate:documents:validate` requires the persisted-evidence export and exact
+  artifact manifest; a self-declared reviewed-results file is rejected. A row
+  cannot pass without completed staging analysis, safe scan, server-resolved
+  provider/model/response, reciprocal comparison ID where applicable, and an
+  immutable timestamped named human disposition.
 - Local artifact generation is preparation evidence only. It cannot satisfy the
   scanner, OCR/provider, legal-quality or authenticated staging gates.
 
@@ -231,3 +232,18 @@ hash-chain corruption fail-closed behavior, protected-field exclusion,
 POST-only CSRF/fresh-MFA route contracts, RU/UZ UI accessibility hooks and the
 chat/document instruction-hash integration. `tests/migration-safety.test.ts`
 replays `0088` with the full ordered schema.
+
+## Document evaluation persisted-evidence gate — 2026-08-05
+
+- The release CLI must reject `--results`; `--evidence` plus the exact hashed
+  materialized artifact manifest is mandatory.
+- Review input cannot self-declare scanner/provider/model/response/completion or
+  critical-risk count; these values are loaded from D1.
+- D1 must reject non-reviewer, expired/non-MFA, forked-chain, stale file/scan,
+  incomplete analysis, changed provider run and non-terminal comparison claims.
+- Export revalidates every latest review, verifies reciprocal comparison pairs,
+  appends an immutable export receipt and exposes no content.
+- Tampering with any review metric, event, record list, manifest hash or export
+  receipt must fail digest/chain verification.
+- A passing local contract test is not the 100-package/30-comparison release
+  run; staging scanner/OCR/provider execution and named review remain required.

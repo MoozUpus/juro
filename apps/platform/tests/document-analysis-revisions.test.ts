@@ -80,7 +80,7 @@ test("analysis revisions are tenant-scoped, reviewable, idempotent and create im
       { analysisId: "analysis-a", workspaceId: "workspace-a", ownerUserId: "user-a", fileName: "contract.pdf", text: source },
     );
     assert.equal(sourceVersion.version, 1);
-    sqlite.prepare("UPDATE document_analyses SET status='completed' WHERE id='analysis-a'").run();
+    sqlite.prepare("UPDATE document_analyses SET status='completed',summary_json='{}',result_sha256=? WHERE id='analysis-a'").run("a".repeat(64));
     seedRevision(sqlite, {
       analysisId: "analysis-a", workspaceId: "workspace-a", userId: "user-a", riskId: "risk-a",
       originalText: "Срок определяется дополнительно.", proposedText: "Срок исполнения составляет 10 календарных дней.",
@@ -193,7 +193,7 @@ test("concurrent correction writers leave one attached version and a reclaimable
       { DB: d1, BUCKET: bucket as unknown as R2Bucket },
       { analysisId: "analysis-a", workspaceId: "workspace-a", ownerUserId: "user-a", fileName: "contract.pdf", text: "Срок определяется дополнительно." },
     );
-    sqlite.prepare("UPDATE document_analyses SET status='completed' WHERE id='analysis-a'").run();
+    sqlite.prepare("UPDATE document_analyses SET status='completed',summary_json='{}',result_sha256=? WHERE id='analysis-a'").run("a".repeat(64));
     seedRevision(sqlite, {
       analysisId: "analysis-a", workspaceId: "workspace-a", userId: "user-a", riskId: "risk-a",
       originalText: "Срок определяется дополнительно.", proposedText: "Срок исполнения составляет 10 календарных дней.",
@@ -255,7 +255,7 @@ test("ambiguous excerpts fail closed without a corrected version", async () => {
       { DB: d1, BUCKET: bucket as unknown as R2Bucket },
       { analysisId: "analysis-a", workspaceId: "workspace-a", ownerUserId: "user-a", fileName: "contract.pdf", text: "Штраф начисляется. Штраф начисляется." },
     );
-    sqlite.prepare("UPDATE document_analyses SET status='completed' WHERE id='analysis-a'").run();
+    sqlite.prepare("UPDATE document_analyses SET status='completed',summary_json='{}',result_sha256=? WHERE id='analysis-a'").run("a".repeat(64));
     seedRevision(sqlite, {
       analysisId: "analysis-a", workspaceId: "workspace-a", userId: "user-a", riskId: "risk-a",
       originalText: "Штраф начисляется.", proposedText: "Штраф составляет 1 процент.",
@@ -321,7 +321,7 @@ test("0069 and 0073 reject cross-tenant, unreviewed, and mismatched object evide
       analysisSourceVersionId("analysis-a"), "analysis-a", "workspace-a", "user-a",
       "analysis-versions/workspace-a/analysis-a/1-source.md", "contract.normalized-v1.md", "a".repeat(64), now,
     );
-    sqlite.prepare("UPDATE document_analyses SET status='completed' WHERE id='analysis-a'").run();
+    sqlite.prepare("UPDATE document_analyses SET status='completed',summary_json='{}',result_sha256=? WHERE id='analysis-a'").run("a".repeat(64));
     sqlite.prepare(`INSERT INTO document_risks
       (id,analysis_id,level,title,description,excerpt,risk_type,recommendation,proposed_wording,legal_basis_source_ids_json,created_at)
       VALUES ('risk-a','analysis-a','medium','Срок','Описание','Срок','document_internal','Уточнить','10 дней','[]',?)`).run(now);

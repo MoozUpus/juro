@@ -111,3 +111,13 @@ versioned resolve. Negative evidence must cover administrator/support denial,
 expired MFA, stale feedback, chain tampering and absence of question/answer text
 from queue responses. Human legal validation of golden answers remains a product
 process; the presence of a stored review is not a legal-quality metric by itself.
+
+## Document evaluation staging gate
+
+Migration `0092` and `POST /api/platform/admin/document-evaluation` are local.
+Activation requires a fresh private `juro-staging` backup with isolated restore,
+ordered migration application, exact Worker deployment and authenticated
+legal-reviewer probes. The actual gate additionally requires a privacy-approved
+fail-closed scanner, all 100 materialized packages, 30 comparisons, real OCR and
+provider runs, named review and threshold remediation. Until then no document
+quality metric is claimed and the feature remains outside production readiness.

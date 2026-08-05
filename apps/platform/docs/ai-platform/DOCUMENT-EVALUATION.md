@@ -1,6 +1,6 @@
 # JURO document evaluation
 
-Updated: 2026-08-04
+Updated: 2026-08-05
 
 ## Reproducible corpus harness
 
@@ -17,18 +17,22 @@ size, SHA-256, unique hash, expected magic bytes and safe relative path. The
 remain ignored local evidence rather than repository payload.
 
 The manifest and materialized artifacts are not a claim that the binaries have
-passed OCR or Claude. `npm run evaluate:documents:validate -- --results
-<reviewed-results.json> --artifacts <artifact-manifest.json>` is deliberately
-fail-closed: every result needs a unique artifact SHA-256 and non-zero size that
-match the materialized manifest, expected format, named and timestamped reviewer
-disposition, and the evidence applicable to its scenario. Each row must also
-identify a completed staging analysis, safe scanner verdict, file, actual
-provider/model/response and completion timestamp. Comparison rows must share a
-real comparison ID with their reciprocal peer. Manifest-only or locally
-generated rows without those explicit fields cannot pass. The validator checks
-shape and consistency, not the authority of a reviewer or existence of remote
-IDs; final evidence must therefore include the corresponding protected staging
-D1 export and an approved reviewer roster.
+passed OCR or Claude. `npm run evaluate:documents:validate -- --evidence
+<persisted-evidence.json> --artifacts <artifact-manifest.json>` is deliberately
+fail-closed. Self-declared result JSON is no longer accepted. The evidence must
+come from the POST-only, fresh-MFA staging endpoint
+`/api/platform/admin/document-evaluation` after migration `0092`.
+
+Each immutable review event is bound by D1 to the actual private file hash/size,
+clean scan record, completed analysis, SHA-256 of the normalized result,
+document-analysis `ai_run`, provider/model/response ID/completion time and exact
+count of persisted critical risks. Comparison rows must identify a completed
+comparison that contains the reviewed file; export additionally requires the
+reciprocal peer review and shared comparison ID. Export re-reads all referenced
+records, rejects stale/deleted/changed evidence, replays the entire per-reviewer
+hash chain and commits the latest-review digest in a separate export event.
+Question, document, OCR, result, filename and provider-response content are not
+included in the evidence artifact.
 
 The validator reports and enforces the requested aggregate metrics: 100% format
 classification and artifact evidence, at least 95% document-type accuracy, at
@@ -90,3 +94,7 @@ The artifact generator and stronger validator contract are implemented and
 tested, but the quality gate remains open until all 100 controlled artifacts and
 30 comparisons run in staging through a real malware scanner, OCR/provider
 pipeline and named human review.
+
+Migration `0092` and its route are a local candidate only. They do not claim a
+single real staging review, and they must not be applied before an authorized
+private D1 backup/restore and ordered migration gate.

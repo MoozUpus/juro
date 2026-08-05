@@ -176,3 +176,19 @@ present but corrupt configuration chain; absence of the `0088` table falls back
 to deployment variables only to preserve expand-migration compatibility.
 Secrets, prompts, jurisdiction, source allowlists and privacy/security rules are
 not mutable settings.
+
+## Document evaluation evidence boundary — local candidate
+
+The document evaluation API accepts only controlled identifiers, artifact
+hash/size and bounded reviewer measurements. Scanner/provider/model/response,
+completion time, normalized result hash and critical-risk count are resolved
+from D1. Review insertion independently checks the clean scan, safe private file,
+completed analysis and provider run at the D1 trigger boundary. Export repeats
+those checks, requires reciprocal comparison evidence and rejects stale rows.
+
+Only an active `legal_reviewer` with TOTP and MFA within 15 minutes may append.
+Events are domain-separated, SHA-256 chained per actor and immutable. Evidence
+contains no document text, OCR, filenames, findings text, prompt, response,
+workspace or email. The digest is tamper evidence, not a public-key signature
+or legal-quality assertion. Migration `0092` and authenticated staging probes
+remain pending.
