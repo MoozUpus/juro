@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { createDocumentVersion, DocumentVersionError, listDocumentVersions, restoreDocumentVersion } from "../lib/document-builder/document-versions";
+import { applyProjectedDocumentContentVersion, createDocumentVersion, DocumentVersionError, listDocumentVersions, restoreDocumentVersion } from "../lib/document-builder/document-versions";
+import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const now = "2026-08-05T14:00:00.000Z";
@@ -22,6 +23,7 @@ class FakeR2Bucket {
     assert.ok(value instanceof Uint8Array); const bytes = value.slice(); const sha256 = await sha256Hex(bytes); assert.equal(options?.sha256, sha256);
     const stored = { bytes, sha256 }; this.objects.set(key, stored); return this.metadata(key, stored);
   }
+  async delete(key: string) { this.objects.delete(key); }
   private metadata(key: string, value: { bytes: Uint8Array; sha256: string }) { return { key, version: "synthetic", size: value.bytes.byteLength, etag: value.sha256, httpEtag: `"${value.sha256}"`, uploaded: new Date(now), httpMetadata: { contentType: "application/json; charset=utf-8" }, customMetadata: {}, range: undefined, checksums: { sha256: hexArrayBuffer(value.sha256) }, storageClass: "Standard", ssecKeyMd5: undefined, writeHttpMetadata() {} }; }
 }
 
@@ -62,6 +64,107 @@ test("Builder versions fail closed across tenants and retry R2 with the same key
   } finally { sqlite.close(); }
 });
 
+test("accepted Builder proposal atomically advances content and attaches its projected immutable version", async () => {
+  const { sqlite, d1 } = seed(); const bucket = new FakeR2Bucket();
+  try {
+    sqlite.prepare(
+      `INSERT INTO document_change_proposals
+       (id,document_id,author_user_id,old_text,new_text,owner_accepted,collaborator_accepted,status,created_at,updated_at)
+       VALUES ('proposal-a',?,'user-a','Original','Updated',1,0,'pending',?,?)`,
+    ).run(documentId, now, now);
+    const input = {
+      db: d1,
+      bucket: bucket as unknown as R2Bucket,
+      documentId,
+      workspaceId: "workspace-a",
+      ownerUserId: "user-a",
+      actorUserId: "user-a",
+      revision: 1,
+      source: "suggestion" as const,
+      sourceEntityId: "proposal-a",
+      idempotencyKey: "builder-proposal-apply-proposal-a",
+      finalContent: "Updated legal text",
+      nextStatus: "Готов",
+      revisionSource: "suggestion",
+      changes: { proposalId: "proposal-a" },
+      mutationStatements: (appliedAt: string) => [d1.prepare(
+        `UPDATE document_change_proposals
+         SET owner_accepted=1,collaborator_accepted=1,status='applied',updated_at=?
+         WHERE id='proposal-a' AND document_id=? AND status='pending'`,
+      ).bind(appliedAt, documentId)],
+    };
+    const applied = await applyProjectedDocumentContentVersion(input);
+    assert.equal(applied.replayed, false);
+    assert.equal(applied.revision, 2);
+    assert.equal(applied.version.source, "suggestion");
+    assert.equal(applied.version.status, "ready");
+    assert.deepEqual(
+      { ...(sqlite.prepare("SELECT revision,status FROM documents WHERE id=?").get(documentId) as object) },
+      { revision: 2, status: "Готов" },
+    );
+    assert.equal((sqlite.prepare("SELECT final_content AS content FROM document_current_content WHERE document_id=?").get(documentId) as { content: string }).content, "Updated legal text");
+    assert.deepEqual(
+      { ...(sqlite.prepare("SELECT status,owner_accepted AS ownerAccepted,collaborator_accepted AS collaboratorAccepted FROM document_change_proposals WHERE id='proposal-a'").get() as object) },
+      { status: "applied", ownerAccepted: 1, collaboratorAccepted: 1 },
+    );
+    assert.deepEqual(
+      { ...(sqlite.prepare("SELECT status,version_id AS versionId FROM builder_document_version_object_writes").get() as object) },
+      { status: "attached", versionId: applied.version.id },
+    );
+    const replay = await applyProjectedDocumentContentVersion(input);
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.version.id, applied.version.id);
+    assert.equal(bucket.putCalls, 1);
+  } finally { sqlite.close(); }
+});
+
+test("projected Builder mutation remains unchanged on attach conflict and stale orphan is reconciled", async () => {
+  const { sqlite, d1 } = seed(); const bucket = new FakeR2Bucket();
+  try {
+    sqlite.prepare(
+      `INSERT INTO document_change_proposals
+       (id,document_id,author_user_id,old_text,new_text,owner_accepted,collaborator_accepted,status,created_at,updated_at)
+       VALUES ('proposal-b',?,'user-a','Original','Updated',1,0,'pending',?,?)`,
+    ).run(documentId, now, now);
+    await assert.rejects(
+      applyProjectedDocumentContentVersion({
+        db: d1,
+        bucket: bucket as unknown as R2Bucket,
+        documentId,
+        workspaceId: "workspace-a",
+        ownerUserId: "user-a",
+        actorUserId: "user-a",
+        revision: 1,
+        source: "suggestion",
+        sourceEntityId: "proposal-b",
+        idempotencyKey: "builder-proposal-attach-conflict-b",
+        finalContent: "Updated legal text",
+        nextStatus: "Готов",
+        revisionSource: "suggestion",
+        changes: { proposalId: "proposal-b" },
+      }),
+      (error: unknown) => error instanceof DocumentVersionError && error.code === "REVISION_CONFLICT",
+    );
+    assert.equal((sqlite.prepare("SELECT revision FROM documents WHERE id=?").get(documentId) as { revision: number }).revision, 1);
+    assert.equal((sqlite.prepare("SELECT final_content AS content FROM document_current_content WHERE document_id=?").get(documentId) as { content: string }).content, "Original legal text");
+    assert.deepEqual(
+      { ...(sqlite.prepare("SELECT status,attempt_count AS attempts,last_error_code AS code FROM builder_document_version_object_writes").get() as object) },
+      { status: "pending", attempts: 1, code: "D1_ATTACH_CONFLICT" },
+    );
+    const writeUpdatedAt = (sqlite.prepare("SELECT updated_at AS updatedAt FROM builder_document_version_object_writes").get() as { updatedAt: string }).updatedAt;
+    const cleanupAt = new Date(Date.parse(writeUpdatedAt) + 20 * 60 * 1_000).toISOString();
+    const cleanup = await reconcileBuilderVersionObjectWrites({
+      db: d1,
+      bucket: bucket as unknown as R2Bucket,
+      now: cleanupAt,
+      graceMs: 60_000,
+    });
+    assert.deepEqual(cleanup, { eligible: 1, claimed: 1, attached: 0, deleted: 1, retrying: 0 });
+    assert.equal(bucket.objects.size, 0);
+    assert.equal((sqlite.prepare("SELECT status FROM builder_document_version_object_writes").get() as { status: string }).status, "deleted");
+  } finally { sqlite.close(); }
+});
+
 test("Builder version routes and RU/UZ UI retain owner, CSRF and recovery contracts", async () => {
   const root = new URL("../", import.meta.url);
   const [versionsRoute, restoreRoute, component, configured, statusRoute, receiptGenerate, configuredGenerate, collaboration, signedFile, responses] = await Promise.all([
@@ -97,6 +200,9 @@ test("Builder version routes and RU/UZ UI retain owner, CSRF and recovery contra
     assert.ok(checkpointIndex < route.indexOf("await Promise.all([", checkpointIndex));
   }
   assert.ok(collaboration.indexOf('source: "approval"') < collaboration.indexOf("INSERT INTO document_approvals"));
+  assert.match(collaboration, /applyProjectedDocumentContentVersion/);
+  assert.match(collaboration, /source: "suggestion"/);
+  assert.doesNotMatch(collaboration, /UPDATE document_current_content SET final_content = \?, manually_edited = 1/);
   assert.ok(signedFile.indexOf('source: "signature"') < signedFile.indexOf("await putPrivateObject"));
   assert.ok(signedFile.indexOf('source: "signature"') < signedFile.indexOf("SET signed_file_id"));
   assert.match(signedFile, /await bucket\.delete\(key\)\.catch/);

@@ -1126,8 +1126,7 @@ migration application or deployment is claimed; production is unchanged.
   platform test runner passes after registering the new tests.
 - Migration `0096` and the explicit owner create/list/restore foundation from
   commit `8433b94` are deployed to protected staging after verified private
-  backup/restore. Authenticated browser proof and automatic checkpoints for
-  accepted suggestions/analysis corrections remain open; production is
+  backup/restore. Authenticated browser proof remains open; production is
   unchanged.
 
 The same local candidate now creates or reuses the exact persisted checkpoint
@@ -1139,3 +1138,20 @@ D1 registration batch fails.
 A revision change refreshes owner history without a page reload. This
 integration is the next local candidate and adds no route or migration beyond
 `0096`.
+
+The following local candidate adds migration `0097` and closes both
+content-changing gaps without a post-mutation false-success window:
+
+- a collaboration proposal is applied together with its projected immutable
+  Builder version in one revision-fenced D1 transaction after private-R2
+  verification;
+- corrected Claude/Analysis versions linked from a Builder snapshot expose an
+  explicit RU/UZ **В конструктор / Konstruktorga** action;
+- correction return is owner/workspace scoped and accepted only against the
+  unchanged source Builder revision;
+- durable metadata-only object-write intents support idempotent replay and a
+  scheduled orphan reconciler; D1 still stores no snapshot legal text;
+- focused migration, service, route/UI and complete
+  Builder→Analysis→Builder roundtrip tests pass locally.
+
+`0097` and the matching Worker candidate are not yet deployed to staging.

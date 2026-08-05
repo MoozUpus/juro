@@ -1,5 +1,14 @@
 import { z } from "zod";
 import { configuredAnswersSchema, receiptAnswersSchema } from "./validation/schema";
+import {
+  beginBuilderVersionObjectAttachment,
+  builderVersionObjectWriteByRequest,
+  createBuilderVersionObjectWrite,
+  recordBuilderVersionObjectWriteFailure,
+  requireAttachedBuilderVersionObjectWrite,
+  type BuilderProjectedVersionSource,
+  type BuilderVersionObjectWrite,
+} from "./document-version-object-write";
 
 const MAX_SNAPSHOT_BYTES = 4_000_000;
 const encoder = new TextEncoder();
@@ -191,6 +200,181 @@ export async function createDocumentVersion(input: {
   return { version: publicVersion(row), replayed: false };
 }
 
+export async function applyProjectedDocumentContentVersion(input: {
+  db: D1Database;
+  bucket: R2Bucket;
+  documentId: string;
+  workspaceId: string;
+  ownerUserId: string;
+  actorUserId: string;
+  revision: number;
+  source: BuilderProjectedVersionSource;
+  sourceEntityId: string;
+  idempotencyKey: string;
+  finalContent: string;
+  nextStatus: string;
+  revisionSource: string;
+  changes: Record<string, unknown>;
+  mutationStatements?: (now: string) => D1PreparedStatement[];
+}): Promise<{ revision: number; version: DocumentVersionSummary; replayed: boolean }> {
+  const idempotencyKey = documentVersionIdempotencyKeySchema.parse(input.idempotencyKey);
+  if (!input.sourceEntityId.trim() || input.sourceEntityId.length > 200) {
+    throw new DocumentVersionError("VERSION_OBJECT_INVALID", 422);
+  }
+  const idempotencyKeySha256 = await sha256Hex(encoder.encode(idempotencyKey));
+  let write = await builderVersionObjectWriteByRequest(
+    input.db, input.workspaceId, input.ownerUserId, idempotencyKeySha256,
+  );
+  if (write?.status === "attached") {
+    assertProjectedWriteIdentity(write, input);
+    if (!write.versionId) throw new DocumentVersionError("VERSION_STORAGE_FAILED", 503);
+    const current = await loadCurrent(input.db, input);
+    if (current.revision !== write.targetRevision || current.finalContent !== input.finalContent) {
+      throw new DocumentVersionError("IDEMPOTENCY_CONFLICT", 409);
+    }
+    const version = await requireVersion(input.db, write.versionId);
+    await verifyObject(input.bucket, version);
+    return { revision: write.targetRevision, version: publicVersion(version), replayed: true };
+  }
+  if (write && write.status !== "pending") {
+    throw new DocumentVersionError("IDEMPOTENCY_CONFLICT", 409);
+  }
+
+  const current = await loadCurrent(input.db, input);
+  if (current.revision !== input.revision) throw new DocumentVersionError("REVISION_CONFLICT", 409);
+  const nextRevision = current.revision + 1;
+  const capturedAt = write?.createdAt ?? new Date().toISOString();
+  const projected = snapshotFromCurrent({
+    ...current,
+    revision: nextRevision,
+    status: input.nextStatus,
+    finalContent: input.finalContent,
+    manuallyEdited: 1,
+  }, capturedAt);
+  const bytes = encoder.encode(JSON.stringify(projected));
+  if (bytes.byteLength > MAX_SNAPSHOT_BYTES) throw new DocumentVersionError("VERSION_OBJECT_INVALID", 422);
+  const sha256 = await sha256Hex(bytes);
+
+  if (!write) {
+    const next = await input.db.prepare(
+      "SELECT COALESCE(MAX(version),0)+1 AS version FROM builder_document_versions WHERE document_id=?",
+    ).bind(input.documentId).first<{ version: number }>();
+    try {
+      write = await createBuilderVersionObjectWrite(input.db, {
+        workspaceId: input.workspaceId,
+        ownerUserId: input.ownerUserId,
+        documentId: input.documentId,
+        targetVersion: Number(next?.version ?? 1),
+        sourceRevision: current.revision,
+        source: input.source,
+        sourceEntityId: input.sourceEntityId,
+        sizeBytes: bytes.byteLength,
+        sha256,
+        idempotencyKeySha256,
+      });
+    } catch (cause) {
+      write = await builderVersionObjectWriteByRequest(
+        input.db, input.workspaceId, input.ownerUserId, idempotencyKeySha256,
+      );
+      if (!write) throw cause;
+    }
+  }
+  assertProjectedWriteIdentity(write, input, {
+    sourceRevision: current.revision,
+    targetRevision: nextRevision,
+    sizeBytes: bytes.byteLength,
+    sha256,
+  });
+  try {
+    await putProjectedSnapshot(input.bucket, write, bytes);
+  } catch (cause) {
+    await recordBuilderVersionObjectWriteFailure(
+      input.db, write, "R2_PUT_FAILED",
+    ).catch(() => undefined);
+    throw cause;
+  }
+
+  const now = new Date().toISOString();
+  const versionId = crypto.randomUUID();
+  const statements: D1PreparedStatement[] = [
+    beginBuilderVersionObjectAttachment(input.db, write, now),
+    ...(input.mutationStatements?.(now) ?? []),
+    input.db.prepare(
+      `INSERT INTO document_revisions
+       (id,document_id,revision,actor_user_id,source,changes_json,created_at)
+       VALUES (?,?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(), input.documentId, nextRevision, input.actorUserId,
+      input.revisionSource, JSON.stringify(input.changes), now,
+    ),
+    input.db.prepare(
+      `UPDATE document_current_content
+       SET final_content=?,manually_edited=1,updated_at=?
+       WHERE document_id=? AND EXISTS (
+         SELECT 1 FROM documents document
+         WHERE document.id=? AND document.workspace_id=? AND document.owner_user_id=?
+           AND document.revision=? AND document.archived_at IS NULL
+       )`,
+    ).bind(
+      input.finalContent, now, input.documentId, input.documentId,
+      input.workspaceId, input.ownerUserId, current.revision,
+    ),
+    input.db.prepare(
+      `UPDATE documents SET status=?,revision=?,updated_at=?
+       WHERE id=? AND workspace_id=? AND owner_user_id=? AND revision=? AND archived_at IS NULL`,
+    ).bind(
+      input.nextStatus, nextRevision, now, input.documentId,
+      input.workspaceId, input.ownerUserId, current.revision,
+    ),
+    input.db.prepare(
+      `INSERT INTO builder_document_versions
+       (id,workspace_id,owner_user_id,document_id,version,document_revision,source,
+        r2_key,size_bytes,sha256,idempotency_key_sha256,status,attempt_count,
+        last_error_code,created_at,updated_at,object_write_id)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,'pending',0,NULL,?,?,?)`,
+    ).bind(
+      versionId, input.workspaceId, input.ownerUserId, input.documentId,
+      write.targetVersion, nextRevision, input.source, write.r2Key,
+      bytes.byteLength, sha256, idempotencyKeySha256, now, now, write.id,
+    ),
+    input.db.prepare(
+      `UPDATE builder_document_versions SET status='ready',last_error_code=NULL,updated_at=?
+       WHERE id=? AND object_write_id=? AND status='pending'`,
+    ).bind(now, versionId, write.id),
+    input.db.prepare(
+      `INSERT INTO workspace_audit_events
+       (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+       SELECT ?,?,?, 'builder_document_version',?,'projected_version_applied',?,?
+       WHERE EXISTS (
+         SELECT 1 FROM builder_document_versions
+         WHERE id=? AND object_write_id=? AND status='ready'
+       )`,
+    ).bind(
+      crypto.randomUUID(), input.workspaceId, input.actorUserId, versionId,
+      JSON.stringify({
+        documentId: input.documentId,
+        source: input.source,
+        sourceEntityId: input.sourceEntityId,
+        fromRevision: current.revision,
+        toRevision: nextRevision,
+      }), now, versionId, write.id,
+    ),
+  ];
+  try {
+    await input.db.batch(statements);
+  } catch (cause) {
+    await recordBuilderVersionObjectWriteFailure(
+      input.db, write, "D1_ATTACH_CONFLICT",
+    ).catch(() => undefined);
+    const conflict = new DocumentVersionError("REVISION_CONFLICT", 409) as DocumentVersionError & { cause?: unknown };
+    conflict.cause = cause;
+    throw conflict;
+  }
+  await requireAttachedBuilderVersionObjectWrite(input.db, write.id, versionId);
+  const version = await requireVersion(input.db, versionId);
+  return { revision: nextRevision, version: publicVersion(version), replayed: false };
+}
+
 export async function restoreDocumentVersion(input: {
   db: D1Database;
   bucket: R2Bucket;
@@ -334,6 +518,71 @@ async function ensureReadyObject(db: D1Database, bucket: R2Bucket, row: VersionR
     ).bind(new Date().toISOString(), row.id).run().catch(() => undefined);
     if (cause instanceof DocumentVersionError) throw cause;
     throw new DocumentVersionError("VERSION_STORAGE_FAILED", 503);
+  }
+}
+
+async function putProjectedSnapshot(
+  bucket: R2Bucket,
+  write: BuilderVersionObjectWrite,
+  bytes: Uint8Array,
+): Promise<void> {
+  try {
+    let object = await bucket.head(write.r2Key);
+    if (!object) {
+      object = await bucket.put(write.r2Key, bytes, {
+        onlyIf: new Headers({ "if-none-match": "*" }),
+        sha256: write.sha256,
+        httpMetadata: { contentType: "application/json; charset=utf-8", cacheControl: "private, no-store" },
+        customMetadata: {
+          workspaceId: write.workspaceId,
+          ownerUserId: write.ownerUserId,
+          documentId: write.documentId,
+          documentRevision: String(write.targetRevision),
+          source: write.source,
+          objectWriteId: write.id,
+        },
+      }) ?? await bucket.head(write.r2Key);
+    }
+    if (
+      !object
+      || object.size !== bytes.byteLength
+      || checksumHex(object.checksums.sha256) !== write.sha256
+    ) {
+      throw new DocumentVersionError("VERSION_STORAGE_FAILED", 503);
+    }
+  } catch (cause) {
+    if (cause instanceof DocumentVersionError) throw cause;
+    throw new DocumentVersionError("VERSION_STORAGE_FAILED", 503);
+  }
+}
+
+function assertProjectedWriteIdentity(
+  write: BuilderVersionObjectWrite,
+  input: {
+    documentId: string;
+    workspaceId: string;
+    ownerUserId: string;
+    revision: number;
+    source: BuilderProjectedVersionSource;
+    sourceEntityId: string;
+  },
+  object?: { sourceRevision: number; targetRevision: number; sizeBytes: number; sha256: string },
+): void {
+  if (
+    write.documentId !== input.documentId
+    || write.workspaceId !== input.workspaceId
+    || write.ownerUserId !== input.ownerUserId
+    || Number(write.sourceRevision) !== input.revision
+    || write.source !== input.source
+    || write.sourceEntityId !== input.sourceEntityId
+    || (object && (
+      Number(write.sourceRevision) !== object.sourceRevision
+      || Number(write.targetRevision) !== object.targetRevision
+      || Number(write.sizeBytes) !== object.sizeBytes
+      || write.sha256 !== object.sha256
+    ))
+  ) {
+    throw new DocumentVersionError("IDEMPOTENCY_CONFLICT", 409);
   }
 }
 

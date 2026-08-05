@@ -26,9 +26,32 @@ export const GET = withApiErrors(async function GET(
   const workspace = await workspaceForUser(user);
   const { analysisId } = await context.params;
   try {
-    return response(await listAnalysisRevisionState(requireD1(), {
+    const db = requireD1();
+    const state = await listAnalysisRevisionState(db, {
       analysisId, workspaceId: workspace.id, userId: user.id,
-    }));
+    });
+    const builderSource = await db.prepare(
+      `SELECT handoff.document_id AS documentId,handoff.document_revision AS sourceRevision,
+        document.revision AS currentRevision
+       FROM builder_document_analysis_handoffs handoff
+       JOIN documents document ON document.id=handoff.document_id
+         AND document.workspace_id=handoff.workspace_id
+         AND document.owner_user_id=handoff.user_id
+       WHERE handoff.analysis_id=? AND handoff.workspace_id=? AND handoff.user_id=?
+         AND handoff.status='ready' AND document.archived_at IS NULL LIMIT 1`,
+    ).bind(analysisId, workspace.id, user.id).first<{
+      documentId: string;
+      sourceRevision: number;
+      currentRevision: number;
+    }>();
+    return response({
+      ...state,
+      builderSource: builderSource ? {
+        ...builderSource,
+        sourceRevision: Number(builderSource.sourceRevision),
+        currentRevision: Number(builderSource.currentRevision),
+      } : null,
+    });
   } catch (error) {
     if (error instanceof AnalysisRevisionError) return revisionError(error);
     throw error;

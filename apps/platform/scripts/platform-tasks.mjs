@@ -177,6 +177,7 @@ const cloudflareTestFiles = [
   "tests/migration-0094-ai-document-prefill.test.ts",
   "tests/migration-0095-builder-document-analysis.test.ts",
   "tests/migration-0096-builder-document-versions.test.ts",
+  "tests/migration-0097-builder-version-object-writes.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 

@@ -5,6 +5,13 @@ import {
   BuilderAnalysisError,
   startBuilderDocumentAnalysis,
 } from "../lib/document-analysis/builder-analysis";
+import { storeInitialAnalysisDocumentVersion } from "../lib/document-analysis/revisions";
+import {
+  beginAnalysisVersionObjectAttachment,
+  createAnalysisVersionObjectWrite,
+  requireAttachedAnalysisVersionObjectWrite,
+} from "../lib/document-analysis/version-object-write";
+import { applyProjectedDocumentContentVersion } from "../lib/document-builder/document-versions";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const now = "2026-08-05T12:00:00.000Z";
@@ -19,6 +26,19 @@ class FakeR2Bucket {
     return value ? this.metadata(key, value) : null;
   }
 
+  async get(key: string) {
+    const value = this.objects.get(key);
+    if (!value) return null;
+    return {
+      ...this.metadata(key, value),
+      body: new ReadableStream(), bodyUsed: false,
+      arrayBuffer: async () => value.bytes.slice().buffer,
+      text: async () => new TextDecoder().decode(value.bytes),
+      json: async () => JSON.parse(new TextDecoder().decode(value.bytes)),
+      blob: async () => new Blob([value.bytes.slice().buffer as ArrayBuffer]),
+    };
+  }
+
   async put(key: string, value: unknown, options?: { onlyIf?: Headers; sha256?: string }) {
     this.putCalls += 1;
     if (this.failPut) throw new Error("synthetic R2 write failure");
@@ -31,6 +51,8 @@ class FakeR2Bucket {
     this.objects.set(key, stored);
     return this.metadata(key, stored);
   }
+
+  async delete(key: string) { this.objects.delete(key); }
 
   private metadata(key: string, value: { bytes: Uint8Array; sha256: string }) {
     return {
@@ -145,12 +167,108 @@ test("R2 failure is fail-closed and retryable with the same request key", async 
   } finally { sqlite.close(); }
 });
 
+test("corrected Claude analysis version returns to its unchanged Builder revision as an immutable checkpoint", async () => {
+  const documentId = "00000000-0000-4000-8000-000000000095";
+  const { sqlite, d1 } = seed(documentId);
+  const bucket = new FakeR2Bucket();
+  try {
+    const handoff = await startBuilderDocumentAnalysis({
+      db: d1,
+      bucket: bucket as unknown as R2Bucket,
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      documentId,
+      mode: "quick",
+      locale: "ru",
+      idempotencyKey: "builder-analysis-correction-roundtrip-0001",
+    });
+    sqlite.prepare(
+      "UPDATE document_analyses SET status='completed',summary_json='{}',error_code=NULL,result_sha256=?,updated_at=? WHERE id=?",
+    ).run("d".repeat(64), now, handoff.analysisId);
+    const original = "Synthetic legal document content long enough for analysis.";
+    const corrected = "Corrected synthetic legal document content with safer terms.";
+    const source = await storeInitialAnalysisDocumentVersion(
+      { DB: d1, BUCKET: bucket as unknown as R2Bucket },
+      { analysisId: handoff.analysisId, workspaceId: "workspace-a", ownerUserId: "user-a", fileName: "contract.md", text: original },
+    );
+    const riskId = "roundtrip-risk-a";
+    const revisionId = "roundtrip-revision-a";
+    sqlite.prepare(
+      `INSERT INTO document_risks
+       (id,analysis_id,level,title,description,excerpt,risk_type,recommendation,
+        proposed_wording,legal_basis_source_ids_json,created_at)
+       VALUES (?,?,'medium','Synthetic correction','Synthetic evidence',?,'document_internal',
+        'Apply reviewed wording',?,'[]',?)`,
+    ).run(riskId, handoff.analysisId, original, corrected, now);
+    sqlite.prepare(
+      `INSERT INTO suggested_revisions
+       (id,analysis_id,risk_id,source_version_id,workspace_id,owner_user_id,
+        original_text,proposed_text,status,created_at,updated_at)
+       VALUES (?,?,?,?,?,?,?,?,'pending',?,?)`,
+    ).run(revisionId, handoff.analysisId, riskId, source.id, "workspace-a", "user-a", original, corrected, now, now);
+    const correctedBytes = new TextEncoder().encode(corrected);
+    const correctedSha256 = await sha256Hex(correctedBytes);
+    const correctedWrite = await createAnalysisVersionObjectWrite(d1, {
+      analysisId: handoff.analysisId,
+      workspaceId: "workspace-a",
+      ownerUserId: "user-a",
+      targetVersion: 2,
+      sourceKind: "corrected",
+      sizeBytes: correctedBytes.byteLength,
+      sha256: correctedSha256,
+    });
+    await bucket.put(correctedWrite.r2Key, correctedBytes, {
+      onlyIf: new Headers({ "if-none-match": "*" }),
+      sha256: correctedSha256,
+    });
+    const correctedVersionId = `analysis-version-${crypto.randomUUID()}`;
+    await d1.batch([
+      beginAnalysisVersionObjectAttachment(d1, correctedWrite, now),
+      d1.prepare(
+        `INSERT INTO analysis_document_versions
+         (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,
+          r2_key,object_write_id,file_name,mime_type,size_bytes,sha256,idempotency_key,
+          selection_sha256,revision_ids_json,created_by_user_id,created_at)
+         VALUES (?,?,?,?,2,?,'corrected',?,?,?,'text/markdown; charset=utf-8',?,?,?,?,?, ?,?)`,
+      ).bind(
+        correctedVersionId, handoff.analysisId, "workspace-a", "user-a", source.id,
+        correctedWrite.r2Key, correctedWrite.id, "contract.corrected-v2.md",
+        correctedBytes.byteLength, correctedSha256, "analysis-corrected-roundtrip-0001",
+        "c".repeat(64), JSON.stringify([revisionId]), "user-a", now,
+      ),
+    ]);
+    await requireAttachedAnalysisVersionObjectWrite(d1, correctedWrite.id, correctedVersionId);
+    const applied = await applyProjectedDocumentContentVersion({
+      db: d1,
+      bucket: bucket as unknown as R2Bucket,
+      documentId,
+      workspaceId: "workspace-a",
+      ownerUserId: "user-a",
+      actorUserId: "user-a",
+      revision: 1,
+      source: "analysis_correction",
+      sourceEntityId: correctedVersionId,
+      idempotencyKey: "builder-analysis-correction-apply-0001",
+      finalContent: corrected,
+      nextStatus: "Черновик",
+      revisionSource: "analysis_correction",
+      changes: { analysisId: handoff.analysisId, analysisVersionId: correctedVersionId },
+    });
+    assert.equal(applied.revision, 2);
+    assert.equal(applied.version.source, "analysis_correction");
+    assert.equal((sqlite.prepare("SELECT final_content AS content FROM document_current_content WHERE document_id=?").get(documentId) as { content: string }).content, corrected);
+    assert.equal((sqlite.prepare("SELECT status FROM builder_document_version_object_writes").get() as { status: string }).status, "attached");
+  } finally { sqlite.close(); }
+});
+
 test("builder analysis route and UI retain security, idempotency and compatibility contracts", async () => {
   const root = new URL("../", import.meta.url);
-  const [route, launcher, builder, legacy] = await Promise.all([
+  const [route, applyRoute, launcher, builder, reviewUi, legacy] = await Promise.all([
     readFile(new URL("app/api/document-builder/documents/[id]/analysis/route.ts", root), "utf8"),
+    readFile(new URL("app/api/platform/document-analysis/[analysisId]/versions/[versionId]/apply-builder/route.ts", root), "utf8"),
     readFile(new URL("app/_document-builder/_components/BuilderAnalysisLauncher.tsx", root), "utf8"),
     readFile(new URL("app/_document-builder/_components/ConfigurableDocumentBuilder.tsx", root), "utf8"),
+    readFile(new URL("app/_platform/DocumentReviewClient.tsx", root), "utf8"),
     readFile(new URL("app/api/document-builder/ai-review/route.ts", root), "utf8"),
   ]);
   assert.match(route, /assertSafeWrite/);
@@ -158,6 +276,13 @@ test("builder analysis route and UI retain security, idempotency and compatibili
   assert.match(route, /requireOwner/);
   assert.match(route, /assertOperationalFeatureEnabled/);
   assert.match(route, /idempotency-key/);
+  assert.match(applyRoute, /assertSafeWrite/);
+  assert.match(applyRoute, /workspaceForUser/);
+  assert.match(applyRoute, /handoff\.status='ready'/);
+  assert.match(applyRoute, /applyProjectedDocumentContentVersion/);
+  assert.match(applyRoute, /source: "analysis_correction"/);
+  assert.match(reviewUi, /applyVersionToBuilder/);
+  assert.match(reviewUi, /В конструктор/);
   assert.match(launcher, /busyRef/);
   assert.match(launcher, /crypto\.randomUUID/);
   assert.match(launcher, /aria-live="polite"/);
@@ -166,7 +291,7 @@ test("builder analysis route and UI retain security, idempotency and compatibili
   assert.match(legacy, /deterministicReview/);
 });
 
-function seed() {
+function seed(documentId = "document-a") {
   const fixture = sqliteD1Fixture();
   const { sqlite } = fixture;
   sqlite.prepare("INSERT INTO user_profiles(id,email,created_at,updated_at) VALUES ('user-a','a@example.invalid',?,?),('user-b','b@example.invalid',?,?)")
@@ -180,11 +305,12 @@ function seed() {
   sqlite.prepare(
     `INSERT INTO documents
      (id,workspace_id,owner_user_id,template_id,template_code,template_version,language,participant_mode,title,category,status,revision,created_at,updated_at)
-     VALUES ('document-a','workspace-a','user-a','template-a','template-a',1,'ru','configurable','Synthetic contract','contracts','Черновик',1,?,?)`,
-  ).run(now, now);
+     VALUES (?,'workspace-a','user-a','template-a','template-a',1,'ru','configurable','Synthetic contract','contracts','Черновик',1,?,?)`,
+  ).run(documentId, now, now);
+  sqlite.prepare("INSERT INTO document_answers(document_id,answers_json,updated_at) VALUES (?,'{}',?)").run(documentId, now);
   sqlite.prepare(
-    "INSERT INTO document_current_content(document_id,auto_content,final_content,manually_edited,updated_at) VALUES ('document-a','Synthetic legal document content long enough for analysis.','Synthetic legal document content long enough for analysis.',0,?)",
-  ).run(now);
+    "INSERT INTO document_current_content(document_id,auto_content,final_content,manually_edited,updated_at) VALUES (?,'Synthetic legal document content long enough for analysis.','Synthetic legal document content long enough for analysis.',0,?)",
+  ).run(documentId, now);
   return fixture;
 }
 

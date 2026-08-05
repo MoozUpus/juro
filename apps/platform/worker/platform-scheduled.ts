@@ -9,6 +9,7 @@ import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
 import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/version-object-write";
+import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
 import type { PlatformJobEnv } from "./platform-jobs";
 
@@ -267,6 +268,12 @@ export async function handleScheduled(
       bucket: env.BUCKET,
       now,
     });
+    failureCode = "BUILDER_VERSION_OBJECT_RECONCILIATION_FAILED";
+    const builderVersionObjects = await reconcileBuilderVersionObjectWrites({
+      db: env.DB,
+      bucket: env.BUCKET,
+      now,
+    });
     failureCode = "PROVIDER_PROBE_FAILED";
     const providerProbe = await maybeRunStagingProviderProbes(env);
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
@@ -302,6 +309,11 @@ export async function handleScheduled(
       analysisVersionObjectsAttached: analysisVersionObjects.attached,
       analysisVersionObjectsDeleted: analysisVersionObjects.deleted,
       analysisVersionObjectsRetrying: analysisVersionObjects.retrying,
+      builderVersionObjectsEligible: builderVersionObjects.eligible,
+      builderVersionObjectsClaimed: builderVersionObjects.claimed,
+      builderVersionObjectsAttached: builderVersionObjects.attached,
+      builderVersionObjectsDeleted: builderVersionObjects.deleted,
+      builderVersionObjectsRetrying: builderVersionObjects.retrying,
       providerProbeAttempted: providerProbe?.attempted ?? 0,
       providerProbeSucceeded: providerProbe?.succeeded ?? 0,
       providerProbeFailed: providerProbe?.failed ?? 0,

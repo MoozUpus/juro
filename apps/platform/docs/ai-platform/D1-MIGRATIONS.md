@@ -1391,3 +1391,23 @@ remote ledger ends at id 97, schema/FK postflight passed and exact commit
 create/list/restore/replay remains open. Rollback is application-first;
 production remains unchanged. Full evidence is in
 `STAGING-0096-BUILDER-VERSIONS-EVIDENCE.md`.
+
+## Migration 0097 — projected Builder version object writes
+
+`0097_builder_document_version_object_writes.sql` is an expand-only local
+candidate. It adds metadata-only R2 write intents and an optional immutable
+`object_write_id` link on Builder versions. Insert/transition/attachment
+triggers bind the intent to the active owner/workspace/document, exact source
+and target revisions, accepted collaboration proposal or corrected Analysis
+version, R2 identity and ready Builder checkpoint.
+
+The legal snapshot stays in private R2. D1 stores only identifiers, revision,
+size, SHA-256, hashed idempotency evidence and bounded lifecycle diagnostics.
+The existing unique `document_revisions(document_id, revision)` index is the
+concurrency fence. If the atomic attachment fails, document/proposal mutations
+roll back and the pending intent is retryable; scheduled reconciliation removes
+only an unreferenced object after an identity check.
+
+Local SQLite/R2 tests cover proposal success/replay, D1 attach rollback, orphan
+cleanup and Builder→Analysis→Builder corrected-version return. `0097` is not
+applied to staging or production.

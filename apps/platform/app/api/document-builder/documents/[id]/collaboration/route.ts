@@ -15,7 +15,10 @@ import type { ParticipantRole } from "../../../../../../lib/document-builder/reg
 import { addActivity, addNotification, isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
-import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
+import {
+  applyProjectedDocumentContentVersion,
+  createDocumentVersion,
+} from "../../../../../../lib/document-builder/document-versions";
 import { addDays, randomToken, sha256 } from "../../../../../../lib/document-builder/share-links/crypto";
 
 export const dynamic = "force-dynamic";
@@ -358,16 +361,33 @@ export async function POST(request: Request, context: Context): Promise<Response
       const ownerAccepted = access.role === "owner" ? true : Boolean(proposal.ownerAccepted);
       const collaboratorAccepted = access.role === "collaborator" ? true : Boolean(proposal.collaboratorAccepted);
       if (ownerAccepted && collaboratorAccepted) {
+        if (!access.workspaceId) return forbidden();
         const current = await db.prepare("SELECT final_content AS finalContent FROM document_current_content WHERE document_id = ?").bind(id).first<{ finalContent: string }>();
         if (!current?.finalContent.includes(proposal.oldText)) return jsonResponse({ error: "Документ уже изменён; предложение устарело.", code: "STALE_PROPOSAL" }, { status: 409 });
         const nextText = current.finalContent.replace(proposal.oldText, proposal.newText);
-        await db.batch([
-          db.prepare("UPDATE document_change_proposals SET owner_accepted = 1, collaborator_accepted = 1, status = 'applied', updated_at = ? WHERE id = ?").bind(now, proposalId),
-          db.prepare("UPDATE document_current_content SET final_content = ?, manually_edited = 1, updated_at = ? WHERE document_id = ?").bind(nextText, now, id),
-          db.prepare("UPDATE documents SET status = CASE WHEN status = 'Согласован' THEN 'Готов' ELSE status END, revision = revision + 1, updated_at = ? WHERE id = ?").bind(now, id),
-          db.prepare("INSERT INTO document_revisions (id, document_id, revision, actor_user_id, source, changes_json, created_at) VALUES (?, ?, ?, ?, 'suggestion', ?, ?)")
-            .bind(crypto.randomUUID(), id, document.revision + 1, user.id, JSON.stringify({ proposalId, anchor: proposal.id, oldText: proposal.oldText, newText: proposal.newText }), now),
-        ]);
+        await applyProjectedDocumentContentVersion({
+          db,
+          bucket: requireR2(),
+          documentId: id,
+          workspaceId: access.workspaceId,
+          ownerUserId: document.ownerUserId,
+          actorUserId: user.id,
+          revision: document.revision,
+          source: "suggestion",
+          sourceEntityId: proposal.id,
+          idempotencyKey: `builder-proposal-apply-${proposal.id}`,
+          finalContent: nextText,
+          nextStatus: document.status === "Согласован" ? "Готов" : document.status,
+          revisionSource: "suggestion",
+          changes: { proposalId, anchor: proposal.id, oldText: proposal.oldText, newText: proposal.newText },
+          mutationStatements: (appliedAt) => [
+            db.prepare(
+              `UPDATE document_change_proposals
+               SET owner_accepted=1,collaborator_accepted=1,status='applied',updated_at=?
+               WHERE id=? AND document_id=? AND status='pending'`,
+            ).bind(appliedAt, proposalId, id),
+          ],
+        });
         await addActivity(id, user.id, "change_agreed");
       } else {
         await db.prepare("UPDATE document_change_proposals SET owner_accepted = ?, collaborator_accepted = ?, updated_at = ? WHERE id = ?")

@@ -199,6 +199,28 @@ function createDatabase(): {
       updated_at text NOT NULL,
       reconciled_at text
     );
+    CREATE TABLE IF NOT EXISTS builder_document_version_object_writes (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text NOT NULL,
+      owner_user_id text NOT NULL,
+      document_id text NOT NULL,
+      target_version integer NOT NULL,
+      source_revision integer NOT NULL,
+      target_revision integer NOT NULL,
+      source text NOT NULL,
+      source_entity_id text NOT NULL,
+      r2_key text NOT NULL UNIQUE,
+      size_bytes integer NOT NULL,
+      sha256 text NOT NULL,
+      idempotency_key_sha256 text NOT NULL,
+      status text NOT NULL,
+      version_id text,
+      attempt_count integer NOT NULL DEFAULT 0,
+      last_error_code text,
+      created_at text NOT NULL,
+      updated_at text NOT NULL,
+      reconciled_at text
+    );
     CREATE TABLE IF NOT EXISTS cases (
       id text PRIMARY KEY NOT NULL,
       workspace_id text,
@@ -1073,6 +1095,7 @@ test("outbox cron hard-purges only due memory tombstones without logging content
     }).find((entry) => entry.event === "scheduled.outbox_completed");
     assert.equal(completion?.memoryRetentionEligible, 1);
     assert.equal(completion?.memoryRetentionPurged, 1);
+    assert.equal(completion?.builderVersionObjectsEligible, 0);
     assert.doesNotMatch(entries.join("\n"), /SECRET_MEMORY_MARKER/);
   } finally {
     console.log = originalLog;
@@ -1139,6 +1162,7 @@ test("outbox cron purges expired guest AI content and retains active sessions wi
     }).find((entry) => entry.event === "scheduled.outbox_completed");
     assert.equal(completion?.guestAiRetentionEligible, 1);
     assert.equal(completion?.guestAiRetentionPurged, 1);
+    assert.equal(completion?.builderVersionObjectsEligible, 0);
     assert.doesNotMatch(entries.join("\n"), /SECRET_GUEST_/);
   } finally {
     console.log = originalLog;

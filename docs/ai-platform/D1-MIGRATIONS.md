@@ -213,3 +213,21 @@ and Access-boundary probes passed. Authenticated synthetic
 create/list/restore/replay remains open. Rollback is application-first. Exact
 evidence is recorded in
 `apps/platform/docs/ai-platform/STAGING-0096-BUILDER-VERSIONS-EVIDENCE.md`.
+
+## 0097 — projected Builder version object writes
+
+Status: additive local candidate; protected staging remains through `0096` and
+production is unchanged.
+
+The migration adds metadata-only private-R2 write intents for accepted Builder
+proposals and corrected Analysis versions. A projected snapshot is verified
+before one revision-fenced D1 transaction mutates content and attaches its
+ready immutable checkpoint. Failed attachment rolls back the document change;
+the scheduled reconciler repairs or removes stale unreferenced objects after an
+identity check. No legal text or raw idempotency key is stored in the new D1
+table.
+
+Staging requires a fresh private backup with SHA round trip and isolated
+restore, ordered `0097` application, schema/FK/trigger postflight, exact Worker
+deploy and authenticated proposal plus Builder→Analysis→Builder correction
+proof.

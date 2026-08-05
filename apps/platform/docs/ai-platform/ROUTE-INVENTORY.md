@@ -598,15 +598,17 @@ Canonical localized case pages expose RU/UZ lifecycle controls. Completion with
 unfinished tasks/steps requires explicit confirmation. No user/workspace actor
 identifier is accepted from the browser. Migration `0093` is local only.
 
-### Document Builder immutable versions — local candidate
+### Document Builder immutable versions
 
 | Route | Method | Behavior | Boundary |
 |---|---|---|---|
 | `/api/document-builder/documents/:id/versions` | GET | Lists at most 100 metadata-only checkpoints | authenticated owner, active workspace resolved server-side, private/no-store |
 | `/api/document-builder/documents/:id/versions` | POST | Saves the exact current revision to private R2 | owner, CSRF, strict body, bounded hashed idempotency key, D1 revision guard, conditional R2 write and checksum verification |
 | `/api/document-builder/documents/:id/versions/:versionId/restore` | POST | Restores one verified checkpoint as a new revision | owner, CSRF, strict body, hashed idempotency, tenant/version guard, verified R2 body and atomic D1 evidence |
+| `/api/platform/document-analysis/:analysisId/versions/:versionId/apply-builder` | POST | Applies a corrected Analysis version back to its unchanged source Builder revision | session, active owner workspace, CSRF, strict revision body, hashed idempotency, ready Builder handoff, verified private R2 body and projected-version transaction |
 
 The receipt and configurable localized Builder routes reuse these APIs. There
 is no public snapshot/download endpoint and no content is returned in list
-responses. Migration `0096` is local only; all existing Builder URLs remain
-unchanged.
+responses. Migration `0096` is deployed to protected staging. The projected
+proposal/correction route and migration `0097` remain local; all existing
+Builder URLs remain unchanged.

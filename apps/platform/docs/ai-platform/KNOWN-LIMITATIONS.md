@@ -712,7 +712,8 @@ approval, internal signing and signed-PDF upload. Restore produces a normal
 immutable revision/evidence row.
 
 Automatic post-change checkpoints for accepted suggestions and Claude/analysis
-corrections remain deliberately unclaimed. Those operations alter document
-content and require a transactional projected-snapshot/write-intent contract;
-calling R2 only after a successful D1 content mutation would create a false
-success window and is not accepted as an implementation.
+corrections are implemented only in the local `0097` candidate. The contract
+writes the projected snapshot before a revision-fenced D1 attachment and has a
+scheduled orphan reconciler. It is not staging evidence until a fresh private
+backup, ordered `0097` migration, exact Worker deployment and authenticated
+proposal/correction lifecycle tests pass. Production remains unchanged.

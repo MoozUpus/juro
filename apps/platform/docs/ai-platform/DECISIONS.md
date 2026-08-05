@@ -3203,3 +3203,22 @@ Accepted suggestions and analysis corrections change the legal text. They are
 excluded from this rule until a projected-snapshot/write-intent transaction can
 prevent D1-success/R2-failure divergence. This distinction is intentional and
 must remain visible in known limitations.
+
+## D-156 — content-changing Builder versions use projected R2 write intents
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+Accepted collaboration proposals and corrected Analysis versions must not
+change Builder content before their immutable checkpoint is durable. The
+server therefore writes and verifies a projected full snapshot under a durable
+metadata-only intent, then uses one D1 batch to apply source evidence, claim the
+monotonic revision fence, mutate content, attach the ready version and close the
+intent. A D1 failure rolls back the legal mutation; a scheduled reconciler
+handles stale unreferenced R2 objects.
+
+Analysis correction return is explicit, owner scoped and valid only for the
+unchanged Builder revision captured by the original handoff. This prevents a
+reviewed old correction from overwriting newer manual work. Migration `0097`
+and its Worker/UI candidate are local only pending separately authorized
+staging backup, migration, deployment and authenticated lifecycle proof.

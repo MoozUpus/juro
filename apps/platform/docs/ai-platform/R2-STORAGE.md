@@ -242,3 +242,11 @@ The current candidate has not written this prefix in staging or production.
 Before staging use, apply `0096` only after a fresh private D1 backup and
 isolated restore, then verify create/list/restore/replay and R2 integrity with a
 synthetic authenticated document.
+
+The local `0097` projected-content candidate reuses the same private prefix
+with a durable write-intent identifier in the server-generated filename. It
+writes the complete proposed snapshot before the D1 revision transaction.
+Failed attachments retain a metadata-only pending intent; the existing
+five-minute scheduler verifies object identity and either repairs attachment
+evidence or deletes an unreferenced object after a grace period. No bucket list
+guessing and no public object URL are used.

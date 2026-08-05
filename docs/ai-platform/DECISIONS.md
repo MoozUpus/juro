@@ -475,6 +475,22 @@ transition before output-object writes. A signed object is removed if its
 atomic D1 registration batch fails. A pre-existing exact revision checkpoint
 is reused.
 
-Accepted suggestions and analysis corrections alter legal text and remain
-excluded until a projected-snapshot/write-intent transaction prevents
-D1-success/R2-failure divergence.
+Accepted suggestions and analysis corrections alter legal text and therefore
+use the separate projected transaction in D-131.
+
+## D-131 — content-changing Builder versions use projected R2 write intents
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+The server writes and verifies the projected complete snapshot before applying
+an accepted collaboration proposal or corrected Analysis version. One D1 batch
+then claims the unique document revision, applies the legal text, attaches the
+ready immutable version and closes its metadata-only write intent. A D1 failure
+leaves the Builder unchanged; the scheduled reconciler handles stale orphan
+objects without bucket-list guessing.
+
+Analysis correction return is explicit, active-owner scoped and valid only for
+the unchanged Builder revision captured by the original handoff. Migration
+`0097` and the matching route/UI remain local pending separately authorized
+staging backup, migration, deploy and authenticated lifecycle proof.

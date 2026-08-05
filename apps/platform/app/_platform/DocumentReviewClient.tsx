@@ -36,6 +36,11 @@ type AnalysisDocumentVersion = {
   id: string; analysisId: string; version: number; sourceKind: "extracted" | "corrected"; fileName: string;
   mimeType: string; sizeBytes: number; sha256: string; createdAt: string;
 };
+type BuilderAnalysisSource = {
+  documentId: string;
+  sourceRevision: number;
+  currentRevision: number;
+};
 
 export function DocumentReviewClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
   const searchParams = useSearchParams();
@@ -260,6 +265,7 @@ function AnalysisView({ analysis, cases, ru, onChanged }: { analysis: Analysis; 
 function RevisionPanel({ analysisId, exports, ru, onAnalysisChanged }: { analysisId: string; exports: AnalysisExport[]; ru: boolean; onAnalysisChanged: () => Promise<void> }) {
   const [revisions, setRevisions] = useState<SuggestedRevision[]>([]);
   const [versions, setVersions] = useState<AnalysisDocumentVersion[]>([]);
+  const [builderSource, setBuilderSource] = useState<BuilderAnalysisSource | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -269,16 +275,18 @@ function RevisionPanel({ analysisId, exports, ru, onAnalysisChanged }: { analysi
   const [notice, setNotice] = useState("");
   const [exportingKey, setExportingKey] = useState<string | null>(null);
   const [deletingExportId, setDeletingExportId] = useState<string | null>(null);
+  const [applyingBuilderVersionId, setApplyingBuilderVersionId] = useState<string | null>(null);
   const [attemptKeys, setAttemptKeys] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
     setError("");
     try {
       const response = await fetch(`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/revisions`, { cache: "no-store" });
-      const body = await response.json() as { revisions?: SuggestedRevision[]; versions?: AnalysisDocumentVersion[]; code?: string; error?: string };
+      const body = await response.json() as { revisions?: SuggestedRevision[]; versions?: AnalysisDocumentVersion[]; builderSource?: BuilderAnalysisSource | null; code?: string; error?: string };
       if (!response.ok) throw new Error(revisionError(body.code, body.error, ru));
       setRevisions(body.revisions ?? []);
       setVersions(body.versions ?? []);
+      setBuilderSource(body.builderSource ?? null);
       setSelectedIds((current) => current.filter((id) => (body.revisions ?? []).some((item) => item.id === id && item.status === "accepted")));
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -373,13 +381,45 @@ function RevisionPanel({ analysisId, exports, ru, onAnalysisChanged }: { analysi
     finally { setDeletingExportId(null); }
   }
 
+  async function applyVersionToBuilder(version: AnalysisDocumentVersion) {
+    if (!builderSource) return;
+    const keyName = `builder:${version.id}:${builderSource.sourceRevision}`;
+    const idempotencyKey = attemptKeys[keyName] ?? `builder-analysis-correction-${crypto.randomUUID()}`;
+    setAttemptKeys((current) => ({ ...current, [keyName]: idempotencyKey }));
+    setApplyingBuilderVersionId(version.id); setError(""); setNotice("");
+    try {
+      const response = await fetch(
+        `/api/platform/document-analysis/${encodeURIComponent(analysisId)}/versions/${encodeURIComponent(version.id)}/apply-builder`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", "idempotency-key": idempotencyKey, "x-juro-csrf": "1" },
+          body: JSON.stringify({ sourceRevision: builderSource.sourceRevision }),
+        },
+      );
+      const body = await response.json() as { revision?: number; code?: string; error?: string };
+      if (!response.ok || !body.revision) {
+        if (response.status !== 409) setAttemptKeys((current) => withoutKey(current, keyName));
+        throw new Error(body.error || (ru ? "Исправленная версия не применена в конструкторе." : "Tuzatilgan nusxa konstruktorda qo‘llanmadi."));
+      }
+      setBuilderSource((current) => current ? { ...current, currentRevision: body.revision as number } : null);
+      setNotice(ru
+        ? `Исправления сохранены в конструкторе как ревизия ${body.revision}.`
+        : `Tuzatishlar konstruktorda ${body.revision}-reviziya sifatida saqlandi.`);
+      await onAnalysisChanged().catch(() => undefined);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setApplyingBuilderVersionId(null);
+    }
+  }
+
   const accepted = revisions.filter((item) => item.status === "accepted");
   const available = revisions.filter((item) => item.status === "pending" || item.status === "accepted");
   const correctedVersions = versions.filter((item) => item.sourceKind === "corrected");
   return <section className="review-revisions" aria-labelledby={`revision-title-${analysisId}`}>
     <div className="review-revisions-heading">
       <div><h3 id={`revision-title-${analysisId}`}>{ru ? "Предлагаемые исправления" : "Taklif etilgan tuzatishlar"}</h3><p>{ru ? "Сравните исходный и новый текст. JURO ничего не применяет без вашего действия." : "Asl va yangi matnni solishtiring. JURO sizning amalingizsiz hech narsani qo‘llamaydi."}</p></div>
-      {correctedVersions.length > 0 && <div className="review-version-downloads" aria-label={ru ? "Исправленные версии" : "Tuzatilgan nusxalar"}>{correctedVersions.map((version) => <div className="review-version-export" key={version.id}><strong>{ru ? `Версия ${version.version}` : `${version.version}-nusxa`}</strong><a href={`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/versions/${encodeURIComponent(version.id)}/file`}><Download />MD</a>{(["corrected_clean", "corrected_redline"] as const).flatMap((variant) => (["docx", "pdf"] as const).map((format) => {
+      {correctedVersions.length > 0 && <div className="review-version-downloads" aria-label={ru ? "Исправленные версии" : "Tuzatilgan nusxalar"}>{correctedVersions.map((version) => <div className="review-version-export" key={version.id}><strong>{ru ? `Версия ${version.version}` : `${version.version}-nusxa`}</strong><a href={`/api/platform/document-analysis/${encodeURIComponent(analysisId)}/versions/${encodeURIComponent(version.id)}/file`}><Download />MD</a>{builderSource && <button type="button" disabled={applyingBuilderVersionId !== null || builderSource.currentRevision !== builderSource.sourceRevision} aria-busy={applyingBuilderVersionId === version.id} title={builderSource.currentRevision !== builderSource.sourceRevision ? (ru ? "Документ изменился после анализа — запустите новый анализ" : "Hujjat tahlildan keyin o‘zgardi — yangi tahlilni boshlang") : undefined} onClick={() => void applyVersionToBuilder(version)}>{applyingBuilderVersionId === version.id ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "В конструктор" : "Konstruktorga"}</button>}{(["corrected_clean", "corrected_redline"] as const).flatMap((variant) => (["docx", "pdf"] as const).map((format) => {
         const record = [...exports].filter((item) => item.sourceVersionId === version.id && item.variant === variant && item.format === format).sort((left, right) => right.createdAt.localeCompare(left.createdAt))[0];
         const keyName = `${version.id}:${variant}:${format}`;
         const pending = ["queued", "processing", "retrying"].includes(record?.status ?? "");

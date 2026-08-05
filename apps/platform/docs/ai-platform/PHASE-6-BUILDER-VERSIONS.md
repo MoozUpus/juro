@@ -2,8 +2,9 @@
 
 Status: the explicit owner checkpoint/restore foundation from commit `8433b94`
 and migration `0096` is deployed to protected staging. Production is unchanged.
-The automatic lifecycle integrations described below are the next local
-candidate and are not yet deployed.
+The automatic unchanged-content lifecycle integrations and projected-content
+write-intent contract described below are local candidates and are not yet
+deployed.
 
 ## Contract
 
@@ -27,6 +28,19 @@ checkpoint before any DOCX/PDF/ZIP object write; signed-PDF upload runs it befor
 the PDF write and removes a just-uploaded object if the atomic D1 batch fails.
 Existing generated files and D1 rows remain intact.
 
+Migration `0097` extends this to content-changing operations. A proposed
+snapshot is written and checksum-verified in private R2 behind a durable D1
+write intent. One D1 batch then applies the proposal or Claude correction,
+claims the unique `(document_id, revision)` fence, advances the document,
+attaches a ready immutable version and marks the intent attached. A failed
+batch leaves the document unchanged. The scheduled reconciler deletes stale,
+unreferenced objects or repairs an already-attached intent.
+
+Accepted collaboration proposals use this transaction directly. A corrected
+Analysis version linked through the original Builder handoff can be explicitly
+returned to the Builder only while the source revision is still current. The
+RU/UZ analysis UI disables the action after any unrelated Builder change.
+
 ## Security and privacy
 
 - Existing session, active-workspace and owner checks are required.
@@ -42,9 +56,11 @@ Existing generated files and D1 rows remain intact.
 ## Verification and rollout
 
 Focused tests cover success, replay, R2 retry, cross-tenant denial, restore,
-immutability, lifecycle checkpoint ordering, typed errors, trigger enforcement
-and migration integrity. The files are registered in the mandatory platform
-test runner. Private pre/post backups, SHA round trips, isolated restores,
+immutability, lifecycle checkpoint ordering, projected proposal application,
+Builder→Analysis→Builder correction return, attach failure, orphan cleanup,
+typed errors, trigger enforcement and migration integrity. The files are
+registered in the mandatory platform test runner. Private pre/post backups,
+SHA round trips, isolated restores,
 ordered `0096` application, schema/FK checks, exact Worker deployment, CI and
 anonymous Access-boundary probes passed. See
 `STAGING-0096-BUILDER-VERSIONS-EVIDENCE.md`.
@@ -56,7 +72,6 @@ Rollback is application-first: return to the previous Worker. Migration `0096`
 is expand-only, so unused metadata tables may remain until a later reviewed
 contract migration. Production requires its own explicit approval.
 
-Accepted suggestions and analysis corrections change content and are not yet
-automatic checkpoints. They require a later transactional projected-snapshot
-contract; the current implementation does not pretend a post-mutation R2 write
-is atomic.
+Migration `0097`, its route/UI integration and scheduler reconciliation remain
+local until a fresh staging backup, ordered migration, exact deploy and
+authenticated synthetic lifecycle proof are explicitly authorized.
