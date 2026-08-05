@@ -1081,3 +1081,16 @@ migration application or deployment is claimed; production is unchanged.
   restore is retry-safe; lifecycle errors use a visible `role=alert`.
 - Targeted tests pass 4/4; the complete platform suite, type-check and lint pass.
   Staging/production are unchanged and browser/axe evidence is still open.
+
+## Phase 6 — reviewed AI answer to Document Builder (local candidate)
+
+- AI chat requests a server-derived preview from a persisted, tenant-owned
+  assistant message; the browser cannot choose the template.
+- RU/UZ users can edit or remove proposed profile, workspace and AI-answer
+  values before explicitly creating a real configurable Builder draft.
+- Confirmation is CSRF-protected, strict, bounded, tenant-checked and
+  idempotent. Only server-offered fields are accepted.
+- Migration `0094` stores content-free provenance with SHA-256 request/selection
+  evidence and D1 ownership guards. It permits cascade deletion with user data.
+- Focused integration/migration tests pass 7/7. Staging and production are
+  unchanged.

@@ -54,6 +54,8 @@ type AiRequestPayload = {
 };
 type AiFeedbackType = "helpful" | "not_helpful" | "wrong_norm" | "broken_link" | "outdated" | "incomplete" | "language" | "unsafe" | "ignored_facts";
 type AiFeedback = { feedbackType: AiFeedbackType; comment: string | null; updatedAt: string };
+type DocumentPrefillCandidate = { fieldId: string; label: string; value: string; source: "profile" | "workspace" | "ai_answer"; sensitive: boolean };
+type DocumentPrefillPreview = { templateCode: string; categorySlug: string; title: string; reason: string; caseId: string | null; candidates: DocumentPrefillCandidate[] };
 type AiRunRecoveryStatus =
   | { kind: "processing"; runId: string }
   | { kind: "completed"; runId: string; conversationId: string; responseMessageId: string; branchId: string | null }
@@ -90,6 +92,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [savingPlan, setSavingPlan] = useState(false);
   const [targetCaseId, setTargetCaseId] = useState("");
   const [openingSuggestedDocument, setOpeningSuggestedDocument] = useState(false);
+  const [documentPrefill, setDocumentPrefill] = useState<DocumentPrefillPreview | null>(null);
+  const [documentPrefillMessageId, setDocumentPrefillMessageId] = useState("");
+  const [creatingSuggestedDocument, setCreatingSuggestedDocument] = useState(false);
+  const documentHandoffKeyRef = useRef("");
   const [feedback, setFeedback] = useState<AiFeedback[]>([]);
   const [feedbackType, setFeedbackType] = useState<AiFeedbackType>("not_helpful");
   const [feedbackComment, setFeedbackComment] = useState("");
@@ -354,27 +360,55 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   async function openSuggestedDocument() {
     if (!answer?.messageId || answer.result.responseKind !== "answer" || !answer.result.suggestedDocument || openingSuggestedDocument) return;
-    const confirmed = window.confirm(ru
-      ? "Открыть опубликованный шаблон JURO для проверки и заполнения? JURO ещё не создаст документ и не передаст данные в URL."
-      : "Tekshirish va to‘ldirish uchun JUROdagi e’lon qilingan shablon ochilsinmi? JURO hozircha hujjat yaratmaydi va ma’lumotlarni URLga uzatmaydi.");
-    if (!confirmed) return;
     setOpeningSuggestedDocument(true);
     setError("");
     try {
       const response = await fetch("/api/platform/ai/suggested-document", {
         method: "POST",
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-        body: JSON.stringify({ assistantMessageId: answer.messageId, locale }),
+        body: JSON.stringify({ action: "preview", assistantMessageId: answer.messageId, locale }),
       });
-      const body = await response.json() as { templateCode?: string; categorySlug?: string; error?: string };
-      if (!response.ok || !body.templateCode || !body.categorySlug) {
+      const body = await response.json() as Partial<DocumentPrefillPreview> & { error?: string };
+      if (!response.ok || !body.templateCode || !body.categorySlug || !body.title || !Array.isArray(body.candidates)) {
         throw new Error(body.error || (ru ? "Шаблон не удалось проверить." : "Shablonni tekshirib bo‘lmadi."));
       }
-      router.push(`${base}/document-builder/${encodeURIComponent(body.categorySlug)}/${encodeURIComponent(body.templateCode)}`);
+      documentHandoffKeyRef.current = `ai-document-${crypto.randomUUID()}`;
+      setDocumentPrefill(body as DocumentPrefillPreview);
+      setDocumentPrefillMessageId(answer.messageId);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
       setOpeningSuggestedDocument(false);
+    }
+  }
+
+  async function confirmSuggestedDocument() {
+    if (!documentPrefillMessageId || !documentPrefill || creatingSuggestedDocument) return;
+    setCreatingSuggestedDocument(true);
+    setError("");
+    if (!documentHandoffKeyRef.current) documentHandoffKeyRef.current = `ai-document-${crypto.randomUUID()}`;
+    try {
+      const response = await fetch("/api/platform/ai/suggested-document", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "idempotency-key": documentHandoffKeyRef.current,
+          "x-juro-csrf": "1",
+        },
+        body: JSON.stringify({
+          action: "confirm",
+          assistantMessageId: documentPrefillMessageId,
+          locale,
+          fields: documentPrefill.candidates.map(({ fieldId, value }) => ({ fieldId, value })),
+        }),
+      });
+      const body = await response.json() as { documentId?: string; error?: string };
+      if (!response.ok || !body.documentId) throw new Error(body.error || (ru ? "Черновик не создан." : "Qoralama yaratilmadi."));
+      router.push(`${base}/documents/${encodeURIComponent(body.documentId)}/edit`);
+    } catch (value) {
+      setError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setCreatingSuggestedDocument(false);
     }
   }
 
@@ -446,6 +480,17 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
               {answer.messageId && answer.result.responseKind === "answer" && <AssistantSpeechControls locale={locale} assistantMessageId={answer.messageId} disabled={sending} onPhaseChange={setVoiceSpeechPhase} />}
             </div>
+            {documentPrefill && documentPrefillMessageId === answer.messageId && <section className="ai-document-prefill" aria-labelledby="ai-document-prefill-title" aria-busy={creatingSuggestedDocument}>
+              <header><div><small>{ru ? "Проверка перед созданием" : "Yaratishdan oldin tekshirish"}</small><h2 id="ai-document-prefill-title">{documentPrefill.title}</h2><p>{documentPrefill.reason}</p></div><button type="button" aria-label={ru ? "Закрыть проверку заполнения" : "To‘ldirish tekshiruvini yopish"} disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); documentHandoffKeyRef.current = ""; }}><X /></button></header>
+              <p className="ai-document-prefill-note">{ru
+                ? "JURO предлагает только данные из вашего профиля, workspace и сохранённого AI-ответа. Проверьте роль каждой стороны: можно исправить или удалить любое поле. Данные не помещаются в URL."
+                : "JURO faqat profilingiz, workspace va saqlangan AI javobidagi ma’lumotlarni taklif qiladi. Har bir taraf rolini tekshiring: istalgan maydonni tuzatish yoki olib tashlash mumkin. Ma’lumotlar URLga joylanmaydi."}</p>
+              {documentPrefill.candidates.length ? <div className="ai-document-prefill-fields">{documentPrefill.candidates.map((candidate) => <div className="ai-document-prefill-field" key={candidate.fieldId}>
+                <label><span>{candidate.label}<em>{candidate.source === "profile" ? (ru ? "Профиль" : "Profil") : candidate.source === "workspace" ? "Workspace" : (ru ? "AI-ответ" : "AI javobi")}{candidate.sensitive ? ` · ${ru ? "проверьте конфиденциальные данные" : "maxfiy ma’lumotlarni tekshiring"}` : ""}</em></span>{candidate.value.length > 160 ? <textarea rows={4} value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} /> : <input value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} />}</label>
+                <button type="button" disabled={creatingSuggestedDocument} onClick={() => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.filter((item) => item.fieldId !== candidate.fieldId) } : current)}>{ru ? "Удалить" : "Olib tashlash"}</button>
+              </div>)}</div> : <p role="status">{ru ? "Безопасных данных для автозаполнения не найдено. Можно создать пустой черновик и заполнить его вручную." : "Xavfsiz avtomatik to‘ldirish ma’lumotlari topilmadi. Bo‘sh qoralama yaratib, uni qo‘lda to‘ldirish mumkin."}</p>}
+              <footer><button type="button" className="secondary" disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); documentHandoffKeyRef.current = ""; }}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={creatingSuggestedDocument} aria-busy={creatingSuggestedDocument} onClick={() => void confirmSuggestedDocument()}>{creatingSuggestedDocument ? <LoaderCircle className="spin" /> : <FilePlus2 />}{creatingSuggestedDocument ? (ru ? "Создаём черновик…" : "Qoralama yaratilmoqda…") : (ru ? "Подтвердить и создать черновик" : "Tasdiqlash va qoralama yaratish")}</button><span className="sr-only" role="status" aria-live="polite">{creatingSuggestedDocument ? (ru ? "JURO создаёт черновик документа" : "JURO hujjat qoralamasini yaratmoqda") : ""}</span></footer>
+            </section>}
             {answer.messageId && <section className="ai-feedback" aria-labelledby="ai-feedback-heading">
               <div><h2 id="ai-feedback-heading">{ru ? "Оцените этот ответ" : "Bu javobni baholang"}</h2><p>{ru ? "Отзыв привязан к этому сохранённому ответу и помогает проверить качество источников." : "Fikr-mulohaza shu saqlangan javobga bog‘lanadi va manbalar sifatini tekshirishga yordam beradi."}</p></div>
               <div className="ai-feedback-actions">

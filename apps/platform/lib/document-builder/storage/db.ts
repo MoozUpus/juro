@@ -42,8 +42,8 @@ export async function ensureTemplateSeed(): Promise<void> {
   }
 }
 
-export async function ensureConfiguredTemplateSeed(definition: DocumentDefinition): Promise<void> {
-  const db = requireD1();
+export async function ensureConfiguredTemplateSeed(definition: DocumentDefinition, database?: D1Database): Promise<void> {
+  const db = database ?? requireD1();
   const now = isoNow();
   await db.batch([
     db.prepare(

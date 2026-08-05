@@ -429,3 +429,19 @@ transition is required to resume work. Migration `0093` records authoritative
 unfinished task/step counts and immutable transition evidence. It remains local
 and expand-only; the direct-projection contract fence is deferred until the new
 Worker is active in staging.
+
+## D-128 — AI document prefill is explicit, server-derived and deletion-coupled
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+An AI suggestion never creates a document directly and the browser cannot pick
+a template or inject an arbitrary questionnaire field. The server derives both
+from the authenticated tenant-owned assistant message, the user reviews values,
+and one explicit confirmation creates the real Builder draft. Idempotency keys
+are transient and stored only as SHA-256.
+
+Provenance intentionally excludes field values and cascades with the deletable
+message/document/account graph. This preserves privacy deletion while retaining
+enough scoped evidence for replay and conflict detection. Migration `0094` is
+local only; staging requires a new backup/isolated restore and explicit rollout.

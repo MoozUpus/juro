@@ -41,6 +41,11 @@ No document in this directory authorizes or implies a production schema, traffic
 
 - `PHASE-2-IDENTITY-ACCESS.md` — local identity/access security implementation evidence and remaining remote gates.
 
+## Case and document workflow
+
+- `PHASE-6-AI-DOCUMENT-BUILDER.md` — reviewed, tenant-safe AI answer to
+  configurable Document Builder draft handoff and migration `0094` staging gate.
+
 ## Legal knowledge foundation
 
 - `LEGAL-SOURCES.md` — local fail-closed source/version/review lifecycle,

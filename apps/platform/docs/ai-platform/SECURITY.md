@@ -192,3 +192,19 @@ contains no document text, OCR, filenames, findings text, prompt, response,
 workspace or email. The digest is tamper evidence, not a public-key signature
 or legal-quality assertion. Migration `0092` and authenticated staging probes
 remain pending.
+
+## AI to Document Builder boundary — local candidate
+
+The preview source is an already persisted assistant message selected by opaque
+UUID and queried with both authenticated user and active workspace. The server
+resolves the published template and field allowlist; neither can be selected by
+the browser. Confirmation repeats the preview, rejects unoffered or oversized
+values and creates document content plus content-free provenance in one D1
+batch. Raw idempotency keys, reviewed field values, profile data and answer text
+are excluded from provenance.
+
+Migration `0094` adds an independent D1 insert guard and immutable-update
+trigger. Evidence remains cascade-deletable to preserve account/document purge.
+Focused tests prove cross-workspace denial, conflicting replay rejection,
+plaintext exclusion and deletion behavior. Migration, authenticated staging
+HTTP proof and browser accessibility evidence remain pending.

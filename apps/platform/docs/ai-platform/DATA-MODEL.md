@@ -140,3 +140,17 @@ An accepted event atomically projects the current case. Restore returns an
 archived case to `completed`, not `open`; reopening is a separate explicit
 action. A contract migration that forbids old direct projection writes is
 intentionally deferred until the matching Worker has been proven in staging.
+
+## AI document prefill handoff — local migration 0094 candidate
+
+`ai_document_prefill_handoffs` binds one persisted assistant message to one
+tenant-owned configurable document draft. Its unique request key is a SHA-256
+digest, not the caller's plaintext idempotency key. Selected field identifiers
+and the canonical selection digest are retained; profile, workspace and AI
+answer values remain only in `document_answers`.
+
+Insert guards revalidate active workspace membership, assistant-message
+ownership and the new draft's workspace/owner/template/status tuple. Rows cannot
+be updated. Foreign keys deliberately cascade on message, document, user and
+workspace deletion so evidence follows the existing content-retention contract.
+This is an expand-only local migration; staging remains through `0092`.

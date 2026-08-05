@@ -177,3 +177,22 @@ active membership, revision and unresolved task/step counts. It is intentionally
 expand-compatible with the old Worker. A later, separately backed-up contract
 migration will reject every legacy direct projection update after the matching
 Worker is proven in staging.
+
+## 0094 — AI document prefill handoff
+
+Status: additive local candidate; protected staging remains through `0092` and
+production is unchanged.
+
+The migration adds one content-free provenance row for explicit AI-answer to
+Document Builder confirmation. It stores opaque tenant/message/document IDs,
+selected field identifiers and SHA-256 digests; reviewed values and raw
+idempotency keys are excluded. D1 independently requires active membership,
+the tenant-owned persisted assistant result and the matching tenant-owned draft.
+Rows are update-immutable and intentionally cascade-deletable with user content.
+
+Before staging application, create a fresh full export in private
+`juro-staging-backups`, verify full-object SHA-256 after upload, restore it to an
+isolated D1 database and pass `quick_check`/`foreign_key_check`. Apply pending
+migrations in order, inspect the table/indexes/triggers, deploy the exact tested
+commit and perform authenticated RU/UZ preview/confirm/replay/delete proof.
+Rollback is application-first; the expand-only table may remain unused.

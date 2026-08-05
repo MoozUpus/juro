@@ -1705,6 +1705,26 @@ export const conversationMessages = sqliteTable("conversation_messages", {
   createdAt: text("created_at").notNull(),
 }, (table) => [index("conversation_messages_conversation_idx").on(table.conversationId, table.createdAt)]);
 
+export const aiDocumentPrefillHandoffs = sqliteTable("ai_document_prefill_handoffs", {
+  id: text("id").primaryKey(),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  assistantMessageId: text("assistant_message_id").notNull().references(() => conversationMessages.id, { onDelete: "cascade" }),
+  templateCode: text("template_code").notNull(),
+  documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+  locale: text("locale").notNull(),
+  selectedFieldIdsJson: text("selected_field_ids_json").notNull(),
+  selectionSha256: text("selection_sha256").notNull(),
+  idempotencyKeySha256: text("idempotency_key_sha256").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  check("ai_document_prefill_handoffs_locale_check", sql`${table.locale} IN ('ru','uz')`),
+  check("ai_document_prefill_handoffs_hash_check", sql`length(${table.selectionSha256}) = 64 AND length(${table.idempotencyKeySha256}) = 64`),
+  uniqueIndex("ai_document_prefill_handoffs_request_uidx").on(table.workspaceId, table.userId, table.idempotencyKeySha256),
+  uniqueIndex("ai_document_prefill_handoffs_document_uidx").on(table.documentId),
+  index("ai_document_prefill_handoffs_source_idx").on(table.assistantMessageId, table.createdAt),
+]);
+
 export const messageBranches = sqliteTable("message_branches", {
   id: text("id").primaryKey(),
   conversationId: text("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),

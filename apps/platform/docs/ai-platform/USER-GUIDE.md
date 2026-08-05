@@ -26,3 +26,12 @@ checkbox, including after an edit. If encrypted memory is unavailable, the
 screen says so explicitly and AI chat continues without memory. A privacy
 export includes decrypted active entries visible from the current workspace or
 fails rather than silently omitting them.
+
+## Create a document from an AI answer (local candidate)
+
+When an AI answer recommends an available JURO template, select **Create a
+document**. Review every proposed value, edit incorrect details and remove data
+that should not enter the draft. JURO creates the Builder draft only after
+confirmation, then opens the real document editor. The recommendation is not a
+legal approval of the resulting document; review the generated draft and its
+sources before use. This flow is not yet deployed to staging or production.
