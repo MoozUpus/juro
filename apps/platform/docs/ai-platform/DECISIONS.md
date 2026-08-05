@@ -3257,3 +3257,19 @@ the explicit POST response. Audit evidence stores roles and opaque IDs, never
 the phone. The browser hands the `tel:` URI to the device; JURO does not claim
 to place or record the call. This local candidate adds no schema migration and
 has not been deployed.
+
+## D-159 — provider transport probes remain dual-provider and staging-only
+
+Status: accepted and verified in protected staging
+Date: 2026-08-06
+
+The fixed synthetic provider probe runs both configured server-side transports
+only when `APP_ENV=staging` and the explicit staging probe flag is true. It
+persists no request or response bodies and the OpenAI lifecycle removes its
+synthetic tenant data after checking idempotent persistence. The flag is
+temporarily enabled for one existing cron cycle and then restored to `false` by
+a separate 100%-traffic deployment.
+
+The evidence proves connectivity and the bounded structured-output contract;
+it never substitutes for a citation, legal-quality, document-analysis,
+authenticated-user, email-delivery, or production gate.

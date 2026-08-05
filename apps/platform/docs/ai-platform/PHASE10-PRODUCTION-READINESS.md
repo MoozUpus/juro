@@ -1,6 +1,6 @@
 # Phase 10 production readiness
 
-Updated: 2026-07-31
+Updated: 2026-08-06
 Status: not production-ready; no production approval requested.
 
 ## Preserved production state
@@ -14,13 +14,18 @@ Status: not production-ready; no production approval requested.
 
 ## Current production blockers
 
-1. Staging now has `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` secret names, but live AI chat/fallback evidence is not yet verified through an authenticated synthetic flow. Document analysis additionally remains blocked fail-closed by the missing malware scanner.
+1. Fixed, content-free staging probes now prove the configured OpenAI and
+   Anthropic transports. An authenticated user chat/fallback journey with
+   citations and a scanner-approved document-analysis flow remain unverified;
+   document analysis therefore remains fail-closed.
 2. No real malware scanner can promote quarantined uploads to safe; analysis remains fail-closed.
 3. Legal-source coverage, Advice ingestion, historical revisions, hybrid retrieval, citation revalidation, and the 250+50 legal evaluation gate are incomplete.
 4. The 100-package/30-comparison document evaluation and required quality thresholds are incomplete.
 5. Complete chat streaming/history/memory/voice, OCR, export/redline, cases/deadlines, lawyer marketplace/access, admin/support/status, billing, and data-lifecycle flows are incomplete.
 6. Authenticated browser, accessibility, responsive, performance, load, recovery, and security matrices have not passed for the exact deployment.
-7. The owner-approved rigged Jurobek asset is absent; 3D, verified rig/skin/clips, shirt/facial corrections, lip sync, and cleanup measurements do not exist.
+7. AI-avatar/3D Jurobek work is explicitly excluded by the current owner
+   direction. Text and voice routes must remain usable without it; no avatar
+   capability is claimed.
 8. Phase 9 closed beta and owner feedback have not occurred.
 9. Final legal approval of production policy text is not recorded.
 

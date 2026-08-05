@@ -1,5 +1,15 @@
 # JURO known limitations checkpoint
 
+> Provider transport checkpoint — 2026-08-06: a controlled staging-only
+> five-minute window on Worker `a90fb469-bbfa-41b3-a594-e5c7b967b622` ran no
+> user content. Existing OpenAI v26 RU/UZ lifecycle evidence remained
+> successful, and Anthropic v26 succeeded on `claude-sonnet-4-6` with 2,353
+> input tokens, 403 output tokens and 7,112 ms latency. The final Worker
+> `1bf4d679-6872-4a78-b99b-1a55f3c38f49` restored
+> `STAGING_SYNTHETIC_PROBES_ENABLED=false`. This is a provider transport gate,
+> not legal-quality, document-analysis, authenticated browser, or production
+> evidence.
+
 > Corpus alert checkpoint — 2026-08-05: migration `0089`, bounded failure/stale
 > evaluation and idempotent Resend delivery are deployed to protected staging
 > from exact commit `1aadfc6`. No controlled remote alert row, Queue/DLQ log or

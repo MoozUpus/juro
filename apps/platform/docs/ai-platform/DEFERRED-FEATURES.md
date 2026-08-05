@@ -1,11 +1,11 @@
 # JURO deferred and gated features
 
-> Current checkpoint — 2026-08-04: closed one-time OpenAI and Anthropic staging
-> probes and later completed-run metadata prove both provider transports; the
-> probe flag is correctly disabled again. Authenticated RU/UZ browser/citation
-> and legal-quality gates remain open. No malware scanner is attached, no
-> approved rigged Jurobek source is present, and no authenticated browser runtime
-> is available. None of these omissions is represented as completed capability.
+> Current checkpoint — 2026-08-06: protected staging provider evidence now
+> proves the current OpenAI and Anthropic transports with fixed, content-free
+> input. The temporary probe flag was restored to `false` at 100% traffic.
+> This does not substitute for authenticated RU/UZ journeys, citations, legal
+> quality, a scanner-approved analysis, or human review. No avatar work is in
+> the currently authorised scope.
 
 Updated: 2026-07-30
 
@@ -13,8 +13,13 @@ This register distinguishes real implementation from planned scope. A database t
 
 ## Provider and legal-intelligence gates
 
-- OpenAI legal chat, structured legal output, streaming/branching/memory, model routing and evaluated RU/UZ legal quality are not staging-ready. Local migrations `0081`–`0082` cover actual-token usage, immutable price/policy versions, daily aggregates, server-checked provider circuits and identifiers-only operational-alert delivery without content, but they are not deployed. Official price/policy entry, a real staging alert/circuit rehearsal and provider-billing reconciliation remain gated.
-- Anthropic document analysis, OCR, comparison quality gates, redline/correction, and provider fallback are not staging-ready.
+- OpenAI staging transport now has a completed synthetic RU/UZ lifecycle with
+  structured output, idempotent persistence and cleanup. It is not a legal
+  quality score or an authenticated user journey. Official price entry, a real
+  alert/circuit rehearsal and provider-billing reconciliation remain gated.
+- Anthropic staging transport has a completed content-free structured-output
+  probe on the configured model. Document analysis, OCR, comparison quality,
+  redline/correction and scanner-approved analysis remain gated.
 - Exact Lex/Advice acquisition, review-only normalization, citation-boundary
   verification and a daily revisit scheduler exist. A bounded recent Lex RU/UZ
   RSS discovery path is now a local candidate, but it is not deployed. Broad

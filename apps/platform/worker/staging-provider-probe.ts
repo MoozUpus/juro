@@ -27,7 +27,10 @@ import { runStagingAiChatLifecycleProbe } from "./staging-ai-chat-lifecycle-prob
 // clarification usage, idempotent replay, audit evidence, and full cleanup.
 const PROBE_KEY = "staging-openai-legal-chat-v26";
 type Provider = "openai" | "anthropic";
-const providers = ["openai"] as const satisfies readonly Provider[];
+// Staging probes exercise both configured server-side providers with a fixed,
+// content-free clarification request. This is deliberately opt-in and
+// staging-only; production cannot enable this code path.
+const providers = ["openai", "anthropic"] as const satisfies readonly Provider[];
 
 // Retained as the stable minimal probe contract used by unit tests and older
 // immutable probe records. v24 itself exercises the full legal-chat schema.

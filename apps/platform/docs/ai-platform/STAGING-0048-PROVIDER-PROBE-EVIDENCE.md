@@ -69,3 +69,23 @@ text was persisted. The safe post-probe Worker version
 `91edb0b9-3758-4959-97d6-27fc52d643ae` restored
 `STAGING_SYNTHETIC_PROBES_ENABLED=false` at 100% traffic. Production was not
 queried, deployed, or changed.
+
+## Dual-provider v26 verification — 2026-08-05 UTC
+
+The staging-only provider list was temporarily extended to include both
+configured transports. Worker `a90fb469-bbfa-41b3-a594-e5c7b967b622` carried
+`STAGING_SYNTHETIC_PROBES_ENABLED=true` for one existing five-minute cron
+cycle. The inputs were fixed synthetic clarification requests and no HTTP
+endpoint, user account, document, prompt body, answer body, or secret was
+recorded.
+
+| Provider | Result | Persisted technical metadata |
+|---|---|---|
+| OpenAI | Pass (existing v26 lifecycle) | `gpt-5.6-sol`; RU/UZ lifecycle; 2,038 input / 295 output tokens; 6,493 ms. |
+| Anthropic | Pass | `claude-sonnet-4-6`; 2,353 input / 403 output tokens; 7,112 ms; completed at `2026-08-05T19:25:43.167Z`. |
+
+The final safety deploy restored `STAGING_SYNTHETIC_PROBES_ENABLED=false` as
+Worker `1bf4d679-6872-4a78-b99b-1a55f3c38f49` at 100% traffic. The verification
+is transport evidence only: it does not establish legal correctness, citation
+quality, document analysis, authentication, mailbox delivery, or production
+readiness.
