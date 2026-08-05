@@ -4,7 +4,7 @@ For suspected data exposure, provider outage, queue failure, cost spike, upload 
 
 Current fail-closed controls: unavailable malware scanning leaves files quarantined; unavailable verified legal-source freshness must not be shown as current; staff routes require fresh MFA. See `ROLLBACK.md` and `SECURITY.md`.
 
-## Legal corpus alert response (after migration 0089 is activated)
+## Legal corpus alert response
 
 1. Confirm the environment, source kind and opaque alert/run ID in the email;
    never paste legal text, source snapshots or secrets into incident notes.

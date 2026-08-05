@@ -1,5 +1,28 @@
 # D1 migration checkpoint
 
+## 0089–0090 — protected staging checkpoint
+
+Status: applied and independently restore-verified in protected staging on
+2026-08-05; production is unchanged.
+
+The exact commit `1aadfc6`, private R2 backup hashes, ordered ledger,
+post-migration integrity, Worker version, CI and Access-boundary evidence are in
+`STAGING-0089-0090-EVIDENCE.md`. Protected staging is through `0090` with 91
+ledger rows. Statements below that call `0090` or earlier migrations local are
+historical preflight notes superseded by this checkpoint.
+
+## 0091 — verified corpus freshness
+
+Status: additive local candidate; protected staging is through `0090`;
+production is unchanged.
+
+`0091_verified_corpus_freshness.sql` makes legal freshness fail closed. A full
+corpus run may be `success` only when every discovered item was fetched and
+matches an activated, staff-published verified version. New or changed
+pending-review material closes the run as `partial`. Terminal run evidence is
+immutable; legacy rows are preserved for audit. A new private backup,
+restore-check, explicit migration authorization and exact deploy are required.
+
 ## 0079–0088 — protected staging checkpoint
 
 Status: applied and independently restore-verified in protected staging on 2026-08-05; production is unchanged.
@@ -8,13 +31,15 @@ The exact Git commit, private R2 backup hashes, ordered ledger, post-migration r
 
 ## 0090 — immutable legal-version applicability
 
-Status: additive local candidate; protected staging is through `0088`; production is unchanged.
+Status: applied in protected staging under `STAGING-0089-0090-EVIDENCE.md`; production is unchanged.
 
 `0090_legal_source_applicability.sql` adds reviewer-bound, append-only effective/expiry evidence for each newly approved legal-source version. D1 requires an assigned in-review source/version, canonical evidence fields, a matching reviewer/session/MFA boundary and the applicability row before the review can transition to approved. Updates and deletes fail closed. Existing terminal approvals remain readable as legacy evidence; they are not retroactively assigned invented dates.
 
 Publication projects the reviewed interval onto the verified version. A replacement archives the previous version at the earlier of its reviewed expiry or the successor effective date. Historical retrieval revalidates the predecessor publication, immutable applicability record, replacement lifecycle evidence and successor applicability evidence before it accepts the derived boundary.
 
-Before staging application: create and round-trip-verify a fresh private backup, restore it in isolation, apply only the exact authorized pending ledger, deploy the matching commit and run authenticated reviewer approval/publication/current-vs-historical retrieval/tamper-denial checks in RU and UZ.
+Backup/restore, migration and exact Worker deployment passed. Authenticated
+reviewer approval/publication/current-vs-historical retrieval/tamper-denial
+checks in RU and UZ remain a distinct gate.
 
 ## 0086 — protected platform audit access
 

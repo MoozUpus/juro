@@ -481,6 +481,11 @@ async function retrieveCorpusFreshness(
     WHERE status='success' AND finished_at IS NOT NULL
       AND source_kind IN ('lex','advice')
       AND run_type IN ('initial_corpus','scheduled_corpus','manual_corpus')
+      AND discovered_count>0
+      AND fetched_count=discovered_count
+      AND verified_count=discovered_count
+      AND changed_count=0
+      AND error_count=0
     ORDER BY finished_at DESC
   `).all<CorpusSyncRow>();
   return legalDatabaseFreshnessFromCorpusRuns(runs.results, now);

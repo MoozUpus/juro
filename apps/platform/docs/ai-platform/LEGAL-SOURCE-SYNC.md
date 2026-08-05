@@ -1,13 +1,20 @@
 # Legal source synchronization
 
-> Local alert candidate — 2026-08-05: migration `0089` adds content-free,
+> Staging alert checkpoint — 2026-08-05: migration `0089` adds content-free,
 > immutable-identity operational alert jobs for every unalerted failed corpus
 > run and for a Lex/Advice corpus that has never succeeded or is older than
 > seven days. The five-minute fenced scheduler evaluates a bounded backlog,
 > writes one idempotent email outbox row per failure/freshness epoch, and reuses
 > the server-side Resend operations channel. No legal text, URL, user, workspace
-> or recipient is persisted in the alert table. Staging deployment and a real
-> alert-delivery rehearsal remain pending; production is unchanged.
+> or recipient is persisted in the alert table. Schema and Worker are deployed
+> from exact commit `1aadfc6`; a controlled alert-delivery rehearsal and
+> received test email remain pending. Production is unchanged.
+
+> Local fail-closed candidate — 2026-08-05: migration `0091` requires a corpus
+> success to match every fetched item to its current activated, staff-published
+> verified version. New or changed pending-review content becomes `partial` and
+> cannot update legal-database freshness. The migration is tested locally but
+> is not applied to staging or production.
 
 > Local candidate — 2026-08-05: the nightly scheduler can discover at most 40
 > recent canonical Lex documents from the official RU and UZ RSS feeds. It
@@ -16,9 +23,9 @@
 > redirects/non-RSS/malformed XML and claims the daily D1 run before any remote
 > request. Discovered URLs enter the existing private-R2, `pending_review`,
 > human-publication boundary; discovery never verifies or exposes a source to
-> AI. The staging configuration candidate enables this flag, while development
-> and production keep it off. The currently deployed staging Worker remains at
-> commit `cff38f0`; no remote activation is claimed.
+> AI. The staging configuration enables this flag, while development and
+> production keep it off. The code is deployed from commit `1aadfc6`, but no
+> controlled live discovery/Queue/reviewer cycle is claimed by that fact alone.
 
 Status: bounded Lex and Advice acquisition/normalization slices are implemented and proven in owner-only staging. Publication, retrieval, and AI use remain fail-closed pending explicit legal review. Advice and the staff source API are enabled only in staging; development and production remain disabled.
 

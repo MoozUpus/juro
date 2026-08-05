@@ -1,16 +1,17 @@
 # JURO known limitations checkpoint
 
 > Corpus alert checkpoint — 2026-08-05: migration `0089`, bounded failure/stale
-> evaluation and idempotent Resend delivery are locally tested. Staging remains
-> through `0078`, so no remote alert row, Queue delivery, Worker log or received
-> email is claimed. The evaluator reports operational freshness only; it does
-> not prove corpus completeness, legal correctness or source availability.
+> evaluation and idempotent Resend delivery are deployed to protected staging
+> from exact commit `1aadfc6`. No controlled remote alert row, Queue/DLQ log or
+> received test email is claimed. Local migration `0091` additionally prevents
+> unreviewed fetches from claiming freshness but is not yet applied. Operational
+> freshness does not prove corpus completeness or legal correctness.
 
 > Lex discovery checkpoint — 2026-08-05: the local candidate discovers only
 > recent official RU/UZ RSS entries; it is not a full historical or
 > priority-area corpus backfill. All results require human legal review before
-> publication, and the current deployed staging Worker (`cff38f0`) does not yet
-> run this path. No claim is made for corpus completeness, nightly remote
+> publication; the path is deployed but a controlled live end-to-end discovery
+> cycle is not claimed. No claim is made for corpus completeness, nightly remote
 > execution, citation entailment quality or the 250-scenario evaluation gate.
 
 > System-status checkpoint — 2026-08-05: local migration `0083` implements a

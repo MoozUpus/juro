@@ -1,6 +1,6 @@
 # JURO implemented-features checkpoint
 
-## Legal corpus failure/freshness alerts (local candidate)
+## Legal corpus failure/freshness alerts (staging checkpoint)
 
 - Migration `0089` records only environment, source kind, opaque run/epoch ID,
   bounded reason, severity, freshness hours and delivery state. It has no legal
@@ -13,8 +13,10 @@
   idempotently and preserves the established AI cost-alert behavior.
 - D1 constraints bind failed alerts to an actual matching failed corpus run,
   make alert identity immutable and forbid deletion. Focused lifecycle,
-  downtime recovery, migration replay and email-idempotency tests pass locally.
-  No staging migration, real email or production change is claimed.
+  downtime recovery, migration replay and email-idempotency tests pass. The
+  matching schema and Worker are deployed to protected staging at `1aadfc6`.
+  No controlled remote alert/Queue receipt, real email or production change is
+  claimed.
 
 ## Bounded Lex RU/UZ RSS discovery (local candidate)
 

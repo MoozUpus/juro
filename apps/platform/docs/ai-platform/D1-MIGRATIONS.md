@@ -1,17 +1,16 @@
 # JURO D1 migrations
 
 > Current checkpoint — 2026-08-05: protected `juro-staging` is through
-> `0078_knowledge_base_authoring.sql` with 79 ledger rows. A fresh pre-change
-> full/schema/data export round-tripped through private `juro-staging-backups`,
-> and both the pre-change and post-migration exports restored in isolation with
-> `quick_check=ok` and zero foreign-key violations. Worker
-> `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4` serves 100% from exact commit
-> `cff38f0`. Sections below that call `0077` or `0078` pending are retained as
-> historical candidate notes and are superseded by this checkpoint. Migrations
-> `0079`–`0089` remain local and unapplied; production is unchanged. Exact
-> evidence is in root `docs/ai-platform/STAGING-0069-0078-EVIDENCE.md`.
+> `0090_legal_source_applicability.sql` with 91 ledger rows. A fresh pre-change
+> full/schema/data export round-tripped through private `juro-staging-backups`
+> and restored in isolation with `quick_check=ok` and zero foreign-key
+> violations. Worker `81ba33a4-2f12-4672-a25a-d28cd31a2434` is the exact
+> `1aadfc6` artifact. Sections below that describe earlier migrations as pending
+> are historical candidate notes and are superseded by this checkpoint.
+> Migration `0091` remains local and unapplied; production is unchanged. Exact
+> evidence is in `STAGING-0089-0090-EVIDENCE.md`.
 
-## Pending 0089 — legal corpus operational alerts
+## Migration 0089 — legal corpus operational alerts (staging applied)
 
 `0089_legal_corpus_alerts.sql` additively creates one content-free alert table,
 an environment/source/type/epoch uniqueness fence, a failed-run ownership guard,
@@ -19,8 +18,26 @@ immutable identity guard and delete guard. Delivery state may advance through
 the bounded Resend lifecycle, but source/run identity and freshness evidence
 cannot be rewritten. The table references existing `source_sync_runs` and adds
 no user-content or recipient column. Staging requires a fresh private backup and
-restore check, ordered `0079`–`0089` application, exact Worker deployment,
-foreign-key/integrity postflight and a controlled Queue/email rehearsal.
+restore check, ordered application, exact Worker deployment and
+foreign-key/integrity postflight passed on 2026-08-05. A controlled Queue/email
+rehearsal remains open and is not inferred from deployment or secret presence.
+
+## Migration 0090 — legal source applicability (staging applied)
+
+`0090_legal_source_applicability.sql` additively records immutable,
+reviewer-bound status and effective-interval evidence for an exact legal source
+version. Staging application, schema/FK postflight and exact Worker deployment
+passed with `0089`; production is unchanged.
+
+## Pending 0091 — verified corpus freshness
+
+`0091_verified_corpus_freshness.sql` replaces only the existing insert/update
+guards and adds a delete guard for `source_sync_runs`. A corpus success must
+cover every fetched source with the current activated, staff-published verified
+version; otherwise the run is `partial` or `failed` and cannot satisfy freshness
+queries. Legacy rows are preserved for audit. The migration and matching Worker
+remain local pending a fresh verified staging backup and a new explicit
+migration/deploy authorization.
 
 ## Pending 0086 — protected platform audit access
 

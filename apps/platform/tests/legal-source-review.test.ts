@@ -782,17 +782,20 @@ test("publication atomically creates verified reading rows and immutable evidenc
     const insertCorpusRun = sqlite.prepare(`
       INSERT INTO source_sync_runs (
         id,environment,source_kind,run_type,status,lock_key,
+        discovered_count,fetched_count,changed_count,verified_count,error_count,
         started_at,finished_at,created_at,updated_at
-      ) VALUES (?,?,?,?,?,?,?,?,?,?)
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
     `);
     insertCorpusRun.run(
       "corpus_lex_205", "development", "lex", "manual_corpus",
       "success", "development:lex:manual-corpus-205",
+      1, 1, 0, 1, 0,
       corpusAt, corpusAt, corpusAt, corpusAt,
     );
     insertCorpusRun.run(
       "corpus_advice_205", "development", "advice", "manual_corpus",
       "success", "development:advice:manual-corpus-205",
+      1, 1, 0, 1, 0,
       corpusAt, corpusAt, corpusAt, corpusAt,
     );
     const retrieval = await retrieveVerifiedLegalSources(

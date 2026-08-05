@@ -358,4 +358,17 @@ Date: 2026-08-05
 
 An effective or expiry date used to select an Uzbekistan legal-source version must come from an explicit legal-reviewer decision. New approvals therefore require a calendar date, stored as the start of that day in `Asia/Tashkent`, with optional later expiry. The evidence is immutable, session/MFA-bound and required by D1 before approval. The AI provider cannot infer or rewrite this interval.
 
-When a successor is activated, the predecessor ends at the earlier of its reviewed expiry or the successor effective date. Historical retrieval accepts that derived boundary only after revalidating both applicability records and the immutable replacement lifecycle. Legacy approvals without applicability evidence remain usable only in their existing current-publication path; no historical date is fabricated for them. Migration `0090` is local-only pending a separately authorized staging backup/migration/deploy cycle; production is unchanged.
+When a successor is activated, the predecessor ends at the earlier of its reviewed expiry or the successor effective date. Historical retrieval accepts that derived boundary only after revalidating both applicability records and the immutable replacement lifecycle. Legacy approvals without applicability evidence remain usable only in their existing current-publication path; no historical date is fabricated for them. Migration `0090` is deployed in protected staging under `STAGING-0089-0090-EVIDENCE.md`; production is unchanged.
+
+## D-122 — legal freshness requires verified activated coverage
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-05
+
+A successful fetch is acquisition evidence, not legal-freshness evidence. Full
+corpus `success` requires all discovered entries to be fetched without error and
+to match their current staff-published, activated, verified versions. Changed or
+new pending-review versions close as `partial` and cannot refresh the database
+timestamp. D1 enforces the counters and immutable terminal evidence; application
+freshness, health and alert readers repeat the predicate. Migration `0091`
+preserves legacy rows and remains local pending separate authorization.

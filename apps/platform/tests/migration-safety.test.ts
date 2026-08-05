@@ -66,6 +66,7 @@ const legalSourceAdviceUrlGuardEntry = journal.entries.find(
 );
 const legalCorpusAlertsEntry = journal.entries.find(({ idx }) => idx === 89);
 const legalSourceApplicabilityEntry = journal.entries.find(({ idx }) => idx === 90);
+const verifiedCorpusFreshnessEntry = journal.entries.find(({ idx }) => idx === 91);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -168,6 +169,10 @@ assert.ok(
 assert.ok(
   legalSourceApplicabilityEntry,
   "Drizzle journal must contain migration 0090",
+);
+assert.ok(
+  verifiedCorpusFreshnessEntry,
+  "Drizzle journal must contain migration 0091",
 );
 
 
@@ -4344,6 +4349,82 @@ test("0090 adds immutable reviewer-bound legal applicability evidence", () => {
     db.exec("PRAGMA foreign_keys = ON");
     for (const entry of journal.entries) applyMigration(db, entry);
     assert.ok(tableDefinitions(db).has("legal_source_applicability_records"));
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0091 prevents unreviewed corpus fetches from claiming legal freshness", () => {
+  const sql = migrationSql(verifiedCorpusFreshnessEntry);
+  const migrationStatements = statements(sql);
+  assert.equal(migrationStatements.length, 5);
+  assert.match(sql, /LEGAL_CORPUS_SUCCESS_UNVERIFIED/);
+  assert.match(sql, /SOURCE_SYNC_COUNTERS_INVALID/);
+  assert.match(sql, /SOURCE_SYNC_TERMINAL_IMMUTABLE/);
+  assert.match(sql, /SOURCE_SYNC_RUN_IMMUTABLE/);
+  for (const statement of migrationStatements) {
+    const executable = statement.replace(/^(?:--[^\n]*(?:\n|$))+/, "");
+    assert.match(executable, /^(?:DROP TRIGGER|CREATE TRIGGER)\b/i);
+    assert.doesNotMatch(executable, /DROP TABLE|DELETE FROM|UPDATE `source_sync_runs`/i);
+  }
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries.filter(({ idx }) => idx < 91)) {
+      applyMigration(db, entry);
+    }
+    const timestamp = "2026-08-05T19:00:00.000Z";
+    db.prepare(`
+      INSERT INTO source_sync_runs (
+        id,environment,source_kind,run_type,status,lock_key,
+        discovered_count,fetched_count,changed_count,verified_count,error_count,
+        started_at,finished_at,error_summary,created_at,updated_at
+      ) VALUES (
+        'legacy-unverified-success','staging','lex','scheduled_corpus','success',
+        'legacy:lex',1,1,0,0,0,?,?,NULL,?,?
+      )
+    `).run(timestamp, timestamp, timestamp, timestamp);
+    applyMigration(db, verifiedCorpusFreshnessEntry);
+    assert.equal(
+      (db.prepare("SELECT count(*) AS count FROM source_sync_runs WHERE id='legacy-unverified-success'").get() as { count: number }).count,
+      1,
+      "migration must preserve legacy evidence for audit",
+    );
+    assert.throws(
+      () => db.prepare(`
+        INSERT INTO source_sync_runs (
+          id,environment,source_kind,run_type,status,lock_key,
+          discovered_count,fetched_count,changed_count,verified_count,error_count,
+          started_at,finished_at,error_summary,created_at,updated_at
+        ) VALUES (
+          'new-unverified-success','staging','lex','scheduled_corpus','success',
+          'new:lex',1,1,0,0,0,?,?,NULL,?,?
+        )
+      `).run(timestamp, timestamp, timestamp, timestamp),
+      /LEGAL_CORPUS_SUCCESS_UNVERIFIED/,
+    );
+    db.prepare(`
+      INSERT INTO source_sync_runs (
+        id,environment,source_kind,run_type,status,lock_key,
+        discovered_count,fetched_count,changed_count,verified_count,error_count,
+        started_at,finished_at,error_summary,created_at,updated_at
+      ) VALUES (
+        'verified-success','staging','lex','scheduled_corpus','success',
+        'verified:lex',1,1,0,1,0,?,?,NULL,?,?
+      )
+    `).run(timestamp, timestamp, timestamp, timestamp);
+    assert.throws(
+      () => db.prepare(
+        "UPDATE source_sync_runs SET verified_count=0 WHERE id='verified-success'",
+      ).run(),
+      /SOURCE_SYNC_TERMINAL_IMMUTABLE/,
+    );
+    assert.throws(
+      () => db.prepare("DELETE FROM source_sync_runs WHERE id='verified-success'").run(),
+      /SOURCE_SYNC_RUN_IMMUTABLE/,
+    );
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

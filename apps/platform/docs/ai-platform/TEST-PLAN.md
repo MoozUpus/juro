@@ -1,17 +1,19 @@
 # Test plan
 
-## Legal corpus operational-alert gate — local candidate
+## Legal corpus operational-alert and freshness gate
 
 `tests/legal-corpus-alerts.test.ts` proves failed-run binding, content-free
 schema, one alert/outbox per epoch, duplicate suppression, recovery of multiple
 failed runs after scheduler downtime, seven-day freshness math, immutable
 identity, delete rejection and idempotent Resend delivery. Existing provider
 cost-alert tests run alongside it to prevent sender regression.
-`tests/migration-safety.test.ts` applies the full chain through `0089`, enforces
+`tests/migration-safety.test.ts` applies the full chain through local `0091`, enforces
 LF/remote-D1-safe trigger syntax, accepts only additive CREATE statements and
 finishes with zero foreign-key violations. Remote release additionally requires
 a controlled failed/stale staging run, outbox/Queue/DLQ evidence and a received
-content-free test email.
+content-free test email. `tests/legal-scheduled-corpus-lifecycle.test.ts` proves
+that pending-review changes end as `partial` while an unchanged, activated and
+verified version is the only successful freshness path.
 
 ## Lex RSS discovery gate — local candidate
 

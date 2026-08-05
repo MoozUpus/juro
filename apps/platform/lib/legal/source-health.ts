@@ -3,7 +3,16 @@ import {
   type LegalDatabaseFreshness,
 } from "./verified-retrieval";
 
-type CorpusRun = { sourceKind: string; status: string; finishedAt: string | null; errorCount: number };
+type CorpusRun = {
+  sourceKind: string;
+  status: string;
+  finishedAt: string | null;
+  discoveredCount: number;
+  fetchedCount: number;
+  changedCount: number;
+  verifiedCount: number;
+  errorCount: number;
+};
 type Count = { total: number };
 
 export type LegalSourceHealth = {
@@ -20,7 +29,10 @@ export async function legalSourceHealth(
 ): Promise<LegalSourceHealth> {
   const [runs, review, approved, fetches] = await Promise.all([
     db.prepare(`
-      SELECT source_kind AS sourceKind,status,finished_at AS finishedAt,error_count AS errorCount
+      SELECT source_kind AS sourceKind,status,finished_at AS finishedAt,
+        discovered_count AS discoveredCount,fetched_count AS fetchedCount,
+        changed_count AS changedCount,verified_count AS verifiedCount,
+        error_count AS errorCount
       FROM source_sync_runs
       WHERE run_type IN ('scheduled_corpus','manual_corpus')
         AND source_kind IN ('lex','advice')
@@ -43,7 +55,12 @@ export async function legalSourceHealth(
     return run ? [{ sourceKind, status: run.status, finishedAt: run.finishedAt, errorCount: Number(run.errorCount ?? 0) }] : [];
   });
   const successful = runs.results
-    .filter((run) => run.status === "success")
+    .filter((run) => run.status === "success"
+      && Number(run.discoveredCount) > 0
+      && Number(run.fetchedCount) === Number(run.discoveredCount)
+      && Number(run.verifiedCount) === Number(run.discoveredCount)
+      && Number(run.changedCount) === 0
+      && Number(run.errorCount) === 0)
     .map((run) => ({ sourceKind: run.sourceKind, finishedAt: run.finishedAt }));
   return {
     freshness: legalDatabaseFreshnessFromCorpusRuns(successful, now),

@@ -37,6 +37,94 @@ function documentHtml(id: string): string {
   return `<html><body><main><h1>Норма ${id}</h1><p>${"Проверяемое правило. ".repeat(40)}</p></main></body></html>`;
 }
 
+async function sha256Hex(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function seedActivatedVerifiedSource(
+  sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
+  input: { canonicalId: string; html: string; now: string },
+): Promise<void> {
+  const hash = await sha256Hex(input.html);
+  const sourceId = `verified-source-${input.canonicalId}`;
+  const versionId = `verified-version-${input.canonicalId}`;
+  const reviewId = `verified-review-${input.canonicalId}`;
+  const publicationId = `verified-publication-${input.canonicalId}`;
+  sqlite.prepare(
+    "INSERT INTO user_profiles(id,email,created_at,updated_at) VALUES ('corpus-publisher','publisher@example.test',?,?)",
+  ).run(input.now, input.now);
+  sqlite.prepare(`
+    INSERT INTO legal_sources (
+      id,canonical_id,official_url,act_title,act_identifier,locale,source_type,
+      status,verification_state,content_sha256,fetched_at,verified_at,
+      verified_by_user_id,last_checked_at,created_at,updated_at
+    ) VALUES (?,?,?,?,?,'ru','lex','verified','verified',?,?,?,?,?,?,?)
+  `).run(
+    sourceId,
+    input.canonicalId,
+    `https://lex.uz/ru/docs/${input.canonicalId}`,
+    `Verified ${input.canonicalId}`,
+    input.canonicalId,
+    hash,
+    input.now,
+    input.now,
+    "corpus-publisher",
+    input.now,
+    input.now,
+    input.now,
+  );
+  sqlite.prepare(`
+    INSERT INTO legal_source_versions (
+      id,source_id,language,status,content_sha256,raw_object_key,parsed_object_key,
+      fetched_at,verified_at,verified_by_user_id,metadata_json,created_at,updated_at
+    ) VALUES (?,?,'ru','verified',?,'fixture/raw','fixture/parsed',?,?,?,'{}',?,?)
+  `).run(
+    versionId,
+    sourceId,
+    hash,
+    input.now,
+    input.now,
+    "corpus-publisher",
+    input.now,
+    input.now,
+  );
+  // Publication integrity is covered by legal-source-review tests. This fixture
+  // isolates scheduled reconciliation of an already activated version.
+  sqlite.exec("DROP TRIGGER legal_source_publications_insert_guard");
+  sqlite.exec("DROP TRIGGER legal_source_current_activations_insert_guard");
+  sqlite.prepare(`
+    INSERT INTO legal_review_queue (
+      id,source_id,version_id,reason_code,confidence,status,created_at,updated_at
+    ) VALUES (?,?,?,'fixture','high','pending',?,?)
+  `).run(reviewId, sourceId, versionId, input.now, input.now);
+  sqlite.prepare(`
+    INSERT INTO legal_source_publications (
+      id,review_id,source_id,version_id,review_evidence_sha256,raw_content_sha256,
+      parsed_content_sha256,published_by_user_id,publication_evidence_json,
+      publication_evidence_sha256,published_at,created_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+  `).run(
+    publicationId,
+    reviewId,
+    sourceId,
+    versionId,
+    hash,
+    hash,
+    hash,
+    "corpus-publisher",
+    "{}",
+    hash,
+    input.now,
+    input.now,
+  );
+  sqlite.prepare(`
+    INSERT INTO legal_source_current_activations (
+      source_id,publication_id,version_id,activated_by_user_id,activated_at,updated_at
+    ) VALUES (?,?,?,?,?,?)
+  `).run(sourceId, publicationId, versionId, "corpus-publisher", input.now, input.now);
+}
+
 test("scheduled corpus keeps a two-source run open until the aggregate reconciliation", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
@@ -108,9 +196,17 @@ test("scheduled corpus keeps a two-source run open until the aggregate reconcili
 
     assert.equal(await reconcileScheduledCorpusSyncRuns(env, { now }), 1);
     const after = sqlite.prepare(`
-      SELECT status,fetched_count,error_count FROM source_sync_runs WHERE id='lscorpus_lex_20260801'
-    `).get() as { status: string; fetched_count: number; error_count: number };
-    assert.equal(after.status, "success");
+      SELECT status,fetched_count,changed_count,verified_count,error_count,error_summary
+      FROM source_sync_runs WHERE id='lscorpus_lex_20260801'
+    `).get() as Record<string, unknown>;
+    assert.deepEqual({ ...after }, {
+      status: "partial",
+      fetched_count: 2,
+      changed_count: 2,
+      verified_count: 0,
+      error_count: 0,
+      error_summary: "LEGAL_SOURCE_CORPUS_REVIEW_REQUIRED",
+    });
   } finally {
     sqlite.close();
   }
@@ -155,16 +251,74 @@ test("scheduled Advice sitemap candidates enter the normal review-only acquisiti
     });
     assert.equal(await reconcileScheduledCorpusSyncRuns(env, { now }), 1);
     const run = sqlite.prepare(`
-      SELECT status,fetched_count,error_count FROM source_sync_runs
+      SELECT status,fetched_count,changed_count,verified_count,error_count FROM source_sync_runs
       WHERE id='lscorpus_advice_20260802'
-    `).get() as { status: string; fetched_count: number; error_count: number };
-    assert.equal(run.status, "success");
+    `).get() as { status: string; fetched_count: number; changed_count: number; verified_count: number; error_count: number };
+    assert.equal(run.status, "partial");
     assert.equal(run.fetched_count, 1);
+    assert.equal(run.changed_count, 1);
+    assert.equal(run.verified_count, 0);
     assert.equal(run.error_count, 0);
     const review = sqlite.prepare(`
       SELECT status FROM legal_review_queue
     `).get() as { status: string };
     assert.equal(review.status, "pending");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("scheduled corpus is successful only when fetched content matches the activated verified version", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env: LegalSourceAcquisitionEnv = {
+    APP_ENV: "development",
+    DB: d1,
+    BUCKET: bucket as unknown as R2Bucket,
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+  };
+  const now = new Date("2026-08-03T19:00:00.000Z");
+  const html = documentHtml("-201");
+  try {
+    await seedActivatedVerifiedSource(sqlite, {
+      canonicalId: "-201",
+      html,
+      now: "2026-08-02T10:00:00.000Z",
+    });
+    assert.deepEqual(await startScheduledCorpusSync(env, { now }), {
+      started: 1,
+      busy: 0,
+      empty: 1,
+    });
+    const request = sqlite.prepare(`
+      SELECT id FROM legal_source_fetch_requests
+      WHERE source_kind='lex' AND canonical_id='-201'
+    `).get() as { id: string };
+    await executeLegalSourceFetchRequest(env, request.id, {
+      now: () => now,
+      wait: async () => undefined,
+      fetchImpl: sourceFetch([
+        new Response("User-agent: *\nAllow: /\n", {
+          headers: { "content-type": "text/plain; charset=utf-8" },
+        }),
+        new Response(html, {
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      ]),
+    });
+    assert.equal(await reconcileScheduledCorpusSyncRuns(env, { now }), 1);
+    const run = sqlite.prepare(`
+      SELECT status,fetched_count,changed_count,verified_count,error_count,error_summary
+      FROM source_sync_runs WHERE id='lscorpus_lex_20260803'
+    `).get() as Record<string, unknown>;
+    assert.deepEqual({ ...run }, {
+      status: "success",
+      fetched_count: 1,
+      changed_count: 0,
+      verified_count: 1,
+      error_count: 0,
+      error_summary: null,
+    });
   } finally {
     sqlite.close();
   }
@@ -217,6 +371,16 @@ test("scheduled Lex RSS candidates enter the normal immutable review-only acquis
       ]),
     });
     assert.equal(await reconcileScheduledCorpusSyncRuns(env, { now }), 1);
+    const run = sqlite.prepare(`
+      SELECT status,changed_count,verified_count,error_summary
+      FROM source_sync_runs WHERE id='lscorpus_lex_20260805'
+    `).get() as Record<string, unknown>;
+    assert.deepEqual({ ...run }, {
+      status: "partial",
+      changed_count: 1,
+      verified_count: 0,
+      error_summary: "LEGAL_SOURCE_CORPUS_REVIEW_REQUIRED",
+    });
     const review = sqlite.prepare(`
       SELECT review.status,source.verification_state,version.status AS version_status
       FROM legal_review_queue review

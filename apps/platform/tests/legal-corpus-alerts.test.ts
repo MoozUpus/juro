@@ -77,7 +77,7 @@ test("0089 records a stale-success epoch and protects alert identity", async () 
       INSERT INTO source_sync_runs
       (id,environment,source_kind,run_type,status,lock_key,discovered_count,fetched_count,
        changed_count,verified_count,error_count,started_at,finished_at,error_summary,created_at,updated_at)
-      VALUES ('old-success','staging','lex','scheduled_corpus','success','staging:lex:old',1,1,0,0,0,
+      VALUES ('old-success','staging','lex','scheduled_corpus','success','staging:lex:old',1,1,0,1,0,
               '2026-07-28T18:59:00.000Z',?,NULL,?,?)
     `).run(finishedAt, finishedAt, finishedAt);
     const summary = await evaluateLegalCorpusAlerts({ APP_ENV: "staging", DB: d1 }, { now });
@@ -114,7 +114,7 @@ test("0089 recovers every bounded unalerted failed run after scheduler downtime"
         INSERT INTO source_sync_runs
         (id,environment,source_kind,run_type,status,lock_key,discovered_count,fetched_count,
          changed_count,verified_count,error_count,started_at,finished_at,error_summary,created_at,updated_at)
-        VALUES (?,?,?,?,? ,?,1,1,0,0,0,?,?,NULL,?,?)
+        VALUES (?,?,?,?,? ,?,1,1,0,1,0,?,?,NULL,?,?)
       `).run(`fresh-${sourceKind}`, "staging", sourceKind, "scheduled_corpus", "success", `fresh:${sourceKind}`, fresh, fresh, fresh, fresh);
     }
     for (const [id, startedAt] of [["failed-lex-1", "2026-08-05T18:10:00.000Z"], ["failed-lex-2", "2026-08-05T18:20:00.000Z"]]) {

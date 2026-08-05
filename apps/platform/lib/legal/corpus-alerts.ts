@@ -36,6 +36,11 @@ async function latestSuccessfulRun(
     WHERE environment=? AND source_kind=?
       AND run_type IN ('scheduled_corpus','manual_corpus')
       AND status='success'
+      AND discovered_count>0
+      AND fetched_count=discovered_count
+      AND verified_count=discovered_count
+      AND changed_count=0
+      AND error_count=0
     ORDER BY finished_at DESC LIMIT 1
   `).bind(environment, sourceKind).first<CorpusRun>();
 }

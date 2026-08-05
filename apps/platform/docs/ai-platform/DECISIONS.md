@@ -3048,3 +3048,22 @@ local until a separately authorized backup, ordered migration and deploy cycle.
 - **Evidence:** local replacement-publication regression proves the archived
   first version is returned for a 2025 date while the current second version is
   returned for the present date. Staging remains unchanged.
+
+## D-147 — Corpus freshness requires activated verified coverage
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-05
+
+A successful HTTP fetch is acquisition evidence, not legal-freshness evidence.
+For `initial_corpus`, `scheduled_corpus` and `manual_corpus`, `success` requires
+every discovered item to be fetched with no error and to match the exact current
+activation whose source/version are verified and whose version has staff
+publication evidence. New or changed pending-review material therefore closes
+the run as `partial` with `LEGAL_SOURCE_CORPUS_REVIEW_REQUIRED`.
+
+D1 guards enforce the counter and success invariants independently of Worker
+code; terminal run evidence is immutable and cannot be deleted. Freshness,
+source-health and operational-alert readers repeat the exact predicate so a
+legacy unverified success cannot silently restore a healthy state. Migration
+`0091` preserves legacy rows for audit and remains local until separately
+authorized backup, migration and exact staging deployment.

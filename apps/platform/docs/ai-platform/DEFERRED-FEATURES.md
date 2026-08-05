@@ -21,10 +21,11 @@ This register distinguishes real implementation from planned scope. A database t
   historical priority-area backfill, Advice discovery activation, human
   publication at corpus scale, version-aware hybrid retrieval and the
   250-scenario human-reviewed legal evaluation remain gated.
-- Local migration `0089` and its Worker candidate add idempotent, content-free
-  failed/stale corpus alerts. They are not staging evidence: a fresh backup,
-  ordered migration, exact deploy, controlled failed/stale run, Queue/DLQ log
-  and real Resend receipt are still required.
+- Migration `0089` and its exact Worker are deployed to protected staging after
+  a verified private backup/restore. A controlled failed/stale run, Queue/DLQ
+  log and real Resend receipt are still required. Local `0091` fail-closes
+  freshness against unreviewed versions but still requires its own authorized
+  backup, migration and deployment.
 - Remote development/staging user-document indexes remain empty at this checkpoint. The local `0080`–`0081` candidates implement immutable-version indexing, owner-scoped semantic search, superseded-vector deletion, account-purge deletion and actual-token cost accounting, but they are not active until a separately authorized migration/deploy, official price entry and protected staging evidence.
 
 ## File and communication gates

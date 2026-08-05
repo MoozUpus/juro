@@ -162,25 +162,59 @@ export async function reconcileScheduledCorpusSyncRuns(
         count(*) AS total,
         sum(CASE WHEN request.status='completed' THEN 1 ELSE 0 END) AS completed,
         sum(CASE WHEN request.status IN ('failed','cancelled') THEN 1 ELSE 0 END) AS failed,
-        sum(CASE WHEN request.status IN ('queued','retrying','running') THEN 1 ELSE 0 END) AS pending
+        sum(CASE WHEN request.status IN ('queued','retrying','running') THEN 1 ELSE 0 END) AS pending,
+        sum(CASE WHEN request.status='completed' AND EXISTS (
+          SELECT 1
+          FROM legal_source_current_activations activation
+          INNER JOIN legal_sources source
+            ON source.id=activation.source_id
+          INNER JOIN legal_source_versions version
+            ON version.id=activation.version_id AND version.source_id=source.id
+          INNER JOIN legal_source_publications publication
+            ON publication.id=activation.publication_id
+           AND publication.source_id=source.id
+           AND publication.version_id=version.id
+          WHERE activation.source_id=request.source_id
+            AND activation.version_id=request.version_id
+            AND source.source_type=?
+            AND source.status='verified'
+            AND source.verification_state='verified'
+            AND version.status='verified'
+        ) THEN 1 ELSE 0 END) AS verified
       FROM job_outbox outbox
       INNER JOIN legal_source_fetch_requests request ON request.id=outbox.subject_id
       WHERE outbox.correlation_id=? AND outbox.job_type='legal.sync'
-    `).bind(run.id).first<{ total: number; completed: number | null; failed: number | null; pending: number | null }>();
+    `).bind(run.sourceKind, run.id).first<{
+      total: number;
+      completed: number | null;
+      failed: number | null;
+      pending: number | null;
+      verified: number | null;
+    }>();
     const total = Number(status?.total ?? 0);
     const succeeded = Number(status?.completed ?? 0);
     const failed = Number(status?.failed ?? 0);
     const pending = Number(status?.pending ?? 0);
+    const verified = Number(status?.verified ?? 0);
+    const changed = Math.max(0, succeeded - verified);
     if (total !== run.discoveredCount || pending > 0) continue;
-    const finalStatus = failed === 0 && succeeded === run.discoveredCount ? "success" : "failed";
+    const complete = failed === 0 && succeeded === run.discoveredCount;
+    const fullyVerified = complete && verified === run.discoveredCount && changed === 0;
+    const finalStatus = fullyVerified ? "success" : complete ? "partial" : "failed";
     const result = await env.DB.prepare(`
       UPDATE source_sync_runs
-      SET status=?,fetched_count=?,changed_count=0,verified_count=0,error_count=?,
+      SET status=?,fetched_count=?,changed_count=?,verified_count=?,error_count=?,
           finished_at=?,error_summary=?,updated_at=?
       WHERE id=? AND status='running'
     `).bind(
-      finalStatus, succeeded, failed, now,
-      finalStatus === "success" ? null : "LEGAL_SOURCE_CORPUS_INCOMPLETE", now, run.id,
+      finalStatus, succeeded, changed, verified, failed, now,
+      finalStatus === "success"
+        ? null
+        : finalStatus === "partial"
+          ? "LEGAL_SOURCE_CORPUS_REVIEW_REQUIRED"
+          : "LEGAL_SOURCE_CORPUS_INCOMPLETE",
+      now,
+      run.id,
     ).run();
     if (Number(result.meta.changes ?? 0) === 1) completed += 1;
   }

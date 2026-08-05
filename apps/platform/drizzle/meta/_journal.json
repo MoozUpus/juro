@@ -638,6 +638,13 @@
       "when": 1785963600000,
       "tag": "0090_legal_source_applicability",
       "breakpoints": true
+    },
+    {
+      "idx": 91,
+      "version": "6",
+      "when": 1785967200000,
+      "tag": "0091_verified_corpus_freshness",
+      "breakpoints": true
     }
   ]
 }

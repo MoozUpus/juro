@@ -7,8 +7,8 @@ test("legal source health reports freshness and work queues without source conte
     prepare(sql: string) {
       return {
         all: async () => ({ results: sql.includes("source_sync_runs") ? [
-          { sourceKind: "lex", status: "success", finishedAt: "2026-08-01T00:00:00.000Z", errorCount: 0 },
-          { sourceKind: "advice", status: "success", finishedAt: "2026-08-01T01:00:00.000Z", errorCount: 0 },
+          { sourceKind: "lex", status: "success", finishedAt: "2026-08-01T00:00:00.000Z", discoveredCount: 1, fetchedCount: 1, changedCount: 0, verifiedCount: 1, errorCount: 0 },
+          { sourceKind: "advice", status: "success", finishedAt: "2026-08-01T01:00:00.000Z", discoveredCount: 1, fetchedCount: 1, changedCount: 0, verifiedCount: 1, errorCount: 0 },
         ] : [] }),
         first: async () => ({ total: sql.includes("status='approved'") ? 1 : sql.includes("legal_review_queue") ? 2 : 2 }),
       };
