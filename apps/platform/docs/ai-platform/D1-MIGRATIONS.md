@@ -1411,3 +1411,17 @@ only an unreferenced object after an identity check.
 Local SQLite/R2 tests cover proposal success/replay, D1 attach rollback, orphan
 cleanup and Builder→Analysis→Builder corrected-version return. `0097` is not
 applied to staging or production.
+
+## Migration 0098 — task reminder email delivery evidence
+
+`0098_task_reminder_email_delivery.sql` additively creates a content-free
+delivery lifecycle for email task reminders. Its guards bind an exact reminder
+revision to an active member, tenant-owned task and unarchived case. Identity
+is immutable; only bounded lifecycle transitions are accepted, and `sent`
+revalidates the live source.
+
+The table stores no recipient address, task/case title or message body. The
+consumer obtains the current address from the protected identity boundary and
+uses provider idempotency. The migration does not backfill or mutate existing
+reminders. Local ordered migration, foreign-key, tenant, lifecycle and queue
+tests pass. `0098` is not applied to staging or production.

@@ -57,6 +57,11 @@ import {
   NotificationDispatchError,
 } from "../lib/notifications/task-reminder-dispatch";
 import {
+  executeTaskReminderEmail,
+  isTaskReminderEmailJobId,
+  TaskReminderEmailError,
+} from "../lib/notifications/task-reminder-email";
+import {
   isStagingDeletionProbe,
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
@@ -709,7 +714,9 @@ async function executeJob(
        LIMIT 1`,
     ).bind(envelope.subjectId, envelope.subjectId).first<{ found: number }>();
     try {
-      if (operationalAlert?.found) {
+      if (isTaskReminderEmailJobId(envelope.subjectId)) {
+        await executeTaskReminderEmail(env, envelope.subjectId);
+      } else if (operationalAlert?.found) {
         await executeOperationalAlertEmail(env, envelope.subjectId);
       } else {
         await executeSecurityEmailJob(env, envelope.subjectId);
@@ -720,6 +727,9 @@ async function executeJob(
         throw new SafeJobError(error.code, error.retryable);
       }
       if (error instanceof SecurityEmailError) {
+        throw new SafeJobError(error.code, error.retryable);
+      }
+      if (error instanceof TaskReminderEmailError) {
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;

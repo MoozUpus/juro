@@ -256,6 +256,21 @@ function createDatabase(): {
       sent_at text,
       updated_at text NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS task_reminder_email_jobs (
+      id text PRIMARY KEY NOT NULL,
+      reminder_id text NOT NULL,
+      workspace_id text NOT NULL,
+      user_id text NOT NULL,
+      reminder_updated_at text NOT NULL,
+      status text NOT NULL,
+      attempt_count integer NOT NULL DEFAULT 0,
+      provider_message_id text,
+      error_code text,
+      sent_at text,
+      created_at text NOT NULL,
+      updated_at text NOT NULL,
+      UNIQUE(reminder_id,reminder_updated_at)
+    );
     CREATE TABLE IF NOT EXISTS notifications (
       id text PRIMARY KEY NOT NULL,
       workspace_id text,
@@ -1264,6 +1279,61 @@ test("due in-app task reminders create one inbox notification and remain retry-s
     }).success,
     true,
   );
+});
+
+test("due email task reminders enqueue an opaque idempotent email job", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    sqlite.exec(`
+      INSERT INTO workspace_members (
+        id,workspace_id,user_id,role,status,joined_at,created_at,updated_at
+      ) VALUES (
+        'wm_email_reminder','ws_test','user_email_reminder','owner','active',
+        '2026-07-20T00:00:00.000Z','2026-07-20T00:00:00.000Z',
+        '2026-07-20T00:00:00.000Z'
+      );
+      INSERT INTO cases (id,workspace_id,owner_user_id,locale,archived_at)
+      VALUES ('case_email_reminder','ws_test','user_email_reminder','ru',NULL);
+      INSERT INTO tasks (id,workspace_id,case_id,owner_user_id,title,due_at,status)
+      VALUES ('task_email_reminder','ws_test','case_email_reminder','user_email_reminder','Secret task title','2026-07-30T00:00:00.000Z','planned');
+      INSERT INTO task_reminders (id,task_id,channel,reminder_at,status,sent_at,updated_at)
+      VALUES ('reminder_email_due','task_email_reminder','email','2026-07-29T00:00:00.000Z','pending',NULL,'2026-07-28T00:00:00.000Z');
+    `);
+    const { env, sends } = createEnv(d1);
+    const now = "2026-07-29T00:00:00.000Z";
+    assert.deepEqual(await enqueueDueTaskReminders(env, now), {
+      due: 1,
+      enqueued: 1,
+    });
+    const durable = sqlite.prepare(
+      "SELECT id,status,workspace_id AS workspaceId,user_id AS userId FROM task_reminder_email_jobs",
+    ).get() as { id: string; status: string; workspaceId: string; userId: string };
+    assert.match(durable.id, /^task-reminder-email:reminder_email_due:[0-9a-z]+$/u);
+    assert.deepEqual({ status: durable.status, workspaceId: durable.workspaceId, userId: durable.userId }, {
+      status: "pending",
+      workspaceId: "ws_test",
+      userId: "user_email_reminder",
+    });
+    assert.deepEqual(await dispatchOutbox(env, 10), {
+      claimed: 1,
+      dispatched: 1,
+      rejected: 0,
+      retrying: 0,
+    });
+    assert.equal(sends.length, 1);
+    assert.equal(sends[0]?.binding, "EMAIL_NOTIFICATIONS_QUEUE");
+    const queued = sends[0]?.body as JobEnvelope;
+    assert.equal(queued.kind, "email.send");
+    assert.equal(queued.subjectId, durable.id);
+    assert.equal(queued.workspaceId, "ws_test");
+    assert.doesNotMatch(JSON.stringify(queued), /Secret task title|@/u);
+    assert.deepEqual(await enqueueDueTaskReminders(env, now), {
+      due: 1,
+      enqueued: 0,
+    });
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("notification consumer does not reveal or deliver a reminder across workspaces", async () => {

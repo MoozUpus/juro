@@ -1155,3 +1155,20 @@ content-changing gaps without a post-mutation false-success window:
   Builder→Analysis→Builder roundtrip tests pass locally.
 
 `0097` and the matching Worker candidate are not yet deployed to staging.
+
+## Phase 6 — deadline reminder email delivery (local candidate)
+
+- Creating or revising a confirmed task now schedules separate `in_app` and
+  `email` reminders. A revision cancels only pending old reminders and creates
+  revision-specific identifiers, so sent evidence is never rewritten.
+- The scheduler authorizes membership, case and task state, then creates a
+  metadata-only delivery job and identifiers-only email outbox row.
+- The consumer resolves the current protected email only immediately before
+  Resend delivery. Recipient and task/case copy are absent from the queue and
+  `task_reminder_email_jobs`.
+- Provider calls use a stable idempotency key. Retryable failures retain the
+  reminder; stale tasks, archived cases and inactive memberships cancel before
+  provider access.
+- Migration `0098` and its Worker are local only. Synthetic migration,
+  provider, retry, tenant and queue tests pass; no real email or deploy is
+  claimed.

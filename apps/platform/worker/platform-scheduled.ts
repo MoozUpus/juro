@@ -11,6 +11,7 @@ import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
 import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/version-object-write";
 import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
+import { taskReminderEmailJobId } from "../lib/notifications/task-reminder-email";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const OUTBOX_CRON = "*/5 * * * *";
@@ -21,6 +22,8 @@ const TASK_REMINDER_BATCH_SIZE = 100;
 type DueTaskReminder = {
   reminderId: string;
   workspaceId: string;
+  userId: string;
+  channel: "in_app" | "email";
   updatedAt: string;
 };
 
@@ -61,6 +64,8 @@ export async function enqueueDueTaskReminders(
     `SELECT
        tr.id AS reminderId,
        t.workspace_id AS workspaceId,
+       t.owner_user_id AS userId,
+       tr.channel,
        tr.updated_at AS updatedAt
      FROM task_reminders tr
      JOIN tasks t ON t.id=tr.task_id
@@ -69,7 +74,7 @@ export async function enqueueDueTaskReminders(
        ON wm.workspace_id=t.workspace_id
       AND wm.user_id=t.owner_user_id
       AND wm.status='active'
-     WHERE tr.channel='in_app'
+     WHERE tr.channel IN ('in_app','email')
        AND tr.status='pending'
        AND tr.reminder_at<=?
        AND t.status NOT IN ('completed','cancelled')
@@ -80,6 +85,36 @@ export async function enqueueDueTaskReminders(
 
   let enqueued = 0;
   for (const reminder of due.results) {
+    if (reminder.channel === "email") {
+      const jobId = taskReminderEmailJobId(reminder.reminderId, reminder.updatedAt);
+      const results = await env.DB.batch([
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO task_reminder_email_jobs (
+             id,reminder_id,workspace_id,user_id,reminder_updated_at,status,
+             attempt_count,provider_message_id,error_code,sent_at,created_at,updated_at
+           ) VALUES (?,?,?,?,?,'pending',0,NULL,NULL,NULL,?,?)`,
+        ).bind(
+          jobId,
+          reminder.reminderId,
+          reminder.workspaceId,
+          reminder.userId,
+          reminder.updatedAt,
+          now,
+          now,
+        ),
+        env.DB.prepare(
+          `INSERT OR IGNORE INTO job_outbox (
+             id,queue_binding,job_type,schema_version,idempotency_key,subject_id,
+             workspace_id,correlation_id,enqueued_at,available_at,status,
+             dispatch_attempts,created_at,updated_at
+           ) SELECT ?,'EMAIL_NOTIFICATIONS_QUEUE','email.send',1,?,?,workspace_id,
+             ?,?,?,'pending',0,?,?
+           FROM task_reminder_email_jobs WHERE id=? AND status='pending'`,
+        ).bind(jobId, jobId, jobId, jobId, now, now, now, now, jobId),
+      ]);
+      enqueued += Number(results[1]?.meta?.changes ?? 0);
+      continue;
+    }
     const subjectId = taskReminderSubjectId(
       reminder.reminderId,
       reminder.updatedAt,

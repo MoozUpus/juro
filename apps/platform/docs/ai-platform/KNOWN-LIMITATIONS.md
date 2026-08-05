@@ -717,3 +717,16 @@ writes the projected snapshot before a revision-fenced D1 attachment and has a
 scheduled orphan reconciler. It is not staging evidence until a fresh private
 backup, ordered `0097` migration, exact Worker deployment and authenticated
 proposal/correction lifecycle tests pass. Production remains unchanged.
+
+## Deadline email reminder checkpoint — 2026-08-06
+
+Migration `0098` and the matching scheduler/consumer are local only. They do
+not backfill email reminders for existing tasks, intentionally avoiding
+unexpected retroactive mail. New and subsequently revised confirmed tasks get
+both in-app and email channels.
+
+The local suite uses a synthetic Resend response; it does not prove sender
+authorization or real mailbox delivery. A fresh private staging backup with
+isolated restore verification, ordered `0097`–`0098` application, exact Worker
+deploy, queue observation and a test email to an owner-controlled staging
+account remain required. Production is unchanged.

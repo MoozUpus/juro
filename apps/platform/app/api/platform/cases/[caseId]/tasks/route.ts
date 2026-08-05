@@ -97,7 +97,10 @@ export const POST = withApiErrors(async function POST(
         now,
         taskStatus === "completed" ? now : null,
       ),
-      ...(reminderAt ? [db.prepare("INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) VALUES (?,?,'in_app',?,'pending',?,?,?)").bind(`${taskId}:default`, taskId, reminderAt, `${taskId}:in_app:default`, now, now)] : []),
+      ...(reminderAt ? [
+        db.prepare("INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) VALUES (?,?,'in_app',?,'pending',?,?,?)").bind(`${taskId}:in_app:initial`, taskId, reminderAt, `${taskId}:in_app:initial`, now, now),
+        db.prepare("INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) VALUES (?,?,'email',?,'pending',?,?,?)").bind(`${taskId}:email:initial`, taskId, reminderAt, `${taskId}:email:initial`, now, now),
+      ] : []),
     ];
   });
   const plan = steps.results[0];

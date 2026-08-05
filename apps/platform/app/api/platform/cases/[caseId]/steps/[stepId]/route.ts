@@ -139,11 +139,14 @@ export const PATCH = withApiErrors(async function PATCH(
       ).bind(owned.planId, owned.planId, now, owned.planId, owned.planRevision),
       taskUpdate,
       db.prepare(
-        "UPDATE task_reminders SET status=CASE WHEN ? THEN 'pending' ELSE 'cancelled' END,reminder_at=CASE WHEN ? IS NULL THEN reminder_at ELSE ? END,updated_at=? WHERE task_id=? AND status IN ('pending','cancelled')",
-      ).bind(reminderAt !== null, reminderAt, reminderAt, now, stepId),
+        "UPDATE task_reminders SET status='cancelled',updated_at=? WHERE task_id=? AND status='pending'",
+      ).bind(now, stepId),
       db.prepare(
         "INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) SELECT ?,id,'in_app',?,'pending',?,?,? FROM tasks WHERE id=? AND workspace_id=? AND case_id=? AND ? IS NOT NULL",
-      ).bind(`${stepId}:default`, reminderAt, `${stepId}:in_app:default`, now, now, stepId, workspace.id, caseId, reminderAt),
+      ).bind(`${stepId}:in_app:r${parsed.data.revision + 1}`, reminderAt, `${stepId}:in_app:r${parsed.data.revision + 1}`, now, now, stepId, workspace.id, caseId, reminderAt),
+      db.prepare(
+        "INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) SELECT ?,id,'email',?,'pending',?,?,? FROM tasks WHERE id=? AND workspace_id=? AND case_id=? AND ? IS NOT NULL",
+      ).bind(`${stepId}:email:r${parsed.data.revision + 1}`, reminderAt, `${stepId}:email:r${parsed.data.revision + 1}`, now, now, stepId, workspace.id, caseId, reminderAt),
       db.prepare(
         "INSERT INTO action_plan_versions (id,plan_id,version,created_by_user_id,reason,snapshot_json,created_at) SELECT ?,p.id,?,?,'step_updated',CASE WHEN (SELECT revision FROM action_plan_steps WHERE id=?)=? AND p.current_revision=? THEN json_object('version',p.current_revision,'title',p.title,'status',p.status,'progressPercent',p.progress_percent,'steps',(SELECT json_group_array(json_object('id',s.id,'ordinal',s.ordinal,'title',s.title,'description',s.description,'status',s.status,'dueAt',s.due_at,'safeDueAt',s.safe_due_at,'sourceDate',s.deadline_source_date,'deadlineType',s.deadline_type,'calculationMethod',s.calculation_method,'deadlineConfidence',s.deadline_confidence,'actionType',s.action_type,'templateCode',s.template_code,'revision',s.revision)) FROM (SELECT id,ordinal,title,description,status,due_at,safe_due_at,deadline_source_date,deadline_type,calculation_method,deadline_confidence,action_type,template_code,revision FROM action_plan_steps WHERE plan_id=p.id ORDER BY ordinal) s)) ELSE NULL END,? FROM action_plans p WHERE p.id=?",
       ).bind(

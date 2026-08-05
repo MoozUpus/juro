@@ -140,11 +140,14 @@ export const PATCH = withApiErrors(async function PATCH(
       stepUpdate,
       taskUpdate,
       db.prepare(
-        "UPDATE task_reminders SET status=CASE WHEN ? THEN 'pending' ELSE 'cancelled' END,reminder_at=CASE WHEN ? IS NULL THEN reminder_at ELSE ? END,updated_at=? WHERE task_id=? AND status IN ('pending','cancelled')",
-      ).bind(reminderAt !== null, reminderAt, reminderAt, now, change.id),
+        "UPDATE task_reminders SET status='cancelled',updated_at=? WHERE task_id=? AND status='pending'",
+      ).bind(now, change.id),
       db.prepare(
         "INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) SELECT ?,id,'in_app',?,'pending',?,?,? FROM tasks WHERE id=? AND workspace_id=? AND case_id=? AND ? IS NOT NULL",
-      ).bind(`${change.id}:default`, reminderAt, `${change.id}:in_app:default`, now, now, change.id, workspace.id, caseId, reminderAt),
+      ).bind(`${change.id}:in_app:r${change.revision + 1}`, reminderAt, `${change.id}:in_app:r${change.revision + 1}`, now, now, change.id, workspace.id, caseId, reminderAt),
+      db.prepare(
+        "INSERT OR IGNORE INTO task_reminders (id,task_id,channel,reminder_at,status,idempotency_key,created_at,updated_at) SELECT ?,id,'email',?,'pending',?,?,? FROM tasks WHERE id=? AND workspace_id=? AND case_id=? AND ? IS NOT NULL",
+      ).bind(`${change.id}:email:r${change.revision + 1}`, reminderAt, `${change.id}:email:r${change.revision + 1}`, now, now, change.id, workspace.id, caseId, reminderAt),
     ];
   });
 

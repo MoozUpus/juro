@@ -178,6 +178,8 @@ const cloudflareTestFiles = [
   "tests/migration-0095-builder-document-analysis.test.ts",
   "tests/migration-0096-builder-document-versions.test.ts",
   "tests/migration-0097-builder-version-object-writes.test.ts",
+  "tests/migration-0098-task-reminder-email.test.ts",
+  "tests/task-reminder-email.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 

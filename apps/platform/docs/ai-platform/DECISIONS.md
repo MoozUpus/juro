@@ -3222,3 +3222,20 @@ unchanged Builder revision captured by the original handoff. This prevents a
 reviewed old correction from overwriting newer manual work. Migration `0097`
 and its Worker/UI candidate are local only pending separately authorized
 staging backup, migration, deployment and authenticated lifecycle proof.
+
+## D-157 — deadline email reminders resolve identity only at delivery
+
+Status: accepted and locally verified
+Date: 2026-08-06
+
+Deadline email is a mandatory service notification, not a marketing
+preference. The durable queue and D1 ledger contain only opaque source, tenant
+and user identifiers. The consumer reauthorizes task/case/membership state and
+resolves the current protected email immediately before Resend. This avoids a
+stale recipient copy after an email change.
+
+Task edits cancel pending reminders and create new revision-specific in-app and
+email rows; sent evidence is never reset. Existing tasks are not retroactively
+enrolled. Provider retries use one stable idempotency key. Migration `0098` is
+local only pending a separately authorized staging backup, ordered migration
+and exact Worker deploy.

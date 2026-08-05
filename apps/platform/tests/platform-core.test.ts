@@ -1362,8 +1362,9 @@ test("action-plan steps and confirmed tasks share a bounded server-side status v
   assert.match(createTasks, /taskStatusForPlanStep\(step\.status\)/);
   assert.match(createTasks, /taskStatusIsTerminal\(taskStatus\)/);
   assert.match(updateStep, /UPDATE tasks SET status=\?,due_at=\?,completed_at=\?,updated_at=\?/);
-  assert.match(updateStep, /UPDATE task_reminders SET status=CASE WHEN \? THEN 'pending' ELSE 'cancelled' END/);
-  assert.match(updateStep, /INSERT OR IGNORE INTO task_reminders/);
+  assert.match(updateStep, /UPDATE task_reminders SET status='cancelled'/);
+  assert.match(updateStep, /SELECT \?,id,'in_app',\?,'pending'/);
+  assert.match(updateStep, /SELECT \?,id,'email',\?,'pending'/);
 });
 
 test("case workspace documents and activity are tenant-scoped", async () => {
