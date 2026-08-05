@@ -11,6 +11,7 @@ import {
   type StoredNormalizedLegalSource,
 } from "./source-normalization";
 import { trustedLegalSourceKind } from "./source-trust";
+import { parseReviewedLegalSourceDate } from "./applicability-date";
 
 export const LEGAL_SOURCE_REVIEW_ERROR_CODES = [
   "LEGAL_SOURCE_REVIEW_NOT_FOUND",
@@ -77,13 +78,23 @@ export const legalSourceReviewListInputSchema = z.object({
   limit: z.coerce.number().int().min(1).max(50).default(25),
   cursor: z.string().min(1).max(512).optional(),
 }).strict();
-export const legalSourceReviewDecisionInputSchema = z.object({
+export const legalSourceReviewDecisionInputObjectSchema = z.object({
   reviewId: identifierSchema,
   decision: z.enum(["approve", "reject"]),
   notes: z.string().trim().min(10).max(2_000),
   expectedRawContentSha256: sha256Schema,
   expectedParsedContentSha256: sha256Schema,
+  effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  expiresDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 }).strict();
+export const legalSourceReviewDecisionInputSchema = legalSourceReviewDecisionInputObjectSchema.superRefine((value, context) => {
+  if (value.decision === "approve" && !value.effectiveDate) {
+    context.addIssue({ code: "custom", path: ["effectiveDate"], message: "effectiveDate is required for approval" });
+  }
+  if (value.effectiveDate && value.expiresDate && value.expiresDate <= value.effectiveDate) {
+    context.addIssue({ code: "custom", path: ["expiresDate"], message: "expiresDate must be later than effectiveDate" });
+  }
+});
 export const legalSourceDecisionEvidenceSchema = z.object({
   schemaVersion: z.literal(1),
   reviewId: identifierSchema,
@@ -103,6 +114,19 @@ export const legalSourceDecisionEvidenceSchema = z.object({
   reviewerAssignmentIds: z.array(identifierSchema).min(1).max(16),
   mfaVerifiedAt: z.string().datetime(),
   decidedAt: z.string().datetime(),
+}).strict();
+export const legalSourceApplicabilityEvidenceSchema = z.object({
+  schemaVersion: z.literal(1),
+  recordId: identifierSchema,
+  reviewId: identifierSchema,
+  sourceId: identifierSchema,
+  versionId: identifierSchema,
+  effectiveAt: z.string().datetime(),
+  expiresAt: z.string().datetime().nullable(),
+  reviewedByUserId: identifierSchema,
+  reviewerSessionId: identifierSchema,
+  mfaVerifiedAt: z.string().datetime(),
+  createdAt: z.string().datetime(),
 }).strict();
 
 const FRESH_MFA_WINDOW_MS = 15 * 60 * 1_000;
@@ -201,6 +225,14 @@ async function sha256Text(value: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0")
   ).join("");
+}
+
+function parseEvidenceJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
 }
 
 async function reviewerAccess(
@@ -502,6 +534,7 @@ export type LegalSourceReviewDecisionResult = {
 };
 
 async function terminalReplay(
+  db: D1Database,
   row: ReviewRow,
   input: z.infer<typeof legalSourceReviewDecisionInputSchema>,
   reviewerUserId: string,
@@ -521,6 +554,34 @@ async function terminalReplay(
     || !row.version_id
   ) {
     return null;
+  }
+  if (input.decision === "approve") {
+    const applicability = await db.prepare(`
+      SELECT effective_at AS effectiveAt,expires_at AS expiresAt,
+        evidence_json AS evidenceJson,evidence_sha256 AS evidenceSha256
+      FROM legal_source_applicability_records
+      WHERE review_id=? AND source_id=? AND version_id=?
+      LIMIT 1
+    `).bind(row.id, row.source_id, row.version_id).first<{
+      effectiveAt: string;
+      expiresAt: string | null;
+      evidenceJson: string;
+      evidenceSha256: string;
+    }>();
+    const parsedApplicability = applicability
+      ? legalSourceApplicabilityEvidenceSchema.safeParse(
+        parseEvidenceJson(applicability.evidenceJson),
+      )
+      : null;
+    if (
+      !applicability
+      || !parsedApplicability?.success
+      || await sha256Text(applicability.evidenceJson) !== applicability.evidenceSha256
+      || applicability.effectiveAt
+        !== parseReviewedLegalSourceDate(input.effectiveDate)?.toISOString()
+      || applicability.expiresAt
+        !== (parseReviewedLegalSourceDate(input.expiresDate)?.toISOString() ?? null)
+    ) return null;
   }
   let evidence: z.infer<typeof legalSourceDecisionEvidenceSchema>;
   try {
@@ -570,7 +631,7 @@ export async function decideLegalSourceReview(
   if (!row) {
     throw new LegalSourceReviewError("LEGAL_SOURCE_REVIEW_NOT_FOUND");
   }
-  const replay = await terminalReplay(row, input, access.userId);
+  const replay = await terminalReplay(env.DB, row, input, access.userId);
   if (replay) return replay;
   if (row.status === "approved" || row.status === "rejected") {
     throw new LegalSourceReviewError(
@@ -605,6 +666,44 @@ export async function decideLegalSourceReview(
   }
 
   const decidedAt = now.toISOString();
+  const effectiveAt = input.decision === "approve"
+    ? parseReviewedLegalSourceDate(input.effectiveDate)
+    : null;
+  const expiresAt = input.decision === "approve" && input.expiresDate
+    ? parseReviewedLegalSourceDate(input.expiresDate)
+    : null;
+  if (
+    input.decision === "approve"
+    && (
+      !effectiveAt
+      || effectiveAt.getTime() > now.getTime() + 24 * 60 * 60 * 1_000
+      || (input.expiresDate && !expiresAt)
+      || (expiresAt && expiresAt.getTime() <= effectiveAt.getTime())
+    )
+  ) {
+    throw new LegalSourceReviewError("LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT");
+  }
+  const applicabilityRecordId = input.decision === "approve"
+    ? `lsapp_${(await sha256Text(`${row.id}\n${versionId}\n${effectiveAt!.toISOString()}\n${expiresAt?.toISOString() ?? ""}`)).slice(0, 32)}`
+    : null;
+  const applicabilityEvidence = input.decision === "approve"
+    ? JSON.stringify(legalSourceApplicabilityEvidenceSchema.parse({
+      schemaVersion: 1,
+      recordId: applicabilityRecordId,
+      reviewId: row.id,
+      sourceId: row.source_id,
+      versionId,
+      effectiveAt: effectiveAt!.toISOString(),
+      expiresAt: expiresAt?.toISOString() ?? null,
+      reviewedByUserId: access.userId,
+      reviewerSessionId: access.sessionId,
+      mfaVerifiedAt: access.mfaVerifiedAt,
+      createdAt: decidedAt,
+    }))
+    : null;
+  const applicabilityEvidenceSha256 = applicabilityEvidence
+    ? await sha256Text(applicabilityEvidence)
+    : null;
   const evidence = JSON.stringify(legalSourceDecisionEvidenceSchema.parse({
     schemaVersion: 1,
     reviewId: row.id,
@@ -627,8 +726,7 @@ export async function decideLegalSourceReview(
   }));
   const decisionEvidenceSha256 = await sha256Text(evidence);
   const status = input.decision === "approve" ? "approved" : "rejected";
-  const statements: D1PreparedStatement[] = [
-    env.DB.prepare(`
+  const decisionStatement = env.DB.prepare(`
       UPDATE legal_review_queue
       SET status = ?, decision = ?, decision_notes = ?,
           reviewed_parsed_sha256 = ?, decided_by_user_id = ?,
@@ -651,8 +749,31 @@ export async function decideLegalSourceReview(
       row.source_id,
       versionId,
       access.userId,
-    ),
-  ];
+    );
+  const statements: D1PreparedStatement[] = [];
+  if (input.decision === "approve") {
+    statements.push(env.DB.prepare(`
+      INSERT INTO legal_source_applicability_records (
+        id,review_id,source_id,version_id,effective_at,expires_at,
+        reviewed_by_user_id,reviewer_session_id,mfa_verified_at,
+        evidence_json,evidence_sha256,created_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+    `).bind(
+      applicabilityRecordId,
+      row.id,
+      row.source_id,
+      versionId,
+      effectiveAt!.toISOString(),
+      expiresAt?.toISOString() ?? null,
+      access.userId,
+      access.sessionId,
+      access.mfaVerifiedAt,
+      applicabilityEvidence,
+      applicabilityEvidenceSha256,
+      decidedAt,
+    ));
+  }
+  statements.push(decisionStatement);
   if (input.decision === "reject") {
     statements.push(
       env.DB.prepare(`
@@ -685,17 +806,33 @@ export async function decideLegalSourceReview(
     );
   }
 
-  const results = await env.DB.batch(statements);
+  let results: D1Result<unknown>[];
+  try {
+    results = await env.DB.batch(statements);
+  } catch {
+    const after = await loadReview(env.DB, input.reviewId);
+    const concurrentReplay = after
+      ? await terminalReplay(env.DB, after, input, access.userId)
+      : null;
+    if (concurrentReplay) return concurrentReplay;
+    throw new LegalSourceReviewError(
+      "LEGAL_SOURCE_REVIEW_PERSISTENCE_FAILED",
+    );
+  }
   if (
-    Number(results[0]?.meta.changes ?? 0) !== 1
+    Number(results[input.decision === "approve" ? 1 : 0]?.meta.changes ?? 0) !== 1
     || (
       input.decision === "reject"
       && Number(results[1]?.meta.changes ?? 0) !== 1
     )
+    || (
+      input.decision === "approve"
+      && Number(results[0]?.meta.changes ?? 0) !== 1
+    )
   ) {
     const after = await loadReview(env.DB, input.reviewId);
     const concurrentReplay = after
-      ? await terminalReplay(after, input, access.userId)
+      ? await terminalReplay(env.DB, after, input, access.userId)
       : null;
     if (concurrentReplay) return concurrentReplay;
     throw new LegalSourceReviewError(
@@ -721,6 +858,9 @@ export type ApprovedLegalSourceReview = {
   reviewerUserId: string;
   decisionEvidenceSha256: string;
   decidedAt: string;
+  applicabilityEvidenceSha256: string | null;
+  effectiveAt: string | null;
+  expiresAt: string | null;
   source: StoredNormalizedLegalSource;
 };
 
@@ -781,6 +921,47 @@ export async function loadApprovedLegalSourceReview(
       "LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT",
     );
   }
+  let applicabilityEvidenceSha256: string | null = null;
+  let effectiveAt: string | null = null;
+  let expiresAt: string | null = null;
+  const applicability = await env.DB.prepare(`
+    SELECT id,review_id AS reviewId,source_id AS sourceId,version_id AS versionId,
+      effective_at AS effectiveAt,expires_at AS expiresAt,
+      reviewed_by_user_id AS reviewedByUserId,
+      reviewer_session_id AS reviewerSessionId,mfa_verified_at AS mfaVerifiedAt,
+      evidence_json AS evidenceJson,evidence_sha256 AS evidenceSha256,
+      created_at AS createdAt
+    FROM legal_source_applicability_records
+    WHERE review_id=? AND source_id=? AND version_id=?
+    LIMIT 1
+  `).bind(row.id, row.source_id, row.version_id).first<{
+    id: string; reviewId: string; sourceId: string; versionId: string;
+    effectiveAt: string; expiresAt: string | null; reviewedByUserId: string;
+    reviewerSessionId: string; mfaVerifiedAt: string; evidenceJson: string;
+    evidenceSha256: string; createdAt: string;
+  }>();
+  if (applicability) {
+    const parsedApplicability = legalSourceApplicabilityEvidenceSchema.safeParse(
+      parseEvidenceJson(applicability.evidenceJson),
+    );
+    if (
+      !parsedApplicability.success
+      || await sha256Text(applicability.evidenceJson) !== applicability.evidenceSha256
+      || parsedApplicability.data.recordId !== applicability.id
+      || parsedApplicability.data.reviewId !== row.id
+      || parsedApplicability.data.sourceId !== row.source_id
+      || parsedApplicability.data.versionId !== row.version_id
+      || parsedApplicability.data.reviewedByUserId !== row.decided_by_user_id
+      || parsedApplicability.data.reviewerSessionId !== applicability.reviewerSessionId
+      || parsedApplicability.data.mfaVerifiedAt !== applicability.mfaVerifiedAt
+      || parsedApplicability.data.createdAt !== row.decided_at
+    ) {
+      throw new LegalSourceReviewError("LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT");
+    }
+    applicabilityEvidenceSha256 = applicability.evidenceSha256;
+    effectiveAt = applicability.effectiveAt;
+    expiresAt = applicability.expiresAt;
+  }
   let source: StoredNormalizedLegalSource;
   try {
     source = await loadStoredNormalizedLegalSource(env, row.version_id);
@@ -813,6 +994,9 @@ export async function loadApprovedLegalSourceReview(
     reviewerUserId: row.decided_by_user_id,
     decisionEvidenceSha256: row.decision_evidence_sha256,
     decidedAt: row.decided_at,
+    applicabilityEvidenceSha256,
+    effectiveAt,
+    expiresAt,
     source,
   };
 }

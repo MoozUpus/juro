@@ -65,6 +65,7 @@ const legalSourceAdviceUrlGuardEntry = journal.entries.find(
   ({ idx }) => idx === 38,
 );
 const legalCorpusAlertsEntry = journal.entries.find(({ idx }) => idx === 89);
+const legalSourceApplicabilityEntry = journal.entries.find(({ idx }) => idx === 90);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -163,6 +164,10 @@ assert.ok(
 assert.ok(
   legalCorpusAlertsEntry,
   "Drizzle journal must contain migration 0089",
+);
+assert.ok(
+  legalSourceApplicabilityEntry,
+  "Drizzle journal must contain migration 0090",
 );
 
 
@@ -3157,14 +3162,53 @@ test("0028 rejects incoherent publication and preserves accepted evidence", () =
     db.prepare(`
       INSERT INTO legal_review_queue (
         id,source_id,version_id,reason_code,confidence,status,
-        assigned_to_user_id,decision,decision_notes,reviewed_parsed_sha256,
-        decided_by_user_id,decision_evidence_json,decision_evidence_sha256,
-        decided_at,created_at,updated_at
+        assigned_to_user_id,created_at,updated_at
       ) VALUES (
         'review-28','source-28','version-28','new_source_version','low',
-        'approved','publisher-28','approve',?,?,'publisher-28',?,?,?, ?,?
+        'in_review','publisher-28',?,?
       )
-    `).run(notes, parsedHash, reviewEvidence, reviewHash, now, now, now);
+    `).run(now, now);
+    const applicabilityEvidence = JSON.stringify({
+      schemaVersion: 1,
+      recordId: "applicability-28",
+      reviewId: "review-28",
+      sourceId: "source-28",
+      versionId: "version-28",
+      effectiveAt: "2019-12-31T19:00:00.000Z",
+      expiresAt: null,
+      reviewedByUserId: "publisher-28",
+      reviewerSessionId: "review-session-28",
+      mfaVerifiedAt: now,
+      createdAt: now,
+    });
+    db.prepare(`
+      INSERT INTO legal_source_applicability_records (
+        id,review_id,source_id,version_id,effective_at,expires_at,
+        reviewed_by_user_id,reviewer_session_id,mfa_verified_at,
+        evidence_json,evidence_sha256,created_at
+      ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+    `).run(
+      "applicability-28",
+      "review-28",
+      "source-28",
+      "version-28",
+      "2019-12-31T19:00:00.000Z",
+      null,
+      "publisher-28",
+      "review-session-28",
+      now,
+      applicabilityEvidence,
+      "f".repeat(64),
+      now,
+    );
+    db.prepare(`
+      UPDATE legal_review_queue
+      SET status='approved',decision='approve',decision_notes=?,
+        reviewed_parsed_sha256=?,decided_by_user_id='publisher-28',
+        decision_evidence_json=?,decision_evidence_sha256=?,decided_at=?,
+        updated_at=?
+      WHERE id='review-28'
+    `).run(notes, parsedHash, reviewEvidence, reviewHash, now, now);
     db.prepare(`
       INSERT INTO legal_source_sections (
         id,version_id,canonical_ref,heading,body_text,sequence,
@@ -4279,6 +4323,27 @@ test("0089 adds only content-free legal corpus alert evidence", () => {
     db.exec("PRAGMA foreign_keys = ON");
     for (const entry of journal.entries) applyMigration(db, entry);
     assert.ok(tableDefinitions(db).has("legal_corpus_alert_jobs"));
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0090 adds immutable reviewer-bound legal applicability evidence", () => {
+  const sql = migrationSql(legalSourceApplicabilityEntry);
+  for (const statement of statements(sql)) {
+    const executable = statement.replace(/^--[^\n]*\n/, "");
+    assert.match(executable, /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i);
+  }
+  assert.match(sql, /CREATE TABLE `legal_source_applicability_records`/);
+  assert.match(sql, /LEGAL_SOURCE_APPLICABILITY_REVIEW_INVALID/);
+  assert.match(sql, /LEGAL_SOURCE_APPLICABILITY_IMMUTABLE/);
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    assert.ok(tableDefinitions(db).has("legal_source_applicability_records"));
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

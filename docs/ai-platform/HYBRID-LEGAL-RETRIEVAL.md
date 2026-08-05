@@ -14,6 +14,10 @@
 
 Exact lexical candidates remain in the same query. If no indexed source exists, OpenAI embeddings is unavailable, or Vectorize fails, the service uses lexical retrieval and reports `retrievalMode: "lexical"`; it never creates an unsupported citation.
 
+## Historical applicability
+
+An explicit legal context date uses lexical retrieval only; semantic similarity is not allowed to select a historical edition. The date is interpreted from the user-visible Uzbekistan calendar at `00:00 Asia/Tashkent`. A candidate must carry immutable reviewer applicability evidence. For a replaced edition, the validator also verifies the replacement lifecycle and successor applicability evidence, then uses the earlier of the reviewed expiry and successor effective date. Invalid, missing or tampered evidence removes the candidate rather than weakening the answer.
+
 ## Boundary
 
 - `OPENAI_API_KEY` is read only in the Worker/server runtime and never enters a client bundle.

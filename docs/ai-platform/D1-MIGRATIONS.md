@@ -1,5 +1,21 @@
 # D1 migration checkpoint
 
+## 0079–0088 — protected staging checkpoint
+
+Status: applied and independently restore-verified in protected staging on 2026-08-05; production is unchanged.
+
+The exact Git commit, private R2 backup hashes, ordered ledger, post-migration restore, Worker version, binding read-back, CI and Access-boundary evidence are recorded in `STAGING-0079-0088-EVIDENCE.md`. Statements below that still call these migrations “local candidates” are retained as their original preflight notes; this checkpoint supersedes those status lines. Authenticated operator rehearsals remain open and are not inferred from anonymous Access redirects.
+
+## 0090 — immutable legal-version applicability
+
+Status: additive local candidate; protected staging is through `0088`; production is unchanged.
+
+`0090_legal_source_applicability.sql` adds reviewer-bound, append-only effective/expiry evidence for each newly approved legal-source version. D1 requires an assigned in-review source/version, canonical evidence fields, a matching reviewer/session/MFA boundary and the applicability row before the review can transition to approved. Updates and deletes fail closed. Existing terminal approvals remain readable as legacy evidence; they are not retroactively assigned invented dates.
+
+Publication projects the reviewed interval onto the verified version. A replacement archives the previous version at the earlier of its reviewed expiry or the successor effective date. Historical retrieval revalidates the predecessor publication, immutable applicability record, replacement lifecycle evidence and successor applicability evidence before it accepts the derived boundary.
+
+Before staging application: create and round-trip-verify a fresh private backup, restore it in isolation, apply only the exact authorized pending ledger, deploy the matching commit and run authenticated reviewer approval/publication/current-vs-historical retrieval/tamper-denial checks in RU and UZ.
+
 ## 0086 — protected platform audit access
 
 `0086_platform_audit_access.sql` adds a per-actor immutable SHA-256 chain for

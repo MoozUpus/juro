@@ -326,7 +326,7 @@ Date: 2026-08-05
 
 Emergency controls are not dashboard variables or client-side presentation flags. Every change is a per-environment append-only D1 version with a real staff actor, bounded reason, predecessor hash and canonical SHA-256 event hash. D1 enforces ordering and immutability; the application verifies the chain before it permits execution or another write. A disabled or corrupted chain fails closed before a provider call, new upload write, voice processing step or lawyer-request creation. Existing user data remains readable and deletable so an incident stop cannot trap personal content.
 
-Only an operations-capable staff member with fresh MFA can view or change the flags, and mutation remains CSRF-protected. The browser never supplies environment or actor identity. Environment comes from server runtime configuration and malformed values are rejected rather than silently treated as production or staging. Migration `0084` and the matching Worker remain local until a separately authorized backup/migration/deploy cycle.
+Only an operations-capable staff member with fresh MFA can view or change the flags, and mutation remains CSRF-protected. The browser never supplies environment or actor identity. Environment comes from server runtime configuration and malformed values are rejected rather than silently treated as production or staging. Migration `0084` and the matching Worker were deployed in protected staging under `STAGING-0079-0088-EVIDENCE.md`; production is unchanged.
 
 ## D-116 — legal quality review is explicit, versioned and content-minimized
 
@@ -338,8 +338,8 @@ content requires a distinct auditable view. Legal decisions append immutable
 versions; corrected/golden text is deletion-coupled, while retained evidence
 contains only hashes, classification and opaque identifiers. Access is limited
 to a legal reviewer with active TOTP and MFA verified within 15 minutes. The
-application and migration `0087` both enforce this boundary; staging remains
-through `0078` and production is unchanged.
+application and migration `0087` both enforce this boundary. It was deployed in
+protected staging under `STAGING-0079-0088-EVIDENCE.md`; production is unchanged.
 ## 2026-08-05 — AI runtime settings are allowlist-only and immutable
 
 Decision: expose only deployment-allowlisted model choices and a fixed response
@@ -348,5 +348,14 @@ hash-chained D1 versions and bind the selected config hash into each chat or
 document-analysis instruction hash. Keep jurisdiction, official-source rules,
 privacy, retention, tenant authorization and injection defenses protected in
 code/config. A missing table may use deployment defaults during expand rollout;
-a present invalid chain fails closed. Migration `0088` remains local pending a
-new staging backup/migration/deploy authorization; production is unchanged.
+a present invalid chain fails closed. Migration `0088` was applied in protected
+staging under `STAGING-0079-0088-EVIDENCE.md`; production is unchanged.
+
+## D-121 — legal applicability is reviewer evidence, not model inference
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+An effective or expiry date used to select an Uzbekistan legal-source version must come from an explicit legal-reviewer decision. New approvals therefore require a calendar date, stored as the start of that day in `Asia/Tashkent`, with optional later expiry. The evidence is immutable, session/MFA-bound and required by D1 before approval. The AI provider cannot infer or rewrite this interval.
+
+When a successor is activated, the predecessor ends at the earlier of its reviewed expiry or the successor effective date. Historical retrieval accepts that derived boundary only after revalidating both applicability records and the immutable replacement lifecycle. Legacy approvals without applicability evidence remain usable only in their existing current-publication path; no historical date is fabricated for them. Migration `0090` is local-only pending a separately authorized staging backup/migration/deploy cycle; production is unchanged.

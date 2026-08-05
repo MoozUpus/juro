@@ -2093,6 +2093,25 @@ export const legalReviewQueue = sqliteTable("legal_review_queue", {
   uniqueIndex("legal_review_queue_version_reason_uidx").on(table.versionId, table.reasonCode),
 ]);
 
+export const legalSourceApplicabilityRecords = sqliteTable("legal_source_applicability_records", {
+  id: text("id").primaryKey(),
+  reviewId: text("review_id").notNull().references(() => legalReviewQueue.id, { onDelete: "restrict" }),
+  sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),
+  versionId: text("version_id").notNull().references(() => legalSourceVersions.id, { onDelete: "restrict" }),
+  effectiveAt: text("effective_at").notNull(),
+  expiresAt: text("expires_at"),
+  reviewedByUserId: text("reviewed_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  reviewerSessionId: text("reviewer_session_id").notNull(),
+  mfaVerifiedAt: text("mfa_verified_at").notNull(),
+  evidenceJson: text("evidence_json").notNull(),
+  evidenceSha256: text("evidence_sha256").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("legal_source_applicability_review_uidx").on(table.reviewId),
+  uniqueIndex("legal_source_applicability_version_uidx").on(table.versionId),
+  index("legal_source_applicability_interval_idx").on(table.effectiveAt, table.expiresAt),
+]);
+
 export const legalSourcePublications = sqliteTable("legal_source_publications", {
   id: text("id").primaryKey(),
   reviewId: text("review_id").notNull().references(() => legalReviewQueue.id, { onDelete: "restrict" }),

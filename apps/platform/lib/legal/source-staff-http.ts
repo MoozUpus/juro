@@ -20,7 +20,7 @@ import {
   claimLegalSourceReview,
   decideLegalSourceReview,
   legalSourceReviewListInputSchema,
-  legalSourceReviewDecisionInputSchema,
+  legalSourceReviewDecisionInputObjectSchema,
   LegalSourceReviewError,
   listLegalSourceReviews,
   type LegalSourceReviewEnv,
@@ -61,8 +61,15 @@ export type LegalSourceStaffHttpDependencies = {
   now?: () => Date;
 };
 
-const decisionRequestSchema = legalSourceReviewDecisionInputSchema.omit({
+const decisionRequestSchema = legalSourceReviewDecisionInputObjectSchema.omit({
   reviewId: true,
+}).superRefine((value, context) => {
+  if (value.decision === "approve" && !value.effectiveDate) {
+    context.addIssue({ code: "custom", path: ["effectiveDate"], message: "effectiveDate is required for approval" });
+  }
+  if (value.effectiveDate && value.expiresDate && value.expiresDate <= value.effectiveDate) {
+    context.addIssue({ code: "custom", path: ["expiresDate"], message: "expiresDate must be later than effectiveDate" });
+  }
 });
 const publicationRequestSchema = legalSourcePublicationInputSchema.omit({
   reviewId: true,

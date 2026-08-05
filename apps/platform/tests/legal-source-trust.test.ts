@@ -210,6 +210,20 @@ async function evidenceFixture(): Promise<VerifiedLegalSourceEvidenceRow> {
     indexedAt: null,
     sectionCount: 1,
     chunkCount: 1,
+    applicabilityId: null,
+    applicabilityEffectiveAt: null,
+    applicabilityExpiresAt: null,
+    applicabilityReviewedByUserId: null,
+    applicabilityReviewerSessionId: null,
+    applicabilityMfaVerifiedAt: null,
+    applicabilityEvidenceJson: null,
+    applicabilityEvidenceSha256: null,
+    applicabilityCreatedAt: null,
+    supersedingApplicabilityEffectiveAt: null,
+    supersedingApplicabilityEvidenceJson: null,
+    supersedingApplicabilityEvidenceSha256: null,
+    supersessionLifecycleEvidenceJson: null,
+    supersessionLifecycleEvidenceSha256: null,
   };
 }
 

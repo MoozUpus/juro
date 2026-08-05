@@ -717,12 +717,14 @@ export async function publishApprovedLegalSource(
     env.DB.prepare(`
       UPDATE legal_source_versions
       SET status='verified',verified_at=?,verified_by_user_id=?,
-        expires_at=NULL,updated_at=?
+        effective_at=?,expires_at=?,updated_at=?
       WHERE id=? AND source_id=? AND status='pending_review'
         AND content_sha256=? AND parsed_object_key IS NOT NULL
     `).bind(
       publishedAt,
       access.userId,
+      review.effectiveAt,
+      review.expiresAt,
       publishedAt,
       review.versionId,
       review.sourceId,
@@ -732,10 +734,16 @@ export async function publishApprovedLegalSource(
   if (activePredecessor) {
     statements.push(env.DB.prepare(`
       UPDATE legal_source_versions
-      SET status='archived',expires_at=?,updated_at=?
+      SET status='archived',
+        expires_at=CASE
+          WHEN expires_at IS NOT NULL AND expires_at<? THEN expires_at
+          ELSE ?
+        END,
+        updated_at=?
       WHERE id=? AND source_id=? AND status='verified'
     `).bind(
-      publishedAt,
+      review.effectiveAt ?? publishedAt,
+      review.effectiveAt ?? publishedAt,
       publishedAt,
       activePredecessor.versionId,
       review.sourceId,
@@ -746,7 +754,7 @@ export async function publishApprovedLegalSource(
       UPDATE legal_sources
       SET status='verified',verification_state='verified',
         content_sha256=?,verified_at=?,verified_by_user_id=?,
-        verification_notes=?,expires_at=NULL,updated_at=?
+        verification_notes=?,effective_at=?,expires_at=?,updated_at=?
       WHERE id=? AND (
         (? IS NULL AND status<>'verified' AND verification_state<>'verified'
           AND (
@@ -775,6 +783,8 @@ export async function publishApprovedLegalSource(
       publishedAt,
       access.userId,
       `publication:${publicationId}`,
+      review.effectiveAt,
+      review.expiresAt,
       publishedAt,
       review.sourceId,
       activePredecessor?.publicationId ?? null,

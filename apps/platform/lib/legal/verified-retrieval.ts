@@ -1,6 +1,7 @@
 import type { LegalSourceContext } from "../ai/provider";
 import { legalSourceLifecycleEvidenceSchema } from "./source-lifecycle";
 import { legalSourcePublicationEvidenceSchema } from "./source-publication";
+import { legalSourceApplicabilityEvidenceSchema } from "./source-review";
 import { filterTrustedVerifiedLegalSources } from "./source-trust";
 import {
   semanticLegalChunkRanks,
@@ -116,6 +117,20 @@ export type VerifiedLegalSourceEvidenceRow = PublishedReadingEvidenceRow & {
   lifecycleOccurredAt: string;
   sectionCount: number;
   chunkCount: number;
+  applicabilityId: string | null;
+  applicabilityEffectiveAt: string | null;
+  applicabilityExpiresAt: string | null;
+  applicabilityReviewedByUserId: string | null;
+  applicabilityReviewerSessionId: string | null;
+  applicabilityMfaVerifiedAt: string | null;
+  applicabilityEvidenceJson: string | null;
+  applicabilityEvidenceSha256: string | null;
+  applicabilityCreatedAt: string | null;
+  supersedingApplicabilityEffectiveAt: string | null;
+  supersedingApplicabilityEvidenceJson: string | null;
+  supersedingApplicabilityEvidenceSha256: string | null;
+  supersessionLifecycleEvidenceJson: string | null;
+  supersessionLifecycleEvidenceSha256: string | null;
 };
 
 function unavailableFreshness(): LegalDatabaseFreshness {
@@ -275,15 +290,67 @@ export async function validateVerifiedLegalSourceEvidence(
   const lifecycle = legalSourceLifecycleEvidenceSchema.safeParse(
     parseJson(row.lifecycleEvidenceJson),
   );
-  const effectiveAt = applicability === "historical"
-    ? row.versionEffectiveAt
-    : row.versionEffectiveAt ?? row.sourceEffectiveAt;
-  const expiresAt = row.versionExpiresAt ?? row.sourceExpiresAt;
+  const applicabilityEvidence = row.applicabilityEvidenceJson
+    ? legalSourceApplicabilityEvidenceSchema.safeParse(parseJson(row.applicabilityEvidenceJson))
+    : null;
+  const supersedingApplicabilityEvidence = row.supersedingApplicabilityEvidenceJson
+    ? legalSourceApplicabilityEvidenceSchema.safeParse(
+      parseJson(row.supersedingApplicabilityEvidenceJson),
+    )
+    : null;
+  const supersessionLifecycleEvidence = row.supersessionLifecycleEvidenceJson
+    ? legalSourceLifecycleEvidenceSchema.safeParse(
+      parseJson(row.supersessionLifecycleEvidenceJson),
+    )
+    : null;
+  const supersessionIsVerified = Boolean(
+    supersedingApplicabilityEvidence?.success
+    && supersessionLifecycleEvidence?.success
+    && row.supersedingApplicabilityEvidenceJson
+    && row.supersedingApplicabilityEvidenceSha256
+    && row.supersessionLifecycleEvidenceJson
+    && row.supersessionLifecycleEvidenceSha256
+    && await sha256Text(row.supersedingApplicabilityEvidenceJson)
+      === row.supersedingApplicabilityEvidenceSha256
+    && await sha256Text(row.supersessionLifecycleEvidenceJson)
+      === row.supersessionLifecycleEvidenceSha256
+    && supersessionLifecycleEvidence.data.eventType === "activated_replacement"
+    && supersessionLifecycleEvidence.data.sourceId === row.id
+    && supersessionLifecycleEvidence.data.previousPublicationId === row.publicationId
+    && supersessionLifecycleEvidence.data.previousVersionId === row.versionId
+    && supersedingApplicabilityEvidence.data.sourceId === row.id
+    && supersedingApplicabilityEvidence.data.versionId
+      === supersessionLifecycleEvidence.data.versionId
+    && supersedingApplicabilityEvidence.data.effectiveAt
+      === row.supersedingApplicabilityEffectiveAt
+  );
+  const effectiveAt = row.applicabilityEffectiveAt
+    ?? (applicability === "historical" ? row.versionEffectiveAt : row.versionEffectiveAt ?? row.sourceEffectiveAt);
+  const reviewedExpiryTime = validTime(row.applicabilityExpiresAt);
+  const supersededTime = supersessionIsVerified
+    ? validTime(row.supersedingApplicabilityEffectiveAt)
+    : null;
+  const expiresAt = reviewedExpiryTime !== null && supersededTime !== null
+    ? (reviewedExpiryTime <= supersededTime
+      ? row.applicabilityExpiresAt
+      : row.supersedingApplicabilityEffectiveAt)
+    : reviewedExpiryTime !== null
+      ? row.applicabilityExpiresAt
+      : supersededTime !== null
+        ? row.supersedingApplicabilityEffectiveAt
+        : row.applicabilityId
+          ? null
+          : row.versionExpiresAt ?? row.sourceExpiresAt;
   const effectiveTime = effectiveAt ? validTime(effectiveAt) : null;
   const expiresTime = expiresAt ? validTime(expiresAt) : null;
   if (
     !publication.success
     || !lifecycle.success
+    || (applicability === "historical" && !applicabilityEvidence?.success)
+    || (row.applicabilityId !== null && !applicabilityEvidence?.success)
+    || (row.versionStatus === "archived"
+      && row.applicabilityExpiresAt === null
+      && !supersessionIsVerified)
     || row.status !== "verified"
     || row.verificationState !== "verified"
     || (applicability === "current"
@@ -311,6 +378,26 @@ export async function validateVerifiedLegalSourceEvidence(
 
   const p = publication.data;
   const l = lifecycle.data;
+  if (applicabilityEvidence?.success) {
+    const a = applicabilityEvidence.data;
+    if (
+      a.recordId !== row.applicabilityId
+      || a.reviewId !== row.reviewId
+      || a.sourceId !== row.id
+      || a.versionId !== row.versionId
+      || a.effectiveAt !== row.applicabilityEffectiveAt
+      || a.expiresAt !== row.applicabilityExpiresAt
+      || a.reviewedByUserId !== row.applicabilityReviewedByUserId
+      || a.reviewerSessionId !== row.applicabilityReviewerSessionId
+      || a.mfaVerifiedAt !== row.applicabilityMfaVerifiedAt
+      || a.createdAt !== row.applicabilityCreatedAt
+      || !row.applicabilityEvidenceJson
+      || !row.applicabilityEvidenceSha256
+      || await sha256Text(row.applicabilityEvidenceJson) !== row.applicabilityEvidenceSha256
+      || row.versionEffectiveAt !== row.applicabilityEffectiveAt
+      || row.versionExpiresAt !== expiresAt
+    ) return null;
+  }
   if (
     p.publicationId !== row.publicationId
     || p.reviewId !== row.reviewId
@@ -539,6 +626,20 @@ export async function retrieveVerifiedLegalSources(
       chunk.language AS chunkLanguage,chunk.content_text AS chunkContentText,
       chunk.content_sha256 AS chunkContentSha256,chunk.vector_id AS vectorId,
       chunk.indexed_at AS indexedAt,
+      applicability.id AS applicabilityId,
+      applicability.effective_at AS applicabilityEffectiveAt,
+      applicability.expires_at AS applicabilityExpiresAt,
+      applicability.reviewed_by_user_id AS applicabilityReviewedByUserId,
+      applicability.reviewer_session_id AS applicabilityReviewerSessionId,
+      applicability.mfa_verified_at AS applicabilityMfaVerifiedAt,
+      applicability.evidence_json AS applicabilityEvidenceJson,
+      applicability.evidence_sha256 AS applicabilityEvidenceSha256,
+      applicability.created_at AS applicabilityCreatedAt,
+      superseding_applicability.effective_at AS supersedingApplicabilityEffectiveAt,
+      superseding_applicability.evidence_json AS supersedingApplicabilityEvidenceJson,
+      superseding_applicability.evidence_sha256 AS supersedingApplicabilityEvidenceSha256,
+      supersession.evidence_json AS supersessionLifecycleEvidenceJson,
+      supersession.evidence_sha256 AS supersessionLifecycleEvidenceSha256,
       (SELECT count(*) FROM legal_source_sections counted_section
         WHERE counted_section.version_id=version.id) AS sectionCount,
       (SELECT count(*) FROM legal_source_chunks counted_chunk
@@ -558,14 +659,36 @@ export async function retrieveVerifiedLegalSources(
     INNER JOIN legal_source_sections section ON section.version_id=version.id
     INNER JOIN legal_source_chunks chunk
       ON chunk.section_id=section.id AND chunk.version_id=version.id
+    LEFT JOIN legal_source_applicability_records applicability
+      ON applicability.review_id=publication.review_id
+     AND applicability.source_id=source.id AND applicability.version_id=version.id
+    LEFT JOIN legal_source_lifecycle_events supersession
+      ON supersession.source_id=source.id
+     AND supersession.previous_publication_id=publication.id
+     AND supersession.previous_version_id=version.id
+     AND supersession.event_type='activated_replacement'
+    LEFT JOIN legal_source_applicability_records superseding_applicability
+      ON superseding_applicability.source_id=source.id
+     AND superseding_applicability.version_id=supersession.version_id
     WHERE source.status='verified' AND source.verification_state='verified'
       AND version.status ${historical ? "IN ('verified','archived')" : "='verified'"}
       AND source.locale=?
       AND ${historical
-        ? "version.effective_at IS NOT NULL AND version.effective_at<=? AND (version.expires_at IS NULL OR version.expires_at>?)"
+        ? `applicability.id IS NOT NULL AND applicability.effective_at<=?
+          AND (CASE
+            WHEN applicability.expires_at IS NULL THEN superseding_applicability.effective_at
+            WHEN superseding_applicability.effective_at IS NULL THEN applicability.expires_at
+            WHEN applicability.expires_at<=superseding_applicability.effective_at THEN applicability.expires_at
+            ELSE superseding_applicability.effective_at
+          END IS NULL OR CASE
+            WHEN applicability.expires_at IS NULL THEN superseding_applicability.effective_at
+            WHEN superseding_applicability.effective_at IS NULL THEN applicability.expires_at
+            WHEN applicability.expires_at<=superseding_applicability.effective_at THEN applicability.expires_at
+            ELSE superseding_applicability.effective_at
+          END>?)`
         : "1=1"}
       AND (${conditions})
-    ORDER BY ${historical ? "version.effective_at DESC," : ""}
+    ORDER BY ${historical ? "applicability.effective_at DESC," : ""}
       source.last_checked_at DESC,section.sequence ASC
     LIMIT 48
   `).bind(

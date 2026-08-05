@@ -288,6 +288,7 @@ async function approvedReviewFixture(
   suffix: string,
   documentHtml?: string,
   requestSuffix = "",
+  effectiveDate = "2020-01-01",
 ) {
   const fixture = await normalizedReviewFixture(
     env,
@@ -303,6 +304,7 @@ async function approvedReviewFixture(
     reviewId: fixture.reviewId,
     decision: "approve",
     notes: "Источник и нормализованная структура проверены для публикации.",
+    effectiveDate,
     expectedRawContentSha256: fixture.rawContentSha256,
     expectedParsedContentSha256: fixture.parsedContentSha256,
   }, { now: new Date("2026-07-28T01:12:00.000Z") });
@@ -512,6 +514,7 @@ test("approval is single-owner, hash-verifiable, immutable, and does not publish
       reviewId: fixture.reviewId,
       decision: "approve" as const,
       notes: "Текст и структура сверены с сохранённым официальным снимком.",
+      effectiveDate: "2020-01-01",
       expectedRawContentSha256: fixture.rawContentSha256,
       expectedParsedContentSha256: fixture.parsedContentSha256,
     };
@@ -552,6 +555,27 @@ test("approval is single-owner, hash-verifiable, immutable, and does not publish
     assert.equal(evidence.reviewerSessionId, reviewer.sessionId);
     assert.equal(evidence.rawContentSha256, fixture.rawContentSha256);
     assert.equal(evidence.parsedContentSha256, fixture.parsedContentSha256);
+    const applicability = sqlite.prepare(`
+      SELECT effective_at AS effectiveAt,expires_at AS expiresAt,
+        evidence_json AS evidenceJson,evidence_sha256 AS evidenceSha256
+      FROM legal_source_applicability_records WHERE review_id=?
+    `).get(fixture.reviewId) as {
+      effectiveAt: string;
+      expiresAt: string | null;
+      evidenceJson: string;
+      evidenceSha256: string;
+    };
+    assert.equal(applicability.effectiveAt, "2019-12-31T19:00:00.000Z");
+    assert.equal(applicability.expiresAt, null);
+    assert.equal(
+      await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(applicability.evidenceJson),
+      ).then((digest) => Array.from(new Uint8Array(digest), (byte) =>
+        byte.toString(16).padStart(2, "0")
+      ).join("")),
+      applicability.evidenceSha256,
+    );
 
     const trust = sqlite.prepare(`
       SELECT
@@ -577,6 +601,13 @@ test("approval is single-owner, hash-verifiable, immutable, and does not publish
     await expectReviewError(
       decideLegalSourceReview(env, reviewer, {
         ...input,
+        effectiveDate: "2021-01-01",
+      }, { now: new Date("2026-07-28T01:13:00.000Z") }),
+      "LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT",
+    );
+    await expectReviewError(
+      decideLegalSourceReview(env, reviewer, {
+        ...input,
         expectedRawContentSha256: "f".repeat(64),
       }, { now: new Date("2026-07-28T01:13:00.000Z") }),
       "LEGAL_SOURCE_REVIEW_EVIDENCE_CONFLICT",
@@ -592,6 +623,14 @@ test("approval is single-owner, hash-verifiable, immutable, and does not publish
       () => sqlite.prepare("DELETE FROM legal_review_queue WHERE id=?")
         .run(fixture.reviewId),
       /legal review terminal evidence cannot be deleted/,
+    );
+    assert.throws(
+      () => sqlite.prepare(`
+        UPDATE legal_source_applicability_records
+        SET effective_at='2021-01-01T00:00:00.000Z'
+        WHERE review_id=?
+      `).run(fixture.reviewId),
+      /LEGAL_SOURCE_APPLICABILITY_IMMUTABLE/,
     );
   } finally {
     sqlite.close();
@@ -673,6 +712,7 @@ test("decision fails closed when the normalized R2 evidence changes", async () =
         reviewId: fixture.reviewId,
         decision: "approve",
         notes: "Снимок должен быть неизменным до фиксации решения ревьюера.",
+        effectiveDate: "2020-01-01",
         expectedRawContentSha256: fixture.rawContentSha256,
         expectedParsedContentSha256: fixture.parsedContentSha256,
       }, { now: new Date("2026-07-28T01:12:00.000Z") }),
@@ -1241,6 +1281,7 @@ test("protected legal-source HTTP flow claims, decides, and publishes real D1/R2
         {
           decision: "approve",
           notes: "HTTP-контур подтвердил точный снимок источника для публикации.",
+          effectiveDate: "2020-01-01",
           expectedRawContentSha256: claimBody.source.rawContentSha256,
           expectedParsedContentSha256: claimBody.source.parsedContentSha256,
         },
@@ -1319,9 +1360,6 @@ test("replacement publication atomically archives the previous current version",
       "replacement-publisher",
       "legal_reviewer",
     );
-    sqlite.prepare(
-      "UPDATE legal_source_versions SET effective_at=? WHERE id=? AND status='pending_review'",
-    ).run("2020-01-01T00:00:00.000Z", first.fixture.versionId);
     const firstPublication = await publishApprovedLegalSource(
       env,
       publisher,
@@ -1344,10 +1382,8 @@ test("replacement publication atomically archives the previous current version",
         "Вторая проверенная редакция нормы с изменённым порядком действий.",
       ),
       "_replacement",
+      "2026-01-01",
     );
-    sqlite.prepare(
-      "UPDATE legal_source_versions SET effective_at=? WHERE id=? AND status='pending_review'",
-    ).run("2026-01-01T00:00:00.000Z", second.fixture.versionId);
     const secondPublication = await publishApprovedLegalSource(
       env,
       publisher,

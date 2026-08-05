@@ -85,6 +85,8 @@ const labels = {
     openOriginal: "Открыть официальный источник", back: "Вернуться к очереди", evidence: "Контрольные суммы",
     normalized: "Нормализованный снимок", showMore: "Показать следующие фрагменты",
     notes: "Обоснование решения", notesHint: "Не менее 10 символов. Зафиксируйте, что именно было проверено.",
+    effectiveDate: "Действует с", expiresDate: "Действует до — необязательно",
+    applicabilityHint: "Даты подтверждаются ревьюером и определяют текущую или историческую редакцию.",
     approve: "Одобрить снимок", reject: "Отклонить снимок", reviewing: "Открывается проверенный снимок…",
     publishing: "Публикуется проверенный снимок…", deciding: "Решение сохраняется…",
     approvedDone: "Снимок одобрен. Он доступен в фильтре «Одобрены» для отдельной публикации.",
@@ -118,6 +120,8 @@ const labels = {
     openOriginal: "Rasmiy manbani ochish", back: "Navbatga qaytish", evidence: "Nazorat yig‘indilari",
     normalized: "Normallashtirilgan nusxa", showMore: "Keyingi qismlarni ko‘rsatish",
     notes: "Qaror asosi", notesHint: "Kamida 10 belgi. Aynan nima tekshirilganini qayd eting.",
+    effectiveDate: "Amal qilish boshlanishi", expiresDate: "Amal qilish tugashi — ixtiyoriy",
+    applicabilityHint: "Sanalar tekshiruvchi tomonidan tasdiqlanadi va joriy yoki tarixiy tahrirni belgilaydi.",
     approve: "Nusxani tasdiqlash", reject: "Nusxani rad etish", reviewing: "Tekshirilgan nusxa ochilmoqda…",
     publishing: "Tekshirilgan nusxa nashr qilinmoqda…", deciding: "Qaror saqlanmoqda…",
     approvedDone: "Nusxa tasdiqlandi. Alohida nashr uchun «Tasdiqlangan» filtrida mavjud.",
@@ -163,6 +167,8 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
   const [claimed, setClaimed] = useState<ClaimedReview | null>(null);
   const [visibleBlocks, setVisibleBlocks] = useState(80);
   const [notes, setNotes] = useState("");
+  const [effectiveDate, setEffectiveDate] = useState("");
+  const [expiresDate, setExpiresDate] = useState("");
   const [busy, setBusy] = useState("");
   const [syncConfirmation, setSyncConfirmation] = useState("");
   const [withdrawing, setWithdrawing] = useState<ReviewItem | null>(null);
@@ -215,6 +221,8 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
       setClaimed(body);
       setVisibleBlocks(80);
       setNotes("");
+      setEffectiveDate("");
+      setExpiresDate("");
       setAnnouncement(l.reviewing);
     } catch (value) {
       setError(value instanceof Error ? value.message : l.error);
@@ -222,7 +230,7 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
   };
 
   const decide = async (decision: "approve" | "reject") => {
-    if (!claimed || notes.trim().length < 10) return;
+    if (!claimed || notes.trim().length < 10 || (decision === "approve" && !effectiveDate)) return;
     setBusy(decision);
     setError("");
     setAnnouncement(l.deciding);
@@ -232,6 +240,8 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
         headers: { "content-type": "application/json", "x-juro-csrf": "1" },
         body: JSON.stringify({
           decision, notes: notes.trim(),
+          effectiveDate: decision === "approve" ? effectiveDate : undefined,
+          expiresDate: decision === "approve" && expiresDate ? expiresDate : undefined,
           expectedRawContentSha256: claimed.source.rawContentSha256,
           expectedParsedContentSha256: claimed.source.parsedContentSha256,
         }),
@@ -363,9 +373,14 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
         </article>
         <section className="staff-decision" aria-labelledby="decision-title">
           <h2 id="decision-title">{l.notes}</h2><p>{l.notesHint}</p>
+          <div className="staff-applicability-dates">
+            <label>{l.effectiveDate}<input type="date" required value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)}/></label>
+            <label>{l.expiresDate}<input type="date" min={effectiveDate || undefined} value={expiresDate} onChange={(event) => setExpiresDate(event.target.value)}/></label>
+          </div>
+          <p>{l.applicabilityHint}</p>
           <textarea value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={2000} rows={5} aria-describedby="decision-help"/>
           <small id="decision-help">{notes.trim().length}/2000</small>
-          <div><button type="button" className="staff-reject" disabled={busy !== "" || notes.trim().length < 10} onClick={() => void decide("reject")}><X aria-hidden="true"/>{l.reject}</button><button type="button" className="staff-approve" disabled={busy !== "" || notes.trim().length < 10} onClick={() => void decide("approve")}><Check aria-hidden="true"/>{l.approve}</button></div>
+          <div><button type="button" className="staff-reject" disabled={busy !== "" || notes.trim().length < 10} onClick={() => void decide("reject")}><X aria-hidden="true"/>{l.reject}</button><button type="button" className="staff-approve" disabled={busy !== "" || notes.trim().length < 10 || !effectiveDate || Boolean(expiresDate && expiresDate <= effectiveDate)} onClick={() => void decide("approve")}><Check aria-hidden="true"/>{l.approve}</button></div>
         </section>
       </section> : <>
         <section className="staff-heading"><div><span>JURO · LEGAL SOURCES</span><h1>{l.title}</h1><p>{l.subtitle}</p></div><button type="button" onClick={() => void load()} disabled={loading}><RefreshCw aria-hidden="true" className={loading ? "is-spinning" : ""}/>{l.refresh}</button></section>

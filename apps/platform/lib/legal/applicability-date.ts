@@ -11,21 +11,26 @@ export function uzbekistanCalendarDate(value = new Date()): string {
   return `${byType.get("year")}-${byType.get("month")}-${byType.get("day")}`;
 }
 
-/**
- * Converts an explicit Uzbekistan calendar date to a stable midday instant.
- * Midday avoids a date-boundary shift when comparing ISO timestamps while the
- * original YYYY-MM-DD remains the user-visible legal event date.
- */
+/** Converts an Uzbekistan legal calendar date to the start of that day. */
 export function parseLegalApplicabilityDate(
   value: unknown,
   now = new Date(),
 ): Date | null {
   if (typeof value !== "string" || !ISO_CALENDAR_DATE.test(value)) return null;
-  const candidate = new Date(`${value}T12:00:00+05:00`);
+  const candidate = new Date(`${value}T00:00:00+05:00`);
   if (!Number.isFinite(candidate.getTime())) return null;
   const [year, month, day] = value.split("-").map(Number);
   const tashkent = uzbekistanCalendarDate(candidate);
   if (tashkent !== value || year! < 1900 || month! < 1 || day! < 1) return null;
   if (candidate.getTime() > now.getTime() + 24 * 60 * 60 * 1_000) return null;
+  return candidate;
+}
+
+export function parseReviewedLegalSourceDate(value: unknown): Date | null {
+  if (typeof value !== "string" || !ISO_CALENDAR_DATE.test(value)) return null;
+  const candidate = new Date(`${value}T00:00:00+05:00`);
+  if (!Number.isFinite(candidate.getTime())) return null;
+  const year = Number(value.slice(0, 4));
+  if (year < 1900 || year > 2200 || uzbekistanCalendarDate(candidate) !== value) return null;
   return candidate;
 }
