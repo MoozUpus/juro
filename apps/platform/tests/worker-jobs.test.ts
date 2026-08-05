@@ -367,6 +367,7 @@ function createEnv(
     LEGAL_SOURCES_SYNC_QUEUE: queue("LEGAL_SOURCES_SYNC_QUEUE"),
     DATA_RETENTION_CLEANUP_QUEUE: queue("DATA_RETENTION_CLEANUP_QUEUE"),
     NOTIFICATIONS_QUEUE: queue("NOTIFICATIONS_QUEUE"),
+    MALWARE_SCAN_QUEUE: queue("MALWARE_SCAN_QUEUE"),
   } as unknown as PlatformJobEnv;
   return { env, metrics, sends };
 }
@@ -497,7 +498,7 @@ test("routes only v2 task kinds and compatibility-blocks legacy kinds", () => {
   );
   assert.equal(
     ATTACHED_PLATFORM_QUEUE_BINDINGS.includes("MALWARE_SCAN_QUEUE" as never),
-    false,
+    true,
   );
 
   for (const legacyKind of LEGACY_JOB_KINDS) {
@@ -1562,31 +1563,31 @@ test("outbox compatibility-blocks legacy job kinds without publishing", async ()
   }
 });
 
-test("malware scan remains an explicit but unattached contract", async () => {
+test("malware scan dispatches through its attached fail-closed queue", async () => {
   const { sqlite, d1 } = createDatabase();
   try {
     insertOutbox(sqlite, {
-      id: "outbox_malware_unattached",
+      id: "outbox_malware_attached",
       queueBinding: "MALWARE_SCAN_QUEUE",
       kind: "malware.scan",
-      idempotencyKey: "outbox_idem_malware_unattached",
+      idempotencyKey: "outbox_idem_malware_attached",
       workspaceId: "ws_test",
     });
     const { env, sends } = createEnv(d1);
     assert.deepEqual(await dispatchOutbox(env), {
       claimed: 1,
-      dispatched: 0,
-      rejected: 1,
+      dispatched: 1,
+      rejected: 0,
       retrying: 0,
     });
-    assert.equal(sends.length, 0);
+    assert.equal(sends.length, 1);
     assert.equal(
       (
         sqlite.prepare(`
-          SELECT status FROM job_outbox WHERE id = 'outbox_malware_unattached'
+          SELECT status FROM job_outbox WHERE id = 'outbox_malware_attached'
         `).get() as { status: string }
       ).status,
-      "rejected",
+      "dispatched",
     );
   } finally {
     sqlite.close();

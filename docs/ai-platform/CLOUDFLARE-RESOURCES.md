@@ -10,7 +10,9 @@ Current read-only verification: 2026-08-05. Staging resources below were queried
 - Vectorize: `staging-lex-uz`, `staging-advice-uz`, `staging-internal-legal-materials`, and `staging-user-documents`; each exists with 1,536 dimensions and cosine distance.
 - Analytics Engine dataset: `juro-platform-staging` is present in the validated Worker binding artifact.
 
-Queue and DLQ resources exist for document analysis, OCR, document export, email notifications, legal-source sync, data-retention cleanup and notifications. All seven processing queues have a staging producer and consumer. The `staging-notifications` consumer is `cdde599b2b904a6b8d9cfb7bb6e17706`; Cloudflare reports batch size 5, five retries, 5-second batch wait, concurrency 2, a 30-second retry delay and `staging-notifications-dlq`.
+Queue and DLQ resources exist for document analysis, OCR, document export, email notifications, legal-source sync, data-retention cleanup, notifications and malware scanning. The scanner queue is `staging-malware-scan` (`238d0cd0f80e401a90b7a3c61acbc4d1`) and its DLQ is `staging-malware-scan-dlq` (`b24bcee7d5104c4eb797ac8a25a9b0d9`); both have a 14-day retention period. All eight processing queues have a staging producer and consumer. The malware consumer is constrained to batch size 1, concurrency 1, three retries and a 30-second retry delay.
+
+Malware scanning is backed by the private Cloudflare Container application `juro-staging-malware-scanner` (`a031feac-d80d-48e5-8519-3ead6399ebac`), with Durable Object namespace `55b276023e9744de8ced8fed3013b07d`. Its pinned official ClamAV image runs with 4 GiB memory and private networking; it has no public IP and no internet egress. The final staging Worker version for this change is `8f6faab1-14f6-4be7-8f8d-a9d4811baa9e`.
 
 An identifiers-only synthetic message reached `notification.dispatch` and was
 durably rejected with the expected neutral `NOTIFICATION_SOURCE_NOT_FOUND` code for
@@ -28,7 +30,9 @@ The validated staging artifact binds exactly:
 - `staging-data-retention-cleanup`
 - `staging-notifications`
 
-The objective also names malware scanning as conditional. No malware queue is attached because no real privacy-approved scanner is available; upload paths that require scanning must remain fail-closed rather than simulate success.
+- `staging-malware-scan`
+
+The 2026-08-05 staging EICAR probe traversed private R2 → Worker service binding → ClamAV Container → D1. Its `22:50:12Z` scheduled run completed under fail-closed logic, then removed all synthetic D1 rows and R2 object. `MALWARE_SCANNER_PROBE_ENABLED` is deployed as `false`.
 
 ## Environment safety
 

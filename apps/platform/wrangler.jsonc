@@ -146,6 +146,8 @@
         "ASYNC_RUNTIME_ENABLED": "true",
         "CRON_ENABLED": "true",
         "ACCOUNT_DELETION_PURGE_ENABLED": "true",
+        "MALWARE_SCAN_ENABLED": "true",
+        "MALWARE_SCANNER_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
@@ -175,6 +177,35 @@
           "database_name": "juro-staging",
           "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a",
           "migrations_dir": "./drizzle"
+        }
+      ],
+      "migrations": [
+        {
+          "tag": "v1-malware-scanner-container",
+          "new_sqlite_classes": ["MalwareScannerContainer"]
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "MALWARE_SCANNER_CONTAINER",
+            "class_name": "MalwareScannerContainer"
+          }
+        ]
+      },
+      "containers": [
+        {
+          "name": "juro-staging-malware-scanner",
+          "class_name": "MalwareScannerContainer",
+          "image": "docker.io/clamav/clamav@sha256:4de20bd9ab45a4b763c5412b769217ef5082572ebc8a63aff1a77943419e5dd8",
+          "instance_type": "standard-1",
+          "max_instances": 1
+        }
+      ],
+      "services": [
+        {
+          "binding": "MALWARE_SCANNER",
+          "service": "juro-platform-staging"
         }
       ],
       "r2_buckets": [
@@ -220,6 +251,10 @@
           {
             "binding": "NOTIFICATIONS_QUEUE",
             "queue": "staging-notifications"
+          },
+          {
+            "binding": "MALWARE_SCAN_QUEUE",
+            "queue": "staging-malware-scan"
           }
         ],
         "consumers": [
@@ -284,6 +319,15 @@
             "max_retries": 5,
             "dead_letter_queue": "staging-notifications-dlq",
             "max_concurrency": 2,
+            "retry_delay": 30
+          },
+          {
+            "queue": "staging-malware-scan",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "staging-malware-scan-dlq",
+            "max_concurrency": 1,
             "retry_delay": 30
           }
         ]

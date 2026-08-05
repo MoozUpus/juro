@@ -494,3 +494,24 @@ Analysis correction return is explicit, active-owner scoped and valid only for
 the unchanged Builder revision captured by the original handoff. Migration
 `0097` and the matching route/UI remain local pending separately authorized
 staging backup, migration, deploy and authenticated lifecycle proof.
+
+## D-132 — staging malware scanning uses a private pinned ClamAV Container
+
+Status: deployed and staging-verified
+Date: 2026-08-05
+
+Docker is not required on the local workstation. The staging Worker uses
+Cloudflare Containers with the pinned official image
+`docker.io/clamav/clamav@sha256:4de20bd9ab45a4b763c5412b769217ef5082572ebc8a63aff1a77943419e5dd8`.
+The Worker streams a quarantined R2 object directly to `clamscan` over a private
+service binding. The container has no public IP and egress is disabled; it never
+receives an AI-provider credential and it does not expose an HTTP endpoint.
+
+The queue is attached only in staging. Scanner, upload and analysis paths are
+fail-closed: an unavailable, malformed or inconsistent scanner response leaves
+the object quarantined and prevents any AI request. A staging-only EICAR probe
+ran successfully on 2026-08-05 and removed its synthetic D1 and R2 state. The
+probe switch is now `false`.
+
+The image digest must be deliberately refreshed through review and staging
+verification when ClamAV signatures need updating; production remains unchanged.

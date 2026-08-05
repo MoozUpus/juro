@@ -194,6 +194,9 @@ const queueContract = [
   ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
   ["NOTIFICATIONS_QUEUE", "notifications"],
 ];
+if (requestedEnvironment === "staging") {
+  queueContract.push(["MALWARE_SCAN_QUEUE", "malware-scan"]);
+}
 assert.deepEqual(
   artifact.queues?.producers,
   queueContract.map(([binding, suffix]) => ({
@@ -268,6 +271,15 @@ assert.deepEqual(
         max_concurrency: 2,
         retry_delay: 30,
       },
+      {
+        queue: "staging-malware-scan",
+        max_batch_size: 1,
+        max_batch_timeout: 5,
+        max_retries: 3,
+        dead_letter_queue: "staging-malware-scan-dlq",
+        max_concurrency: 1,
+        retry_delay: 30,
+      },
     ]
     : [],
   "Only reviewed staging consumers may be attached",
@@ -276,8 +288,8 @@ assert.equal(
   artifact.queues?.producers.some(({ binding }) =>
     binding === "MALWARE_SCAN_QUEUE"
   ),
-  false,
-  "Malware queue cannot be attached before a real scanner exists",
+  requestedEnvironment === "staging",
+  "Only staging may attach the reviewed, fail-closed malware scanner queue",
 );
 
 const vectorContract = [

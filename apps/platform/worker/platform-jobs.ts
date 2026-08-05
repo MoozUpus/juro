@@ -262,10 +262,6 @@ export const PLATFORM_QUEUE_BINDINGS = [
   "MALWARE_SCAN_QUEUE",
 ] as const;
 
-/**
- * Malware scanning stays in the source contract but is deliberately not bound
- * until a real scanner and fail-closed consumer have passed staging review.
- */
 export const ATTACHED_PLATFORM_QUEUE_BINDINGS = [
   "DOCUMENT_ANALYSIS_QUEUE",
   "OCR_PROCESSING_QUEUE",
@@ -274,6 +270,7 @@ export const ATTACHED_PLATFORM_QUEUE_BINDINGS = [
   "LEGAL_SOURCES_SYNC_QUEUE",
   "DATA_RETENTION_CLEANUP_QUEUE",
   "NOTIFICATIONS_QUEUE",
+  "MALWARE_SCAN_QUEUE",
 ] as const;
 
 export type PlatformQueueBinding =

@@ -32,6 +32,7 @@
     "db:generate": "node scripts/platform-tasks.mjs db-generate"
   },
   "dependencies": {
+    "@cloudflare/containers": "0.3.7",
     "@pdf-lib/fontkit": "^1.1.1",
     "diff": "9.0.0",
     "drizzle-orm": "0.45.2",
@@ -66,7 +67,7 @@
     "typescript": "5.9.3",
     "vinext": "0.0.50",
     "vite": "8.0.13",
-    "wrangler": "4.92.0"
+    "wrangler": "4.119.0"
   },
   "overrides": {
     "postcss": "8.5.23",

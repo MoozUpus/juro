@@ -52,6 +52,17 @@ async function maybeRunStagingEmailDeliveryProbe(env: PlatformJobEnv) {
   const { runStagingEmailDeliveryProbe } = await import("./staging-email-delivery-probe");
   return runStagingEmailDeliveryProbe(env);
 }
+
+async function maybeRunStagingMalwareScannerProbe(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "staging"
+    || (env as Record<string, unknown>).MALWARE_SCANNER_PROBE_ENABLED !== "true"
+  ) return null;
+  const { runStagingMalwareScannerProbe } = await import("./staging-malware-scanner-probe");
+  const summary = await runStagingMalwareScannerProbe(env);
+  if (summary.failed > 0) throw new Error("STAGING_MALWARE_SCANNER_PROBE_FAILED");
+  return summary;
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -322,6 +333,8 @@ export async function handleScheduled(
     const providerProbe = await maybeRunStagingProviderProbes(env);
     failureCode = "EMAIL_DELIVERY_PROBE_FAILED";
     const emailDeliveryProbe = await maybeRunStagingEmailDeliveryProbe(env);
+    failureCode = "MALWARE_SCANNER_PROBE_FAILED";
+    const malwareScannerProbe = await maybeRunStagingMalwareScannerProbe(env);
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
     const corpusRunsCompleted =
       env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
@@ -369,6 +382,10 @@ export async function handleScheduled(
       emailDeliveryProbeFailed: emailDeliveryProbe?.failed ?? 0,
       emailDeliveryProbeSkipped: emailDeliveryProbe?.skipped ?? 0,
       emailDeliveryProbeAlreadyAccepted: emailDeliveryProbe?.alreadyAccepted ?? 0,
+      malwareScannerProbeAttempted: malwareScannerProbe?.attempted ?? 0,
+      malwareScannerProbeDetected: malwareScannerProbe?.detected ?? 0,
+      malwareScannerProbeFailed: malwareScannerProbe?.failed ?? 0,
+      malwareScannerProbeSkipped: malwareScannerProbe?.skipped ?? 0,
       corpusRunsCompleted,
       corpusAlertsCreated: corpusAlerts.created,
       corpusFailedRunAlerts: corpusAlerts.failedRuns,

@@ -6,6 +6,7 @@ import {
   mkdtemp,
   readFile,
   rm,
+  writeFile,
 } from "node:fs/promises";
 import { dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -98,6 +99,7 @@ const coreTestFiles = [
   "tests/document-analysis-upload.test.ts",
   "tests/document-analysis-route-boundary.test.ts",
   "tests/document-analysis-provider.test.ts",
+  "tests/clamav-output.test.ts",
   "tests/document-analysis-processor.test.ts",
   "tests/document-analysis-revisions.test.ts",
   "tests/document-analysis-case-link.test.ts",
@@ -183,6 +185,7 @@ const cloudflareTestFiles = [
   "tests/migration-0099-staging-email-delivery-probe.test.ts",
   "tests/task-reminder-email.test.ts",
   "tests/staging-email-delivery-probe.test.ts",
+  "tests/staging-malware-scanner-probe.test.ts",
   "tests/worker-jobs.test.ts",
 ];
 
@@ -634,6 +637,20 @@ async function validateArtifact(environment) {
   );
 }
 
+async function normalizeGeneratedWranglerConfig() {
+  const configPath = resolve(projectRoot, "dist", "server", "wrangler.json");
+  const raw = await readFile(configPath, "utf8");
+  const config = JSON.parse(raw);
+  // Wrangler 4.119+ rejects the legacy_env field emitted by the current
+  // Vinext artifact generator. Removing it preserves the documented default
+  // environment behavior while allowing current Workers/Container tooling.
+  if (!Object.hasOwn(config, "legacy_env")) {
+    return;
+  }
+  delete config.legacy_env;
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+}
+
 async function build(environment) {
   const { environment: commandEnvironment } = await prepareEnvironment(
     environment === "development"
@@ -658,6 +675,7 @@ async function build(environment) {
       "SITES_BUILD_KILL_AFTER",
     ),
   });
+  await normalizeGeneratedWranglerConfig();
   await validateArtifact(environment);
 }
 

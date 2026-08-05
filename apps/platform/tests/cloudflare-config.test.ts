@@ -159,16 +159,23 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
         },
       ],
     );
+    const environmentQueueContract = environment === "staging"
+      ? [...queueContract, ["MALWARE_SCAN_QUEUE", "malware-scan"] as const]
+      : queueContract;
     assert.deepEqual(
       config.queues.producers,
-      queueContract.map(([binding, name]) => ({
+      environmentQueueContract.map(([binding, name]) => ({
         binding,
         queue: `${environment}-${name}`,
       })),
     );
     assert.deepEqual(
       config.queues.producers.map(({ binding }) => binding),
-      [...ATTACHED_PLATFORM_QUEUE_BINDINGS],
+      environment === "staging"
+        ? [...ATTACHED_PLATFORM_QUEUE_BINDINGS]
+        : [...ATTACHED_PLATFORM_QUEUE_BINDINGS].filter((binding) =>
+          binding !== "MALWARE_SCAN_QUEUE"
+        ),
     );
     assert.deepEqual(
       [...PLATFORM_QUEUE_BINDINGS].filter((binding) =>
@@ -176,7 +183,7 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
           binding as (typeof ATTACHED_PLATFORM_QUEUE_BINDINGS)[number],
         )
       ),
-      ["MALWARE_SCAN_QUEUE"],
+      [],
     );
     assert.deepEqual(
       config.queues.consumers,
@@ -243,6 +250,15 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
             max_retries: 5,
             dead_letter_queue: "staging-notifications-dlq",
             max_concurrency: 2,
+            retry_delay: 30,
+          },
+          {
+            queue: "staging-malware-scan",
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 3,
+            dead_letter_queue: "staging-malware-scan-dlq",
+            max_concurrency: 1,
             retry_delay: 30,
           },
         ]
@@ -356,7 +372,7 @@ test("pins only verified non-production D1 identifiers and excludes secrets", ()
   }
 });
 
-test("does not attach legacy or premature queue contracts", () => {
+test("does not attach legacy queue contracts and limits malware scanning to staging", () => {
   const serialized = JSON.stringify(source);
   for (const legacyBinding of [
     "AI_JOBS_QUEUE",
@@ -374,11 +390,11 @@ test("does not attach legacy or premature queue contracts", () => {
     serialized,
     /juro-(?:ai|file|document|legal|email|notification|cleanup|backup)-jobs-/,
   );
-  assert.doesNotMatch(serialized, /"MALWARE_SCAN_QUEUE"/);
-  assert.doesNotMatch(serialized, /-malware-scan"/);
+  assert.match(serialized, /"MALWARE_SCAN_QUEUE"/);
+  assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
   assert.deepEqual(source.env.production.queues.consumers, []);
-  assert.equal(source.env.staging.queues.consumers.length, 7);
+  assert.equal(source.env.staging.queues.consumers.length, 8);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
     [
@@ -389,6 +405,7 @@ test("does not attach legacy or premature queue contracts", () => {
       "staging-email-notifications",
       "staging-data-retention-cleanup",
       "staging-notifications",
+      "staging-malware-scan",
     ],
   );
 });

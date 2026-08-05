@@ -5,7 +5,13 @@ import {
   handleQueue,
   type PlatformJobEnv,
 } from "./platform-jobs";
+import {
+  handleMalwareScannerServiceRequest,
+  MalwareScannerContainer,
+} from "./malware-scanner-container";
 import { handleScheduled } from "./platform-scheduled";
+
+export { MalwareScannerContainer };
 
 type FrameworkEnv = PlatformJobEnv & {
   AI?: Ai;
@@ -76,6 +82,9 @@ function withSecurityHeaders(response: Response, url: URL): Response {
 const worker = {
   async fetch(request: Request, env: FrameworkEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
+    if (url.hostname === "malware-scanner.internal") {
+      return handleMalwareScannerServiceRequest(request, env);
+    }
     const configuredStatusHostname = env.STATUS_HOSTNAME?.trim().toLowerCase();
     const isStatusHost = Boolean(configuredStatusHostname && url.hostname.toLowerCase() === configuredStatusHostname);
     let routedRequest = request;
