@@ -1,5 +1,11 @@
 # JURO known limitations checkpoint
 
+> Corpus alert checkpoint — 2026-08-05: migration `0089`, bounded failure/stale
+> evaluation and idempotent Resend delivery are locally tested. Staging remains
+> through `0078`, so no remote alert row, Queue delivery, Worker log or received
+> email is claimed. The evaluator reports operational freshness only; it does
+> not prove corpus completeness, legal correctness or source availability.
+
 > Lex discovery checkpoint — 2026-08-05: the local candidate discovers only
 > recent official RU/UZ RSS entries; it is not a full historical or
 > priority-area corpus backfill. All results require human legal review before

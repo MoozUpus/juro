@@ -1,5 +1,21 @@
 # JURO implemented-features checkpoint
 
+## Legal corpus failure/freshness alerts (local candidate)
+
+- Migration `0089` records only environment, source kind, opaque run/epoch ID,
+  bounded reason, severity, freshness hours and delivery state. It has no legal
+  content, source URL, tenant, user or recipient column.
+- The existing five-minute fenced scheduler recovers up to 20 unalerted failed
+  Lex/Advice corpus runs per source and creates one stale warning when no full
+  success exists or the latest success is at least seven days old.
+- One D1 transaction creates the unique alert and identifiers-only
+  `email.send` outbox row. The existing server-side Resend worker delivers it
+  idempotently and preserves the established AI cost-alert behavior.
+- D1 constraints bind failed alerts to an actual matching failed corpus run,
+  make alert identity immutable and forbid deletion. Focused lifecycle,
+  downtime recovery, migration replay and email-idempotency tests pass locally.
+  No staging migration, real email or production change is claimed.
+
 ## Bounded Lex RU/UZ RSS discovery (local candidate)
 
 - The daily corpus run is claimed atomically before network discovery, so an

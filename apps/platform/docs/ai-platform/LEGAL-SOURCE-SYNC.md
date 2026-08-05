@@ -1,5 +1,14 @@
 # Legal source synchronization
 
+> Local alert candidate — 2026-08-05: migration `0089` adds content-free,
+> immutable-identity operational alert jobs for every unalerted failed corpus
+> run and for a Lex/Advice corpus that has never succeeded or is older than
+> seven days. The five-minute fenced scheduler evaluates a bounded backlog,
+> writes one idempotent email outbox row per failure/freshness epoch, and reuses
+> the server-side Resend operations channel. No legal text, URL, user, workspace
+> or recipient is persisted in the alert table. Staging deployment and a real
+> alert-delivery rehearsal remain pending; production is unchanged.
+
 > Local candidate — 2026-08-05: the nightly scheduler can discover at most 40
 > recent canonical Lex documents from the official RU and UZ RSS feeds. It
 > reads `robots.txt` first, honors the declared 20-second `Crawl-delay` through

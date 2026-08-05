@@ -8,8 +8,19 @@
 > `3af9bfe6-bd1d-436c-a94a-3fa3ef9283d4` serves 100% from exact commit
 > `cff38f0`. Sections below that call `0077` or `0078` pending are retained as
 > historical candidate notes and are superseded by this checkpoint. Migrations
-> `0079`–`0086` remain local and unapplied; production is unchanged. Exact
+> `0079`–`0089` remain local and unapplied; production is unchanged. Exact
 > evidence is in root `docs/ai-platform/STAGING-0069-0078-EVIDENCE.md`.
+
+## Pending 0089 — legal corpus operational alerts
+
+`0089_legal_corpus_alerts.sql` additively creates one content-free alert table,
+an environment/source/type/epoch uniqueness fence, a failed-run ownership guard,
+immutable identity guard and delete guard. Delivery state may advance through
+the bounded Resend lifecycle, but source/run identity and freshness evidence
+cannot be rewritten. The table references existing `source_sync_runs` and adds
+no user-content or recipient column. Staging requires a fresh private backup and
+restore check, ordered `0079`–`0089` application, exact Worker deployment,
+foreign-key/integrity postflight and a controlled Queue/email rehearsal.
 
 ## Pending 0086 — protected platform audit access
 

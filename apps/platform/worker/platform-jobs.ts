@@ -703,8 +703,11 @@ async function executeJob(
   }
   if (envelope.kind === "email.send") {
     const operationalAlert = await env.DB.prepare(
-      "SELECT 1 AS found FROM operational_alert_jobs WHERE id=? LIMIT 1",
-    ).bind(envelope.subjectId).first<{ found: number }>();
+      `SELECT 1 AS found FROM operational_alert_jobs WHERE id=?
+       UNION ALL
+       SELECT 1 AS found FROM legal_corpus_alert_jobs WHERE id=?
+       LIMIT 1`,
+    ).bind(envelope.subjectId, envelope.subjectId).first<{ found: number }>();
     try {
       if (operationalAlert?.found) {
         await executeOperationalAlertEmail(env, envelope.subjectId);

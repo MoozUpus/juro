@@ -4,6 +4,7 @@ import {
   reconcileScheduledCorpusSyncRuns,
   startScheduledCorpusSync,
 } from "../lib/legal/scheduled-corpus-sync";
+import { evaluateLegalCorpusAlerts } from "../lib/legal/corpus-alerts";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
@@ -273,6 +274,10 @@ export async function handleScheduled(
       env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
         ? await reconcileScheduledCorpusSyncRuns(env)
         : 0;
+    failureCode = "LEGAL_CORPUS_ALERT_EVALUATION_FAILED";
+    const corpusAlerts = env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+      ? await evaluateLegalCorpusAlerts(env, { now: new Date(now) })
+      : { created: 0, failedRuns: 0, staleSources: 0 };
     failureCode = "SCHEDULE_COMPLETION_FAILED";
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {
@@ -302,6 +307,9 @@ export async function handleScheduled(
       providerProbeFailed: providerProbe?.failed ?? 0,
       providerProbeSkipped: providerProbe?.skipped ?? 0,
       corpusRunsCompleted,
+      corpusAlertsCreated: corpusAlerts.created,
+      corpusFailedRunAlerts: corpusAlerts.failedRuns,
+      corpusStaleSourceAlerts: corpusAlerts.staleSources,
     });
   } catch {
     try {

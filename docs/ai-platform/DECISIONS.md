@@ -1,5 +1,22 @@
 # Decisions
 
+## D-119 — legal corpus alerts are content-free immutable epochs
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+A failed full-corpus run and a stale-source interval are operational evidence,
+not legal content. JURO stores them in a separate additive table rather than
+weakening the provider-cost alert schema. Each environment/source/type/epoch is
+unique; failed alerts must reference an actual matching failed run, alert
+identity is immutable and records cannot be deleted. The queue contains only an
+opaque alert ID, and the existing server-only Resend worker resolves bounded
+copy at delivery time. No source text, URL, tenant, user, workspace or recipient
+is persisted in the alert. Absence of a prior successful run and age of at least
+seven days both warn, while every previously unalerted failed run is recovered
+in a bounded batch after scheduler downtime. Migration `0089` remains local
+pending separately authorized staging backup/migration/deploy and email proof.
+
 ## D-118 — Lex discovery uses official RSS and remains review-only
 
 Status: accepted and locally verified

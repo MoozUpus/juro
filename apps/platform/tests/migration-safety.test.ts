@@ -64,6 +64,7 @@ const legalSourceCurrentUrlGuardEntry = journal.entries.find(
 const legalSourceAdviceUrlGuardEntry = journal.entries.find(
   ({ idx }) => idx === 38,
 );
+const legalCorpusAlertsEntry = journal.entries.find(({ idx }) => idx === 89);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -158,6 +159,10 @@ assert.ok(
 assert.ok(
   legalSourceAdviceUrlGuardEntry,
   "Drizzle journal must contain migration 0038",
+);
+assert.ok(
+  legalCorpusAlertsEntry,
+  "Drizzle journal must contain migration 0089",
 );
 
 
@@ -4245,6 +4250,35 @@ test("0038 accepts only current Advice RU and Uzbek Latin document URLs", () => 
         /legal source fetch request URL invalid/,
       );
     }
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    db.close();
+  }
+});
+
+test("0089 adds only content-free legal corpus alert evidence", () => {
+  const sql = migrationSql(legalCorpusAlertsEntry);
+  for (const statement of statements(sql)) {
+    const executable = statement.replace(/^--[^\n]*\n/, "");
+    assert.match(
+      executable,
+      /^CREATE (?:TABLE|INDEX|UNIQUE INDEX|TRIGGER)\b/i,
+      `unexpected legal corpus alert statement: ${executable.slice(0, 100)}`,
+    );
+  }
+  assert.match(sql, /CREATE TABLE `legal_corpus_alert_jobs`/);
+  assert.match(sql, /LEGAL_CORPUS_ALERT_RUN_INVALID/);
+  assert.match(sql, /LEGAL_CORPUS_ALERT_IDENTITY_IMMUTABLE/);
+  assert.match(sql, /LEGAL_CORPUS_ALERT_IMMUTABLE/);
+  for (const forbidden of ["question", "answer", "document_text", "source_url", "recipient_email"]) {
+    assert.doesNotMatch(sql, new RegExp(forbidden, "i"));
+  }
+
+  const db = new DatabaseSync(":memory:");
+  try {
+    db.exec("PRAGMA foreign_keys = ON");
+    for (const entry of journal.entries) applyMigration(db, entry);
+    assert.ok(tableDefinitions(db).has("legal_corpus_alert_jobs"));
     assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
   } finally {
     db.close();

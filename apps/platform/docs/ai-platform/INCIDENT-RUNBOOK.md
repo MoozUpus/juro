@@ -4,6 +4,20 @@ For suspected data exposure, provider outage, queue failure, cost spike, upload 
 
 Current fail-closed controls: unavailable malware scanning leaves files quarantined; unavailable verified legal-source freshness must not be shown as current; staff routes require fresh MFA. See `ROLLBACK.md` and `SECURITY.md`.
 
+## Legal corpus alert response (after migration 0089 is activated)
+
+1. Confirm the environment, source kind and opaque alert/run ID in the email;
+   never paste legal text, source snapshots or secrets into incident notes.
+2. Inspect the protected source-health and jobs views, then correlate the
+   `source_sync_runs`, identifiers-only outbox and Queue/DLQ records.
+3. If the run failed, repair the source/Queue/parser boundary and use the
+   guarded redrive or manual corpus operation; do not edit a failed run or alert.
+4. If the corpus is stale, verify both Lex and Advice full-corpus success and
+   their source timestamps. Keep confirmed legal conclusions fail-closed until
+   freshness is restored.
+5. Preserve the alert and run evidence. A later successful run is new evidence;
+   it does not delete or rewrite the historical alert.
+
 ## Feature-stop procedure (after migration 0084 is activated)
 
 1. Enter `/:locale/admin/feature-flags` only through the protected staff session and complete fresh MFA.
