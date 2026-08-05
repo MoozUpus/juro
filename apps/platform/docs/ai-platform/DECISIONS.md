@@ -3134,3 +3134,19 @@ pairs and commits the latest-review digest in an immutable hash-chain event.
 This closes a false-positive evidence path but does not close the quality gate.
 No staging migration/deploy, real scanner run, 100 analyses, 30 comparisons or
 human quality result is claimed. Production remains unchanged.
+
+## D-152 — restoring an archived case preserves completion
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+Archive is a visibility state, not an implicit restart of legal work. A case
+must first be completed, may then be archived, and restoration returns it to
+`completed`. Reopening is a separate explicit action. The ledger records actual
+unfinished task/plan-step counts so completion does not fabricate “all work
+done”; RU/UZ UI asks for confirmation when those counts are non-zero.
+
+Migration `0093` is the expand step. It adds the immutable tenant/revision/count
+guarded ledger and atomic projection without blocking the previously deployed
+Worker during rollout. A direct-projection contract trigger is intentionally a
+later migration after staging proves the new Worker and rollback path.

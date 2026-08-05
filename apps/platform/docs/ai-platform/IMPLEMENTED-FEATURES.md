@@ -1066,3 +1066,18 @@ The release CLI now requires `--evidence` and verifies the exact raw
 artifact-manifest SHA-256 before applying the existing 100-package thresholds.
 Focused migration/evaluation tests pass locally. No staging run, quality score,
 migration application or deployment is claimed; production is unchanged.
+
+## Phase 6 — case completion, archive and restore lifecycle (local candidate)
+
+- `PATCH /api/platform/cases/:caseId` completes, reopens or archives only a case
+  from the authenticated active workspace. It requires CSRF, strict JSON and a
+  bounded idempotency key.
+- `PATCH /api/platform/archive` restores an archived case through the same
+  lifecycle service; it no longer writes `cases` directly.
+- Migration `0093` records an immutable per-case SHA-256 chain and atomically
+  projects current state. D1 rechecks active membership, revision, transition
+  and unresolved task/plan-step counts.
+- RU/UZ case controls show a confirmation with actual unresolved counts. Archive
+  restore is retry-safe; lifecycle errors use a visible `role=alert`.
+- Targeted tests pass 4/4; the complete platform suite, type-check and lint pass.
+  Staging/production are unchanged and browser/axe evidence is still open.

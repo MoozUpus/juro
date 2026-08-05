@@ -127,3 +127,16 @@ each package. Per-actor predecessor hashes provide tamper evidence. User content
 is referenced only by opaque IDs and hashes; the evaluation ledger deliberately
 has no foreign key to deletable user content, while each insert/export rechecks
 the live records.
+
+## Case lifecycle domain — local migration 0093 candidate
+
+`cases` gains `lifecycle_revision`, completion timestamp/actor and archive actor
+projection fields. `case_lifecycle_events` stores one immutable transition per
+case revision with the authenticated actor/workspace, before/after state,
+authoritative unresolved task/step counts, scoped idempotency key and SHA-256
+chain. It stores no case description, task text or document content.
+
+An accepted event atomically projects the current case. Restore returns an
+archived case to `completed`, not `open`; reopening is a separate explicit
+action. A contract migration that forbids old direct projection writes is
+intentionally deferred until the matching Worker has been proven in staging.

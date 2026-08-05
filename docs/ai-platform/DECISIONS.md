@@ -417,3 +417,15 @@ records immutable review/export events and binds them to current D1 file, scan,
 analysis-result hash, provider run, critical-risk and comparison state. The
 100-package/30-comparison execution and quality thresholds remain open; this
 decision changes no staging or production resource by itself.
+
+## D-127 — case restore does not silently reopen legal work
+
+Status: accepted and locally verified
+Date: 2026-08-05
+
+Completion, archive visibility and reopening are distinct user decisions.
+Restoring an archived case returns it to `completed`; a separate `reopen`
+transition is required to resume work. Migration `0093` records authoritative
+unfinished task/step counts and immutable transition evidence. It remains local
+and expand-only; the direct-projection contract fence is deferred until the new
+Worker is active in staging.

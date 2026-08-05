@@ -1,0 +1,32 @@
+.case-workspace-actions button {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cbd6df;
+  border-radius: 10px;
+  background: #fff;
+  color: #18324c;
+  cursor: pointer;
+  font: inherit;
+  font-size: .82rem;
+  font-weight: 750;
+  padding: 0 13px;
+}
+
+.case-workspace-actions button:disabled { cursor: wait; opacity: .6; }
+.case-workspace-actions a:active,
+.case-workspace-actions button:active { transform: scale(.98); }
+.case-workspace-actions a:focus-visible,
+.case-workspace-actions button:focus-visible { outline: 3px solid #be974f; outline-offset: 2px; }
+.case-lifecycle-error { display: flex; align-items: center; gap: 8px; margin: 0; padding: 13px 15px; border: 1px solid #e6bbb5; border-radius: 12px; background: #fff2f0; color: #8e332c; font-size: .84rem; }
+.case-lifecycle-error svg { width: 18px; flex: 0 0 18px; }
+
+@media (max-width: 800px) {
+  .case-workspace-actions button { flex: 1; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .case-workspace-actions a:active,
+  .case-workspace-actions button:active { transform: none; }
+}

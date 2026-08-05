@@ -576,3 +576,14 @@ critical-risk count are resolved server-side rather than accepted from the
 request. The exported JSON is content-free and cannot replace the required
 100-package/30-comparison named review. Migration `0092` and the route are not
 deployed to staging or production.
+
+### Case lifecycle — local candidate
+
+| Route | Method | Behavior | Boundary |
+|---|---|---|---|
+| `/api/platform/cases/:caseId` | PATCH | `complete`, `reopen` or `archive` with replay-safe result | session, active workspace membership, CSRF, strict 1 KiB Zod body, bounded idempotency key, D1 transition/revision/count guard |
+| `/api/platform/archive` | PATCH | Restores a case to its prior completed workflow state | same tenant/session/CSRF/idempotency boundary; neutral not-found for foreign workspace |
+
+Canonical localized case pages expose RU/UZ lifecycle controls. Completion with
+unfinished tasks/steps requires explicit confirmation. No user/workspace actor
+identifier is accepted from the browser. Migration `0093` is local only.

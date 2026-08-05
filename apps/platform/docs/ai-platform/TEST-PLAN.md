@@ -247,3 +247,18 @@ replays `0088` with the full ordered schema.
   receipt must fail digest/chain verification.
 - A passing local contract test is not the 100-package/30-comparison release
   run; staging scanner/OCR/provider execution and named review remain required.
+
+## Case lifecycle checkpoint — 2026-08-05
+
+- Apply the complete migration journal and require zero foreign-key violations.
+- Complete with unresolved tasks/steps and verify the ledger stores D1-derived
+  counts; replay the same idempotency key without a second event.
+- Exercise `complete → archive → restore → reopen`; require sequential revisions,
+  exact hash parentage and the expected projection after every event.
+- Reject foreign-workspace access with neutral `CASE_UNAVAILABLE`, fabricated
+  counts, illegal transitions, event update/delete and key reuse with another
+  action/actor.
+- Route/static UI tests require session, CSRF, server workspace derivation,
+  RU/UZ copy, confirmation, visible alert and retry-safe archive restoration.
+- Staging still needs authenticated desktop/mobile, keyboard, axe and audit-log
+  rehearsal after private backup, ordered migrations and exact deploy.

@@ -1,7 +1,12 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
+import { parseJsonRequest } from "../../../../lib/auth/input";
+import { z } from "zod";
+import { CaseLifecycleError, caseLifecycleIdempotencyKeySchema, executeCaseLifecycle } from "../../../../lib/platform/case-lifecycle";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+
+const archiveRestoreSchema = z.object({ type: z.enum(["document", "case"]), id: z.string().min(1).max(180) }).strict();
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store" } });
@@ -28,8 +33,9 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
-  const body = await request.json().catch(() => null) as { type?: string; id?: string } | null;
-  if (!body?.id || !["document", "case"].includes(body.type ?? "")) return response({ error: "Некорректный объект архива." }, 400);
+  const parsed = await parseJsonRequest(request, archiveRestoreSchema, 1_024);
+  if (!parsed.ok) return response({ error: "Некорректный объект архива.", code: "INVALID_ARCHIVE_INPUT" }, parsed.error === "payload_too_large" ? 413 : 400);
+  const body = parsed.data;
   const now = isoNow();
   const db = requireD1();
   if (body.type === "document") {
@@ -40,11 +46,19 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     await db.prepare("INSERT INTO activity_events (id,document_id,actor_user_id,type,metadata_json,created_at) VALUES (?,?,?,'document_restored',?,?)")
       .bind(crypto.randomUUID(), body.id, user.id, JSON.stringify({ shareLinksReactivated: false }), now).run();
   } else {
-    const result = await db.prepare("UPDATE cases SET archived_at=NULL,status='open',updated_at=? WHERE id=? AND workspace_id=? AND archived_at IS NOT NULL")
-      .bind(now, body.id, workspace.id).run();
-    if (!result.meta.changes) return response({ error: "Дело не найдено." }, 404);
-    await db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'case_restored',NULL,?)")
-      .bind(crypto.randomUUID(), body.id, user.id, now).run();
+    const idempotency = caseLifecycleIdempotencyKeySchema.safeParse(request.headers.get("idempotency-key")?.trim() ?? "");
+    if (!idempotency.success) return response({ error: "Некорректный ключ операции.", code: "INVALID_IDEMPOTENCY_KEY" }, 400);
+    try {
+      await executeCaseLifecycle({
+        db, caseId: body.id, workspaceId: workspace.id, actorUserId: user.id,
+        action: "restore", idempotencyKey: idempotency.data, now,
+      });
+    } catch (error) {
+      if (error instanceof CaseLifecycleError) {
+        return response({ error: error.message, code: error.code }, error.code === "CASE_UNAVAILABLE" ? 404 : error.code === "CASE_LIFECYCLE_INVALID" ? 400 : 409);
+      }
+      throw error;
+    }
   }
   return response({ ok: true });
 });

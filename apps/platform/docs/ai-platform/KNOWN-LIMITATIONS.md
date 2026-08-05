@@ -684,3 +684,16 @@ They are not applied to staging. The real scanner, 100 protected-staging
 analyses, 30 reciprocal comparisons, named reviews, OCR measurements and every
 required quality threshold remain incomplete. A hash-chain/digest proves
 integrity of recorded evidence, not correctness of the legal review.
+
+## Case lifecycle checkpoint — 2026-08-05
+
+Migration `0093` and the RU/UZ lifecycle controls are local only. Protected
+staging remains through `0091`. A fresh private backup, ordered `0092`/`0093`
+application, exact Worker deploy and authenticated browser/keyboard/axe/mobile
+rehearsal remain required.
+
+`0093` is deliberately the expand step: while the new application path is
+ledger-only, direct legacy SQL updates are not yet globally rejected. A later
+contract migration may install that projection guard only after the old Worker
+can no longer receive traffic. This is a documented rollout safety trade-off,
+not a claim of final database-boundary enforcement.

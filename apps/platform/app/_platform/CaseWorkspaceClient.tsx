@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
+  Archive,
   ArrowUpRight,
   BookOpenCheck,
   CalendarDays,
@@ -15,12 +17,13 @@ import {
   LoaderCircle,
   LockKeyhole,
   MessageSquareText,
+  RotateCcw,
   Scale,
   ShieldCheck,
   Trash2,
   UsersRound,
 } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CASE_SECTIONS,
   type CaseSection,
@@ -29,7 +32,7 @@ import {
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
 type Step = { id: string; title: string; status: string; dueAt?: string | null };
-type CaseRecord = { id: string; title: string; description?: string | null; legalArea: string; status: string; nextDeadlineAt?: string | null; progressPercent?: number; steps?: Step[] };
+type CaseRecord = { id: string; title: string; description?: string | null; legalArea: string; status: string; nextDeadlineAt?: string | null; archivedAt?: string | null; completedAt?: string | null; lifecycleRevision?: number; progressPercent?: number; steps?: Step[] };
 type Task = { id: string; title: string; status: string; dueAt?: string | null; safeDueAt?: string | null };
 type CaseDocument = { id: string; title: string; status: string; language: string; planStepId?: string | null; updatedAt: string };
 type CaseActivity = { eventType: string; createdAt: string; metadata: Record<string, unknown> };
@@ -84,6 +87,7 @@ export function CaseWorkspaceClient({
   section?: CaseSection;
 }) {
   const ru = locale === "ru";
+  const router = useRouter();
   const base = usePlatformBasePath();
   const caseBase = `${base}/cases/${encodeURIComponent(caseId)}`;
   const [item, setItem] = useState<CaseRecord | null>(null);
@@ -91,6 +95,9 @@ export function CaseWorkspaceClient({
   const [workspaceData, setWorkspaceData] = useState<CaseWorkspaceData>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [lifecycleError, setLifecycleError] = useState("");
+  const [lifecycleBusy, setLifecycleBusy] = useState("");
+  const lifecycleKeys = useRef(new Map<string, string>());
 
   useEffect(() => {
     let cancelled = false;
@@ -116,8 +123,44 @@ export function CaseWorkspaceClient({
   if (error || !item) return <section className="case-workspace-empty"><CircleAlert /><h1>{ru ? "Дело недоступно" : "Ish mavjud emas"}</h1><p>{ru ? "Оно не найдено в текущем пространстве или доступ к нему изменён." : "U joriy makonda topilmadi yoki unga kirish o‘zgardi."}</p><Link href={`${base}/cases`}>{ru ? "К списку дел" : "Ishlar ro‘yxatiga"}</Link></section>;
 
   const complete = item.steps?.filter((step) => step.status === "completed").length ?? 0;
+
+  async function changeLifecycle(action: "complete" | "reopen" | "archive") {
+    const unresolvedTasks = tasks.filter((task) => !["completed", "cancelled"].includes(task.status)).length;
+    const unresolvedSteps = (item?.steps ?? []).filter((step) => !["completed", "cancelled"].includes(step.status)).length;
+    if (action === "complete" && (unresolvedTasks || unresolvedSteps)) {
+      const accepted = window.confirm(ru
+        ? `Останутся незавершёнными: задач — ${unresolvedTasks}, шагов плана — ${unresolvedSteps}. Завершить дело?`
+        : `Yakunlanmaganlari qoladi: vazifalar — ${unresolvedTasks}, reja qadamlari — ${unresolvedSteps}. Ish yakunlansinmi?`);
+      if (!accepted) return;
+    }
+    const idempotencyKey = lifecycleKeys.current.get(action) ?? `case-${action}-${crypto.randomUUID()}`;
+    lifecycleKeys.current.set(action, idempotencyKey);
+    setLifecycleBusy(action);
+    setLifecycleError("");
+    try {
+      const response = await fetch(`/api/platform/cases/${encodeURIComponent(caseId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey, "x-juro-csrf": "1" },
+        body: JSON.stringify({ action }),
+      });
+      const body = await response.json() as { status?: string; archivedAt?: string | null; completedAt?: string | null; lifecycleRevision?: number; error?: string; code?: string };
+      if (!response.ok) throw new Error(body.code || body.error || "CASE_LIFECYCLE_FAILED");
+      lifecycleKeys.current.delete(action);
+      if (action === "archive") {
+        router.replace(`${base}/archive`);
+        return;
+      }
+      setItem((current) => current ? { ...current, status: body.status ?? current.status, archivedAt: body.archivedAt ?? null, completedAt: body.completedAt ?? null, lifecycleRevision: body.lifecycleRevision ?? current.lifecycleRevision } : current);
+    } catch (cause) {
+      setLifecycleError(localizedLifecycleError(cause instanceof Error ? cause.message : String(cause), ru));
+    } finally {
+      setLifecycleBusy("");
+    }
+  }
+
   return <section className="case-workspace" aria-labelledby="case-title">
-    <header><div><p>JURO · {ru ? "Дело" : "Ish"}</p><h1 id="case-title">{item.title}</h1><span>{item.legalArea} · {statusLabel(item.status, ru)}</span>{item.description && <p className="case-workspace-description">{item.description}</p>}</div><div className="case-workspace-actions"><Link href={`${caseBase}/plan`}><ListChecks />{ru ? "План действий" : "Harakatlar rejasi"}</Link><Link href={`${caseBase}/calendar`}><CalendarDays />{ru ? "Сроки" : "Muddatlar"}</Link></div></header>
+    <header><div><p>JURO · {ru ? "Дело" : "Ish"}</p><h1 id="case-title">{item.title}</h1><span>{item.legalArea} · {statusLabel(item.status, ru)}</span>{item.description && <p className="case-workspace-description">{item.description}</p>}</div><div className="case-workspace-actions"><Link href={`${caseBase}/plan`}><ListChecks />{ru ? "План действий" : "Harakatlar rejasi"}</Link><Link href={`${caseBase}/calendar`}><CalendarDays />{ru ? "Сроки" : "Muddatlar"}</Link>{item.status === "completed" ? <><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("reopen")}><RotateCcw />{ru ? "Вернуть в работу" : "Ishga qaytarish"}</button><button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("archive")}><Archive />{ru ? "В архив" : "Arxivga"}</button></> : <button type="button" disabled={Boolean(lifecycleBusy)} onClick={() => void changeLifecycle("complete")}><CheckCircle2 />{ru ? "Завершить дело" : "Ishni yakunlash"}</button>}</div></header>
+    {lifecycleError && <p className="case-lifecycle-error" role="alert"><CircleAlert />{lifecycleError}</p>}
     <div className="case-workspace-summary"><article><small>{ru ? "Прогресс плана" : "Reja jarayoni"}</small><strong>{item.progressPercent ?? 0}%</strong><span>{complete}/{item.steps?.length ?? 0} {ru ? "шагов завершено" : "qadam yakunlandi"}</span></article><article><small>{ru ? "Ближайший срок" : "Eng yaqin muddat"}</small><strong>{date(item.nextDeadlineAt, locale)}</strong><span>{ru ? "из активного плана" : "faol rejadan"}</span></article><article><small>{ru ? "Подтверждённые задачи" : "Tasdiqlangan vazifalar"}</small><strong>{tasks.length}</strong><span>{ru ? "реальные записи дела" : "ishning haqiqiy yozuvlari"}</span></article></div>
     <nav className="case-workspace-tabs" aria-label={ru ? "Разделы дела" : "Ish bo‘limlari"}>{CASE_SECTIONS.map((name) => {
       const Icon = sectionIcons[name];
@@ -236,9 +279,16 @@ function activityLabel(eventType: string, ru: boolean) {
 
 function statusLabel(status: string, ru: boolean) {
   const labels: Record<string, [string, string]> = {
-    open: ["Открыто", "Ochiq"], active: ["Активно", "Faol"], completed: ["Завершено", "Yakunlangan"], not_started: ["Не начато", "Boshlanmagan"], in_progress: ["В работе", "Jarayonda"], waiting_information: ["Ожидает данных", "Ma’lumot kutilmoqda"], cancelled: ["Отменено", "Bekor qilingan"], queued: ["В очереди", "Navbatda"], processing: ["Обрабатывается", "Qayta ishlanmoqda"], failed: ["Ошибка", "Xato"], unassigned: ["Ожидает назначения", "Tayinlash kutilmoqda"], conflict_check_pending: ["Проверка конфликта", "Manfaatlar to‘qnashuvi tekshirilmoqda"], awaiting_user_consent: ["Ожидает подтверждения", "Tasdiq kutilmoqda"], access_granted: ["Доступ предоставлен", "Ruxsat berilgan"], access_revoked: ["Доступ отозван", "Ruxsat bekor qilingan"],
+    open: ["Открыто", "Ochiq"], active: ["Активно", "Faol"], completed: ["Завершено", "Yakunlangan"], archived: ["В архиве", "Arxivda"], not_started: ["Не начато", "Boshlanmagan"], in_progress: ["В работе", "Jarayonda"], waiting_information: ["Ожидает данных", "Ma’lumot kutilmoqda"], cancelled: ["Отменено", "Bekor qilingan"], queued: ["В очереди", "Navbatda"], processing: ["Обрабатывается", "Qayta ishlanmoqda"], failed: ["Ошибка", "Xato"], unassigned: ["Ожидает назначения", "Tayinlash kutilmoqda"], conflict_check_pending: ["Проверка конфликта", "Manfaatlar to‘qnashuvi tekshirilmoqda"], awaiting_user_consent: ["Ожидает подтверждения", "Tasdiq kutilmoqda"], access_granted: ["Доступ предоставлен", "Ruxsat berilgan"], access_revoked: ["Доступ отозван", "Ruxsat bekor qilingan"],
   };
   return labels[status]?.[ru ? 0 : 1] || status.replaceAll("_", " ");
+}
+
+function localizedLifecycleError(code: string, ru: boolean) {
+  if (code.includes("CASE_LIFECYCLE_INVALID")) return ru ? "Это действие недоступно в текущем состоянии дела." : "Bu amal ishning joriy holatida mavjud emas.";
+  if (code.includes("CASE_LIFECYCLE_CONFLICT")) return ru ? "Дело уже изменилось. Обновите страницу и повторите." : "Ish allaqachon o‘zgargan. Sahifani yangilab, qayta urinib ko‘ring.";
+  if (code.includes("CASE_UNAVAILABLE")) return ru ? "Дело не найдено в текущем пространстве." : "Ish joriy makonda topilmadi.";
+  return ru ? "Не удалось изменить состояние дела." : "Ish holatini o‘zgartirib bo‘lmadi.";
 }
 
 function roleLabel(role: string, ru: boolean) {

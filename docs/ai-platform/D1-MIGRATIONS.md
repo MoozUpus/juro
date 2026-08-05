@@ -164,3 +164,16 @@ monotonic versions and the current feedback timestamp. Staging requires a fresh
 private backup with isolated restore, ordered pending migrations, postflight and
 authenticated positive/negative rehearsal before the matching Worker deploy is
 claimed.
+
+## 0093 — case lifecycle evidence
+
+Status: additive local candidate; protected staging remains through `0091` and
+production is unchanged.
+
+The migration adds case completion/archive projection fields and an immutable,
+tenant-checked lifecycle event chain. Accepted events atomically project
+`complete`, `reopen`, `archive` and `restore`; D1 verifies exact current state,
+active membership, revision and unresolved task/step counts. It is intentionally
+expand-compatible with the old Worker. A later, separately backed-up contract
+migration will reject every legacy direct projection update after the matching
+Worker is proven in staging.

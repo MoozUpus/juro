@@ -1412,13 +1412,32 @@ export const userAcceptances = sqliteTable("user_acceptances", {
 export const cases = sqliteTable("cases", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }), ownerUserId: text("owner_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
   accountType: text("account_type").notNull(), locale: text("locale").notNull(), title: text("title").notNull(), description: text("description"), legalArea: text("legal_area").notNull(),
-  status: text("status").notNull().default("open"), currentRevision: integer("current_revision").notNull().default(1), nextDeadlineAt: text("next_deadline_at"), archivedAt: text("archived_at"), ...timestamps,
+  status: text("status").notNull().default("open"), currentRevision: integer("current_revision").notNull().default(1), nextDeadlineAt: text("next_deadline_at"), archivedAt: text("archived_at"),
+  lifecycleRevision: integer("lifecycle_revision").notNull().default(0), completedAt: text("completed_at"), completedByUserId: text("completed_by_user_id"), archivedByUserId: text("archived_by_user_id"), ...timestamps,
 }, (table) => [index("cases_owner_idx").on(table.ownerUserId, table.updatedAt), index("cases_workspace_idx").on(table.workspaceId, table.updatedAt)]);
 
 export const caseEvents = sqliteTable("case_events", {
   id: text("id").primaryKey(), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), actorUserId: text("actor_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
   eventType: text("event_type").notNull(), metadataJson: text("metadata_json"), createdAt: text("created_at").notNull(),
 }, (table) => [index("case_events_case_idx").on(table.caseId, table.createdAt)]);
+
+export const caseLifecycleEvents = sqliteTable("case_lifecycle_events", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  actorUserId: text("actor_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  action: text("action").notNull(), fromStatus: text("from_status").notNull(), toStatus: text("to_status").notNull(),
+  fromArchivedAt: text("from_archived_at"), toArchivedAt: text("to_archived_at"),
+  unresolvedTaskCount: integer("unresolved_task_count").notNull(), unresolvedPlanStepCount: integer("unresolved_plan_step_count").notNull(),
+  idempotencyKey: text("idempotency_key").notNull(), lifecycleRevision: integer("lifecycle_revision").notNull(),
+  previousHash: text("previous_hash").notNull(), eventHash: text("event_hash").notNull(), createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("case_lifecycle_event_hash_uidx").on(table.eventHash),
+  uniqueIndex("case_lifecycle_idempotency_uidx").on(table.caseId, table.idempotencyKey),
+  uniqueIndex("case_lifecycle_revision_uidx").on(table.caseId, table.lifecycleRevision),
+  uniqueIndex("case_lifecycle_chain_uidx").on(table.caseId, table.previousHash),
+  index("case_lifecycle_workspace_created_idx").on(table.workspaceId, table.createdAt),
+]);
 
 export const actionPlans = sqliteTable("action_plans", {
   id: text("id").primaryKey(), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),

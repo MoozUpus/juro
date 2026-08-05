@@ -1340,3 +1340,19 @@ provider and evidence-tamper tests pass. Staging remains through `0091`; before
 `0092`, create and independently restore/checksum a private staging backup,
 apply only the ordered pending migration, run D1 postflight and deploy the exact
 Worker. Production is unchanged.
+
+## Migration 0093 — case lifecycle evidence (local candidate)
+
+`0093_case_lifecycle_evidence.sql` is expand-only. It adds completion/archive
+projection fields to `cases` and an immutable, tenant-checked, hash-chained
+`case_lifecycle_events` ledger. `complete`, `reopen`, `archive` and `restore`
+are the only transitions. D1 recomputes unresolved task/plan-step counts from
+authoritative rows before accepting an event; the projection trigger updates
+the case in the same statement.
+
+The migration deliberately does not yet reject every direct legacy `cases`
+update. That contract fence belongs in a later migration after the matching
+Worker is active, so applying `0093` before deploy cannot break the old archive
+route. Local tests pass the full migration chain, tenant denial, idempotent
+replay, invalid counts, immutable events and the four-state lifecycle. Staging
+remains through `0091`; production is unchanged.
