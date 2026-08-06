@@ -2,18 +2,16 @@
 
 > **Authoritative remote state — 2026-08-06.** This section supersedes every
 > older "current checkpoint" below; those entries remain historical evidence,
-> not a description of the active staging release. Cloudflare's deployments
-> API reports Worker `juro-platform-staging` deployment
-> `ea1ded08-03a8-46a9-83c8-279c468b4541` at 100% on version
-> `bd6e6725-f74e-48fb-bcc8-ffcca7a4cddc`. Remote `juro-staging`
-> `d1_migrations` ledger row 100 is
-> `0099_staging_email_delivery_probe.sql` (`2026-08-05 19:59:01`). The active
-> Worker has `STAGING_SYNTHETIC_PROBES_ENABLED=false`; no production Worker,
-> D1 or R2 binding was changed. Anonymous root, canonical AI-lawyer and
-> document-builder requests are stopped by Cloudflare Access before app
-> content. This is staging infrastructure evidence only: it does not prove
-> authenticated UI, inbox placement, legal quality, a safe-file scan, or
-> production readiness.
+> not a description of the active staging release. Worker
+> `juro-platform-staging` is deployed on version
+> `5f8c08d6-bcb8-4a80-8776-373145cc3d05` from PR #3 commit `90f9bba`.
+> Remote `juro-staging` has not received a migration in this deploy; existing
+> D1, R2, Queue and Vectorize bindings were preserved. The active Worker has
+> `STAGING_SYNTHETIC_PROBES_ENABLED=false`; no production Worker, D1 or R2
+> binding was changed. Anonymous root, canonical AI-lawyer and document-builder
+> requests are stopped by Cloudflare Access before app content. This is staging
+> infrastructure evidence only: it does not prove authenticated UI, inbox
+> placement, legal quality, broad malware coverage, or production readiness.
 
 > **Release-gate recheck — 2026-08-06.** PR #3 head `7902608` passed GitHub
 > Actions run `31047312603` for both application packages. A fresh local pass
@@ -21,14 +19,24 @@
 > and production-dependency audit also succeeded. The protected status host
 > returned `200` for HTML and localized JSON and returned `404` for an
 > application route, confirming the hostname fence. These checks do not prove
-> an authenticated user flow. Cloudflare Containers remains unavailable to the
-> account (`Unauthorized`; Workers Paid plan required), so no actual scanner
-> service can be provisioned there. The platform therefore continues to fail
-> closed: no `MALWARE_SCANNER` service binding, no malware queue, and no
-> scanner-approved file may reach OCR or AI. The official browser-control
-> runtime again failed before connection because an external user-profile
-> `package.json` marks its generated CommonJS kernel as ESM; this repository
-> does not alter that unrelated host configuration.
+> an authenticated user flow. Staging now has the private Cloudflare Container
+> `juro-staging-malware-scanner` pinned to the documented ClamAV digest and
+> bound through `MALWARE_SCANNER`; a staging-only EICAR run previously proved
+> the fail-closed path. This is not evidence of broad malware-detection quality
+> or a reason to enable an unreviewed production scanner. The official
+> browser-control runtime still fails before connection because an external
+> user-profile `package.json` marks its generated CommonJS kernel as ESM; this
+> repository does not alter that unrelated host configuration.
+
+> Legal corpus parser checkpoint — 2026-08-06: the active staging Worker adds
+> a bounded fallback for canonical Lex pages whose official text is exposed as
+> `/pdffile/:id`. The five-minute scheduler created one idempotent PDF parse
+> job and the legal-sources Queue completed it without error; the resulting
+> immutable `unpdf` snapshot is private in R2. At the checkpoint, staging had
+> 50 fetched source versions and 37 normalized versions. The trusted Lex/Advice
+> domain allowlist remains intact, but fetched versions still need the existing
+> publication review flow before they can become verified legal evidence. This
+> does not claim corpus completeness, citation entailment, or human legal review.
 
 > Staging status-host checkpoint — 2026-08-06: Cloudflare Workers domain
 > `status.staging.juro.uz` is attached only to `juro-platform-staging` (domain
