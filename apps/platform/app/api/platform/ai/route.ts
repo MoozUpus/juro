@@ -20,8 +20,12 @@ import {
 } from "../../../../lib/ai/legal-chat-schema";
 import {
   legalDatabaseFreshnessFromAsOf,
-  retrieveVerifiedLegalSources,
 } from "../../../../lib/legal/verified-retrieval";
+import {
+  retrieveDirectLegalSources,
+  unavailableDirectLegalRetrieval,
+} from "../../../../lib/legal/direct-retrieval";
+import { directCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
@@ -239,10 +243,9 @@ async function executePost(
       workspaceIdHash: await sha256Json({ workspaceId: workspace.id }),
     });
   }
-  const retrieval = await retrieveVerifiedLegalSources(db, question, locale, 8, {
-    semantic: runtimeEnv(),
-    applicableAt: applicableAt ?? undefined,
-  });
+  const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
+    ? await retrieveDirectLegalSources(question, locale, { limit: 4 })
+    : unavailableDirectLegalRetrieval();
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({
     question,
@@ -427,6 +430,9 @@ async function executePost(
           verifiedAt: source.verifiedAt,
         };
       }),
+      sourceAccessMode: retrieval.sourceAccessMode,
+      sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
+      sourceValidationStatus: retrieval.sourceValidationStatus,
     };
     result = enforceLegalDatabaseFreshness(
       canonicalResult,
@@ -535,9 +541,15 @@ async function executePost(
     ...facts.map((fact) => db.prepare(
       "INSERT INTO confirmed_facts (id,conversation_id,case_id,statement,status,created_at,updated_at) VALUES (?,?,?,?,'proposed',?,?)",
     ).bind(fact.id, conversationId, body?.caseId || null, fact.statement, now, now)),
-    ...result.sources.map((source) => db.prepare(
-      "INSERT INTO conversation_sources (id,conversation_id,message_id,source_id,citation_label,created_at) VALUES (?,?,?,?,?,?)",
-    ).bind(crypto.randomUUID(), conversationId, assistantMessageId, source.sourceId, source.article || source.actIdentifier || source.sourceId, now)),
+    ...directCitationStatements({
+      db,
+      sources,
+      citations: result.sources,
+      aiRunId: reservation.runId,
+      conversationId,
+      messageId: assistantMessageId,
+      now,
+    }),
     ...(voiceRecording ? [linkVoiceRecordingStatement({
       db,
       recordingId: voiceRecording.id,
@@ -696,7 +708,9 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
   const sourceFreshness = legalDatabaseFreshnessFromAsOf(
     storedResult.legalDatabaseAsOf,
   );
-  const result = enforceLegalDatabaseFreshness(storedResult, sourceFreshness, {
+  const result = storedResult.sourceAccessMode === "direct"
+    ? storedResult
+    : enforceLegalDatabaseFreshness(storedResult, sourceFreshness, {
     locale: storedResult.language, answerMode: storedResult.answerMode, reasoningMode: storedResult.reasoningMode,
   });
   return {

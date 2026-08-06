@@ -37,6 +37,9 @@ type LegalResult = {
   suggestedDocument: { templateCode: string | null; title: string; reason: string } | null;
   suggestLawyer: boolean;
   legalDatabaseAsOf: string;
+  sourceAccessMode?: "direct" | "approved_package";
+  sourcesRetrievedAt?: string | null;
+  sourceValidationStatus?: "validated" | "unavailable";
 };
 type AiMessageOperation = "new" | "follow_up" | "edit" | "regenerate";
 type Branch = { branchId: string; parentBranchId: string | null; requestMessageId: string; responseMessageId: string; operation: AiMessageOperation; versionNumber: number; question: string; createdAt: string };
@@ -535,13 +538,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             : <button disabled={!status?.configured || !question.trim()} aria-label={ru ? "Отправить" : "Yuborish"}><Send /></button>}
           <small role={sending ? "status" : undefined}>{streamStatus || (legalContextDate
             ? (ru ? `Проверяется редакция права на ${legalContextDate}.` : `${legalContextDate} sanasidagi qonun tahriri tekshiriladi.`)
-            : (ru ? "Подтверждённые выводы строятся только на опубликованных источниках JURO." : "Tasdiqlangan xulosalar faqat JUROda e’lon qilingan manbalarga asoslanadi."))}</small>
+            : (ru ? "JURO получает только релевантные страницы Lex.uz и Advice.uz напрямую для этого вопроса." : "JURO ushbu savol uchun Lex.uz va Advice.uzning faqat tegishli sahifalarini bevosita oladi."))}</small>
         </form>
       </main>
       <aside className="ai-context">
         <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
         <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence"><h2>{ru ? "Источники" : "Manbalar"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <article className="ai-source-card" key={`${source.sourceId}:${source.article || "source"}`}><a href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.status === "historical" ? (ru ? "Историческая редакция" : "Tarixiy tahrir") : (source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba"))}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`}</em></a><SourceBookmarkControl source={source} cases={cases} locale={locale} /></article> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
+        <section className="ai-evidence"><h2>{ru ? "Источники" : "Manbalar"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <article className="ai-source-card" key={`${source.sourceId}:${source.article || "source"}`}><a href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.status === "historical" ? (ru ? "Историческая редакция" : "Tarixiy tahrir") : (source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba"))}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{answer.result.sourceAccessMode === "direct" ? (ru ? `Получено напрямую ${formatDate(answer.result.sourcesRetrievedAt || source.verifiedAt, ru)}` : `${formatDate(answer.result.sourcesRetrievedAt || source.verifiedAt, ru)} bevosita olindi`) : (ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`)}</em></a>{answer.result.sourceAccessMode !== "direct" && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}</article> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );
@@ -696,7 +699,7 @@ async function readAiEventStream(
 function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness?: SourceFreshness; ru: boolean }) {
   return <article className="ai-answer">
     <small>JURO · {result.responseKind === "answer" ? (ru ? "структурированный ответ" : "tuzilgan javob") : (ru ? "нужно уточнение · лимит не списан" : "aniqlik kerak · limit yechilmadi")}</small>
-    {freshness && freshness.status !== "fresh" && <div className={`ai-source-freshness ai-source-freshness-${freshness.status}`} role="status">
+    {freshness && freshness.status !== "fresh" && result.sourceAccessMode !== "direct" && <div className={`ai-source-freshness ai-source-freshness-${freshness.status}`} role="status">
       <CircleAlert aria-hidden="true" />
       <p>{freshness.status === "unavailable"
         ? (ru

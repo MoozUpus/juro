@@ -110,15 +110,19 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
     );
     assert.equal(
       config.vars.LEGAL_ADVICE_INGESTION_ENABLED,
-      environment === "staging" ? "true" : "false",
+      "false",
+    );
+    assert.equal(
+      config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
+      environment === "staging" || environment === "development" ? "true" : "false",
     );
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
-      environment === "staging" ? "true" : "false",
+      "false",
     );
     assert.equal(
       config.vars.LEGAL_SOURCE_STAFF_API_ENABLED,
-      environment === "staging" ? "true" : "false",
+      "false",
     );
     assert.equal(
       config.vars.LAWYER_PROFILE_DIRECTORY_ENABLED,

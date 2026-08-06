@@ -107,6 +107,16 @@ test("legal source URL classifier accepts only exact HTTPS document routes", () 
       host: "advice.uz",
     },
   );
+  assert.deepEqual(
+    classifyLegalSourceUrl("https://advice.uz/ru/document/2920?keyword=contract"),
+    {
+      sourceKind: "advice",
+      locale: "ru",
+      canonicalId: "2920",
+      canonicalUrl: "https://advice.uz/ru/document/2920",
+      host: "advice.uz",
+    },
+  );
 
   for (const value of [
     "http://lex.uz/ru/docs/-42",

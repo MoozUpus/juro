@@ -109,6 +109,7 @@ function sourceHostKind(hostname: string): LegalSourceKind | null {
 function parseSourcePath(url: URL, sourceKind: LegalSourceKind): {
   locale: LegalSourceLocale;
   canonicalId: string;
+  adviceRoute?: "document" | "documents";
 } | null {
   if (sourceKind === "lex") {
     const match = /^\/(ru|uz)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
@@ -118,12 +119,28 @@ function parseSourcePath(url: URL, sourceKind: LegalSourceKind): {
     return { locale: locale.data, canonicalId: match[2] };
   }
 
-  const match = /^\/(ru|oz)\/documents\/(\d+)\/?$/.exec(url.pathname);
-  if (!match?.[2]) return null;
+  const match = /^\/(ru|oz)\/(document|documents)\/(\d+)\/?$/.exec(
+    url.pathname,
+  );
+  if (!match?.[3]) return null;
   return {
     locale: match[1] === "ru" ? "ru" : "uz",
-    canonicalId: match[2],
+    canonicalId: match[3],
+    // Advice.uz currently serves /document/:id in search results, while
+    // older official links retain /documents/:id. Keep the supplied official
+    // route canonical so historical links remain valid without inventing a
+    // redirect target.
+    adviceRoute: match[2] as "document" | "documents",
   };
+}
+
+function hasAllowedAdviceCardQuery(url: URL): boolean {
+  if (url.search === "") return true;
+  const entries = [...url.searchParams.entries()];
+  return entries.length === 1
+    && entries[0]?.[0] === "keyword"
+    && entries[0][1].length > 0
+    && entries[0][1].length <= 240;
 }
 
 export function classifyLegalSourceUrl(value: string): LegalSourceReference {
@@ -134,18 +151,21 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
     throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
   }
 
+  const sourceKind = sourceHostKind(url.hostname);
   if (
     url.protocol !== "https:" ||
     url.port !== "" ||
     url.username !== "" ||
     url.password !== "" ||
     url.hash !== "" ||
-    url.search !== ""
+    // Advice search result cards currently retain a harmless `keyword` query.
+    // It is stripped before any source fetch. Lex document URLs do not permit
+    // a query string at all.
+    (url.search !== "" && (sourceKind !== "advice" || !hasAllowedAdviceCardQuery(url)))
   ) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
   }
 
-  const sourceKind = sourceHostKind(url.hostname);
   if (!sourceKind) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
   }
@@ -157,7 +177,7 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
   const canonicalHost = sourceKind === "lex" ? "lex.uz" : "advice.uz";
   const canonicalPath = sourceKind === "lex"
     ? `/${path.locale}/docs/${path.canonicalId}`
-    : `/${path.locale === "ru" ? "ru" : "oz"}/documents/${path.canonicalId}`;
+    : `/${path.locale === "ru" ? "ru" : "oz"}/${path.adviceRoute ?? "documents"}/${path.canonicalId}`;
   return {
     sourceKind,
     locale: path.locale,

@@ -10,7 +10,9 @@ test("guest AI route is server-only, same-origin protected, provider-backed, and
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /validateTurnstile/);
   assert.match(route, /guestAiTurnstileAction/);
-  assert.match(route, /retrieveVerifiedLegalSources/);
+  assert.match(route, /retrieveDirectLegalSources/);
+  assert.match(route, /directCitationStatements/);
+  assert.doesNotMatch(route, /retrieveVerifiedLegalSources/);
   assert.match(route, /legalAiProvider\(\)/);
   assert.match(route, /enforceLegalChatSourceBoundary/);
   assert.match(route, /enforceLegalDatabaseFreshness/);

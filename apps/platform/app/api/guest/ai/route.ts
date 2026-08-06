@@ -26,8 +26,12 @@ import {
 } from "../../../../lib/ai/legal-chat-schema";
 import {
   legalDatabaseFreshnessFromAsOf,
-  retrieveVerifiedLegalSources,
 } from "../../../../lib/legal/verified-retrieval";
+import {
+  retrieveDirectLegalSources,
+  unavailableDirectLegalRetrieval,
+} from "../../../../lib/legal/direct-retrieval";
+import { directCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { sha256Json } from "../../../../lib/ai/run-store";
 import {
@@ -313,13 +317,9 @@ export async function POST(request: Request): Promise<Response> {
       question: parsed.data.question,
       locale,
     });
-    const retrieval = await retrieveVerifiedLegalSources(
-      db,
-      effectiveQuestion,
-      locale,
-      8,
-      { semantic: runtimeEnv(), applicableAt: applicableAt ?? undefined },
-    );
+    const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
+      ? await retrieveDirectLegalSources(effectiveQuestion, locale, { limit: 4 })
+      : unavailableDirectLegalRetrieval();
     const requestHash = await sha256Json({
       question: effectiveQuestion,
       locale,
@@ -436,6 +436,9 @@ export async function POST(request: Request): Promise<Response> {
             verifiedAt: source.verifiedAt,
           };
         }),
+        sourceAccessMode: retrieval.sourceAccessMode,
+        sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
+        sourceValidationStatus: retrieval.sourceValidationStatus,
       }, retrieval.freshness, {
         locale,
         answerMode: "short",
@@ -472,6 +475,13 @@ export async function POST(request: Request): Promise<Response> {
       cachedInputTokens: aiResult.usage.cachedInputTokens,
       attempts: aiResult.attempts,
       latencyMs: aiResult.latencyMs,
+      additionalStatements: directCitationStatements({
+        db,
+        sources: retrieval.sources,
+        citations: result.sources,
+        guestRunId: reservation.run.id,
+        now: new Date().toISOString(),
+      }),
     });
     return json({
       runId: reservation.run.id,

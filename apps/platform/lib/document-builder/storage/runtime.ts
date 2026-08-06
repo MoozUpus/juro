@@ -12,6 +12,7 @@ export interface BuilderRuntimeEnv {
   USER_DOCUMENTS_INDEX?: VectorizeIndex;
   EMBEDDING_MODEL?: string;
   LEGAL_ADVICE_INGESTION_ENABLED?: string;
+  LEGAL_DIRECT_RETRIEVAL_ENABLED?: string;
   LEGAL_SOURCE_STAFF_API_ENABLED?: string;
   LAWYER_PROFILE_DIRECTORY_ENABLED?: string;
   OPENAI_API_KEY?: string;

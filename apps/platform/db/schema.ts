@@ -2303,6 +2303,37 @@ export const conversationSources = sqliteTable("conversation_sources", {
   createdAt: text("created_at").notNull(),
 }, (table) => [uniqueIndex("conversation_sources_uidx").on(table.conversationId, table.messageId, table.sourceId)]);
 
+// Query-scoped metadata only. Do not use this table as an owned Lex/Advice corpus.
+export const legalSourceReferences = sqliteTable("legal_source_references", {
+  id: text("id").primaryKey(),
+  aiRunId: text("ai_run_id").references(() => aiRuns.id, { onDelete: "cascade" }),
+  guestRunId: text("guest_run_id").references(() => guestAiRuns.id, { onDelete: "cascade" }),
+  conversationId: text("conversation_id").references(() => conversations.id, { onDelete: "cascade" }),
+  messageId: text("message_id").references(() => conversationMessages.id, { onDelete: "cascade" }),
+  sourceKind: text("source_kind").notNull(),
+  sourceLocale: text("source_locale").notNull(),
+  canonicalId: text("canonical_id"),
+  sourceUrl: text("source_url").notNull(),
+  canonicalUrl: text("canonical_url").notNull(),
+  title: text("title").notNull(),
+  actIdentifier: text("act_identifier"),
+  articleReference: text("article_reference"),
+  excerpt: text("excerpt"),
+  documentStatus: text("document_status"),
+  effectiveDate: text("effective_date"),
+  retrievedAt: text("retrieved_at").notNull(),
+  validatedAt: text("validated_at").notNull(),
+  contentSha256: text("content_sha256").notNull(),
+  fetchStatus: text("fetch_status").notNull(),
+  citationValidationStatus: text("citation_validation_status").notNull(),
+  sourceAccessMode: text("source_access_mode").notNull().default("direct"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("legal_source_references_run_url_uidx").on(table.aiRunId, table.guestRunId, table.canonicalUrl),
+  index("legal_source_references_conversation_idx").on(table.conversationId, table.createdAt),
+  index("legal_source_references_guest_idx").on(table.guestRunId, table.createdAt),
+]);
+
 export const legislationUpdates = sqliteTable("legislation_updates", {
   id: text("id").primaryKey(),
   sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),

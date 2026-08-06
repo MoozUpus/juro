@@ -573,3 +573,25 @@ When the published index lacks a relevant fragment, the UI says that the
 official-source index is not yet published for that finding; it must not imply
 that Lex.uz or Advice.uz themselves are untrusted. Production remains
 unchanged.
+
+## D-136 — query-scoped direct official sources replace the owned legal corpus
+
+Status: accepted locally; staging deployment pending
+Date: 2026-08-06
+
+The current execution objective supersedes D-118 through D-135 where they
+require a JURO-owned Lex.uz/Advice.uz corpus, per-source reviewer approval,
+RSS discovery, or Vectorize retrieval. AI chat now obtains only query-scoped,
+allowlisted official pages. A direct result is technically validated through
+canonical URL, bounded fetch, robots policy, parsed title/excerpt and content
+hash; it is not sent through a new legal-review queue.
+
+Migration 0106 stores only the source card metadata and a maximum 1,200
+character excerpt for the completed AI run. The legacy corpus tables, R2 data,
+queue and indexes are retained as dormant rollback assets; no deletion or
+production change is included in this decision.
+
+The owner has accepted the existing 314 legal, 100 document and 30 comparison
+reviewer decisions as a private staging-beta acceptance. This records beta
+authorization only, does not invent test execution evidence, and grants no
+access to another person.

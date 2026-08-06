@@ -49,14 +49,25 @@ export const GET = withApiErrors(async function GET(
        ORDER BY updated_at DESC LIMIT 40`,
     ).bind(workspace.id, user.id, caseId),
     db.prepare(
-      `SELECT DISTINCT s.id,s.act_title AS actTitle,s.act_identifier AS actIdentifier,
-        s.official_url AS officialUrl,s.status,s.locale,s.last_checked_at AS lastCheckedAt
-       FROM conversation_sources cs
-       JOIN conversations c ON c.id=cs.conversation_id
-       JOIN legal_sources s ON s.id=cs.source_id
-       WHERE c.workspace_id=? AND c.owner_user_id=? AND c.case_id=?
-       ORDER BY s.act_title,s.id LIMIT 100`,
-    ).bind(workspace.id, user.id, caseId),
+      `SELECT id,actTitle,actIdentifier,officialUrl,status,locale,lastCheckedAt
+       FROM (
+         SELECT DISTINCT s.id,s.act_title AS actTitle,s.act_identifier AS actIdentifier,
+           s.official_url AS officialUrl,s.status,s.locale,s.last_checked_at AS lastCheckedAt
+         FROM conversation_sources cs
+         JOIN conversations c ON c.id=cs.conversation_id
+         JOIN legal_sources s ON s.id=cs.source_id
+         WHERE c.workspace_id=? AND c.owner_user_id=? AND c.case_id=?
+         UNION
+         SELECT DISTINCT citation.id,citation.title AS actTitle,
+           citation.act_identifier AS actIdentifier,citation.canonical_url AS officialUrl,
+           citation.document_status AS status,citation.source_locale AS locale,
+           citation.validated_at AS lastCheckedAt
+         FROM legal_source_references citation
+         JOIN conversations c ON c.id=citation.conversation_id
+         WHERE c.workspace_id=? AND c.owner_user_id=? AND c.case_id=?
+       )
+       ORDER BY actTitle,id LIMIT 100`,
+    ).bind(workspace.id, user.id, caseId, workspace.id, user.id, caseId),
     db.prepare(
       `SELECT bookmark.id AS bookmarkId,bookmark.source_id AS sourceId,
         bookmark.version_id AS versionId,bookmark.comment,bookmark.revision,

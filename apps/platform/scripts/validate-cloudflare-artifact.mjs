@@ -51,11 +51,17 @@ assert.equal(
 );
 assert.equal(
   artifact.vars?.LEGAL_ADVICE_INGESTION_ENABLED,
-  requestedEnvironment === "staging" ? "true" : "false",
+  "false",
 );
 assert.equal(
   artifact.vars?.LEGAL_SOURCE_STAFF_API_ENABLED,
-  requestedEnvironment === "staging" ? "true" : "false",
+  "false",
+);
+assert.equal(
+  artifact.vars?.LEGAL_DIRECT_RETRIEVAL_ENABLED,
+  requestedEnvironment === "staging" || requestedEnvironment === "development"
+    ? "true"
+    : "false",
 );
 assert.equal(
   artifact.vars?.IDENTITY_PROTECTION_MODE,

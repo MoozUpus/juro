@@ -85,6 +85,9 @@ export const legalChatResponseSchema = z.object({
   suggestedDocument: suggestedDocumentSchema.nullable(),
   suggestLawyer: z.boolean(),
   legalDatabaseAsOf: z.string().max(64),
+  sourceAccessMode: z.enum(["direct", "approved_package"]).optional(),
+  sourcesRetrievedAt: z.string().max(64).nullable().optional(),
+  sourceValidationStatus: z.enum(["validated", "unavailable"]).optional(),
 }).strict();
 
 export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
@@ -117,8 +120,8 @@ export function forceClarificationWithoutVerifiedSources(
       ? "Для надёжного ответа нужны дополнительные факты и проверенный правовой источник."
       : "Ishonchli javob uchun qo‘shimcha faktlar va tekshirilgan huquqiy manba kerak.",
     answer: options.locale === "ru"
-      ? "JURO пока не сформировал правовой вывод: релевантный фрагмент ещё не найден в опубликованной части индекса официальных источников. Ответьте на уточняющие вопросы — этот шаг не списывает лимит ответа."
-      : "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha rasmiy manbalar indeksining nashr qilingan qismida hali topilmadi. Aniqlashtiruvchi savollarga javob bering — bu bosqich javob limitidan yechilmaydi.",
+      ? "JURO пока не сформировал правовой вывод: релевантный фрагмент не удалось получить напрямую из доступных официальных источников. Ответьте на уточняющие вопросы или попробуйте позже — этот шаг не списывает лимит ответа."
+      : "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha mavjud rasmiy manbalardan bevosita olinmadi. Aniqlashtiruvchi savollarga javob bering yoki keyinroq urinib ko‘ring — bu bosqich javob limitidan yechilmaydi.",
     language: options.locale,
     jurisdiction: "UZ",
     answerMode: options.answerMode,

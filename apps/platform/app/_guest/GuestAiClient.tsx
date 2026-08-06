@@ -20,6 +20,8 @@ type GuestResult = {
     originalUrl: string;
   }>;
   legalDatabaseAsOf: string;
+  sourceAccessMode?: "direct" | "approved_package";
+  sourcesRetrievedAt?: string | null;
 };
 
 type Bootstrap = {
@@ -239,11 +241,14 @@ export function GuestAiClient({ locale }: { locale: "ru" | "uz" }) {
 
 function GuestResultView({ result, locale }: { result: GuestResult; locale: "ru" | "uz" }) {
   const ru = locale === "ru";
+  const sourceTimestamp = result.sourcesRetrievedAt || result.legalDatabaseAsOf;
+  const sourceDate = new Date(sourceTimestamp);
+  const hasSourceDate = Number.isFinite(sourceDate.getTime());
   return (
     <article className="guest-ai-result" aria-labelledby="guest-result-title">
       <div className="guest-ai-result-heading">
         <span>{ru ? "AI-ответ" : "AI javobi"}</span>
-        <time dateTime={result.legalDatabaseAsOf}>{ru ? "База на" : "Baza sanasi"}: {new Date(result.legalDatabaseAsOf).toLocaleDateString(ru ? "ru-RU" : "uz-UZ")}</time>
+        {hasSourceDate && <time dateTime={sourceTimestamp}>{result.sourceAccessMode === "direct" ? (ru ? "Получено напрямую" : "Bevosita olindi") : (ru ? "База на" : "Baza sanasi")}: {sourceDate.toLocaleDateString(ru ? "ru-RU" : "uz-UZ")}</time>}
       </div>
       <h2 id="guest-result-title">{result.summary}</h2>
       {paragraphs(result.answer).map((paragraph) => <p key={paragraph}>{paragraph}</p>)}

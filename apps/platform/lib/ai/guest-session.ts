@@ -517,6 +517,7 @@ export async function completeGuestAiRun(input: {
   cachedInputTokens: number;
   attempts: number;
   latencyMs: number;
+  additionalStatements?: D1PreparedStatement[];
   now?: Date | string;
 }): Promise<void> {
   const protectedResult = await protectIdentityValue(
@@ -581,6 +582,7 @@ export async function completeGuestAiRun(input: {
       input.run.id,
       input.run.sessionId,
     ),
+    ...(input.additionalStatements ?? []),
   ]);
   if (
     Number(runResult.meta.changes ?? 0) !== 1

@@ -246,3 +246,21 @@ Staging requires a fresh private backup with SHA round trip and isolated
 restore, ordered `0097` application, schema/FK/trigger postflight, exact Worker
 deploy and authenticated proposal plus Builder→Analysis→Builder correction
 proof.
+
+## 0106 — direct legal source references
+
+Status: additive local candidate; staging application pending.
+
+`0106_direct_legal_source_references.sql` adds an isolated metadata table for
+the exact official source cards shown in one AI answer. It enforces exactly one
+parent (`ai_runs` or `guest_ai_runs`), official source kind/language enums,
+lowercase SHA-256, a 1,200-character excerpt cap and no full-content column.
+It has no foreign key to the legacy `legal_sources`, source version, source
+section or source chunk corpus tables.
+
+Before staging application: create a private D1 backup, verify its SHA-256 and
+an isolated restore, apply 0106, inspect the table/FKs/indexes, deploy the
+exact tested worker and prove that an authenticated direct-source AI answer
+creates limited rows while legacy corpus table counts remain unchanged. Rollback
+is application-first; the additive table remains unused if the prior Worker is
+restored. Production is not in scope.
