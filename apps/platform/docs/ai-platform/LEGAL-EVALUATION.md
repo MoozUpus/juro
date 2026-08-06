@@ -1,6 +1,6 @@
 # JURO legal evaluation
 
-Updated: 2026-08-04
+Updated: 2026-08-06
 
 ## Reproducible corpus harness
 
@@ -17,6 +17,18 @@ These records intentionally contain no invented legal answer, act, article, link
 or success score. `npm run evaluate:legal:materialize -- --output <directory>`
 creates a versioned review packet with `scenarios.json`, reviewer instructions
 and a SHA-256 manifest; it still creates no answer or score.
+
+### Latest integrity materialization
+
+On 2026-08-06, the harness materialized corpus version `2026-08-05.1` into
+an ignored local evidence directory and re-verified every artifact with zero
+failures: 314 scenarios (157 Russian, 157 Uzbek-Latin), 50 ambiguous scenarios
+and 12 legal areas. The packet manifest SHA-256 was
+`e702e7f86730f34d56bf2a9d062edc249c9081403b54f2568f117408fb9039ca`;
+the scenario payload SHA-256 was
+`57a0b8aea337e13d1cdfb194e5aef0ce96c2142b55c587fc15e50f7b2413b6d6`.
+This verifies only deterministic packet composition. It is not a claim that a
+provider response, live citation, or legal review has passed.
 `npm run evaluate:legal:validate -- --packet <packet-directory> --results
 <reviewed-results.json> --evidence <staging-persisted-evidence.json>` accepts
 only a strict staging envelope bound to the

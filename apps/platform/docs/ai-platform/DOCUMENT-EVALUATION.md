@@ -1,6 +1,6 @@
 # JURO document evaluation
 
-Updated: 2026-08-05
+Updated: 2026-08-06
 
 ## Reproducible corpus harness
 
@@ -15,6 +15,17 @@ size, SHA-256, unique hash, expected magic bytes and safe relative path. The
 2026-08-04 local run produced 100 distinct artifacts, 30 comparison pairs and
 5,502,884 total artifact bytes with zero integrity failures. Generated binaries
 remain ignored local evidence rather than repository payload.
+
+### Latest integrity materialization
+
+On 2026-08-06, the deterministic corpus was materialized again with zero
+integrity failures: corpus version `2026-08-04.1`, 100 distinct artifacts, 30
+comparison pairs and 5,502,884 total bytes. The artifact-manifest SHA-256 was
+`c4c7f1864f00161ef60106cf54c30d8216caea985b39266c57cb1fabb46e38d2` and
+the synthetic ground-truth SHA-256 was
+`3ba7dfdfaafc2ddb757a39715502c3564f8d8756c669e1ff1e6c6bf8c45e0c2d`.
+This is reproducible fixture integrity, not OCR, provider, comparison, or
+human-review evidence.
 
 The manifest and materialized artifacts are not a claim that the binaries have
 passed OCR or Claude. `npm run evaluate:documents:validate -- --evidence
@@ -68,14 +79,14 @@ removed while structural findings remain; stale compliance findings are marked
 low confidence with an explicit RU/UZ warning. Image-derived text is explicitly
 marked for human review and does not count toward the 95% OCR quality threshold.
 
-A live staging analysis is not claimed: no real malware scanner can promote a new
-upload to `analysis_safe`. The current read-only staging secret-name inventory
-contains `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` alongside the existing
-security secrets; no value was read, logged, or exported. Separate fixed synthetic
-probes completed successfully with `gpt-5.6-sol` and `claude-sonnet-4-6` and
-record only technical metadata in D1. This is connectivity evidence, not evidence
-of a user/legal response, safe-file promotion, or completed document analysis.
-The deployed Workers AI binding and OCR consumer remain infrastructure evidence only.
+A focused live staging analysis is recorded in
+`STAGING-0101-0103-DOCUMENT-ANALYSIS-EVIDENCE.md`: one authenticated synthetic
+DOCX received a safe verdict from `juro-private-clamav`, Anthropic availability
+failed for that attempt, the documented OpenAI fallback completed without double
+charge, and three tenant-scoped index chunks persisted. It is deliberately not
+treated as corpus, comparison, accuracy, clean-console, or human-review proof.
+The current read-only secret-name inventory contains `OPENAI_API_KEY` and
+`ANTHROPIC_API_KEY`; no value was read, logged, or exported.
 
 ## Required release matrix — not yet achieved
 
@@ -95,6 +106,6 @@ tested, but the quality gate remains open until all 100 controlled artifacts and
 30 comparisons run in staging through a real malware scanner, OCR/provider
 pipeline and named human review.
 
-Migration `0092` and its route are a local candidate only. They do not claim a
-single real staging review, and they must not be applied before an authorized
-private D1 backup/restore and ordered migration gate.
+Migration `0092` is present in the current staging migration ledger; this does
+not claim a single document review. The export route still requires a fresh-MFA
+legal reviewer and a real persisted safe-file/provider run for every package.
