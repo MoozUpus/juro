@@ -26,17 +26,19 @@ import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 
 type SearchResult = {
   id: string;
-  type: "case" | "document" | "conversation" | "comparison" | "task" | "analysis" | "template" | "lawyer" | "source";
+  type: "case" | "document" | "document-content" | "conversation" | "comparison" | "task" | "analysis" | "template" | "lawyer" | "source";
   title: string;
   subtitle: string | null;
   updatedAt: string;
   caseId?: string;
+  analysisId?: string;
   officialUrl?: string;
 };
 
 const icons = {
   case: BriefcaseBusiness,
   document: Files,
+  "document-content": FileSearch,
   conversation: Bot,
   comparison: FileDiff,
   task: CheckSquare,
@@ -160,18 +162,21 @@ export function GlobalSearch({
 
   return (
     <>
-      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={ru ? "Глобальный поиск" : "Global qidiruv"}>
+      <button ref={triggerRef} className="global-search-trigger" type="button" onClick={() => setOpen(true)} aria-label={ru ? "Глобальный поиск" : "Global qidiruv"} aria-expanded={open} aria-controls="global-search-workspace">
         <Search /><span>{ru ? "Поиск" : "Qidiruv"}</span><kbd>⌘K</kbd>
       </button>
       {open && (
         <div className="global-search-layer">
           <button className="global-search-backdrop" type="button" onClick={() => setOpen(false)} aria-label={ru ? "Закрыть поиск" : "Qidiruvni yopish"} />
-          <section ref={dialogRef} className="global-search-dialog" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
+          <section id="global-search-workspace" ref={dialogRef} className="global-search-dialog" role="dialog" aria-modal="true" aria-labelledby="global-search-title">
             <header>
               <Search />
               <h2 id="global-search-title" className="sr-only">{ru ? "Поиск по JURO" : "JURO bo‘yicha qidiruv"}</h2>
               <input
                 ref={inputRef}
+                type="text"
+                inputMode="search"
+                autoComplete="off"
                 value={query}
                 onChange={(event) => setQuery(event.target.value.slice(0, 120))}
                 onKeyDown={(event) => {
@@ -191,7 +196,7 @@ export function GlobalSearch({
               ) : !loading && !resultLinks.length ? (
                 <p className="global-search-message">{ru ? "Ничего не найдено в доступном вам пространстве." : "Sizga ochiq makonda hech narsa topilmadi."}</p>
               ) : resultLinks.map(({ result, href }, index) => {
-                const Icon = icons[result.type];
+                const Icon = icons[result.type as keyof typeof icons] ?? Search;
                 const external = result.type === "source";
                 return (
                   <Link
@@ -223,6 +228,7 @@ export function GlobalSearch({
 function resultHref(result: SearchResult, base: string, query: string) {
   if (result.type === "case") return `${base}/cases/${encodeURIComponent(result.id)}`;
   if (result.type === "document") return `${base}/documents/${encodeURIComponent(result.id)}`;
+  if (result.type === "document-content") return result.analysisId ? `${base}/document-review?analysisId=${encodeURIComponent(result.analysisId)}` : `${base}/documents`;
   if (result.type === "conversation") return `${base}/ai-chat?conversationId=${encodeURIComponent(result.id)}`;
   if (result.type === "comparison") return `${base}/documents/comparisons/${encodeURIComponent(result.id)}`;
   if (result.type === "task") return result.caseId ? `${base}/cases/${encodeURIComponent(result.caseId)}` : `${base}/cases`;
@@ -244,6 +250,7 @@ function typeLabel(type: SearchResult["type"], ru: boolean) {
   const labels = {
     case: ["Дело", "Ish"],
     document: ["Документ", "Hujjat"],
+    "document-content": ["В документе", "Hujjat ichida"],
     conversation: ["Диалог", "Suhbat"],
     comparison: ["Сравнение", "Taqqoslash"],
     task: ["Задача", "Vazifa"],
@@ -252,5 +259,5 @@ function typeLabel(type: SearchResult["type"], ru: boolean) {
     lawyer: ["Юрист", "Yurist"],
     source: ["Официальный источник", "Rasmiy manba"],
   } as const;
-  return labels[type][ru ? 0 : 1];
+  return (labels[type as keyof typeof labels] ?? ["Результат", "Natija"])[ru ? 0 : 1];
 }
