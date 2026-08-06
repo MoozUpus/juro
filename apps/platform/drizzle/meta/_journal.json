@@ -708,6 +708,20 @@
       "when": 1786028400000,
       "tag": "0100_r2_write_guard_exact_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1786032000000,
+      "tag": "0101_document_index_persisting_schedule",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1786035600000,
+      "tag": "0102_d1_redrive_hash_check",
+      "breakpoints": true
     }
   ]
 }

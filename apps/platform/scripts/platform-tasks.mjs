@@ -183,6 +183,8 @@ const cloudflareTestFiles = [
   "tests/migration-0097-builder-version-object-writes.test.ts",
   "tests/migration-0098-task-reminder-email.test.ts",
   "tests/migration-0099-staging-email-delivery-probe.test.ts",
+  "tests/migration-0101-document-index-scheduling.test.ts",
+  "tests/migration-0102-d1-redrive-hash-check.test.ts",
   "tests/task-reminder-email.test.ts",
   "tests/staging-email-delivery-probe.test.ts",
     "tests/staging-malware-scanner-probe.test.ts",
