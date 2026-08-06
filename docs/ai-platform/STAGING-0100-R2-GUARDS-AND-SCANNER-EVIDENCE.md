@@ -56,11 +56,14 @@ scanner and analysis path. It has no HTTP route and its enable flag is now
 three matching private R2 objects were removed. A final D1 count for every
 synthetic identifier was zero and `foreign_key_check` returned no rows.
 
-The probe also established that real document-analysis provider execution is
-not yet an acceptance gate: the durable production-like adapter still needs a
-separate successful real-provider analysis before it may be claimed as working.
-Staging contains `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` by name, but names do
-not prove billing, model entitlement or successful provider responses.
+The document-analysis provider execution is not yet an acceptance gate: its
+durable production-like adapter still needs a separate successful real-provider
+analysis before it may be claimed as working. However, the closed v26 staging
+provider probe did receive successful no-content responses through both current
+chat adapters: OpenAI `gpt-5.6-sol` and Anthropic `claude-sonnet-4-6`.
+It persists only technical metadata. This proves the configured chat keys and
+models can respond; it does not prove document-analysis quality, file pipeline
+completion, billing limits, or a release gate.
 
 ## Staging deployment verification
 
@@ -80,8 +83,12 @@ only supported deployment path for this repository.
 ## Legal sources
 
 JURO continues to restrict legal citations to the official Lex.uz and Advice.uz
-allowlist and preserves the source integrity checks. The staging database had
-zero activated current source versions during this probe. Therefore this
-technical run cannot prove an indexed legal corpus, citations, legal quality or
-the asserted state of every external source; those require the separate
-ingestion/activation and human legal-review gates.
+allowlist and preserves the source integrity checks. The owner has accepted
+these domains as official government sources. That authority decision does not
+by itself activate a fetched database version: at this checkpoint staging holds
+38 `pending_review` official versions and zero activated current versions. A
+scheduled Lex run from `2026-08-05T19:00:32.136Z` is still running because 16
+of its 41 fetch requests remain retrying; 24 are completed and one failed.
+Until that lifecycle is reconciled and the versions are deliberately published,
+the technical run cannot prove an active indexed corpus, citations, or legal
+quality. Existing fail-closed citation controls remain intentional.
