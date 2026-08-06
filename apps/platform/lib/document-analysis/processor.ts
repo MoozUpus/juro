@@ -128,7 +128,11 @@ export type DocumentAnalysisDiagnosticStage =
 export type DocumentAnalysisDiagnosticDetail =
   | "ANALYSIS_REVISION_STORAGE_FAILED"
   | "ANALYSIS_REVISION_SOURCE_INVALID"
-  | "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED";
+  | "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
+  | "ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH"
+  | "ANALYSIS_DOCUMENT_VERSION_OBJECT_WRITE_MISMATCH"
+  | "ANALYSIS_VERSION_OBJECT_WRITE_ATTACHMENT_MISMATCH"
+  | "ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID";
 
 function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
   if (error instanceof AnalysisRevisionError) {
@@ -139,7 +143,24 @@ function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDet
   }
   return error instanceof Error && error.message === "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
     ? "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
-    : undefined;
+    : error instanceof Error
+      ? (() => {
+        const normalized = error.message.toUpperCase();
+        if (normalized.includes("ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH")) {
+          return "ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH";
+        }
+        if (normalized.includes("ANALYSIS_DOCUMENT_VERSION_OBJECT_WRITE_MISMATCH")) {
+          return "ANALYSIS_DOCUMENT_VERSION_OBJECT_WRITE_MISMATCH";
+        }
+        if (normalized.includes("ANALYSIS_VERSION_OBJECT_WRITE_ATTACHMENT_MISMATCH")) {
+          return "ANALYSIS_VERSION_OBJECT_WRITE_ATTACHMENT_MISMATCH";
+        }
+        if (normalized.includes("ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID")) {
+          return "ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID";
+        }
+        return undefined;
+      })()
+      : undefined;
 }
 
 export type DocumentAnalysisProcessorDependencies = {
