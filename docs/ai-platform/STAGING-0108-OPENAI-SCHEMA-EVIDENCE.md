@@ -27,6 +27,7 @@ credentials are not stored in this diagnostic event.
 - `npm run type-check` passed.
 - `npm run lint` passed.
 - Targeted fallback, direct-retrieval and OpenAI schema tests passed.
+- Full `npm run test:cloudflare` passed: 129/129 tests.
 - `npm run build:staging` passed its artifact/binding validation.
 - An authenticated UZ browser smoke used a short general labour-law question.
   It completed with a structured UZ answer, validated direct official source
