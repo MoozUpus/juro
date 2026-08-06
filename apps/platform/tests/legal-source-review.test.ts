@@ -26,6 +26,7 @@ import {
 import { retrieveVerifiedLegalSources } from "../lib/legal/verified-retrieval";
 import { executeLegalSourceIndexing } from "../lib/legal/source-indexing";
 import {
+  handleLegalSourceBulkApprovalRequest,
   handleLegalSourcePublicationRequest,
   handleLegalSourceReviewClaimRequest,
   handleLegalSourceReviewDecisionRequest,
@@ -1233,6 +1234,46 @@ test("legal-source staff HTTP authorization and path validation precede body par
       `).get(fixture.reviewId) as Record<string, unknown> },
       { status: "pending", assigned_to_user_id: null },
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("bulk approval records independent evidence and reports changed rows", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = reviewEnv(d1, bucket);
+  try {
+    const first = await normalizedReviewFixture(env, 241);
+    const second = await normalizedReviewFixture(env, 242, undefined, "bulk-b");
+    const reviewer = insertStaff(sqlite, "bulk-http-reviewer", "legal_reviewer");
+    const response = await handleLegalSourceBulkApprovalRequest(
+      staffRequest("/api/platform/legal-sources/reviews/bulk-approval", {
+        items: [{ reviewId: first.reviewId }, { reviewId: second.reviewId }],
+        notes: "Проверены официальные URL, сохранённые снимки и контрольные суммы.",
+        effectiveDate: "2020-01-01",
+      }),
+      {
+        enabled: "true", env,
+        sessionForRequest: async () => reviewer,
+        now: () => REVIEW_AT,
+      },
+    );
+    assert.equal(response.status, 200);
+    const body = await response.json() as {
+      summary: { requested: number; approved: number; skipped: number };
+    };
+    assert.deepEqual(body.summary, { requested: 2, approved: 2, skipped: 0 });
+    const rows = sqlite.prepare(`
+      SELECT status,decided_by_user_id,decision_evidence_sha256
+      FROM legal_review_queue WHERE id IN (?,?) ORDER BY id
+    `).all(first.reviewId, second.reviewId) as Array<Record<string, unknown>>;
+    assert.equal(rows.length, 2);
+    for (const row of rows) {
+      assert.equal(row.status, "approved");
+      assert.equal(row.decided_by_user_id, reviewer.userId);
+      assert.match(String(row.decision_evidence_sha256), /^[0-9a-f]{64}$/);
+    }
   } finally {
     sqlite.close();
   }

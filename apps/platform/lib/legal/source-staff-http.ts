@@ -71,6 +71,26 @@ const decisionRequestSchema = legalSourceReviewDecisionInputObjectSchema.omit({
     context.addIssue({ code: "custom", path: ["expiresDate"], message: "expiresDate must be later than effectiveDate" });
   }
 });
+const bulkApprovalRequestSchema = z.object({
+  items: z.array(z.object({
+    reviewId: z.string().min(1).max(180).regex(/^[A-Za-z0-9:_-]+$/),
+  }).strict()).min(1).max(25).superRefine((items, context) => {
+    const ids = new Set<string>();
+    items.forEach((item, index) => {
+      if (ids.has(item.reviewId)) {
+        context.addIssue({ code: "custom", path: [index, "reviewId"], message: "duplicate reviewId" });
+      }
+      ids.add(item.reviewId);
+    });
+  }),
+  notes: z.string().trim().min(10).max(2_000),
+  effectiveDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  expiresDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+}).strict().superRefine((value, context) => {
+  if (value.expiresDate && value.expiresDate <= value.effectiveDate) {
+    context.addIssue({ code: "custom", path: ["expiresDate"], message: "expiresDate must be later than effectiveDate" });
+  }
+});
 const publicationRequestSchema = legalSourcePublicationInputSchema.omit({
   reviewId: true,
 });
@@ -545,6 +565,62 @@ export async function handleLegalSourceReviewDecisionRequest(
       ...parsed.data,
     }, { now });
     return jsonNoStore({ ok: true, decision: result });
+  } catch (error) {
+    const response = legalSourceErrorResponse(error, locale);
+    if (response) return response;
+    return unavailableResponse(locale);
+  }
+}
+
+export async function handleLegalSourceBulkApprovalRequest(
+  request: Request,
+  dependencies: LegalSourceStaffHttpDependencies,
+): Promise<Response> {
+  const locale = localeForRequest(request);
+  if (!legalSourceStaffApiEnabled(dependencies.enabled)) return disabledResponse(locale);
+  if (!dependencies.env) return unavailableResponse(locale);
+  const now = dependencies.now?.() ?? new Date();
+  try {
+    const { env, session } = await authorize(
+      request,
+      dependencies,
+      "legal.sources.review",
+      now,
+    );
+    const parsed = await parseJsonRequest(request, bulkApprovalRequestSchema, 32_768);
+    if (!parsed.ok) return inputErrorResponse(locale, parsed.error);
+    const results: Array<{
+      reviewId: string;
+      status: "approved" | "skipped";
+      code?: string;
+    }> = [];
+    for (const item of parsed.data.items) {
+      try {
+        const claimed = await claimLegalSourceReview(env, session, item.reviewId, { now });
+        await decideLegalSourceReview(env, session, {
+          reviewId: item.reviewId,
+          decision: "approve",
+          notes: parsed.data.notes,
+          effectiveDate: parsed.data.effectiveDate,
+          expiresDate: parsed.data.expiresDate,
+          expectedRawContentSha256: claimed.source.rawContentSha256,
+          expectedParsedContentSha256: claimed.source.parsedContentSha256,
+        }, { now });
+        results.push({ reviewId: item.reviewId, status: "approved" });
+      } catch (error) {
+        if (error instanceof LegalSourceReviewError) {
+          results.push({ reviewId: item.reviewId, status: "skipped", code: error.code });
+          continue;
+        }
+        throw error;
+      }
+    }
+    const approved = results.filter((result) => result.status === "approved").length;
+    return jsonNoStore({
+      ok: true,
+      summary: { requested: results.length, approved, skipped: results.length - approved },
+      results,
+    });
   } catch (error) {
     const response = legalSourceErrorResponse(error, locale);
     if (response) return response;
