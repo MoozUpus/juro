@@ -28,6 +28,7 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
+  directSourceCards,
   retrieveDirectLegalSources,
   unavailableDirectLegalRetrieval,
 } from "../../../../lib/legal/direct-retrieval";
@@ -420,9 +421,14 @@ export async function POST(request: Request): Promise<Response> {
         ),
       );
       const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
+      // Direct source cards come from the server-validated page metadata, not
+      // from a model claim. This preserves the empty-claim safety boundary.
+      const returnedSources = bounded.sources.length > 0
+        ? bounded.sources
+        : directSourceCards(retrieval.sources);
       result = enforceLegalDatabaseFreshness({
         ...bounded,
-        sources: bounded.sources.map((reference) => {
+        sources: returnedSources.map((reference) => {
           const source = sourceById.get(reference.sourceId)!;
           return {
             sourceId: source.id,

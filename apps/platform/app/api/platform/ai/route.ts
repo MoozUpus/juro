@@ -22,6 +22,7 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
+  directSourceCards,
   retrieveDirectLegalSources,
   unavailableDirectLegalRetrieval,
 } from "../../../../lib/legal/direct-retrieval";
@@ -414,9 +415,15 @@ async function executePost(
       new Set(sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
     );
     const sourceById = new Map(sources.map((source) => [source.id, source]));
+    // The model may correctly decline to cite a page. In direct mode the
+    // technically validated, query-relevant page can still be shown as an
+    // official source card; it does not turn any model claim into a cited fact.
+    const returnedSources = boundedResult.sources.length > 0
+      ? boundedResult.sources
+      : directSourceCards(sources);
     const canonicalResult = {
       ...boundedResult,
-      sources: boundedResult.sources.map((reference) => {
+      sources: returnedSources.map((reference) => {
         const source = sourceById.get(reference.sourceId)!;
         return {
           sourceId: source.id,

@@ -20,6 +20,11 @@ const SEARCH_MAX_BYTES = 512 * 1024;
 const DOCUMENT_MAX_BYTES = 1_500_000;
 const MAX_CANDIDATES_PER_PROVIDER = 3;
 const MAX_SOURCES_PER_PROVIDER = 2;
+const QUERY_STOPWORDS = new Set([
+  "about", "after", "before", "could", "from", "have", "into", "need", "should", "that", "the", "this", "what", "with",
+  "быть", "какие", "какой", "когда", "нужны", "обычно", "после", "права", "порядок", "почему", "сейчас", "также", "чтобы", "этом",
+  "bilan", "uchun", "qanday", "kerak", "keyin", "oldin", "qayerda", "qonun", "bo‘yicha", "boyicha",
+]);
 
 type FetchLike = typeof fetch;
 
@@ -153,13 +158,61 @@ function officialDocumentUrls(html: string, kind: LegalSourceKind): string[] {
 
 function relevantExcerpt(plainText: string, query: string): string {
   const normalized = plainText.replace(/\s+/gu, " ").trim();
-  const terms = query.toLocaleLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [];
+  const terms = directQueryTerms(query);
   const lower = normalized.toLocaleLowerCase();
   const index = terms
     .map((term) => lower.indexOf(term))
     .find((value) => value >= 0) ?? 0;
   const start = Math.max(0, index - 220);
   return normalized.slice(start, start + 1_200);
+}
+
+function directQueryTerms(query: string): string[] {
+  return [...new Set(
+    (query.toLocaleLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])
+      .filter((term) => !QUERY_STOPWORDS.has(term)),
+  )].slice(0, 12);
+}
+
+function queryStem(term: string): string {
+  if (term.length >= 11) return term.slice(0, -3);
+  if (term.length >= 8) return term.slice(0, -2);
+  if (term.length >= 6) return term.slice(0, -1);
+  return term;
+}
+
+/**
+ * A direct page is a source card only when its parsed, official text matches
+ * the question. This deliberately runs after URL validation and does not use
+ * model output, so an unrelated search result cannot become a citation.
+ */
+function isRelevantDirectSource(source: LegalSourceContext, question: string): boolean {
+  const terms = directQueryTerms(question);
+  if (terms.length === 0) return false;
+  const searchable = `${source.actTitle}\n${source.article ?? ""}\n${source.excerpt ?? ""}`.toLocaleLowerCase();
+  const matched = terms.filter((term) => searchable.includes(queryStem(term)));
+  return terms.length === 1 ? matched.length === 1 : matched.length >= 2;
+}
+
+/**
+ * Public, server-derived cards for official pages retrieved for this exact
+ * request. They are deliberately separate from model claims: no finding,
+ * risk, or deadline gains a citation merely because a card is present.
+ */
+export function directSourceCards(sources: readonly LegalSourceContext[]) {
+  return sources
+    .filter((source) => source.verificationState === "direct_validated" && source.excerpt?.trim())
+    .map((source) => ({
+      sourceId: source.id,
+      actTitle: source.actTitle,
+      actIdentifier: source.actIdentifier,
+      article: source.article ?? null,
+      excerpt: source.excerpt ?? null,
+      originalUrl: source.officialUrl,
+      status: source.applicabilityStatus ?? "current" as const,
+      effectiveDate: source.effectiveDate ?? null,
+      verifiedAt: source.verifiedAt,
+    }));
 }
 
 function articleReference(blocks: Array<{ kind: string; text: string }>): string | null {
@@ -282,6 +335,7 @@ export async function retrieveDirectLegalSources(
         if (sources.length >= sourceLimit || accepted >= MAX_SOURCES_PER_PROVIDER) break;
         try {
           const item = await provider.fetchDocument(candidate);
+          if (!isRelevantDirectSource(item.source, question)) continue;
           sources.push(item.source);
           evidence.push(item.evidence);
           accepted += 1;
