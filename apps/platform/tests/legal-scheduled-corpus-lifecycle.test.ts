@@ -5,6 +5,7 @@ import {
   type LegalSourceAcquisitionEnv,
 } from "../lib/legal/source-acquisition";
 import {
+  recoverStaleScheduledCorpusFetchRequests,
   reconcileScheduledCorpusSyncRuns,
   startScheduledCorpusSync,
 } from "../lib/legal/scheduled-corpus-sync";
@@ -124,6 +125,73 @@ async function seedActivatedVerifiedSource(
     ) VALUES (?,?,?,?,?,?)
   `).run(sourceId, publicationId, versionId, "corpus-publisher", input.now, input.now);
 }
+
+test("scheduled corpus requeues one stale crawl-window retry without changing its source request", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = { APP_ENV: "staging", DB: d1 } as Pick<LegalSourceAcquisitionEnv, "APP_ENV" | "DB">;
+  const stale = "2026-08-05T19:00:00.000Z";
+  const now = new Date("2026-08-05T19:20:00.000Z");
+  try {
+    sqlite.prepare(`
+      INSERT INTO source_sync_runs (
+        id,environment,source_kind,run_type,status,lock_key,
+        discovered_count,fetched_count,changed_count,verified_count,error_count,
+        started_at,finished_at,error_summary,created_at,updated_at
+      ) VALUES ('run-stale','staging','lex','scheduled_corpus','running','staging:lex:scheduled_corpus',
+        1,0,0,0,0,?,NULL,NULL,?,?)
+    `).run(stale, stale, stale);
+    sqlite.prepare(`
+      INSERT INTO legal_source_fetch_requests (
+        id,environment,source_kind,locale,requested_url,canonical_id,idempotency_key,
+        status,attempt_count,requested_by_user_id,source_id,version_id,error_code,
+        started_at,finished_at,created_at,updated_at
+      ) VALUES ('request-stale','staging','lex','ru','https://lex.uz/ru/docs/-123','-123',
+        'request-stale-key','retrying',1,NULL,NULL,NULL,'LEGAL_SOURCE_CRAWL_WINDOW_BUSY',
+        ?,NULL,?,?)
+    `).run(stale, stale, stale);
+    sqlite.prepare(`
+      INSERT INTO job_outbox (
+        id,queue_binding,job_type,schema_version,idempotency_key,subject_id,workspace_id,
+        correlation_id,enqueued_at,available_at,status,dispatch_attempts,lease_owner,
+        lease_expires_at,next_attempt_at,dispatched_at,error_code,created_at,updated_at
+      ) VALUES ('outbox-stale','LEGAL_SOURCES_SYNC_QUEUE','legal.sync',1,'outbox-stale-key',
+        'request-stale',NULL,'run-stale',?,?, 'dispatched',1,NULL,NULL,NULL,?,NULL,?,?)
+    `).run(stale, stale, stale, stale, stale);
+    sqlite.prepare(`
+      INSERT INTO job_runs (
+        id,queue_name,message_id,job_type,schema_version,idempotency_key,subject_id,
+        workspace_id,correlation_id,envelope_hash,status,attempt,lease_owner,
+        lease_expires_at,next_attempt_at,error_code,started_at,finished_at,created_at,updated_at
+      ) VALUES ('jobrun-stale','staging-legal-sources-sync','message-stale','legal.sync',1,
+        'outbox-stale-key','request-stale',NULL,'run-stale','fixture-hash','retrying',5,NULL,
+        NULL,?,'LEGAL_SOURCE_SYNC_FAILED',?, ?,?,?)
+    `).run(stale, stale, stale, stale, stale);
+
+    assert.equal(await recoverStaleScheduledCorpusFetchRequests(env, { now }), 1);
+    const outbox = sqlite.prepare(`
+      SELECT status,error_code,lease_owner,lease_expires_at,next_attempt_at
+      FROM job_outbox WHERE id='outbox-stale'
+    `).get() as Record<string, unknown>;
+    assert.deepEqual({ ...outbox }, {
+      status: "pending",
+      error_code: "LEGAL_SOURCE_RETRY_RECOVERY",
+      lease_owner: null,
+      lease_expires_at: null,
+      next_attempt_at: null,
+    });
+    const request = sqlite.prepare(`
+      SELECT status,error_code,attempt_count FROM legal_source_fetch_requests WHERE id='request-stale'
+    `).get() as Record<string, unknown>;
+    assert.deepEqual({ ...request }, {
+      status: "retrying",
+      error_code: "LEGAL_SOURCE_CRAWL_WINDOW_BUSY",
+      attempt_count: 1,
+    });
+    assert.equal(await recoverStaleScheduledCorpusFetchRequests(env, { now }), 0);
+  } finally {
+    sqlite.close();
+  }
+});
 
 test("scheduled corpus keeps a two-source run open until the aggregate reconciliation", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();

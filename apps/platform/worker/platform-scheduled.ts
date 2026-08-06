@@ -1,6 +1,7 @@
 import { dispatchOutbox } from "./platform-outbox";
 import {
   LEGAL_CORPUS_SYNC_CRON,
+  recoverStaleScheduledCorpusFetchRequests,
   reconcileScheduledCorpusSyncRuns,
   startScheduledCorpusSync,
 } from "../lib/legal/scheduled-corpus-sync";
@@ -307,6 +308,11 @@ export async function handleScheduled(
     failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
     const now = new Date().toISOString();
     const taskReminders = await enqueueDueTaskReminders(env, now);
+    failureCode = "LEGAL_CORPUS_RETRY_RECOVERY_FAILED";
+    const corpusRetriesRecovered =
+      env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+        ? await recoverStaleScheduledCorpusFetchRequests(env, { now: new Date(now) })
+        : 0;
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
     failureCode = "MEMORY_RETENTION_CLEANUP_FAILED";
@@ -371,6 +377,7 @@ export async function handleScheduled(
       rejected: summary.rejected,
       taskRemindersDue: taskReminders.due,
       taskRemindersEnqueued: taskReminders.enqueued,
+      corpusRetriesRecovered,
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,
       guestAiRetentionEligible: guestAiRetention.eligible,

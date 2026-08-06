@@ -515,3 +515,22 @@ probe switch is now `false`.
 
 The image digest must be deliberately refreshed through review and staging
 verification when ClamAV signatures need updating; production remains unchanged.
+
+## D-133 — Corpus crawl-window retries are recovered through the existing outbox
+
+Status: accepted and locally verified
+Date: 2026-08-06
+
+Official Lex.uz and Advice.uz URLs remain subject to their published
+robots/rate policy. A retry can become stranded when a queue delivery budget is
+exhausted while a fenced host crawl window is still active: the source-fetch
+request and job run stay retryable, while the immutable outbox row is already
+marked `dispatched` and therefore is not claimed by ordinary dispatch.
+
+The five-minute scheduled handler recovers at most one stale, retryable
+scheduled-corpus outbox row per invocation. It retains the original job ID and
+idempotency key, clears only the expired dispatch state, and then lets the
+ordinary leased outbox publisher deliver it. This neither bypasses host
+windows nor mutates a fetch request, source version or review status. A late
+queue delivery is fenced by the existing job lease. Production is unchanged
+until a separately approved deployment.

@@ -8,6 +8,8 @@ import {
 export const LEGAL_CORPUS_SYNC_CRON = "0 19 * * *";
 const MAX_SOURCES_PER_KIND = 100;
 const MAX_DISCOVERED_ADVICE_SOURCES = 20;
+const STALE_FETCH_RECOVERY_MS = 15 * 60 * 1_000;
+const STALE_FETCH_RECOVERY_BATCH_SIZE = 1;
 
 type SourceKind = "lex" | "advice";
 type Candidate = { officialUrl: string; locale: "ru" | "uz"; canonicalId: string };
@@ -219,4 +221,85 @@ export async function reconcileScheduledCorpusSyncRuns(
     if (Number(result.meta.changes ?? 0) === 1) completed += 1;
   }
   return completed;
+}
+
+/**
+ * Cloudflare Queues can exhaust a message's delivery budget while a source host
+ * is still enforcing a robots.txt crawl window. The request remains retryable,
+ * but its outbox row is already marked dispatched, so ordinary dispatch cannot
+ * deliver it again. Requeue one stale, fenced job per scheduled invocation.
+ *
+ * The original job id and idempotency key are retained. A late Queue delivery
+ * therefore races safely through the existing job lease rather than fetching a
+ * source twice. Limiting recovery to one item keeps every retry behind the
+ * host's declared crawl window.
+ */
+export async function recoverStaleScheduledCorpusFetchRequests(
+  env: Pick<LegalSourceAcquisitionEnv, "APP_ENV" | "DB">,
+  options: {
+    now?: Date;
+    staleAfterMs?: number;
+    limit?: number;
+  } = {},
+): Promise<number> {
+  const now = options.now ?? new Date();
+  const staleAfterMs = Math.max(60_000, Math.trunc(
+    options.staleAfterMs ?? STALE_FETCH_RECOVERY_MS,
+  ));
+  const limit = Math.max(1, Math.min(
+    STALE_FETCH_RECOVERY_BATCH_SIZE,
+    Math.trunc(options.limit ?? STALE_FETCH_RECOVERY_BATCH_SIZE),
+  ));
+  const timestamp = now.toISOString();
+  const cutoff = new Date(now.getTime() - staleAfterMs).toISOString();
+  const candidates = await env.DB.prepare(`
+    SELECT outbox.id AS outboxId
+    FROM job_outbox AS outbox
+    INNER JOIN legal_source_fetch_requests AS request
+      ON request.id=outbox.subject_id
+    INNER JOIN source_sync_runs AS run
+      ON run.id=outbox.correlation_id
+    INNER JOIN job_runs AS job
+      ON job.idempotency_key=outbox.idempotency_key
+    WHERE outbox.job_type='legal.sync'
+      AND outbox.queue_binding='LEGAL_SOURCES_SYNC_QUEUE'
+      AND outbox.status='dispatched'
+      AND outbox.updated_at<=?
+      AND request.environment=?
+      AND request.status='retrying'
+      AND request.updated_at<=?
+      AND run.environment=?
+      AND run.run_type='scheduled_corpus'
+      AND run.status='running'
+      AND job.status='retrying'
+      AND job.next_attempt_at IS NOT NULL
+      AND job.next_attempt_at<=?
+    ORDER BY request.updated_at ASC, outbox.created_at ASC
+    LIMIT ?
+  `).bind(
+    cutoff,
+    env.APP_ENV,
+    cutoff,
+    env.APP_ENV,
+    timestamp,
+    limit,
+  ).all<{ outboxId: string }>();
+
+  let recovered = 0;
+  for (const candidate of candidates.results) {
+    const result = await env.DB.prepare(`
+      UPDATE job_outbox
+      SET status='pending',
+          lease_owner=NULL,
+          lease_expires_at=NULL,
+          next_attempt_at=NULL,
+          error_code='LEGAL_SOURCE_RETRY_RECOVERY',
+          updated_at=?
+      WHERE id=?
+        AND status='dispatched'
+        AND updated_at<=?
+    `).bind(timestamp, candidate.outboxId, cutoff).run();
+    recovered += Number(result.meta.changes ?? 0);
+  }
+  return recovered;
 }
