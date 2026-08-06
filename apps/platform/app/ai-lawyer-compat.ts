@@ -8,6 +8,11 @@ import {
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+function preserveCaseContext(request: Request, target: URL) {
+  const caseId = new URL(request.url).searchParams.get("caseId");
+  if (caseId && UUID_PATTERN.test(caseId)) target.searchParams.set("caseId", caseId);
+}
+
 function destination(
   request: Request,
   basePath: string,
@@ -16,13 +21,16 @@ function destination(
   const segments = path ?? [];
   const target = new URL(`${basePath}/ai-chat`, request.url);
   if (segments.length === 0 || (segments.length === 1 && segments[0] === "new")) {
+    preserveCaseContext(request, target);
     return Response.redirect(target, 308);
   }
   if (segments.length === 1 && segments[0] === "voice") {
+    preserveCaseContext(request, target);
     target.searchParams.set("mode", "voice");
     return Response.redirect(target, 308);
   }
   if (segments.length === 2 && segments[0] === "chat" && UUID_PATTERN.test(segments[1])) {
+    preserveCaseContext(request, target);
     target.searchParams.set("conversationId", segments[1]);
     return Response.redirect(target, 308);
   }

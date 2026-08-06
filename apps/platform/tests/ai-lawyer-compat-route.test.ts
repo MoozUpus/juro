@@ -8,13 +8,14 @@ import {
 } from "../app/ai-lawyer-compat";
 
 test("personal ai-lawyer compatibility routes preserve locale and canonical account type", async () => {
+  const caseId = "22222222-2222-4222-8222-222222222222";
   for (const path of [undefined, ["new"]]) {
     const response = await personalAiLawyerCompatibilityRoute(
-      new Request("https://staging.app.juro.uz/ru/individual/ai-lawyer/new?ignored=secret"),
+      new Request(`https://staging.app.juro.uz/ru/individual/ai-lawyer/new?caseId=${caseId}&ignored=secret`),
       Promise.resolve({ locale: "ru", accountType: "individual", path }),
     );
     assert.equal(response.status, 308);
-    assert.equal(response.headers.get("location"), "https://staging.app.juro.uz/ru/individual/ai-chat");
+    assert.equal(response.headers.get("location"), `https://staging.app.juro.uz/ru/individual/ai-chat?caseId=${caseId}`);
   }
   const chatId = "11111111-1111-4111-8111-111111111111";
   const chat = await personalAiLawyerCompatibilityRoute(
@@ -33,12 +34,13 @@ test("personal ai-lawyer compatibility routes preserve locale and canonical acco
 });
 
 test("business compatibility route keeps the exact workspace and rejects malformed paths", async () => {
+  const caseId = "33333333-3333-4333-8333-333333333333";
   const response = await businessAiLawyerCompatibilityRoute(
-    new Request("https://staging.app.juro.uz/ru/business/workspace-1/ai-lawyer/new"),
+    new Request(`https://staging.app.juro.uz/ru/business/workspace-1/ai-lawyer/new?caseId=${caseId}&ignored=secret`),
     Promise.resolve({ locale: "ru", workspaceId: "workspace-1", path: ["new"] }),
   );
   assert.equal(response.status, 308);
-  assert.equal(response.headers.get("location"), "https://staging.app.juro.uz/ru/business/workspace-1/ai-chat");
+  assert.equal(response.headers.get("location"), `https://staging.app.juro.uz/ru/business/workspace-1/ai-chat?caseId=${caseId}`);
 
   const voice = await businessAiLawyerCompatibilityRoute(
     new Request("https://staging.app.juro.uz/uz/business/workspace-1/ai-lawyer/voice"),
