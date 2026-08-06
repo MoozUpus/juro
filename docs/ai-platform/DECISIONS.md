@@ -556,3 +556,20 @@ This recovery does not alter source/version verification, activation or
 publication state. A pending source review is still required before a source
 can support a verified legal answer. Production remains unchanged until a
 separate approved deployment.
+
+## D-135 — Official source authority is distinct from index publication
+
+Status: accepted and staging-verified
+Date: 2026-08-06
+
+`lex.uz` and `advice.uz` are JURO's allowlisted official source domains. Their
+authority is not questioned in the user interface. Separately, JURO only makes
+a legal finding "confirmed" after the exact fetched snapshot has been parsed,
+linked to a source version and published through the existing staff audit trail.
+This prevents a fetch, parser or indexing failure from being presented as a
+verified article while preserving the owner's source-authority policy.
+
+When the published index lacks a relevant fragment, the UI says that the
+official-source index is not yet published for that finding; it must not imply
+that Lex.uz or Advice.uz themselves are untrusted. Production remains
+unchanged.

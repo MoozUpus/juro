@@ -117,8 +117,8 @@ export function forceClarificationWithoutVerifiedSources(
       ? "Для надёжного ответа нужны дополнительные факты и проверенный правовой источник."
       : "Ishonchli javob uchun qo‘shimcha faktlar va tekshirilgan huquqiy manba kerak.",
     answer: options.locale === "ru"
-      ? "JURO пока не сформировал правовой вывод: релевантный подтверждённый фрагмент законодательства не найден. Ответьте на уточняющие вопросы — этот шаг не списывает лимит ответа."
-      : "JURO hozircha huquqiy xulosa tuzmadi: tegishli tasdiqlangan qonunchilik parchasi topilmadi. Aniqlashtiruvchi savollarga javob bering — bu bosqich javob limitidan yechilmaydi.",
+      ? "JURO пока не сформировал правовой вывод: релевантный фрагмент ещё не найден в опубликованной части индекса официальных источников. Ответьте на уточняющие вопросы — этот шаг не списывает лимит ответа."
+      : "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha rasmiy manbalar indeksining nashr qilingan qismida hali topilmadi. Aniqlashtiruvchi savollarga javob bering — bu bosqich javob limitidan yechilmaydi.",
     language: options.locale,
     jurisdiction: "UZ",
     answerMode: options.answerMode,
