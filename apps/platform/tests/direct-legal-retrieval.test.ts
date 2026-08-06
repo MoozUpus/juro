@@ -75,6 +75,21 @@ test("direct retrieval excludes technically valid but unrelated search documents
   assert.deepEqual(result.sources.map((source) => source.officialUrl), ["https://lex.uz/ru/docs/43"]);
 });
 
+test("direct retrieval strips reader controls from a quoted Lex act title", async () => {
+  const responses = [
+    responseHtml('<a href="/ru/docs/42">Lex result</a>'),
+    new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Предложения по документу Прослушать аудио «Трудовой договор»", "Статья 12. Условия")),
+    responseHtml(""),
+  ];
+  const result = await retrieveDirectLegalSources("трудовой договор", "ru", {
+    fetchImpl: (async () => responses.shift() ?? new Response("offline", { status: 503 })) as typeof fetch,
+    now: () => new Date("2026-08-06T12:00:00.000Z"),
+    wait: async () => undefined,
+  });
+  assert.equal(result.sources[0]?.actTitle, "«Трудовой договор»");
+});
+
 test("direct retrieval returns an honest unavailable state and writes no corpus", async () => {
   const result = await retrieveDirectLegalSources("договор", "ru", {
     fetchImpl: (async () => new Response("offline", { status: 503, headers: { "content-type": "text/html" } })) as typeof fetch,

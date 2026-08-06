@@ -189,9 +189,21 @@ function queryStem(term: string): string {
 function isRelevantDirectSource(source: LegalSourceContext, question: string): boolean {
   const terms = directQueryTerms(question);
   if (terms.length === 0) return false;
-  const searchable = `${source.actTitle}\n${source.article ?? ""}\n${source.excerpt ?? ""}`.toLocaleLowerCase();
+  // Search-result pages can contain unrelated navigation and recommendation
+  // text. Relevance therefore relies on the parsed document title only, which
+  // is a deliberately conservative source-card criterion.
+  const searchable = source.actTitle.toLocaleLowerCase();
   const matched = terms.filter((term) => searchable.includes(queryStem(term)));
   return terms.length === 1 ? matched.length === 1 : matched.length >= 2;
+}
+
+function officialDisplayTitle(value: string): string {
+  const normalized = value.replace(/\s+/gu, " ").trim();
+  // Lex can prepend reader controls inside the ACT_TITLE element. A quoted act
+  // title is the authoritative visible portion and avoids exposing those UI
+  // controls as the title of a source card.
+  const quoted = normalized.match(/«[^»]{3,1800}»/u)?.[0];
+  return (quoted ?? normalized).slice(0, 500);
 }
 
 /**
@@ -258,7 +270,7 @@ class OfficialDirectProvider implements LegalSourceProvider {
     const sourceId = `direct:${fetched.sourceKind}:${fetched.locale}:${fetched.canonicalId}:${fetched.contentSha256.slice(0, 12)}`;
     const source: LegalSourceContext = {
       id: sourceId,
-      actTitle: snapshot.documentTitle.slice(0, 500),
+      actTitle: officialDisplayTitle(snapshot.documentTitle),
       actIdentifier: fetched.canonicalId,
       officialUrl: fetched.canonicalUrl,
       revisionDate: fetched.lastModified,
