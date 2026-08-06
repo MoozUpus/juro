@@ -17,6 +17,7 @@
 .platform-collapse{display:flex;min-height:44px;align-items:center;justify-content:flex-start;gap:11px;margin-top:8px;padding:0 12px;border:1px solid rgba(255,255,255,.11);border-radius:11px;background:rgba(255,255,255,.04);color:#b9c5d0;font-weight:720}
 .platform-collapse svg{width:19px;flex:none}
 .platform-shell.is-collapsed .platform-collapse{justify-content:center;padding:0}
+@media(min-width:801px){.platform-shell.is-collapsed .platform-brand img{width:58px;height:58px;object-fit:contain;object-position:center}.platform-shell.is-collapsed .platform-sidebar nav{scrollbar-width:none}.platform-shell.is-collapsed .platform-sidebar nav::-webkit-scrollbar{display:none}}
 .platform-mobile-nav{display:none}
 .platform-skip-link{position:fixed;z-index:1000;inset-block-start:8px;inset-inline-start:8px;min-height:44px;padding:11px 15px;border-radius:9px;background:#fff;color:#062844;font-weight:800;box-shadow:0 8px 28px rgba(6,40,68,.2);transform:translateY(-160%)}
 .platform-skip-link:focus{transform:none}
