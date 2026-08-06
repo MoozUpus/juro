@@ -264,6 +264,12 @@
 .dbt-version-list span { color: #364e60; font-size: 12px; }
 .dbt-version-list small { grid-column: 1 / -1; display: inline-flex; align-items: center; gap: 4px; color: var(--dbt-muted); }
 .dbt-version-list .pending { display: inline-flex; align-items: center; gap: 5px; color: var(--dbt-muted); }
+.dbt-version-confirm-dialog { width: min(100% - 32px, 440px); padding: 22px; border: 1px solid var(--dbt-line); border-radius: 14px; color: var(--dbt-navy); box-shadow: 0 24px 64px rgba(6,40,68,.24); }
+.dbt-version-confirm-dialog::backdrop { background: rgba(6,40,68,.42); }
+.dbt-version-confirm-dialog h3 { margin: 0; font-size: 18px; }
+.dbt-version-confirm-dialog p { margin: 9px 0 17px; color: var(--dbt-muted); font-size: 13px; line-height: 1.5; }
+.dbt-version-confirm-dialog > div { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.dbt-version-confirm-dialog button.primary { border-color: var(--dbt-navy); background: var(--dbt-navy); color: white; }
 @media (hover: hover) and (pointer: fine) { .dbt-versions button:hover { border-color: var(--dbt-navy); background: #f6f8f9; } }
 @media (prefers-reduced-motion: reduce) { .dbt-versions button { transition-duration: 1ms; } .dbt-versions button:active { transform: none; } }
 .dbt-editor-heading { margin: 22px auto 0; display: flex; justify-content: space-between; align-items: center; }
