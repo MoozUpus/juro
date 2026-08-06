@@ -4,9 +4,9 @@ Date: 2026-08-07
 
 ## Deployment
 
-- Commit: pending (application-only lifecycle correction)
+- Commit: `174f6ba` (`feat(marketplace): publish safe lawyer catalogue projections`)
 - Environment: protected staging only
-- Worker version: pending staging deployment
+- Worker version: `37e9945a-a998-4393-9e37-0fcfc337a08d`
 - D1 migrations: none; this is application-only
 - Production: not read, deployed, or otherwise changed
 
@@ -30,9 +30,15 @@ Date: 2026-08-07
 - `npm run build:staging`: passed, including staging artifact validation.
 - Website type-check, lint and production build: passed. The website linter has
   no errors; it reports existing and intentional direct-image warnings.
+- Authenticated Chrome staging smoke: `/ru/individual/lawyers` loaded the
+  corrected review-state explanation and completed with `Найдено специалистов:
+  0`, with no error UI. The zero is a truthful staging-data state, not mock data.
 
 ## Explicit limitation
 
 This record replaces 0110's overly restrictive pending-profile treatment.
 The former staging Worker version remains historical evidence only. A fresh
-authenticated staging smoke is required after this application-only deploy.
+public-API response smoke remains open: the browser extension blocks direct
+JSON navigation with `ERR_BLOCKED_BY_CLIENT`; it does not affect the
+authenticated directory's same-origin request. Public juro.uz deployment is
+also deliberately pending separate production approval.
