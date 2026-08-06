@@ -1,9 +1,9 @@
 # JURO deferred and gated features
 
 > **Authoritative remote state — 2026-08-06.** Protected staging is Worker
-> `juro-platform-staging` version `598d327d-ac0b-4ac9-932e-627c0ab19fe4` at
-> 100% traffic; `juro-staging` has D1 migration ledger row 105
-> (`0104_d1_case_lifecycle_hash_guard.sql`). Older local-only and earlier
+> `juro-platform-staging` version `aa82068e-339d-4a38-a5b0-54aba3dc46e7` at
+> 100% traffic; `juro-staging` has D1 migration ledger row 106
+> (`0105_d1_builder_version_hash_guards.sql`). Older local-only and earlier
 > staging checkpoint labels below are historical and do not reopen a feature
 > or downgrade the active schema. The remaining items in this register remain
 > release gates until their stated evidence exists.
