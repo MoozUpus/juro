@@ -27,7 +27,7 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { platformBasePath, type AccountType, type PlatformLocale } from "../../lib/platform/routing";
 import type { WorkspaceOption } from "../../lib/platform/workspace";
 import { GlobalSearch } from "./GlobalSearch";
@@ -70,10 +70,11 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   const base = platformBasePath(locale, accountType, activeWorkspaceId);
   const business = accountType === "business";
   const visibleNav = nav.filter(([slug]) => slug !== "team" || business);
-  const activeIndex = visibleNav.findIndex(([slug]) => {
-    const href = `${base}/${slug}`;
-    return pathname === href || pathname.startsWith(`${href}/`);
-  });
+  const navSections = new Map([
+    ["dashboard", locale === "ru" ? "Работа" : "Ish"],
+    ["monitoring", locale === "ru" ? "Сервисы" : "Xizmatlar"],
+    ["history", locale === "ru" ? "Система" : "Tizim"],
+  ]);
   useEffect(() => {
     setCollapsed(localStorage.getItem("juro-sidebar-collapsed") === "1");
   }, []);
@@ -168,8 +169,16 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
       </div>
       {workspaceError && <p className="platform-workspace-error" role="alert">{workspaceError}</p>}
       <nav>
-        {activeIndex >= 0 && <i className="platform-nav-indicator" style={{ transform: `translateY(${activeIndex * 48}px)` }} aria-hidden="true"/>}
-        {visibleNav.map(([slug, Icon, ru, uz]) => { const href=`${base}/${slug}`; const active=pathname===href || pathname.startsWith(`${href}/`); const label=locale === "ru" ? ru : uz; return <Link className={active?"active":""} aria-current={active ? "page" : undefined} href={href} key={slug} onClick={()=>setOpen(false)} title={collapsed ? label : undefined}><Icon/><span>{label}</span></Link>; })}
+        {visibleNav.map(([slug, Icon, ru, uz]) => {
+          const href=`${base}/${slug}`;
+          const active=pathname===href || pathname.startsWith(`${href}/`);
+          const label=locale === "ru" ? ru : uz;
+          const section = navSections.get(slug);
+          return <Fragment key={slug}>
+            {section && <span className="platform-nav-section" aria-hidden="true">{section}</span>}
+            <Link className={active?"active":""} aria-current={active ? "page" : undefined} href={href} onClick={()=>setOpen(false)} title={collapsed ? label : undefined}><Icon/><span>{label}</span></Link>
+          </Fragment>;
+        })}
       </nav>
       <div className="platform-sidebar-bottom"><Link href={`${base}/security`}><ShieldCheck/><span>{locale === "ru" ? "Безопасность" : "Xavfsizlik"}</span></Link><Link href={`${base}/help`}><HelpCircle/><span>{locale === "ru" ? "Помощь" : "Yordam"}</span></Link></div>
       <button className="platform-collapse" onClick={toggleCollapsed} aria-label={collapsed ? (locale === "ru" ? "Развернуть меню" : "Menyuni kengaytirish") : (locale === "ru" ? "Свернуть меню" : "Menyuni yig‘ish")} aria-expanded={!collapsed}>

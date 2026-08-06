@@ -220,6 +220,15 @@
   gap: .45rem;
 }
 
+/* Composer buttons are square by default; voice actions keep their label and touch target. */
+.ai-composer .ai-voice-actions button,
+.ai-composer .ai-speech-controls button {
+  width: auto;
+  height: auto;
+  padding: .55rem .8rem;
+  white-space: nowrap;
+}
+
 .ai-voice-actions svg,
 .ai-speech-controls svg {
   width: 1rem;
