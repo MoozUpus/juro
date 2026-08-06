@@ -62,6 +62,21 @@ separate successful real-provider analysis before it may be claimed as working.
 Staging contains `OPENAI_API_KEY` and `ANTHROPIC_API_KEY` by name, but names do
 not prove billing, model entitlement or successful provider responses.
 
+## Staging deployment verification
+
+The documented deployment command is `npm run deploy:staging`. It builds the
+staging artifact and refuses deployment unless its target environment, Worker
+name and `APP_ENV` are all staging. On 2026-08-06 it deployed Worker version
+`2642eb90-77d8-41da-9449-bba10cf49ec0` to `juro-platform-staging`.
+
+The deploy output confirmed `juro-staging`, the three private staging R2
+buckets, the malware-scan queue and dead-letter queue, the `MALWARE_SCANNER`
+binding, and the pinned private ClamAV Container. Both synthetic probe flags
+were `false`. A preceding direct Wrangler invocation had used a previously
+generated development artifact and updated only `juro-platform-development`;
+it did not alter staging data or production. The guarded staging script is the
+only supported deployment path for this repository.
+
 ## Legal sources
 
 JURO continues to restrict legal citations to the official Lex.uz and Advice.uz
