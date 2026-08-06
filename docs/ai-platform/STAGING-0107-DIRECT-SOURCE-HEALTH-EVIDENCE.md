@@ -63,9 +63,15 @@ an HTTP response for both providers; the bounded audit records
 bounded timeout diagnostics were deployed and retested. The latest visible run
 did not complete within the test window and was stopped through the UI.
 
-Consequently the source-card success criterion remains **not passed**. Local
-query-scoped retrieval of the same synthetic wording obtained the official
-Advice page `https://advice.uz/ru/document/4668`, so the remaining issue is
-specific to outbound Worker search egress/upstream behavior, not a fabricated
-answer or a database corpus fallback. The platform stays fail-closed until that
-external path is made available.
+That failed attempt remains useful fail-closed evidence. After Cloudflare
+Access renewal, a later authenticated RU browser smoke completed normally and
+rendered two direct source cards. Both links passed the exact public
+`lex.uz`/`advice.uz` allowlist and the browser reported no console errors or
+warnings. The limited **RU source-card success criterion is now passed**.
+
+This does not establish the legal accuracy of a model answer or replace a
+reviewer decision. An initial UZ-language meta-question correctly received no
+card under the title-relevance guard, and a later subject-matter UZ request did
+not complete within the bounded browser window. The platform remained
+fail-closed: no UZ citation was displayed or fabricated. UZ completion and a
+citation-to-case smoke remain open.

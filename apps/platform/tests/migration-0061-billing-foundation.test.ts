@@ -137,12 +137,14 @@ test("the synthetic staging fixture is explicit, zero-tax and idempotent", () =>
     assert.match(sql, /Never execute against production/);
     db.exec(sql);
     db.exec(sql);
-    const plan = db.prepare("SELECT price_minor AS priceMinor,approval_status AS approvalStatus FROM subscription_plan_versions WHERE id=?")
-      .get("12000000-0000-4000-8000-000000000005") as { priceMinor: number; approvalStatus: string };
+    const plan = db.prepare(`SELECT p.code AS code,v.price_minor AS priceMinor,v.approval_status AS approvalStatus
+      FROM subscription_plan_versions v JOIN subscription_plans p ON p.id=v.plan_id WHERE v.id=?`)
+      .get("12000000-0000-4000-8000-000000000005") as { code: string; priceMinor: number; approvalStatus: string };
     const tax = db.prepare("SELECT vat_rate_basis_points AS vatRate,tax_model AS taxModel FROM tax_profiles WHERE id=?")
       .get("12000000-0000-4000-8000-000000000003") as { vatRate: number; taxModel: string };
     assert.equal(plan.priceMinor, 1_000_000);
     assert.equal(plan.approvalStatus, "approved");
+    assert.equal(plan.code, "individual", "the synthetic plan must exercise the canonical paid entitlement code");
     assert.equal(tax.vatRate, 0);
     assert.match(tax.taxModel, /SYNTHETIC_STAGING_ONLY/);
     assert.equal(db.prepare("SELECT COUNT(*) AS count FROM subscription_plan_versions").get()?.count, 1);

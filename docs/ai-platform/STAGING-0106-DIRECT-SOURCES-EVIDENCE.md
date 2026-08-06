@@ -44,10 +44,20 @@ staging-beta acceptance**. It enables owner-only system exercise without access
 for other people. It is not an independent legal review, a claim that all
 scenarios were executed, or a production-release approval.
 
-## Remaining verification
+## Authenticated browser smoke after Access renewal
 
-The authenticated browser source-card smoke is pending because the Chrome
-Cloudflare Access session expired before the post-deploy request. No Access
-control was bypassed. The next owner login can verify one RU and one UZ query;
-the expected D1 result is one or more bounded rows in
-`legal_source_references` tied to the completed run, with no raw page content.
+After Cloudflare Access was renewed, a short RU staging question completed in
+the authenticated browser. The AI provider completed normally, the UI rendered
+two source cards and every rendered link passed the exact public allowlist for
+`lex.uz` or `advice.uz`. The browser reported no console errors or warnings.
+
+This is limited transport and UI evidence: it proves neither the legal merits
+of the generated answer nor an independent review of either source. A direct
+source card is not treated as a legal finding by the implementation.
+
+An initial UZ-language meta-question correctly produced no card because the
+title-relevance guard cannot cite a page merely about the system's own source
+policy. A separate subject-matter UZ request did not settle within the bounded
+browser window; its Stop control did not visibly settle before the tab was
+navigated away. UZ completion remains an explicit follow-up rather than a
+passed result.

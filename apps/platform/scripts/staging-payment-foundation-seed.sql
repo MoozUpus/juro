@@ -27,7 +27,7 @@ SELECT
 FROM user_profiles ORDER BY created_at,id LIMIT 1;
 
 INSERT OR IGNORE INTO subscription_plans(id,code,status,created_at,updated_at)
-VALUES('12000000-0000-4000-8000-000000000004','staging_individual','active','2026-08-03T00:00:00.000Z','2026-08-03T00:00:00.000Z');
+VALUES('12000000-0000-4000-8000-000000000004','individual','active','2026-08-03T00:00:00.000Z','2026-08-03T00:00:00.000Z');
 
 INSERT OR IGNORE INTO subscription_plan_versions(
   id,plan_id,version,name_ru,name_uz,billing_period,price_minor,currency,entitlements_json,
