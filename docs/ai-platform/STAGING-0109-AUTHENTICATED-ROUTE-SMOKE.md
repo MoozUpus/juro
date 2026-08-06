@@ -19,6 +19,18 @@ output repair. It does not deploy to or modify production.
   surface.
 - Each inspected route reported an empty browser console log.
 
+After deployment of Worker version `0cf1dbe0-3e92-4a67-8587-4c6ac5456b45`, an
+authenticated UZ smoke also completed the full **AI answer → action-plan
+confirmation → new case** path using a saved synthetic AI answer:
+
+- the user-facing plan-save button opened an in-app, keyboard-focusable
+  confirmation group with explicit cancel and confirm actions;
+- accepting it created a new case and navigated to its canonical localized
+  case URL;
+- the new case showed the immutable AI-proposed plan with two visible steps and
+  two persisted planned tasks;
+- browser console logs remained empty.
+
 The UZ AI conversation recorded in
 `STAGING-0108-OPENAI-SCHEMA-EVIDENCE.md` remained readable and showed its
 structured answer, action plan, suggested document and query-scoped official
@@ -26,12 +38,10 @@ source cards after direct navigation to its saved conversation.
 
 ## Limits of this pass
 
-- The Chrome QA bridge hangs while accepting a browser-native `window.confirm`
-  dialog used by the **create case from AI plan** action. The action is covered
-  by the existing persisted-plan unit/integration suite and previous synthetic
-  lifecycle evidence, but this particular bridge run is not counted as a new
-  browser confirmation. This is a test-automation limitation, not evidence of
-  a user-visible product failure.
+- The plan-save flow no longer relies on browser-native `window.confirm`.
+  It uses an explicit in-app confirmation group that is covered by the
+  authenticated browser smoke above and keeps the existing server-side
+  idempotent persistence contract.
 - The current Wrangler OAuth identity can read and deploy the worker, but its
   Cloudflare API request to the configured remote `juro-staging` D1 database
   was rejected with code `7403`. No data was read or changed. Browser staging
