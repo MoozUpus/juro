@@ -411,6 +411,10 @@
 .dbt-empty-state h2 { margin: 0; color: var(--dbt-navy); }
 .dbt-empty-state p { margin: 0; }
 .dbt-empty-state a { margin-top: 8px; padding: 9px 13px; border-radius: 8px; background: var(--dbt-navy); color: white; text-decoration: none; }
+.dbt-notifications-empty { min-height: 240px; padding: 32px; border-style: solid; }
+.dbt-notifications-empty > svg { width: 44px; height: 44px; padding: 11px; box-sizing: content-box; border-radius: 14px; background: #f2eee6; color: var(--dbt-gold); }
+.dbt-notifications-empty p { max-width: 520px; line-height: 1.55; }
+.dbt-notifications-empty a { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 .dbt-document-list { display: grid; gap: 9px; }
 .dbt-document-card { min-width: 0; padding: 13px; display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; gap: 12px; align-items: center; background: white; border: 1px solid var(--dbt-line); border-radius: 12px; position: relative; }
 .dbt-file-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 10px; background: #edf2f5; color: var(--dbt-navy); }
