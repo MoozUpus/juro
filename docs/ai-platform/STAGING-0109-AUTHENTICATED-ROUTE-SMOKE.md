@@ -41,6 +41,15 @@ The UZ AI conversation recorded in
 structured answer, action plan, suggested document and query-scoped official
 source cards after direct navigation to its saved conversation.
 
+After Worker version `face3164-02b2-4143-874c-d0355717caf2` deployed, the
+same saved AI answer's case source route
+`/uz/individual/cases/ffe28f29-47d0-53fb-b5a3-06bee0c08aba/sources` displayed
+both preserved direct-citation cards. The cards linked to the exact allowlisted
+Advice.uz documents `2920` and `712`; the browser console had no errors. The
+server derives this association from the immutable action-plan confirmation
+event, so replaying or appending a saved plan cannot move the source
+conversation away from another case or duplicate source content.
+
 The rendered-route regression suite also passed: `npm run test:rendered`
 reported 30/30 successful tests, including canonical document-builder routes,
 private route cache and CSRF controls, legacy redirects, security headers,
