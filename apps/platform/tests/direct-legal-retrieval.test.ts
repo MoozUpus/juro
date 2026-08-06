@@ -99,4 +99,8 @@ test("direct retrieval returns an honest unavailable state and writes no corpus"
   assert.equal(result.sourceValidationStatus, "unavailable");
   assert.equal(result.freshness.status, "unavailable");
   assert.equal(result.errors.length, 2);
+  assert.deepEqual(result.errors.map((error) => error.code), [
+    "LEGAL_SOURCE_SEARCH_HTTP_503",
+    "LEGAL_SOURCE_SEARCH_HTTP_503",
+  ]);
 });

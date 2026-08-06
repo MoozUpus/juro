@@ -950,6 +950,7 @@ test("AI conversations and facts remain owner-scoped inside a tenant", async () 
   ]);
   assert.match(conversationRoute, /owner_user_id=\?/);
   assert.match(conversationRoute, /c\.owner_user_id=\?/);
+  assert.match(conversationRoute, /directSourceErrorCodes: retrieval\.errors\.map/);
   assert.match(factRoute, /conversations WHERE workspace_id=\? AND owner_user_id=\?/);
   assert.doesNotMatch(conversationRoute, /WHERE workspace_id=\?\s+ORDER BY updated_at/s);
 });

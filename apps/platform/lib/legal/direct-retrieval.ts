@@ -99,9 +99,17 @@ async function boundedSearchHtml(url: URL, fetchImpl: FetchLike): Promise<string
     });
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
     const length = Number(response.headers.get("content-length") ?? "0");
-    if (!response.ok || !contentType.includes("text/html") || (length && length > SEARCH_MAX_BYTES)) {
+    if (!response.ok) {
       try { await response.body?.cancel(); } catch { /* best effort */ }
-      throw new Error("LEGAL_SOURCE_SEARCH_UNAVAILABLE");
+      throw new Error(`LEGAL_SOURCE_SEARCH_HTTP_${response.status}`);
+    }
+    if (!contentType.includes("text/html")) {
+      try { await response.body?.cancel(); } catch { /* best effort */ }
+      throw new Error("LEGAL_SOURCE_SEARCH_CONTENT_TYPE_REJECTED");
+    }
+    if (length && length > SEARCH_MAX_BYTES) {
+      try { await response.body?.cancel(); } catch { /* best effort */ }
+      throw new Error("LEGAL_SOURCE_SEARCH_TOO_LARGE");
     }
     const reader = response.body?.getReader();
     if (!reader) throw new Error("LEGAL_SOURCE_SEARCH_UNAVAILABLE");

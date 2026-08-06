@@ -575,6 +575,10 @@ async function executePost(
       sourceCount: result.sources.length, responseKind: result.responseKind,
       sourceFreshnessStatus: freshness.status,
       sourceFreshnessAsOf: freshness.asOf,
+      // Direct retrieval errors are bounded public codes only. Keeping them in
+      // the workspace audit record makes a staging source outage diagnosable
+      // without retaining a source page, question, or provider response.
+      directSourceErrorCodes: retrieval.errors.map((error) => error.code).slice(0, 4),
       branchId, operation: branchInput.operation,
       sourceMessageId: branchInput.forkedFromMessageId,
     }), now),
