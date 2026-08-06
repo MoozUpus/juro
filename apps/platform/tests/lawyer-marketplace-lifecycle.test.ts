@@ -68,6 +68,8 @@ test("a completed profile under review is visible but cannot receive a request",
   assert.match(directoryClient, /Профиль на проверке JURO/);
   assert.match(directoryClient, /Запись после проверки/);
   assert.match(detailRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(detailClient, /consultations\?lawyer=/);
+  assert.match(detailClient, /Запись после проверки/);
   assert.match(detailClient, /Профиль на проверке JURO/);
   assert.match(privatePhotoRoute, /export const GET/);
   assert.match(privatePhotoRoute, /WHERE user_id=\?/);
