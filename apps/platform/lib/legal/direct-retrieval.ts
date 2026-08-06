@@ -165,6 +165,9 @@ async function boundedSearchHtml(
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch (error) {
     if (error instanceof Error && error.message.startsWith("LEGAL_SOURCE_SEARCH_")) throw error;
+    if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) {
+      throw new Error("LEGAL_SOURCE_SEARCH_TIMEOUT");
+    }
     throw new Error("LEGAL_SOURCE_SEARCH_UNAVAILABLE");
   } finally {
     clearTimeout(timeout);

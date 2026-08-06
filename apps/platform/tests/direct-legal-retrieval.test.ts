@@ -130,3 +130,14 @@ test("direct retrieval returns an honest unavailable state and writes no corpus"
     "LEGAL_SOURCE_SEARCH_HTTP_503",
   ]);
 });
+
+test("direct retrieval reports bounded source timeouts without writing a corpus", async () => {
+  const result = await retrieveDirectLegalSources("договор", "ru", {
+    fetchImpl: (async () => { throw new DOMException("aborted", "AbortError"); }) as typeof fetch,
+    now: () => new Date("2026-08-06T12:00:00.000Z"),
+  });
+  assert.deepEqual(result.errors.map((error) => error.code), [
+    "LEGAL_SOURCE_SEARCH_TIMEOUT",
+    "LEGAL_SOURCE_SEARCH_TIMEOUT",
+  ]);
+});
