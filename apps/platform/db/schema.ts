@@ -2334,6 +2334,22 @@ export const legalSourceReferences = sqliteTable("legal_source_references", {
   index("legal_source_references_guest_idx").on(table.guestRunId, table.createdAt),
 ]);
 
+// Operational metadata for direct Lex/Advice availability only. It never holds
+// a source document, a legal excerpt, or a materialized corpus.
+export const legalSourceHealthChecks = sqliteTable("legal_source_health_checks", {
+  id: text("id").primaryKey(),
+  environment: text("environment").notNull(),
+  sourceKind: text("source_kind").notNull(),
+  status: text("status").notNull(),
+  checkedAt: text("checked_at").notNull(),
+  latencyMs: integer("latency_ms").notNull(),
+  errorCode: text("error_code"),
+  endpointUrl: text("endpoint_url").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("legal_source_health_checks_lookup_idx").on(table.environment, table.sourceKind, table.checkedAt),
+]);
+
 export const legislationUpdates = sqliteTable("legislation_updates", {
   id: text("id").primaryKey(),
   sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),

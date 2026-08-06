@@ -1,26 +1,50 @@
 import { localSessionForRequest } from "../../../../../lib/auth/mfa-http";
 import { requirePlatformStaffAccess } from "../../../../../lib/auth/staff-access";
+import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
 import { runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
-import { legalSourceHealth } from "../../../../../lib/legal/source-health";
+import {
+  readDirectLegalSourceHealth,
+  runDirectLegalSourceHealthCheck,
+} from "../../../../../lib/legal/direct-source-health";
+import { operationalEnvironment } from "../../../../../lib/operations/operational-feature-flags";
+
+const headers = { "cache-control": "private, no-store", pragma: "no-cache" };
+
+async function staff(request: Request, capability: "staff.console.view" | "staff.operations.manage") {
+  const runtime = runtimeEnv();
+  if (runtime.LEGAL_DIRECT_RETRIEVAL_ENABLED !== "true" || !runtime.DB) return null;
+  const now = new Date();
+  const session = await localSessionForRequest(request, { now });
+  await requirePlatformStaffAccess(runtime.DB, session, capability, {
+    now,
+    freshMfaWithinMs: 15 * 60 * 1_000,
+  });
+  return { runtime, now };
+}
 
 export async function GET(request: Request): Promise<Response> {
-  const headers = { "cache-control": "private, no-store", pragma: "no-cache" };
-  const runtime = runtimeEnv();
-  if (runtime.LEGAL_SOURCE_STAFF_API_ENABLED !== "true" || !runtime.DB) {
-    return Response.json({ code: "NOT_AVAILABLE" }, { status: 404, headers });
-  }
-  const fetchSite = request.headers.get("sec-fetch-site");
-  if ((fetchSite !== null && fetchSite !== "same-origin") || request.headers.get("x-juro-csrf") !== "1") {
-    return Response.json({ code: "REQUEST_REJECTED" }, { status: 403, headers });
-  }
   try {
-    const now = new Date();
-    const session = await localSessionForRequest(request, { now });
-    await requirePlatformStaffAccess(runtime.DB, session, "legal.sources.review", {
-      now,
-      freshMfaWithinMs: 15 * 60 * 1_000,
-    });
-    return Response.json({ ok: true, ...(await legalSourceHealth(runtime.DB, now)) }, { headers });
+    const access = await staff(request, "staff.console.view");
+    if (!access) return Response.json({ code: "NOT_AVAILABLE" }, { status: 404, headers });
+    return Response.json({ ok: true, ...(await readDirectLegalSourceHealth(
+      access.runtime.DB!,
+      operationalEnvironment(access.runtime.APP_ENV),
+      access.now,
+    )) }, { headers });
+  } catch {
+    return Response.json({ code: "ACCESS_DENIED" }, { status: 403, headers });
+  }
+}
+
+export async function POST(request: Request): Promise<Response> {
+  try {
+    assertSafeWrite(request);
+    const access = await staff(request, "staff.operations.manage");
+    if (!access) return Response.json({ code: "NOT_AVAILABLE" }, { status: 404, headers });
+    return Response.json({ ok: true, ...(await runDirectLegalSourceHealthCheck({
+      db: access.runtime.DB!,
+      environment: operationalEnvironment(access.runtime.APP_ENV),
+    })) }, { headers });
   } catch {
     return Response.json({ code: "ACCESS_DENIED" }, { status: 403, headers });
   }

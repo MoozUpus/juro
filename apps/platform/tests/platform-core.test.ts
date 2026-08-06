@@ -1282,17 +1282,20 @@ test("support tickets are tenant-scoped, validated, and audited", async () => {
   assert.match(staffQueue, /freshMfaWithinMs: 15 \* 60 \* 1000/);
   assert.match(staffReply, /support_ticket_replied/);
 });
-test("legal-source health route is staff-gated, same-origin, and no-store", async () => {
+test("direct legal-source health route is staff-gated, bounded, and no-store", async () => {
   const route = await readFile(new URL("../app/api/platform/legal-sources/health/route.ts", import.meta.url), "utf8");
-  assert.match(route, /LEGAL_SOURCE_STAFF_API_ENABLED !== "true"/);
-  assert.match(route, /x-juro-csrf/);
-  assert.match(route, /sec-fetch-site/);
-  assert.match(route, /legal\.sources\.review/);
+  assert.match(route, /LEGAL_DIRECT_RETRIEVAL_ENABLED !== "true"/);
+  assert.doesNotMatch(route, /LEGAL_SOURCE_STAFF_API_ENABLED/);
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /staff\.operations\.manage/);
   assert.match(route, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
   assert.match(route, /cache-control": "private, no-store/);
+  assert.match(route, /runDirectLegalSourceHealthCheck/);
+  assert.match(route, /readDirectLegalSourceHealth/);
   assert.match(route, /ACCESS_DENIED/);
-  const page = await readFile(new URL("../app/[locale]/admin/legal-sources/reviews/page.tsx", import.meta.url), "utf8");
+  const page = await readFile(new URL("../app/[locale]/admin/legal-sources/page.tsx", import.meta.url), "utf8");
   assert.match(page, /robots: \{ index: false, follow: false, nocache: true \}/);
+  assert.match(page, /DirectLegalSourceHealthPanel/);
 });
 test("action-plan history snapshots are tenant-scoped and immutable", async () => {
   const [createRoute, updateRoute, historyRoute, client, migration] = await Promise.all([
