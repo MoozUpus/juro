@@ -10,6 +10,21 @@ Date: 2026-08-07
 - D1 migrations: none; this is application-only
 - Production: not read, deployed, or otherwise changed
 
+## Staging fixture and deployment update
+
+- Commit: `d4ec1ef` (`feat(staging): seed auditable lawyer handoff fixtures`)
+- Worker version: `4f44481f-feec-4356-9ca3-e90e4aae7f87`
+- Remote private R2: one existing JURO logo was stored under the synthetic
+  staging-only profile-image key, with the checked file size and SHA-256 from
+  the local source asset. No personal image or customer document was uploaded.
+- Remote D1: the idempotent `scripts/staging-lawyer-handoff-seed.sql` created
+  one clearly labelled approved fixture and one clearly labelled pending-review
+  fixture. It creates no session, OTP, case, request, order or payment.
+- The approved state was derived by the existing immutable
+  `lawyer_profile_moderation` trigger; the fixture records its beta-only,
+  owner-authorized moderation reason rather than claiming production
+  accreditation.
+
 ## Boundary implemented
 
 - An incomplete profile is never projected into the public directory.
@@ -33,6 +48,15 @@ Date: 2026-08-07
 - Authenticated Chrome staging smoke: `/ru/individual/lawyers` loaded the
   corrected review-state explanation and completed with `Найдено специалистов:
   0`, with no error UI. The zero is a truthful staging-data state, not mock data.
+- Authenticated in-app browser smoke after the fixture seed: the directory
+  rendered two profiles; its approved fixture exposed `Выбрать для заявки`,
+  while its pending-review fixture exposed only the disabled review state.
+- The approved profile detail now exposes the same case-linked handoff CTA.
+  Its destination preselected that profile in the existing handoff form, which
+  still requires an anonymized summary and explicit consent before a request
+  can be created.
+- `npm run type-check`, targeted marketplace/fixture tests (6/6), `npm run
+  lint`, staging build and artifact validation passed before deployment.
 
 ## Explicit limitation
 
@@ -42,3 +66,9 @@ public-API response smoke remains open: the browser extension blocks direct
 JSON navigation with `ERR_BLOCKED_BY_CLIENT`; it does not affect the
 authenticated directory's same-origin request. Public juro.uz deployment is
 also deliberately pending separate production approval.
+
+The browser smoke intentionally stopped before submitting a handoff request:
+creating even a synthetic request is an auditable data write. The existing
+server-side handoff lifecycle is covered by its regression suite; a full
+interactive request → conflict check → consented grant requires a separately
+authenticated synthetic lawyer session and an explicit write confirmation.
