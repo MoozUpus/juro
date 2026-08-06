@@ -379,6 +379,38 @@
   font-size: .75rem;
 }
 
+.ai-plan-confirmation {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: .65rem;
+  border: 1px solid #e2c98f;
+  border-radius: .75rem;
+  background: #fff9ed;
+  color: #43351e;
+  padding: .75rem;
+}
+
+.ai-plan-confirmation:focus-visible {
+  outline: 3px solid #be974f;
+  outline-offset: 2px;
+}
+
+.ai-plan-confirmation p {
+  margin: 0;
+  font-size: .75rem;
+  line-height: 1.5;
+}
+
+.ai-plan-confirmation > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.ai-plan-confirmation button {
+  min-height: 2.75rem;
+}
+
 .ai-feedback-actions > button.selected {
   border-color: #327052;
   background: #f1f8f4;

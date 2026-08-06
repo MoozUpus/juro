@@ -94,6 +94,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [canRetry, setCanRetry] = useState(false);
   const [savingPlan, setSavingPlan] = useState(false);
   const [targetCaseId, setTargetCaseId] = useState("");
+  const [planConfirmationOpen, setPlanConfirmationOpen] = useState(false);
+  const planConfirmationRef = useRef<HTMLDivElement | null>(null);
   const [openingSuggestedDocument, setOpeningSuggestedDocument] = useState(false);
   const [documentPrefill, setDocumentPrefill] = useState<DocumentPrefillPreview | null>(null);
   const [documentPrefillMessageId, setDocumentPrefillMessageId] = useState("");
@@ -142,6 +144,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }, [ru, selectedBranchId, selectedConversationId]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (planConfirmationOpen) planConfirmationRef.current?.focus();
+  }, [planConfirmationOpen]);
 
   useEffect(() => {
     if (!answer?.messageId) { setFeedback([]); setFeedbackStatus(""); return; }
@@ -334,15 +340,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   async function savePlanToCase() {
     if (!answer?.messageId || answer.result.responseKind !== "answer" || !answer.result.actionPlan.length || savingPlan) return;
-    const selectedCase = cases.find((item) => item.id === targetCaseId);
-    const confirmed = window.confirm(targetCaseId
-      ? (ru
-        ? `Добавить задачи по показанному плану в дело «${selectedCase?.title ?? "Выбранное дело"}»? Исходный AI-ответ и текущая версия плана сохранятся.`
-        : `Ko‘rsatilgan reja vazifalari “${selectedCase?.title ?? "Tanlangan ish"}” ishiga qo‘shilsinmi? Asl AI javobi va joriy reja versiyasi saqlanadi.`)
-      : (ru
-        ? "Создать новое дело и задачи по показанному плану? Исходный AI-ответ сохранится без изменений."
-        : "Ko‘rsatilgan reja bo‘yicha yangi ish va vazifalar yaratilsinmi? Asl AI javobi o‘zgarmaydi."));
-    if (!confirmed) return;
+    setPlanConfirmationOpen(false);
     setSavingPlan(true);
     setError("");
     try {
@@ -476,7 +474,16 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
                   <option value="">{ru ? "Новое дело" : "Yangi ish"}</option>
                   {cases.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
                 </select>
-                <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => void savePlanToCase()}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : targetCaseId ? (ru ? "Добавить в выбранное дело" : "Tanlangan ishga qo‘shish") : (ru ? "Создать дело с планом" : "Reja bilan ish yaratish")}</button>
+                {!planConfirmationOpen ? <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => setPlanConfirmationOpen(true)}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : targetCaseId ? (ru ? "Добавить в выбранное дело" : "Tanlangan ishga qo‘shish") : (ru ? "Создать дело с планом" : "Reja bilan ish yaratish")}</button> : <div className="ai-plan-confirmation" ref={planConfirmationRef} tabIndex={-1} role="group" aria-label={ru ? "Подтверждение сохранения плана" : "Rejani saqlashni tasdiqlash"}>
+                  <p>{targetCaseId
+                    ? (ru
+                      ? `Добавить задачи по показанному плану в дело «${cases.find((item) => item.id === targetCaseId)?.title ?? "Выбранное дело"}»? Исходный AI-ответ и текущая версия плана сохранятся.`
+                      : `Ko‘rsatilgan reja vazifalari “${cases.find((item) => item.id === targetCaseId)?.title ?? "Tanlangan ish"}” ishiga qo‘shilsinmi? Asl AI javobi va joriy reja versiyasi saqlanadi.`)
+                    : (ru
+                      ? "Создать новое дело и задачи по показанному плану? Исходный AI-ответ сохранится без изменений."
+                      : "Ko‘rsatilgan reja bo‘yicha yangi ish va vazifalar yaratilsinmi? Asl AI javobi o‘zgarmaydi.")}</p>
+                  <div><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanConfirmationOpen(false)}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={savingPlan} aria-busy={savingPlan} onClick={() => void savePlanToCase()}>{savingPlan ? <LoaderCircle className="spin" /> : <ListPlus />}{savingPlan ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : (ru ? "Подтвердить и сохранить" : "Tasdiqlash va saqlash")}</button></div>
+                </div>}
               </div>}
               {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? (ru ? "Проверяем шаблон…" : "Shablon tekshirilmoqda…") : (ru ? "Открыть шаблон JURO" : "JURO shablonini ochish")}</button>}
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setVoiceRecordingId(""); setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
