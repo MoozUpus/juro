@@ -1,6 +1,6 @@
 # Security audit delta — 2026-08-07
 
-## Resolved locally; staging deployment pending
+## Deployed to protected staging; endpoint smoke partly environment-blocked
 
 **S-2026-08-07-01 — pending lawyer-profile media had a public delivery path.**
 
@@ -18,9 +18,13 @@ The local fix now:
   own upload/preview;
 - adds regression assertions for both query boundaries.
 
-This is an application-only, fail-closed change. It awaits build, staging
-deployment and an authenticated/unauthenticated endpoint smoke before it can
-be marked deployed.
+This application-only, fail-closed change was deployed to protected staging as
+Worker version `1721fec0-b8f6-451d-9e8a-4893204d8519`. The authenticated
+directory smoke rendered the approved-only copy and no pending cards, with no
+console errors or horizontal overflow. The local Chrome client blocked a direct
+image URL with `ERR_BLOCKED_BY_CLIENT`, so the HTTP response for a known pending
+profile is not claimed as browser-verified; the server query boundary remains
+covered by a regression test.
 
 ## Open release gates
 

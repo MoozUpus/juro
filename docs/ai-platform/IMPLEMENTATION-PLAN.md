@@ -1,7 +1,8 @@
 # Remaining implementation plan — after 2026-08-07 audit
 
-1. Build and deploy the pending-profile visibility correction to protected
-   staging; verify public rejection and owner-only image access.
+1. Completed: deploy the pending-profile visibility correction to protected
+   staging. A browser extension blocked a direct image-endpoint smoke, so retain
+   the server regression test and repeat it in a neutral browser session.
 2. Create a synthetic approved lawyer profile under a controlled staging
    account, then test client request → conflict preview → consented case access
    → completion. Do not fabricate a real lawyer or availability.
