@@ -839,3 +839,31 @@
 @media (prefers-reduced-motion: reduce) {
   .dbt-root *, .dbt-signed-access * { scroll-behavior: auto !important; animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
+
+/* The platform already supplies identity and primary navigation. Keep the
+   document workspace header compact and below the shared shell instead of
+   rendering a second competing application header. */
+.platform-shell .dbt-header {
+  position: relative;
+  top: auto;
+  z-index: 40;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 12px;
+  padding-inline: 24px;
+}
+.platform-shell .dbt-header nav { justify-content: flex-end; }
+.platform-shell .dbt-brand span,
+.platform-shell .dbt-user { display: none; }
+
+@media (max-width: 820px) {
+  .platform-shell .dbt-header {
+    height: 62px;
+    padding-inline: 14px;
+    grid-template-columns: auto 1fr;
+  }
+  .dbt-folders {
+    scrollbar-width: none;
+    overscroll-behavior-inline: contain;
+  }
+  .dbt-folders::-webkit-scrollbar { display: none; }
+}

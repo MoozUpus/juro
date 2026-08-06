@@ -313,3 +313,6 @@
 .comparison-version-heads strong,
 .comparison-sources dd{font-size:14px}
 @media(max-width:820px){.comparison-mobile-version button{font-size:14px}}
+
+.review-mode-tabs{scrollbar-width:none;overscroll-behavior-inline:contain}
+.review-mode-tabs::-webkit-scrollbar{display:none}
