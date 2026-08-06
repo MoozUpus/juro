@@ -188,7 +188,10 @@ test("Builder version routes and RU/UZ UI retain owner, CSRF and recovery contra
   assert.match(component, /Versiyalar tarixi/);
   assert.match(component, /История версий/);
   assert.match(component, /aria-live="polite"/);
-  assert.match(component, /window\.confirm/);
+  assert.match(component, /<dialog/);
+  assert.match(component, /showModal\(\)/);
+  assert.match(component, /onCancel=/);
+  assert.doesNotMatch(component, /window\.confirm/);
   assert.match(configured, /saveQueue/);
   assert.match(configured, /skipNextAutosave/);
   assert.ok(statusRoute.indexOf('source: "approval"') < statusRoute.indexOf("SET status = 'Согласован'"));
