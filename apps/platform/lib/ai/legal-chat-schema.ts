@@ -92,7 +92,19 @@ export const legalChatResponseSchema = z.object({
 
 export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
 
-export const legalChatJsonSchema = z.toJSONSchema(legalChatResponseSchema, {
+/**
+ * Source-access fields are attached by the server after direct retrieval has
+ * been validated. They are intentionally absent from the provider contract:
+ * OpenAI Structured Outputs requires every property in an object schema to be
+ * listed as required, whereas these three fields must remain server-owned.
+ */
+export const legalChatModelResponseSchema = legalChatResponseSchema.omit({
+  sourceAccessMode: true,
+  sourcesRetrievedAt: true,
+  sourceValidationStatus: true,
+});
+
+export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, {
   target: "draft-7",
   unrepresentable: "throw",
 }) as Record<string, unknown>;

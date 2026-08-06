@@ -67,6 +67,16 @@ export type LegalAiRunOptions = {
     provider: "openai" | "anthropic";
     model: string;
   }) => void | Promise<void>;
+  /**
+   * Internal-safe diagnostic metadata for a fallback decision. This must never
+   * receive prompt, source, response, token, or credential data.
+   */
+  onProviderFailure?: (input: {
+    provider: "openai" | "anthropic";
+    code: AiUnavailableError["code"];
+    providerStatus: number | null;
+    providerErrorType: string | null;
+  }) => void | Promise<void>;
 };
 
 export type AiProviderStatus = {
@@ -220,6 +230,14 @@ class ResilientLegalProvider implements LegalAiProvider {
       return await new OpenAiLegalProvider().runLegalChat(input, options);
     } catch (error) {
       if (!hasAnthropicConfiguration() || !isAnthropicFallbackEligible(error)) throw error;
+      if (error instanceof AiUnavailableError) {
+        await options.onProviderFailure?.({
+          provider: "openai",
+          code: error.code,
+          providerStatus: error.providerStatus,
+          providerErrorType: error.providerErrorType,
+        });
+      }
       await options.onProgress?.({ stage: "fallback", from: "openai", to: "anthropic" });
       const result = await runAnthropicLegalChat(input, options);
       return { ...result, fallbackFromProvider: "openai" };

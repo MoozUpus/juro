@@ -9,8 +9,8 @@ regression tests; it does not mean production was changed.
 | Module | Route / API | Current status | Evidence / implementation | Missing behaviour / next action | Security impact | Final status |
 |---|---|---|---|---|---|---|
 | Auth, OTP, sessions, workspace isolation | localized platform routes | VERIFIED_WORKING | Existing route/security suites and staging evidence through 0105 | Regression after direct-source release | Critical | preserved |
-| AI chat provider and structured response | `/api/platform/ai`, `/api/guest/ai` | PARTIAL | OpenAI/Anthropic adapters, encrypted run records, rate/cost controls; authenticated RU staging response completed without provider or console error | Verify bounded abort/recovery state and UZ completion | Critical | RU browser smoke passed; UZ follow-up open |
-| Official legal sources | AI chat source panel; `/api/platform/legal-sources/health` | PARTIAL | Staging migrations `0106` and `0107`, bounded direct source-health, private backup/restore evidence; authenticated RU smoke rendered two exact allowlisted official source cards | Subject-matter UZ direct retrieval did not settle in the bounded browser window; citation-to-case smoke remains | Critical | RU source-card smoke passed; UZ QA open |
+| AI chat provider and structured response | `/api/platform/ai`, `/api/guest/ai` | VERIFIED_WORKING | OpenAI/Anthropic adapters, encrypted run records, rate/cost controls; authenticated RU and UZ staging answers completed without console errors; OpenAI provider schema contract is regression-tested | Full mobile/accessibility matrix remains part of final release gate | Critical | RU/UZ staging browser smoke passed |
+| Official legal sources | AI chat source panel; `/api/platform/legal-sources/health` | VERIFIED_WORKING | Staging migrations `0106` and `0107`, bounded direct source-health, private backup/restore evidence; authenticated RU and UZ subject-matter smokes rendered exact allowlisted official source cards | Citation-to-case remains a separate final regression | Critical | RU/UZ source-card smoke passed |
 | Legacy legal corpus | legacy review/sync routes | DUPLICATE_OR_OBSOLETE | Existing tables, queue and indexes retained for rollback | No new staging writes; document later decommission only | High | dormant in staging config |
 | Document Builder | `/:locale/:accountType/document-builder` | VERIFIED_WORKING | Existing Builder version and R2 guard migrations/tests; authenticated synthetic browser run created a versioned document and DOCX/PDF/ZIP in staging | Upload → analysis, compare → redline and plan → case remain separate staging regressions | Critical | staging browser smoke passed |
 | Document analysis and compare | document-analysis routes | VERIFIED_WORKING | Authenticated synthetic analysis accepted an explicit revision and created `Нормализованная версия 2`; synthetic comparison completed, exposed redline and linked to a case | Direct-source cards/citations remain unavailable in the Worker path | High | staging browser smoke passed |
@@ -49,3 +49,6 @@ synthetic browser evidence and the exact outstanding gates.
 
 See `STAGING-ENTITLEMENT-REPAIR-EVIDENCE.md` for the staging-only backup,
 repair, recovery check and post-reload browser verification.
+
+See `STAGING-0108-OPENAI-SCHEMA-EVIDENCE.md` for the primary-provider schema
+repair and UZ direct-source browser evidence.

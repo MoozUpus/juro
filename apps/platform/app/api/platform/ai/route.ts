@@ -337,6 +337,12 @@ async function executePost(
     model: string;
     startedAt: string;
   }> = [];
+  const providerFailures: Array<{
+    provider: "openai" | "anthropic";
+    code: AiUnavailableError["code"];
+    providerStatus: number | null;
+    providerErrorType: string | null;
+  }> = [];
   const beforeProviderCall = async (call: { provider: "openai" | "anthropic"; model: string }) => {
     try {
       await assertProviderCallAllowed({
@@ -369,9 +375,51 @@ async function executePost(
         scope: memory.scope,
       })),
       runtimeSettings,
-    }, { signal, onProgress, beforeProviderCall });
+    }, {
+      signal,
+      onProgress,
+      beforeProviderCall,
+      onProviderFailure: async (failure) => { providerFailures.push(failure); },
+    });
   } catch (error) {
     const code = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";
+    // Keep staging/provider incidents diagnosable without emitting the legal
+    // question, user identifiers, source excerpts, or provider response body.
+    // The request correlation id already belongs to the client-safe response
+    // and lets operations correlate this metadata with the durable ai_run.
+    console.warn(JSON.stringify({
+      event: "ai.legal_chat_provider_failed",
+      code,
+      providerStatus: error instanceof AiUnavailableError ? error.providerStatus : null,
+      providerErrorType: error instanceof AiUnavailableError ? error.providerErrorType : null,
+      attemptedProviders: providerCalls.map((call) => ({ provider: call.provider, model: call.model })),
+      providerFailures,
+      correlationId: reservation.correlationId,
+    }));
+    // Store the same non-content metadata in the durable workspace audit log.
+    // This makes a provider incident explainable even where operator log access
+    // is intentionally restricted, while preserving the privacy boundary for
+    // legal questions, source excerpts, and raw provider responses.
+    try {
+      await db.prepare(
+        "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'ai_run',?,'ai_chat_provider_failure',?,?)",
+      ).bind(
+        crypto.randomUUID(),
+        workspace.id,
+        user.id,
+        reservation.runId,
+        JSON.stringify({
+          code,
+          providerStatus: error instanceof AiUnavailableError ? error.providerStatus : null,
+          providerErrorType: error instanceof AiUnavailableError ? error.providerErrorType : null,
+          attemptedProviders: providerCalls.map((call) => ({ provider: call.provider, model: call.model })),
+          providerFailures,
+        }),
+        isoNow(),
+      ).run();
+    } catch {
+      // Failure audit must not mask the durable run failure or public response.
+    }
     const completedAt = isoNow();
     try {
       for (const call of providerCalls) {
