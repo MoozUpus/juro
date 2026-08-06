@@ -30,6 +30,15 @@
 > mailbox delivery, citations, legal quality, a scanner-approved analysis, or
 > human review. No avatar work is in the currently authorised scope.
 
+> **Read-only release evidence — 2026-08-06.** The Cloudflare D1 API confirms
+> 106 applied migrations; four completed OpenAI and seven completed Anthropic
+> runs; and two clean `juro-private-clamav` verdicts. It also shows 40 Lex and
+> two Advice records only in `fetched` state (none has a reviewer disposition),
+> one completed document analysis, and no corpus-scale comparison result. One
+> active `legal_reviewer` assignment exists until 2026-09-05. These are useful
+> staging facts, not substitutes for legal-review, 314-scenario, 100-document,
+> 30-comparison, or authenticated-browser release evidence.
+
 Updated: 2026-08-06
 
 This register distinguishes real implementation from planned scope. A database table, UI placeholder, binding, or feature flag is not counted as a working feature.
