@@ -129,6 +129,10 @@ export type DocumentAnalysisDiagnosticDetail =
   | "ANALYSIS_REVISION_STORAGE_FAILED"
   | "ANALYSIS_REVISION_SOURCE_INVALID"
   | "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
+  | "ANALYSIS_VERSION_CREATE_INTENT_FAILED"
+  | "ANALYSIS_VERSION_WRITE_OBJECT_FAILED"
+  | "ANALYSIS_VERSION_ATTACH_FAILED"
+  | "ANALYSIS_VERSION_VERIFY_ATTACHMENT_FAILED"
   | "ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH"
   | "ANALYSIS_DOCUMENT_VERSION_OBJECT_WRITE_MISMATCH"
   | "ANALYSIS_VERSION_OBJECT_WRITE_ATTACHMENT_MISMATCH"
@@ -136,6 +140,12 @@ export type DocumentAnalysisDiagnosticDetail =
 
 function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
   if (error instanceof AnalysisRevisionError) {
+    if (error.code === "ANALYSIS_REVISION_STORAGE_FAILED") {
+      if (error.diagnosticStage === "create_intent") return "ANALYSIS_VERSION_CREATE_INTENT_FAILED";
+      if (error.diagnosticStage === "write_object") return "ANALYSIS_VERSION_WRITE_OBJECT_FAILED";
+      if (error.diagnosticStage === "attach_version") return "ANALYSIS_VERSION_ATTACH_FAILED";
+      if (error.diagnosticStage === "verify_attachment") return "ANALYSIS_VERSION_VERIFY_ATTACHMENT_FAILED";
+    }
     if (error.code === "ANALYSIS_REVISION_STORAGE_FAILED" || error.code === "ANALYSIS_REVISION_SOURCE_INVALID") {
       return error.code;
     }

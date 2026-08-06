@@ -74,6 +74,7 @@ export class AnalysisRevisionError extends Error {
       | "ANALYSIS_REVISION_CONFLICT"
       | "ANALYSIS_REVISION_STORAGE_FAILED",
     readonly status: number,
+    readonly diagnosticStage?: "create_intent" | "write_object" | "attach_version" | "verify_attachment",
   ) {
     super(code);
     this.name = "AnalysisRevisionError";
@@ -111,15 +112,20 @@ export async function storeInitialAnalysisDocumentVersion(
   }
 
   const id = analysisSourceVersionId(input.analysisId);
-  const objectWrite = await createAnalysisVersionObjectWrite(env.DB, {
-    analysisId: input.analysisId,
-    workspaceId: input.workspaceId,
-    ownerUserId: input.ownerUserId,
-    targetVersion: 1,
-    sourceKind: "extracted",
-    sizeBytes: bytes.byteLength,
-    sha256,
-  });
+  let objectWrite: Awaited<ReturnType<typeof createAnalysisVersionObjectWrite>>;
+  try {
+    objectWrite = await createAnalysisVersionObjectWrite(env.DB, {
+      analysisId: input.analysisId,
+      workspaceId: input.workspaceId,
+      ownerUserId: input.ownerUserId,
+      targetVersion: 1,
+      sourceKind: "extracted",
+      sizeBytes: bytes.byteLength,
+      sha256,
+    });
+  } catch {
+    throw new AnalysisRevisionError("ANALYSIS_REVISION_STORAGE_FAILED", 503, "create_intent");
+  }
   const r2Key = objectWrite.r2Key;
   try {
     await putImmutableText(env.BUCKET, r2Key, bytes, sha256, {
@@ -128,9 +134,9 @@ export async function storeInitialAnalysisDocumentVersion(
       sourceKind: "extracted",
       objectWriteId: objectWrite.id,
     });
-  } catch (error) {
+  } catch {
     await recordAnalysisVersionObjectWriteFailure(env.DB, objectWrite, "R2_PUT_FAILED").catch(() => undefined);
-    throw error;
+    throw new AnalysisRevisionError("ANALYSIS_REVISION_STORAGE_FAILED", 503, "write_object");
   }
   const now = new Date().toISOString();
   const fileName = normalizedFileName(input.fileName, 1);
@@ -148,13 +154,19 @@ export async function storeInitialAnalysisDocumentVersion(
         r2Key, objectWrite.id, fileName, bytes.byteLength, sha256, now,
       ),
     ]);
-  } catch (error) {
+  } catch {
     await recordAnalysisVersionObjectWriteFailure(env.DB, objectWrite, "D1_ATTACH_CONFLICT").catch(() => undefined);
     const raced = await versionByNumber(env.DB, input.analysisId, input.workspaceId, input.ownerUserId, 1);
-    if (!raced || raced.sha256 !== sha256 || raced.sizeBytes !== bytes.byteLength) throw error;
+    if (!raced || raced.sha256 !== sha256 || raced.sizeBytes !== bytes.byteLength) {
+      throw new AnalysisRevisionError("ANALYSIS_REVISION_STORAGE_FAILED", 503, "attach_version");
+    }
     return publicVersion(raced);
   }
-  await requireAttachedAnalysisVersionObjectWrite(env.DB, objectWrite.id, id);
+  try {
+    await requireAttachedAnalysisVersionObjectWrite(env.DB, objectWrite.id, id);
+  } catch {
+    throw new AnalysisRevisionError("ANALYSIS_REVISION_STORAGE_FAILED", 503, "verify_attachment");
+  }
   return { id, analysisId: input.analysisId, version: 1, sourceKind: "extracted", fileName, mimeType: "text/markdown; charset=utf-8", sizeBytes: bytes.byteLength, sha256, createdAt: now };
 }
 
