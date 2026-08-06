@@ -1,8 +1,9 @@
 # Remaining staging-beta plan
 
-1. Back up and restore-verify staging D1, apply 0106, deploy the exact tested
-   worker; production remains unchanged.
-2. Run authenticated RU/UZ AI questions to prove direct Lex/Advice cards,
+1. Completed: back up and restore-verify staging D1, apply 0106 and 0107, and
+   deploy the exact tested Worker; production remains unchanged.
+2. Resolve or obtain an approved upstream path for Worker direct Lex/Advice
+   search, then run authenticated RU/UZ AI questions to prove source cards,
    citation metadata bounds, no legacy corpus writes, and case-source display.
 3. Run the already implemented Builder → version → export, upload → analysis,
    compare → redline, and plan → case flows with synthetic documents.

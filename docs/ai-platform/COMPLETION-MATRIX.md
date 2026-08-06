@@ -10,7 +10,7 @@ regression tests; it does not mean production was changed.
 |---|---|---|---|---|---|---|
 | Auth, OTP, sessions, workspace isolation | localized platform routes | VERIFIED_WORKING | Existing route/security suites and staging evidence through 0105 | Regression after direct-source release | Critical | preserved |
 | AI chat provider and structured response | `/api/platform/ai`, `/api/guest/ai` | PARTIAL | OpenAI/Anthropic adapters, encrypted run records, rate/cost controls | Deploy direct Lex/Advice slice and run authenticated smoke | Critical | in progress |
-| Official legal sources | AI chat source panel | PARTIAL | Staging migration `0106`, Worker `14280f6b-ffed-435a-a95b-6aea28ee8b6f`, direct-source tests and query-scoped Lex/Advice technical fetch | Fresh Cloudflare Access session for authenticated RU/UZ source-card smoke; source-health replacement | Critical | deployed, QA pending |
+| Official legal sources | AI chat source panel; `/api/platform/legal-sources/health` | PARTIAL | Staging migrations `0106` and `0107`, bounded direct source-health, private backup/restore evidence and authenticated synthetic smoke | Worker direct search egress is currently unavailable/slow for both providers; source-card success remains pending | Critical | deployed, QA blocked |
 | Legacy legal corpus | legacy review/sync routes | DUPLICATE_OR_OBSOLETE | Existing tables, queue and indexes retained for rollback | No new staging writes; document later decommission only | High | dormant in staging config |
 | Document Builder | `/:locale/:accountType/document-builder` | VERIFIED_WORKING | Existing Builder version and R2 guard migrations/tests | Re-run smoke after staging deploy | Critical | preserved |
 | Document analysis and compare | document-analysis routes | VERIFIED_WORKING | Claude/fallback, compare/redline and case links already present | Authenticated regression with synthetic documents | High | preserved |
@@ -40,3 +40,6 @@ validation at query time.
 - unavailable sources force a non-chargeable clarification state;
 - legacy corpus tables, R2 objects, queue and Vectorize bindings are not
   deleted in this release and are configured dormant in staging.
+
+See `STAGING-0107-DIRECT-SOURCE-HEALTH-EVIDENCE.md` for the backup, migration,
+bounded health check and the exact direct-source smoke outcome.
