@@ -576,7 +576,7 @@ unchanged.
 
 ## D-136 — query-scoped direct official sources replace the owned legal corpus
 
-Status: accepted locally; staging deployment pending
+Status: accepted locally and deployed to staging; authenticated browser smoke pending
 Date: 2026-08-06
 
 The current execution objective supersedes D-118 through D-135 where they

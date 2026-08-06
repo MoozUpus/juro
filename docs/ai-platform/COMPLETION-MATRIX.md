@@ -10,7 +10,7 @@ regression tests; it does not mean production was changed.
 |---|---|---|---|---|---|---|
 | Auth, OTP, sessions, workspace isolation | localized platform routes | VERIFIED_WORKING | Existing route/security suites and staging evidence through 0105 | Regression after direct-source release | Critical | preserved |
 | AI chat provider and structured response | `/api/platform/ai`, `/api/guest/ai` | PARTIAL | OpenAI/Anthropic adapters, encrypted run records, rate/cost controls | Deploy direct Lex/Advice slice and run authenticated smoke | Critical | in progress |
-| Official legal sources | AI chat source panel | PARTIAL | `lib/legal/direct-retrieval.ts`, 0106, direct-source tests | Staging migration, real RU/UZ direct-source smoke, source-health replacement | Critical | in progress |
+| Official legal sources | AI chat source panel | PARTIAL | Staging migration `0106`, Worker `14280f6b-ffed-435a-a95b-6aea28ee8b6f`, direct-source tests and query-scoped Lex/Advice technical fetch | Fresh Cloudflare Access session for authenticated RU/UZ source-card smoke; source-health replacement | Critical | deployed, QA pending |
 | Legacy legal corpus | legacy review/sync routes | DUPLICATE_OR_OBSOLETE | Existing tables, queue and indexes retained for rollback | No new staging writes; document later decommission only | High | dormant in staging config |
 | Document Builder | `/:locale/:accountType/document-builder` | VERIFIED_WORKING | Existing Builder version and R2 guard migrations/tests | Re-run smoke after staging deploy | Critical | preserved |
 | Document analysis and compare | document-analysis routes | VERIFIED_WORKING | Claude/fallback, compare/redline and case links already present | Authenticated regression with synthetic documents | High | preserved |
