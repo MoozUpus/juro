@@ -31,10 +31,20 @@ confirmation → new case** path using a saved synthetic AI answer:
   two persisted planned tasks;
 - browser console logs remained empty.
 
+The same transition was also exercised with the keyboard: `Enter` opened the
+confirmation and `Enter` accepted it. The idempotent server path returned to
+the same case without duplicating its plan or tasks, again with an empty
+browser console log.
+
 The UZ AI conversation recorded in
 `STAGING-0108-OPENAI-SCHEMA-EVIDENCE.md` remained readable and showed its
 structured answer, action plan, suggested document and query-scoped official
 source cards after direct navigation to its saved conversation.
+
+The rendered-route regression suite also passed: `npm run test:rendered`
+reported 30/30 successful tests, including canonical document-builder routes,
+private route cache and CSRF controls, legacy redirects, security headers,
+robots/noindex policy and the production-artifact prototype guard.
 
 ## Limits of this pass
 
@@ -48,7 +58,7 @@ source cards after direct navigation to its saved conversation.
   Access remains authenticated; an owner of the Cloudflare account that owns
   the database must refresh/authorize the control-plane OAuth session before
   a direct D1 evidence query can be repeated.
-- Mobile-device, full keyboard interaction, screen-reader and Core Web Vitals
+- Mobile-device, full keyboard matrix, screen-reader and Core Web Vitals
   measurements remain final release gates. No performance claim is made here.
 
 ## Boundaries
