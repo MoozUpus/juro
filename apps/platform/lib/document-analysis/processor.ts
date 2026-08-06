@@ -107,6 +107,7 @@ export class DocumentAnalysisProcessingError extends Error {
       | "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED",
     readonly retryable: boolean,
     readonly diagnosticStage?: DocumentAnalysisDiagnosticStage,
+    readonly diagnosticDetail?: DocumentAnalysisDiagnosticDetail,
   ) {
     super(code);
     this.name = "DocumentAnalysisProcessingError";
@@ -123,6 +124,23 @@ export type DocumentAnalysisDiagnosticStage =
   | "runtime"
   | "provider"
   | "validation";
+
+export type DocumentAnalysisDiagnosticDetail =
+  | "ANALYSIS_REVISION_STORAGE_FAILED"
+  | "ANALYSIS_REVISION_SOURCE_INVALID"
+  | "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED";
+
+function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
+  if (error instanceof AnalysisRevisionError) {
+    if (error.code === "ANALYSIS_REVISION_STORAGE_FAILED" || error.code === "ANALYSIS_REVISION_SOURCE_INVALID") {
+      return error.code;
+    }
+    return undefined;
+  }
+  return error instanceof Error && error.message === "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
+    ? "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
+    : undefined;
+}
 
 export type DocumentAnalysisProcessorDependencies = {
   extract: (input: {
@@ -488,7 +506,12 @@ async function analyzeObject(
     }
     if (error instanceof AnalysisRevisionError) {
       await setAnalysisState(env.DB, row, "retrying", "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED");
-      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PERSISTENCE_FAILED", true);
+      throw new DocumentAnalysisProcessingError(
+        "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED",
+        true,
+        "version",
+        analysisDiagnosticDetail(error),
+      );
     }
     if (error instanceof ComparisonProcessingError) {
       const waiting = error.code === "OCR_REQUIRED" ? "awaiting_ocr" : "failed";
@@ -513,6 +536,7 @@ async function analyzeObject(
       "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE",
       true,
       diagnosticStage,
+      analysisDiagnosticDetail(error),
     );
   }
 }

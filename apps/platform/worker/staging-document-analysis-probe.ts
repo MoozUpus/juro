@@ -247,7 +247,12 @@ export async function runStagingDocumentAnalysisProbe(
     const processorStage = error instanceof DocumentAnalysisProcessingError
       ? error.diagnosticStage
       : null;
-    const errorCode = stage === "analysis" && processorCode && processorStage
+    const processorDetail = error instanceof DocumentAnalysisProcessingError
+      ? error.diagnosticDetail
+      : null;
+    const errorCode = stage === "analysis" && processorStage === "version" && processorDetail
+      ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_VERSION_${processorDetail}`
+      : stage === "analysis" && processorCode && processorStage
       ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorStage.toUpperCase()}_${processorCode}`
       : stage === "analysis" && processorCode
         ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorCode}`
