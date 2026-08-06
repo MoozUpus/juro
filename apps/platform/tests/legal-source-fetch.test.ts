@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   LegalSourceFetchError,
   classifyLegalSourceUrl,
+  fetchLexPdfRepresentation,
   fetchLegalSource,
 } from "../lib/legal/source-fetch";
 
@@ -43,6 +44,14 @@ function html(body = "<!doctype html><html><body>Official act</body></html>"):
       etag: '"synthetic-etag"',
       "last-modified": "Tue, 28 Jul 2026 00:00:00 GMT",
     },
+  });
+}
+
+function pdf(body = "%PDF-1.7\nsynthetic official Lex representation\n"):
+  Response {
+  return new Response(body, {
+    status: 200,
+    headers: { "content-type": "application/pdf" },
   });
 }
 
@@ -235,6 +244,33 @@ test("supported robots crawl-delay is awaited before source fetch", async () => 
   assert.equal(result.canonicalId, "8282675");
   assert.deepEqual(waits, [20_000]);
   assert.equal(synthetic.calls.length, 2);
+});
+
+test("Lex PDF representation is fetched only from the canonical official endpoint", async () => {
+  const synthetic = sequenceFetch([
+    robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),
+    pdf(),
+  ]);
+  const waits: number[] = [];
+  const result = await fetchLexPdfRepresentation("https://lex.uz/uz/docs/-42", {
+    fetchImpl: synthetic.fetchImpl,
+    wait: async (delayMs) => {
+      waits.push(delayMs);
+    },
+    now: () => new Date("2026-08-06T00:00:00.000Z"),
+  });
+
+  assert.equal(result.sourceKind, "lex");
+  assert.equal(result.locale, "uz");
+  assert.equal(result.canonicalId, "-42");
+  assert.equal(result.representationUrl, "https://lex.uz/pdffile/42");
+  assert.equal(result.fetchedAt, "2026-08-06T00:00:00.000Z");
+  assert.match(result.contentSha256, /^[0-9a-f]{64}$/);
+  assert.deepEqual(waits, [20_000]);
+  assert.deepEqual(
+    synthetic.calls.map((call) => call.url),
+    ["https://lex.uz/robots.txt", "https://lex.uz/pdffile/42"],
+  );
 });
 
 test("crawl-delay requires a durable caller window and never sleeps by default", async () => {

@@ -54,6 +54,15 @@ export type FetchedLegalSource = LegalSourceReference & {
   robotsUrl: string;
 };
 
+export type FetchedLexPdfRepresentation = LegalSourceReference & {
+  bytes: Uint8Array;
+  contentSha256: string;
+  contentType: string;
+  representationUrl: string;
+  fetchedAt: string;
+  robotsUrl: string;
+};
+
 type FetchLike = (
   input: RequestInfo | URL,
   init?: RequestInit,
@@ -601,6 +610,130 @@ export async function fetchLegalSource(
     contentType: contentType.raw || "text/html; charset=utf-8",
     etag: contentResult.response.headers.get("etag"),
     lastModified: contentResult.response.headers.get("last-modified"),
+    fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
+    robotsUrl: robotsResult.finalUrl.href,
+  };
+}
+
+/**
+ * Fetch an official Lex PDF representation from a canonical Lex citation.
+ * This endpoint is deliberately not accepted as an input URL: callers retain
+ * the canonical /:locale/docs/:id citation and the derived PDF path is exact.
+ */
+export async function fetchLexPdfRepresentation(
+  canonicalUrl: string,
+  options: Pick<
+    FetchOptions,
+    "fetchImpl" | "now" | "timeoutMs" | "maxBytes" | "maxRedirects" | "wait"
+  >,
+): Promise<FetchedLexPdfRepresentation> {
+  const reference = classifyLegalSourceUrl(canonicalUrl);
+  if (reference.sourceKind !== "lex") {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
+  }
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? DEFAULT_MAX_BYTES;
+  const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  if (
+    timeoutMs < 1 || maxBytes < 1 || maxRedirects < 0
+    || !Number.isSafeInteger(timeoutMs)
+    || !Number.isSafeInteger(maxBytes)
+    || !Number.isSafeInteger(maxRedirects)
+  ) {
+    throw new TypeError("Invalid Lex PDF fetch limits.");
+  }
+
+  const representationId = reference.canonicalId.replace(/^-/, "");
+  if (!/^\d+$/.test(representationId)) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
+  }
+  const representationUrl = new URL(
+    `https://${reference.host}/pdffile/${representationId}`,
+  );
+  const robotsInitialUrl = new URL(`https://${reference.host}/robots.txt`);
+  const robotsResult = await fetchFollowingRedirects(robotsInitialUrl, {
+    fetchImpl,
+    timeoutMs,
+    maxRedirects,
+    accept: "text/plain, */*;q=0.1",
+    unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
+    validateUrl(candidate) {
+      return candidate.protocol === "https:"
+        && candidate.port === ""
+        && candidate.username === ""
+        && candidate.password === ""
+        && sourceHostKind(candidate.hostname) === "lex"
+        && candidate.pathname === "/robots.txt"
+        && candidate.search === ""
+        && candidate.hash === "";
+    },
+  });
+  const robotsType = responseContentType(robotsResult.response);
+  if (
+    robotsType.mediaType !== "text/plain"
+    || (robotsType.charset && !["utf-8", "utf8"].includes(robotsType.charset))
+  ) {
+    await cancelBody(robotsResult.response);
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_UNAVAILABLE", false);
+  }
+  const robotsBytes = await readBoundedBytes(
+    robotsResult.response,
+    ROBOTS_MAX_BYTES,
+    timeoutMs,
+  );
+  const robots = robotsAllows(
+    parseRobots(decodeUtf8(robotsBytes)),
+    representationUrl,
+  );
+  if (!robots.allowed) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_DISALLOWED", false);
+  }
+  if (robots.crawlDelay > MAX_ROBOTS_CRAWL_DELAY_SECONDS) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_RATE_POLICY", false);
+  }
+  if (robots.crawlDelay > 0) {
+    if (!options.wait) {
+      throw new LegalSourceFetchError("LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED", true);
+    }
+    await options.wait(Math.ceil(robots.crawlDelay * 1_000));
+  }
+
+  const contentResult = await fetchFollowingRedirects(representationUrl, {
+    fetchImpl,
+    timeoutMs,
+    maxRedirects,
+    accept: "application/pdf",
+    unavailableCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+    validateUrl(candidate) {
+      return candidate.protocol === "https:"
+        && candidate.port === ""
+        && candidate.username === ""
+        && candidate.password === ""
+        && sourceHostKind(candidate.hostname) === "lex"
+        && candidate.pathname === `/pdffile/${representationId}`
+        && candidate.search === ""
+        && candidate.hash === "";
+    },
+  });
+  const contentType = responseContentType(contentResult.response);
+  if (contentType.mediaType !== "application/pdf") {
+    await cancelBody(contentResult.response);
+    throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
+  }
+  const bytes = await readBoundedBytes(contentResult.response, maxBytes, timeoutMs);
+  if (
+    bytes.byteLength < 5
+    || String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-"
+  ) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
+  }
+  return {
+    ...reference,
+    bytes,
+    contentSha256: await sha256(bytes),
+    contentType: contentType.raw || "application/pdf",
+    representationUrl: contentResult.finalUrl.href,
     fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
     robotsUrl: robotsResult.finalUrl.href,
   };

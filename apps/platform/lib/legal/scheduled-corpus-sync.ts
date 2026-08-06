@@ -10,6 +10,7 @@ const MAX_SOURCES_PER_KIND = 100;
 const MAX_DISCOVERED_ADVICE_SOURCES = 20;
 const STALE_FETCH_RECOVERY_MS = 15 * 60 * 1_000;
 const STALE_FETCH_RECOVERY_BATCH_SIZE = 1;
+const LEX_PDF_NORMALIZATION_RECOVERY_BATCH_SIZE = 1;
 
 type SourceKind = "lex" | "advice";
 type Candidate = { officialUrl: string; locale: "ru" | "uz"; canonicalId: string };
@@ -27,6 +28,16 @@ function dayKey(now: Date): string {
 
 function sourceRunId(kind: SourceKind, now: Date): string {
   return `lscorpus_${kind}_${dayKey(now).replaceAll("-", "")}`;
+}
+
+async function sha256Text(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
 }
 
 export async function startScheduledCorpusSync(
@@ -302,4 +313,65 @@ export async function recoverStaleScheduledCorpusFetchRequests(
     recovered += Number(result.meta.changes ?? 0);
   }
   return recovered;
+}
+
+/**
+ * HTML-only Lex pages can legitimately embed their official legal text as a
+ * PDF. A prior parser rejection remains immutable evidence, while this sends
+ * one separately idempotent parse attempt through the PDF fallback. It never
+ * changes verification or publication state.
+ */
+export async function enqueueLexPdfNormalizationRecovery(
+  env: Pick<LegalSourceAcquisitionEnv, "APP_ENV" | "DB">,
+  options: { now?: Date; limit?: number } = {},
+): Promise<number> {
+  const now = options.now ?? new Date();
+  const timestamp = now.toISOString();
+  const limit = Math.max(1, Math.min(
+    LEX_PDF_NORMALIZATION_RECOVERY_BATCH_SIZE,
+    Math.trunc(options.limit ?? LEX_PDF_NORMALIZATION_RECOVERY_BATCH_SIZE),
+  ));
+  const candidates = await env.DB.prepare(`
+    SELECT version.id AS versionId
+    FROM legal_source_versions AS version
+    INNER JOIN legal_sources AS source ON source.id=version.source_id
+    INNER JOIN legal_review_queue AS review ON review.version_id=version.id
+    WHERE source.source_type='lex'
+      AND source.verification_state!='rejected'
+      AND version.status='pending_review'
+      AND version.parsed_object_key IS NULL
+      AND review.reason_code='normalization_failed'
+      AND review.status IN ('pending','in_review')
+    ORDER BY review.created_at ASC, version.created_at ASC
+    LIMIT ?
+  `).bind(limit).all<{ versionId: string }>();
+
+  let enqueued = 0;
+  for (const candidate of candidates.results) {
+    const stableHash = await sha256Text(
+      `${candidate.versionId}\nlegal.parse\njuro-legal-pdf-v1`,
+    );
+    const result = await env.DB.prepare(`
+      INSERT INTO job_outbox (
+        id,queue_binding,job_type,schema_version,idempotency_key,subject_id,
+        workspace_id,correlation_id,enqueued_at,available_at,status,
+        dispatch_attempts,lease_owner,lease_expires_at,next_attempt_at,
+        dispatched_at,error_code,created_at,updated_at
+      ) VALUES (
+        ?,'LEGAL_SOURCES_SYNC_QUEUE','legal.parse',1,?, ?,NULL,?, ?,?,
+        'pending',0,NULL,NULL,NULL,NULL,NULL,?,?
+      ) ON CONFLICT(idempotency_key) DO NOTHING
+    `).bind(
+      `lspdfparsejob_${stableHash.slice(0, 32)}`,
+      `legal_parse_pdf_${stableHash.slice(0, 40)}`,
+      candidate.versionId,
+      `lspdfparsecorr_${stableHash.slice(0, 32)}`,
+      timestamp,
+      timestamp,
+      timestamp,
+      timestamp,
+    ).run();
+    enqueued += Number(result.meta.changes ?? 0);
+  }
+  return enqueued;
 }

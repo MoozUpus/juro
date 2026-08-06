@@ -5,6 +5,7 @@ import {
   type LegalSourceAcquisitionEnv,
 } from "../lib/legal/source-acquisition";
 import {
+  enqueueLexPdfNormalizationRecovery,
   recoverStaleScheduledCorpusFetchRequests,
   reconcileScheduledCorpusSyncRuns,
   startScheduledCorpusSync,
@@ -188,6 +189,49 @@ test("scheduled corpus requeues one stale crawl-window retry without changing it
       attempt_count: 1,
     });
     assert.equal(await recoverStaleScheduledCorpusFetchRequests(env, { now }), 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("scheduled recovery enqueues one distinct PDF fallback parse for a rejected Lex HTML parse", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = { APP_ENV: "staging", DB: d1 } as Pick<LegalSourceAcquisitionEnv, "APP_ENV" | "DB">;
+  const now = new Date("2026-08-06T01:00:00.000Z");
+  try {
+    sqlite.prepare(`
+      INSERT INTO legal_sources (
+        id,canonical_id,official_url,act_title,act_identifier,locale,source_type,
+        status,verification_state,last_checked_at,created_at,updated_at
+      ) VALUES ('pdf-source','87','https://lex.uz/ru/docs/87','PDF-backed Lex act','87','ru','lex',
+        'pending_review','fetched',?,?,?)
+    `).run(now.toISOString(), now.toISOString(), now.toISOString());
+    sqlite.prepare(`
+      INSERT INTO legal_source_versions (
+        id,source_id,language,status,content_sha256,raw_object_key,parsed_object_key,
+        fetched_at,metadata_json,created_at,updated_at
+      ) VALUES ('pdf-version','pdf-source','ru','pending_review',
+        'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        'legal-sources/raw/lex/ru/aa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.html',
+        NULL,?,'{}',?,?)
+    `).run(now.toISOString(), now.toISOString(), now.toISOString());
+    sqlite.prepare(`
+      INSERT INTO legal_review_queue (
+        id,source_id,version_id,reason_code,confidence,status,created_at,updated_at
+      ) VALUES ('pdf-normalization-review','pdf-source','pdf-version','normalization_failed','low',
+        'pending',?,?)
+    `).run(now.toISOString(), now.toISOString());
+
+    assert.equal(await enqueueLexPdfNormalizationRecovery(env, { now }), 1);
+    assert.equal(await enqueueLexPdfNormalizationRecovery(env, { now }), 0);
+    const outbox = sqlite.prepare(`
+      SELECT id,idempotency_key,job_type,subject_id,status FROM job_outbox
+      WHERE id LIKE 'lspdfparsejob_%'
+    `).get() as Record<string, string>;
+    assert.equal(outbox.job_type, "legal.parse");
+    assert.equal(outbox.subject_id, "pdf-version");
+    assert.equal(outbox.status, "pending");
+    assert.match(outbox.idempotency_key, /^legal_parse_pdf_[0-9a-f]{40}$/);
   } finally {
     sqlite.close();
   }

@@ -1,11 +1,17 @@
 import { z } from "zod";
+import { extractDocument } from "../document-comparison/extract";
 import {
   LegalSourceParserError,
   normalizeLegalSourceHtml,
   normalizedLegalSourceSnapshotSchema,
   type NormalizedLegalSourceSnapshot,
 } from "./source-parser";
-import { classifyLegalSourceUrl } from "./source-fetch";
+import {
+  LegalSourceFetchError,
+  classifyLegalSourceUrl,
+  fetchLexPdfRepresentation,
+} from "./source-fetch";
+import { reserveLegalSourceCrawlWindow } from "./crawl-window";
 
 export const LEGAL_SOURCE_NORMALIZATION_ERROR_CODES = [
   "LEGAL_SOURCE_VERSION_NOT_FOUND",
@@ -21,6 +27,8 @@ export const LEGAL_SOURCE_NORMALIZATION_ERROR_CODES = [
   "LEGAL_SOURCE_NORMALIZED_CONTENT_REJECTED",
   "LEGAL_SOURCE_NORMALIZED_STORAGE_FAILED",
   "LEGAL_SOURCE_NORMALIZED_PERSISTENCE_FAILED",
+  "LEGAL_SOURCE_PDF_FETCH_FAILED",
+  "LEGAL_SOURCE_PDF_EXTRACTION_FAILED",
 ] as const;
 
 export type LegalSourceNormalizationErrorCode =
@@ -37,6 +45,11 @@ export class LegalSourceNormalizationError extends Error {
 }
 
 export type LegalSourceNormalizationEnv = Pick<Env, "APP_ENV" | "BUCKET" | "DB">;
+
+type FetchLike = (
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) => Promise<Response>;
 
 export type LegalSourceNormalizationResult = {
   versionId: string;
@@ -71,6 +84,12 @@ const normalizationMetadataSchema = z.object({
 const MAX_RAW_BYTES = 2 * 1024 * 1024;
 const MAX_PARSED_BYTES = 4 * 1024 * 1024;
 const MAX_METADATA_BYTES = 64 * 1024;
+
+type PdfRepresentation = {
+  contentSha256: string;
+  objectKey: string;
+  sourceUrl: string;
+};
 
 async function sha256(bytes: Uint8Array): Promise<string> {
   const digestBytes = Uint8Array.from(bytes);
@@ -288,6 +307,108 @@ async function recordNormalizationReview(
   ).run();
 }
 
+async function storeLexPdfRepresentation(
+  bucket: R2Bucket,
+  input: {
+    bytes: Uint8Array;
+    contentSha256: string;
+    locale: "ru" | "uz";
+    canonicalId: string;
+    sourceUrl: string;
+    fetchedAt: string;
+  },
+): Promise<string> {
+  const objectKey = [
+    "legal-sources",
+    "representations",
+    "lex-pdf",
+    input.locale,
+    input.contentSha256.slice(0, 2),
+    `${input.contentSha256}.pdf`,
+  ].join("/");
+  try {
+    if (!await bucket.head(objectKey)) {
+      const stored = await bucket.put(objectKey, input.bytes, {
+        httpMetadata: {
+          contentType: "application/pdf",
+          cacheControl: "private, no-store",
+        },
+        customMetadata: {
+          sourceKind: "lex",
+          locale: input.locale,
+          canonicalId: input.canonicalId,
+          contentSha256: input.contentSha256,
+          sourceUrl: input.sourceUrl,
+          fetchedAt: input.fetchedAt,
+        },
+      });
+      if (!stored) throw new TypeError("R2 did not persist Lex PDF.");
+    }
+    return objectKey;
+  } catch {
+    throw new LegalSourceNormalizationError(
+      "LEGAL_SOURCE_NORMALIZED_STORAGE_FAILED",
+      true,
+    );
+  }
+}
+
+async function normalizeLexPdfRepresentation(input: {
+  bytes: Uint8Array;
+  reference: ReturnType<typeof classifyLegalSourceUrl>;
+  rawContentSha256: string;
+}): Promise<NormalizedLegalSourceSnapshot> {
+  let extracted: Awaited<ReturnType<typeof extractDocument>>;
+  try {
+    extracted = await extractDocument({
+      bytes: input.bytes,
+      fileName: `lex-${input.reference.canonicalId.replace(/^-/, "")}.pdf`,
+      mimeType: "application/pdf",
+      sizeBytes: input.bytes.byteLength,
+    });
+  } catch {
+    throw new LegalSourceNormalizationError(
+      "LEGAL_SOURCE_PDF_EXTRACTION_FAILED",
+      false,
+    );
+  }
+  const blocks = extracted.sections.map((section, index) => ({
+    index,
+    kind: section.heading === section.text ? "heading" as const : "paragraph" as const,
+    ...(section.heading === section.text ? { headingLevel: 1 } : {}),
+    text: section.text,
+  }));
+  const plainText = extracted.text.trim();
+  if (blocks.length === 0 || plainText.length < 200 || plainText.length > 1_000_000) {
+    throw new LegalSourceNormalizationError(
+      "LEGAL_SOURCE_PDF_EXTRACTION_FAILED",
+      false,
+    );
+  }
+  const title = blocks.find((block) => block.kind === "heading")?.text
+    ?? blocks[0]?.text.slice(0, 2_000)
+    ?? `Lex.uz — document ${input.reference.canonicalId}`;
+  return normalizedLegalSourceSnapshotSchema.parse({
+    schemaVersion: 1,
+    parser: {
+      name: "unpdf",
+      version: "1.8.0",
+      profile: "juro-legal-pdf-v1",
+    },
+    source: {
+      sourceKind: "lex",
+      locale: input.reference.locale,
+      canonicalId: input.reference.canonicalId,
+      canonicalUrl: input.reference.canonicalUrl,
+      rawContentSha256: input.rawContentSha256,
+    },
+    primarySelector: "lex-pdf",
+    documentTitle: title.slice(0, 2_000),
+    blocks,
+    plainText,
+  });
+}
+
 async function persistAdviceScenario(
   db: D1Database,
   row: VersionRow,
@@ -340,7 +461,7 @@ async function persistAdviceScenario(
 export async function executeLegalSourceNormalization(
   env: LegalSourceNormalizationEnv,
   versionId: string,
-  dependencies: { now?: () => Date } = {},
+  dependencies: { now?: () => Date; fetchImpl?: FetchLike } = {},
 ): Promise<LegalSourceNormalizationResult> {
   identifierSchema.parse(versionId);
   const row = await loadVersion(env.DB, versionId);
@@ -457,16 +578,92 @@ export async function executeLegalSourceNormalization(
     );
   }
 
-  let snapshot;
+  let snapshot: NormalizedLegalSourceSnapshot;
+  const representationState: { pdf: PdfRepresentation | null } = { pdf: null };
   const now = (dependencies.now ?? (() => new Date()))().toISOString();
+  const rawHtml = decodeUtf8(rawBytes);
   try {
     snapshot = normalizeLegalSourceHtml({
-      html: decodeUtf8(rawBytes),
+      html: rawHtml,
       reference,
       rawContentSha256: row.content_sha256,
     });
   } catch (error) {
-    if (error instanceof LegalSourceParserError) {
+    const expectedPdfPath = `/pdffile/${reference.canonicalId.replace(/^-/, "")}`;
+    const canUseOfficialPdfRepresentation = row.source_type === "lex"
+      && rawHtml.includes(expectedPdfPath);
+    if (canUseOfficialPdfRepresentation) {
+      try {
+        const fetched = await fetchLexPdfRepresentation(row.official_url, {
+          fetchImpl: dependencies.fetchImpl,
+          now: () => new Date(now),
+          wait: async (delayMs) => {
+            const reserved = await reserveLegalSourceCrawlWindow({
+              db: env.DB,
+              environment: env.APP_ENV,
+              host: reference.host,
+              delayMs,
+              now,
+            });
+            if (!reserved) {
+              throw new LegalSourceFetchError(
+                "LEGAL_SOURCE_CRAWL_WINDOW_BUSY",
+                true,
+              );
+            }
+          },
+        });
+        const objectKey = await storeLexPdfRepresentation(env.BUCKET, {
+          bytes: fetched.bytes,
+          contentSha256: fetched.contentSha256,
+          locale: reference.locale,
+          canonicalId: reference.canonicalId,
+          sourceUrl: fetched.representationUrl,
+          fetchedAt: fetched.fetchedAt,
+        });
+        snapshot = await normalizeLexPdfRepresentation({
+          bytes: fetched.bytes,
+          reference,
+          rawContentSha256: row.content_sha256,
+        });
+        representationState.pdf = {
+          contentSha256: fetched.contentSha256,
+          objectKey,
+          sourceUrl: fetched.representationUrl,
+        };
+      } catch (fallbackError) {
+        if (
+          fallbackError instanceof LegalSourceFetchError
+          && fallbackError.retryable
+        ) {
+          throw new LegalSourceNormalizationError(
+            "LEGAL_SOURCE_PDF_FETCH_FAILED",
+            true,
+          );
+        }
+        if (
+          fallbackError instanceof LegalSourceNormalizationError
+          && fallbackError.retryable
+        ) {
+          throw fallbackError;
+        }
+        try {
+          await recordNormalizationReview(env.DB, row, now);
+        } catch {
+          throw new LegalSourceNormalizationError(
+            "LEGAL_SOURCE_NORMALIZED_PERSISTENCE_FAILED",
+            true,
+          );
+        }
+        if (fallbackError instanceof LegalSourceNormalizationError) {
+          throw fallbackError;
+        }
+        throw new LegalSourceNormalizationError(
+          "LEGAL_SOURCE_PDF_FETCH_FAILED",
+          false,
+        );
+      }
+    } else if (error instanceof LegalSourceParserError) {
       try {
         await recordNormalizationReview(env.DB, row, now);
       } catch {
@@ -479,8 +676,9 @@ export async function executeLegalSourceNormalization(
         "LEGAL_SOURCE_NORMALIZATION_FAILED",
         false,
       );
+    } else {
+      throw error;
     }
-    throw error;
   }
 
   const serialized = JSON.stringify(snapshot);
@@ -493,7 +691,7 @@ export async function executeLegalSourceNormalization(
     reference.locale,
     row.content_sha256.slice(0, 2),
     row.content_sha256,
-    `parse5-v1-${parsedContentSha256}.json`,
+    `${snapshot.parser.name}-v1-${parsedContentSha256}.json`,
   ].join("/");
 
   try {
@@ -509,7 +707,7 @@ export async function executeLegalSourceNormalization(
           canonicalId: reference.canonicalId,
           rawContentSha256: row.content_sha256,
           parsedContentSha256,
-          parserProfile: "juro-legal-blocks-v1",
+          parserProfile: snapshot.parser.profile,
           parsedAt: now,
         },
       });
@@ -530,12 +728,20 @@ export async function executeLegalSourceNormalization(
   const nextMetadata = JSON.stringify({
     ...metadata,
     normalization: {
-      parser: "parse5",
-      parserVersion: "8.0.1",
-      profile: "juro-legal-blocks-v1",
+      parser: snapshot.parser.name,
+      parserVersion: snapshot.parser.version,
+      profile: snapshot.parser.profile,
       contentSha256: parsedContentSha256,
       blockCount: snapshot.blocks.length,
       parsedAt: now,
+      ...(representationState.pdf === null ? {} : {
+        representation: {
+          kind: "lex-pdf",
+          contentSha256: representationState.pdf.contentSha256,
+          objectKey: representationState.pdf.objectKey,
+          sourceUrl: representationState.pdf.sourceUrl,
+        },
+      }),
     },
   });
   if (new TextEncoder().encode(nextMetadata).byteLength > MAX_METADATA_BYTES) {

@@ -534,3 +534,25 @@ ordinary leased outbox publisher deliver it. This neither bypasses host
 windows nor mutates a fetch request, source version or review status. A late
 queue delivery is fenced by the existing job lease. Production is unchanged
 until a separately approved deployment.
+
+## D-134 — Lex PDF representations are secondary immutable evidence, not automatic verification
+
+Status: accepted and locally verified
+Date: 2026-08-06
+
+Some canonical Lex.uz document pages expose the legal text through an official
+`/pdffile/:id` representation rather than through an extractable HTML article.
+After an extractable-HTML parser failure, JURO may derive that representation
+only from the same canonical Lex document identifier. The PDF request remains
+constrained by the exact Lex host, canonical identifier, `robots.txt`, the
+durable crawl window, a content-type and magic-byte check, and the normal byte
+limit.
+
+The immutable private R2 PDF object is linked from normalization metadata while
+the original HTML evidence and canonical citation remain unchanged. Extraction
+uses the existing bounded PDF parser and creates a separate idempotent
+`legal.parse` recovery job only for a previously rejected Lex normalization.
+This recovery does not alter source/version verification, activation or
+publication state. A pending source review is still required before a source
+can support a verified legal answer. Production remains unchanged until a
+separate approved deployment.

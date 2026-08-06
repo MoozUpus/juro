@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PDFDocument, StandardFonts } from "pdf-lib";
 import {
   createLegalSourceFetchRequest,
   executeLegalSourceFetchRequest,
@@ -122,6 +123,32 @@ function html(body: string): Response {
   });
 }
 
+function pdf(bytes: Uint8Array): Response {
+  return new Response(new Uint8Array(bytes).buffer, {
+    headers: { "content-type": "application/pdf" },
+  });
+}
+
+async function officialLexPdf(): Promise<Uint8Array> {
+  const document = await PDFDocument.create();
+  const font = await document.embedFont(StandardFonts.Helvetica);
+  const page = document.addPage([595, 842]);
+  const text = [
+    "Official legal act. Article 1 establishes the rights, duties, deadlines,",
+    "and procedural safeguards for parties. The authorized body reviews",
+    "documents, records its decision, and applies the current law. Parties",
+    "may provide evidence, request review, and use the available appeal",
+    "procedure within the statutory time limit. This official PDF is the",
+    "representation embedded by the canonical Lex source document.",
+  ];
+  let y = 780;
+  for (const line of text) {
+    page.drawText(line, { x: 48, y, size: 10, font });
+    y -= 20;
+  }
+  return document.save();
+}
+
 function legalDocument(title: string): string {
   return `<html><head><title>${title}</title></head><body><main>
     <h1>${title}</h1>
@@ -217,6 +244,92 @@ test("normalization persists deterministic untrusted JSON and never creates trus
       verified_sources: 0,
       verified_versions: 0,
     });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("Lex PDF-backed pages use the official embedded representation without auto-verification", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env = envFixture(d1, bucket);
+  try {
+    const acquired = await acquire(
+      env,
+      "https://lex.uz/ru/docs/87",
+      "normalize_lex_pdf_87",
+      '<html><body><main><h1>Official Lex page</h1><script>PDFObject.embed("/pdffile/87", "#pdfBody");</script></main></body></html>',
+    );
+    const raw = bucket.objects.get(acquired.rawObjectKey);
+    assert.ok(raw);
+    assert.match(
+      new TextDecoder().decode(raw.bytes),
+      /PDFObject\.embed\("\/pdffile\/87", "#pdfBody"\)/u,
+    );
+    assert.deepEqual(
+      {
+        ...sqlite.prepare(`
+          SELECT source.source_type,source.canonical_id,source.official_url,version.language
+          FROM legal_source_versions AS version
+          INNER JOIN legal_sources AS source ON source.id=version.source_id
+          WHERE version.id=?
+        `).get(acquired.versionId) as Record<string, string>,
+      },
+      {
+        source_type: "lex",
+        canonical_id: "87",
+        official_url: "https://lex.uz/ru/docs/87",
+        language: "ru",
+      },
+    );
+    const result = await executeLegalSourceNormalization(env, acquired.versionId, {
+      now: () => new Date("2026-08-06T01:01:00.000Z"),
+      fetchImpl: sourceFetch([
+        robots(),
+        pdf(await officialLexPdf()),
+      ]),
+    });
+
+    assert.match(result.parsedObjectKey, /\/unpdf-v1-[0-9a-f]{64}\.json$/);
+    const parsed = bucket.objects.get(result.parsedObjectKey);
+    assert.ok(parsed);
+    const snapshot = normalizedLegalSourceSnapshotSchema.parse(
+      JSON.parse(new TextDecoder().decode(parsed.bytes)),
+    );
+    assert.equal(snapshot.primarySelector, "lex-pdf");
+    assert.equal(snapshot.parser.name, "unpdf");
+    assert.equal(snapshot.source.canonicalUrl, "https://lex.uz/ru/docs/87");
+    assert.equal(snapshot.plainText.includes("Official legal act"), true);
+
+    const representation = [...bucket.objects.entries()].find(([key]) =>
+      key.startsWith("legal-sources/representations/lex-pdf/ru/"),
+    );
+    assert.ok(representation);
+    assert.equal(representation[1].customMetadata?.sourceUrl, "https://lex.uz/pdffile/87");
+
+    const metadata = JSON.parse(
+      (sqlite.prepare(`SELECT metadata_json FROM legal_source_versions WHERE id=?`)
+        .get(acquired.versionId) as { metadata_json: string }).metadata_json,
+    ) as { normalization: { parser: string; representation?: { kind: string } } };
+    assert.equal(metadata.normalization.parser, "unpdf");
+    assert.equal(metadata.normalization.representation?.kind, "lex-pdf");
+    assert.equal(
+      (sqlite.prepare(`SELECT COUNT(*) AS count FROM legal_review_queue WHERE version_id=?`)
+        .get(acquired.versionId) as { count: number }).count,
+      1,
+    );
+    assert.equal(
+      (sqlite.prepare(`
+        SELECT COUNT(*) AS count FROM legal_review_queue
+        WHERE version_id=? AND reason_code='normalization_failed'
+      `).get(acquired.versionId) as { count: number }).count,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare(`SELECT COUNT(*) AS count FROM legal_source_versions WHERE status='verified'`)
+        .get() as { count: number }).count,
+      0,
+    );
   } finally {
     sqlite.close();
   }

@@ -40,9 +40,9 @@ const normalizedBlockSchema = z.object({
 export const normalizedLegalSourceSnapshotSchema = z.object({
   schemaVersion: z.literal(1),
   parser: z.object({
-    name: z.literal("parse5"),
-    version: z.literal("8.0.1"),
-    profile: z.literal("juro-legal-blocks-v1"),
+    name: z.enum(["parse5", "unpdf"]),
+    version: z.enum(["8.0.1", "1.8.0"]),
+    profile: z.enum(["juro-legal-blocks-v1", "juro-legal-pdf-v1"]),
   }).strict(),
   source: z.object({
     sourceKind: z.enum(["lex", "advice"]),
@@ -56,6 +56,7 @@ export const normalizedLegalSourceSnapshotSchema = z.object({
     "article",
     "role-main",
     "advice-document",
+    "lex-pdf",
   ]),
   documentTitle: z.string().min(1).max(2_000),
   blocks: z.array(normalizedBlockSchema).min(1).max(5_000),

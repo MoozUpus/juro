@@ -1,6 +1,7 @@
 import { dispatchOutbox } from "./platform-outbox";
 import {
   LEGAL_CORPUS_SYNC_CRON,
+  enqueueLexPdfNormalizationRecovery,
   recoverStaleScheduledCorpusFetchRequests,
   reconcileScheduledCorpusSyncRuns,
   startScheduledCorpusSync,
@@ -313,6 +314,11 @@ export async function handleScheduled(
       env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
         ? await recoverStaleScheduledCorpusFetchRequests(env, { now: new Date(now) })
         : 0;
+    failureCode = "LEGAL_CORPUS_PDF_NORMALIZATION_RECOVERY_FAILED";
+    const lexPdfNormalizationsEnqueued =
+      env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+        ? await enqueueLexPdfNormalizationRecovery(env, { now: new Date(now) })
+        : 0;
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
     failureCode = "MEMORY_RETENTION_CLEANUP_FAILED";
@@ -378,6 +384,7 @@ export async function handleScheduled(
       taskRemindersDue: taskReminders.due,
       taskRemindersEnqueued: taskReminders.enqueued,
       corpusRetriesRecovered,
+      lexPdfNormalizationsEnqueued,
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,
       guestAiRetentionEligible: guestAiRetention.eligible,

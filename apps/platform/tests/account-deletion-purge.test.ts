@@ -259,11 +259,11 @@ function seedContent(
     `INSERT INTO analysis_version_object_writes (
        id,analysis_id,workspace_id,owner_user_id,target_version,source_kind,r2_key,
        size_bytes,sha256,status,version_id,attempt_count,last_error_code,created_at,updated_at,reconciled_at
-     ) VALUES ('purge-pending-write','purge-analysis',?,?,2,'corrected',
-       'analysis-versions/purge-workspace/purge-analysis/purge-pending-write-2-orphan.md',
-       2,?,'pending',NULL,0,NULL,?,?,NULL)`,
-  ).run(WORKSPACE_ID, USER_ID, "b".repeat(64), NOW, NOW);
-  bucket.objects.add("analysis-versions/purge-workspace/purge-analysis/purge-pending-write-2-orphan.md");
+      ) VALUES ('purge-pending-write','purge-analysis',?,?,2,'corrected',
+        'analysis-versions/purge-workspace/purge-analysis/purge-pending-write-2-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.md',
+        2,?,'pending',NULL,0,NULL,?,?,NULL)`,
+    ).run(WORKSPACE_ID, USER_ID, "b".repeat(64), NOW, NOW);
+  bucket.objects.add("analysis-versions/purge-workspace/purge-analysis/purge-pending-write-2-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.md");
   assert.equal(
     (sqlite.prepare("SELECT count(*) AS total FROM file_extractions WHERE owner_user_id=?").get(USER_ID) as { total: number }).total,
     1,
@@ -382,7 +382,7 @@ test("purge removes D1/R2 content, redacts shared comments, and retains immutabl
     });
     assert.deepEqual(bucket.deleted.sort(), [
       "analysis-versions/purge-workspace/purge-analysis/1-source.md",
-      "analysis-versions/purge-workspace/purge-analysis/purge-pending-write-2-orphan.md",
+      "analysis-versions/purge-workspace/purge-analysis/purge-pending-write-2-bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb.md",
       "comparison-exports/purge-workspace/purge-comparison/purge-comparison-export.docx",
       "comparisons/purge/one.json",
       "comparisons/purge/two.json",
