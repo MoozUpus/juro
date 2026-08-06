@@ -751,6 +751,7 @@ export async function executeLegalSourceFetchRequest(
   const scheduledCorpus = scheduledRunId !== null;
   const runId = scheduledRunId ?? `lsrun_${crypto.randomUUID().replaceAll("-", "")}`;
   try {
+    let started = false;
     for (let offset = 0; offset < 4; offset += 1) {
       const startStatements: D1PreparedStatement[] = [env.DB.prepare(`
       UPDATE legal_source_fetch_requests
@@ -801,6 +802,7 @@ export async function executeLegalSourceFetchRequest(
             false,
           );
         }
+        started = true;
         break;
       } catch (error) {
         if (
@@ -813,6 +815,9 @@ export async function executeLegalSourceFetchRequest(
         }
         throw error;
       }
+    }
+    if (!started) {
+      throw new LegalSourceAcquisitionError("LEGAL_SOURCE_SYNC_BUSY", true);
     }
   } catch (error) {
     if (error instanceof LegalSourceAcquisitionError) throw error;
