@@ -65,9 +65,20 @@ export const GET = withApiErrors(async function GET(
          FROM legal_source_references citation
          JOIN conversations c ON c.id=citation.conversation_id
          WHERE c.workspace_id=? AND c.owner_user_id=? AND c.case_id=?
+         UNION
+         SELECT DISTINCT citation.id,citation.title AS actTitle,
+           citation.act_identifier AS actIdentifier,citation.canonical_url AS officialUrl,
+           citation.document_status AS status,citation.source_locale AS locale,
+           citation.validated_at AS lastCheckedAt
+         FROM legal_source_references citation
+         JOIN conversations c ON c.id=citation.conversation_id
+         JOIN case_events event ON event.case_id=?
+         WHERE c.workspace_id=? AND c.owner_user_id=?
+           AND event.event_type IN ('ai_action_plan_confirmed','ai_action_plan_appended')
+           AND json_extract(event.metadata_json,'$.assistantMessageId')=citation.message_id
        )
        ORDER BY actTitle,id LIMIT 100`,
-    ).bind(workspace.id, user.id, caseId, workspace.id, user.id, caseId),
+    ).bind(workspace.id, user.id, caseId, workspace.id, user.id, caseId, caseId, workspace.id, user.id),
     db.prepare(
       `SELECT bookmark.id AS bookmarkId,bookmark.source_id AS sourceId,
         bookmark.version_id AS versionId,bookmark.comment,bookmark.revision,

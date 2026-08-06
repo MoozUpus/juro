@@ -52,6 +52,9 @@ test("case workspace aggregation scopes every private domain before returning re
   assert.match(route, /FROM document_comparisons[\s\S]*workspace_id=\? AND owner_user_id=\? AND case_id=\?/);
   assert.match(route, /FROM document_analyses[\s\S]*a\.workspace_id=\? AND a\.owner_user_id=\? AND a\.case_id=\?/);
   assert.match(route, /c\.workspace_id=\? AND c\.owner_user_id=\? AND c\.case_id=\?/);
+  assert.match(route, /FROM legal_source_references citation[\s\S]*JOIN case_events event ON event\.case_id=\?/);
+  assert.match(route, /event\.event_type IN \('ai_action_plan_confirmed','ai_action_plan_appended'\)/);
+  assert.match(route, /json_extract\(event\.metadata_json,'\$\.assistantMessageId'\)=citation\.message_id/);
   assert.match(route, /m\.workspace_id=\? AND m\.status='active'/);
   assert.match(route, /r\.workspace_id=\? AND r\.requester_user_id=\? AND r\.case_id=\?/);
   assert.match(route, /cache-control": "private, no-store/);

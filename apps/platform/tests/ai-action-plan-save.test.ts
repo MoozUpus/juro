@@ -291,7 +291,8 @@ test("AI-plan route and chat require server-side ownership and explicit confirma
   assert.match(service, /structuredJson/);
   assert.match(service, /ai_action_plan_confirmed/);
   assert.match(service, /ai_action_plan_appended/);
-  assert.match(client, /window\.confirm\(/);
+  assert.match(client, /ai-plan-confirmation/);
+  assert.match(client, /planConfirmationRef/);
   assert.match(client, /\/api\/platform\/ai\/action-plan/);
   assert.match(client, /assistantMessageId: answer\.messageId/);
   assert.match(client, /targetCaseId: targetCaseId \|\| undefined/);
