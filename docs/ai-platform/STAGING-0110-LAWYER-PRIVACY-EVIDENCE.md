@@ -57,6 +57,13 @@ Date: 2026-08-07
   can be created.
 - `npm run type-check`, targeted marketplace/fixture tests (6/6), `npm run
   lint`, staging build and artifact validation passed before deployment.
+- A complete post-fixture `npm test` regression run passed **576/576**. The
+  run initially exposed a test-fixture defect: an assertion intended to inspect
+  a public review used `reviewCount: 1`, below JURO's documented minimum of
+  three moderated reviews, and therefore inspected an empty list. The fixture
+  now uses the threshold and proves that a pending lawyer reply projects as
+  `null`, never as reply content. The focused reply suite passed 4/4 before the
+  complete run.
 
 ## Explicit limitation
 

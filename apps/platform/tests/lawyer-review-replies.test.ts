@@ -75,7 +75,11 @@ test("unrelated user cannot reply and public projection never exposes a pending 
     await submitLawyerReviewReply({ db: d1, actorUserId: "lawyer", reviewId: REVIEW_ID, body: "Pending reply", clientRequestId: REQUEST_ONE, now: NOW });
     const projected = projectPublicLawyerDirectory(
       [{ id: "lawyer-profile", displayName: "Юрист", specialtiesJson: "[]", languagesJson: "[]", experienceYears: null, priceDescription: null, availabilityStatus: "available", nextAvailableAt: null, advocateStatus: "declared", firmName: null, bio: null }],
-      [{ lawyerProfileId: "lawyer-profile", reviewCount: 1, overallAverage: 5, speedAverage: 5, qualityAverage: 5, communicationAverage: 5 }],
+      // Public reviews are intentionally withheld until the marketplace has
+      // enough moderated feedback. Use the threshold here so this assertion
+      // exercises the approved-only reply projection rather than an empty
+      // review list.
+      [{ lawyerProfileId: "lawyer-profile", reviewCount: 3, overallAverage: 5, speedAverage: 5, qualityAverage: 5, communicationAverage: 5 }],
       [{ reviewId: REVIEW_ID, lawyerProfileId: "lawyer-profile", overallRating: 5, body: "Полезно", createdAt: NOW.toISOString(), replyBody: null, replyCreatedAt: null }],
     );
     assert.equal(projected[0]?.reviews[0]?.reply, null);
