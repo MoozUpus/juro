@@ -722,6 +722,13 @@
       "when": 1786035600000,
       "tag": "0102_d1_redrive_hash_check",
       "breakpoints": true
+    },
+    {
+      "idx": 103,
+      "version": "7",
+      "when": 1786039200000,
+      "tag": "0103_d1_completed_result_hash_guard",
+      "breakpoints": true
     }
   ]
 }

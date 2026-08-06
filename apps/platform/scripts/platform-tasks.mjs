@@ -185,6 +185,7 @@ const cloudflareTestFiles = [
   "tests/migration-0099-staging-email-delivery-probe.test.ts",
   "tests/migration-0101-document-index-scheduling.test.ts",
   "tests/migration-0102-d1-redrive-hash-check.test.ts",
+  "tests/migration-0103-d1-completed-result-hash-guard.test.ts",
   "tests/task-reminder-email.test.ts",
   "tests/staging-email-delivery-probe.test.ts",
     "tests/staging-malware-scanner-probe.test.ts",
