@@ -10,6 +10,7 @@ import {
   MalwareScannerContainer,
 } from "./malware-scanner-container";
 import { handleScheduled } from "./platform-scheduled";
+import { handleInternalAdminRequest } from "../lib/auth/admin-internal-api";
 
 export { MalwareScannerContainer };
 
@@ -41,6 +42,7 @@ type FrameworkEnv = PlatformJobEnv & {
   PAYMENT_PRODUCTION_APPROVED?: string;
   PAYMENT_SANDBOX_WEBHOOK_SECRET?: string;
   ALLOW_PLATFORM_AUTH_HEADERS?: string;
+  ADMIN_INTERNAL_TOKEN?: string;
 };
 
 type SupportedImageOutputFormat =
@@ -134,6 +136,9 @@ const worker = {
       }, allowedWidths);
       return withSecurityHeaders(optimized, url);
     }
+
+    const internalAdminResponse = await handleInternalAdminRequest(routedRequest, env);
+    if (internalAdminResponse) return withSecurityHeaders(internalAdminResponse, url);
 
     const response = await handler.fetch(routedRequest, env, ctx);
     const isPrivateApi = routedUrl.pathname.startsWith("/api/document-builder/") || routedUrl.pathname.startsWith("/api/auth/") || routedUrl.pathname.startsWith("/api/platform/");

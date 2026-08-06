@@ -156,6 +156,7 @@ const coreTestFiles = [
   "tests/analysis-export.test.ts",
   "tests/archive-inspector.test.ts",
   "tests/staff-access.test.ts",
+  "tests/admin-domain-handoff.test.ts",
   "tests/staff-role-management.test.ts",
   "tests/policy-acceptance.test.ts",
   "tests/onboarding-profile.test.ts",

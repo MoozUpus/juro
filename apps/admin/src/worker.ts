@@ -1,0 +1,212 @@
+const ADMIN_SESSION_COOKIE = "juro_admin_session";
+const ADMIN_CSRF_COOKIE = "juro_admin_csrf";
+const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const MAX_FORM_BYTES = 4_096;
+
+type PlatformReply<T> = { response: Response; body: T | null };
+type Dashboard = {
+  roles: string[];
+  expiresAt: string;
+  counts: {
+    pendingLawyerProfiles: number;
+    approvedLawyerProfiles: number;
+    activeLawyerRequests: number;
+    adminAuditEvents: number;
+  };
+};
+type Profile = {
+  id: string;
+  displayName: string;
+  status: string;
+  marketplaceStatus: string;
+  profileRevision: number;
+  city: string | null;
+  region: string | null;
+  experienceYears: number | null;
+  priceDescription: string | null;
+  availabilityStatus: string;
+  updatedAt: string;
+};
+
+function cookie(request: Request, name: string): string | null {
+  const source = request.headers.get("cookie");
+  if (!source) return null;
+  for (const item of source.split(";")) {
+    const [candidate, ...parts] = item.trim().split("=");
+    if (candidate !== name) continue;
+    try {
+      const value = decodeURIComponent(parts.join("="));
+      return TOKEN_PATTERN.test(value) ? value : null;
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+function escaped(value: unknown): string {
+  return String(value ?? "").replace(/[&<>'"]/g, (character) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;",
+  })[character] ?? character);
+}
+
+function page(title: string, body: string, options: { notice?: string; role?: string } = {}): Response {
+  const notice = options.notice ? `<p class="notice">${escaped(options.notice)}</p>` : "";
+  const role = options.role ? `<span class="role">${escaped(options.role)}</span>` : "";
+  return new Response(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>${escaped(title)} · JURO</title><style>
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль staging</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
+}
+
+function securityHeaders(): Headers {
+  return new Headers({
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "private, no-store",
+    pragma: "no-cache",
+    "referrer-policy": "no-referrer",
+    "x-robots-tag": "noindex, nofollow, noarchive",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "permissions-policy": "camera=(), microphone=(), payment=(), geolocation=()",
+    "content-security-policy": "default-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; style-src 'unsafe-inline'; upgrade-insecure-requests",
+    "strict-transport-security": "max-age=31536000; includeSubDomains",
+  });
+}
+
+// Wrangler's generated Env intentionally contains only declarative bindings;
+// dashboard secrets are injected at runtime. Reflect keeps Env generated from
+// wrangler.jsonc instead of maintaining a second hand-written binding type.
+function requiredSecret(env: Env, name: string): string {
+  const value: unknown = Reflect.get(env, name);
+  if (typeof value !== "string" || value.length < 32) {
+    throw new Error("ADMIN_INTERNAL_SECRET_UNAVAILABLE");
+  }
+  return value;
+}
+
+async function platform<T>(env: Env, path: string, init: RequestInit & { session?: string } = {}): Promise<PlatformReply<T>> {
+  const headers = new Headers(init.headers);
+  headers.set("x-juro-admin-internal-token", requiredSecret(env, "ADMIN_INTERNAL_TOKEN"));
+  if (init.session) headers.set("x-juro-admin-session", init.session);
+  const response = await env.PLATFORM_ADMIN_API.fetch(new Request(`https://admin-service.internal${path}`, {
+    method: init.method ?? "GET", headers, body: init.body,
+  }));
+  let body: T | null = null;
+  try { body = await response.json() as T; } catch { /* fixed error handling below */ }
+  return { response, body };
+}
+
+async function constantTimeEqual(left: string | null, right: string | null): Promise<boolean> {
+  if (!left || !right) return false;
+  const encoder = new TextEncoder();
+  const [leftHash, rightHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(left)),
+    crypto.subtle.digest("SHA-256", encoder.encode(right)),
+  ]);
+  const a = new Uint8Array(leftHash); const b = new Uint8Array(rightHash); let delta = 0;
+  for (let i = 0; i < a.length; i += 1) delta |= a[i]! ^ b[i]!;
+  return delta === 0;
+}
+
+async function csrf(request: Request): Promise<boolean> {
+  const origin = request.headers.get("origin");
+  if (!origin || origin !== new URL(request.url).origin) return false;
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin") return false;
+  const length = Number(request.headers.get("content-length"));
+  if (Number.isFinite(length) && length > MAX_FORM_BYTES) return false;
+  const form = await request.clone().formData();
+  const field = form.get("_csrf");
+  return typeof field === "string" && constantTimeEqual(field, cookie(request, ADMIN_CSRF_COOKIE));
+}
+
+function sessionCookies(token: string, csrfToken: string, expiresAt: string): string[] {
+  const seconds = Math.max(0, Math.floor((Date.parse(expiresAt) - Date.now()) / 1_000));
+  return [
+    `${ADMIN_SESSION_COOKIE}=${encodeURIComponent(token)}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${seconds}`,
+    `${ADMIN_CSRF_COOKIE}=${encodeURIComponent(csrfToken)}; Path=/; Secure; SameSite=Strict; Max-Age=${seconds}`,
+  ];
+}
+
+function clearCookies(): string[] {
+  return [
+    `${ADMIN_SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`,
+    `${ADMIN_CSRF_COOKIE}=; Path=/; Secure; SameSite=Strict; Max-Age=0`,
+  ];
+}
+
+function redirect(location: string, cookies: string[] = []): Response {
+  const headers = securityHeaders(); headers.set("location", location); for (const item of cookies) headers.append("set-cookie", item);
+  return new Response(null, { status: 303, headers });
+}
+
+async function consumeTicket(request: Request, env: Env): Promise<Response> {
+  const ticket = new URL(request.url).searchParams.get("ticket");
+  if (!ticket || !TOKEN_PATTERN.test(ticket)) return page("Вход недоступен", "<p>Одноразовая ссылка недействительна или уже использована.</p>");
+  const result = await platform<{ token: string; csrfToken: string; expiresAt: string; roles: string[] }>(env, "/api/internal/admin/session/consume", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-juro-admin-origin": new URL(request.url).origin },
+    body: JSON.stringify({ ticket }),
+  });
+  if (!result.response.ok || !result.body?.token || !result.body.csrfToken || !result.body.expiresAt) return page("Вход недоступен", `<p>Не удалось подтвердить отдельную admin-сессию. Обновите MFA в <a href="${escaped(env.PLATFORM_ORIGIN)}/ru/admin/console">JURO</a> и повторите переход.</p>`);
+  const destination = result.body.roles?.includes("super_admin") ? "/" : "/lawyers";
+  return redirect(destination, sessionCookies(result.body.token, result.body.csrfToken, result.body.expiresAt));
+}
+
+async function dashboard(request: Request, env: Env, session: string): Promise<Response> {
+  const result = await platform<Dashboard>(env, "/api/internal/admin/dashboard", { session });
+  if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
+  const data = result.body;
+  return page("Операционный обзор", `<p>Роль: ${escaped(data.roles.join(", "))}. Сеанс действует до ${escaped(data.expiresAt)}.</p><section class="metrics"><div class="metric"><span>Профили на проверке</span><strong>${data.counts.pendingLawyerProfiles}</strong></div><div class="metric"><span>Одобренные профили</span><strong>${data.counts.approvedLawyerProfiles}</strong></div><div class="metric"><span>Активные заявки</span><strong>${data.counts.activeLawyerRequests}</strong></div><div class="metric"><span>Audit events</span><strong>${data.counts.adminAuditEvents}</strong></div></section><section class="panel"><h2>Граница доступа</h2><p>Консоль использует отдельную host-only cookie и обращается к платформе только через service binding. Текущая сессия требует активный TOTP и свежую MFA исходного JURO-сеанса.</p></section>`, { role: data.roles.join(" · ") });
+}
+
+async function lawyerList(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
+  const result = await platform<{ profiles: Profile[] }>(env, "/api/internal/admin/lawyers?status=pending_review", { session });
+  if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
+  const csrfToken = cookie(request, ADMIN_CSRF_COOKIE) ?? "";
+  const rows = result.body.profiles.map((profile) => `<tr><td>${escaped(profile.displayName)}</td><td>${escaped(profile.city ?? "—")}</td><td>${escaped(profile.experienceYears ?? "—")}</td><td>${escaped(profile.updatedAt)}</td><td><form method="post" action="/lawyers/${encodeURIComponent(profile.id)}/moderate"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Причина<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="decision" value="approved">Одобрить</button><button class="danger" name="decision" value="rejected">Отклонить</button></div></form></td></tr>`).join("");
+  return page("Профили юристов", `<section class="panel"><p>Показаны только завершённые профили, ожидающие review. Телефон и личный email не выдаются этой поверхности.</p><table><thead><tr><th>Профиль</th><th>Город</th><th>Стаж</th><th>Изменён</th><th>Модерация</th></tr></thead><tbody>${rows || "<tr><td colspan=\"5\">Нет профилей на проверке.</td></tr>"}</tbody></table></section>`, { notice, role: "lawyer moderation" });
+}
+
+async function moderate(request: Request, env: Env, session: string, profileId: string): Promise<Response> {
+  if (!await csrf(request)) return page("Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
+  const form = await request.formData();
+  const decision = form.get("decision"); const reason = form.get("reason");
+  if ((decision !== "approved" && decision !== "rejected") || typeof reason !== "string" || reason.trim().length < 1 || reason.trim().length > 2_000) return lawyerList(request, env, session, "Проверьте решение и причину.");
+  const result = await platform<{ ok: boolean }>(env, `/api/internal/admin/lawyers/${encodeURIComponent(profileId)}/moderate`, {
+    method: "POST", session, headers: { "content-type": "application/json" }, body: JSON.stringify({ decision, reason: reason.trim() }),
+  });
+  return lawyerList(request, env, session, result.response.ok && result.body?.ok ? "Решение сохранено и записано в audit." : "Профиль изменился или решение нельзя применить.");
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    try {
+      if (request.method === "GET" && url.pathname === "/health") return Response.json({ status: "ok", environment: env.APP_ENV }, { headers: { "cache-control": "no-store" } });
+      if (request.method === "GET" && url.pathname === "/auth/handoff") return consumeTicket(request, env);
+      if (request.method === "GET" && url.pathname === "/logout") return page("Выход", `<form method="post" action="/logout"><input type="hidden" name="_csrf" value="${escaped(cookie(request, ADMIN_CSRF_COOKIE) ?? "")}"><button>Завершить admin-сеанс</button></form>`);
+      if (request.method === "POST" && url.pathname === "/logout") {
+        if (!await csrf(request)) return page("Запрос отклонён", "<p>CSRF не пройдена.</p>");
+        const session = cookie(request, ADMIN_SESSION_COOKIE);
+        if (session) {
+          await platform<{ ok: boolean }>(env, "/api/internal/admin/session/logout", { method: "POST", session });
+        }
+        return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console`, clearCookies());
+      }
+      const session = cookie(request, ADMIN_SESSION_COOKIE);
+      if (!session) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
+      if (request.method === "GET" && url.pathname === "/") return dashboard(request, env, session);
+      if (request.method === "GET" && url.pathname === "/lawyers") return lawyerList(request, env, session);
+      const match = /^\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
+      if (request.method === "POST" && match && profileIdValid(match[1])) return moderate(request, env, session, match[1]);
+      return page("Не найдено", "<p>Этот административный маршрут отсутствует.</p>");
+    } catch (error) {
+      console.error(JSON.stringify({ event: "admin.request_failed", path: url.pathname, message: error instanceof Error ? error.message : "unknown" }));
+      return page("Временно недоступно", "<p>Защищённая операция не выполнена. Повторите позже или обновите MFA.</p>");
+    }
+  },
+} satisfies ExportedHandler<Env>;
+
+function profileIdValid(value: string | undefined): value is string {
+  return typeof value === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(value);
+}

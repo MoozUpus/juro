@@ -36,6 +36,7 @@ export interface BuilderRuntimeEnv {
   GUEST_AI_ENABLED?: string;
   APP_URL?: string;
   PUBLIC_SITE_URL?: string;
+  ADMIN_CONSOLE_ORIGIN?: string;
   PAYMENT_PROVIDER?: string;
   PAYMENT_API_KEY?: string;
   PAYMENT_WEBHOOK_SECRET?: string;

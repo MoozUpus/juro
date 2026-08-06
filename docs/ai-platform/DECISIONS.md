@@ -595,3 +595,21 @@ The owner has accepted the existing 314 legal, 100 document and 30 comparison
 reviewer decisions as a private staging-beta acceptance. This records beta
 authorization only, does not invent test execution evidence, and grants no
 access to another person.
+
+## D-137 — staging administration uses a separate Access-protected Worker and session
+
+Status: accepted and staging-deployed; Access boundary verified, authenticated browser handoff smoke pending
+Date: 2026-08-06
+
+The protected staging admin domain is an independent Worker rather than another
+platform route. It has no direct D1/R2/Queue/AI binding and can request only
+strictly projected dashboard and lawyer-moderation data from
+`juro-platform-staging` through a service binding authenticated by a shared
+secret. A two-minute hash-only handoff ticket becomes an independent
+fifteen-minute host-only admin session. Every protected request rechecks active
+TOTP, current platform role and the source MFA session; logout revokes that
+server record before cookie removal.
+
+Cloudflare Access is a second boundary with a dedicated owner-only application.
+This decision covers only `admin.staging.juro.uz`; it does not migrate or
+expose production administration.

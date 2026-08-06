@@ -80,16 +80,18 @@ test("lawyer professional profile accepts only bounded self-declared directory d
 });
 
 test("lawyer-profile approval is staff-capability and revision gated", async () => {
-  const [capabilities, listRoute, decisionRoute, page, migration] = await Promise.all([
+  const [capabilities, listRoute, decisionRoute, service, page, migration] = await Promise.all([
     readFile(new URL("../lib/auth/staff-access.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/admin/lawyer-profiles/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/lawyer-profile-moderation-service.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/[locale]/admin/lawyer-profiles/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0059_pretty_punisher.sql", import.meta.url), "utf8"),
   ]);
   assert.match(capabilities, /lawyer\.profiles\.moderate/);
   assert.match(listRoute, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(listRoute, /freshMfaWithinMs/); assert.match(listRoute, /profile_revision/);
-  assert.match(decisionRoute, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(decisionRoute, /lawyer_profile_moderation/); assert.match(decisionRoute, /profileSha256/); assert.match(decisionRoute, /lawyer_profile_moderated/); assert.match(decisionRoute, /meta\.changes/); assert.match(decisionRoute, /WHERE EXISTS/);
+  assert.match(decisionRoute, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(decisionRoute, /moderateLawyerProfile/);
+  assert.match(service, /lawyer_profile_moderation/); assert.match(service, /profileSha256/); assert.match(service, /lawyer_profile_moderated/); assert.match(service, /meta\.changes/); assert.match(service, /WHERE EXISTS/);
   assert.match(page, /lawyer\.profiles\.moderate/);
   assert.match(migration, /lawyer_profile_moderation_revision_uidx/); assert.match(migration, /lawyer_profiles_status_requires_moderation/); assert.match(migration, /append-only/);
 });

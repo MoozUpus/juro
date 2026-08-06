@@ -167,6 +167,7 @@
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
         "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com",
         "STATUS_HOSTNAME": "status.staging.juro.uz",
+        "ADMIN_CONSOLE_ORIGIN": "https://admin.staging.juro.uz",
         "OPENAI_CHAT_MODEL": "gpt-5.6-terra",
         "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",

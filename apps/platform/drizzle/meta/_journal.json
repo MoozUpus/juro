@@ -743,6 +743,13 @@
       "when": 1786046400000,
       "tag": "0105_d1_builder_version_hash_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1786050000000,
+      "tag": "0109_admin_domain_handoff_sessions",
+      "breakpoints": true
     }
   ]
 }
