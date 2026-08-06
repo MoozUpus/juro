@@ -4,6 +4,7 @@ Date: 2026-08-06
 Environment: `staging` only  
 Application: `https://staging.app.juro.uz`  
 Code: `d006e62` (`fix(platform): retain configured Builder document route`)
+Worker: `juro-platform-staging` version `2642eb90-77d8-41da-9449-bba10cf49ec0` at 100% traffic
 
 ## Purpose
 
