@@ -21,6 +21,7 @@ test("migration 0097 is additive, content-free and journaled", () => {
 test("0097 fences projected version identity and requires attached source evidence", () => {
   const { sqlite } = sqliteD1Fixture();
   const hash = "a".repeat(64);
+  const r2Key = `builder-document-versions/workspace-a/document-a/write-a-2-${hash}.json`;
   try {
     seed(sqlite);
     sqlite.prepare(
@@ -29,8 +30,8 @@ test("0097 fences projected version identity and requires attached source eviden
         source,source_entity_id,r2_key,size_bytes,sha256,idempotency_key_sha256,status,
         version_id,attempt_count,last_error_code,created_at,updated_at,reconciled_at)
        VALUES ('write-a','workspace-a','user-a','document-a',1,1,2,'suggestion','proposal-a',
-        'builder-document-versions/workspace-a/document-a/write-a-2-object.json',100,?,?,'pending',NULL,0,NULL,?,?,NULL)`,
-    ).run(hash, "b".repeat(64), now, now);
+        ?,100,?,?,'pending',NULL,0,NULL,?,?,NULL)`,
+    ).run(r2Key, hash, "b".repeat(64), now, now);
     assert.throws(
       () => sqlite.prepare("UPDATE builder_document_version_object_writes SET document_id='other' WHERE id='write-a'").run(),
       /BUILDER_VERSION_WRITE_(?:IDENTITY_IMMUTABLE|TRANSITION_INVALID)/u,
@@ -51,8 +52,8 @@ test("0097 fences projected version identity and requires attached source eviden
       `INSERT INTO builder_document_versions
        (id,workspace_id,owner_user_id,document_id,version,document_revision,source,r2_key,size_bytes,sha256,idempotency_key_sha256,status,attempt_count,last_error_code,created_at,updated_at,object_write_id)
        VALUES ('version-a','workspace-a','user-a','document-a',1,2,'suggestion',
-        'builder-document-versions/workspace-a/document-a/write-a-2-object.json',100,?,?,'pending',0,NULL,?,?,'write-a')`,
-    ).run(hash, "b".repeat(64), now, now);
+        ?,100,?,?,'pending',0,NULL,?,?,'write-a')`,
+    ).run(r2Key, hash, "b".repeat(64), now, now);
     sqlite.prepare("UPDATE builder_document_versions SET status='ready',last_error_code=NULL,updated_at=? WHERE id='version-a'").run(now);
     assert.deepEqual(
       { ...(sqlite.prepare("SELECT status,version_id AS versionId FROM builder_document_version_object_writes WHERE id='write-a'").get() as object) },
