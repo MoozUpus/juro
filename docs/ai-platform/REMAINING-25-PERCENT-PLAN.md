@@ -5,8 +5,9 @@
 2. Resolve or obtain an approved upstream path for Worker direct Lex/Advice
    search, then run authenticated RU/UZ AI questions to prove source cards,
    citation metadata bounds, no legacy corpus writes, and case-source display.
-3. Run the already implemented Builder → version → export, upload → analysis,
-   compare → redline, and plan → case flows with synthetic documents.
+3. Completed the Builder → version → export flow with a synthetic authenticated
+   staging document. Run the remaining upload → analysis, compare → redline,
+   and plan → case flows with synthetic documents.
 4. Re-run lawyer/marketplace/admin/demo-payment critical E2E using existing
    beta data only; no external user access is required.
 5. Complete keyboard, reduced-motion, mobile, accessibility and secret-scan
