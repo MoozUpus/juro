@@ -1,9 +1,9 @@
 # JURO deferred and gated features
 
 > **Authoritative remote state — 2026-08-06.** Protected staging is Worker
-> `juro-platform-staging` version `bd6e6725-f74e-48fb-bcc8-ffcca7a4cddc` at
-> 100% traffic; `juro-staging` has D1 migration ledger row 100
-> (`0099_staging_email_delivery_probe.sql`). Older local-only and earlier
+> `juro-platform-staging` version `598d327d-ac0b-4ac9-932e-627c0ab19fe4` at
+> 100% traffic; `juro-staging` has D1 migration ledger row 105
+> (`0104_d1_case_lifecycle_hash_guard.sql`). Older local-only and earlier
 > staging checkpoint labels below are historical and do not reopen a feature
 > or downgrade the active schema. The remaining items in this register remain
 > release gates until their stated evidence exists.
@@ -27,7 +27,7 @@
 > mailbox delivery, citations, legal quality, a scanner-approved analysis, or
 > human review. No avatar work is in the currently authorised scope.
 
-Updated: 2026-07-30
+Updated: 2026-08-06
 
 This register distinguishes real implementation from planned scope. A database table, UI placeholder, binding, or feature flag is not counted as a working feature.
 
@@ -58,11 +58,14 @@ This register distinguishes real implementation from planned scope. A database t
   log and real Resend receipt are still required. `0091` fail-closes freshness
   against unreviewed versions, but a controlled corpus run and named legal
   review remain gated.
-- Remote development/staging user-document indexes remain empty at this checkpoint. The local `0080`–`0081` candidates implement immutable-version indexing, owner-scoped semantic search, superseded-vector deletion, account-purge deletion and actual-token cost accounting, but they are not active until a separately authorized migration/deploy, official price entry and protected staging evidence.
+- A synthetic staging document-analysis smoke has persisted three tenant-scoped
+  user-document index chunks after a scanner-approved file and provider fallback
+  completed. This is not corpus scale, a cross-tenant search evaluation, official
+  price reconciliation, or an account-purge exercise; those gates remain open.
 
 ## File and communication gates
 
-- The streaming private-R2 upload, SSRF-safe public URL import, strict ZIP/DOCX integrity gate, PDF structure/page-count preflight, deterministic ZIP package extraction, bounded per-member Workers AI conversion, provider prompt boundary, adversarial document-input tests, and private fail-closed ClamAV scanner exist in protected staging. The scanner has only passed a synthetic infected-file EICAR path. Protected-staging clean-file OCR/provider evidence, page coordinates and faithful DOCX pagination, over-budget streaming extraction, quarantine promotion evidence, and the full 100-package quality gate remain deferred.
+- The streaming private-R2 upload, SSRF-safe public URL import, strict ZIP/DOCX integrity gate, PDF structure/page-count preflight, deterministic ZIP package extraction, bounded per-member Workers AI conversion, provider prompt boundary, adversarial document-input tests, and private fail-closed ClamAV scanner exist in protected staging. The scanner has passed a synthetic infected-file EICAR path and a separate synthetic clean DOCX analysis smoke. Protected-staging clean-file OCR/provider evidence at corpus quality, page coordinates and faithful DOCX pagination, over-budget streaming extraction, quarantine promotion evidence, and the full 100-package quality gate remain deferred.
 - Realtime voice, avatar lip sync, original-audio retention automation, audio/video call provider, and call recording remain off. Text chat must not pretend these are live.
 - The approved Jurobek 3D asset still requires source-asset verification, rig/material/facial review, optimization evidence, WebGL fallback, and device testing before integration.
 
@@ -82,7 +85,7 @@ Development and production remain unattached and fail closed.
 
 ## Product and operations gates
 
-- Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, broad admin/analytics, and deletion across every future provider remain incomplete. The public operator-managed status slice is deployed on the staging-only hostname `status.staging.juro.uz`, with a narrow route fence and `noindex` header verified by HTTPS smoke checks. Protected admin browser QA, synthetic component probes, an incident rehearsal and any production hostname remain gated.
+- Complete AI chat, document-analysis, cases/plans/deadlines/calendar, lawyer handoff/conflict/access, entitlements, broad admin/analytics, and deletion across every future provider remain incomplete. One authenticated synthetic case has passed complete → archive → restore → reopen in staging with an immutable D1 hash chain; this is not a substitute for the full case/product matrix. The public operator-managed status slice is deployed on the staging-only hostname `status.staging.juro.uz`, with a narrow route fence and `noindex` header verified by HTTPS smoke checks. Protected admin browser QA, synthetic component probes, an incident rehearsal and any production hostname remain gated.
 - Production backup/quarantine targets, operational RTO/RPO, scheduled backup
   automation, alert delivery and full incident rehearsal remain open. A local
   fresh-MFA Queue monitor and guarded same-job redrive UI now exists through
