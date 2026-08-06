@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, Download, Eye, FileCheck2, LoaderCircle, LockKeyhole, Plus, RotateCcw, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { DocumentDefinition, QuestionnaireAnswers, QuestionnaireField, AnswerScalar } from "../../../lib/document-builder/registry";
 import { calculateQuestionnaireProgress, conditionMatches, createQuestionnaireAnswers, localize, renderConfiguredDocument, setAnswer, validateQuestionnaire, type BuilderLanguage } from "../../../lib/document-builder/registry/engine";
 import type { GenericStoredDocument } from "../../../lib/document-builder/types";
@@ -66,6 +66,7 @@ function FieldControl({ field, language, value, error, onChange }: { field: Ques
 export function ConfigurableDocumentBuilder({ definition, initialUser, signInPath, initialDocumentId }: { definition: DocumentDefinition; initialUser: BuilderUser | null; signInPath: string; initialDocumentId?: string }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
+  const router = useRouter();
   const caseId = searchParams.get("caseId") ?? undefined;
   const planStepId = searchParams.get("stepId") ?? undefined;
   const paths = useMemo(
@@ -128,9 +129,9 @@ export function ConfigurableDocumentBuilder({ definition, initialUser, signInPat
     if (documentId) return documentId;
     if (!initialUser) throw new Error(language === "uz" ? "Saqlash uchun tizimga kiring." : "Войдите, чтобы сохранить документ.");
     if (createPromise.current) return createPromise.current;
-    createPromise.current = apiFetch<{ document: GenericStoredDocument }>("/api/document-builder/configured-drafts", { method: "POST", body: JSON.stringify({ templateCode: definition.code, language, title: title || defaultTitle(definition, language), answers, finalContent: finalText, manuallyEdited, caseId, planStepId }) }).then(({ document }) => { hydrate(document); sessionStorage.removeItem(draftKey(definition.code)); return document.id; }).finally(() => { createPromise.current = null; });
+    createPromise.current = apiFetch<{ document: GenericStoredDocument }>("/api/document-builder/configured-drafts", { method: "POST", body: JSON.stringify({ templateCode: definition.code, language, title: title || defaultTitle(definition, language), answers, finalContent: finalText, manuallyEdited, caseId, planStepId }) }).then(({ document }) => { hydrate(document); sessionStorage.removeItem(draftKey(definition.code)); router.replace(paths.document(document.id)); return document.id; }).finally(() => { createPromise.current = null; });
     return createPromise.current;
-  }, [answers, caseId, definition, documentId, finalText, hydrate, initialUser, language, manuallyEdited, planStepId, title]);
+  }, [answers, caseId, definition, documentId, finalText, hydrate, initialUser, language, manuallyEdited, paths, planStepId, router, title]);
 
   const save = useCallback((targetDocumentId = documentId): Promise<void> => {
     if (!initialUser || !targetDocumentId || !hydrated) return Promise.resolve();
