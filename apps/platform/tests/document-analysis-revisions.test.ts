@@ -293,7 +293,7 @@ test("0069 and 0073 reject cross-tenant, unreviewed, and mismatched object evide
       (id,analysis_id,workspace_id,owner_user_id,target_version,source_kind,r2_key,size_bytes,sha256,
        status,version_id,attempt_count,last_error_code,created_at,updated_at,reconciled_at)
       VALUES ('write-b','analysis-b','workspace-b','user-b',1,'extracted',
-        'analysis-versions/workspace-b/analysis-b/write-b-1-source.md',10,?,'pending',NULL,0,NULL,?,?,NULL)`).run(
+        'analysis-versions/workspace-b/analysis-b/write-b-1-8888888888888888888888888888888888888888888888888888888888888888.md',10,?,'pending',NULL,0,NULL,?,?,NULL)`).run(
       "8".repeat(64), now, now,
     );
     assert.throws(
