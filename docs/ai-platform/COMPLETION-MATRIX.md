@@ -52,3 +52,6 @@ repair, recovery check and post-reload browser verification.
 
 See `STAGING-0108-OPENAI-SCHEMA-EVIDENCE.md` for the primary-provider schema
 repair and UZ direct-source browser evidence.
+
+See `STAGING-0109-AUTHENTICATED-ROUTE-SMOKE.md` for the post-repair
+authenticated RU/UZ route smoke and its explicit final-QA limitations.
