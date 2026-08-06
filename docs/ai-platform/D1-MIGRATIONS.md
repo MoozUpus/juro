@@ -1,5 +1,20 @@
 # D1 migration checkpoint
 
+## 0100 — exact immutable R2 write-key guards
+
+Status: applied and independently restore-verified in protected staging on
+2026-08-06; production is unchanged.
+
+`0100_r2_write_guard_exact_keys.sql` replaces two dynamic R2-key `LIKE`
+predicates with exact immutable keys formed from the existing workspace, object,
+intent, revision and SHA-256 fields. This is stricter than a prefix match and
+prevents D1 `LIKE or GLOB pattern too complex` errors without changing rows,
+object keys, tenant relationships or the data lifecycle. The pre-change full,
+schema and data exports were stored only under the private backup prefix,
+checksum verified and restored in isolation; `foreign_key_check` returned no
+rows after application. See
+`STAGING-0100-R2-GUARDS-AND-SCANNER-EVIDENCE.md`.
+
 ## 0089–0090 — protected staging checkpoint
 
 Status: applied and independently restore-verified in protected staging on

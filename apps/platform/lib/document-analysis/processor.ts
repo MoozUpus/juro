@@ -136,7 +136,10 @@ export type DocumentAnalysisDiagnosticDetail =
   | "ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH"
   | "ANALYSIS_DOCUMENT_VERSION_OBJECT_WRITE_MISMATCH"
   | "ANALYSIS_VERSION_OBJECT_WRITE_ATTACHMENT_MISMATCH"
-  | "ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID";
+  | "ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID"
+  | "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX"
+  | "LEGAL_RETRIEVAL_SQLITE_ERROR"
+  | "LEGAL_RETRIEVAL_FAILED";
 
 function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
   if (error instanceof AnalysisRevisionError) {
@@ -149,12 +152,9 @@ function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDet
     if (error.code === "ANALYSIS_REVISION_STORAGE_FAILED" || error.code === "ANALYSIS_REVISION_SOURCE_INVALID") {
       return error.code;
     }
-    return undefined;
-  }
-  return error instanceof Error && error.message === "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
-    ? "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
-    : error instanceof Error
-      ? (() => {
+    return error.message === "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
+      ? "ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED"
+      : (() => {
         const normalized = error.message.toUpperCase();
         if (normalized.includes("ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH")) {
           return "ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH";
@@ -169,8 +169,18 @@ function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDet
           return "ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID";
         }
         return undefined;
-      })()
-      : undefined;
+      })();
+  }
+  if (error instanceof Error) {
+    // The detail remains an allow-listed operational category: never include
+    // document text, source content, SQL, provider responses, or credentials.
+    if (/LIKE or GLOB pattern too complex/i.test(error.message)) {
+      return "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX";
+    }
+    if (/SQLITE_ERROR/i.test(error.message)) return "LEGAL_RETRIEVAL_SQLITE_ERROR";
+    return "LEGAL_RETRIEVAL_FAILED";
+  }
+  return undefined;
 }
 
 export type DocumentAnalysisProcessorDependencies = {

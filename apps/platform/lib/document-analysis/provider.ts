@@ -52,6 +52,12 @@ export async function runDocumentAnalysis(
       model: string;
     }) => void | Promise<void>;
     runtimeSettings?: AiRuntimeSettings;
+    /**
+     * Reserved for controlled non-user verification only. Normal document
+     * analysis retains the product timeouts and retry policy below.
+     */
+    providerTimeoutMs?: number;
+    providerMaxAttempts?: 1 | 2;
   } = {},
 ): Promise<DocumentAnalysisProviderResult> {
   const runtimeSettings = options.runtimeSettings ?? await resolveAiRuntimeSettings({
@@ -81,14 +87,20 @@ export function documentFallbackEligible(error: unknown): boolean {
 
 async function runAnthropicDocumentAnalysis(
   input: DocumentAnalysisProviderRequest,
-  options: { beforeProviderCall?: (input: { provider: "openai" | "anthropic"; model: string }) => void | Promise<void>; runtimeSettings: AiRuntimeSettings },
+  options: {
+    beforeProviderCall?: (input: { provider: "openai" | "anthropic"; model: string }) => void | Promise<void>;
+    runtimeSettings: AiRuntimeSettings;
+    providerTimeoutMs?: number;
+    providerMaxAttempts?: 1 | 2;
+  },
 ) {
   const model = options.runtimeSettings.anthropicDocumentModel;
   await options.beforeProviderCall?.({ provider: "anthropic", model });
   const result = await callAnthropicStructured<DocumentAnalysisResult>({
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
-    timeoutMs: input.mode === "expert" ? 90_000 : 60_000,
+    timeoutMs: options.providerTimeoutMs ?? (input.mode === "expert" ? 90_000 : 60_000),
+    maxAttempts: options.providerMaxAttempts,
     requestId: input.requestId,
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings),
@@ -104,7 +116,12 @@ async function runAnthropicDocumentAnalysis(
 
 async function runOpenAiDocumentAnalysis(
   input: DocumentAnalysisProviderRequest,
-  options: { beforeProviderCall?: (input: { provider: "openai" | "anthropic"; model: string }) => void | Promise<void>; runtimeSettings: AiRuntimeSettings },
+  options: {
+    beforeProviderCall?: (input: { provider: "openai" | "anthropic"; model: string }) => void | Promise<void>;
+    runtimeSettings: AiRuntimeSettings;
+    providerTimeoutMs?: number;
+    providerMaxAttempts?: 1 | 2;
+  },
 ) {
   const model = options.runtimeSettings.openaiDocumentFallbackModel;
   await options.beforeProviderCall?.({ provider: "openai", model });
@@ -112,7 +129,8 @@ async function runOpenAiDocumentAnalysis(
     schemaName: "juro_document_analysis_result",
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
-    timeoutMs: input.mode === "expert" ? 90_000 : 60_000,
+    timeoutMs: options.providerTimeoutMs ?? (input.mode === "expert" ? 90_000 : 60_000),
+    maxAttempts: options.providerMaxAttempts,
     requestId: input.requestId,
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings),

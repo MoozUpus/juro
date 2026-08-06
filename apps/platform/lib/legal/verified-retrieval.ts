@@ -12,6 +12,11 @@ import { uzbekistanCalendarDate } from "./applicability-date";
 const DAY_MS = 24 * 60 * 60 * 1_000;
 const MAX_FRESHNESS_AGE_DAYS = 7;
 const MAX_CLOCK_SKEW_MS = 5 * 60 * 1_000;
+// The lexical query expands each term over six fields and up to three
+// locale-aware casing forms. Keep the combined lexical + semantic binding
+// budget deliberately small for D1, rather than relying on SQLite defaults.
+const MAX_RETRIEVAL_LEXICAL_KEYWORDS = 4;
+const MAX_RETRIEVAL_SEMANTIC_VECTOR_IDS = 16;
 
 export type LegalDatabaseFreshnessStatus = "fresh" | "stale" | "unavailable";
 
@@ -191,7 +196,7 @@ export function legalDatabaseFreshnessFromCorpusRuns(
 export function legalSearchKeywords(
   value: string,
   locale: "ru" | "uz",
-  limit = 8,
+  limit = MAX_RETRIEVAL_LEXICAL_KEYWORDS,
 ): string[] {
   return [...new Set(
     value
@@ -551,7 +556,8 @@ export async function retrieveVerifiedLegalSources(
   const semantic = !historical && await hasIndexedVerifiedSource(db, locale)
     ? await semanticLegalChunkRanks(options.semantic, query, locale)
     : { status: "unavailable" as const, vectorRanks: new Map<string, number>() };
-  const semanticVectorIds = [...semantic.vectorRanks.keys()];
+  const semanticVectorIds = [...semantic.vectorRanks.keys()]
+    .slice(0, MAX_RETRIEVAL_SEMANTIC_VECTOR_IDS);
   if (!keywords.length && !semanticVectorIds.length) {
     return {
       sources: [],

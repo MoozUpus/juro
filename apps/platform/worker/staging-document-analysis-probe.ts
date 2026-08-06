@@ -4,6 +4,7 @@ import {
   DocumentAnalysisProcessingError,
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
+import { runDocumentAnalysis } from "../lib/document-analysis/provider";
 import type { PlatformJobEnv } from "./platform-jobs";
 
 const probeKey = "staging-document-analysis-v1";
@@ -82,7 +83,11 @@ async function cleanup(env: PlatformJobEnv): Promise<void> {
     env.QUARANTINE_BUCKET.delete(probeIds.quarantineKey),
     ...objectKeys.filter((key) => key !== probeIds.quarantineKey).map((key) => env.BUCKET.delete(key)),
   ]);
-  await env.DB.batch([
+  // Keep cleanup sequential rather than batched: a synthetic probe can leave
+  // an AI run, an outbox item, and cascading analysis rows. This makes the
+  // dependency order explicit, so a failed later cleanup action cannot roll
+  // back earlier safe deletions as one batch.
+  const statements = [
     env.DB.prepare("DELETE FROM job_outbox WHERE workspace_id=? OR subject_id=?").bind(probeIds.workspaceId, probeIds.analysisId),
     env.DB.prepare("DELETE FROM ai_provider_usage_events WHERE workspace_id=? AND user_id=?").bind(probeIds.workspaceId, probeIds.userId),
     env.DB.prepare("DELETE FROM ai_cost_daily_aggregates WHERE workspace_id=? AND user_id=?").bind(probeIds.workspaceId, probeIds.userId),
@@ -91,11 +96,12 @@ async function cleanup(env: PlatformJobEnv): Promise<void> {
     env.DB.prepare("DELETE FROM workspace_audit_events WHERE workspace_id=?").bind(probeIds.workspaceId),
     env.DB.prepare("DELETE FROM document_analyses WHERE id=? AND workspace_id=?").bind(probeIds.analysisId, probeIds.workspaceId),
     env.DB.prepare("DELETE FROM document_files WHERE id=? AND workspace_id=?").bind(probeIds.fileId, probeIds.workspaceId),
-    env.DB.prepare("DELETE FROM workspace_members WHERE workspace_id=?").bind(probeIds.workspaceId),
     env.DB.prepare("UPDATE user_profiles SET default_workspace_id=NULL WHERE id=? AND default_workspace_id=?").bind(probeIds.userId, probeIds.workspaceId),
+    env.DB.prepare("DELETE FROM workspace_members WHERE workspace_id=?").bind(probeIds.workspaceId),
     env.DB.prepare("DELETE FROM workspaces WHERE id=?").bind(probeIds.workspaceId),
     env.DB.prepare("DELETE FROM user_profiles WHERE id=?").bind(probeIds.userId),
-  ]);
+  ];
+  for (const statement of statements) await statement.run();
 }
 
 async function assertCleanup(env: PlatformJobEnv): Promise<void> {
@@ -226,6 +232,7 @@ export async function runStagingDocumentAnalysisProbe(
     return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode: "DOCUMENT_ANALYSIS_PROBE_SCANNER_DISABLED" };
   }
   let stage: ProbeStage = "prepare";
+  let summary: StagingDocumentAnalysisProbeSummary;
   try {
     await cleanup(env);
     await assertCleanup(env);
@@ -235,11 +242,21 @@ export async function runStagingDocumentAnalysisProbe(
     const scan = await executeMalwareScanJob(env, probeIds.analysisId, probeIds.workspaceId);
     if (scan.status !== "safe") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_SCAN_FAILED");
     stage = "analysis";
-    const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId);
+    // This probe must leave room for cleanup within one scheduled invocation.
+    // Its short one-attempt policy is strictly an injected test dependency;
+    // user analyses keep their production timeout and retry policy.
+    const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId, {
+      analyze: (input) => runDocumentAnalysis(input, {
+        beforeProviderCall: input.beforeProviderCall,
+        runtimeSettings: input.runtimeSettings,
+        providerTimeoutMs: 20_000,
+        providerMaxAttempts: 1,
+      }),
+    });
     if (analysis.status !== "completed") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_ANALYSIS_FAILED");
     stage = "verify";
     await assertCompleted(env);
-    return { attempted: 1, completed: 1, failed: 0, skipped: 0 };
+    summary = { attempted: 1, completed: 1, failed: 0, skipped: 0 };
   } catch (error) {
     const processorCode = error instanceof DocumentAnalysisProcessingError
       ? error.code
@@ -250,27 +267,29 @@ export async function runStagingDocumentAnalysisProbe(
     const processorDetail = error instanceof DocumentAnalysisProcessingError
       ? error.diagnosticDetail
       : null;
-    const errorCode = stage === "analysis" && processorStage === "version" && processorDetail
-      ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_VERSION_${processorDetail}`
+    const errorCode = stage === "analysis" && processorStage && processorDetail
+      ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorStage.toUpperCase()}_${processorDetail}`
       : stage === "analysis" && processorCode && processorStage
       ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorStage.toUpperCase()}_${processorCode}`
       : stage === "analysis" && processorCode
         ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorCode}`
       : `DOCUMENT_ANALYSIS_PROBE_${stage.toUpperCase()}_FAILED`;
     console.error(JSON.stringify({ event: "staging.document_analysis_probe_failed", stage, errorCode }));
-    return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode };
-  } finally {
-    try {
-      stage = "cleanup";
-      await cleanup(env);
-      await assertCleanup(env);
-    } catch {
-      console.error(JSON.stringify({
-        event: "staging.document_analysis_probe_cleanup_failed",
-        stage,
-        errorCode: "DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED",
-      }));
-      throw new Error("DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED");
-    }
+    summary = { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode };
   }
+  try {
+    stage = "cleanup";
+    await cleanup(env);
+    await assertCleanup(env);
+  } catch {
+    // Never throw from cleanup: preserve a safe structured status for the
+    // scheduler and prevent a generic cron failure from hiding probe residue.
+    console.error(JSON.stringify({
+      event: "staging.document_analysis_probe_cleanup_failed",
+      stage,
+      errorCode: "DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED",
+    }));
+    return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode: "DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED" };
+  }
+  return summary;
 }

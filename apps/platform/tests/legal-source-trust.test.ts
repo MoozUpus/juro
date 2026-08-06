@@ -287,6 +287,10 @@ test("legal keywords are bounded and locale-aware", () => {
     ["закон", "205", "статья", "1"],
   );
   assert.deepEqual(
+    legalSearchKeywords("договор увольнение налог недвижимость труд семья банк".repeat(2), "ru"),
+    ["договор", "увольнение", "налог", "недвижимость"],
+  );
+  assert.deepEqual(
     legalSearchPatterns("договор", "ru"),
     ["договор", "Договор", "ДОГОВОР"],
   );
