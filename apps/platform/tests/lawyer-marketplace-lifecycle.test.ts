@@ -57,6 +57,8 @@ test("a completed profile under review is visible but cannot receive a request",
   const publicDirectoryRoute = readFileSync(new URL("../app/api/public/lawyers/route.ts", import.meta.url), "utf8");
   const publicDetailRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/route.ts", import.meta.url), "utf8");
   const directoryClient = readFileSync(new URL("../app/_platform/LawyerDirectoryClient.tsx", import.meta.url), "utf8");
+  const detailRoute = readFileSync(new URL("../app/api/platform/lawyers/[lawyerId]/route.ts", import.meta.url), "utf8");
+  const detailClient = readFileSync(new URL("../app/_platform/LawyerProfileClient.tsx", import.meta.url), "utf8");
   const privatePhotoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
   assert.match(publicPhotoRoute, /marketplace_status='pending_review' AND status='pending'/);
   assert.match(directoryRoute, /marketplace_status='pending_review' AND status='pending'/);
@@ -65,6 +67,8 @@ test("a completed profile under review is visible but cannot receive a request",
   assert.doesNotMatch(publicDirectoryRoute, /phone|user_profiles|moderation_notes/i);
   assert.match(directoryClient, /Профиль на проверке JURO/);
   assert.match(directoryClient, /Запись после проверки/);
+  assert.match(detailRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(detailClient, /Профиль на проверке JURO/);
   assert.match(privatePhotoRoute, /export const GET/);
   assert.match(privatePhotoRoute, /WHERE user_id=\?/);
 });

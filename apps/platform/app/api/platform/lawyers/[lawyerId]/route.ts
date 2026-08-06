@@ -10,7 +10,16 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
   const parsedId = z.string().uuid().safeParse((await context.params).lawyerId);
   if (!parsedId.success) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
   const db = requireD1();
-  const lawyer = await db.prepare(`SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson,experience_years AS experienceYears,price_description AS priceDescription,availability_status AS availabilityStatus,next_available_at AS nextAvailableAt,advocate_status AS advocateStatus,firm_name AS firmName,bio FROM lawyer_profiles WHERE id=? AND status='public_approved' AND public_approved_at IS NOT NULL LIMIT 1`).bind(parsedId.data).all<{id:string;displayName:string;specialtiesJson:unknown;languagesJson:unknown;experienceYears:number|null;priceDescription:string|null;availabilityStatus:string;nextAvailableAt:string|null;advocateStatus:string;firmName:string|null;bio:string|null}>();
+  const lawyer = await db.prepare(
+    `SELECT id,display_name AS displayName,specialties_json AS specialtiesJson,languages_json AS languagesJson,
+      experience_years AS experienceYears,price_description AS priceDescription,availability_status AS availabilityStatus,
+      next_available_at AS nextAvailableAt,advocate_status AS advocateStatus,firm_name AS firmName,bio,
+      marketplace_status AS marketplaceStatus,city,region,education,
+      consultation_formats_json AS consultationFormatsJson,
+      CASE WHEN profile_photo_key IS NOT NULL THEN '/api/public/lawyers/' || id || '/photo' ELSE NULL END AS profilePhotoUrl
+     FROM lawyer_profiles WHERE id=? AND ((status='public_approved' AND public_approved_at IS NOT NULL)
+       OR (marketplace_status='pending_review' AND status='pending')) LIMIT 1`,
+  ).bind(parsedId.data).all<{id:string;displayName:string;specialtiesJson:unknown;languagesJson:unknown;experienceYears:number|null;priceDescription:string|null;availabilityStatus:string;nextAvailableAt:string|null;advocateStatus:string;firmName:string|null;bio:string|null;marketplaceStatus:string;city:string|null;region:string|null;education:string|null;consultationFormatsJson:unknown;profilePhotoUrl:string|null}>();
   if (!lawyer.results.length) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
   const aggregates = await db.prepare(`SELECT r.lawyer_profile_id AS lawyerProfileId,COUNT(*) AS reviewCount,AVG(r.overall_rating) AS overallAverage,AVG(r.speed_rating) AS speedAverage,AVG(r.quality_rating) AS qualityAverage,AVG(r.communication_rating) AS communicationAverage FROM lawyer_reviews r JOIN lawyer_review_moderation m ON m.review_id=r.id AND m.decision='approved' WHERE r.lawyer_profile_id=? AND r.status='approved' GROUP BY r.lawyer_profile_id`).bind(parsedId.data).all<{lawyerProfileId:string;reviewCount:number;overallAverage:number;speedAverage:number;qualityAverage:number;communicationAverage:number}>();
   const reviews = await db.prepare(`SELECT r.id AS reviewId,r.lawyer_profile_id AS lawyerProfileId,r.overall_rating AS overallRating,COALESCE(m.moderated_body,r.body) AS body,r.created_at AS createdAt,
