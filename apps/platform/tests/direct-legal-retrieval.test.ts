@@ -58,6 +58,39 @@ test("direct retrieval uses only query-scoped official links and keeps Lex befor
   assert.equal(calls.every((item) => new URL(item.url).hostname.endsWith(".uz") || new URL(item.url).hostname === "lex.uz" || new URL(item.url).hostname === "advice.uz"), true);
 });
 
+test("direct retrieval supports the official UZ and oz paths without relaxing the allowlist", async () => {
+  const calls: Call[] = [];
+  const responses = [
+    responseHtml('<a href="/uz/docs/42">Lex result</a>'),
+    new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Mehnat shartnomasi", "Modda 12. Shartlar")),
+    responseHtml('<a href="/oz/document/21?keyword=mehnat">Advice result</a>'),
+    new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Mehnat shartnomasi bo‘yicha amaliy ssenariy", "Modda 3. Harakatlar")),
+  ];
+  const result = await retrieveDirectLegalSources("mehnat shartnomasi", "uz", {
+    fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return responses.shift() ?? new Response("offline", { status: 503 });
+    }) as typeof fetch,
+    now: () => new Date("2026-08-06T12:00:00.000Z"),
+    wait: async () => undefined,
+  });
+
+  assert.equal(result.sourceValidationStatus, "validated");
+  assert.deepEqual(result.sources.map((source) => source.officialUrl), [
+    "https://lex.uz/uz/docs/42",
+    "https://advice.uz/oz/document/21",
+  ]);
+  assert.deepEqual(calls.slice(0, 4).map((item) => item.url), [
+    "https://lex.uz/uz/search/all?searchtitle=mehnat+shartnomasi",
+    "https://lex.uz/robots.txt",
+    "https://lex.uz/uz/docs/42",
+    "https://advice.uz/oz/search?q=mehnat+shartnomasi",
+  ]);
+  assert.equal(calls.every((item) => new URL(item.url).hostname === "lex.uz" || new URL(item.url).hostname === "advice.uz"), true);
+});
+
 test("direct retrieval excludes technically valid but unrelated search documents", async () => {
   const responses = [
     responseHtml('<a href="/ru/docs/42">Unrelated</a><a href="/ru/docs/43">Relevant</a>'),
@@ -140,4 +173,24 @@ test("direct retrieval reports bounded source timeouts without writing a corpus"
     "LEGAL_SOURCE_SEARCH_TIMEOUT",
     "LEGAL_SOURCE_SEARCH_TIMEOUT",
   ]);
+});
+
+test("caller cancellation aborts direct retrieval before it can reach the AI provider", async () => {
+  const controller = new AbortController();
+  let signalSeen: AbortSignal | undefined;
+  let beginFetch: (() => void) | undefined;
+  const fetchStarted = new Promise<void>((resolve) => { beginFetch = resolve; });
+  const pending = retrieveDirectLegalSources("mehnat shartnomasi", "uz", {
+    signal: controller.signal,
+    fetchImpl: ((_: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_, reject) => {
+      signalSeen = init?.signal ?? undefined;
+      beginFetch?.();
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+    })) as typeof fetch,
+  });
+
+  await fetchStarted;
+  controller.abort();
+  await assert.rejects(pending, (error: unknown) => error instanceof DOMException && error.name === "AbortError");
+  assert.equal(signalSeen?.aborted, true);
 });

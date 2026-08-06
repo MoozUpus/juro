@@ -245,7 +245,7 @@ async function executePost(
     });
   }
   const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
-    ? await retrieveDirectLegalSources(question, locale, { limit: 4 })
+    ? await retrieveDirectLegalSources(question, locale, { limit: 4, signal })
     : unavailableDirectLegalRetrieval();
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({

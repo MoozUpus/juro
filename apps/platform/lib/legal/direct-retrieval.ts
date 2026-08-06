@@ -19,6 +19,7 @@ const SEARCH_TIMEOUT_MS = 10_000;
 const SEARCH_MAX_BYTES = 512 * 1024;
 const SEARCH_MAX_REDIRECTS = 2;
 const DOCUMENT_MAX_BYTES = 1_500_000;
+const DIRECT_RETRIEVAL_BUDGET_MS = 30_000;
 const MAX_CANDIDATES_PER_PROVIDER = 3;
 const MAX_SOURCES_PER_PROVIDER = 2;
 const QUERY_STOPWORDS = new Set([
@@ -96,9 +97,13 @@ async function boundedSearchHtml(
   url: URL,
   kind: LegalSourceKind,
   fetchImpl: FetchLike,
+  signal?: AbortSignal,
 ): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
+  const requestSignal = signal
+    ? AbortSignal.any([controller.signal, signal])
+    : controller.signal;
   try {
     let searchUrl = url;
     let response: Response | null = null;
@@ -108,7 +113,7 @@ async function boundedSearchHtml(
         redirect: "manual",
         credentials: "omit",
         cache: "no-store",
-        signal: controller.signal,
+        signal: requestSignal,
         headers: {
           accept: "text/html,application/xhtml+xml;q=0.9",
           "user-agent": "JURO-LegalSourceDirect/1.0 (+https://juro.uz)",
@@ -172,6 +177,45 @@ async function boundedSearchHtml(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function abortError(signal: AbortSignal): DOMException {
+  return signal.reason instanceof DOMException
+    ? signal.reason
+    : new DOMException("Request was aborted", "AbortError");
+}
+
+function throwIfRequestAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw abortError(signal);
+}
+
+function abortableFetch(fetchImpl: FetchLike, signal: AbortSignal): FetchLike {
+  return (input, init) => fetchImpl(input, {
+    ...init,
+    signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal,
+  });
+}
+
+async function waitWithAbort(
+  wait: (delayMs: number) => Promise<void>,
+  delayMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  throwIfRequestAborted(signal);
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(abortError(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    void wait(delayMs).then(
+      () => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      },
+      (error) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
 }
 
 function officialDocumentUrls(html: string, kind: LegalSourceKind): string[] {
@@ -283,11 +327,12 @@ class OfficialDirectProvider implements LegalSourceProvider {
     private readonly fetchImpl: FetchLike,
     private readonly now: () => Date,
     private readonly wait: (delayMs: number) => Promise<void>,
+    private readonly signal: AbortSignal,
   ) {}
 
   async search(query: string, locale: "ru" | "uz"): Promise<string[]> {
     return officialDocumentUrls(
-      await boundedSearchHtml(directSearchUrl(this.kind, query, locale), this.kind, this.fetchImpl),
+      await boundedSearchHtml(directSearchUrl(this.kind, query, locale), this.kind, this.fetchImpl, this.signal),
       this.kind,
     );
   }
@@ -300,7 +345,7 @@ class OfficialDirectProvider implements LegalSourceProvider {
       maxBytes: DOCUMENT_MAX_BYTES,
       // Advice.uz asks for a short crawl delay. This is a single query-scoped
       // request, so wait rather than bypassing its published request policy.
-      wait: this.wait,
+      wait: (delayMs) => waitWithAbort(this.wait, delayMs, this.signal),
     });
     const snapshot = normalizeLegalSourceHtml({
       html: new TextDecoder("utf-8", { fatal: true }).decode(fetched.bytes),
@@ -366,39 +411,60 @@ export async function retrieveDirectLegalSources(
     now?: () => Date;
     limit?: number;
     wait?: (delayMs: number) => Promise<void>;
+    signal?: AbortSignal;
+    budgetMs?: number;
   } = {},
 ): Promise<DirectLegalRetrieval> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const now = options.now ?? (() => new Date());
   const wait = options.wait ?? ((delayMs: number) => new Promise<void>((resolve) => setTimeout(resolve, delayMs)));
+  const budgetMs = options.budgetMs ?? DIRECT_RETRIEVAL_BUDGET_MS;
+  if (!Number.isSafeInteger(budgetMs) || budgetMs < 1) throw new TypeError("Invalid direct retrieval budget.");
+  throwIfRequestAborted(options.signal);
+  const budgetController = new AbortController();
+  const budgetTimer = setTimeout(() => budgetController.abort(), budgetMs);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, budgetController.signal])
+    : budgetController.signal;
+  const boundedFetch = abortableFetch(fetchImpl, signal);
   const sources: LegalSourceContext[] = [];
   const evidence: DirectLegalSourceEvidence[] = [];
   const errors: Array<{ provider: LegalSourceKind; code: string }> = [];
-  const providers = [
-    new OfficialDirectProvider("lex", question, locale, fetchImpl, now, wait),
-    new OfficialDirectProvider("advice", question, locale, fetchImpl, now, wait),
-  ] as const;
-  const sourceLimit = Math.max(1, Math.min(options.limit ?? 4, 8));
-  for (const provider of providers) {
-    if (sources.length >= sourceLimit) break;
-    try {
-      const candidates = await provider.search(question, locale);
-      let accepted = 0;
-      for (const candidate of candidates) {
-        if (sources.length >= sourceLimit || accepted >= MAX_SOURCES_PER_PROVIDER) break;
-        try {
-          const item = await provider.fetchDocument(candidate);
-          if (!isRelevantDirectSource(item.source, question)) continue;
-          sources.push(item.source);
-          evidence.push(item.evidence);
-          accepted += 1;
-        } catch (error) {
-          errors.push({ provider: provider.kind, code: publicErrorCode(error) });
+  try {
+    const providers = [
+      new OfficialDirectProvider("lex", question, locale, boundedFetch, now, wait, signal),
+      new OfficialDirectProvider("advice", question, locale, boundedFetch, now, wait, signal),
+    ] as const;
+    const sourceLimit = Math.max(1, Math.min(options.limit ?? 4, 8));
+    for (const provider of providers) {
+      throwIfRequestAborted(options.signal);
+      if (sources.length >= sourceLimit || budgetController.signal.aborted) break;
+      try {
+        const candidates = await provider.search(question, locale);
+        throwIfRequestAborted(options.signal);
+        let accepted = 0;
+        for (const candidate of candidates) {
+          throwIfRequestAborted(options.signal);
+          if (budgetController.signal.aborted || sources.length >= sourceLimit || accepted >= MAX_SOURCES_PER_PROVIDER) break;
+          try {
+            const item = await provider.fetchDocument(candidate);
+            throwIfRequestAborted(options.signal);
+            if (!isRelevantDirectSource(item.source, question)) continue;
+            sources.push(item.source);
+            evidence.push(item.evidence);
+            accepted += 1;
+          } catch (error) {
+            throwIfRequestAborted(options.signal);
+            errors.push({ provider: provider.kind, code: publicErrorCode(error) });
+          }
         }
+      } catch (error) {
+        throwIfRequestAborted(options.signal);
+        errors.push({ provider: provider.kind, code: publicErrorCode(error) });
       }
-    } catch (error) {
-      errors.push({ provider: provider.kind, code: publicErrorCode(error) });
     }
+  } finally {
+    clearTimeout(budgetTimer);
   }
   const retrievedAt = evidence.map((item) => item.retrievedAt).sort()[0] ?? null;
   const freshness = retrievedAt

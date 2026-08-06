@@ -319,7 +319,7 @@ export async function POST(request: Request): Promise<Response> {
       locale,
     });
     const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
-      ? await retrieveDirectLegalSources(effectiveQuestion, locale, { limit: 4 })
+      ? await retrieveDirectLegalSources(effectiveQuestion, locale, { limit: 4, signal: request.signal })
       : unavailableDirectLegalRetrieval();
     const requestHash = await sha256Json({
       question: effectiveQuestion,
