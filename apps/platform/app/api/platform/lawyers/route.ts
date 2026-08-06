@@ -13,10 +13,8 @@ export const GET = withApiErrors(async function GET() {
        consultation_formats_json AS consultationFormatsJson,
        CASE WHEN profile_photo_key IS NOT NULL THEN '/api/public/lawyers/' || id || '/photo' ELSE NULL END AS profilePhotoUrl
      FROM lawyer_profiles
-     WHERE (status='public_approved' AND public_approved_at IS NOT NULL)
-       OR (marketplace_status='pending_review' AND status='pending')
-     ORDER BY CASE WHEN status='public_approved' AND public_approved_at IS NOT NULL THEN 0 ELSE 1 END,
-       display_name COLLATE NOCASE LIMIT 100`,
+     WHERE status='public_approved' AND public_approved_at IS NOT NULL
+     ORDER BY display_name COLLATE NOCASE LIMIT 100`,
   ).all<{ id: string; displayName: string; specialtiesJson: unknown; languagesJson: unknown; experienceYears: number | null; priceDescription: string | null; availabilityStatus: string; nextAvailableAt: string | null; advocateStatus: string; firmName: string | null; bio: string | null; marketplaceStatus: string; city: string | null; region: string | null; education: string | null; consultationFormatsJson: unknown; profilePhotoUrl: string | null }>();
   const aggregates = await db.prepare(
     `SELECT r.lawyer_profile_id AS lawyerProfileId,

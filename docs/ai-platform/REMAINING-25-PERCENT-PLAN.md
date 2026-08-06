@@ -8,8 +8,9 @@
 3. Completed the Builder → version → export flow with a synthetic authenticated
    staging document. Run the remaining upload → analysis, compare → redline,
    and plan → case flows with synthetic documents.
-4. Re-run lawyer/marketplace/admin/demo-payment critical E2E using existing
-   beta data only; no external user access is required.
+4. Deploy the pending-lawyer-profile visibility correction, then re-run the
+   lawyer/marketplace/admin/demo-payment critical E2E using synthetic or
+   existing beta data only; no external user access is required.
 5. Complete keyboard, reduced-motion, mobile, accessibility and secret-scan
    regressions; document failures rather than converting them into a pass.
 6. Produce a staging readiness report and then request two separate production

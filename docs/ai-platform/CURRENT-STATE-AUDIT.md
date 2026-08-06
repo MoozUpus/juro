@@ -1,7 +1,7 @@
 # Current state audit — direct-source transition
 
-Date: 2026-08-06. Scope: local branch `feature/juro-ai-platform`, configured
-staging, and existing repository evidence. No production mutation was made.
+Date: 2026-08-07. Scope: local branch `feature/juro-ai-platform`, configured
+staging, and current browser evidence. No production mutation was made.
 
 ## Finding
 
@@ -21,12 +21,12 @@ per-run citation metadata and a bounded excerpt.
 
 | Function | Status | Evidence / limitation |
 |---|---|---|
-| AI chat | PARTIAL | Direct retrieval is locally type-checked and contract-tested; staging migration and authenticated smoke pending. |
-| Search and citation validation | PARTIAL | Exact Lex/Advice URLs, bounded fetches and parsed excerpts implemented; no full-page persistence. |
+| AI chat | VERIFIED_WORKING | On 2026-08-07 an authenticated Chrome session completed both a source-backed structured answer and a no-charge clarification where the direct source did not support the requested conclusion. |
+| Search and citation validation | VERIFIED_WORKING | The source panel rendered the direct Advice.uz canonical card `https://advice.uz/ru/document/2620`; exact URLs, bounded fetches and parsed excerpts are used without full-page persistence. |
 | Document builder | VERIFIED_WORKING | Existing staged implementation preserved, untouched by this slice. |
 | Document analysis / comparison | VERIFIED_WORKING | Existing implementation preserved; authenticated regression pending. |
 | Cases / action plan | VERIFIED_WORKING | Direct citations are now included in case aggregation; staging verification pending. |
-| Lawyer consultation / profile / marketplace | PARTIAL | Existing staged flows are outside this direct-source change; full E2E pending. |
+| Lawyer consultation / profile / marketplace | PARTIAL | Profile lifecycle is staged. A local security correction now prevents a pending-review profile or photo from being served publicly; deploy and approved-profile E2E remain pending. |
 | Admin / demo payments | PARTIAL | Existing implementation retained; needs isolated staging E2E. |
 | Cinematic Legal Intelligence | PARTIAL | Existing shell retained; changed AI source UI needs visual/accessibility QA. |
 

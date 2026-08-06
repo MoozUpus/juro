@@ -18,8 +18,8 @@ type Lawyer = {
   advocateStatus: "not_declared" | "declared" | "verified";
   firmName: string | null;
   bio: string | null;
-  marketplaceStatus: "pending_review" | "public_approved";
-  canReceiveRequests: boolean;
+  marketplaceStatus: "public_approved";
+  canReceiveRequests: true;
   city: string | null;
   region: string | null;
   education: string | null;
@@ -71,25 +71,20 @@ export function LawyerDirectoryClient({ locale, accountType, workspaceId }: { lo
         && (!minimumRating || (lawyer.rating.overallAverage ?? 0) >= Number(minimumRating));
     });
   }, [availabilityFilter, lawyers, minimumRating, query, specialty]);
-  const approved = results.filter((lawyer) => lawyer.canReceiveRequests);
-  const pendingReview = results.filter((lawyer) => !lawyer.canReceiveRequests);
-
   function card(lawyer: Lawyer) {
-    const underReview = !lawyer.canReceiveRequests;
     return <article key={lawyer.id} className="lawyer-directory-card">
       <div className="lawyer-directory-card-head"><div className="lawyer-directory-identity">{lawyer.profilePhotoUrl && <Image src={lawyer.profilePhotoUrl} alt="" width={48} height={48} unoptimized />}<div><h2>{lawyer.displayName}</h2><p>{lawyer.firmName || (ru ? "Независимый специалист" : "Mustaqil mutaxassis")}</p></div></div>{lawyer.advocateStatus === "verified" && <span className="lawyer-verified"><ShieldCheck aria-hidden="true" />{ru ? "Проверено JURO" : "JURO tasdiqlagan"}</span>}</div>
-      {underReview && <p className="lawyer-pending-review" role="status">{ru ? "Профиль на проверке JURO · запись пока недоступна" : "Profil JURO tekshiruvida · hozircha so‘rov yuborib bo‘lmaydi"}</p>}
       <p className="lawyer-directory-specialties">{lawyer.specialties.join(" · ") || (ru ? "Специализация уточняется" : "Mutaxassislik aniqlashtirilmoqda")}</p>
       <dl><div><dt>{ru ? "Языки" : "Tillar"}</dt><dd>{lawyer.languages.join(", ") || "—"}</dd></div>{lawyer.city && <div><dt>{ru ? "Город" : "Shahar"}</dt><dd>{[lawyer.city, lawyer.region].filter(Boolean).join(", ")}</dd></div>}<div><dt>{ru ? "Доступность" : "Mavjudlik"}</dt><dd>{availability[lawyer.availabilityStatus][ru ? 0 : 1]}</dd></div>{lawyer.experienceYears !== null && <div><dt>{ru ? "Опыт" : "Tajriba"}</dt><dd>{ru ? `${lawyer.experienceYears} лет` : `${lawyer.experienceYears} yil`}</dd></div>}{lawyer.priceDescription && <div><dt>{ru ? "Цена" : "Narx"}</dt><dd>{lawyer.priceDescription}</dd></div>}</dl>
       <p className="lawyer-rating"><Star aria-hidden="true" />{lawyer.rating.reviewCount && lawyer.rating.overallAverage !== null ? `${lawyer.rating.overallAverage.toFixed(1)}/5 · ${lawyer.rating.reviewCount}` : (ru ? "Нет одобренных отзывов" : "Tasdiqlangan fikrlar yo‘q")}</p>
-      <div className="lawyer-directory-actions"><Link href={`${base}/lawyers/${encodeURIComponent(lawyer.id)}`}>{ru ? "Профиль" : "Profil"}</Link>{underReview ? <span aria-disabled="true">{ru ? "Запись после проверки" : "Tekshiruvdan keyin"}</span> : <Link className="primary" href={`${base}/consultations?lawyer=${encodeURIComponent(lawyer.id)}`}>{ru ? "Выбрать для заявки" : "So‘rov uchun tanlash"}</Link>}</div>
+      <div className="lawyer-directory-actions"><Link href={`${base}/lawyers/${encodeURIComponent(lawyer.id)}`}>{ru ? "Профиль" : "Profil"}</Link><Link className="primary" href={`${base}/consultations?lawyer=${encodeURIComponent(lawyer.id)}`}>{ru ? "Выбрать для заявки" : "So‘rov uchun tanlash"}</Link></div>
     </article>;
   }
 
   return <section className="lawyer-directory" aria-labelledby="lawyer-directory-heading">
     <header className="lawyer-directory-hero">
       <Scale aria-hidden="true" />
-      <div><span>JURO · MARKETPLACE</span><h1 id="lawyer-directory-heading">{ru ? "Юристы и адвокаты" : "Yuristlar va advokatlar"}</h1><p>{ru ? "Одобренные профили доступны для заявки. Полные профили на проверке показаны отдельно и не принимают записи. Передача материалов дела всегда требует вашего подтверждения." : "Tasdiqlangan profillarga so‘rov yuborish mumkin. To‘liq tekshiruvdagi profillar alohida ko‘rsatiladi va so‘rov qabul qilmaydi. Ish materiallarini topshirish doimo sizning tasdig‘ingizni talab qiladi."}</p></div>
+      <div><span>JURO · MARKETPLACE</span><h1 id="lawyer-directory-heading">{ru ? "Юристы и адвокаты" : "Yuristlar va advokatlar"}</h1><p>{ru ? "Для заявки доступны только профили, отдельно одобренные JURO. Передача материалов дела всегда требует вашего подтверждения." : "So‘rov uchun faqat JURO alohida tasdiqlagan profillar mavjud. Ish materiallarini topshirish doimo sizning tasdig‘ingizni talab qiladi."}</p></div>
     </header>
 
     <form className="lawyer-directory-controls" onSubmit={(event) => event.preventDefault()} aria-label={ru ? "Фильтры каталога" : "Katalog filtrlari"}>
@@ -103,7 +98,6 @@ export function LawyerDirectoryClient({ locale, accountType, workspaceId }: { lo
     {error && <p className="lawyer-directory-state error" role="alert"><CircleAlert aria-hidden="true" />{ru ? "Каталог временно недоступен. Попробуйте обновить страницу." : "Katalog vaqtincha mavjud emas. Sahifani yangilang."}</p>}
     {!loading && !error && <p className="lawyer-directory-count" role="status">{ru ? `Найдено специалистов: ${results.length}` : `Topilgan mutaxassislar: ${results.length}`}</p>}
     {!loading && !error && results.length === 0 && <section className="lawyer-directory-empty"><UserRoundCheck aria-hidden="true" /><h2>{ru ? "Пока нет подходящих профилей" : "Hozircha mos profillar yo‘q"}</h2><p>{ru ? "Измените фильтры или создайте заявку — JURO сможет подобрать специалиста после проверки конфликта интересов." : "Filtrlarni o‘zgartiring yoki so‘rov yarating — JURO manfaatlar to‘qnashuvini tekshirgandan keyin mutaxassis tanlay oladi."}</p><Link href={`${base}/consultations`} className="lawyer-directory-link">{ru ? "Создать заявку" : "So‘rov yaratish"}</Link></section>}
-    <div className="lawyer-directory-grid">{approved.map(card)}</div>
-    {pendingReview.length > 0 && <section className="lawyer-directory-pending" aria-labelledby="lawyer-directory-pending-heading"><h2 id="lawyer-directory-pending-heading">{ru ? "Профили на проверке JURO" : "JURO tekshiruvidagi profillar"}</h2><p>{ru ? "Эти специалисты завершили профиль, но ещё не одобрены для приёма заявок." : "Bu mutaxassislar profilini to‘ldirgan, biroq so‘rov qabul qilish uchun hali tasdiqlanmagan."}</p><div className="lawyer-directory-grid">{pendingReview.map(card)}</div></section>}
+    <div className="lawyer-directory-grid">{results.map(card)}</div>
   </section>;
 }

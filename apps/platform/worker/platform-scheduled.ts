@@ -311,12 +311,12 @@ export async function handleScheduled(
     const taskReminders = await enqueueDueTaskReminders(env, now);
     failureCode = "LEGAL_CORPUS_RETRY_RECOVERY_FAILED";
     const corpusRetriesRecovered =
-      env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
         ? await recoverStaleScheduledCorpusFetchRequests(env, { now: new Date(now) })
         : 0;
     failureCode = "LEGAL_CORPUS_PDF_NORMALIZATION_RECOVERY_FAILED";
     const lexPdfNormalizationsEnqueued =
-      env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
         ? await enqueueLexPdfNormalizationRecovery(env, { now: new Date(now) })
         : 0;
     failureCode = "OUTBOX_DISPATCH_FAILED";
@@ -364,11 +364,11 @@ export async function handleScheduled(
     }
     failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
     const corpusRunsCompleted =
-      env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
         ? await reconcileScheduledCorpusSyncRuns(env)
         : 0;
     failureCode = "LEGAL_CORPUS_ALERT_EVALUATION_FAILED";
-    const corpusAlerts = env.LEGAL_ADVICE_INGESTION_ENABLED === "true"
+    const corpusAlerts = (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
       ? await evaluateLegalCorpusAlerts(env, { now: new Date(now) })
       : { created: 0, failedRuns: 0, staleSources: 0 };
     failureCode = "SCHEDULE_COMPLETION_FAILED";

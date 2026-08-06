@@ -30,6 +30,13 @@ type ProfileForPhoto = {
   hasPhone: number;
 };
 
+type StoredProfilePhoto = {
+  profilePhotoKey: string;
+  profilePhotoMime: "image/jpeg" | "image/png" | "image/webp";
+  profilePhotoSha256: string | null;
+  profilePhotoSizeBytes: number | null;
+};
+
 function response(body: unknown, status = 200) {
   return Response.json(body, {
     status,
@@ -127,6 +134,42 @@ async function ownProfile(userId: string): Promise<ProfileForPhoto | null> {
      WHERE p.user_id=? AND u.account_type='lawyer' LIMIT 1`,
   ).bind(userId).first<ProfileForPhoto>();
 }
+
+/**
+ * The review state is private. The public image route deliberately serves only
+ * approved marketplace profiles, while the professional can still preview the
+ * image they uploaded in their own authenticated settings.
+ */
+export const GET = withApiErrors(async function GET() {
+  if (!isLawyerProfileDirectoryPreviewEnabled(runtimeEnv())) {
+    return response({ code: "NOT_AVAILABLE" }, 404);
+  }
+  const user = await requireApiUser();
+  const photo = await requireD1().prepare(
+    `SELECT profile_photo_key AS profilePhotoKey,profile_photo_mime AS profilePhotoMime,
+      profile_photo_sha256 AS profilePhotoSha256,profile_photo_size_bytes AS profilePhotoSizeBytes
+     FROM lawyer_profiles
+     WHERE user_id=?
+       AND profile_photo_key IS NOT NULL
+       AND profile_photo_mime IN ('image/jpeg','image/png','image/webp')
+     LIMIT 1`,
+  ).bind(user.id).first<StoredProfilePhoto>();
+  if (!photo) return response({ code: "PROFILE_PHOTO_UNAVAILABLE" }, 404);
+
+  const object = await requireR2().get(photo.profilePhotoKey);
+  if (!object || object.size !== photo.profilePhotoSizeBytes) {
+    return response({ code: "PROFILE_PHOTO_UNAVAILABLE" }, 404);
+  }
+  return new Response(object.body, {
+    headers: {
+      "content-type": photo.profilePhotoMime,
+      "cache-control": "private, no-store",
+      pragma: "no-cache",
+      "x-content-type-options": "nosniff",
+      etag: photo.profilePhotoSha256 ? `\"${photo.profilePhotoSha256}\"` : object.httpEtag,
+    },
+  });
+});
 
 export const POST = withApiErrors(async function POST(request: Request) {
   if (!isLawyerProfileDirectoryPreviewEnabled(runtimeEnv())) {
@@ -255,6 +298,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ok: true,
     marketplaceStatus,
     missingRequiredFields,
-    profilePhotoUrl: `/api/public/lawyers/${encodeURIComponent(profile.id)}/photo`,
+    profilePhotoUrl: "/api/platform/lawyer-profile/photo",
   }, 201);
 });

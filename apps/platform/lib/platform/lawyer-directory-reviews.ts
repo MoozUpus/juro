@@ -64,7 +64,9 @@ export function projectPublicLawyerDirectory(
     list.push(review);
     reviewsByLawyer.set(review.lawyerProfileId, list);
   }
-  return lawyers.map((lawyer) => {
+  return lawyers
+    .filter((lawyer) => lawyer.marketplaceStatus === undefined || lawyer.marketplaceStatus === "public_approved")
+    .map((lawyer) => {
     const aggregate = aggregateByLawyer.get(lawyer.id);
     const hasMarketplaceProjection = lawyer.marketplaceStatus !== undefined
       || lawyer.city !== undefined
@@ -85,10 +87,8 @@ export function projectPublicLawyerDirectory(
       firmName: lawyer.firmName,
       bio: lawyer.bio,
       ...(hasMarketplaceProjection ? {
-        marketplaceStatus: lawyer.marketplaceStatus === "pending_review"
-          ? "pending_review"
-          : "public_approved",
-        canReceiveRequests: lawyer.marketplaceStatus !== "pending_review",
+        marketplaceStatus: "public_approved",
+        canReceiveRequests: true,
         city: lawyer.city ?? null,
         region: lawyer.region ?? null,
         education: lawyer.education ?? null,
@@ -110,5 +110,5 @@ export function projectPublicLawyerDirectory(
         reply: review.replyBody ? { body: review.replyBody, createdAt: review.replyCreatedAt } : null,
       })),
     };
-  });
+    });
 }

@@ -50,3 +50,15 @@ test("profile photos remain fail-closed until the malware scanner verifies their
   assert.match(route, /parsed\.data\.sourceSha256 !== checksum/);
   assert.ok(route.indexOf("const scanVerdict") < route.indexOf("const objectKey"));
 });
+
+test("a profile under review cannot expose its photo or appear in the request directory", () => {
+  const publicPhotoRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/photo/route.ts", import.meta.url), "utf8");
+  const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
+  const privatePhotoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
+  assert.match(publicPhotoRoute, /status='public_approved'/);
+  assert.doesNotMatch(publicPhotoRoute, /marketplace_status='pending_review'/);
+  assert.match(directoryRoute, /WHERE status='public_approved' AND public_approved_at IS NOT NULL/);
+  assert.doesNotMatch(directoryRoute, /marketplace_status='pending_review'/);
+  assert.match(privatePhotoRoute, /export const GET/);
+  assert.match(privatePhotoRoute, /WHERE user_id=\?/);
+});

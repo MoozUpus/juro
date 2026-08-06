@@ -133,7 +133,7 @@ function serialize(profile: LawyerProfile) {
     consultationFormats: list(profile.consultationFormatsJson),
     hasPhone: profile.hasPhone === 1,
     profilePhotoUrl: profile.profilePhotoKey
-      ? `/api/public/lawyers/${encodeURIComponent(profile.id)}/photo`
+      ? "/api/platform/lawyer-profile/photo"
       : null,
     missingRequiredFields: missingLawyerMarketplaceFields(required),
     profileRevision: profile.profileRevision,
