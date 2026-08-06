@@ -55,6 +55,23 @@ reported 30/30 successful tests, including canonical document-builder routes,
 private route cache and CSRF controls, legacy redirects, security headers,
 robots/noindex policy and the production-artifact prototype guard.
 
+## Responsive smoke
+
+With an authenticated staging browser session, selected core routes were also
+checked at `390×844`, `360×800` and `768×1024`:
+
+- UZ case sources at `390×844` retained both direct-citation cards with no
+  horizontal overflow;
+- RU document builder at `390×844` retained its localized library heading with
+  no horizontal overflow;
+- UZ AI entry at `360×800` rendered the active conversation surface with no
+  horizontal overflow;
+- UZ dashboard at `768×1024` rendered its main heading with no horizontal
+  overflow.
+
+The browser console contained no errors across this responsive pass. The
+temporary viewport override was reset after the test.
+
 ## Limits of this pass
 
 - The plan-save flow no longer relies on browser-native `window.confirm`.
@@ -67,7 +84,8 @@ robots/noindex policy and the production-artifact prototype guard.
   immutable action-plan event relation. Both statements reported
   `rows_written = 0`; no content rows or user data were exported.
 - Mobile-device, full keyboard matrix, screen-reader and Core Web Vitals
-  measurements remain final release gates. No performance claim is made here.
+  measurements remain final release gates. This is a targeted responsive
+  smoke, not a claim that the complete device or performance matrix passed.
 
 ## Boundaries
 
