@@ -244,8 +244,13 @@ export async function runStagingDocumentAnalysisProbe(
     const processorCode = error instanceof DocumentAnalysisProcessingError
       ? error.code
       : null;
-    const errorCode = stage === "analysis" && processorCode
-      ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorCode}`
+    const processorStage = error instanceof DocumentAnalysisProcessingError
+      ? error.diagnosticStage
+      : null;
+    const errorCode = stage === "analysis" && processorCode && processorStage
+      ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorStage.toUpperCase()}_${processorCode}`
+      : stage === "analysis" && processorCode
+        ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorCode}`
       : `DOCUMENT_ANALYSIS_PROBE_${stage.toUpperCase()}_FAILED`;
     console.error(JSON.stringify({ event: "staging.document_analysis_probe_failed", stage, errorCode }));
     return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode };

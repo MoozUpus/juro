@@ -106,11 +106,23 @@ export class DocumentAnalysisProcessingError extends Error {
       | "DOCUMENT_ANALYSIS_INVALID_OUTPUT"
       | "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED",
     readonly retryable: boolean,
+    readonly diagnosticStage?: DocumentAnalysisDiagnosticStage,
   ) {
     super(code);
     this.name = "DocumentAnalysisProcessingError";
   }
 }
+
+export type DocumentAnalysisDiagnosticStage =
+  | "integrity"
+  | "ocr"
+  | "object"
+  | "extract"
+  | "version"
+  | "retrieval"
+  | "runtime"
+  | "provider"
+  | "validation";
 
 export type DocumentAnalysisProcessorDependencies = {
   extract: (input: {
@@ -206,11 +218,13 @@ async function analyzeObject(
   row: AnalysisRow,
   deps: DocumentAnalysisProcessorDependencies,
 ): Promise<PersistedAnalysis> {
+  let diagnosticStage: DocumentAnalysisDiagnosticStage = "integrity";
   try {
     if (!row.sha256 || !/^[a-f0-9]{64}$/i.test(row.sha256)) {
       await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INTEGRITY_FAILED");
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_INTEGRITY_FAILED", false);
     }
+    diagnosticStage = "ocr";
     let extracted = await loadCompletedOcrExtraction(env, {
       analysisId: row.analysisId,
       workspaceId: row.workspaceId,
@@ -232,6 +246,7 @@ async function analyzeObject(
         });
         throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_OCR_REQUIRED", false);
       }
+      diagnosticStage = "object";
       const object = await env.BUCKET.get(row.r2Key);
       if (!object) {
         throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_OBJECT_MISSING", false);
@@ -242,6 +257,7 @@ async function analyzeObject(
         throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_INTEGRITY_FAILED", false);
       }
       try {
+        diagnosticStage = "extract";
         extracted = await deps.extract({
           bytes,
           fileName: row.fileName,
@@ -279,6 +295,7 @@ async function analyzeObject(
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
     }
 
+    diagnosticStage = "version";
     await storeInitialAnalysisDocumentVersion(env, {
       analysisId: row.analysisId,
       workspaceId: row.workspaceId,
@@ -287,8 +304,10 @@ async function analyzeObject(
       text: extracted.text,
     });
 
+    diagnosticStage = "retrieval";
     const request = parseRequestMetadata(row.summaryJson);
     const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8, { semantic: env });
+    diagnosticStage = "runtime";
     const providerEnvironment = parseProviderEnvironment(env.APP_ENV);
     const runtimeSettings = await resolveAiRuntimeSettings({ db: env.DB, env });
     const providerCalls: Array<{
@@ -298,6 +317,7 @@ async function analyzeObject(
     }> = [];
     let ai: AiStructuredResult<DocumentAnalysisResult>;
     try {
+      diagnosticStage = "provider";
       ai = await deps.analyze({
         fileName: row.fileName,
         mimeType: row.mimeType,
@@ -406,6 +426,7 @@ async function analyzeObject(
     const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
     let boundedResult: DocumentAnalysisResult;
     try {
+      diagnosticStage = "validation";
       const validatedResult = enforceDocumentExcerptBoundary(
         enforceDocumentAnalysisSourceBoundary(
           documentAnalysisResultSchema.parse(ai.data),
@@ -485,10 +506,14 @@ async function analyzeObject(
         ? "awaiting_ai_configuration"
         : error.retryable ? "retrying" : "failed";
       await setAnalysisState(env.DB, row, status, code);
-      throw new DocumentAnalysisProcessingError(code, error.retryable);
+      throw new DocumentAnalysisProcessingError(code, error.retryable, "provider");
     }
     await setAnalysisState(env.DB, row, "retrying", "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE");
-    throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE", true);
+    throw new DocumentAnalysisProcessingError(
+      "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE",
+      true,
+      diagnosticStage,
+    );
   }
 }
 
