@@ -19,6 +19,20 @@ method, legal outcome, customer document, or provider credential was used.
 The controlled browser tab reported no console errors or warnings after the
 completed demo-payment flow.
 
+## Regression commands after the browser run
+
+| Command | Result |
+|---|---|
+| `npm run type-check` | passed |
+| `npm run lint` | passed |
+| Targeted Node test set for analysis, comparison, action plan, checkout and reviewer protection | 92 passed, 0 failed |
+| `npm run test:rendered` | 30 passed, 0 failed |
+| `CLOUDFLARE_ENV=staging npm run validate:artifact` | passed: bindings, migrations, manifest and Worker handlers consistent |
+
+The artifact validator intentionally defaults to `development`; its initial
+environment mismatch was rerun with the explicit staging target above. No
+source, binding, migration or deployed artifact was changed by that check.
+
 ## Verified negative / safety states
 
 - The lawyer marketplace returned zero available specialists instead of showing a
