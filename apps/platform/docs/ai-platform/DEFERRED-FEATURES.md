@@ -1,12 +1,14 @@
 # JURO deferred and gated features
 
 > **Authoritative remote state — 2026-08-06.** Protected staging is Worker
-> `juro-platform-staging` version `2642eb90-77d8-41da-9449-bba10cf49ec0` at
+> `juro-platform-staging` version `9fe76749-0d69-41a8-aa3d-cf16d67e40a6` at
 > 100% traffic (read back with `wrangler deployments list --env staging`);
 > `juro-staging` has D1 migration ledger row 106
 > (`0105_d1_builder_version_hash_guards.sql`). Older local-only and earlier
 > staging checkpoint labels below are historical and do not reopen a feature
-> or downgrade the active schema. The remaining items in this register remain
+> or downgrade the active schema. Migrations `0084` through `0092` are also
+> present in the remote ledger (rows 85 through 93). The remaining items in
+> this register remain
 > release gates until their stated evidence exists.
 
 > **Migration-ledger clarification — 2026-08-06.** A direct read-only query
@@ -111,47 +113,43 @@ Staging behavior is not marked complete until migration `0030`–`0033`, exact W
 
 ## Operational feature-control gate
 
-The `0084` operational feature history, server guards and fresh-MFA RU/UZ console are local-only. They are not an active staging kill switch until a fresh private backup/restore, ordered migration, exact Worker deployment and authenticated disable/re-enable rehearsal prove that covered provider, usage, R2, queue and request writes remain absent while disabled. Production feature control remains unchanged.
+The `0084` operational feature history, server guards and fresh-MFA RU/UZ console are deployed to protected staging. They are not yet counted as an active staging kill switch: an authenticated disable/re-enable rehearsal must prove that covered provider, usage, R2, queue and request writes remain absent while disabled. Production feature control remains unchanged.
 
 ## Operational job-redrive gate
 
 Migration `0085`, `/:locale/admin/jobs` and `/api/platform/admin/jobs` are
-local-only. Do not use direct D1 updates as a substitute. Staging activation
-requires a new private export with isolated restore verification, ordered
-`0079`–`0085` migration application, exact Worker deployment and a controlled
-recoverable identifiers-only job. Evidence must prove one resulting effect,
-unchanged idempotency, immutable redrive history, valid ledger reconciliation,
-expected Queue/DLQ behavior and operator alerting. Production remains unchanged.
+deployed to protected staging. Do not use direct D1 updates as a substitute.
+The release gate still requires a controlled recoverable identifiers-only job.
+Evidence must prove one resulting effect, unchanged idempotency, immutable
+redrive history, valid ledger reconciliation, expected Queue/DLQ behavior and
+operator alerting. Production remains unchanged.
 
 ## Platform audit-log gate
 
 Migration `0086`, `/:locale/admin/audit-log` and the POST-only
-`/api/platform/admin/audit-log` endpoint are local-only. Staging activation
-requires a fresh private D1 export with isolated restore verification, ordered
-application through `0086`, exact Worker deployment and an authenticated
-administrator rehearsal for query, filter and CSV export. Evidence must confirm
-fresh-MFA denial, support-role denial, access-event chain integrity and absence
-of user/provider content in responses and downloads. The console does not make
-the older `workspace_audit_events` table globally tamper-evident; it only gives
-tamper-evident evidence of who accessed the safe projection.
+`/api/platform/admin/audit-log` endpoint are deployed to protected staging. An
+authenticated administrator rehearsal for query, filter and CSV export remains
+required. Evidence must confirm fresh-MFA denial, support-role denial,
+access-event chain integrity and absence of user/provider content in responses
+and downloads. The console does not make the older `workspace_audit_events`
+table globally tamper-evident; it only gives tamper-evident evidence of who
+accessed the safe projection.
 
 ## AI quality-review staging gate
 
-Migration `0087`, `/:locale/admin/ai-quality` and its POST-only API are local.
-Activation requires a fresh private D1 export and isolated restore, ordered
-application of every pending migration through `0087`, exact Worker deployment,
-and authenticated legal-reviewer rehearsal of query, explicit content view and
-versioned resolve. Negative evidence must cover administrator/support denial,
-expired MFA, stale feedback, chain tampering and absence of question/answer text
-from queue responses. Human legal validation of golden answers remains a product
-process; the presence of a stored review is not a legal-quality metric by itself.
+Migration `0087`, `/:locale/admin/ai-quality` and its POST-only API are deployed
+to protected staging. An authenticated legal-reviewer rehearsal of query,
+explicit content view and versioned resolve remains required. Negative evidence
+must cover administrator/support denial, expired MFA, stale feedback, chain
+tampering and absence of question/answer text from queue responses. Human legal
+validation of golden answers remains a product process; the presence of a stored
+review is not a legal-quality metric by itself.
 
 ## Document evaluation staging gate
 
-Migration `0092` and `POST /api/platform/admin/document-evaluation` are local.
-Activation requires a fresh private `juro-staging` backup with isolated restore,
-ordered migration application, exact Worker deployment and authenticated
-legal-reviewer probes. The actual gate additionally requires all 100
-materialized packages, 30 comparisons, real OCR and provider runs, named review
-and threshold remediation. Until then no document
-quality metric is claimed and the feature remains outside production readiness.
+Migration `0092` and `POST /api/platform/admin/document-evaluation` are
+deployed to protected staging. Authenticated legal-reviewer probes remain
+required. The actual gate additionally requires all 100 materialized packages,
+30 comparisons, real OCR and provider runs, named review and threshold
+remediation. Until then no document quality metric is claimed and the feature
+remains outside production readiness.
