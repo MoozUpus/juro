@@ -61,12 +61,11 @@ robots/noindex policy and the production-artifact prototype guard.
   It uses an explicit in-app confirmation group that is covered by the
   authenticated browser smoke above and keeps the existing server-side
   idempotent persistence contract.
-- The current Wrangler OAuth identity can read and deploy the worker, but its
-  Cloudflare API request to the configured remote `juro-staging` D1 database
-  was rejected with code `7403`. No data was read or changed. Browser staging
-  Access remains authenticated; an owner of the Cloudflare account that owns
-  the database must refresh/authorize the control-plane OAuth session before
-  a direct D1 evidence query can be repeated.
+- The refreshed Wrangler OAuth access completed read-only remote D1 checks:
+  the configured `juro-staging` database exposed its `cases` table, and the
+  exact saved synthetic case returned `direct_citation_count = 2` through the
+  immutable action-plan event relation. Both statements reported
+  `rows_written = 0`; no content rows or user data were exported.
 - Mobile-device, full keyboard matrix, screen-reader and Core Web Vitals
   measurements remain final release gates. No performance claim is made here.
 
