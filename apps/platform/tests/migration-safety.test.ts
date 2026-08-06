@@ -69,6 +69,7 @@ const legalSourceApplicabilityEntry = journal.entries.find(({ idx }) => idx === 
 const verifiedCorpusFreshnessEntry = journal.entries.find(({ idx }) => idx === 91);
 const documentEvaluationReviewsEntry = journal.entries.find(({ idx }) => idx === 92);
 const caseLifecycleEvidenceEntry = journal.entries.find(({ idx }) => idx === 93);
+const caseLifecycleHashGuardEntry = journal.entries.find(({ idx }) => idx === 104);
 assert.ok(phaseOneEntry, "Drizzle journal must contain migration 0011");
 assert.ok(phaseTwoEntry, "Drizzle journal must contain migration 0012");
 assert.ok(sessionSecurityEntry, "Drizzle journal must contain migration 0013");
@@ -183,6 +184,10 @@ assert.ok(
 assert.ok(
   caseLifecycleEvidenceEntry,
   "Drizzle journal must contain migration 0093",
+);
+assert.ok(
+  caseLifecycleHashGuardEntry,
+  "Drizzle journal must contain migration 0104",
 );
 
 

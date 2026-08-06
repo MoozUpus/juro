@@ -729,6 +729,13 @@
       "when": 1786039200000,
       "tag": "0103_d1_completed_result_hash_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1786042800000,
+      "tag": "0104_d1_case_lifecycle_hash_guard",
+      "breakpoints": true
     }
   ]
 }
