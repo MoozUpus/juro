@@ -103,6 +103,10 @@ const labels = {
     syncPlaceholder: "https://advice.uz/ru/documents/1744",
     syncSubmit: "Поставить в очередь",
     syncQueued: "Запрос поставлен в очередь. После загрузки снимок появится на ручной проверке.",
+    selectPage: "Выбрать доступные на странице", selected: "Выбрано", bulkApprove: "Одобрить выбранные",
+    bulkTitle: "Массовое одобрение", bulkHint: "Решение будет записано отдельно для каждого снимка. Публикация останется отдельным действием.",
+    bulkConfirm: "Подтвердить одобрение", bulkCancel: "Отмена",
+    bulkDone: "Массовая проверка завершена", bulkSkipped: "пропущено из-за изменения состояния",
     error: "Не удалось выполнить запрос.", count: "заданий",
   },
   uz: {
@@ -138,6 +142,10 @@ const labels = {
     syncPlaceholder: "https://advice.uz/oz/documents/624",
     syncSubmit: "Navbatga qo‘yish",
     syncQueued: "So‘rov navbatga qo‘yildi. Yuklangach, nusxa qo‘lda tekshirish uchun paydo bo‘ladi.",
+    selectPage: "Sahifadagi mavjudlarini tanlash", selected: "Tanlandi", bulkApprove: "Tanlanganlarni tasdiqlash",
+    bulkTitle: "Ommaviy tasdiqlash", bulkHint: "Qaror har bir nusxa uchun alohida qayd etiladi. Nashr qilish alohida amal bo‘lib qoladi.",
+    bulkConfirm: "Tasdiqlash", bulkCancel: "Bekor qilish",
+    bulkDone: "Ommaviy tekshiruv yakunlandi", bulkSkipped: "holat o‘zgargani uchun o‘tkazib yuborildi",
     error: "So‘rovni bajarib bo‘lmadi.", count: "topshiriq",
   },
 } as const;
@@ -176,7 +184,13 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
   const [syncUrl, setSyncUrl] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState("");
+  const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(new Set());
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkNotes, setBulkNotes] = useState("");
+  const [bulkEffectiveDate, setBulkEffectiveDate] = useState("");
+  const [bulkExpiresDate, setBulkExpiresDate] = useState("");
   const requestSequence = useRef(0);
+  const bulkDialogRef = useRef<HTMLDialogElement>(null);
 
   const query = useMemo(() => new URLSearchParams({
     lang: locale, status, scope, sourceKind, language, limit: "25",
@@ -209,6 +223,70 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    const dialog = bulkDialogRef.current;
+    if (!dialog) return;
+    if (bulkOpen && !dialog.open) dialog.showModal();
+    if (!bulkOpen && dialog.open) dialog.close();
+  }, [bulkOpen]);
+
+  const eligibleItems = useMemo(
+    () => items.filter((item) => item.status === "pending" && item.parsedSnapshotReady),
+    [items],
+  );
+  const eligibleReviewIds = useMemo(
+    () => new Set(eligibleItems.map((item) => item.reviewId)),
+    [eligibleItems],
+  );
+  const selectedEligibleReviewIds = useMemo(
+    () => new Set([...selectedReviewIds].filter((id) => eligibleReviewIds.has(id))),
+    [eligibleReviewIds, selectedReviewIds],
+  );
+  const allEligibleSelected = eligibleItems.length > 0
+    && eligibleItems.every((item) => selectedEligibleReviewIds.has(item.reviewId));
+
+  const toggleSelection = (reviewId: string) => {
+    setSelectedReviewIds((current) => {
+      const next = new Set(current);
+      if (next.has(reviewId)) next.delete(reviewId); else next.add(reviewId);
+      return next;
+    });
+  };
+
+  const togglePageSelection = () => {
+    setSelectedReviewIds(allEligibleSelected
+      ? new Set()
+      : new Set(eligibleItems.map((item) => item.reviewId)));
+  };
+
+  const bulkApprove = async () => {
+    if (selectedEligibleReviewIds.size === 0 || bulkNotes.trim().length < 10 || !bulkEffectiveDate) return;
+    setBusy("bulk");
+    setError("");
+    try {
+      const response = await fetch(`/api/platform/legal-sources/reviews/bulk-approval?lang=${locale}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({
+          items: [...selectedEligibleReviewIds].map((reviewId) => ({ reviewId })),
+          notes: bulkNotes.trim(),
+          effectiveDate: bulkEffectiveDate,
+          expiresDate: bulkExpiresDate || undefined,
+        }),
+      });
+      const body = await responseJson<{ ok: true; summary: { approved: number; skipped: number } }>(response);
+      setAnnouncement(`${l.bulkDone}: ${body.summary.approved}; ${l.bulkSkipped}: ${body.summary.skipped}.`);
+      setBulkOpen(false);
+      setSelectedReviewIds(new Set());
+      setBulkNotes("");
+      setBulkEffectiveDate("");
+      setBulkExpiresDate("");
+      await load();
+    } catch (value) {
+      setError(value instanceof Error ? value.message : l.error);
+    } finally { setBusy(""); }
+  };
 
   const claim = async (item: ReviewItem) => {
     setBusy(item.reviewId);
@@ -407,6 +485,21 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
           <label>{l.language}<select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">{l.allLanguages}</option><option value="ru">Русский</option><option value="uz">O‘zbekcha</option></select></label>
         </section>
         <div className="staff-count">{items.length} {l.count}</div>
+        {status === "pending" && eligibleItems.length > 0 && <section className="staff-bulk-toolbar" aria-label={l.bulkTitle}>
+          <label><input type="checkbox" checked={allEligibleSelected} onChange={togglePageSelection}/>{l.selectPage}</label>
+          <span>{l.selected}: <b>{selectedEligibleReviewIds.size}</b></span>
+          <button type="button" disabled={selectedEligibleReviewIds.size === 0 || busy !== ""} onClick={() => setBulkOpen(true)}><Check aria-hidden="true"/>{l.bulkApprove}</button>
+        </section>}
+        <dialog ref={bulkDialogRef} className="staff-bulk-confirm" aria-labelledby="bulk-title" onClose={() => setBulkOpen(false)}>
+          <h2 id="bulk-title">{l.bulkTitle}: {selectedEligibleReviewIds.size}</h2>
+          <p>{l.bulkHint}</p>
+          <div className="staff-applicability-dates">
+            <label>{l.effectiveDate}<input type="date" required value={bulkEffectiveDate} onChange={(event) => setBulkEffectiveDate(event.target.value)}/></label>
+            <label>{l.expiresDate}<input type="date" min={bulkEffectiveDate || undefined} value={bulkExpiresDate} onChange={(event) => setBulkExpiresDate(event.target.value)}/></label>
+          </div>
+          <label>{l.notes}<textarea autoFocus value={bulkNotes} onChange={(event) => setBulkNotes(event.target.value)} maxLength={2000} rows={4}/></label>
+          <div><button type="button" onClick={() => setBulkOpen(false)} disabled={busy !== ""}>{l.bulkCancel}</button><button type="button" className="staff-approve" disabled={busy !== "" || bulkNotes.trim().length < 10 || !bulkEffectiveDate || Boolean(bulkExpiresDate && bulkExpiresDate <= bulkEffectiveDate)} onClick={() => void bulkApprove()}>{busy === "bulk" ? <LoaderCircle className="is-spinning" aria-hidden="true"/> : <Check aria-hidden="true"/>}{l.bulkConfirm}: {selectedEligibleReviewIds.size}</button></div>
+        </dialog>
         {withdrawing && <section className="staff-withdrawal" aria-labelledby="withdrawal-title">
           <div><ArchiveX aria-hidden="true"/><div><h2 id="withdrawal-title">{l.withdrawalTitle}</h2><p>{l.withdrawalHint}</p><b>{withdrawing.title}</b></div></div>
           <label>{l.withdrawalNotes}<textarea value={withdrawalNotes} onChange={(event) => setWithdrawalNotes(event.target.value)} minLength={10} maxLength={2000} rows={4}/></label>
@@ -416,8 +509,9 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
         <section className="staff-queue" aria-busy={loading} aria-labelledby="queue-caption">
           <h2 id="queue-caption" className="sr-only">{l.title}</h2>
           <div className="staff-table" role="table">
-            <div className="staff-table-head" role="row"><span role="columnheader">{l.sourceCol}</span><span role="columnheader">{l.reasonCol}</span><span role="columnheader">{l.stateCol}</span><span role="columnheader">{l.receivedCol}</span><span role="columnheader">{l.actionCol}</span></div>
-            {loading && items.length === 0 ? Array.from({ length: 5 }, (_, index) => <div className="staff-skeleton" role="row" key={index}><i/><i/><i/><i/><i/></div>) : items.map((item) => <div className="staff-table-row" role="row" key={item.reviewId}>
+            <div className="staff-table-head" role="row"><span role="columnheader" aria-label={l.selected}/><span role="columnheader">{l.sourceCol}</span><span role="columnheader">{l.reasonCol}</span><span role="columnheader">{l.stateCol}</span><span role="columnheader">{l.receivedCol}</span><span role="columnheader">{l.actionCol}</span></div>
+            {loading && items.length === 0 ? Array.from({ length: 5 }, (_, index) => <div className="staff-skeleton" role="row" key={index}><i/><i/><i/><i/><i/><i/></div>) : items.map((item) => <div className="staff-table-row" role="row" key={item.reviewId}>
+              <div role="cell" className="staff-select-cell">{item.status === "pending" && item.parsedSnapshotReady && <input type="checkbox" aria-label={`${l.selected}: ${item.title}`} checked={selectedEligibleReviewIds.has(item.reviewId)} onChange={() => toggleSelection(item.reviewId)}/>}</div>
               <div role="cell" data-label={l.sourceCol} className="staff-source"><span>{item.sourceKind.toUpperCase()} · {item.language.toUpperCase()}</span><b>{item.title}</b><small>{item.actIdentifier || item.canonicalId || item.sourceId}</small></div>
               <div role="cell" data-label={l.reasonCol}><code>{item.reasonCode}</code><small className={`confidence-${item.confidence}`}>{item.confidence}</small></div>
               <div role="cell" data-label={l.stateCol}><span className={`staff-status status-${item.status}`}>{statusLabel(item.status, locale)}</span>{item.versionStatus === "verified" && <small className="staff-verified"><FileCheck2 aria-hidden="true"/>{l.published}</small>}</div>
