@@ -17,6 +17,7 @@ import { normalizeLegalSourceHtml } from "./source-parser";
  */
 const SEARCH_TIMEOUT_MS = 10_000;
 const SEARCH_MAX_BYTES = 512 * 1024;
+const SEARCH_MAX_REDIRECTS = 2;
 const DOCUMENT_MAX_BYTES = 1_500_000;
 const MAX_CANDIDATES_PER_PROVIDER = 3;
 const MAX_SOURCES_PER_PROVIDER = 2;
@@ -82,21 +83,50 @@ function directSearchUrl(kind: LegalSourceKind, query: string, locale: "ru" | "u
   return url;
 }
 
-async function boundedSearchHtml(url: URL, fetchImpl: FetchLike): Promise<string> {
+function isSafeSearchRedirect(url: URL, kind: LegalSourceKind): boolean {
+  const expectedHost = kind === "lex" ? "lex.uz" : "advice.uz";
+  return url.protocol === "https:"
+    && url.port === ""
+    && url.username === ""
+    && url.password === ""
+    && (url.hostname === expectedHost || url.hostname === `www.${expectedHost}`);
+}
+
+async function boundedSearchHtml(
+  url: URL,
+  kind: LegalSourceKind,
+  fetchImpl: FetchLike,
+): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), SEARCH_TIMEOUT_MS);
   try {
-    const response = await fetchImpl(url, {
-      method: "GET",
-      redirect: "error",
-      credentials: "omit",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: {
-        accept: "text/html,application/xhtml+xml;q=0.9",
-        "user-agent": "JURO-LegalSourceDirect/1.0 (+https://juro.uz)",
-      },
-    });
+    let searchUrl = url;
+    let response: Response | null = null;
+    for (let redirects = 0; redirects <= SEARCH_MAX_REDIRECTS; redirects += 1) {
+      response = await fetchImpl(searchUrl, {
+        method: "GET",
+        redirect: "manual",
+        credentials: "omit",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: {
+          accept: "text/html,application/xhtml+xml;q=0.9",
+          "user-agent": "JURO-LegalSourceDirect/1.0 (+https://juro.uz)",
+        },
+      });
+      if (![301, 302, 303, 307, 308].includes(response.status)) break;
+      const location = response.headers.get("location");
+      try { await response.body?.cancel(); } catch { /* best effort */ }
+      if (!location || redirects === SEARCH_MAX_REDIRECTS) {
+        throw new Error("LEGAL_SOURCE_SEARCH_REDIRECT_REJECTED");
+      }
+      const nextUrl = new URL(location, searchUrl);
+      if (!isSafeSearchRedirect(nextUrl, kind)) {
+        throw new Error("LEGAL_SOURCE_SEARCH_REDIRECT_REJECTED");
+      }
+      searchUrl = nextUrl;
+    }
+    if (!response) throw new Error("LEGAL_SOURCE_SEARCH_UNAVAILABLE");
     const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
     const length = Number(response.headers.get("content-length") ?? "0");
     if (!response.ok) {
@@ -254,7 +284,7 @@ class OfficialDirectProvider implements LegalSourceProvider {
 
   async search(query: string, locale: "ru" | "uz"): Promise<string[]> {
     return officialDocumentUrls(
-      await boundedSearchHtml(directSearchUrl(this.kind, query, locale), this.fetchImpl),
+      await boundedSearchHtml(directSearchUrl(this.kind, query, locale), this.kind, this.fetchImpl),
       this.kind,
     );
   }

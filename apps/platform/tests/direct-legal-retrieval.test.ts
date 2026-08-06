@@ -90,6 +90,32 @@ test("direct retrieval strips reader controls from a quoted Lex act title", asyn
   assert.equal(result.sources[0]?.actTitle, "«Трудовой договор»");
 });
 
+test("direct retrieval follows only a bounded same-host search redirect", async () => {
+  const calls: Call[] = [];
+  const responses = [
+    new Response("", {
+      status: 302,
+      headers: { location: "/ru/search/all?searchtitle=%D0%B4%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80" },
+    }),
+    responseHtml('<a href="/ru/docs/42">Lex result</a>'),
+    new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Договор", "Статья 12. Условия")),
+    new Response("offline", { status: 503, headers: { "content-type": "text/html" } }),
+  ];
+  const result = await retrieveDirectLegalSources("договор", "ru", {
+    fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return responses.shift() ?? new Response("offline", { status: 503 });
+    }) as typeof fetch,
+    now: () => new Date("2026-08-06T12:00:00.000Z"),
+    wait: async () => undefined,
+  });
+  assert.equal(result.sources.length, 1);
+  assert.equal(result.sources[0]?.officialUrl, "https://lex.uz/ru/docs/42");
+  assert.equal(calls[0]?.init?.redirect, "manual");
+  assert.equal(calls[1]?.url, "https://lex.uz/ru/search/all?searchtitle=%D0%B4%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80");
+});
+
 test("direct retrieval returns an honest unavailable state and writes no corpus", async () => {
   const result = await retrieveDirectLegalSources("договор", "ru", {
     fetchImpl: (async () => new Response("offline", { status: 503, headers: { "content-type": "text/html" } })) as typeof fetch,
