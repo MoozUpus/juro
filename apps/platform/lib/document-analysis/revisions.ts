@@ -81,6 +81,16 @@ export class AnalysisRevisionError extends Error {
   }
 }
 
+function knownVersionIntentGuardError(error: unknown): error is Error {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toUpperCase();
+  return message.includes("ANALYSIS_VERSION_OBJECT_WRITE_SOURCE_MISMATCH")
+    || message.includes("ANALYSIS_DOCUMENT_VERSION_OBJECT_WRITE_MISMATCH")
+    || message.includes("ANALYSIS_VERSION_OBJECT_WRITE_ATTACHMENT_MISMATCH")
+    || message.includes("ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID")
+    || message.includes("ANALYSIS_VERSION_OBJECT_WRITE_NOT_ATTACHED");
+}
+
 export function analysisSourceVersionId(analysisId: string): string {
   return `analysis-source-${analysisId}`;
 }
@@ -123,7 +133,8 @@ export async function storeInitialAnalysisDocumentVersion(
       sizeBytes: bytes.byteLength,
       sha256,
     });
-  } catch {
+  } catch (error) {
+    if (knownVersionIntentGuardError(error)) throw error;
     throw new AnalysisRevisionError("ANALYSIS_REVISION_STORAGE_FAILED", 503, "create_intent");
   }
   const r2Key = objectWrite.r2Key;
