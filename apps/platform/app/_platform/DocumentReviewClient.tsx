@@ -524,7 +524,7 @@ function analysisState(status: string, errorCode: string | null, ru: boolean) {
     };
   }
   const states: Record<string, [string, string, string, string]> = {
-    quarantined: ["Анализ не запущен", "Tahlil ishga tushirilmadi", "Файл помещён в карантин и не передан AI: staging-сканер вредоносного содержимого ещё не подключён.", "Fayl karantinga joylandi va AI ga yuborilmadi: staging zararli fayl skaneri hali ulanmagan."],
+    quarantined: ["Анализ не запущен", "Tahlil ishga tushirilmadi", "Файл помещён в карантин и не передан AI. JURO передаст его только после успешного сканирования вредоносного содержимого.", "Fayl karantinga joylandi va AI ga yuborilmadi. JURO uni faqat zararli tarkib muvaffaqiyatli skanerlangandan keyin yuboradi."],
     processing: ["Идёт анализ", "Tahlil ketmoqda", "JURO извлекает структуру документа и проверяет выводы. Можно покинуть страницу и вернуться позже.", "JURO hujjat tuzilishini ajratmoqda va xulosalarni tekshirmoqda. Sahifadan chiqib, keyin qaytish mumkin."],
     persisting: ["Результат сохраняется", "Natija saqlanmoqda", "Анализ завершён у провайдера; JURO атомарно сохраняет нормализованный результат.", "Provayder tahlilni yakunladi; JURO normallashtirilgan natijani atomar saqlamoqda."],
     awaiting_ocr: ["Идёт подготовка OCR", "OCR tayyorlanmoqda", "Текст не извлечён напрямую. Файл поставлен в защищённую очередь распознавания; юридический AI получит только проверенный результат.", "Matn to‘g‘ridan-to‘g‘ri ajratilmadi. Fayl himoyalangan OCR navbatiga qo‘yildi; yuridik AI faqat tekshirilgan natijani oladi."],
