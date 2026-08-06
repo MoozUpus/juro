@@ -107,6 +107,18 @@ function nowIso(now: (() => Date) | undefined): string {
   return (now ?? (() => new Date()))().toISOString();
 }
 
+function nextMillisecond(iso: string, offset: number): string {
+  const timestamp = Date.parse(iso);
+  if (!Number.isFinite(timestamp)) throw new TypeError("Invalid source-sync time.");
+  return new Date(timestamp + offset).toISOString();
+}
+
+function isCompletedRunTimestampCollision(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("source_sync_runs_lock_uidx")
+    || message.includes("source_sync_runs.lock_key, source_sync_runs.started_at");
+}
+
 function acquisitionError(error: unknown): LegalSourceAcquisitionError {
   if (error instanceof LegalSourceAcquisitionError) return error;
   if (error instanceof LegalSourceFetchError) {
@@ -733,12 +745,14 @@ export async function executeLegalSourceFetchRequest(
     );
   }
 
-  const startedAt = nowIso(dependencies.now);
+  const initialStartedAt = nowIso(dependencies.now);
+  let startedAt = initialStartedAt;
   const scheduledRunId = await scheduledCorpusRunId(env.DB, request.id, environment);
   const scheduledCorpus = scheduledRunId !== null;
   const runId = scheduledRunId ?? `lsrun_${crypto.randomUUID().replaceAll("-", "")}`;
   try {
-    const startStatements: D1PreparedStatement[] = [env.DB.prepare(`
+    for (let offset = 0; offset < 4; offset += 1) {
+      const startStatements: D1PreparedStatement[] = [env.DB.prepare(`
       UPDATE legal_source_fetch_requests
       SET status = 'running',
           attempt_count = attempt_count + 1,
@@ -769,22 +783,36 @@ export async function executeLegalSourceFetchRequest(
         startedAt,
         startedAt,
       ));
-    }
-    const startResults = await env.DB.batch(startStatements);
-    if (Number(startResults[0]?.meta.changes ?? 0) !== 1) {
-      if (!scheduledCorpus) {
-        const failedAt = nowIso(dependencies.now);
-        await env.DB.prepare(`
+      }
+      try {
+        const startResults = await env.DB.batch(startStatements);
+        if (Number(startResults[0]?.meta.changes ?? 0) !== 1) {
+          if (!scheduledCorpus) {
+            const failedAt = nowIso(dependencies.now);
+            await env.DB.prepare(`
           UPDATE source_sync_runs
           SET status = 'failed', finished_at = ?, error_count = 1,
               error_summary = 'LEGAL_SOURCE_REQUEST_TERMINAL', updated_at = ?
           WHERE id = ? AND status = 'running'
         `).bind(failedAt, failedAt, runId).run();
+          }
+          throw new LegalSourceAcquisitionError(
+            "LEGAL_SOURCE_REQUEST_TERMINAL",
+            false,
+          );
+        }
+        break;
+      } catch (error) {
+        if (
+          !scheduledCorpus
+          && offset < 3
+          && isCompletedRunTimestampCollision(error)
+        ) {
+          startedAt = nextMillisecond(initialStartedAt, offset + 1);
+          continue;
+        }
+        throw error;
       }
-      throw new LegalSourceAcquisitionError(
-        "LEGAL_SOURCE_REQUEST_TERMINAL",
-        false,
-      );
     }
   } catch (error) {
     if (error instanceof LegalSourceAcquisitionError) throw error;
