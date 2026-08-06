@@ -4,7 +4,7 @@
 > older "current checkpoint" below; those entries remain historical evidence,
 > not a description of the active staging release. Worker
 > `juro-platform-staging` is deployed on version
-> `5f8c08d6-bcb8-4a80-8776-373145cc3d05` from PR #3 commit `90f9bba`.
+> `7d9a75e6-be2a-4af8-9bec-c90076667df0` from PR #3 commit `01fbc33`.
 > Remote `juro-staging` has not received a migration in this deploy; existing
 > D1, R2, Queue and Vectorize bindings were preserved. The active Worker has
 > `STAGING_SYNTHETIC_PROBES_ENABLED=false`; no production Worker, D1 or R2
@@ -23,20 +23,26 @@
 > `juro-staging-malware-scanner` pinned to the documented ClamAV digest and
 > bound through `MALWARE_SCANNER`; a staging-only EICAR run previously proved
 > the fail-closed path. This is not evidence of broad malware-detection quality
-> or a reason to enable an unreviewed production scanner. The official
-> browser-control runtime still fails before connection because an external
-> user-profile `package.json` marks its generated CommonJS kernel as ESM; this
-> repository does not alter that unrelated host configuration.
+> or a reason to enable an unreviewed production scanner. A bounded temporary
+> browser-QA package override permitted one authenticated staging session and
+> was then removed; the unrelated user-profile `package.json` remains unchanged.
+> That smoke covered the canonical AI route redirect, one real provider-backed
+> response, RU/UZ routing, 390 px layout, the canonical document-builder route
+> and the document-review entry with no browser console errors. It is not the
+> full keyboard, screen-reader, reduced-motion, zoom or device matrix.
 
 > Legal corpus parser checkpoint — 2026-08-06: the active staging Worker adds
 > a bounded fallback for canonical Lex pages whose official text is exposed as
 > `/pdffile/:id`. The five-minute scheduler created one idempotent PDF parse
 > job and the legal-sources Queue completed it without error; the resulting
 > immutable `unpdf` snapshot is private in R2. At the checkpoint, staging had
-> 50 fetched source versions and 37 normalized versions. The trusted Lex/Advice
+> 52 fetched source versions and 37 normalized versions. The trusted Lex/Advice
 > domain allowlist remains intact, but fetched versions still need the existing
-> publication review flow before they can become verified legal evidence. This
-> does not claim corpus completeness, citation entailment, or human legal review.
+> publication review flow before they can become verified legal evidence. The
+> staging reviewer-assignment table is currently empty and the review queue has
+> 53 `new_source_version` and 14 `normalization_failed` records, so no source is
+> published yet. This does not claim corpus completeness, citation entailment,
+> or human legal review.
 
 > Staging status-host checkpoint — 2026-08-06: Cloudflare Workers domain
 > `status.staging.juro.uz` is attached only to `juro-platform-staging` (domain
