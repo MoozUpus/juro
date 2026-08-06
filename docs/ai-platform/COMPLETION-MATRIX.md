@@ -13,10 +13,10 @@ regression tests; it does not mean production was changed.
 | Official legal sources | AI chat source panel; `/api/platform/legal-sources/health` | PARTIAL | Staging migrations `0106` and `0107`, bounded direct source-health, private backup/restore evidence and authenticated synthetic smoke | Worker direct search egress is currently unavailable/slow for both providers; source-card success remains pending | Critical | deployed, QA blocked |
 | Legacy legal corpus | legacy review/sync routes | DUPLICATE_OR_OBSOLETE | Existing tables, queue and indexes retained for rollback | No new staging writes; document later decommission only | High | dormant in staging config |
 | Document Builder | `/:locale/:accountType/document-builder` | VERIFIED_WORKING | Existing Builder version and R2 guard migrations/tests; authenticated synthetic browser run created a versioned document and DOCX/PDF/ZIP in staging | Upload → analysis, compare → redline and plan → case remain separate staging regressions | Critical | staging browser smoke passed |
-| Document analysis and compare | document-analysis routes | VERIFIED_WORKING | Claude/fallback, compare/redline and case links already present | Authenticated regression with synthetic documents | High | preserved |
-| Cases, plans and deadlines | cases and action-plan APIs | VERIFIED_WORKING | Existing lifecycle and action-plan tests | Verify direct citations appear in case source tab | High | extended by 0106 |
+| Document analysis and compare | document-analysis routes | VERIFIED_WORKING | Authenticated synthetic analysis accepted an explicit revision and created `Нормализованная версия 2`; synthetic comparison completed, exposed redline and linked to a case | Direct-source cards/citations remain unavailable in the Worker path | High | staging browser smoke passed |
+| Cases, plans and deadlines | cases and action-plan APIs | VERIFIED_WORKING | Explicit plan confirmation created four persisted synthetic case tasks; existing lifecycle/action-plan tests remain | Verify direct citations appear in case source tab after egress repair | High | staging browser smoke passed |
 | Lawyer handoff / marketplace | lawyer routes | PARTIAL | Existing staged implementation and migration evidence | Full client→lawyer→case E2E remains to be rerun | Critical | in progress |
-| Admin and demo payment | admin and payments/demo routes | PARTIAL | Existing role, audit, demo-payment implementation | Isolated admin staging and demo E2E remain to be rerun | Critical | in progress |
+| Admin and demo payment | admin and payments/demo routes | PARTIAL | Staging sandbox checkout completed with server-recorded payment/ledger state and no real charge; AI-quality write was correctly rejected without fresh reviewer MFA | Demo-payment failure/cancellation regression; active reviewer role plus fresh TOTP for audited queue actions | Critical | demo-payment browser smoke passed; admin gated |
 | Cinematic UI | app shell and priority clients | PARTIAL | Existing design migration work | Visual/mobile/accessibility regression after deployment | Medium | in progress |
 
 ## Owner beta confirmation
@@ -43,3 +43,6 @@ validation at query time.
 
 See `STAGING-0107-DIRECT-SOURCE-HEALTH-EVIDENCE.md` for the backup, migration,
 bounded health check and the exact direct-source smoke outcome.
+
+See `STAGING-ANALYSIS-COMPARE-PLAN-PAYMENT-EVIDENCE.md` for authenticated
+synthetic browser evidence and the exact outstanding gates.
