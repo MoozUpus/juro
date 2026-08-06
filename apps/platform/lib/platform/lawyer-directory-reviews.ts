@@ -10,6 +10,12 @@ export type PublicLawyerDirectoryRow = {
   advocateStatus: string;
   firmName: string | null;
   bio: string | null;
+  marketplaceStatus?: string;
+  city?: string | null;
+  region?: string | null;
+  education?: string | null;
+  consultationFormatsJson?: unknown;
+  profilePhotoUrl?: string | null;
 };
 
 export type ApprovedReviewAggregateRow = {
@@ -60,6 +66,12 @@ export function projectPublicLawyerDirectory(
   }
   return lawyers.map((lawyer) => {
     const aggregate = aggregateByLawyer.get(lawyer.id);
+    const hasMarketplaceProjection = lawyer.marketplaceStatus !== undefined
+      || lawyer.city !== undefined
+      || lawyer.region !== undefined
+      || lawyer.education !== undefined
+      || lawyer.consultationFormatsJson !== undefined
+      || lawyer.profilePhotoUrl !== undefined;
     return {
       id: lawyer.id,
       displayName: lawyer.displayName,
@@ -72,6 +84,17 @@ export function projectPublicLawyerDirectory(
       advocateStatus: lawyer.advocateStatus,
       firmName: lawyer.firmName,
       bio: lawyer.bio,
+      ...(hasMarketplaceProjection ? {
+        marketplaceStatus: lawyer.marketplaceStatus === "pending_review"
+          ? "pending_review"
+          : "public_approved",
+        canReceiveRequests: lawyer.marketplaceStatus !== "pending_review",
+        city: lawyer.city ?? null,
+        region: lawyer.region ?? null,
+        education: lawyer.education ?? null,
+        consultationFormats: stringList(lawyer.consultationFormatsJson),
+        profilePhotoUrl: lawyer.profilePhotoUrl ?? null,
+      } : {}),
       rating: aggregate ? {
         reviewCount: aggregate.reviewCount,
         overallAverage: rounded(aggregate.overallAverage),

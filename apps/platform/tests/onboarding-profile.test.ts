@@ -136,6 +136,17 @@ function onboardingDatabase(): {
       metadata_json TEXT,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE lawyer_profiles (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      specialties_json TEXT NOT NULL,
+      languages_json TEXT NOT NULL,
+      status TEXT NOT NULL,
+      marketplace_status TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE policy_documents (
       id TEXT PRIMARY KEY,
       document_key TEXT NOT NULL,
@@ -395,7 +406,16 @@ test("RU onboarding stores split names and normalized phone without broad consen
     assert.deepEqual(JSON.parse(audit.metadata), {
       accountPersona: "lawyer",
       primaryGoal: "professional_work",
+      lawyerProfileProvisioned: true,
       policyEvidence: "registration_digests",
+    });
+    assert.deepEqual({ ...(sqlite.prepare(
+      `SELECT display_name AS displayName,status,marketplace_status AS marketplaceStatus
+       FROM lawyer_profiles WHERE user_id=?`,
+    ).get(userId) as Record<string, unknown>) }, {
+      displayName: "Karimov Sardor Akmalovich",
+      status: "pending",
+      marketplaceStatus: "profile_incomplete",
     });
   } finally {
     sqlite.close();

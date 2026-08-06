@@ -26,6 +26,8 @@ type PublicLawyer = {
   advocateStatus: "not_declared" | "declared" | "verified";
   firmName: string | null;
   bio: string | null;
+  marketplaceStatus: "pending_review" | "public_approved";
+  canReceiveRequests: boolean;
   rating: { reviewCount: number; overallAverage: number | null; speedAverage: number | null; qualityAverage: number | null; communicationAverage: number | null };
   reviews: Array<{ overallRating: number; body: string | null; createdAt: string }>;
 };
@@ -135,7 +137,8 @@ export function LawyerHandoffClient({ locale, accountType, workspaceId }: { loca
 
   const specialties = [...new Set(lawyers.flatMap((lawyer) => lawyer.specialties))].sort();
   const languages = [...new Set(lawyers.flatMap((lawyer) => lawyer.languages))].sort();
-  const filteredLawyers = lawyers.filter((lawyer) =>
+  const filteredLawyers = lawyers.filter((lawyer) => lawyer.canReceiveRequests
+    &&
     (!specialtyFilter || lawyer.specialties.includes(specialtyFilter))
     && (!languageFilter || lawyer.languages.includes(languageFilter))
     && (!minimumExperience || (lawyer.experienceYears ?? -1) >= Number(minimumExperience))

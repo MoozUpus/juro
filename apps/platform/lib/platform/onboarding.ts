@@ -247,7 +247,16 @@ export async function completeOnboarding(
   const now = dependencies.now ?? new Date().toISOString();
   const formattedName = fullName(input);
   const membershipId = `wm_${crypto.randomUUID()}`;
+  const lawyerProfileId = crypto.randomUUID();
   const auditId = crypto.randomUUID();
+  const lawyerProfileStatement = input.accountPersona === "lawyer"
+    ? db.prepare(
+      `INSERT OR IGNORE INTO lawyer_profiles (
+         id,user_id,display_name,specialties_json,languages_json,status,
+         marketplace_status,created_at,updated_at
+       ) VALUES (?, ?, ?, '[]', '[]', 'pending', 'profile_incomplete', ?, ?)`,
+    ).bind(lawyerProfileId, userId, formattedName, now, now)
+    : null;
 
   const results = await db.batch([
     db.prepare(
@@ -277,6 +286,7 @@ export async function completeOnboarding(
       workspaceId,
       userId,
     ),
+    ...(lawyerProfileStatement ? [lawyerProfileStatement] : []),
     db.prepare(
       `UPDATE workspaces
        SET name=?,locale=?,updated_at=?
@@ -351,6 +361,7 @@ export async function completeOnboarding(
       JSON.stringify({
         accountPersona: input.accountPersona,
         primaryGoal: input.primaryGoal,
+        lawyerProfileProvisioned: input.accountPersona === "lawyer",
         policyEvidence: "registration_digests",
       }),
       now,
@@ -360,7 +371,7 @@ export async function completeOnboarding(
     ),
   ]);
 
-  const profileUpdate = results[3];
+  const profileUpdate = results[input.accountPersona === "lawyer" ? 4 : 3];
   if (!profileUpdate.success || Number(profileUpdate.meta.changes ?? 0) !== 1) {
     const completed = await db.prepare(
       `SELECT account_type AS accountType,locale,default_workspace_id AS workspaceId

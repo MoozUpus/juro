@@ -18,6 +18,10 @@ const editableFields = {
   advocateStatus: lawyerAdvocateStatusSchema,
   firmName: optionalText(180),
   bio: optionalText(2_000),
+  city: optionalText(100),
+  region: optionalText(100),
+  education: optionalText(500),
+  consultationFormats: stringList(10).optional(),
 };
 
 export const lawyerProfileCreateSchema = z.object({ ...editableFields, locale: z.enum(["ru", "uz"]) }).strict();
@@ -27,7 +31,7 @@ export const lawyerProfileUpdateSchema = z.object({ ...editableFields, locale: z
 );
 
 export const lawyerProfileModerationListSchema = z.object({
-  status: z.enum(["pending", "public_approved", "rejected"]).default("pending"),
+  status: z.enum(["profile_incomplete", "pending_review", "public_approved", "rejected"]).default("pending_review"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 }).strict();
 
