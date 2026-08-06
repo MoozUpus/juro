@@ -208,6 +208,22 @@ export type DocumentAnalysisProcessorDependencies = {
   }) => Promise<AiStructuredResult<DocumentAnalysisResult>>;
 };
 
+function withSequentialAnalysisSession(
+  env: DocumentAnalysisProcessorEnv,
+): DocumentAnalysisProcessorEnv {
+  // D1 version-intent triggers read the analysis state immediately after the
+  // processor claims it. A primary-anchored session keeps that write visible to
+  // all following statements in this lifecycle, including on read-replicated
+  // deployments. The generated runtime type exposes the same prepare/batch
+  // surface required by this processor, while local test doubles may not
+  // implement sessions and safely retain their original behavior.
+  if (typeof env.DB.withSession !== "function") return env;
+  return {
+    ...env,
+    DB: env.DB.withSession("first-primary") as unknown as D1Database,
+  };
+}
+
 const defaultDependencies: DocumentAnalysisProcessorDependencies = {
   extract: extractAnalysisDocument,
   retrieve: retrieveVerifiedLegalSources,
@@ -227,7 +243,8 @@ export async function executeDocumentAnalysisJob(
   dependencies: Partial<DocumentAnalysisProcessorDependencies> = {},
 ): Promise<{ status: "completed" | "already_completed"; analysisId: string }> {
   const deps = { ...defaultDependencies, ...dependencies };
-  const row = await loadAnalysis(env.DB, analysisId, workspaceId);
+  const scopedEnv = withSequentialAnalysisSession(env);
+  const row = await loadAnalysis(scopedEnv.DB, analysisId, workspaceId);
   if (!row) {
     throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_NOT_FOUND", false);
   }
@@ -238,20 +255,20 @@ export async function executeDocumentAnalysisJob(
     persisted = parsePersistedAnalysis(row.summaryJson);
   } else {
     assertSafeReadyState(row);
-    const claimed = await env.DB.prepare(
+    const claimed = await scopedEnv.DB.prepare(
       "UPDATE document_analyses SET status='processing',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status='ready'",
     ).bind(new Date().toISOString(), analysisId, workspaceId).run();
     if (Number(claimed.meta.changes ?? 0) !== 1 && row.status !== "processing") {
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_FILE_UNSAFE", false);
     }
-    persisted = await analyzeObject(env, row, deps);
-    await env.DB.prepare(
+    persisted = await analyzeObject(scopedEnv, row, deps);
+    await scopedEnv.DB.prepare(
       "UPDATE document_analyses SET status='persisting',summary_json=?,error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status='processing'",
     ).bind(JSON.stringify(persisted), new Date().toISOString(), analysisId, workspaceId).run();
   }
 
   try {
-    await persistNormalizedAnalysis(env.DB, row, persisted);
+    await persistNormalizedAnalysis(scopedEnv.DB, row, persisted);
     return { status: "completed", analysisId };
   } catch (error) {
     if (error instanceof DocumentAnalysisProcessingError) throw error;
