@@ -79,10 +79,15 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
   }
   let result: LegalAiRunResult;
   try {
+    const interactive = input.reasoningMode === "fast";
     result = await callAnthropicStructured<LegalChatResponse>({
       schema: legalChatJsonSchema,
       parse: (value) => normalizeAnthropicLegalChatResponse(value, input),
-      timeoutMs: input.reasoningMode === "deep" ? 75_000 : 45_000,
+      // Keep the fallback inside the interactive budget. Longer document
+      // analysis remains independently configured in its own provider.
+      timeoutMs: interactive ? 26_000 : 75_000,
+      maxAttempts: 1,
+      maxTokens: input.answerMode === "short" ? 2_400 : 4_200,
       requestId: input.requestId,
       model,
       signal: options.signal,

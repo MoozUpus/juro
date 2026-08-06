@@ -58,6 +58,8 @@ export async function callAnthropicStructured<T>(options: {
   maxAttempts?: 1 | 2;
   signal?: AbortSignal;
   strictOutput?: boolean;
+  /** Keep interactive structured results bounded without affecting document analysis. */
+  maxTokens?: number;
 }): Promise<AiStructuredResult<T>> {
   const configuration = runtimeEnv();
   const apiKey = configuration.ANTHROPIC_API_KEY;
@@ -95,7 +97,7 @@ export async function callAnthropicStructured<T>(options: {
         },
         body: JSON.stringify({
           model,
-          max_tokens: 8_192,
+          max_tokens: options.maxTokens ?? 8_192,
           system: systemInstructions,
           messages: [{
             role: "user",

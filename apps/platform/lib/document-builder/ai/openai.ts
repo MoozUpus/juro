@@ -111,6 +111,8 @@ export async function callOpenAiStructured<T>(options: {
   safetyIdentifier?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   textVerbosity?: "low" | "medium" | "high";
+  /** Bound generated output for latency-sensitive structured interactions. */
+  maxOutputTokens?: number;
 }): Promise<AiStructuredResult<T>> {
   const configuration = runtimeEnv();
   const apiKey = configuration.OPENAI_API_KEY || (configuration.AI_PROVIDER === "openai" ? configuration.AI_PROVIDER_API_KEY : undefined);
@@ -148,6 +150,7 @@ export async function callOpenAiStructured<T>(options: {
           input: options.rawInput ? options.input : typeof options.input === "string" ? options.input : JSON.stringify(options.input),
           ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
           ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort } } : {}),
+          ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
           stream: Boolean(options.onProgress),
           text: {
             ...(options.textVerbosity ? { verbosity: options.textVerbosity } : {}),

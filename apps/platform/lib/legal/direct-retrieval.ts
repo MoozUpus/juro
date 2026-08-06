@@ -19,7 +19,10 @@ const SEARCH_TIMEOUT_MS = 10_000;
 const SEARCH_MAX_BYTES = 512 * 1024;
 const SEARCH_MAX_REDIRECTS = 2;
 const DOCUMENT_MAX_BYTES = 1_500_000;
-const DIRECT_RETRIEVAL_BUDGET_MS = 30_000;
+// Interactive chat must leave a bounded window for the AI provider. A direct
+// source miss is safe: the answer is constrained to clarification rather than
+// spending the full request lifetime retrying public websites.
+const DIRECT_RETRIEVAL_BUDGET_MS = 15_000;
 const MAX_CANDIDATES_PER_PROVIDER = 3;
 const MAX_SOURCES_PER_PROVIDER = 2;
 const QUERY_STOPWORDS = new Set([
