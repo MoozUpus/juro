@@ -11,7 +11,7 @@ import { lawyerRequestMessageSchema } from "../lib/platform/lawyer-request-messa
 import { lawyerProfileCreateSchema, lawyerProfileModerationSchema, lawyerProfileUpdateSchema } from "../lib/platform/lawyer-profile";
 import { lawyerReviewSchema } from "../lib/platform/lawyer-review";
 import { hasLikelyPersonalData, lawyerReviewModerationSchema } from "../lib/platform/lawyer-review-moderation";
-import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
+import { MINIMUM_PUBLISHED_LAWYER_REVIEWS, projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
 import { normalizeEmail, randomOtp, sha256 } from "../lib/auth/crypto";
 import { pricingConfig } from "../config/pricing";
 import { appLegalContent } from "../content/app-legal";
@@ -28,7 +28,7 @@ import { notificationPreferencesSchema, optionalEmailPreferenceKeys } from "../l
 test("lawyer directory projects only moderation-approved review aggregates", () => {
   const directory = projectPublicLawyerDirectory(
     [{ id: "lawyer-1", displayName: "Юрист JURO", specialtiesJson: '["contracts"]', languagesJson: '["ru","uz"]', experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика" }],
-    [{ lawyerProfileId: "lawyer-1", reviewCount: 2, overallAverage: 4.666, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 }],
+    [{ lawyerProfileId: "lawyer-1", reviewCount: 3, overallAverage: 4.666, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 }],
     [
       { reviewId: "review-1", lawyerProfileId: "lawyer-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z", replyBody: "Одобренный ответ", replyCreatedAt: "2026-08-03T00:00:00.000Z" },
       { reviewId: "review-2", lawyerProfileId: "lawyer-1", overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z", replyBody: null, replyCreatedAt: null },
@@ -38,7 +38,7 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
   );
   assert.deepEqual(directory, [{
     id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
-    rating: { reviewCount: 2, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
+    rating: { reviewCount: 3, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
     reviews: [
       { id: "review-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z", reply: { body: "Одобренный ответ", createdAt: "2026-08-03T00:00:00.000Z" } },
       { id: "review-2", overallRating: 4, body: "Второй", createdAt: "2026-08-01T00:00:00.000Z", reply: null },
@@ -46,6 +46,14 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
     ],
   }]);
   assert.equal(projectPublicLawyerDirectory([{ id: "lawyer-2", displayName: "Без отзывов", specialtiesJson: "[]", languagesJson: "[]", experienceYears: null, priceDescription: null, availabilityStatus: "unknown", nextAvailableAt: null, advocateStatus: "not_declared", firmName: null, bio: null }], [], [])[0]?.rating.reviewCount, 0);
+});
+
+test("public lawyer rating waits for the minimum approved-review threshold", () => {
+  const lawyer = { id: "lawyer-public", displayName: "Юрист", specialtiesJson: "[]", languagesJson: "[]", experienceYears: 3, priceDescription: null, availabilityStatus: "available", nextAvailableAt: null, advocateStatus: "not_declared", firmName: null, bio: null };
+  const below = projectPublicLawyerDirectory([lawyer], [{ lawyerProfileId: lawyer.id, reviewCount: MINIMUM_PUBLISHED_LAWYER_REVIEWS - 1, overallAverage: 5, speedAverage: 5, qualityAverage: 5, communicationAverage: 5 }], []);
+  assert.equal(below[0]?.rating.reviewCount, 0);
+  const atThreshold = projectPublicLawyerDirectory([lawyer], [{ lawyerProfileId: lawyer.id, reviewCount: MINIMUM_PUBLISHED_LAWYER_REVIEWS, overallAverage: 5, speedAverage: 5, qualityAverage: 5, communicationAverage: 5 }], []);
+  assert.equal(atThreshold[0]?.rating.reviewCount, MINIMUM_PUBLISHED_LAWYER_REVIEWS);
 });
 
 test("lawyer professional profile accepts only bounded self-declared directory data", async () => {

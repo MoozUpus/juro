@@ -52,6 +52,13 @@ function rounded(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+/**
+ * A single review is useful to the lawyer and client who completed a matter,
+ * but it is not a reliable public marketplace signal. Keep the threshold in
+ * one auditable place until the runtime setting is introduced.
+ */
+export const MINIMUM_PUBLISHED_LAWYER_REVIEWS = 3;
+
 export function projectPublicLawyerDirectory(
   lawyers: PublicLawyerDirectoryRow[],
   aggregates: ApprovedReviewAggregateRow[],
@@ -64,10 +71,9 @@ export function projectPublicLawyerDirectory(
     list.push(review);
     reviewsByLawyer.set(review.lawyerProfileId, list);
   }
-  return lawyers
-    .filter((lawyer) => lawyer.marketplaceStatus === undefined || lawyer.marketplaceStatus === "public_approved")
-    .map((lawyer) => {
+  return lawyers.map((lawyer) => {
     const aggregate = aggregateByLawyer.get(lawyer.id);
+    const mayPublishReviews = Boolean(aggregate && aggregate.reviewCount >= MINIMUM_PUBLISHED_LAWYER_REVIEWS);
     const hasMarketplaceProjection = lawyer.marketplaceStatus !== undefined
       || lawyer.city !== undefined
       || lawyer.region !== undefined
@@ -87,22 +93,24 @@ export function projectPublicLawyerDirectory(
       firmName: lawyer.firmName,
       bio: lawyer.bio,
       ...(hasMarketplaceProjection ? {
-        marketplaceStatus: "public_approved",
-        canReceiveRequests: true,
+        marketplaceStatus: lawyer.marketplaceStatus === "pending_review"
+          ? "pending_review"
+          : "public_approved",
+        canReceiveRequests: lawyer.marketplaceStatus !== "pending_review",
         city: lawyer.city ?? null,
         region: lawyer.region ?? null,
         education: lawyer.education ?? null,
         consultationFormats: stringList(lawyer.consultationFormatsJson),
         profilePhotoUrl: lawyer.profilePhotoUrl ?? null,
       } : {}),
-      rating: aggregate ? {
+      rating: mayPublishReviews && aggregate ? {
         reviewCount: aggregate.reviewCount,
         overallAverage: rounded(aggregate.overallAverage),
         speedAverage: rounded(aggregate.speedAverage),
         qualityAverage: rounded(aggregate.qualityAverage),
         communicationAverage: rounded(aggregate.communicationAverage),
       } : { reviewCount: 0, overallAverage: null, speedAverage: null, qualityAverage: null, communicationAverage: null },
-      reviews: (reviewsByLawyer.get(lawyer.id) ?? []).slice(0, 3).map((review) => ({
+      reviews: (mayPublishReviews ? reviewsByLawyer.get(lawyer.id) ?? [] : []).slice(0, 3).map((review) => ({
         id: review.reviewId ?? `${review.lawyerProfileId}:${review.createdAt}`,
         overallRating: review.overallRating,
         body: review.body,
@@ -110,5 +118,5 @@ export function projectPublicLawyerDirectory(
         reply: review.replyBody ? { body: review.replyBody, createdAt: review.replyCreatedAt } : null,
       })),
     };
-    });
+  });
 }

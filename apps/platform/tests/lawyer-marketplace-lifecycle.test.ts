@@ -51,14 +51,20 @@ test("profile photos remain fail-closed until the malware scanner verifies their
   assert.ok(route.indexOf("const scanVerdict") < route.indexOf("const objectKey"));
 });
 
-test("a profile under review cannot expose its photo or appear in the request directory", () => {
+test("a completed profile under review is visible but cannot receive a request", () => {
   const publicPhotoRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/photo/route.ts", import.meta.url), "utf8");
   const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
+  const publicDirectoryRoute = readFileSync(new URL("../app/api/public/lawyers/route.ts", import.meta.url), "utf8");
+  const publicDetailRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/route.ts", import.meta.url), "utf8");
+  const directoryClient = readFileSync(new URL("../app/_platform/LawyerDirectoryClient.tsx", import.meta.url), "utf8");
   const privatePhotoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
-  assert.match(publicPhotoRoute, /status='public_approved'/);
-  assert.doesNotMatch(publicPhotoRoute, /marketplace_status='pending_review'/);
-  assert.match(directoryRoute, /WHERE status='public_approved' AND public_approved_at IS NOT NULL/);
-  assert.doesNotMatch(directoryRoute, /marketplace_status='pending_review'/);
+  assert.match(publicPhotoRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(directoryRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(publicDirectoryRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(publicDetailRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.doesNotMatch(publicDirectoryRoute, /phone|user_profiles|moderation_notes/i);
+  assert.match(directoryClient, /Профиль на проверке JURO/);
+  assert.match(directoryClient, /Запись после проверки/);
   assert.match(privatePhotoRoute, /export const GET/);
   assert.match(privatePhotoRoute, /WHERE user_id=\?/);
 });

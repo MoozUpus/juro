@@ -298,6 +298,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ok: true,
     marketplaceStatus,
     missingRequiredFields,
-    profilePhotoUrl: "/api/platform/lawyer-profile/photo",
+    profilePhotoUrl: `/api/public/lawyers/${encodeURIComponent(profile.id)}/photo`,
   }, 201);
 });
