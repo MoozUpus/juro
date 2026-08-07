@@ -26,8 +26,8 @@ per-run citation metadata and a bounded excerpt.
 | Document builder | VERIFIED_WORKING | Existing staged implementation preserved, untouched by this slice. |
 | Document analysis / comparison | VERIFIED_WORKING | Existing implementation preserved; authenticated regression pending. |
 | Cases / action plan | VERIFIED_WORKING | Direct citations are now included in case aggregation; staging verification pending. |
-| Lawyer consultation / profile / marketplace | PARTIAL | Profile lifecycle is staged. A local security correction now prevents a pending-review profile or photo from being served publicly; deploy and approved-profile E2E remain pending. |
-| Admin / demo payments | PARTIAL | Existing implementation retained; needs isolated staging E2E. |
+| Lawyer consultation / profile / marketplace | PARTIAL | Migration `0110` is applied and restore-verified in staging. Pending/restricted profiles are fail-closed for public/request paths; immutable suspend/block/archive/restore actions and localized notification/audit evidence are deployed. The remaining gate is a consented synthetic request → conflict check → scoped grant → lawyer-side decision E2E. |
+| Admin / demo payments | PARTIAL | The isolated `juro-admin-staging` Worker (version `0416c908-1eff-4842-9ae7-2fa842ce41ac`) now exposes status-filtered lifecycle controls behind its independent session and platform-side fresh-MFA recheck. The payment demo implementation remains retained; protected browser E2E, cancellation/failure and fresh reviewer-MFA proof remain open. |
 | Cinematic Legal Intelligence | PARTIAL | Existing shell retained; changed AI source UI needs visual/accessibility QA. |
 
 ## Dormant dependencies and rollback
