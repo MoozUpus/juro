@@ -8,12 +8,6 @@ type Environment = {
  */
 export default {
   fetch(request: Request, env: Environment): Promise<Response> {
-    if (new URL(request.url).pathname === "/__juro-router-health") {
-      return new Response(null, {
-        status: 204,
-        headers: { "X-JURO-Production-Router": "active" },
-      });
-    }
     return env.PLATFORM.fetch(request);
   },
 };
