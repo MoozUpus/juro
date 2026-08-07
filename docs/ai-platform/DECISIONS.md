@@ -690,3 +690,26 @@ it does not reinstate public availability.
 This is an expand-only protected-staging release. Production D1, Worker,
 Access configuration and public `juro.uz` remain unchanged. The protected
 staff-UI smoke and an authenticated bilateral handoff remain release gates.
+
+## D-142 — isolated admin Worker exposes lifecycle controls without authority duplication
+
+Status: accepted and deployed to protected staging only
+Date: 2026-08-07
+
+The existing `juro-admin-staging` Worker now offers status-filtered lawyer
+profile views and reason-bound lifecycle forms. It makes the protected
+lifecycle endpoint operationally discoverable without adding a second
+moderation API, a direct D1 binding, or a frontend-held role model.
+
+The Worker receives only the private service binding to
+`juro-platform-staging`. Each lifecycle POST retains same-origin and CSRF
+checks at the admin Worker, then re-enters the platform's server-side
+admin-domain session, role and fresh-MFA enforcement. `block` is deliberately
+renderable only as a request and is still denied unless the platform confirms
+super-admin authority. The UI cannot turn a failed authorization into a
+profile state change.
+
+Worker version `0416c908-1eff-4842-9ae7-2fa842ce41ac` is staging only. This
+deployment contains no data migration, production change or modification to
+the platform Worker. An authenticated browser check remains required before
+claiming the staff surface as fully verified.

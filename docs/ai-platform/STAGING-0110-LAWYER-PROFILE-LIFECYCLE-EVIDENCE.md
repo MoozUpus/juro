@@ -50,6 +50,20 @@ user records, session data or secret values are recorded here.
 | `CLOUDFLARE_ENV=staging npm run validate:artifact` | passed |
 | `npm run deploy:staging` | passed, Worker version above |
 
+## Protected staff surface
+
+- Commit `307bf2f` adds status filters and reason-bound lifecycle forms to the
+  isolated `juro-admin-staging` Worker. A restricted profile can be restored;
+  another profile can be suspended, archived or (only for a server-authorized
+  super-admin) blocked. The UI never carries its own authorization decision:
+  platform rechecks the separate session, role and fresh MFA for every POST.
+- `apps/admin` typecheck and staging dry-run passed. The related platform
+  admin/lifecycle contract suite passed 16/16.
+- Staging deployment succeeded as Worker
+  `0416c908-1eff-4842-9ae7-2fa842ce41ac`, bound only to the private
+  `juro-platform-staging` service plus staging environment variables. No D1,
+  R2, queue, AI, production binding or schema change was introduced.
+
 ## Remaining gate
 
 An authenticated read-only browser smoke for the protected staff control and a
