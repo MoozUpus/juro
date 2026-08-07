@@ -386,7 +386,7 @@
       },
       "vars": {
         "APP_ENV": "production",
-        "TURNSTILE_SITE_KEY": "0x4AAAAAAEAlp9iaX71dp2te",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEJG7au8PVCt7Euq",
         "ASYNC_RUNTIME_ENABLED": "true",
         "CRON_ENABLED": "true",
         "ACCOUNT_DELETION_PURGE_ENABLED": "true",

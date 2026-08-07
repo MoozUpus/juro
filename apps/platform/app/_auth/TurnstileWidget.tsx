@@ -149,8 +149,8 @@ export function TurnstileWidget({
           ? (ru ? "Проверка пройдена." : "Tekshiruvdan o‘tildi.")
           : status === "error"
             ? (ru
-              ? "Проверка не загрузилась. Разрешите challenges.cloudflare.com в блокировщике содержимого и повторите."
-              : "Tekshiruv yuklanmadi. Kontent bloklagichida challenges.cloudflare.com manziliga ruxsat bering va qayta urinib ko‘ring.")
+              ? "Проверка безопасности не запустилась. Повторите проверку."
+              : "Xavfsizlik tekshiruvi ishga tushmadi. Tekshiruvni takrorlang.")
             : (ru ? "Выполняется проверка…" : "Tekshiruv bajarilmoqda…")}
       </span>
       {status === "error" && <button type="button" className="auth-turnstile-retry" onClick={retry}>
