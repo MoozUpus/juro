@@ -387,6 +387,10 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(adminWorker, /juro_admin_session/u);
   assert.match(adminWorker, /\/reviews/u);
   assert.match(adminWorker, /changes_requested/u);
+  assert.match(adminWorker, /\/lifecycle/u);
+  assert.match(adminWorker, /RESTRICTED_LAWYER_MARKETPLACE_STATUSES/u);
+  assert.match(adminWorker, /action !== "suspend"/u);
+  assert.match(internal, /lawyer\.profiles\.block/u);
   assert.match(internal, /lawyer\.reviews\.moderate/u);
   assert.match(internal, /changes_requested/u);
   assert.match(internal, /api\/internal\/admin\/reviews/u);

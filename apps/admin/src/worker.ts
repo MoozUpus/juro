@@ -1,6 +1,17 @@
 const ADMIN_SESSION_COOKIE = "juro_admin_session";
 const ADMIN_CSRF_COOKIE = "juro_admin_csrf";
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const LAWYER_MARKETPLACE_STATUSES = [
+  "profile_incomplete",
+  "pending_review",
+  "changes_requested",
+  "public_approved",
+  "rejected",
+  "suspended",
+  "blocked",
+  "archived",
+] as const;
+const RESTRICTED_LAWYER_MARKETPLACE_STATUSES = new Set<string>(["suspended", "blocked", "archived"]);
 // A moderation form can carry both a 2,000-character redaction and a reason.
 // Keep a bounded server-side limit while allowing both fields plus CSRF encoding.
 const MAX_FORM_BYTES = 8_192;
@@ -63,11 +74,30 @@ function escaped(value: unknown): string {
   })[character] ?? character);
 }
 
+function lawyerMarketplaceStatus(value: string | null): (typeof LAWYER_MARKETPLACE_STATUSES)[number] {
+  return LAWYER_MARKETPLACE_STATUSES.includes(value as (typeof LAWYER_MARKETPLACE_STATUSES)[number])
+    ? value as (typeof LAWYER_MARKETPLACE_STATUSES)[number]
+    : "pending_review";
+}
+
+function lawyerStatusLabel(status: string): string {
+  return {
+    profile_incomplete: "Профиль не завершён",
+    pending_review: "На проверке",
+    changes_requested: "Нужны исправления",
+    public_approved: "Одобрен",
+    rejected: "Отклонён",
+    suspended: "Временно скрыт",
+    blocked: "Заблокирован",
+    archived: "Архивирован",
+  }[status] ?? status;
+}
+
 function page(title: string, body: string, options: { notice?: string; role?: string } = {}): Response {
   const notice = options.notice ? `<p class="notice">${escaped(options.notice)}</p>` : "";
   const role = options.role ? `<span class="role">${escaped(options.role)}</span>` : "";
   return new Response(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>${escaped(title)} · JURO</title><style>
-    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}.review-body{max-width:34rem;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль staging</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="/reviews">Отзывы</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}.filters{display:flex;flex-wrap:wrap;gap:.45rem;margin:1rem 0}.filters a{border:1px solid #8596a5;border-radius:999px;color:#102a43;padding:.4rem .65rem;text-decoration:none}.filters a[aria-current=page]{background:#062844;border-color:#062844;color:#fff}.filters a:hover,.filters a:focus-visible{outline:3px solid #be974f;outline-offset:2px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}.review-body{max-width:34rem;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль staging</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="/reviews">Отзывы</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
 }
 
 function securityHeaders(): Headers {
@@ -173,11 +203,25 @@ async function dashboard(request: Request, env: Env, session: string): Promise<R
 }
 
 async function lawyerList(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
-  const result = await platform<{ profiles: Profile[] }>(env, "/api/internal/admin/lawyers?status=pending_review", { session });
+  const selectedStatus = lawyerMarketplaceStatus(new URL(request.url).searchParams.get("status"));
+  const result = await platform<{ profiles: Profile[] }>(env, `/api/internal/admin/lawyers?status=${encodeURIComponent(selectedStatus)}`, { session });
   if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
   const csrfToken = cookie(request, ADMIN_CSRF_COOKIE) ?? "";
-  const rows = result.body.profiles.map((profile) => `<tr><td>${escaped(profile.displayName)}</td><td>${escaped(profile.city ?? "—")}</td><td>${escaped(profile.experienceYears ?? "—")}</td><td>${escaped(profile.updatedAt)}</td><td><form method="post" action="/lawyers/${encodeURIComponent(profile.id)}/moderate"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Причина<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="decision" value="approved">Одобрить</button><button name="decision" value="changes_requested">Запросить исправления</button><button class="danger" name="decision" value="rejected">Отклонить</button></div></form></td></tr>`).join("");
-  return page("Профили юристов", `<section class="panel"><p>Показаны только завершённые профили, ожидающие review. Телефон и личный email не выдаются этой поверхности.</p><table><thead><tr><th>Профиль</th><th>Город</th><th>Стаж</th><th>Изменён</th><th>Модерация</th></tr></thead><tbody>${rows || "<tr><td colspan=\"5\">Нет профилей на проверке.</td></tr>"}</tbody></table></section>`, { notice, role: "lawyer moderation" });
+  const filters = LAWYER_MARKETPLACE_STATUSES.map((status) => `<a href="/lawyers?status=${encodeURIComponent(status)}"${status === selectedStatus ? " aria-current=\"page\"" : ""}>${escaped(lawyerStatusLabel(status))}</a>`).join("");
+  const lifecycleForm = (profile: Profile): string => {
+    const currentStatus = lawyerMarketplaceStatus(profile.marketplaceStatus);
+    if (RESTRICTED_LAWYER_MARKETPLACE_STATUSES.has(currentStatus)) {
+      return `<form method="post" action="/lawyers/${encodeURIComponent(profile.id)}/lifecycle?status=${encodeURIComponent(selectedStatus)}"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Причина восстановления<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><button name="action" value="restore">Снять ограничение</button></form>`;
+    }
+    return `<form method="post" action="/lawyers/${encodeURIComponent(profile.id)}/lifecycle?status=${encodeURIComponent(selectedStatus)}"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Причина lifecycle-действия<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="action" value="suspend">Временно скрыть</button><button class="danger" name="action" value="block">Заблокировать</button><button name="action" value="archive">Архивировать</button></div></form>`;
+  };
+  const rows = result.body.profiles.map((profile) => {
+    const moderation = profile.marketplaceStatus === "pending_review"
+      ? `<form method="post" action="/lawyers/${encodeURIComponent(profile.id)}/moderate"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Причина<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="decision" value="approved">Одобрить</button><button name="decision" value="changes_requested">Запросить исправления</button><button class="danger" name="decision" value="rejected">Отклонить</button></div></form>`
+      : "";
+    return `<tr><td>${escaped(profile.displayName)}<br><small>${escaped(lawyerStatusLabel(profile.marketplaceStatus))}</small></td><td>${escaped(profile.city ?? "—")}</td><td>${escaped(profile.experienceYears ?? "—")}</td><td>${escaped(profile.updatedAt)}</td><td>${moderation}${lifecycleForm(profile)}</td></tr>`;
+  }).join("");
+  return page("Профили юристов", `<section class="panel"><p>Телефон и личный email не выдаются этой поверхности. Lifecycle-действия требуют отдельной причины; сервер повторно проверяет роль и свежую MFA.</p><nav class="filters" aria-label="Статус профиля">${filters}</nav><table><thead><tr><th>Профиль</th><th>Город</th><th>Стаж</th><th>Изменён</th><th>Модерация и lifecycle</th></tr></thead><tbody>${rows || `<tr><td colspan="5">Нет профилей со статусом «${escaped(lawyerStatusLabel(selectedStatus))}».</td></tr>`}</tbody></table></section>`, { notice, role: "lawyer moderation" });
 }
 
 async function moderate(request: Request, env: Env, session: string, profileId: string): Promise<Response> {
@@ -189,6 +233,22 @@ async function moderate(request: Request, env: Env, session: string, profileId: 
     method: "POST", session, headers: { "content-type": "application/json" }, body: JSON.stringify({ decision, reason: reason.trim() }),
   });
   return lawyerList(request, env, session, result.response.ok && result.body?.ok ? "Решение сохранено и записано в audit." : "Профиль изменился или решение нельзя применить.");
+}
+
+async function transitionLifecycle(request: Request, env: Env, session: string, profileId: string): Promise<Response> {
+  if (!await csrf(request)) return page("Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
+  const form = await request.formData();
+  const action = form.get("action"); const reason = form.get("reason");
+  if ((action !== "suspend" && action !== "block" && action !== "archive" && action !== "restore") || typeof reason !== "string" || reason.trim().length < 1 || reason.trim().length > 2_000) {
+    return lawyerList(request, env, session, "Проверьте lifecycle-действие и причину.");
+  }
+  const result = await platform<{ ok?: boolean; code?: string }>(env, `/api/internal/admin/lawyers/${encodeURIComponent(profileId)}/lifecycle`, {
+    method: "POST", session, headers: { "content-type": "application/json" }, body: JSON.stringify({ action, reason: reason.trim() }),
+  });
+  if (result.response.ok && result.body?.ok) return lawyerList(request, env, session, "Lifecycle-действие сохранено и записано в audit.");
+  if (result.response.status === 403) return lawyerList(request, env, session, "Недостаточно роли или MFA устарела. Обновите MFA и повторите действие.");
+  if (result.body?.code === "PROFILE_STATE_CONFLICT") return lawyerList(request, env, session, "Профиль уже изменился. Обновите список и проверьте текущий статус.");
+  return lawyerList(request, env, session, "Lifecycle-действие сейчас недоступно.");
 }
 
 async function reviewList(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
@@ -235,6 +295,8 @@ export default {
       if (request.method === "GET" && url.pathname === "/reviews") return reviewList(request, env, session);
       const match = /^\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
       if (request.method === "POST" && match && profileIdValid(match[1])) return moderate(request, env, session, match[1]);
+      const lifecycleMatch = /^\/lawyers\/([0-9a-f-]{36})\/lifecycle$/.exec(url.pathname);
+      if (request.method === "POST" && lifecycleMatch && profileIdValid(lifecycleMatch[1])) return transitionLifecycle(request, env, session, lifecycleMatch[1]);
       const reviewMatch = /^\/reviews\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
       if (request.method === "POST" && reviewMatch && profileIdValid(reviewMatch[1])) return moderateReview(request, env, session, reviewMatch[1]);
       return page("Не найдено", "<p>Этот административный маршрут отсутствует.</p>");
