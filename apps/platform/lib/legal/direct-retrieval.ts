@@ -27,8 +27,13 @@ const MAX_CANDIDATES_PER_PROVIDER = 3;
 const MAX_SOURCES_PER_PROVIDER = 2;
 const QUERY_STOPWORDS = new Set([
   "about", "after", "before", "could", "from", "have", "into", "need", "should", "that", "the", "this", "what", "with",
-  "быть", "какие", "какой", "когда", "нужны", "обычно", "после", "права", "порядок", "почему", "сейчас", "также", "чтобы", "этом",
-  "bilan", "uchun", "qanday", "kerak", "keyin", "oldin", "qayerda", "qonun", "bo‘yicha", "boyicha",
+  // These words identify a jurisdiction, an answer format, or the platform —
+  // not a legal subject.  They must never make an otherwise unrelated page
+  // eligible as a citation card (for example, an apostille page for an LLC
+  // registration query just because both mention Uzbekistan and documents).
+  "быть", "какие", "какой", "когда", "нужны", "обычно", "после", "права", "праву", "порядок", "почему", "сейчас", "также", "чтобы", "этом",
+  "официальные", "официальный", "источники", "источник", "ответ", "ответьте", "кратко", "подробно", "узбекистан", "узбекистана", "juro", "staging", "smoke",
+  "bilan", "uchun", "qanday", "kerak", "keyin", "oldin", "qayerda", "qonun", "bo‘yicha", "boyicha", "rasmiy", "manba", "javob", "qisqa", "o‘zbekiston", "ozbekiston",
 ]);
 
 type FetchLike = typeof fetch;

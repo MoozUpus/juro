@@ -108,6 +108,26 @@ test("direct retrieval excludes technically valid but unrelated search documents
   assert.deepEqual(result.sources.map((source) => source.officialUrl), ["https://lex.uz/ru/docs/43"]);
 });
 
+test("direct retrieval does not treat jurisdiction or platform words as document relevance", async () => {
+  const responses = [
+    responseHtml('<a href="/ru/docs/42">Unrelated but official</a>'),
+    new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Апостиль на официальных документах Республики Узбекистан", "Статья 1. Общие правила")),
+    responseHtml(""),
+  ];
+  const result = await retrieveDirectLegalSources(
+    "Staging QA: какие официальные источники JURO использует для ответов по праву Узбекистана? Ответьте кратко.",
+    "ru",
+    {
+      fetchImpl: (async () => responses.shift() ?? new Response("offline", { status: 503 })) as typeof fetch,
+      now: () => new Date("2026-08-07T12:00:00.000Z"),
+      wait: async () => undefined,
+    },
+  );
+  assert.equal(result.sources.length, 0);
+  assert.equal(result.sourceValidationStatus, "unavailable");
+});
+
 test("direct retrieval strips reader controls from a quoted Lex act title", async () => {
   const responses = [
     responseHtml('<a href="/ru/docs/42">Lex result</a>'),

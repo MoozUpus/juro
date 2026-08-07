@@ -713,3 +713,23 @@ Worker version `0416c908-1eff-4842-9ae7-2fa842ce41ac` is staging only. This
 deployment contains no data migration, production change or modification to
 the platform Worker. An authenticated browser check remains required before
 claiming the staff surface as fully verified.
+
+## D-143 — AI deep links are server-addressable and locale-preserving
+
+Status: accepted and deployed to protected staging only
+Date: 2026-08-07
+
+AI conversations and answer branches use ordinary URL anchors so the saved
+conversation remains open even if client routing is unavailable. The locale
+switch preserves the complete query string, including `conversationId` and
+`branchId`. This prevents language switching from discarding an active legal
+answer and makes shared, server-authorized deep links reproducible.
+
+The direct retrieval term filter treats jurisdiction, platform and response
+format words as stop words. Therefore those generic terms cannot make an
+otherwise unrelated official document eligible. The filter still fails closed:
+when no source matches, the UI offers a no-charge clarification rather than a
+legal conclusion. Browser QA on staging Worker
+`e2b26fe4-56e8-45f8-8973-b614f2bf98a7` verified one direct source card, the
+RU → UZ deep-link transition and no desktop horizontal overflow. No migration
+or production resource was changed.

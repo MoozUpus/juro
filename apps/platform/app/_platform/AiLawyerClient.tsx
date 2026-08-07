@@ -120,7 +120,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     const params = new URLSearchParams(searchParams.toString());
     if (next === "voice") params.set("mode", "voice");
     else params.delete("mode");
-    router.replace(params.size ? `${pathname}?${params}` : pathname, { scroll: false });
+    window.location.assign(params.size ? `${pathname}?${params}` : pathname);
   }
 
   const load = useCallback(async () => {
@@ -193,7 +193,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setCanRetry(false);
       const nextParams = new URLSearchParams({ conversationId: statusBody.conversationId });
       if (statusBody.branchId) nextParams.set("branchId", statusBody.branchId);
-      router.replace(aiLocation(nextParams), { scroll: false });
+      window.location.assign(aiLocation(nextParams));
       return { kind: "completed" as const };
     }
     return { kind: "uncertain" as const };
@@ -276,7 +276,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       setCanRetry(false);
       const nextParams = new URLSearchParams({ conversationId: body.conversationId });
       if (body.branchId) nextParams.set("branchId", body.branchId);
-      router.replace(aiLocation(nextParams), { scroll: false });
+      window.location.assign(aiLocation(nextParams));
     } catch (value) {
       const cancelled = isUserCancelledAiRequest(value);
       if (!cancelled && (value instanceof AiRetryableRequestError || value instanceof TypeError)) {
@@ -447,8 +447,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""}`}>
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setVoiceRecordingId(""); setEditSourceMessageId(""); router.replace(aiLocation(), { scroll: false }); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
-        <div>{conversations.length ? conversations.map((item) => <button key={item.id} onClick={() => { setEditSourceMessageId(""); setVoiceRecordingId(""); router.replace(aiLocation(new URLSearchParams({ conversationId: item.id })), { scroll: false }); }}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></button>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
+        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}>{ru ? "+ Новый вопрос" : "+ Yangi savol"}</button>
+        <div>{conversations.length ? conversations.map((item) => <a key={item.id} href={aiLocation(new URLSearchParams({ conversationId: item.id }))}><strong>{item.title}</strong><small>{formatDate(item.updatedAt, ru)}</small></a>) : <p>{ru ? "История появится после первого обработанного вопроса." : "Tarix birinchi qayta ishlangan savoldan keyin paydo bo‘ladi."}</p>}</div>
       </aside>
       <main className="ai-dialog">
         <header><span><Bot /></span><div><h1>{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button><button type="button" disabled title={ru ? "Нужен утверждённый 3D-ассет Журобека" : "Tasdiqlangan Jurobek 3D asseti kerak"}><UserRoundX />{ru ? "С аватаром · скоро" : "Avatar bilan · tez orada"}</button></nav></header>
@@ -518,7 +518,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             </section>}
             {answer.branches && answer.branches.length > 1 && <nav className="ai-branch-history" aria-label={ru ? "Версии ответа" : "Javob versiyalari"}>
               <span><History />{ru ? "Версии" : "Versiyalar"}</span>
-              {answer.branches.map((branch) => <button type="button" aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} onClick={() => { setEditSourceMessageId(""); router.replace(aiLocation(new URLSearchParams({ conversationId: answer.conversationId, branchId: branch.branchId })), { scroll: false }); }}>{branch.versionNumber} · {branch.operation}</button>)}
+              {answer.branches.map((branch) => <a aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} href={aiLocation(new URLSearchParams({ conversationId: answer.conversationId, branchId: branch.branchId }))}>{branch.versionNumber} · {branch.operation}</a>)}
             </nav>}
           </>}
         </div>

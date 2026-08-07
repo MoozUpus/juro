@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
   Bell,
@@ -59,6 +59,7 @@ const nav = [
 export function PlatformShell({ locale, accountType, userName, activeWorkspaceId, workspaces, children }: Props) {
   const pathname = usePathname();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
@@ -112,7 +113,12 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
     const next = locale === "ru" ? "uz" : "ru";
     document.documentElement.lang = next;
     document.cookie = `juro_locale=${next}; Path=/; Max-Age=31536000; SameSite=Lax; Secure`;
-    router.push(pathname.replace(`/${locale}/`, `/${next}/`));
+    // Preserve the concrete object state (conversation, branch, comparison,
+    // selected case) instead of sending a user back to an empty screen after
+    // changing language. Route-level authorization still validates every ID.
+    const nextPath = pathname.replace(`/${locale}/`, `/${next}/`);
+    const query = searchParams.toString();
+    router.push(query ? `${nextPath}?${query}` : nextPath);
   };
   const toggleCollapsed = () => {
     const next = !collapsed;

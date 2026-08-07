@@ -721,3 +721,8 @@
   .ai-voice-controls button:active,
   .ai-speech-controls button:active { transform: none; }
 }
+
+.ai-branch-history a { display:inline-flex; min-height:2.75rem; align-items:center; gap:.4rem; border:1px solid rgba(6,40,68,.16); border-radius:.625rem; background:#fff; color:#062844; padding:.5rem .75rem; font:inherit; font-size:.75rem; font-weight:750; text-decoration:none; }
+.ai-branch-history a[aria-current="page"] { border-color:#be974f; background:#fff8e9; }
+.ai-branch-history a:focus-visible { outline:3px solid #be974f; outline-offset:2px; }
+@media (hover: hover) and (pointer: fine) { .ai-branch-history a:hover { background:#f4f0e8; } }
