@@ -733,3 +733,19 @@ legal conclusion. Browser QA on staging Worker
 `e2b26fe4-56e8-45f8-8973-b614f2bf98a7` verified one direct source card, the
 RU → UZ deep-link transition and no desktop horizontal overflow. No migration
 or production resource was changed.
+
+## D-144 — a sandbox payment is labelled at record level
+
+Status: accepted and deployed to protected staging only
+Date: 2026-08-07
+
+The staging-only payment foundation does not rely on a screen-level banner to
+communicate its simulated nature. When `sandboxEnabled` is true, the payment
+history heading and every displayed status are explicitly labelled as demo in
+the active locale. The persisted payment status itself stays intact; only the
+presentation is scoped to the sandbox flag, which is fail-closed in
+production.
+
+Staging Worker `24e06e7c-affd-4838-a785-3122d546db5c` passed the checkout
+contract suite and authenticated RU/UZ Chrome checks at desktop and 390px.
+No migration, payment execution, or production resource was changed.

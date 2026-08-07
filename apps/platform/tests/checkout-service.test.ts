@@ -303,4 +303,6 @@ test("checkout routes and UI retain auth, CSRF, workspace, localization and feat
   assert.match(checkoutUi, /AUTO_RENEW/);
   assert.match(paymentUi, /sandbox-authorize/);
   assert.match(billingUi, /api\/subscriptions\/plans/);
+  assert.match(billingUi, /function paymentStatusLabel/);
+  assert.match(billingUi, /Демо: оплачено/);
 });
