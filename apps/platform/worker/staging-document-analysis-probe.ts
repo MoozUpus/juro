@@ -89,11 +89,11 @@ async function cleanup(env: PlatformJobEnv): Promise<void> {
   // back earlier safe deletions as one batch.
   const statements = [
     env.DB.prepare("DELETE FROM job_outbox WHERE workspace_id=? OR subject_id=?").bind(probeIds.workspaceId, probeIds.analysisId),
-    env.DB.prepare("DELETE FROM ai_provider_usage_events WHERE workspace_id=? AND user_id=?").bind(probeIds.workspaceId, probeIds.userId),
     env.DB.prepare("DELETE FROM ai_cost_daily_aggregates WHERE workspace_id=? AND user_id=?").bind(probeIds.workspaceId, probeIds.userId),
     env.DB.prepare("DELETE FROM ai_usage_ledger WHERE workspace_id=? AND user_id=?").bind(probeIds.workspaceId, probeIds.userId),
     env.DB.prepare("DELETE FROM ai_runs WHERE workspace_id=? AND user_id=?").bind(probeIds.workspaceId, probeIds.userId),
     env.DB.prepare("DELETE FROM workspace_audit_events WHERE workspace_id=?").bind(probeIds.workspaceId),
+    env.DB.prepare("DELETE FROM file_scan_results WHERE analysis_id=?").bind(probeIds.analysisId),
     env.DB.prepare("DELETE FROM document_analyses WHERE id=? AND workspace_id=?").bind(probeIds.analysisId, probeIds.workspaceId),
     env.DB.prepare("DELETE FROM document_files WHERE id=? AND workspace_id=?").bind(probeIds.fileId, probeIds.workspaceId),
     env.DB.prepare("UPDATE user_profiles SET default_workspace_id=NULL WHERE id=? AND default_workspace_id=?").bind(probeIds.userId, probeIds.workspaceId),
@@ -113,16 +113,13 @@ async function assertCleanup(env: PlatformJobEnv): Promise<void> {
     (SELECT count(*) FROM file_scan_results WHERE analysis_id=?) +
     (SELECT count(*) FROM analysis_document_versions WHERE analysis_id=?) +
     (SELECT count(*) FROM ai_runs WHERE workspace_id=? AND user_id=?) +
-    (SELECT count(*) FROM ai_usage_ledger WHERE workspace_id=? AND user_id=?) +
-    (SELECT count(*) FROM ai_provider_usage_events WHERE workspace_id=? AND user_id=?) AS remaining`).bind(
+    (SELECT count(*) FROM ai_usage_ledger WHERE workspace_id=? AND user_id=?) AS remaining`).bind(
     probeIds.userId,
     probeIds.workspaceId,
     probeIds.fileId,
     probeIds.analysisId,
     probeIds.analysisId,
     probeIds.analysisId,
-    probeIds.workspaceId,
-    probeIds.userId,
     probeIds.workspaceId,
     probeIds.userId,
     probeIds.workspaceId,
@@ -219,8 +216,9 @@ async function assertCompleted(env: PlatformJobEnv): Promise<void> {
 
 /**
  * One explicitly enabled staging-only lifecycle check. It intentionally uses a
- * synthetic non-user DOCX and the normal scanner and analysis handlers, but
- * retains no document text, provider response or durable probe data afterward.
+ * synthetic non-user DOCX and the normal scanner and analysis handlers. It
+ * removes mutable probe state afterward; the content-free provider-usage
+ * ledger remains append-only audit evidence by design.
  */
 export async function runStagingDocumentAnalysisProbe(
   env: PlatformJobEnv & { STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED?: string },

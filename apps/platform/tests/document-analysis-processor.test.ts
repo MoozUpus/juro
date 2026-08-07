@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
+  documentAnalysisDiagnosticDetail,
   type DocumentAnalysisProcessorDependencies,
   DocumentAnalysisProcessingError,
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
+import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 import { ComparisonProcessingError } from "../lib/document-comparison/types";
 import { PackageExtractionError } from "../lib/document-analysis/package-extractor";
 import type { DocumentAnalysisResult } from "../lib/document-analysis/schema";
@@ -67,8 +69,23 @@ test("document consumer refuses quarantined files before any R2 or AI read", asy
   fixture.sqlite.close();
 });
 
-test("safe document analysis persists normalized result, usage, audit and is idempotent", async () => {
-  const fixture = await databaseFixture("ready", "analysis_safe");
+test("provider diagnostics expose only an allow-listed HTTP category", () => {
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_UNAVAILABLE", false, 401, "authentication_error")),
+    "PROVIDER_HTTP_401",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_UNAVAILABLE", true, 503, "api_error")),
+    "PROVIDER_HTTP_5XX",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_TIMEOUT", true)),
+    "PROVIDER_TIMEOUT",
+  );
+});
+
+test("safe retrying document analysis persists normalized result, usage, audit and is idempotent", async () => {
+  const fixture = await databaseFixture("retrying", "analysis_safe");
   const bytes = new TextEncoder().encode("Сторона А. срок определяется дополнительно");
   const sha256 = await sha256Hex(bytes);
   fixture.sqlite.prepare("UPDATE document_files SET file_name='package.zip',mime_type='application/zip',size_bytes=?,sha256=? WHERE id='file-a'").run(bytes.byteLength, sha256);

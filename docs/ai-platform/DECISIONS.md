@@ -749,3 +749,41 @@ production.
 Staging Worker `24e06e7c-affd-4838-a785-3122d546db5c` passed the checkout
 contract suite and authenticated RU/UZ Chrome checks at desktop and 390px.
 No migration, payment execution, or production resource was changed.
+
+## D-145 — a safe document-analysis retry preserves the scanner boundary
+
+Status: accepted and deployed to protected staging only
+Date: 2026-08-07
+
+Provider outages leave a completed scanner result in `retrying`. The prior
+worker accepted only `ready` rows, so a queue redelivery could incorrectly
+classify this safe retry as `DOCUMENT_ANALYSIS_FILE_UNSAFE`. The processor now
+atomically claims only `ready` or `retrying` analyses and continues to require
+the exact `analysis_safe` file kind before any R2 or provider access.
+
+This is deliberately not a broad retry relaxation: quarantined, unsafe and
+unknown file states remain terminal before provider access. The focused retry
+contract is included in the 129/129 platform regression. Worker
+`b9ca6e98-f20a-42b8-8771-4e4ad3b50ce2` is deployed to staging only; no D1
+migration, secret value, or production resource changed.
+
+## D-161 — provider diagnostics retain only an allow-listed transport category
+
+Status: accepted and staging-verified
+Date: 2026-08-07
+
+Document analysis never persists a provider response, request body, document
+content or credential to explain an outage. For the staging-only synthetic
+probe, the processor now emits only a bounded diagnostic category: one of
+HTTP 401/403/404/408/409/429, HTTP 5xx, timeout, an open cost circuit, or a
+generic unavailable state. The category is sufficient to distinguish
+configuration, authorization, quota and provider-outage paths without
+expanding the privacy surface.
+
+The controlled 2026-08-07 run passed the private ClamAV boundary, reached the
+Anthropic document adapter, then returned the generic unavailable category
+without a transport code. It removed its R2 objects, mutable D1 records and
+synthetic identity before returning. The content-free provider-usage ledger is
+intentionally append-only audit evidence and is not deleted. Staging Worker
+`51244924-3cd6-4a3e-a0e3-103b458f3a3a` has the probe flag reverted to `false`.
+No production setting is changed.

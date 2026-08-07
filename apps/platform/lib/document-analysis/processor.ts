@@ -139,9 +139,35 @@ export type DocumentAnalysisDiagnosticDetail =
   | "ANALYSIS_VERSION_OBJECT_WRITE_TRANSITION_INVALID"
   | "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX"
   | "LEGAL_RETRIEVAL_SQLITE_ERROR"
-  | "LEGAL_RETRIEVAL_FAILED";
+  | "LEGAL_RETRIEVAL_FAILED"
+  | "PROVIDER_HTTP_401"
+  | "PROVIDER_HTTP_403"
+  | "PROVIDER_HTTP_404"
+  | "PROVIDER_HTTP_408"
+  | "PROVIDER_HTTP_409"
+  | "PROVIDER_HTTP_429"
+  | "PROVIDER_HTTP_5XX"
+  | "PROVIDER_TIMEOUT"
+  | "PROVIDER_CIRCUIT_OPEN"
+  | "PROVIDER_UNAVAILABLE";
 
-function analysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
+export function documentAnalysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
+  if (error instanceof AiUnavailableError) {
+    if (error.code === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
+    if (error.code === "PROVIDER_CIRCUIT_OPEN") return "PROVIDER_CIRCUIT_OPEN";
+    switch (error.providerStatus) {
+      case 401: return "PROVIDER_HTTP_401";
+      case 403: return "PROVIDER_HTTP_403";
+      case 404: return "PROVIDER_HTTP_404";
+      case 408: return "PROVIDER_HTTP_408";
+      case 409: return "PROVIDER_HTTP_409";
+      case 429: return "PROVIDER_HTTP_429";
+      default:
+        return error.providerStatus !== null && error.providerStatus >= 500
+          ? "PROVIDER_HTTP_5XX"
+          : "PROVIDER_UNAVAILABLE";
+    }
+  }
   if (error instanceof AnalysisRevisionError) {
     if (error.code === "ANALYSIS_REVISION_STORAGE_FAILED") {
       if (error.diagnosticStage === "create_intent") return "ANALYSIS_VERSION_CREATE_INTENT_FAILED";
@@ -266,7 +292,7 @@ export async function executeDocumentAnalysisJob(
   } else {
     assertSafeReadyState(row);
     const claimed = await scopedEnv.DB.prepare(
-      "UPDATE document_analyses SET status='processing',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status='ready'",
+      "UPDATE document_analyses SET status='processing',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status IN ('ready','retrying')",
     ).bind(new Date().toISOString(), analysisId, workspaceId).run();
     if (Number(claimed.meta.changes ?? 0) !== 1 && row.status !== "processing") {
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_FILE_UNSAFE", false);
@@ -568,7 +594,7 @@ async function analyzeObject(
         "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED",
         true,
         "version",
-        analysisDiagnosticDetail(error),
+        documentAnalysisDiagnosticDetail(error),
       );
     }
     if (error instanceof ComparisonProcessingError) {
@@ -594,7 +620,7 @@ async function analyzeObject(
       "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE",
       true,
       diagnosticStage,
-      analysisDiagnosticDetail(error),
+      documentAnalysisDiagnosticDetail(error),
     );
   }
 }
@@ -756,7 +782,7 @@ async function persistNormalizedAnalysis(
 }
 
 function assertSafeReadyState(row: AnalysisRow): void {
-  if (!(["ready", "processing"] as string[]).includes(row.status) || row.fileKind !== "analysis_safe") {
+  if (!(["ready", "processing", "retrying"] as string[]).includes(row.status) || row.fileKind !== "analysis_safe") {
     throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_FILE_UNSAFE", false);
   }
 }
