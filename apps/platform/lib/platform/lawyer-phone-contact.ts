@@ -46,7 +46,7 @@ export async function revealLawyerRequestPhone(input: {
          WHEN p.user_id=? THEN 'lawyer'
        END AS actorRole
      FROM lawyer_requests r
-     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.status='public_approved'
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id
        AND g.lawyer_user_id=p.user_id
        AND g.revoked_at IS NULL

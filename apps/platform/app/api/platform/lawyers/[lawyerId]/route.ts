@@ -17,7 +17,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
       marketplace_status AS marketplaceStatus,city,region,education,
       consultation_formats_json AS consultationFormatsJson,
       CASE WHEN profile_photo_key IS NOT NULL THEN '/api/public/lawyers/' || id || '/photo' ELSE NULL END AS profilePhotoUrl
-     FROM lawyer_profiles WHERE id=? AND ((status='public_approved' AND public_approved_at IS NOT NULL)
+     FROM lawyer_profiles WHERE id=? AND ((status='public_approved' AND marketplace_status='public_approved' AND public_approved_at IS NOT NULL)
        OR (marketplace_status='pending_review' AND status='pending')) LIMIT 1`,
   ).bind(parsedId.data).all<{id:string;displayName:string;specialtiesJson:unknown;languagesJson:unknown;experienceYears:number|null;priceDescription:string|null;availabilityStatus:string;nextAvailableAt:string|null;advocateStatus:string;firmName:string|null;bio:string|null;marketplaceStatus:string;city:string|null;region:string|null;education:string|null;consultationFormatsJson:unknown;profilePhotoUrl:string|null}>();
   if (!lawyer.results.length) return Response.json({ code: "NOT_FOUND" }, { status: 404 });

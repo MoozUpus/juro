@@ -28,7 +28,7 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   const handoff = await db.prepare(
     `SELECT r.id,r.case_id AS caseId,p.user_id AS lawyerUserId
      FROM lawyer_requests r
-     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.status='public_approved'
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN conflict_checks c ON c.lawyer_request_id=r.id AND c.lawyer_profile_id=p.id AND c.status='clear'
      WHERE r.id=? AND r.workspace_id=? AND r.requester_user_id=? AND r.status='awaiting_user_consent' LIMIT 1`,
   ).bind(requestId, workspace.id, user.id).first<{ id: string; caseId: string; lawyerUserId: string }>();

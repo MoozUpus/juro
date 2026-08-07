@@ -29,7 +29,7 @@ export const GET = withApiErrors(async function GET() {
       ,(SELECT reply.body FROM lawyer_review_replies reply JOIN lawyer_reviews review ON review.id=reply.review_id WHERE review.lawyer_request_id=r.id ORDER BY reply.version DESC LIMIT 1) AS reviewReplyBody
       ,(SELECT reply.version FROM lawyer_review_replies reply JOIN lawyer_reviews review ON review.id=reply.review_id WHERE review.lawyer_request_id=r.id ORDER BY reply.version DESC LIMIT 1) AS reviewReplyVersion
      FROM lawyer_requests r
-     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN conflict_checks c ON c.lawyer_request_id=r.id AND c.lawyer_profile_id=p.id
      LEFT JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
      LEFT JOIN cases cs ON cs.id=g.case_id

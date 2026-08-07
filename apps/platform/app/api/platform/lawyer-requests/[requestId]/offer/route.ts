@@ -29,7 +29,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
     `SELECT o.id,o.version,o.status,o.scope_description AS scopeDescription,o.price_description AS priceDescription,o.duration_description AS durationDescription,o.created_at AS createdAt,o.updated_at AS updatedAt,o.responded_at AS respondedAt
      FROM lawyer_offers o
      JOIN lawyer_requests r ON r.id=o.lawyer_request_id
-     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
      WHERE r.id=? ORDER BY o.version DESC LIMIT 1`,
   ).bind(user.id, user.id, new Date().toISOString(), requestId).first<OfferRow>();
@@ -49,7 +49,7 @@ export const POST = withApiErrors(async function POST(request: Request, context:
   const handoff = await db.prepare(
     `SELECT r.id,r.workspace_id AS workspaceId
      FROM lawyer_requests r
-     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
      WHERE r.id=? AND r.status IN ('access_granted','offer_proposed') LIMIT 1`,
   ).bind(user.id, user.id, new Date().toISOString(), requestId).first<{ id: string; workspaceId: string }>();

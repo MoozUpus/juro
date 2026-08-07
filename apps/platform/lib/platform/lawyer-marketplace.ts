@@ -4,6 +4,9 @@ export const lawyerMarketplaceStatuses = [
   "changes_requested",
   "public_approved",
   "rejected",
+  "suspended",
+  "blocked",
+  "archived",
 ] as const;
 
 export type LawyerMarketplaceStatus = (typeof lawyerMarketplaceStatuses)[number];
@@ -78,4 +81,8 @@ export function marketplaceStatusAfterProfileEdit(
 
 export function mayReceiveLawyerRequests(status: string): boolean {
   return status === "public_approved";
+}
+
+export function isRestrictedLawyerMarketplaceStatus(status: string): boolean {
+  return status === "suspended" || status === "blocked" || status === "archived";
 }

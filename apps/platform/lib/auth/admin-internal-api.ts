@@ -9,6 +9,7 @@ import {
   type AdminDomainEnvironment,
 } from "./admin-domain-session";
 import { moderateLawyerProfile } from "../platform/lawyer-profile-moderation-service";
+import { LawyerProfileLifecycleError, transitionLawyerProfileLifecycle } from "../platform/lawyer-profile-lifecycle-service";
 import { lawyerReviewModerationInputSchema, lawyerReviewModerationListSchema } from "../platform/lawyer-review-moderation";
 import { LawyerReviewModerationServiceError, listLawyerReviews, moderateLawyerReview } from "../platform/lawyer-review-moderation-service";
 
@@ -20,6 +21,10 @@ const reviewIdSchema = z.string().uuid();
 const consumeSchema = z.object({ ticket: z.string().regex(TOKEN_PATTERN) }).strict();
 const moderationSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().min(1).max(2_000),
+}).strict();
+const lifecycleSchema = z.object({
+  action: z.enum(["suspend", "block", "archive", "restore"]),
   reason: z.string().trim().min(1).max(2_000),
 }).strict();
 
@@ -120,7 +125,7 @@ async function lawyerProfiles(request: Request, env: AdminInternalEnv): Promise<
   const authenticated = await requirePrincipal(request, env);
   if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "lawyer.profiles.moderate")) return noStore({ code: "ACCESS_DENIED" }, 403);
   const status = new URL(request.url).searchParams.get("status") ?? "pending_review";
-  if (!["profile_incomplete", "pending_review", "changes_requested", "public_approved", "rejected"].includes(status)) return noStore({ code: "INVALID_INPUT" }, 400);
+  if (!["profile_incomplete", "pending_review", "changes_requested", "public_approved", "rejected", "suspended", "blocked", "archived"].includes(status)) return noStore({ code: "INVALID_INPUT" }, 400);
   const rows = await authenticated.db.prepare(
     `SELECT p.id,p.display_name AS displayName,p.status,p.marketplace_status AS marketplaceStatus,
        p.profile_revision AS profileRevision,p.city,p.region,p.experience_years AS experienceYears,
@@ -161,6 +166,41 @@ async function moderateProfile(request: Request, env: AdminInternalEnv, profileI
     });
     return noStore({ ok: true, status: result.status });
   } catch {
+    return noStore({ code: "PROFILE_UNAVAILABLE" }, 409);
+  }
+}
+
+async function transitionProfileLifecycle(request: Request, env: AdminInternalEnv, profileId: string): Promise<Response> {
+  const authenticated = await requirePrincipal(request, env);
+  if (!authenticated) return noStore({ code: "ACCESS_DENIED" }, 403);
+  const payload = lifecycleSchema.safeParse(await parseJson(request));
+  if (!payload.success) return noStore({ code: "INVALID_INPUT" }, 400);
+  const capability = payload.data.action === "block" ? "lawyer.profiles.block" : "lawyer.profiles.moderate";
+  if (!adminRoleAllows(authenticated.principal.roles, capability)) return noStore({ code: "ACCESS_DENIED" }, 403);
+  const auditAction = {
+    suspend: "lawyer_profile_suspended",
+    block: "lawyer_profile_blocked",
+    archive: "lawyer_profile_archived",
+    restore: "lawyer_profile_restored",
+  } as const;
+  try {
+    const result = await transitionLawyerProfileLifecycle(authenticated.db, {
+      profileId,
+      actorUserId: authenticated.principal.userId,
+      action: payload.data.action,
+      reason: payload.data.reason,
+    });
+    await appendAdminDomainAudit(authenticated.db, {
+      environment: authenticated.environment,
+      principal: authenticated.principal,
+      action: auditAction[payload.data.action],
+      entityType: "lawyer_profile",
+      entityId: profileId,
+      metadata: { status: result.status, profileRevision: result.profileRevision },
+    });
+    return noStore({ ok: true, status: result.status, profileRevision: result.profileRevision });
+  } catch (error) {
+    if (error instanceof LawyerProfileLifecycleError) return noStore({ code: error.code }, 409);
     return noStore({ code: "PROFILE_UNAVAILABLE" }, 409);
   }
 }
@@ -263,6 +303,12 @@ export async function handleInternalAdminRequest(request: Request, env: AdminInt
     const profileId = profileIdSchema.safeParse(moderation[1]);
     if (!profileId.success) return noStore({ code: "NOT_FOUND" }, 404);
     return moderateProfile(request, env, profileId.data);
+  }
+  const lifecycle = /^\/api\/internal\/admin\/lawyers\/([0-9a-f-]{36})\/lifecycle$/.exec(url.pathname);
+  if (lifecycle && request.method === "POST") {
+    const profileId = profileIdSchema.safeParse(lifecycle[1]);
+    if (!profileId.success) return noStore({ code: "NOT_FOUND" }, 404);
+    return transitionProfileLifecycle(request, env, profileId.data);
   }
   const reviewModeration = /^\/api\/internal\/admin\/reviews\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
   if (reviewModeration && request.method === "POST") {

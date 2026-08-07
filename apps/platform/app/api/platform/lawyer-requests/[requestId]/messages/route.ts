@@ -17,7 +17,7 @@ async function participantForRequest(userId: string, workspaceId: string, reques
   const owner = await db.prepare("SELECT workspace_id AS workspaceId FROM lawyer_requests WHERE id=? AND workspace_id=? AND requester_user_id=? LIMIT 1").bind(requestId, workspaceId, userId).first<{ workspaceId: string }>();
   if (owner) return { workspaceId: owner.workspaceId, role: "owner" };
   const lawyer = await db.prepare(`SELECT r.workspace_id AS workspaceId
-    FROM lawyer_requests r JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
+    FROM lawyer_requests r JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved' AND p.marketplace_status='public_approved'
     JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
     WHERE r.id=? LIMIT 1`).bind(userId, userId, new Date().toISOString(), requestId).first<{ workspaceId: string }>();
   return lawyer ? { workspaceId: lawyer.workspaceId, role: "lawyer" } : null;

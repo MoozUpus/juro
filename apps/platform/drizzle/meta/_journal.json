@@ -771,6 +771,13 @@
       "when": 1786060800000,
       "tag": "0109_admin_domain_handoff_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1786064400000,
+      "tag": "0110_lawyer_profile_lifecycle_controls",
+      "breakpoints": true
     }
   ]
 }

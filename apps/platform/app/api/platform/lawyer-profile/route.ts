@@ -9,6 +9,7 @@ import {
 } from "../../../../lib/platform/lawyer-profile";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../../../../lib/platform/lawyer-profile-preview";
 import {
+  isRestrictedLawyerMarketplaceStatus,
   marketplaceStatusAfterProfileEdit,
   missingLawyerMarketplaceFields,
 } from "../../../../lib/platform/lawyer-marketplace";
@@ -296,6 +297,9 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
   const profile = await ownProfile(user.id);
   if (!profile) {
     return response({ code: "PROFILE_UNAVAILABLE", error: lawyerProfileError(locale, "PROFILE_UNAVAILABLE") }, 404);
+  }
+  if (isRestrictedLawyerMarketplaceStatus(profile.marketplaceStatus)) {
+    return response({ code: "PROFILE_LOCKED", error: lawyerProfileError(locale, "PROFILE_LOCKED") }, 423);
   }
   const value = parsed.data;
   const current = toEditable(profile);

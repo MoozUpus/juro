@@ -65,7 +65,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const lawyer = parsed.data.lawyerProfileId
     ? await db.prepare(
-      "SELECT id,user_id AS userId FROM lawyer_profiles WHERE id=? AND status='public_approved' LIMIT 1",
+      "SELECT id,user_id AS userId FROM lawyer_profiles WHERE id=? AND status='public_approved' AND marketplace_status='public_approved' LIMIT 1",
     ).bind(parsed.data.lawyerProfileId).first<{ id: string; userId: string }>()
     : null;
   if (parsed.data.lawyerProfileId && !lawyer) {

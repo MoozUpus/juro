@@ -18,7 +18,7 @@ export const GET = withApiErrors(async function GET(_request: Request, context: 
     `SELECT r.id,r.status,r.anonymized_summary AS anonymizedSummary,r.created_at AS createdAt,
       c.id AS conflictCheckId,c.status AS conflictStatus
      FROM lawyer_requests r
-     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id AND p.user_id=? AND p.status='public_approved' AND p.marketplace_status='public_approved'
      JOIN conflict_checks c ON c.lawyer_request_id=r.id AND c.lawyer_profile_id=p.id
      WHERE r.id=? LIMIT 1`,
   ).bind(user.id, requestId).first();
@@ -40,7 +40,7 @@ export const POST = withApiErrors(async function POST(request: Request, context:
     `SELECT c.id,c.lawyer_request_id AS requestId,r.workspace_id AS workspaceId
      FROM conflict_checks c
      JOIN lawyer_requests r ON r.id=c.lawyer_request_id
-     JOIN lawyer_profiles p ON p.id=c.lawyer_profile_id AND p.user_id=? AND p.status='public_approved'
+     JOIN lawyer_profiles p ON p.id=c.lawyer_profile_id AND p.user_id=? AND p.status='public_approved' AND p.marketplace_status='public_approved'
      WHERE c.lawyer_request_id=? AND c.status='pending' LIMIT 1`,
   ).bind(user.id, requestId).first<{ id: string; requestId: string; workspaceId: string }>();
   if (!check) return response({ code: "REQUEST_UNAVAILABLE", error: localizedHandoffError(locale, "REQUEST_UNAVAILABLE") }, 404);

@@ -85,7 +85,7 @@ export async function submitLawyerReviewReply(input: ReplyLifecycleInput & {
      FROM lawyer_reviews r
      JOIN lawyer_review_moderation moderation ON moderation.review_id=r.id AND moderation.decision='approved'
      JOIN lawyer_profiles profile ON profile.id=r.lawyer_profile_id
-       AND profile.user_id=? AND profile.status='public_approved'
+       AND profile.user_id=? AND profile.status='public_approved' AND profile.marketplace_status='public_approved'
      JOIN user_profiles requester ON requester.id=r.requester_user_id
      WHERE r.id=? AND r.status='approved' LIMIT 1`,
   ).bind(input.actorUserId, input.reviewId).first<ReviewForReply>();

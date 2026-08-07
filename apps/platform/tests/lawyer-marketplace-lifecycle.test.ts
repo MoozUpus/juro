@@ -3,6 +3,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import {
   isLawyerMarketplaceProfileComplete,
+  isRestrictedLawyerMarketplaceStatus,
   marketplaceStatusAfterProfileEdit,
   mayReceiveLawyerRequests,
   missingLawyerMarketplaceFields,
@@ -42,7 +43,31 @@ test("only an approved profile may receive a client request", () => {
   assert.equal(mayReceiveLawyerRequests("pending_review"), false);
   assert.equal(mayReceiveLawyerRequests("changes_requested"), false);
   assert.equal(mayReceiveLawyerRequests("rejected"), false);
+  assert.equal(mayReceiveLawyerRequests("suspended"), false);
+  assert.equal(mayReceiveLawyerRequests("blocked"), false);
+  assert.equal(mayReceiveLawyerRequests("archived"), false);
   assert.equal(mayReceiveLawyerRequests("public_approved"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("suspended"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("blocked"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("archived"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("pending_review"), false);
+});
+
+test("restricted profiles are locked for edits and excluded from new handoff work", () => {
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  const photoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
+  const handoffRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/route.ts", import.meta.url), "utf8");
+  const lifecycleRoute = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/lifecycle/route.ts", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../drizzle/0110_lawyer_profile_lifecycle_controls.sql", import.meta.url), "utf8");
+  assert.match(profileRoute, /PROFILE_LOCKED/);
+  assert.match(photoRoute, /PROFILE_LOCKED/);
+  assert.match(handoffRoute, /marketplace_status='public_approved'/);
+  assert.match(lifecycleRoute, /staff\.operations\.manage/);
+  assert.match(lifecycleRoute, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(migration, /lawyer_profile_lifecycle_events/);
+  assert.match(migration, /append-only/);
+  assert.match(migration, /lifecycle evidence required/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|DELETE\s+FROM/iu);
 });
 
 test("profile status notifications are localized and preserve only a bounded review reason", () => {

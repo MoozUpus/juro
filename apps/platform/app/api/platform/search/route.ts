@@ -90,7 +90,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
       `SELECT id,display_name AS title,'' AS subtitle,
         coalesce(public_approved_at,created_at) AS updatedAt
        FROM lawyer_profiles
-       WHERE status='public_approved' AND public_approved_at IS NOT NULL
+       WHERE status='public_approved' AND marketplace_status='public_approved' AND public_approved_at IS NOT NULL
          AND display_name LIKE ? ESCAPE '\\'
        ORDER BY display_name COLLATE NOCASE LIMIT 6`,
     ).bind(like) : emptySearchRows(

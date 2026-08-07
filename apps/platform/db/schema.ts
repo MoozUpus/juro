@@ -1529,6 +1529,25 @@ export const lawyerProfiles = sqliteTable("lawyer_profiles", {
   id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), displayName: text("display_name").notNull(), specialtiesJson: text("specialties_json").notNull().default("[]"), languagesJson: text("languages_json").notNull().default("[]"), status: text("status").notNull().default("pending"), marketplaceStatus: text("marketplace_status").notNull().default("profile_incomplete"), publicApprovedAt: text("public_approved_at"), experienceYears: integer("experience_years"), priceDescription: text("price_description"), availabilityStatus: text("availability_status").notNull().default("unknown"), nextAvailableAt: text("next_available_at"), advocateStatus: text("advocate_status").notNull().default("not_declared"), firmName: text("firm_name"), bio: text("bio"), profileRevision: integer("profile_revision").notNull().default(1), city: text("city"), region: text("region"), education: text("education"), consultationFormatsJson: text("consultation_formats_json").notNull().default("[]"), profilePhotoKey: text("profile_photo_key"), profilePhotoMime: text("profile_photo_mime"), profilePhotoSha256: text("profile_photo_sha256"), profilePhotoSizeBytes: integer("profile_photo_size_bytes"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("lawyer_profiles_user_uidx").on(table.userId), index("lawyer_profiles_status_idx").on(table.status, table.updatedAt)]);
 
+/** Immutable operational decisions that restrict marketplace publication/work. */
+export const lawyerProfileLifecycleEvents = sqliteTable("lawyer_profile_lifecycle_events", {
+  id: text("id").primaryKey(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  fromProfileRevision: integer("from_profile_revision").notNull(),
+  toProfileRevision: integer("to_profile_revision").notNull(),
+  actorUserId: text("actor_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  action: text("action").notNull(),
+  reason: text("reason").notNull(),
+  fromProfileStatus: text("from_profile_status").notNull(),
+  toProfileStatus: text("to_profile_status").notNull(),
+  fromMarketplaceStatus: text("from_marketplace_status").notNull(),
+  toMarketplaceStatus: text("to_marketplace_status").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("lawyer_profile_lifecycle_profile_idx").on(table.lawyerProfileId, table.createdAt),
+  index("lawyer_profile_lifecycle_actor_idx").on(table.actorUserId, table.createdAt),
+]);
+
 export const lawyerRequests = sqliteTable("lawyer_requests", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").references(() => lawyerProfiles.id, { onDelete: "set null" }), status: text("status").notNull().default("requested"), anonymizedSummary: text("anonymized_summary").notNull(), requestedScopeJson: text("requested_scope_json").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [index("lawyer_requests_workspace_idx").on(table.workspaceId, table.updatedAt), index("lawyer_requests_lawyer_idx").on(table.lawyerProfileId, table.status)]);

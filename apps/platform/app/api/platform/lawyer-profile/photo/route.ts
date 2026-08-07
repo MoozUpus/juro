@@ -4,6 +4,7 @@ import { requireD1, requireR2, runtimeEnv } from "../../../../../lib/document-bu
 import { malwareScannerResponseSchema } from "../../../../../lib/document-analysis/malware-scanner";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../../../../../lib/platform/lawyer-profile-preview";
 import {
+  isRestrictedLawyerMarketplaceStatus,
   marketplaceStatusAfterProfileEdit,
   missingLawyerMarketplaceFields,
 } from "../../../../../lib/platform/lawyer-marketplace";
@@ -184,6 +185,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const user = await requireApiUser();
   const profile = await ownProfile(user.id);
   if (!profile) return response({ code: "PROFILE_UNAVAILABLE" }, 404);
+  if (isRestrictedLawyerMarketplaceStatus(profile.marketplaceStatus)) {
+    return response({ code: "PROFILE_LOCKED" }, 423);
+  }
 
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (!request.body || !Number.isFinite(contentLength) || contentLength > MAX_PROFILE_PHOTO_BYTES) {

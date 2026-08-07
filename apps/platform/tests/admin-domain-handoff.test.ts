@@ -12,6 +12,7 @@ import {
 import { sha256 } from "../lib/auth/crypto";
 import { LawyerReviewModerationServiceError, moderateLawyerReview } from "../lib/platform/lawyer-review-moderation-service";
 import { moderateLawyerProfile } from "../lib/platform/lawyer-profile-moderation-service";
+import { transitionLawyerProfileLifecycle } from "../lib/platform/lawyer-profile-lifecycle-service";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const NOW = new Date("2026-08-07T08:00:00.000Z");
@@ -298,6 +299,66 @@ test("lawyer moderator may request corrections without publishing or booking the
     assert.equal(notification.type, "lawyer_profile_status");
     assert.equal(notification.title, "Профиль юриста нужно доработать");
     assert.match(notification.body, /Synthetic request: clarify the listed consultation format\./u);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("restricted lawyer lifecycle is append-only, blocks work, and restores only to review", async () => {
+  const { sqlite, d1 } = seed();
+  try {
+    seedPendingLawyerProfile(sqlite);
+    assert.equal(adminRoleAllows(["lawyer_moderator"], "lawyer.profiles.block"), false);
+    assert.equal(adminRoleAllows(["super_admin"], "lawyer.profiles.block"), true);
+
+    const suspended = await transitionLawyerProfileLifecycle(d1, {
+      profileId: "pending-lawyer-profile",
+      actorUserId: USER_ID,
+      action: "suspend",
+      reason: "Synthetic temporary operational restriction.",
+      now: NOW,
+    });
+    assert.deepEqual(suspended, { status: "suspended", profileRevision: 1 });
+    const profile = sqlite.prepare(
+      "SELECT status,marketplace_status AS marketplaceStatus,profile_revision AS profileRevision,public_approved_at AS publicApprovedAt FROM lawyer_profiles WHERE id='pending-lawyer-profile'",
+    ).get() as { status: string; marketplaceStatus: string; profileRevision: number; publicApprovedAt: string | null };
+    assert.equal(profile.status, "pending");
+    assert.equal(profile.marketplaceStatus, "suspended");
+    assert.equal(profile.profileRevision, 1);
+    assert.equal(profile.publicApprovedAt, null);
+    assert.throws(
+      () => sqlite.prepare("UPDATE lawyer_profiles SET status='public_approved',marketplace_status='public_approved' WHERE id='pending-lawyer-profile'").run(),
+      /lifecycle evidence required/u,
+    );
+    assert.throws(
+      () => sqlite.prepare("UPDATE lawyer_profile_lifecycle_events SET reason='tampered' WHERE lawyer_profile_id='pending-lawyer-profile'").run(),
+      /append-only/u,
+    );
+    const event = sqlite.prepare(
+      "SELECT action,reason,actor_user_id AS actorUserId,from_marketplace_status AS fromStatus,to_marketplace_status AS toStatus FROM lawyer_profile_lifecycle_events",
+    ).get() as { action: string; reason: string; actorUserId: string; fromStatus: string; toStatus: string };
+    assert.equal(event.action, "suspend");
+    assert.equal(event.reason, "Synthetic temporary operational restriction.");
+    assert.equal(event.actorUserId, USER_ID);
+    assert.equal(event.fromStatus, "pending_review");
+    assert.equal(event.toStatus, "suspended");
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM workspace_audit_events WHERE action='lawyer_profile_suspended'").get()?.total, 1);
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM notifications WHERE type='lawyer_profile_status'").get()?.total, 1);
+
+    const restored = await transitionLawyerProfileLifecycle(d1, {
+      profileId: "pending-lawyer-profile",
+      actorUserId: USER_ID,
+      action: "restore",
+      reason: "Synthetic review restoration.",
+      now: new Date("2026-08-07T08:01:00.000Z"),
+    });
+    assert.deepEqual(restored, { status: "pending_review", profileRevision: 2 });
+    const restoredProfile = sqlite.prepare(
+      "SELECT marketplace_status AS marketplaceStatus,profile_revision AS profileRevision FROM lawyer_profiles WHERE id='pending-lawyer-profile'",
+    ).get() as { marketplaceStatus: string; profileRevision: number };
+    assert.equal(restoredProfile.marketplaceStatus, "pending_review");
+    assert.equal(restoredProfile.profileRevision, 2);
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM lawyer_profile_lifecycle_events").get()?.total, 2);
   } finally {
     sqlite.close();
   }

@@ -161,8 +161,8 @@ function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
     (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,current_revision,created_at,updated_at)
     VALUES ('case-a','workspace-owner','owner-a','individual','ru','Case A','contracts','open',1,?,?)`).run(now, now);
   sqlite.prepare(`INSERT INTO lawyer_profiles
-    (id,user_id,display_name,specialties_json,languages_json,status,public_approved_at,created_at,updated_at)
-    VALUES ('profile-a','lawyer-a','Lawyer A','[]','["ru"]','public_approved',?,?,?)`).run(now, now, now);
+    (id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,public_approved_at,created_at,updated_at)
+    VALUES ('profile-a','lawyer-a','Lawyer A','[]','["ru"]','public_approved','public_approved',?,?,?)`).run(now, now, now);
   sqlite.prepare(`INSERT INTO lawyer_requests
     (id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at)
     VALUES ('request-a','workspace-owner','case-a','owner-a','profile-a','access_granted','Summary','{}',?,?)`).run(now, now);

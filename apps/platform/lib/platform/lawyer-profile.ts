@@ -31,7 +31,7 @@ export const lawyerProfileUpdateSchema = z.object({ ...editableFields, locale: z
 );
 
 export const lawyerProfileModerationListSchema = z.object({
-  status: z.enum(["profile_incomplete", "pending_review", "changes_requested", "public_approved", "rejected"]).default("pending_review"),
+  status: z.enum(["profile_incomplete", "pending_review", "changes_requested", "public_approved", "rejected", "suspended", "blocked", "archived"]).default("pending_review"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 }).strict();
 
@@ -41,11 +41,18 @@ export const lawyerProfileModerationSchema = z.object({
   locale: z.enum(["ru", "uz"]),
 }).strict();
 
-export function lawyerProfileError(locale: "ru" | "uz", code: "PROFILE_UNAVAILABLE" | "PROFILE_FORBIDDEN" | "INVALID_INPUT") {
+export const lawyerProfileLifecycleSchema = z.object({
+  action: z.enum(["suspend", "block", "archive", "restore"]),
+  reason: compactText(2_000),
+  locale: z.enum(["ru", "uz"]),
+}).strict();
+
+export function lawyerProfileError(locale: "ru" | "uz", code: "PROFILE_UNAVAILABLE" | "PROFILE_FORBIDDEN" | "PROFILE_LOCKED" | "INVALID_INPUT") {
   const ru = locale === "ru";
   const messages = {
     PROFILE_UNAVAILABLE: ru ? "Профиль юриста недоступен." : "Yurist profili mavjud emas.",
     PROFILE_FORBIDDEN: ru ? "Этот раздел доступен только для профиля юриста." : "Bu bo‘lim faqat yurist profiliga tegishli.",
+    PROFILE_LOCKED: ru ? "Профиль временно ограничен модерацией и не может быть изменён." : "Profil moderatsiya tufayli vaqtincha cheklangan va o‘zgartirib bo‘lmaydi.",
     INVALID_INPUT: ru ? "Проверьте данные профессионального профиля." : "Professional profil ma’lumotlarini tekshiring.",
   };
   return messages[code];
