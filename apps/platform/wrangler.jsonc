@@ -371,6 +371,13 @@
       "name": "juro",
       "workers_dev": false,
       "preview_urls": false,
+      "routes": [
+        {
+          "pattern": "admin.juro.uz",
+          "zone_name": "juro.uz",
+          "custom_domain": true
+        }
+      ],
       "assets": {
         "binding": "ASSETS"
       },
@@ -379,6 +386,7 @@
       },
       "vars": {
         "APP_ENV": "production",
+        "TURNSTILE_SITE_KEY": "0x4AAAAAAEAlp9iaX71dp2te",
         "ASYNC_RUNTIME_ENABLED": "true",
         "CRON_ENABLED": "true",
         "ACCOUNT_DELETION_PURGE_ENABLED": "true",

@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "juro-app-production-router",
+  "main": "./worker/app-production-router.ts",
+  "compatibility_date": "2026-07-26",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    {
+      "pattern": "app.juro.uz",
+      "zone_name": "juro.uz",
+      "custom_domain": true
+    }
+  ],
+  "services": [
+    {
+      "binding": "PLATFORM",
+      "service": "juro",
+      "environment": "production"
+    }
+  ]
+}

@@ -344,17 +344,19 @@ if (requestedEnvironment === "production") {
   assert.equal(selected.name, "juro", "production must update the Worker attached to app.juro.uz");
   assert.equal(selected.workers_dev, false, "production must not expose a workers.dev endpoint");
   assert.equal(selected.preview_urls, false, "production must not expose version preview URLs");
-  assert.equal(
-    Object.hasOwn(selected, "routes"),
-    false,
-    "production custom-domain routing remains dashboard-managed and must not be overwritten by an empty routes array",
-  );
+  assert.deepEqual(selected.routes, [
+    {
+      pattern: "admin.juro.uz",
+      zone_name: "juro.uz",
+      custom_domain: true,
+    },
+  ], "production must keep admin.juro.uz attached directly to Worker juro");
   assert.equal(artifact.workers_dev, false, "production artifact must disable workers.dev exposure");
   assert.equal(artifact.preview_urls, false, "production artifact must disable version preview URLs");
-  assert.equal(
-    Object.hasOwn(artifact, "routes"),
-    false,
-    "production artifact must preserve the existing app.juro.uz custom-domain attachment",
+  assert.deepEqual(
+    artifact.routes,
+    selected.routes,
+    "production artifact must retain the public JURO custom-domain routes",
   );
 }
 
