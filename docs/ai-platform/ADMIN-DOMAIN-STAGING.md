@@ -13,13 +13,13 @@ surface is complete.
 ## Boundary
 
 - Console Worker: `juro-admin-staging`, version
-  `c686edaf-e284-4cce-bce2-d2553ca91f70`.
+  `d38bf2e2-f252-4ba2-8a0f-256abf6e9573`.
 - Domain: `https://admin.staging.juro.uz`.
 - Cloudflare Access application:
   `9c4710fc-99f8-4417-800b-974926196c21`; the sole allow policy is
   `014d5339-beda-45d3-b8d4-73ec8f06a0d6` for the staging owner.
 - Platform Worker: `juro-platform-staging`, version
-  `8c427b22-84c1-41ae-8c62-ac83ad7566aa`.
+  `4b509bbb-81d4-458a-ae5f-b44e95e4f66f`.
 - The admin Worker has no D1, R2, Queue, AI or public platform session binding.
   Its only data path is the private `PLATFORM_ADMIN_API` service binding.
 
@@ -33,11 +33,16 @@ never persisted.
 
 `administrator` maps to `super_admin`; `legal_reviewer` maps only to
 `lawyer_moderator`. A reviewer may open the pending lawyer-profile and
-lawyer-review queues, approve or reject a review, and submit a bounded
-redaction/reason. It cannot read the dashboard counts intended for
-`super_admin`. The platform performs the update and writes both the immutable
-moderation record and a tenant audit event in one D1 batch; the isolated Worker
-never receives a D1 binding or raw session token.
+lawyer-review queues. For a professional profile it may approve, reject, or
+request corrections with a bounded reason; a correction keeps the legacy
+booking status `pending` and changes the marketplace state to
+`changes_requested`, so the profile cannot receive a client request. The next
+lawyer edit creates a new profile revision and returns a complete profile to
+`pending_review`. A public review may be approved or rejected with a bounded
+redaction/reason. The reviewer cannot read the dashboard counts intended for
+`super_admin`. The platform performs each update with its immutable moderation
+record and tenant audit event in one D1 batch; the isolated Worker never
+receives a D1 binding or raw session token.
 
 ## Migration and recoverability
 
@@ -66,15 +71,25 @@ The control-plane Time Travel bookmark request returned Cloudflare OAuth
 the integrity evidence for this additive migration. No production D1, Worker,
 route, secret or Access policy changed.
 
+The later correction-workflow deployment made no D1 change. It reconciled the
+local Drizzle test journal with already-applied migrations `0106`–`0109`, so
+the in-memory SQLite test fixture now has the same marketplace columns as
+staging. The remote ledger was queried read-only before deployment; no backup
+or migration application was needed for this application-only release.
+
 ## Validation already completed
 
 - `apps/platform`: `type-check`, lint, complete test suite (129 test groups),
   staging build and staging artifact validation.
 - Admin Worker: TypeScript check and staging dry-run; the deployed binding set
   remains only the private platform service and non-secret staging variables.
-- Handoff/moderation focused suite: 7/7, including one-use ticket, stale
+- Handoff/moderation focused suite: 8/8, including one-use ticket, stale
   role/MFA denial, append-only audit, server-side logout revocation,
-  reviewer capability boundaries, atomic moderation and PII rejection.
+  reviewer capability boundaries, atomic moderation, PII rejection and a
+  correction request that remains non-bookable.
+- Platform full regression: 129/129; focused handoff/marketplace/migration
+  regression: 73/73; staging build and artifact validation passed. The admin
+  Worker TypeScript and staging dry-run checks also passed before deployment.
 - Cloudflare deployment bound the admin Worker only to the staging service
   binding and custom domain.
 - A read-only remote D1 query confirmed all three migration tables exist after

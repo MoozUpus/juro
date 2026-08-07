@@ -1,6 +1,7 @@
 export const lawyerMarketplaceStatuses = [
   "profile_incomplete",
   "pending_review",
+  "changes_requested",
   "public_approved",
   "rejected",
 ] as const;

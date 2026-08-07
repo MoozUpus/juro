@@ -31,12 +31,12 @@ export const lawyerProfileUpdateSchema = z.object({ ...editableFields, locale: z
 );
 
 export const lawyerProfileModerationListSchema = z.object({
-  status: z.enum(["profile_incomplete", "pending_review", "public_approved", "rejected"]).default("pending_review"),
+  status: z.enum(["profile_incomplete", "pending_review", "changes_requested", "public_approved", "rejected"]).default("pending_review"),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 }).strict();
 
 export const lawyerProfileModerationSchema = z.object({
-  decision: z.enum(["approved", "rejected"]),
+  decision: z.enum(["approved", "changes_requested", "rejected"]),
   reason: compactText(2_000),
   locale: z.enum(["ru", "uz"]),
 }).strict();

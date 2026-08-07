@@ -11,7 +11,7 @@ type Profile = {
   specialties: string[];
   languages: string[];
   status: string;
-  marketplaceStatus: "profile_incomplete" | "pending_review" | "public_approved" | "rejected";
+  marketplaceStatus: "profile_incomplete" | "pending_review" | "changes_requested" | "public_approved" | "rejected";
   publicApprovedAt: string | null;
   experienceYears: number | null;
   priceDescription: string | null;
@@ -27,6 +27,7 @@ type Profile = {
   hasPhone: boolean;
   profilePhotoUrl: string | null;
   missingRequiredFields: string[];
+  moderationReason: string | null;
 };
 
 type Form = {
@@ -195,6 +196,10 @@ export function LawyerProfessionalProfile({ locale }: { locale: PlatformLocale }
         ? "Статус адвоката «подтверждён» нельзя установить самостоятельно: его присваивает только JURO после проверки."
         : "«Tasdiqlangan» advokat maqomini mustaqil belgilab bo‘lmaydi: uni faqat JURO tekshiruvdan keyin beradi."}</p>
       {profile && <p>{ru ? `Статус каталога: ${profile.marketplaceStatus}` : `Katalog holati: ${profile.marketplaceStatus}`}</p>}
+      {profile?.marketplaceStatus === "changes_requested" && <section className="profile-message warning" role="status">
+        <strong>{ru ? "Нужно исправить профиль перед повторной проверкой." : "Qayta tekshiruvdan oldin profilni tuzatish kerak."}</strong>
+        <p>{profile.moderationReason || (ru ? "Откройте поля профиля, исправьте замечания и сохраните изменения." : "Profil maydonlarini tekshiring, izohlarni tuzating va o‘zgarishlarni saqlang.")}</p>
+      </section>}
       {error && <p className="profile-message error" role="alert">{error}</p>}
       {notice && <p className="profile-message success" role="status">{notice}</p>}
       <form className="profile-form" onSubmit={(event) => void save(event)}>

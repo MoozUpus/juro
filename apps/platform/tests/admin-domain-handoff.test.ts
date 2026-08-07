@@ -11,6 +11,7 @@ import {
 } from "../lib/auth/admin-domain-session";
 import { sha256 } from "../lib/auth/crypto";
 import { LawyerReviewModerationServiceError, moderateLawyerReview } from "../lib/platform/lawyer-review-moderation-service";
+import { moderateLawyerProfile } from "../lib/platform/lawyer-profile-moderation-service";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const NOW = new Date("2026-08-07T08:00:00.000Z");
@@ -87,6 +88,24 @@ function seedPendingReview(sqlite: ReturnType<typeof seed>["sqlite"], input: { r
   sqlite.prepare(
     "INSERT INTO lawyer_reviews(id,lawyer_request_id,workspace_id,lawyer_profile_id,requester_user_id,overall_rating,speed_rating,quality_rating,communication_rating,body,status,created_at,updated_at) VALUES (?,?,?,'lawyer-profile',?,5,5,5,5,?,'pending',?,?)",
   ).run(input.reviewId, input.requestId, WORKSPACE_ID, USER_ID, input.body, now, now);
+}
+
+function seedPendingLawyerProfile(sqlite: ReturnType<typeof seed>["sqlite"]) {
+  const now = NOW.toISOString();
+  sqlite.prepare(
+    "INSERT INTO workspaces(id,type,name,locale,created_at,updated_at) VALUES (?,'individual','Admin profile','ru',?,?)",
+  ).run("profile-workspace", now, now);
+  sqlite.prepare("UPDATE user_profiles SET default_workspace_id=?,phone=? WHERE id=?")
+    .run("profile-workspace", "+998901234567", USER_ID);
+  sqlite.prepare(
+    `INSERT INTO lawyer_profiles (
+      id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,
+      experience_years,price_description,availability_status,advocate_status,firm_name,
+      city,region,education,consultation_formats_json,profile_photo_key,created_at,updated_at
+    ) VALUES ('pending-lawyer-profile',?,'JURO test lawyer','[\"contracts\"]','[\"ru\"]',
+      'pending','pending_review',5,'Synthetic price','available','declared','JURO Legal',
+      'Tashkent','Tashkent','JURO Law School','[\"chat\"]','lawyer-profiles/test/photo.webp',?,?)`,
+  ).run(USER_ID, now, now);
 }
 
 test("admin-domain ticket persists only a hash and creates an append-only audit event", async () => {
@@ -243,6 +262,39 @@ test("review approval blocks likely personal data before any terminal transition
   }
 });
 
+test("lawyer moderator may request corrections without publishing or booking the profile", async () => {
+  const { sqlite, d1 } = seed();
+  try {
+    seedPendingLawyerProfile(sqlite);
+    assert.equal(adminRoleAllows(["lawyer_moderator"], "lawyer.profiles.moderate"), true);
+    const moderated = await moderateLawyerProfile(d1, {
+      profileId: "pending-lawyer-profile",
+      moderatorUserId: USER_ID,
+      decision: "changes_requested",
+      reason: "Synthetic request: clarify the listed consultation format.",
+      now: NOW,
+    });
+    assert.deepEqual(moderated, { status: "changes_requested" });
+    const profileAfterCorrectionRequest = sqlite.prepare("SELECT status,marketplace_status AS marketplaceStatus,public_approved_at AS publicApprovedAt FROM lawyer_profiles WHERE id='pending-lawyer-profile'").get() as {
+      status: string;
+      marketplaceStatus: string;
+      publicApprovedAt: string | null;
+    };
+    assert.equal(profileAfterCorrectionRequest.status, "pending");
+    assert.equal(profileAfterCorrectionRequest.marketplaceStatus, "changes_requested");
+    assert.equal(profileAfterCorrectionRequest.publicApprovedAt, null);
+    const moderationRecord = sqlite.prepare("SELECT decision,reason FROM lawyer_profile_moderation WHERE lawyer_profile_id='pending-lawyer-profile'").get() as {
+      decision: string;
+      reason: string;
+    };
+    assert.equal(moderationRecord.decision, "changes_requested");
+    assert.equal(moderationRecord.reason, "Synthetic request: clarify the listed consultation format.");
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM workspace_audit_events WHERE action='lawyer_profile_moderated'").get()?.total, 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("admin handoff route requires same-origin write protection and current MFA", async () => {
   const [route, migration, internal, adminWorker, reviewService] = await Promise.all([
     readFile(new URL("../app/api/platform/admin/handoff/route.ts", import.meta.url), "utf8"),
@@ -265,7 +317,9 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(adminWorker, /PLATFORM_ADMIN_API\.fetch/u);
   assert.match(adminWorker, /juro_admin_session/u);
   assert.match(adminWorker, /\/reviews/u);
+  assert.match(adminWorker, /changes_requested/u);
   assert.match(internal, /lawyer\.reviews\.moderate/u);
+  assert.match(internal, /changes_requested/u);
   assert.match(internal, /api\/internal\/admin\/reviews/u);
   assert.match(reviewService, /LIKELY_PERSONAL_DATA/u);
   assert.match(reviewService, /lawyer_review_moderated/u);

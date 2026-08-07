@@ -55,11 +55,11 @@ export async function moderateLawyerProfile(
   input: {
     profileId: string;
     moderatorUserId: string;
-    decision: "approved" | "rejected";
+    decision: "approved" | "changes_requested" | "rejected";
     reason: string;
     now?: Date;
   },
-): Promise<{ status: "public_approved" | "rejected" }> {
+): Promise<{ status: "public_approved" | "changes_requested" | "rejected" }> {
   const profile = await db.prepare(
     `SELECT p.id,u.default_workspace_id AS workspaceId,p.profile_revision AS profileRevision,
        p.display_name AS displayName,p.specialties_json AS specialtiesJson,
@@ -113,7 +113,15 @@ export async function moderateLawyerProfile(
     consultationFormatsJson: profile.consultationFormatsJson,
     profilePhotoKey: profile.profilePhotoKey,
   }));
-  const resultStatus = input.decision === "approved" ? "public_approved" : "rejected";
+  const resultStatus = input.decision === "approved"
+    ? "public_approved"
+    : input.decision === "changes_requested"
+      ? "changes_requested"
+      : "rejected";
+  // The legacy status column remains the booking authority. A profile awaiting
+  // corrections stays non-bookable (`pending`); marketplace_status carries the
+  // reviewer-visible correction state until the lawyer edits and resubmits it.
+  const expectedProfileStatus = resultStatus === "changes_requested" ? "pending" : resultStatus;
   try {
     const results = await db.batch([
       db.prepare(
@@ -147,9 +155,9 @@ export async function moderateLawyerProfile(
         input.moderatorUserId, input.decision,
       ),
       db.prepare(
-        `UPDATE lawyer_profiles SET marketplace_status=?,updated_at=?
+        `UPDATE lawyer_profiles SET marketplace_status=?,public_approved_at=CASE WHEN ?='public_approved' THEN ? ELSE NULL END,updated_at=?
          WHERE id=? AND profile_revision=? AND status=?`,
-      ).bind(resultStatus, now, profile.id, profile.profileRevision, resultStatus),
+      ).bind(resultStatus, resultStatus, now, now, profile.id, profile.profileRevision, expectedProfileStatus),
     ]);
     if (
       Number(results[0]?.meta.changes ?? 0) !== 1

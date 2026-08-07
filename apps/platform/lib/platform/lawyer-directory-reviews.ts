@@ -93,10 +93,13 @@ export function projectPublicLawyerDirectory(
       firmName: lawyer.firmName,
       bio: lawyer.bio,
       ...(hasMarketplaceProjection ? {
-        marketplaceStatus: lawyer.marketplaceStatus === "pending_review"
-          ? "pending_review"
-          : "public_approved",
-        canReceiveRequests: lawyer.marketplaceStatus !== "pending_review",
+        // The directory query admits only pending-review and approved profiles. Keep
+        // this projection fail-closed as a second boundary: any future status such
+        // as "changes_requested" must neither look published nor accept a request.
+        marketplaceStatus: lawyer.marketplaceStatus === "public_approved"
+          ? "public_approved"
+          : "pending_review",
+        canReceiveRequests: lawyer.marketplaceStatus === "public_approved",
         city: lawyer.city ?? null,
         region: lawyer.region ?? null,
         education: lawyer.education ?? null,

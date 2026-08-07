@@ -120,7 +120,7 @@ async function lawyerProfiles(request: Request, env: AdminInternalEnv): Promise<
   const authenticated = await requirePrincipal(request, env);
   if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "lawyer.profiles.moderate")) return noStore({ code: "ACCESS_DENIED" }, 403);
   const status = new URL(request.url).searchParams.get("status") ?? "pending_review";
-  if (!["profile_incomplete", "pending_review", "public_approved", "rejected"].includes(status)) return noStore({ code: "INVALID_INPUT" }, 400);
+  if (!["profile_incomplete", "pending_review", "changes_requested", "public_approved", "rejected"].includes(status)) return noStore({ code: "INVALID_INPUT" }, 400);
   const rows = await authenticated.db.prepare(
     `SELECT p.id,p.display_name AS displayName,p.status,p.marketplace_status AS marketplaceStatus,
        p.profile_revision AS profileRevision,p.city,p.region,p.experience_years AS experienceYears,

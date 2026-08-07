@@ -36,6 +36,7 @@ type LawyerProfile = {
   profilePhotoKey: string | null;
   profileRevision: number;
   hasPhone: number;
+  moderationReason: string | null;
 };
 
 type EditableProfile = {
@@ -135,6 +136,9 @@ function serialize(profile: LawyerProfile) {
     profilePhotoUrl: profile.profilePhotoKey
       ? `/api/public/lawyers/${encodeURIComponent(profile.id)}/photo`
       : null,
+    moderationReason: profile.marketplaceStatus === "changes_requested"
+      ? profile.moderationReason
+      : null,
     missingRequiredFields: missingLawyerMarketplaceFields(required),
     profileRevision: profile.profileRevision,
   };
@@ -156,7 +160,11 @@ async function ownProfile(userId: string) {
        p.firm_name AS firmName,p.bio,p.city,p.region,p.education,
        p.consultation_formats_json AS consultationFormatsJson,
        p.profile_photo_key AS profilePhotoKey,p.profile_revision AS profileRevision,
-       CASE WHEN u.phone IS NOT NULL AND length(trim(u.phone))>0 THEN 1 ELSE 0 END AS hasPhone
+       CASE WHEN u.phone IS NOT NULL AND length(trim(u.phone))>0 THEN 1 ELSE 0 END AS hasPhone,
+       (SELECT m.reason FROM lawyer_profile_moderation m
+         WHERE m.lawyer_profile_id=p.id AND m.profile_revision=p.profile_revision
+           AND m.decision='changes_requested'
+         ORDER BY m.created_at DESC LIMIT 1) AS moderationReason
      FROM lawyer_profiles p
      JOIN user_profiles u ON u.id=p.user_id
      WHERE p.user_id=? LIMIT 1`,

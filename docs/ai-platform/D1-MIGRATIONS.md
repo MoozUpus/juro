@@ -1,5 +1,18 @@
 # D1 migration checkpoint
 
+## Local Drizzle journal reconciliation — 0106–0109
+
+Status: local test-fixture repair; no remote D1 operation was performed on
+2026-08-07.
+
+The repository had migration SQL files `0106` through `0109` and the protected
+staging `d1_migrations` ledger already recorded all four. The local
+`drizzle/meta/_journal.json`, which drives the isolated SQLite migration
+fixture, omitted them. The journal now lists those existing SQL files in order.
+This is not a new schema migration, does not add D1 SQL and was not submitted
+to Cloudflare. It makes local migration safety tests exercise the same
+marketplace and admin-session schema that is already deployed in staging.
+
 ## 0100 — exact immutable R2 write-key guards
 
 Status: applied and independently restore-verified in protected staging on

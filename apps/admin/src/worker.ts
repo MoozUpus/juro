@@ -176,7 +176,7 @@ async function lawyerList(request: Request, env: Env, session: string, notice?: 
   const result = await platform<{ profiles: Profile[] }>(env, "/api/internal/admin/lawyers?status=pending_review", { session });
   if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
   const csrfToken = cookie(request, ADMIN_CSRF_COOKIE) ?? "";
-  const rows = result.body.profiles.map((profile) => `<tr><td>${escaped(profile.displayName)}</td><td>${escaped(profile.city ?? "—")}</td><td>${escaped(profile.experienceYears ?? "—")}</td><td>${escaped(profile.updatedAt)}</td><td><form method="post" action="/lawyers/${encodeURIComponent(profile.id)}/moderate"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Причина<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="decision" value="approved">Одобрить</button><button class="danger" name="decision" value="rejected">Отклонить</button></div></form></td></tr>`).join("");
+  const rows = result.body.profiles.map((profile) => `<tr><td>${escaped(profile.displayName)}</td><td>${escaped(profile.city ?? "—")}</td><td>${escaped(profile.experienceYears ?? "—")}</td><td>${escaped(profile.updatedAt)}</td><td><form method="post" action="/lawyers/${encodeURIComponent(profile.id)}/moderate"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Причина<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="decision" value="approved">Одобрить</button><button name="decision" value="changes_requested">Запросить исправления</button><button class="danger" name="decision" value="rejected">Отклонить</button></div></form></td></tr>`).join("");
   return page("Профили юристов", `<section class="panel"><p>Показаны только завершённые профили, ожидающие review. Телефон и личный email не выдаются этой поверхности.</p><table><thead><tr><th>Профиль</th><th>Город</th><th>Стаж</th><th>Изменён</th><th>Модерация</th></tr></thead><tbody>${rows || "<tr><td colspan=\"5\">Нет профилей на проверке.</td></tr>"}</tbody></table></section>`, { notice, role: "lawyer moderation" });
 }
 
@@ -184,7 +184,7 @@ async function moderate(request: Request, env: Env, session: string, profileId: 
   if (!await csrf(request)) return page("Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
   const form = await request.formData();
   const decision = form.get("decision"); const reason = form.get("reason");
-  if ((decision !== "approved" && decision !== "rejected") || typeof reason !== "string" || reason.trim().length < 1 || reason.trim().length > 2_000) return lawyerList(request, env, session, "Проверьте решение и причину.");
+  if ((decision !== "approved" && decision !== "changes_requested" && decision !== "rejected") || typeof reason !== "string" || reason.trim().length < 1 || reason.trim().length > 2_000) return lawyerList(request, env, session, "Проверьте решение и причину.");
   const result = await platform<{ ok: boolean }>(env, `/api/internal/admin/lawyers/${encodeURIComponent(profileId)}/moderate`, {
     method: "POST", session, headers: { "content-type": "application/json" }, body: JSON.stringify({ decision, reason: reason.trim() }),
   });

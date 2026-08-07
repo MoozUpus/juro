@@ -630,3 +630,21 @@ bounded redaction/reason. It cannot view the super-admin dashboard. A decision
 and its workspace audit event are written atomically, PII-like replacement text
 is rejected, and audit payloads contain identifiers and decision metadata only.
 This release has no D1 migration and does not alter production.
+
+## D-139 — correction requests are an explicit non-bookable marketplace state
+
+Status: accepted and staging-deployed
+Date: 2026-08-07
+
+Professional profile moderation now distinguishes `changes_requested` from a
+terminal rejection. The immutable per-revision moderation record keeps the
+reviewer's bounded reason. To remain compatible with the existing D1 triggers,
+the legacy profile status remains `pending` while `marketplace_status` becomes
+`changes_requested`; public-directory projection is explicitly fail-closed and
+cannot expose or book that state. A later material profile edit increments the
+revision and returns a complete profile to `pending_review`, requiring a new
+moderation record before publication.
+
+This release is application-only. The related repair to the local Drizzle
+journal records already-applied migrations `0106`–`0109` for SQLite test
+parity; it does not modify remote D1 or production.

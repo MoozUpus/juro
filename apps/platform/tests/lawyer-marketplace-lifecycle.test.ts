@@ -8,6 +8,7 @@ import {
   missingLawyerMarketplaceFields,
   type LawyerMarketplaceCompletionInput,
 } from "../lib/platform/lawyer-marketplace";
+import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
 
 const completeProfile: LawyerMarketplaceCompletionInput = {
   displayName: "Юрист JURO",
@@ -38,8 +39,28 @@ test("a lawyer profile is reviewable only after every required professional fiel
 test("only an approved profile may receive a client request", () => {
   assert.equal(mayReceiveLawyerRequests("profile_incomplete"), false);
   assert.equal(mayReceiveLawyerRequests("pending_review"), false);
+  assert.equal(mayReceiveLawyerRequests("changes_requested"), false);
   assert.equal(mayReceiveLawyerRequests("rejected"), false);
   assert.equal(mayReceiveLawyerRequests("public_approved"), true);
+});
+
+test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {
+  const [lawyer] = projectPublicLawyerDirectory([{
+    id: "correction-requested-lawyer",
+    displayName: "Юрист JURO",
+    specialtiesJson: '["Договоры"]',
+    languagesJson: '["ru","uz"]',
+    experienceYears: 5,
+    priceDescription: "По договорённости",
+    availabilityStatus: "available",
+    nextAvailableAt: null,
+    advocateStatus: "not_verified",
+    firmName: null,
+    bio: null,
+    marketplaceStatus: "changes_requested",
+  }], [], []);
+  assert.equal(lawyer.marketplaceStatus, "pending_review");
+  assert.equal(lawyer.canReceiveRequests, false);
 });
 
 test("profile photos remain fail-closed until the malware scanner verifies their checksum", () => {
