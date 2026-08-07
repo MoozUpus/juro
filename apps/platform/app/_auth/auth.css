@@ -320,6 +320,31 @@
   line-height: 1.45;
 }
 
+.auth-turnstile-retry {
+  justify-self: start;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid #34516b;
+  border-radius: 9px;
+  background: #fff;
+  color: #16364d;
+  font: 700 14px/1 var(--font-sans, Arial, sans-serif);
+  cursor: pointer;
+}
+
+.auth-turnstile-retry:hover {
+  background: #edf3f5;
+}
+
+.auth-turnstile-retry:focus-visible {
+  outline: 3px solid rgba(138, 104, 46, .42);
+  outline-offset: 2px;
+}
+
+.auth-turnstile-retry:active {
+  transform: scale(.98);
+}
+
 .auth-code-actions .auth-turnstile {
   grid-column: 1 / -1;
 }
