@@ -187,6 +187,16 @@ export function AuthForm({
       });
       const data = await response.json() as OtpResponse;
       if (!response.ok) {
+        if (data.code === "ACCOUNT_NOT_FOUND" || data.code === "OTP_USED") {
+          // A one-time code is intentionally non-retryable. Return to the
+          // email step instead of leaving a stale code form on screen.
+          setChallengeId("");
+          setCode("");
+          setCooldown(0);
+          setTurnstileToken("");
+          setTurnstileReset((value) => value + 1);
+          setStep("details");
+        }
         throw new Error(data.error || (ru ? "Не удалось подтвердить код." : "Kodni tasdiqlab bo‘lmadi."));
       }
       if (data.requiresTwoFactor) {

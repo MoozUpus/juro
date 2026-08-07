@@ -163,7 +163,18 @@ export const POST = withApiErrors(async function POST(request: Request) {
       onboardingCompletedAt: string | null;
     }>()
     : null;
-  if (purpose === "login" && !user) return json({ error: locale === "ru" ? "Не удалось завершить вход." : "Kirishni yakunlab bo‘lmadi." }, 400);
+  // The caller has already proved control of this email with a valid OTP, so
+  // this response cannot be used for account enumeration. Returning a clear
+  // next step prevents people from repeatedly submitting an already-spent
+  // one-time code on the login screen.
+  if (purpose === "login" && !user) {
+    return json({
+      code: "ACCOUNT_NOT_FOUND",
+      error: locale === "ru"
+        ? "Для этого email ещё нет аккаунта. Выберите «Создать аккаунт» и запросите новый код."
+        : "Bu email uchun hali hisob yaratilmagan. «Yaratish»ni tanlang va yangi kod so‘rang.",
+    }, 404);
+  }
   if (purpose === "register" && user) {
     return json({
       code: "ACCOUNT_EXISTS",
