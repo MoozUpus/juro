@@ -32,5 +32,10 @@ exist; it does not authorize or describe a production change.
   and staging browser proof. Cloudflare Access to the platform staging session
   was restored on 2026-08-07; the separately deployed admin surface still
   awaits its final authenticated browser handoff proof.
-- No production deployment, production migration or production feature flag
-  has been changed by this work.
+- The production application release is prepared against isolated resources:
+  `juro-production`, private production R2 buckets, 16 `production-*`
+  queues/DLQs and four `production-*` Vectorize indexes. No production Worker
+  deployment or D1 migration has yet occurred. Cloudflare secret values cannot
+  be copied from staging; `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` and
+  `TURNSTILE_SECRET_KEY` must be set independently in production before the
+  guarded release can proceed.

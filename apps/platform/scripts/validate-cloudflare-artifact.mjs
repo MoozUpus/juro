@@ -39,15 +39,15 @@ assert.equal(artifact.vars?.APP_ENV, requestedEnvironment);
 assert.deepEqual(artifact.vars, selected.vars);
 assert.equal(
   artifact.vars?.ASYNC_RUNTIME_ENABLED,
-  requestedEnvironment === "staging" ? "true" : "false",
+  ["staging", "production"].includes(requestedEnvironment) ? "true" : "false",
 );
 assert.equal(
   artifact.vars?.CRON_ENABLED,
-  requestedEnvironment === "staging" ? "true" : "false",
+  ["staging", "production"].includes(requestedEnvironment) ? "true" : "false",
 );
 assert.equal(
   artifact.vars?.ACCOUNT_DELETION_PURGE_ENABLED,
-  requestedEnvironment === "staging" ? "true" : "false",
+  ["staging", "production"].includes(requestedEnvironment) ? "true" : "false",
 );
 assert.equal(
   artifact.vars?.LEGAL_ADVICE_INGESTION_ENABLED,
@@ -59,9 +59,7 @@ assert.equal(
 );
 assert.equal(
   artifact.vars?.LEGAL_DIRECT_RETRIEVAL_ENABLED,
-  requestedEnvironment === "staging" || requestedEnvironment === "development"
-    ? "true"
-    : "false",
+  "true",
 );
 assert.equal(
   artifact.vars?.IDENTITY_PROTECTION_MODE,
@@ -190,6 +188,15 @@ assert.deepEqual(
   artifact.observability,
   selected.observability ?? source.observability,
 );
+if (["staging", "production"].includes(requestedEnvironment)) {
+  assert.equal(artifact.vars?.MALWARE_SCAN_ENABLED, "true");
+  assert.equal(artifact.vars?.MALWARE_SCANNER_PROBE_ENABLED, "false");
+  assert.equal(artifact.vars?.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED, "false");
+  assert.deepEqual(artifact.migrations, selected.migrations);
+  assert.deepEqual(artifact.durable_objects, selected.durable_objects);
+  assert.deepEqual(artifact.containers, selected.containers);
+  assert.deepEqual(artifact.services, selected.services);
+}
 
 const queueContract = [
   ["DOCUMENT_ANALYSIS_QUEUE", "document-analysis"],
@@ -200,7 +207,8 @@ const queueContract = [
   ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
   ["NOTIFICATIONS_QUEUE", "notifications"],
 ];
-if (requestedEnvironment === "staging") {
+const hasAsyncConsumers = ["staging", "production"].includes(requestedEnvironment);
+if (hasAsyncConsumers) {
   queueContract.push(["MALWARE_SCAN_QUEUE", "malware-scan"]);
 }
 assert.deepEqual(
@@ -210,92 +218,37 @@ assert.deepEqual(
     queue: `${requestedEnvironment}-${suffix}`,
   })),
 );
+const consumerContract = [
+  ["document-analysis", 1, 3, 1],
+  ["ocr-processing", 1, 3, 1],
+  ["document-export", 1, 3, 1],
+  ["legal-sources-sync", 5, 5, 1],
+  ["email-notifications", 5, 5, 2],
+  ["data-retention-cleanup", 5, 5, 1],
+  ["notifications", 5, 5, 2],
+  ["malware-scan", 1, 3, 1],
+];
 assert.deepEqual(
   artifact.queues?.consumers,
-  requestedEnvironment === "staging"
-    ? [
-      {
-        queue: "staging-document-analysis",
-        max_batch_size: 1,
-        max_batch_timeout: 5,
-        max_retries: 3,
-        dead_letter_queue: "staging-document-analysis-dlq",
-        max_concurrency: 1,
-        retry_delay: 30,
-      },
-      {
-        queue: "staging-ocr-processing",
-        max_batch_size: 1,
-        max_batch_timeout: 5,
-        max_retries: 3,
-        dead_letter_queue: "staging-ocr-processing-dlq",
-        max_concurrency: 1,
-        retry_delay: 30,
-      },
-      {
-        queue: "staging-document-export",
-        max_batch_size: 1,
-        max_batch_timeout: 5,
-        max_retries: 3,
-        dead_letter_queue: "staging-document-export-dlq",
-        max_concurrency: 1,
-        retry_delay: 30,
-      },
-      {
-        queue: "staging-legal-sources-sync",
-        max_batch_size: 5,
-        max_batch_timeout: 5,
-        max_retries: 5,
-        dead_letter_queue: "staging-legal-sources-sync-dlq",
-        max_concurrency: 1,
-        retry_delay: 30,
-      },
-      {
-        queue: "staging-email-notifications",
-        max_batch_size: 5,
-        max_batch_timeout: 5,
-        max_retries: 5,
-        dead_letter_queue: "staging-email-notifications-dlq",
-        max_concurrency: 2,
-        retry_delay: 30,
-      },
-      {
-        queue: "staging-data-retention-cleanup",
-        max_batch_size: 5,
-        max_batch_timeout: 5,
-        max_retries: 5,
-        dead_letter_queue: "staging-data-retention-cleanup-dlq",
-        max_concurrency: 1,
-        retry_delay: 30,
-      },
-      {
-        queue: "staging-notifications",
-        max_batch_size: 5,
-        max_batch_timeout: 5,
-        max_retries: 5,
-        dead_letter_queue: "staging-notifications-dlq",
-        max_concurrency: 2,
-        retry_delay: 30,
-      },
-      {
-        queue: "staging-malware-scan",
-        max_batch_size: 1,
-        max_batch_timeout: 5,
-        max_retries: 3,
-        dead_letter_queue: "staging-malware-scan-dlq",
-        max_concurrency: 1,
-        retry_delay: 30,
-      },
-    ]
+  hasAsyncConsumers
+    ? consumerContract.map(([suffix, batchSize, retries, concurrency]) => ({
+      queue: `${requestedEnvironment}-${suffix}`,
+      max_batch_size: batchSize,
+      max_batch_timeout: 5,
+      max_retries: retries,
+      dead_letter_queue: `${requestedEnvironment}-${suffix}-dlq`,
+      max_concurrency: concurrency,
+      retry_delay: 30,
+    }))
     : [],
-  "Only reviewed staging consumers may be attached",
+  "Only isolated staging or production consumers may be attached",
 );
 assert.equal(
   artifact.queues?.producers.some(({ binding }) =>
     binding === "MALWARE_SCAN_QUEUE"
   ),
-  requestedEnvironment === "staging",
-  "Only staging may attach the reviewed, fail-closed malware scanner queue",
+  hasAsyncConsumers,
+  "Only isolated staging or production may attach the fail-closed malware scanner queue",
 );
 
 const vectorContract = [
@@ -344,10 +297,10 @@ assert.equal(
 const triggers = artifact.triggers;
 assert.deepEqual(
   triggers,
-  requestedEnvironment === "staging"
+  hasAsyncConsumers
     ? { crons: ["*/5 * * * *", "0 19 * * *"] }
     : {},
-  "Only the reviewed staging scheduler crons may be attached",
+  "Only isolated staging or production scheduler crons may be attached",
 );
 
 async function filesBelow(root) {
@@ -384,6 +337,24 @@ for (const path of sourceFiles) {
     await sha256(resolve(artifactMigrations, path)),
     await sha256(resolve(sourceMigrations, path)),
     `packaged migration differs: ${path}`,
+  );
+}
+
+if (requestedEnvironment === "production") {
+  assert.equal(selected.name, "juro", "production must update the Worker attached to app.juro.uz");
+  assert.equal(selected.workers_dev, false, "production must not expose a workers.dev endpoint");
+  assert.equal(selected.preview_urls, false, "production must not expose version preview URLs");
+  assert.equal(
+    Object.hasOwn(selected, "routes"),
+    false,
+    "production custom-domain routing remains dashboard-managed and must not be overwritten by an empty routes array",
+  );
+  assert.equal(artifact.workers_dev, false, "production artifact must disable workers.dev exposure");
+  assert.equal(artifact.preview_urls, false, "production artifact must disable version preview URLs");
+  assert.equal(
+    Object.hasOwn(artifact, "routes"),
+    false,
+    "production artifact must preserve the existing app.juro.uz custom-domain attachment",
   );
 }
 

@@ -85,28 +85,28 @@ function assertUnique(values: string[], label: string): void {
   );
 }
 
-test("declares isolated Cloudflare environments with reviewed staging consumers and cron", () => {
+test("declares isolated Cloudflare environments with reviewed staging and production consumers and cron", () => {
   const resourceNames = new Map<string, Set<string>>();
 
   for (const environment of environments) {
     const config = selectedEnvironment(environment);
-    assert.equal(config.name, `juro-platform-${environment}`);
+    assert.equal(config.name, environment === "production" ? "juro" : `juro-platform-${environment}`);
     assert.equal(config.vars.APP_ENV, environment);
     assert.equal(
       config.vars.ASYNC_RUNTIME_ENABLED,
-      environment === "staging" ? "true" : "false",
+      environment === "staging" || environment === "production" ? "true" : "false",
     );
     assert.equal(
       config.vars.CRON_ENABLED,
-      environment === "staging" ? "true" : "false",
+      environment === "staging" || environment === "production" ? "true" : "false",
     );
     assert.equal(
       config.vars.ACCOUNT_DELETION_PURGE_ENABLED,
-      environment === "staging" ? "true" : "false",
+      environment === "staging" || environment === "production" ? "true" : "false",
     );
     assert.equal(
       config.vars.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED,
-      environment === "staging" ? "false" : undefined,
+      environment === "staging" || environment === "production" ? "false" : undefined,
     );
     assert.equal(
       config.vars.LEGAL_ADVICE_INGESTION_ENABLED,
@@ -114,7 +114,7 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
     );
     assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
-      environment === "staging" || environment === "development" ? "true" : "false",
+      "true",
     );
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
@@ -126,17 +126,17 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
     );
     assert.equal(
       config.vars.LAWYER_PROFILE_DIRECTORY_ENABLED,
-      environment === "staging" ? "true" : "false",
+      environment === "staging" || environment === "production" ? "true" : "false",
     );
     assert.equal(
       config.vars.GUEST_AI_ENABLED,
-      environment === "production" ? "false" : "true",
+      "true",
     );
     assert.equal(config.vars.IDENTITY_PROTECTION_MODE, "legacy");
     assert.equal(config.vars.JOB_SCHEMA_VERSION, "1");
     assert.deepEqual(
       config.triggers,
-      environment === "staging"
+      environment === "staging" || environment === "production"
         ? { crons: ["*/5 * * * *", "0 19 * * *"] }
         : undefined,
     );
@@ -167,7 +167,8 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
         },
       ],
     );
-    const environmentQueueContract = environment === "staging"
+    const hasAsyncConsumers = environment === "staging" || environment === "production";
+    const environmentQueueContract = hasAsyncConsumers
       ? [...queueContract, ["MALWARE_SCAN_QUEUE", "malware-scan"] as const]
       : queueContract;
     assert.deepEqual(
@@ -179,7 +180,7 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
     );
     assert.deepEqual(
       config.queues.producers.map(({ binding }) => binding),
-      environment === "staging"
+      environment === "staging" || environment === "production"
         ? [...ATTACHED_PLATFORM_QUEUE_BINDINGS]
         : [...ATTACHED_PLATFORM_QUEUE_BINDINGS].filter((binding) =>
           binding !== "MALWARE_SCAN_QUEUE"
@@ -195,77 +196,77 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
     );
     assert.deepEqual(
       config.queues.consumers,
-      environment === "staging"
+      hasAsyncConsumers
         ? [
           {
-            queue: "staging-document-analysis",
+            queue: `${environment}-document-analysis`,
             max_batch_size: 1,
             max_batch_timeout: 5,
             max_retries: 3,
-            dead_letter_queue: "staging-document-analysis-dlq",
+            dead_letter_queue: `${environment}-document-analysis-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
           },
           {
-            queue: "staging-ocr-processing",
+            queue: `${environment}-ocr-processing`,
             max_batch_size: 1,
             max_batch_timeout: 5,
             max_retries: 3,
-            dead_letter_queue: "staging-ocr-processing-dlq",
+            dead_letter_queue: `${environment}-ocr-processing-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
           },
           {
-            queue: "staging-document-export",
+            queue: `${environment}-document-export`,
             max_batch_size: 1,
             max_batch_timeout: 5,
             max_retries: 3,
-            dead_letter_queue: "staging-document-export-dlq",
+            dead_letter_queue: `${environment}-document-export-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
           },
           {
-            queue: "staging-legal-sources-sync",
+            queue: `${environment}-legal-sources-sync`,
             max_batch_size: 5,
             max_batch_timeout: 5,
             max_retries: 5,
-            dead_letter_queue: "staging-legal-sources-sync-dlq",
+            dead_letter_queue: `${environment}-legal-sources-sync-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
           },
           {
-            queue: "staging-email-notifications",
+            queue: `${environment}-email-notifications`,
             max_batch_size: 5,
             max_batch_timeout: 5,
             max_retries: 5,
-            dead_letter_queue: "staging-email-notifications-dlq",
+            dead_letter_queue: `${environment}-email-notifications-dlq`,
             max_concurrency: 2,
             retry_delay: 30,
           },
           {
-            queue: "staging-data-retention-cleanup",
+            queue: `${environment}-data-retention-cleanup`,
             max_batch_size: 5,
             max_batch_timeout: 5,
             max_retries: 5,
-            dead_letter_queue: "staging-data-retention-cleanup-dlq",
+            dead_letter_queue: `${environment}-data-retention-cleanup-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
           },
           {
-            queue: "staging-notifications",
+            queue: `${environment}-notifications`,
             max_batch_size: 5,
             max_batch_timeout: 5,
             max_retries: 5,
-            dead_letter_queue: "staging-notifications-dlq",
+            dead_letter_queue: `${environment}-notifications-dlq`,
             max_concurrency: 2,
             retry_delay: 30,
           },
           {
-            queue: "staging-malware-scan",
+            queue: `${environment}-malware-scan`,
             max_batch_size: 1,
             max_batch_timeout: 5,
             max_retries: 3,
-            dead_letter_queue: "staging-malware-scan-dlq",
+            dead_letter_queue: `${environment}-malware-scan-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
           },
@@ -337,7 +338,7 @@ test("declares isolated Cloudflare environments with reviewed staging consumers 
   );
 });
 
-test("pins only verified non-production D1 identifiers and excludes secrets", () => {
+test("pins verified D1 identifiers for every isolated environment and excludes secrets", () => {
   const serialized = JSON.stringify(source);
   assert.equal(
     source.d1_databases[0]?.database_id,
@@ -347,11 +348,14 @@ test("pins only verified non-production D1 identifiers and excludes secrets", ()
     source.env.staging.d1_databases[0]?.database_id,
     "bb716a96-b2fb-4823-90d6-6c228fed181a",
   );
-  assert.equal(source.env.production.d1_databases[0]?.database_id, undefined);
-  assert.doesNotMatch(
+  assert.equal(
+    source.env.production.d1_databases[0]?.database_id,
+    "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
+  );
+  assert.match(
     serialized,
     /4cce509b-0e02-4ca9-a3ba-a5ce1327aeda/i,
-    "the production D1 identifier remains outside source configuration",
+    "the verified production D1 identifier is pinned to prevent fallback to staging",
   );
   assert.doesNotMatch(serialized, /"account_id"\s*:/i);
   assert.doesNotMatch(serialized, /"(?:api_key|secret|token)"\s*:/i);
@@ -380,7 +384,7 @@ test("pins only verified non-production D1 identifiers and excludes secrets", ()
   }
 });
 
-test("does not attach legacy queue contracts and limits malware scanning to staging", () => {
+test("does not attach legacy queue contracts and limits malware scanning to isolated async environments", () => {
   const serialized = JSON.stringify(source);
   for (const legacyBinding of [
     "AI_JOBS_QUEUE",
@@ -401,7 +405,7 @@ test("does not attach legacy queue contracts and limits malware scanning to stag
   assert.match(serialized, /"MALWARE_SCAN_QUEUE"/);
   assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
-  assert.deepEqual(source.env.production.queues.consumers, []);
+  assert.equal(source.env.production.queues.consumers.length, 8);
   assert.equal(source.env.staging.queues.consumers.length, 8);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
@@ -414,6 +418,19 @@ test("does not attach legacy queue contracts and limits malware scanning to stag
       "staging-data-retention-cleanup",
       "staging-notifications",
       "staging-malware-scan",
+    ],
+  );
+  assert.deepEqual(
+    source.env.production.queues.consumers.map(({ queue }) => queue),
+    [
+      "production-document-analysis",
+      "production-ocr-processing",
+      "production-document-export",
+      "production-legal-sources-sync",
+      "production-email-notifications",
+      "production-data-retention-cleanup",
+      "production-notifications",
+      "production-malware-scan",
     ],
   );
 });

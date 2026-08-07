@@ -787,3 +787,27 @@ synthetic identity before returning. The content-free provider-usage ledger is
 intentionally append-only audit evidence and is not deleted. Staging Worker
 `51244924-3cd6-4a3e-a0e3-103b458f3a3a` has the probe flag reverted to `false`.
 No production setting is changed.
+
+## D-162 — production infrastructure is isolated before the application release
+
+Status: accepted; application deployment blocked by missing external secret bindings
+Date: 2026-08-07
+
+The production release targets the existing Worker `juro`, which is the Worker
+attached to `app.juro.uz`; it does not create a second public application
+hostname. The production artifact is pinned to `juro-production`,
+`juro-private-documents`, `juro-production-backups`,
+`juro-production-quarantine`, `production-*` Queues/DLQs and four
+`production-*` Vectorize indexes. The fourteen staging resource names cannot
+appear in the generated production artifact.
+
+The new production queues and indexes are empty and isolated. Production D1
+has not been migrated and the `juro` Worker has not been deployed, so the
+existing public application remains untouched. Fresh production-only
+`ADMIN_INTERNAL_TOKEN` and `IDENTITY_KEYRING` bindings were generated directly
+into Cloudflare secret storage and were never read back or logged.
+
+Cloudflare never exposes existing secret values, therefore the final release is
+correctly refused until independently configured production bindings exist for
+`OPENAI_API_KEY`, `ANTHROPIC_API_KEY` and `TURNSTILE_SECRET_KEY`. This avoids a
+public deployment that would make AI or anti-abuse controls fail closed.

@@ -12,6 +12,7 @@
     "build:staging": "node scripts/platform-tasks.mjs build --environment staging",
     "build:production": "node scripts/platform-tasks.mjs build --environment production",
     "deploy:staging": "node scripts/deploy-staging.mjs",
+    "deploy:production": "node scripts/deploy-production.mjs",
     "start": "node scripts/platform-tasks.mjs start",
     "test": "node scripts/platform-tasks.mjs test",
     "test:rendered": "node scripts/platform-tasks.mjs test-rendered",

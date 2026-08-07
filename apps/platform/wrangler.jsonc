@@ -368,40 +368,83 @@
       }
     },
     "production": {
-      "name": "juro-platform-production",
+      "name": "juro",
+      "workers_dev": false,
+      "preview_urls": false,
       "assets": {
         "binding": "ASSETS"
       },
+      "triggers": {
+        "crons": ["*/5 * * * *", "0 19 * * *"]
+      },
       "vars": {
         "APP_ENV": "production",
-        "ASYNC_RUNTIME_ENABLED": "false",
-        "CRON_ENABLED": "false",
-        "ACCOUNT_DELETION_PURGE_ENABLED": "false",
-        "GUEST_AI_ENABLED": "false",
+        "ASYNC_RUNTIME_ENABLED": "true",
+        "CRON_ENABLED": "true",
+        "ACCOUNT_DELETION_PURGE_ENABLED": "true",
+        "MALWARE_SCAN_ENABLED": "true",
+        "MALWARE_SCANNER_PROBE_ENABLED": "false",
+        "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
+        "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
-        "PAYMENT_FOUNDATION_ENABLED": "false",
+        "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "false",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
-        "LEGAL_DIRECT_RETRIEVAL_ENABLED": "false",
+        "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
         "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
-        "LAWYER_PROFILE_DIRECTORY_ENABLED": "false",
+        "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "legacy",
         "JOB_SCHEMA_VERSION": "1",
         "EMBEDDING_MODEL": "text-embedding-3-large",
+        "OPENAI_CHAT_MODEL": "gpt-5.6-terra",
+        "OPENAI_DEEP_MODEL": "gpt-5.6-sol",
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
         "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
+        "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-6",
+        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6",
         "EMAIL_FROM": "JURO <no-reply@juro.uz>",
         "OPERATIONS_ALERT_EMAIL": "muzaffarbekmurodoff@gmail.com",
-        "STATUS_HOSTNAME": "status.juro.uz"
+        "STATUS_HOSTNAME": "status.juro.uz",
+        "ADMIN_CONSOLE_ORIGIN": "https://admin.juro.uz"
       },
       "d1_databases": [
         {
           "binding": "DB",
           "database_name": "juro-production",
+          "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
           "migrations_dir": "./drizzle"
+        }
+      ],
+      "migrations": [
+        {
+          "tag": "v1-malware-scanner-container",
+          "new_sqlite_classes": ["MalwareScannerContainer"]
+        }
+      ],
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "MALWARE_SCANNER_CONTAINER",
+            "class_name": "MalwareScannerContainer"
+          }
+        ]
+      },
+      "containers": [
+        {
+          "name": "juro-production-malware-scanner",
+          "class_name": "MalwareScannerContainer",
+          "image": "docker.io/clamav/clamav@sha256:4de20bd9ab45a4b763c5412b769217ef5082572ebc8a63aff1a77943419e5dd8",
+          "instance_type": "standard-1",
+          "max_instances": 1
+        }
+      ],
+      "services": [
+        {
+          "binding": "MALWARE_SCANNER",
+          "service": "juro"
         }
       ],
       "r2_buckets": [
@@ -447,9 +490,86 @@
           {
             "binding": "NOTIFICATIONS_QUEUE",
             "queue": "production-notifications"
+          },
+          {
+            "binding": "MALWARE_SCAN_QUEUE",
+            "queue": "production-malware-scan"
           }
         ],
-        "consumers": []
+        "consumers": [
+          {
+            "queue": "production-document-analysis",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "production-document-analysis-dlq",
+            "max_concurrency": 1,
+            "retry_delay": 30
+          },
+          {
+            "queue": "production-ocr-processing",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "production-ocr-processing-dlq",
+            "max_concurrency": 1,
+            "retry_delay": 30
+          },
+          {
+            "queue": "production-document-export",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "production-document-export-dlq",
+            "max_concurrency": 1,
+            "retry_delay": 30
+          },
+          {
+            "queue": "production-legal-sources-sync",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "production-legal-sources-sync-dlq",
+            "max_concurrency": 1,
+            "retry_delay": 30
+          },
+          {
+            "queue": "production-email-notifications",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "production-email-notifications-dlq",
+            "max_concurrency": 2,
+            "retry_delay": 30
+          },
+          {
+            "queue": "production-data-retention-cleanup",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "production-data-retention-cleanup-dlq",
+            "max_concurrency": 1,
+            "retry_delay": 30
+          },
+          {
+            "queue": "production-notifications",
+            "max_batch_size": 5,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "production-notifications-dlq",
+            "max_concurrency": 2,
+            "retry_delay": 30
+          },
+          {
+            "queue": "production-malware-scan",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "dead_letter_queue": "production-malware-scan-dlq",
+            "max_concurrency": 1,
+            "retry_delay": 30
+          }
+        ]
       },
       "vectorize": [
         {
