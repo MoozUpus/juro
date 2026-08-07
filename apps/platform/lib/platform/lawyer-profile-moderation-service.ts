@@ -1,8 +1,11 @@
 import { isLawyerMarketplaceProfileComplete } from "./lawyer-marketplace";
+import { localizedLawyerProfileStatusNotification } from "./lawyer-profile-notifications";
 
 type PendingProfile = {
   id: string;
+  userId: string;
   workspaceId: string | null;
+  locale: "ru" | "uz";
   profileRevision: number;
   displayName: string;
   specialtiesJson: string;
@@ -61,7 +64,9 @@ export async function moderateLawyerProfile(
   },
 ): Promise<{ status: "public_approved" | "changes_requested" | "rejected" }> {
   const profile = await db.prepare(
-    `SELECT p.id,u.default_workspace_id AS workspaceId,p.profile_revision AS profileRevision,
+    `SELECT p.id,p.user_id AS userId,u.default_workspace_id AS workspaceId,
+       CASE WHEN u.locale='uz' THEN 'uz' ELSE 'ru' END AS locale,
+       p.profile_revision AS profileRevision,
        p.display_name AS displayName,p.specialties_json AS specialtiesJson,
        p.languages_json AS languagesJson,p.experience_years AS experienceYears,
        p.price_description AS priceDescription,p.availability_status AS availabilityStatus,
@@ -94,6 +99,7 @@ export async function moderateLawyerProfile(
   const now = (input.now ?? new Date()).toISOString();
   const moderationId = crypto.randomUUID();
   const auditId = crypto.randomUUID();
+  const notificationId = crypto.randomUUID();
   const profileSha256 = await sha256(JSON.stringify({
     id: profile.id,
     revision: profile.profileRevision,
@@ -122,6 +128,7 @@ export async function moderateLawyerProfile(
   // corrections stays non-bookable (`pending`); marketplace_status carries the
   // reviewer-visible correction state until the lawyer edits and resubmits it.
   const expectedProfileStatus = resultStatus === "changes_requested" ? "pending" : resultStatus;
+  const notification = localizedLawyerProfileStatusNotification(profile.locale, resultStatus, input.reason);
   try {
     const results = await db.batch([
       db.prepare(
@@ -155,6 +162,20 @@ export async function moderateLawyerProfile(
         input.moderatorUserId, input.decision,
       ),
       db.prepare(
+        `INSERT INTO notifications
+          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+         SELECT ?,?,?,NULL,'lawyer_profile_status',?,?,NULL,?
+         WHERE EXISTS (
+           SELECT 1 FROM lawyer_profile_moderation
+           WHERE id=? AND lawyer_profile_id=? AND profile_revision=?
+             AND moderator_user_id=? AND decision=?
+         )`,
+      ).bind(
+        notificationId, profile.workspaceId, profile.userId, notification.title,
+        notification.body, now, moderationId, profile.id, profile.profileRevision,
+        input.moderatorUserId, input.decision,
+      ),
+      db.prepare(
         `UPDATE lawyer_profiles SET marketplace_status=?,public_approved_at=CASE WHEN ?='public_approved' THEN ? ELSE NULL END,updated_at=?
          WHERE id=? AND profile_revision=? AND status=?`,
       ).bind(resultStatus, resultStatus, now, now, profile.id, profile.profileRevision, expectedProfileStatus),
@@ -163,6 +184,7 @@ export async function moderateLawyerProfile(
       Number(results[0]?.meta.changes ?? 0) !== 1
       || Number(results[1]?.meta.changes ?? 0) !== 1
       || Number(results[2]?.meta.changes ?? 0) !== 1
+      || Number(results[3]?.meta.changes ?? 0) !== 1
     ) throw new LawyerProfileModerationError("PROFILE_UNAVAILABLE");
   } catch (error) {
     if (error instanceof LawyerProfileModerationError) throw error;

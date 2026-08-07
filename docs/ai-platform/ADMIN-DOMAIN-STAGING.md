@@ -18,8 +18,8 @@ surface is complete.
 - Cloudflare Access application:
   `9c4710fc-99f8-4417-800b-974926196c21`; the sole allow policy is
   `014d5339-beda-45d3-b8d4-73ec8f06a0d6` for the staging owner.
-- Platform Worker: `juro-platform-staging`, version
-  `4b509bbb-81d4-458a-ae5f-b44e95e4f66f`.
+- Platform Worker: `juro-platform-staging`; its exact version is recorded in
+  the deployment evidence for the latest application-only release.
 - The admin Worker has no D1, R2, Queue, AI or public platform session binding.
   Its only data path is the private `PLATFORM_ADMIN_API` service binding.
 
@@ -41,8 +41,11 @@ lawyer edit creates a new profile revision and returns a complete profile to
 `pending_review`. A public review may be approved or rejected with a bounded
 redaction/reason. The reviewer cannot read the dashboard counts intended for
 `super_admin`. The platform performs each update with its immutable moderation
-record and tenant audit event in one D1 batch; the isolated Worker never
-receives a D1 binding or raw session token.
+record and tenant audit event in one D1 batch; when a marketplace status
+changes it also creates a localized in-app notification for the lawyer in the
+same batch. This covers profile creation, complete-profile resubmission,
+photo-driven resubmission, and approve/reject/correction moderation decisions.
+The isolated Worker never receives a D1 binding or raw session token.
 
 ## Migration and recoverability
 
@@ -78,6 +81,15 @@ staging. The remote ledger was queried read-only before deployment; no backup
 or migration application was needed for this application-only release.
 
 ## Validation already completed
+
+### Latest application-only platform release
+
+On 2026-08-07 Cloudflare deployed `juro-platform-staging` version
+`f0422886-6eb3-4610-aef4-e8c0f6dd99f5`. This release introduced localized,
+tenant-scoped inbox notifications for lawyer-profile lifecycle status changes.
+It has no D1 migration, no Cloudflare binding change, and no production effect.
+Before deployment, the platform type-check, lint, 129/129 full regression, and
+staging build/artifact validation passed.
 
 - `apps/platform`: `type-check`, lint, complete test suite (129 test groups),
   staging build and staging artifact validation.

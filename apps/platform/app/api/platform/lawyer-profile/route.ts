@@ -12,6 +12,7 @@ import {
   marketplaceStatusAfterProfileEdit,
   missingLawyerMarketplaceFields,
 } from "../../../../lib/platform/lawyer-marketplace";
+import { localizedLawyerProfileStatusNotification } from "../../../../lib/platform/lawyer-profile-notifications";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 type LawyerProfile = {
@@ -225,6 +226,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const id = crypto.randomUUID();
   const db = requireD1();
   const value = parsed.data;
+  const notification = localizedLawyerProfileStatusNotification(locale, "profile_incomplete");
   await db.batch([
     db.prepare(
       `INSERT INTO lawyer_profiles (
@@ -252,6 +254,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
       JSON.stringify(value.consultationFormats ?? []),
       now,
       now,
+    ),
+    db.prepare(
+      `INSERT INTO notifications
+        (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+       VALUES (?,?,?,NULL,'lawyer_profile_status',?,?,NULL,?)`,
+    ).bind(
+      crypto.randomUUID(), workspace.id, user.id, notification.title, notification.body, now,
     ),
     db.prepare(
       `INSERT INTO workspace_audit_events
@@ -316,7 +325,9 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
   const now = isoNow();
   const db = requireD1();
   const auditId = crypto.randomUUID();
-  const results = await db.batch([
+  const statusChanged = profile.marketplaceStatus !== marketplaceStatus;
+  const notification = localizedLawyerProfileStatusNotification(locale, marketplaceStatus);
+  const statements = [
     db.prepare(
       `UPDATE lawyer_profiles SET
        display_name=?,specialties_json=?,languages_json=?,experience_years=?,
@@ -372,8 +383,30 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
       marketplaceStatus,
       now,
     ),
-  ]);
-  if (Number(results[0]?.meta.changes ?? 0) !== 1 || Number(results[1]?.meta.changes ?? 0) !== 1) {
+  ];
+  if (statusChanged) {
+    statements.push(
+      db.prepare(
+        `INSERT INTO notifications
+          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+         SELECT ?,?,?,NULL,'lawyer_profile_status',?,?,NULL,?
+         WHERE EXISTS (
+           SELECT 1 FROM lawyer_profiles
+           WHERE id=? AND user_id=? AND profile_revision=?
+             AND status='pending' AND marketplace_status=? AND updated_at=?
+         )`,
+      ).bind(
+        crypto.randomUUID(), workspace.id, user.id, notification.title, notification.body,
+        now, profile.id, user.id, profile.profileRevision + 1, marketplaceStatus, now,
+      ),
+    );
+  }
+  const results = await db.batch(statements);
+  if (
+    Number(results[0]?.meta.changes ?? 0) !== 1
+    || Number(results[1]?.meta.changes ?? 0) !== 1
+    || (statusChanged && Number(results[2]?.meta.changes ?? 0) !== 1)
+  ) {
     return response({ code: "PROFILE_UNAVAILABLE", error: lawyerProfileError(locale, "PROFILE_UNAVAILABLE") }, 409);
   }
   const updated = await ownProfile(user.id);

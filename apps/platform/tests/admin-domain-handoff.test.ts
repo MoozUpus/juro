@@ -290,6 +290,14 @@ test("lawyer moderator may request corrections without publishing or booking the
     assert.equal(moderationRecord.decision, "changes_requested");
     assert.equal(moderationRecord.reason, "Synthetic request: clarify the listed consultation format.");
     assert.equal(sqlite.prepare("SELECT count(*) AS total FROM workspace_audit_events WHERE action='lawyer_profile_moderated'").get()?.total, 1);
+    const notification = sqlite.prepare(
+      "SELECT workspace_id AS workspaceId,user_id AS userId,type,title,body FROM notifications WHERE type='lawyer_profile_status'",
+    ).get() as { workspaceId: string; userId: string; type: string; title: string; body: string };
+    assert.equal(notification.workspaceId, "profile-workspace");
+    assert.equal(notification.userId, USER_ID);
+    assert.equal(notification.type, "lawyer_profile_status");
+    assert.equal(notification.title, "Профиль юриста нужно доработать");
+    assert.match(notification.body, /Synthetic request: clarify the listed consultation format\./u);
   } finally {
     sqlite.close();
   }

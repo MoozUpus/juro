@@ -9,6 +9,7 @@ import {
   type LawyerMarketplaceCompletionInput,
 } from "../lib/platform/lawyer-marketplace";
 import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
+import { localizedLawyerProfileStatusNotification } from "../lib/platform/lawyer-profile-notifications";
 
 const completeProfile: LawyerMarketplaceCompletionInput = {
   displayName: "Юрист JURO",
@@ -42,6 +43,15 @@ test("only an approved profile may receive a client request", () => {
   assert.equal(mayReceiveLawyerRequests("changes_requested"), false);
   assert.equal(mayReceiveLawyerRequests("rejected"), false);
   assert.equal(mayReceiveLawyerRequests("public_approved"), true);
+});
+
+test("profile status notifications are localized and preserve only a bounded review reason", () => {
+  const ru = localizedLawyerProfileStatusNotification("ru", "changes_requested", "Уточните формат консультации.");
+  assert.equal(ru.title, "Профиль юриста нужно доработать");
+  assert.match(ru.body, /Уточните формат консультации\./u);
+  const uz = localizedLawyerProfileStatusNotification("uz", "pending_review");
+  assert.equal(uz.title, "Yurist profilingiz tekshiruvga yuborildi");
+  assert.doesNotMatch(uz.body, /Izoh:/u);
 });
 
 test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {
@@ -81,6 +91,7 @@ test("a completed profile under review is visible but cannot receive a request",
   const detailRoute = readFileSync(new URL("../app/api/platform/lawyers/[lawyerId]/route.ts", import.meta.url), "utf8");
   const detailClient = readFileSync(new URL("../app/_platform/LawyerProfileClient.tsx", import.meta.url), "utf8");
   const privatePhotoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
+  const privateProfileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
   assert.match(publicPhotoRoute, /marketplace_status='pending_review' AND status='pending'/);
   assert.match(directoryRoute, /marketplace_status='pending_review' AND status='pending'/);
   assert.match(publicDirectoryRoute, /marketplace_status='pending_review' AND status='pending'/);
@@ -94,4 +105,6 @@ test("a completed profile under review is visible but cannot receive a request",
   assert.match(detailClient, /Профиль на проверке JURO/);
   assert.match(privatePhotoRoute, /export const GET/);
   assert.match(privatePhotoRoute, /WHERE user_id=\?/);
+  assert.match(privatePhotoRoute, /lawyer_profile_status/);
+  assert.match(privateProfileRoute, /lawyer_profile_status/);
 });

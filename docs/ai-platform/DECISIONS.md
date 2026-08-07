@@ -648,3 +648,21 @@ moderation record before publication.
 This release is application-only. The related repair to the local Drizzle
 journal records already-applied migrations `0106`–`0109` for SQLite test
 parity; it does not modify remote D1 or production.
+
+## D-140 — lawyer-profile status changes notify the lawyer atomically
+
+Status: accepted for protected staging
+Date: 2026-08-07
+
+Profile lifecycle status is not communicated only through a later page reload.
+The existing tenant-scoped `notifications` inbox is reused so no redundant
+identity or moderation table is introduced. Profile creation, a complete
+resubmission (including one caused by a replacement photo), and reviewer
+approve/reject/correction decisions add a localized RU/UZ in-app notification
+in the same D1 batch as the status revision and immutable audit evidence.
+
+Notifications contain only the status and the reviewer's bounded reason when
+applicable; they do not expose moderator identity, raw tokens, or private
+profile data. Marketplace projection remains fail-closed regardless of whether
+the notification is read. This is an application-only staging change and does
+not modify production or remote D1 schema.

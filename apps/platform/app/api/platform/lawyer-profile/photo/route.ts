@@ -7,6 +7,7 @@ import {
   marketplaceStatusAfterProfileEdit,
   missingLawyerMarketplaceFields,
 } from "../../../../../lib/platform/lawyer-marketplace";
+import { localizedLawyerProfileStatusNotification } from "../../../../../lib/platform/lawyer-profile-notifications";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
 
 const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
@@ -14,6 +15,8 @@ const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
 type ImageSpec = { mimeType: "image/jpeg" | "image/png" | "image/webp"; extension: "jpg" | "png" | "webp" };
 type ProfileForPhoto = {
   id: string;
+  marketplaceStatus: string;
+  locale: "ru" | "uz";
   displayName: string;
   specialtiesJson: string;
   languagesJson: string;
@@ -123,7 +126,9 @@ async function scanProfilePhoto(
 
 async function ownProfile(userId: string): Promise<ProfileForPhoto | null> {
   return requireD1().prepare(
-    `SELECT p.id,p.display_name AS displayName,p.specialties_json AS specialtiesJson,
+    `SELECT p.id,p.marketplace_status AS marketplaceStatus,
+      CASE WHEN u.locale='uz' THEN 'uz' ELSE 'ru' END AS locale,
+      p.display_name AS displayName,p.specialties_json AS specialtiesJson,
       p.languages_json AS languagesJson,p.experience_years AS experienceYears,
       p.price_description AS priceDescription,p.availability_status AS availabilityStatus,
       p.firm_name AS firmName,p.city,p.region,p.education,
@@ -243,7 +248,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const now = isoNow();
   const db = requireD1();
   const auditId = crypto.randomUUID();
-  const result = await db.batch([
+  const statusChanged = profile.marketplaceStatus !== marketplaceStatus;
+  const notification = localizedLawyerProfileStatusNotification(profile.locale, marketplaceStatus);
+  const statements = [
     db.prepare(
       `UPDATE lawyer_profiles SET
         profile_photo_key=?,profile_photo_mime=?,profile_photo_sha256=?,profile_photo_size_bytes=?,
@@ -283,11 +290,33 @@ export const POST = withApiErrors(async function POST(request: Request) {
       marketplaceStatus,
       now,
     ),
-  ]).catch(async (error) => {
+  ];
+  if (statusChanged) {
+    statements.push(
+      db.prepare(
+        `INSERT INTO notifications
+          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+         SELECT ?,?,?,NULL,'lawyer_profile_status',?,?,NULL,?
+         WHERE EXISTS (
+           SELECT 1 FROM lawyer_profiles
+           WHERE id=? AND user_id=? AND profile_revision=?
+             AND status='pending' AND marketplace_status=? AND updated_at=?
+         )`,
+      ).bind(
+        crypto.randomUUID(), workspace.id, user.id, notification.title, notification.body,
+        now, profile.id, user.id, profile.profileRevision + 1, marketplaceStatus, now,
+      ),
+    );
+  }
+  const result = await db.batch(statements).catch(async (error) => {
     if (createdObject) await bucket.delete(objectKey).catch(() => undefined);
     throw error;
   });
-  if (Number(result[0]?.meta.changes ?? 0) !== 1 || Number(result[1]?.meta.changes ?? 0) !== 1) {
+  if (
+    Number(result[0]?.meta.changes ?? 0) !== 1
+    || Number(result[1]?.meta.changes ?? 0) !== 1
+    || (statusChanged && Number(result[2]?.meta.changes ?? 0) !== 1)
+  ) {
     if (createdObject) await bucket.delete(objectKey).catch(() => undefined);
     return response({ code: "PROFILE_UNAVAILABLE" }, 409);
   }
