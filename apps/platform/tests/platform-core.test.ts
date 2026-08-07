@@ -1557,8 +1557,9 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   assert.match(review, /replayed:true/);
   assert.match(lawyerClient, /completion/); assert.match(ownerClient, /\/review/); assert.match(migration, /CREATE TABLE `lawyer_reviews`/);
   assert.match(ownerClient, /speedRating/); assert.match(ownerClient, /qualityRating/); assert.match(ownerClient, /communicationRating/);
-  const [moderation, moderationRoutes, moderationMigration] = await Promise.all([
+  const [moderation, moderationService, moderationRoutes, moderationMigration] = await Promise.all([
     readFile(new URL("../lib/platform/lawyer-review-moderation.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/lawyer-review-moderation-service.ts", import.meta.url), "utf8"),
     Promise.all([
       readFile(new URL("../app/api/platform/admin/lawyer-reviews/route.ts", import.meta.url), "utf8"),
       readFile(new URL("../app/api/platform/admin/lawyer-reviews/[reviewId]/route.ts", import.meta.url), "utf8"),
@@ -1571,7 +1572,9 @@ test("completed lawyer services gate private owner reviews and moderation", asyn
   ]);
   assert.match(moderation, /hasLikelyPersonalData/);
   assert.match(moderationRoutes[0], /lawyer\.reviews\.moderate/);
-  assert.match(moderationRoutes[1], /originalBodySha256/);
+  assert.match(moderationRoutes[1], /moderateLawyerReview/);
+  assert.match(moderationService, /originalBodySha256/);
+  assert.match(moderationService, /lawyer_review_moderated/);
   assert.match(moderationRoutes[1], /LIKELY_PERSONAL_DATA/);
   assert.match(moderationRoutes[1], /assertSafeWrite/);
   assert.match(moderationMigration[0], /CREATE TABLE `lawyer_review_moderation`/);

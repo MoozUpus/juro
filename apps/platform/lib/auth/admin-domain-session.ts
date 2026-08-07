@@ -237,10 +237,11 @@ export async function revokeAdminDomainSession(
 
 export function adminRoleAllows(
   roles: readonly AdminDomainRole[],
-  capability: "dashboard.view" | "lawyer.profiles.moderate",
+  capability: "dashboard.view" | "lawyer.profiles.moderate" | "lawyer.reviews.moderate",
 ): boolean {
   return roles.includes("super_admin") || (
-    capability === "lawyer.profiles.moderate" && roles.includes("lawyer_moderator")
+    (capability === "lawyer.profiles.moderate" || capability === "lawyer.reviews.moderate")
+      && roles.includes("lawyer_moderator")
   );
 }
 

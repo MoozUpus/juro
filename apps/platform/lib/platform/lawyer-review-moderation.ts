@@ -3,16 +3,24 @@ import { z } from "zod";
 const reviewId = z.string().uuid();
 const body = z.string().trim().min(1).max(2_000);
 
-export const lawyerReviewModerationSchema = z.object({
+const moderationFields = {
   decision: z.enum(["approved", "rejected"]),
   moderatedBody: z.string().trim().max(2_000).optional(),
   reason: body,
-  locale: z.enum(["ru", "uz"]),
-}).strict().superRefine((value, context) => {
+};
+
+function validateModeratedBody(value: { decision: "approved" | "rejected"; moderatedBody?: string }, context: z.RefinementCtx) {
   if (value.decision === "approved" && value.moderatedBody !== undefined && !value.moderatedBody) {
     context.addIssue({ code: "custom", path: ["moderatedBody"], message: "Moderated body must not be empty." });
   }
-});
+}
+
+export const lawyerReviewModerationInputSchema = z.object(moderationFields).strict().superRefine(validateModeratedBody);
+
+export const lawyerReviewModerationSchema = z.object({
+  ...moderationFields,
+  locale: z.enum(["ru", "uz"]),
+}).strict().superRefine(validateModeratedBody);
 
 export const lawyerReviewModerationListSchema = z.object({
   status: z.enum(["pending", "approved", "rejected"]).default("pending"),

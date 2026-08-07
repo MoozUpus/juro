@@ -613,3 +613,20 @@ server record before cookie removal.
 Cloudflare Access is a second boundary with a dedicated owner-only application.
 This decision covers only `admin.staging.juro.uz`; it does not migrate or
 expose production administration.
+
+## D-138 — reviewer moderation reuses the protected platform service boundary
+
+Status: accepted and staging-deployed
+Date: 2026-08-07
+
+The isolated staging admin Worker now renders the pending lawyer-review queue
+and sends only bounded moderation commands to the existing platform Worker via
+the private service binding. It remains intentionally without D1, R2, Queue,
+AI or public-session bindings. The platform rechecks the separate admin-domain
+session, fresh source MFA and current role on every request.
+
+`lawyer_moderator` may list, approve or reject lawyer reviews and supply a
+bounded redaction/reason. It cannot view the super-admin dashboard. A decision
+and its workspace audit event are written atomically, PII-like replacement text
+is rejected, and audit payloads contain identifiers and decision metadata only.
+This release has no D1 migration and does not alter production.

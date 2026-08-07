@@ -1,22 +1,25 @@
 # Isolated staging admin domain
 
 Status: deployed to staging. DNS/TLS and the Cloudflare Access boundary have
-been verified by a read-only HTTPS response. The automated browser smoke is
-still pending because the connected browser blocks this domain locally with
-`ERR_BLOCKED_BY_CLIENT`; that tooling condition is not treated as a successful
-authenticated browser test. This is not a production deployment or a claim
-that the full admin surface is complete.
+been verified by a read-only HTTPS response. The isolated console also exposes
+the pending lawyer-review moderation queue through the same protected service
+binding. The authenticated browser smoke remains pending: the in-app browser
+blocks the domain locally with `ERR_BLOCKED_BY_CLIENT`, while the connected
+Chrome profile redirects to Cloudflare login because it has no active Access
+session. Neither condition is treated as a successful authenticated browser
+test. This is not a production deployment or a claim that the full admin
+surface is complete.
 
 ## Boundary
 
 - Console Worker: `juro-admin-staging`, version
-  `d9474641-30d6-4f44-a106-7022a3e5cfc6`.
+  `c686edaf-e284-4cce-bce2-d2553ca91f70`.
 - Domain: `https://admin.staging.juro.uz`.
 - Cloudflare Access application:
   `9c4710fc-99f8-4417-800b-974926196c21`; the sole allow policy is
   `014d5339-beda-45d3-b8d4-73ec8f06a0d6` for the staging owner.
 - Platform Worker: `juro-platform-staging`, version
-  `38f0c814-5099-414c-bdc1-b30d2537cb77`.
+  `8c427b22-84c1-41ae-8c62-ac83ad7566aa`.
 - The admin Worker has no D1, R2, Queue, AI or public platform session binding.
   Its only data path is the private `PLATFORM_ADMIN_API` service binding.
 
@@ -29,8 +32,12 @@ browser cookies are cleared. Raw app, ticket, CSRF and admin-session tokens are
 never persisted.
 
 `administrator` maps to `super_admin`; `legal_reviewer` maps only to
-`lawyer_moderator`. A reviewer is directed to the pending lawyer-profile queue
-and cannot read the dashboard counts intended for `super_admin`.
+`lawyer_moderator`. A reviewer may open the pending lawyer-profile and
+lawyer-review queues, approve or reject a review, and submit a bounded
+redaction/reason. It cannot read the dashboard counts intended for
+`super_admin`. The platform performs the update and writes both the immutable
+moderation record and a tenant audit event in one D1 batch; the isolated Worker
+never receives a D1 binding or raw session token.
 
 ## Migration and recoverability
 
@@ -63,20 +70,24 @@ route, secret or Access policy changed.
 
 - `apps/platform`: `type-check`, lint, complete test suite (129 test groups),
   staging build and staging artifact validation.
-- Admin Worker: generated Wrangler types, TypeScript check and staging dry-run.
-- Handoff focused suite: 5/5, including one-use ticket, stale role/MFA denial,
-  append-only audit and server-side logout revocation.
+- Admin Worker: TypeScript check and staging dry-run; the deployed binding set
+  remains only the private platform service and non-secret staging variables.
+- Handoff/moderation focused suite: 7/7, including one-use ticket, stale
+  role/MFA denial, append-only audit, server-side logout revocation,
+  reviewer capability boundaries, atomic moderation and PII rejection.
 - Cloudflare deployment bound the admin Worker only to the staging service
   binding and custom domain.
 - A read-only remote D1 query confirmed all three migration tables exist after
   `0109` (`adminTables=3`); the query made no database changes.
-- `https://admin.staging.juro.uz/health` now completes TLS and returns the
-  Cloudflare Access challenge. It was not possible to complete an authenticated
-  browser check from the connected browser because that browser reports
-  `ERR_BLOCKED_BY_CLIENT` before the request reaches Access.
+- `https://admin.staging.juro.uz/health` completes TLS and returns the
+  Cloudflare Access challenge. A clean Chrome control connection reaches the
+  Cloudflare login page, which proves the route is not a public Worker route;
+  it has no active Access session and therefore cannot authenticate the admin
+  flow. The in-app browser still reports `ERR_BLOCKED_BY_CLIENT` before the
+  request reaches Access.
 
 The initial browser request immediately after DNS route creation returned TLS
 `ERR_SSL_VERSION_OR_CIPHER_MISMATCH`; that propagation condition is resolved.
-Perform the read-only `/health`, Access-denial, handoff and fresh-MFA browser
-checks from a browser that does not block the domain before marking the surface
-browser-verified.
+Sign in to Cloudflare Access in the Chrome profile, then perform the read-only
+`/health`, Access-denial, handoff and fresh-MFA browser checks before marking
+the surface browser-verified.

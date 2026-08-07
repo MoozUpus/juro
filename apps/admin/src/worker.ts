@@ -1,7 +1,9 @@
 const ADMIN_SESSION_COOKIE = "juro_admin_session";
 const ADMIN_CSRF_COOKIE = "juro_admin_csrf";
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
-const MAX_FORM_BYTES = 4_096;
+// A moderation form can carry both a 2,000-character redaction and a reason.
+// Keep a bounded server-side limit while allowing both fields plus CSRF encoding.
+const MAX_FORM_BYTES = 8_192;
 
 type PlatformReply<T> = { response: Response; body: T | null };
 type Dashboard = {
@@ -26,6 +28,17 @@ type Profile = {
   priceDescription: string | null;
   availabilityStatus: string;
   updatedAt: string;
+};
+type Review = {
+  id: string;
+  lawyerName: string;
+  overallRating: number;
+  speedRating: number;
+  qualityRating: number;
+  communicationRating: number;
+  body: string | null;
+  status: string;
+  createdAt: string;
 };
 
 function cookie(request: Request, name: string): string | null {
@@ -54,7 +67,7 @@ function page(title: string, body: string, options: { notice?: string; role?: st
   const notice = options.notice ? `<p class="notice">${escaped(options.notice)}</p>` : "";
   const role = options.role ? `<span class="role">${escaped(options.role)}</span>` : "";
   return new Response(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>${escaped(title)} · JURO</title><style>
-    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль staging</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}.review-body{max-width:34rem;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль staging</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="/reviews">Отзывы</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
 }
 
 function securityHeaders(): Headers {
@@ -178,6 +191,28 @@ async function moderate(request: Request, env: Env, session: string, profileId: 
   return lawyerList(request, env, session, result.response.ok && result.body?.ok ? "Решение сохранено и записано в audit." : "Профиль изменился или решение нельзя применить.");
 }
 
+async function reviewList(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
+  const result = await platform<{ reviews: Review[] }>(env, "/api/internal/admin/reviews?status=pending&limit=50", { session });
+  if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
+  const csrfToken = cookie(request, ADMIN_CSRF_COOKIE) ?? "";
+  const rows = result.body.reviews.map((review) => `<tr><td>${escaped(review.lawyerName)}<br><small>${escaped(review.createdAt)}</small></td><td>${escaped(`${review.overallRating}/5`)}<br><small>Скорость ${escaped(review.speedRating)}, качество ${escaped(review.qualityRating)}, коммуникация ${escaped(review.communicationRating)}</small></td><td class="review-body">${escaped(review.body ?? "Без текста")}</td><td><form method="post" action="/reviews/${encodeURIComponent(review.id)}/moderate"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Редакция без персональных данных<textarea name="moderatedBody" maxlength="2000"></textarea></label><label>Причина<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="decision" value="approved">Одобрить</button><button class="danger" name="decision" value="rejected">Отклонить</button></div></form></td></tr>`).join("");
+  return page("Модерация отзывов", `<section class="panel"><p>Отзыв публикуется только после проверки. При обнаружении контактов одобрение отклоняется, пока текст не будет отредактирован.</p><table><thead><tr><th>Юрист</th><th>Оценка</th><th>Отзыв</th><th>Решение</th></tr></thead><tbody>${rows || "<tr><td colspan=\"4\">Нет отзывов на проверке.</td></tr>"}</tbody></table></section>`, { notice, role: "lawyer moderation" });
+}
+
+async function moderateReview(request: Request, env: Env, session: string, reviewId: string): Promise<Response> {
+  if (!await csrf(request)) return page("Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
+  const form = await request.formData();
+  const decision = form.get("decision"); const reason = form.get("reason"); const rawModeratedBody = form.get("moderatedBody");
+  const moderatedBody = typeof rawModeratedBody === "string" && rawModeratedBody.trim() ? rawModeratedBody.trim() : undefined;
+  if ((decision !== "approved" && decision !== "rejected") || typeof reason !== "string" || reason.trim().length < 1 || reason.trim().length > 2_000 || (moderatedBody !== undefined && moderatedBody.length > 2_000)) return reviewList(request, env, session, "Проверьте решение, текст и причину.");
+  const result = await platform<{ ok?: boolean; code?: string }>(env, `/api/internal/admin/reviews/${encodeURIComponent(reviewId)}/moderate`, {
+    method: "POST", session, headers: { "content-type": "application/json" }, body: JSON.stringify({ decision, reason: reason.trim(), ...(moderatedBody ? { moderatedBody } : {}) }),
+  });
+  if (result.response.ok && result.body?.ok) return reviewList(request, env, session, "Решение сохранено и записано в audit.");
+  if (result.body?.code === "LIKELY_PERSONAL_DATA") return reviewList(request, env, session, "Удалите контакты или другие персональные данные перед одобрением.");
+  return reviewList(request, env, session, "Отзыв изменился или решение нельзя применить.");
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -197,8 +232,11 @@ export default {
       if (!session) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
       if (request.method === "GET" && url.pathname === "/") return dashboard(request, env, session);
       if (request.method === "GET" && url.pathname === "/lawyers") return lawyerList(request, env, session);
+      if (request.method === "GET" && url.pathname === "/reviews") return reviewList(request, env, session);
       const match = /^\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
       if (request.method === "POST" && match && profileIdValid(match[1])) return moderate(request, env, session, match[1]);
+      const reviewMatch = /^\/reviews\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
+      if (request.method === "POST" && reviewMatch && profileIdValid(reviewMatch[1])) return moderateReview(request, env, session, reviewMatch[1]);
       return page("Не найдено", "<p>Этот административный маршрут отсутствует.</p>");
     } catch (error) {
       console.error(JSON.stringify({ event: "admin.request_failed", path: url.pathname, message: error instanceof Error ? error.message : "unknown" }));

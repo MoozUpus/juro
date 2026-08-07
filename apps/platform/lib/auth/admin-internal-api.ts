@@ -9,11 +9,14 @@ import {
   type AdminDomainEnvironment,
 } from "./admin-domain-session";
 import { moderateLawyerProfile } from "../platform/lawyer-profile-moderation-service";
+import { lawyerReviewModerationInputSchema, lawyerReviewModerationListSchema } from "../platform/lawyer-review-moderation";
+import { LawyerReviewModerationServiceError, listLawyerReviews, moderateLawyerReview } from "../platform/lawyer-review-moderation-service";
 
 const SESSION_HEADER = "x-juro-admin-session";
 const INTERNAL_TOKEN_HEADER = "x-juro-admin-internal-token";
 const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 const profileIdSchema = z.string().uuid();
+const reviewIdSchema = z.string().uuid();
 const consumeSchema = z.object({ ticket: z.string().regex(TOKEN_PATTERN) }).strict();
 const moderationSchema = z.object({
   decision: z.enum(["approved", "rejected"]),
@@ -162,6 +165,56 @@ async function moderateProfile(request: Request, env: AdminInternalEnv, profileI
   }
 }
 
+async function reviews(request: Request, env: AdminInternalEnv): Promise<Response> {
+  const authenticated = await requirePrincipal(request, env);
+  if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "lawyer.reviews.moderate")) return noStore({ code: "ACCESS_DENIED" }, 403);
+  const url = new URL(request.url);
+  const parsed = lawyerReviewModerationListSchema.safeParse({
+    status: url.searchParams.get("status") ?? undefined,
+    limit: url.searchParams.get("limit") ?? undefined,
+  });
+  if (!parsed.success) return noStore({ code: "INVALID_INPUT" }, 400);
+  const reviews = await listLawyerReviews(authenticated.db, parsed.data);
+  await appendAdminDomainAudit(authenticated.db, {
+    environment: authenticated.environment,
+    principal: authenticated.principal,
+    action: "lawyer_reviews_viewed",
+    entityType: "lawyer_review_list",
+    metadata: { status: parsed.data.status, count: reviews.results.length },
+  });
+  return noStore({ reviews: reviews.results });
+}
+
+async function moderateReview(request: Request, env: AdminInternalEnv, reviewId: string): Promise<Response> {
+  const authenticated = await requirePrincipal(request, env);
+  if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "lawyer.reviews.moderate")) return noStore({ code: "ACCESS_DENIED" }, 403);
+  const payload = lawyerReviewModerationInputSchema.safeParse(await parseJson(request, 8_192));
+  if (!payload.success) return noStore({ code: "INVALID_INPUT" }, 400);
+  try {
+    const result = await moderateLawyerReview(authenticated.db, {
+      reviewId,
+      moderatorUserId: authenticated.principal.userId,
+      decision: payload.data.decision,
+      moderatedBody: payload.data.moderatedBody,
+      reason: payload.data.reason,
+    });
+    await appendAdminDomainAudit(authenticated.db, {
+      environment: authenticated.environment,
+      principal: authenticated.principal,
+      action: "lawyer_review_moderated",
+      entityType: "lawyer_review",
+      entityId: reviewId,
+      metadata: { decision: payload.data.decision },
+    });
+    return noStore({ ok: true, status: result.status });
+  } catch (error) {
+    if (error instanceof LawyerReviewModerationServiceError && error.code === "LIKELY_PERSONAL_DATA") {
+      return noStore({ code: error.code }, 400);
+    }
+    return noStore({ code: "REVIEW_UNAVAILABLE" }, 409);
+  }
+}
+
 async function consume(request: Request, env: AdminInternalEnv): Promise<Response> {
   const internal = await fixedTimeTokenMatch(request.headers.get(INTERNAL_TOKEN_HEADER), env.ADMIN_INTERNAL_TOKEN);
   if (!internal) return noStore({ code: "ACCESS_DENIED" }, 403);
@@ -204,11 +257,18 @@ export async function handleInternalAdminRequest(request: Request, env: AdminInt
   if (url.pathname === "/api/internal/admin/session/logout" && request.method === "POST") return logout(request, env);
   if (url.pathname === "/api/internal/admin/dashboard" && request.method === "GET") return dashboard(request, env);
   if (url.pathname === "/api/internal/admin/lawyers" && request.method === "GET") return lawyerProfiles(request, env);
+  if (url.pathname === "/api/internal/admin/reviews" && request.method === "GET") return reviews(request, env);
   const moderation = /^\/api\/internal\/admin\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
   if (moderation && request.method === "POST") {
     const profileId = profileIdSchema.safeParse(moderation[1]);
     if (!profileId.success) return noStore({ code: "NOT_FOUND" }, 404);
     return moderateProfile(request, env, profileId.data);
+  }
+  const reviewModeration = /^\/api\/internal\/admin\/reviews\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
+  if (reviewModeration && request.method === "POST") {
+    const reviewId = reviewIdSchema.safeParse(reviewModeration[1]);
+    if (!reviewId.success) return noStore({ code: "NOT_FOUND" }, 404);
+    return moderateReview(request, env, reviewId.data);
   }
   return noStore({ code: "NOT_FOUND" }, 404);
 }

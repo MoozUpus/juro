@@ -4,16 +4,20 @@ import test from "node:test";
 
 import { issueAdminDomainHandoff } from "../lib/auth/admin-domain-handoff";
 import {
+  adminRoleAllows,
   consumeAdminDomainHandoff,
   revokeAdminDomainSession,
   requireAdminDomainSession,
 } from "../lib/auth/admin-domain-session";
 import { sha256 } from "../lib/auth/crypto";
+import { LawyerReviewModerationServiceError, moderateLawyerReview } from "../lib/platform/lawyer-review-moderation-service";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const NOW = new Date("2026-08-07T08:00:00.000Z");
 const USER_ID = "10000000-0000-4000-8000-000000000001";
 const SESSION_ID = "20000000-0000-4000-8000-000000000001";
+const WORKSPACE_ID = "50000000-0000-4000-8000-000000000001";
+const LAWYER_ID = "60000000-0000-4000-8000-000000000001";
 
 function seed() {
   const value = sqliteD1Fixture();
@@ -61,6 +65,28 @@ function staff() {
     assignmentIds: ["assignment"],
     mfaVerifiedAt: NOW.toISOString(),
   };
+}
+
+function seedPendingReview(sqlite: ReturnType<typeof seed>["sqlite"], input: { requestId: string; reviewId: string; body: string }) {
+  const now = NOW.toISOString();
+  sqlite.prepare(
+    "INSERT INTO workspaces(id,type,name,locale,created_at,updated_at) VALUES (?,'individual','Admin review','ru',?,?)",
+  ).run(WORKSPACE_ID, now, now);
+  sqlite.prepare(
+    "INSERT INTO user_profiles(id,email,locale,account_type,created_at,updated_at) VALUES (?,'lawyer-review-fixture@example.test','ru','lawyer',?,?)",
+  ).run(LAWYER_ID, now, now);
+  sqlite.prepare(
+    "INSERT INTO lawyer_profiles(id,user_id,display_name,status,public_approved_at,created_at,updated_at) VALUES ('lawyer-profile',?,'JURO test lawyer','public_approved',?,?,?)",
+  ).run(LAWYER_ID, now, now, now);
+  sqlite.prepare(
+    "INSERT INTO cases(id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,created_at,updated_at) VALUES ('review-case',?,?,'individual','ru','Synthetic review case','contracts','completed',?,?)",
+  ).run(WORKSPACE_ID, USER_ID, now, now);
+  sqlite.prepare(
+    "INSERT INTO lawyer_requests(id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at) VALUES (?,?,'review-case',?,'lawyer-profile','completed','Synthetic review flow','{}',?,?)",
+  ).run(input.requestId, WORKSPACE_ID, USER_ID, now, now);
+  sqlite.prepare(
+    "INSERT INTO lawyer_reviews(id,lawyer_request_id,workspace_id,lawyer_profile_id,requester_user_id,overall_rating,speed_rating,quality_rating,communication_rating,body,status,created_at,updated_at) VALUES (?,?,?,'lawyer-profile',?,5,5,5,5,?,'pending',?,?)",
+  ).run(input.reviewId, input.requestId, WORKSPACE_ID, USER_ID, input.body, now, now);
 }
 
 test("admin-domain ticket persists only a hash and creates an append-only audit event", async () => {
@@ -174,12 +200,56 @@ test("admin-domain logout revokes the server session before its browser cookie e
   }
 });
 
+test("lawyer moderator may moderate only the review surface and its decisions remain audited", async () => {
+  const { sqlite, d1 } = seed();
+  try {
+    seedPendingReview(sqlite, { requestId: "review-request-1", reviewId: "70000000-0000-4000-8000-000000000001", body: "Хорошая консультация без контактов" });
+    assert.equal(adminRoleAllows(["lawyer_moderator"], "lawyer.reviews.moderate"), true);
+    assert.equal(adminRoleAllows(["lawyer_moderator"], "dashboard.view"), false);
+    const moderated = await moderateLawyerReview(d1, {
+      reviewId: "70000000-0000-4000-8000-000000000001",
+      moderatorUserId: USER_ID,
+      decision: "approved",
+      reason: "Synthetic review has no personal data.",
+      now: NOW,
+    });
+    assert.deepEqual(moderated, { status: "approved" });
+    assert.equal(sqlite.prepare("SELECT status FROM lawyer_reviews WHERE id=?").get("70000000-0000-4000-8000-000000000001")?.status, "approved");
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM lawyer_review_moderation").get()?.total, 1);
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM workspace_audit_events WHERE action='lawyer_review_moderated'").get()?.total, 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("review approval blocks likely personal data before any terminal transition", async () => {
+  const { sqlite, d1 } = seed();
+  try {
+    seedPendingReview(sqlite, { requestId: "review-request-2", reviewId: "70000000-0000-4000-8000-000000000002", body: "Позвоните мне по +998 90 123 45 67" });
+    await assert.rejects(
+      moderateLawyerReview(d1, {
+        reviewId: "70000000-0000-4000-8000-000000000002",
+        moderatorUserId: USER_ID,
+        decision: "approved",
+        reason: "Synthetic check.",
+        now: NOW,
+      }),
+      (error: unknown) => error instanceof LawyerReviewModerationServiceError && error.code === "LIKELY_PERSONAL_DATA",
+    );
+    assert.equal(sqlite.prepare("SELECT status FROM lawyer_reviews WHERE id=?").get("70000000-0000-4000-8000-000000000002")?.status, "pending");
+    assert.equal(sqlite.prepare("SELECT count(*) AS total FROM lawyer_review_moderation").get()?.total, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("admin handoff route requires same-origin write protection and current MFA", async () => {
-  const [route, migration, internal, adminWorker] = await Promise.all([
+  const [route, migration, internal, adminWorker, reviewService] = await Promise.all([
     readFile(new URL("../app/api/platform/admin/handoff/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0109_admin_domain_handoff_sessions.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/auth/admin-internal-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../../admin/src/worker.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/platform/lawyer-review-moderation-service.ts", import.meta.url), "utf8"),
   ]);
   assert.match(route, /assertSafeWrite\(request\)/u);
   assert.match(route, /requirePlatformStaffRequest\(request, "staff\.console\.view"/u);
@@ -194,5 +264,10 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(internal, /session\/logout/u);
   assert.match(adminWorker, /PLATFORM_ADMIN_API\.fetch/u);
   assert.match(adminWorker, /juro_admin_session/u);
+  assert.match(adminWorker, /\/reviews/u);
+  assert.match(internal, /lawyer\.reviews\.moderate/u);
+  assert.match(internal, /api\/internal\/admin\/reviews/u);
+  assert.match(reviewService, /LIKELY_PERSONAL_DATA/u);
+  assert.match(reviewService, /lawyer_review_moderated/u);
   assert.doesNotMatch(adminWorker, /D1Database|d1_databases/u);
 });
