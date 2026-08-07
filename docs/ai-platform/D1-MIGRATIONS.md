@@ -277,3 +277,37 @@ exact tested worker and prove that an authenticated direct-source AI answer
 creates limited rows while legacy corpus table counts remain unchanged. Rollback
 is application-first; the additive table remains unused if the prior Worker is
 restored. Production is not in scope.
+
+## 0110 — restricted lawyer-profile lifecycle controls
+
+Status: applied and restore-verified in protected staging on 2026-08-07;
+production unchanged.
+
+`0110_lawyer_profile_lifecycle_controls.sql` adds the append-only
+`lawyer_profile_lifecycle_events` ledger plus state/evidence and immutability
+triggers. It uses an expand-only design: no existing lawyer profile, request,
+document or workspace row is deleted or rewritten by the migration.
+
+Staging preflight created a private pre-migration export under
+`juro-staging-backups/d1/juro-staging/20260807T013100Z-0110/`. The full export
+SHA-256 was `fd36c098cf8c59635ffb4331455f10da42da36f39a66dadba9e5037a6a28ce2d`.
+Its isolated restore passed `quick_check`, returned no foreign-key violations,
+and contained 221 tables, 492 indexes and 293 triggers. Wrangler then applied
+the eight SQL statements in `0110` to `juro-staging`; the migration ledger
+reported no pending migration afterward.
+
+The post-migration private export lives under
+`juro-staging-backups/d1/juro-staging/20260807T013309Z-0110-post/`; its full
+export SHA-256 is
+`4546a0a2fa68a327bde430c673bf2b648632fc153f904b19f15c6c4e693238a1`.
+The isolated post-migration restore passed `quick_check` and foreign-key
+verification and contained 222 tables, 494 indexes, 297 triggers and 111
+migration records. The remote schema query found the new table and both
+guard triggers. A direct remote `PRAGMA quick_check` was not usable because
+Cloudflare D1 returned `SQLITE_NOMEM`; this control-plane limitation does not
+replace the verified isolated restore evidence.
+
+The rollback is application-first: revert the Worker or disable the lifecycle
+entry point. The ledger is intentionally retained; do not drop it in the same
+incident response. Any later contract cleanup requires a fresh private export,
+restore proof and separate approval.

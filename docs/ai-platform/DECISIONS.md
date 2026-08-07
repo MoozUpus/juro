@@ -666,3 +666,27 @@ applicable; they do not expose moderator identity, raw tokens, or private
 profile data. Marketplace projection remains fail-closed regardless of whether
 the notification is read. This is an application-only staging change and does
 not modify production or remote D1 schema.
+
+## D-141 — restricted lawyer-profile lifecycle is fail-closed and append-only
+
+Status: accepted and deployed to protected staging only
+Date: 2026-08-07
+
+Migration `0110_lawyer_profile_lifecycle_controls.sql` introduces a dedicated
+append-only lifecycle record for `suspended`, `blocked`, `archived` and
+`restored` marketplace states. D1 rejects update or deletion of lifecycle
+records, validates state-specific evidence, and rejects any marketplace change
+away from a restricted state unless an exact lifecycle event is present in the
+same transaction.
+
+The private lifecycle endpoint is role- and fresh-MFA-gated: only a
+super-admin can block a profile; moderation staff may suspend, archive or
+restore it. Each transition atomically records the lifecycle event,
+workspace audit event and localized in-app notification. A restricted profile
+is locked against its own edits, cannot appear in public projection and cannot
+be selected for a lawyer request. Restore produces a new reviewable profile;
+it does not reinstate public availability.
+
+This is an expand-only protected-staging release. Production D1, Worker,
+Access configuration and public `juro.uz` remain unchanged. The protected
+staff-UI smoke and an authenticated bilateral handoff remain release gates.
