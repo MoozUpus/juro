@@ -3304,3 +3304,29 @@ provider idempotency key. The switch was active for one cron cycle and restored
 by a separate 100%-traffic staging deployment. A `sent` row proves Resend API
 acceptance, not inbox placement, recipient reading, sender-domain status, a
 real task notification, or production readiness.
+
+## D-161 — accidental production synthetic analysis is purged while audit evidence remains
+
+Status: completed under explicit owner approval
+Date: 2026-08-09
+
+An authenticated document-analysis smoke exercise reached the production D1
+database and private production R2 bucket instead of an isolated staging
+boundary. The owner explicitly approved removal of the exact synthetic analysis
+`f32fd17d-8826-4d24-9fad-fdb17218ed4c`, its matching source file and derived
+analysis-version object, and its related outbox entries.
+
+The cleanup deleted only those two exact remote R2 keys, the matching
+`document_analyses` projection and cascade-owned records, the one
+`document_files` row, and two `job_outbox` rows. A remote D1 re-read confirmed
+zero analysis, file, outbox, scan, version and vector-index records for the
+subject; remote R2 reads returned `The specified key does not exist` for both
+keys. The two terminal `job_runs` records and content-free workspace audit
+events remain immutable audit evidence and contain no retained document object.
+
+`app.juro.uz` is not accepted as a staging target until its Worker binding is
+proved to use the isolated staging D1, R2, queues and secrets. Further
+authenticated document browser QA must use the owner-protected
+`staging.app.juro.uz` boundary (or another separately verified staging
+hostname). No production deployment, routing change, migration or production
+configuration was made by this cleanup.
