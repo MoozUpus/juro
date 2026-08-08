@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   BriefcaseBusiness,
@@ -63,7 +64,9 @@ export function AuthForm({
   platformAuthEnabled,
   turnstileSiteKey,
 }: Props) {
-  const [locale, setLocale] = useState<Locale>(initialLocale);
+  const [locale] = useState<Locale>(initialLocale);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
   const [step, setStep] = useState<"details" | "code" | "mfa">("details");
   const [challengeId, setChallengeId] = useState("");
@@ -89,6 +92,12 @@ export function AuthForm({
   const ru = locale === "ru";
   const explicitReturnTo = safeReturnPath(returnTo);
   const protectedReturnTo = explicitReturnTo ?? "/";
+  const localeHref = (nextLocale: Locale): string => {
+    const localePath = pathname.replace(/^\/(?:ru|uz)(?=\/|$)/u, `/${nextLocale}`);
+    const targetPath = localePath === pathname ? `/${nextLocale}/auth/${mode}` : localePath;
+    const query = searchParams.toString();
+    return query ? `${targetPath}?${query}` : targetPath;
+  };
   const masked = useMemo(() => {
     const [name, domain] = email.split("@");
     return domain ? `${name.slice(0, 2)}•••@${domain}` : email;
@@ -264,7 +273,7 @@ export function AuthForm({
       <main className="auth-page" lang={locale}>
         <BrandPanel locale={locale} mode={mode} />
         <section className="auth-card">
-          <LanguageSwitch locale={locale} onChange={setLocale} />
+          <LanguageSwitch locale={locale} hrefFor={localeHref} />
           <header className="auth-unavailable">
             <KeyRound />
             <div>
@@ -286,7 +295,7 @@ export function AuthForm({
     <main className="auth-page" lang={locale}>
       <BrandPanel locale={locale} mode={mode} />
       <section className="auth-card">
-        <LanguageSwitch locale={locale} onChange={setLocale} />
+        <LanguageSwitch locale={locale} hrefFor={localeHref} />
         {step === "details" ? (
           <form onSubmit={requestCode}>
             <header>
@@ -481,12 +490,12 @@ function BrandPanel({ locale, mode }: { locale: Locale; mode: "login" | "registe
   );
 }
 
-function LanguageSwitch({ locale, onChange }: { locale: Locale; onChange: (value: Locale) => void }) {
+function LanguageSwitch({ locale, hrefFor }: { locale: Locale; hrefFor: (value: Locale) => string }) {
   return (
     <div className="auth-language" aria-label="RU / UZ">
       <Languages aria-hidden="true" />
-      <button type="button" className={locale === "ru" ? "active" : ""} aria-pressed={locale === "ru"} onClick={() => onChange("ru")}>RU</button>
-      <button type="button" className={locale === "uz" ? "active" : ""} aria-pressed={locale === "uz"} onClick={() => onChange("uz")}>UZ</button>
+      <Link href={hrefFor("ru")} className={locale === "ru" ? "active" : ""} aria-current={locale === "ru" ? "page" : undefined}>RU</Link>
+      <Link href={hrefFor("uz")} className={locale === "uz" ? "active" : ""} aria-current={locale === "uz" ? "page" : undefined}>UZ</Link>
     </div>
   );
 }

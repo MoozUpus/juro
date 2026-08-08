@@ -401,6 +401,16 @@ test("OTP, MFA, and logout writes require the application CSRF contract", async 
   assert.match(verifyMfaRoute, /deviceContinuityCookie\(result\.session\.deviceContinuityToken\)/);
 });
 
+test("auth locale links retain the canonical locale URL and query string", async () => {
+  const authForm = await readFile(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8");
+  assert.match(authForm, /usePathname/);
+  assert.match(authForm, /useSearchParams/);
+  assert.match(authForm, /pathname\.replace/);
+  assert.match(authForm, /searchParams\.toString\(\)/);
+  assert.match(authForm, /hrefFor\("ru"\)/);
+  assert.match(authForm, /hrefFor\("uz"\)/);
+});
+
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
   const source = await readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
   assert.ok(source.indexOf("const sessionUser = await getSessionUser()") < source.indexOf("const requestHeaders = await headers()"));

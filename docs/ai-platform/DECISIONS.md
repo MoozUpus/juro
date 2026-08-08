@@ -854,3 +854,14 @@ The companion encrypted-memory test was corrected to validate the Base64URL
 ciphertext envelope and record-bound decryption. It no longer searches random
 ciphertext for short ASCII fragments, which could occasionally yield a false
 failure without indicating a plaintext leak.
+
+## D-165 — auth language selection is a canonical navigation
+
+Status: accepted; staging smoke remediation pending deployment
+Date: 2026-08-09
+
+The login form previously changed its client copy while retaining the old
+`/ru` or `/uz` URL. Auth language controls are now ordinary localized links
+that retain the full query string, including a safe `returnTo` and the
+registration account type. This keeps the visible language, server locale,
+direct URL and browser history aligned before an OTP request begins.
