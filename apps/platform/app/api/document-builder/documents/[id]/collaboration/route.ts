@@ -1,9 +1,24 @@
 import { assertSafeWrite, requireApiUser } from "../../../../../../lib/document-builder/auth/api";
+import { normalizeEmail } from "../../../../../../lib/auth/crypto";
+import { prepareKeyedIdentityEvidence } from "../../../../../../lib/auth/identity-evidence";
+import {
+  normalizePhoneForLookup,
+  resolveUserIdentity,
+  userIdsByIdentifier,
+  userIdentitySelect,
+  type UserIdentityRow,
+} from "../../../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../../../lib/auth/identity-runtime";
 import { apiError, badRequest, forbidden, jsonResponse, notFound } from "../../../../../../lib/document-builder/auth/responses";
 import { getDocumentAccess, hasDocumentPermission, loadStoredDocument } from "../../../../../../lib/document-builder/permissions";
 import type { ParticipantRole } from "../../../../../../lib/document-builder/registry";
 import { addActivity, addNotification, isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import {
+  applyProjectedDocumentContentVersion,
+  createDocumentVersion,
+} from "../../../../../../lib/document-builder/document-versions";
 import { addDays, randomToken, sha256 } from "../../../../../../lib/document-builder/share-links/crypto";
 
 export const dynamic = "force-dynamic";
@@ -11,9 +26,11 @@ type Context = { params: Promise<{ id: string }> };
 
 async function snapshot(documentId: string): Promise<Record<string, unknown>> {
   const db = requireD1();
+  const identityContext = runtimeIdentityProtection();
   const [collaborators, comments, proposals, activity] = await Promise.all([
     db.prepare(
-      `SELECT c.id, c.user_id AS userId, u.email, COALESCE(u.full_name, u.email) AS displayName,
+      `SELECT c.id, c.user_id AS userId, u.full_name AS fullName,
+       ${userIdentitySelect("u")},
        c.status, c.role, c.party_number AS partyNumber, c.approval_status AS approvalStatus,
        c.confirmed_at AS confirmedAt, c.opened_at AS openedAt,
        c.can_view AS canView, c.can_download AS canDownload,
@@ -26,7 +43,8 @@ async function snapshot(documentId: string): Promise<Record<string, unknown>> {
        WHERE c.document_id = ? AND c.status <> 'revoked' ORDER BY c.created_at`,
     ).bind(documentId).all(),
     db.prepare(
-      `SELECT c.id, c.author_user_id AS authorUserId, COALESCE(u.full_name, u.email) AS authorName,
+      `SELECT c.id, c.author_user_id AS authorUserId,
+       u.full_name AS authorFullName,${userIdentitySelect("u")},
        c.body, c.anchor, c.thread_id AS threadId, c.parent_comment_id AS parentCommentId,
        t.status AS threadStatus, t.anchor_type AS anchorType, t.anchor_key AS anchorKey, c.created_at AS createdAt
        FROM document_comments c JOIN user_profiles u ON u.id = c.author_user_id
@@ -41,9 +59,82 @@ async function snapshot(documentId: string): Promise<Record<string, unknown>> {
     db.prepare("SELECT id, type, created_at AS createdAt FROM activity_events WHERE document_id = ? ORDER BY created_at DESC LIMIT 100")
       .bind(documentId).all(),
   ]);
+  const resolvedCollaborators = await Promise.all(
+    (collaborators.results as Array<UserIdentityRow & {
+      userId: string;
+      fullName: string | null;
+      status: string;
+      role: string | null;
+      partyNumber: number | null;
+      approvalStatus: string | null;
+      confirmedAt: string | null;
+      openedAt: string | null;
+      canView: number;
+      canDownload: number;
+      signedViewAllowed: number;
+      signedDownloadAllowed: number;
+      signedOpened: number;
+      restoredViewOnly: number;
+    }>).map(async item => {
+      const identity = await resolveUserIdentity(
+        identityContext,
+        { ...item, id: item.userId },
+      );
+      return {
+        id: item.id,
+        userId: item.userId,
+        email: identity.email,
+        displayName: item.fullName || identity.email,
+        status: item.status,
+        role: item.role,
+        partyNumber: item.partyNumber,
+        approvalStatus: item.approvalStatus,
+        confirmedAt: item.confirmedAt,
+        openedAt: item.openedAt,
+        canView: Boolean(item.canView),
+        canDownload: Boolean(item.canDownload),
+        signedViewAllowed: Boolean(item.signedViewAllowed),
+        signedDownloadAllowed: Boolean(item.signedDownloadAllowed),
+        signedOpened: Boolean(item.signedOpened),
+        restoredViewOnly: Boolean(item.restoredViewOnly),
+      };
+    }),
+  );
+  const resolvedComments = await Promise.all(
+    (comments.results as Array<UserIdentityRow & {
+      authorUserId: string;
+      authorFullName: string | null;
+      body: string;
+      anchor: string | null;
+      threadId: string | null;
+      parentCommentId: string | null;
+      threadStatus: string | null;
+      anchorType: string | null;
+      anchorKey: string | null;
+      createdAt: string;
+    }>).map(async item => {
+      const identity = await resolveUserIdentity(
+        identityContext,
+        { ...item, id: item.authorUserId },
+      );
+      return {
+        id: item.id,
+        authorUserId: item.authorUserId,
+        authorName: item.authorFullName || identity.email,
+        body: item.body,
+        anchor: item.anchor,
+        threadId: item.threadId,
+        parentCommentId: item.parentCommentId,
+        threadStatus: item.threadStatus,
+        anchorType: item.anchorType,
+        anchorKey: item.anchorKey,
+        createdAt: item.createdAt,
+      };
+    }),
+  );
   return {
-    collaborators: collaborators.results.map((item) => ({ ...item, canView: Boolean(item.canView), canDownload: Boolean(item.canDownload), signedViewAllowed: Boolean(item.signedViewAllowed), signedDownloadAllowed: Boolean(item.signedDownloadAllowed), signedOpened: Boolean(item.signedOpened), restoredViewOnly: Boolean(item.restoredViewOnly) })),
-    comments: comments.results,
+    collaborators: resolvedCollaborators,
+    comments: resolvedComments,
     proposals: proposals.results.map((item) => ({ ...item, ownerAccepted: Boolean(item.ownerAccepted), collaboratorAccepted: Boolean(item.collaboratorAccepted) })),
     activity: activity.results,
   };
@@ -82,30 +173,115 @@ export async function POST(request: Request, context: Context): Promise<Response
       const allowedRoles = new Set<ParticipantRole>(["party", "counterparty", "co-party", "representative", "editor", "commenter", "viewer", "legal-reviewer", "approver"]);
       const requestedRole = typeof body.role === "string" && allowedRoles.has(body.role as ParticipantRole) ? body.role as ParticipantRole : "counterparty";
       const partyNumber = typeof body.partyNumber === "number" && Number.isInteger(body.partyNumber) && body.partyNumber >= 2 && body.partyNumber <= 3 ? body.partyNumber : 2;
-      const candidates = await db.prepare(
-        "SELECT id, email, COALESCE(full_name, email) AS displayName FROM user_profiles WHERE lower(email) = lower(?) OR phone = ? LIMIT 2",
-      ).bind(identifier, identifier).all<{ id: string; email: string; displayName: string }>();
-      if (candidates.results.length > 1) return badRequest("Найдено несколько профилей. Уточните email.");
-      const invitee = candidates.results[0] ?? null;
+      const identityContext = runtimeIdentityProtection();
+      const candidateIds = await userIdsByIdentifier(
+        db,
+        identityContext,
+        identifier,
+      );
+      if (candidateIds.length > 1) return badRequest("Найдено несколько профилей. Уточните email.");
+      const candidate = candidateIds[0]
+        ? await db.prepare(
+          `SELECT id,full_name AS fullName,${userIdentitySelect("user_profiles")}
+           FROM user_profiles WHERE id=? LIMIT 1`,
+        ).bind(candidateIds[0]).first<UserIdentityRow & {
+          fullName: string | null;
+        }>()
+        : null;
+      const candidateIdentity = candidate
+        ? await resolveUserIdentity(identityContext, candidate)
+        : null;
+      const invitee = candidate && candidateIdentity ? {
+        id: candidate.id,
+        email: candidateIdentity.email,
+        displayName: candidate.fullName || candidateIdentity.email,
+      } : null;
       if (invitee?.id === user.id) return badRequest("Нельзя пригласить самого себя.");
+      if (invitee) {
+        const accepted = await db.prepare(
+          `SELECT id
+           FROM document_collaborators
+           WHERE document_id = ?
+             AND user_id = ?
+             AND invitation_status = 'accepted'
+             AND can_view = 1
+             AND status IN ('active', 'opened', 'confirmed')
+           LIMIT 1`,
+        ).bind(id, invitee.id).first<{ id: string }>();
+        if (accepted) {
+          return jsonResponse(
+            {
+              error: "Этот пользователь уже имеет доступ к документу.",
+              code: "ALREADY_COLLABORATOR",
+            },
+            { status: 409 },
+          );
+        }
+      }
       const pendingCount = await db.prepare("SELECT COUNT(*) AS count FROM document_invitations WHERE document_id = ? AND revoked_at IS NULL AND declined_at IS NULL AND accepted_at IS NULL AND expires_at > ?").bind(id, now).first<{ count: number }>();
-      const activeCount = await db.prepare("SELECT COUNT(*) AS count FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).first<{ count: number }>();
+      const activeCount = await db.prepare("SELECT COUNT(*) AS count FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).first<{ count: number }>();
       if ((pendingCount?.count ?? 0) + (activeCount?.count ?? 0) >= 2) return badRequest("Для этого документа уже добавлено максимально допустимое число участников.", "PARTICIPANT_LIMIT");
       const token = randomToken();
-      const normalizedIdentifier = identifier.toLocaleLowerCase();
+      const legacyNormalizedIdentifier = identifier.toLocaleLowerCase();
+      const identifierKind = identifier.includes("@") ? "email" : "phone";
+      const normalizedEvidenceIdentifier = identifierKind === "email"
+        ? normalizeEmail(identifier)
+        : normalizePhoneForLookup(identifier);
+      const identityEvidence = await prepareKeyedIdentityEvidence(
+        identityContext,
+        {
+          normalizedValue: normalizedEvidenceIdentifier,
+          purpose: identifierKind === "email"
+            ? "document-invitation-email"
+            : "document-invitation-phone",
+        },
+      );
       const invitationId = crypto.randomUUID();
       const expiresAt = addDays(now, 7);
       await db.prepare(
-        "INSERT INTO document_invitations (id, document_id, invited_by_user_id, target_user_id, target_identifier_hash, role, party_number, token_hash, expires_at, accepted_at, declined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?)",
-      ).bind(invitationId, id, user.id, invitee?.id ?? null, await sha256(normalizedIdentifier), requestedRole, partyNumber, await sha256(token), expiresAt, now, now).run();
+        `INSERT INTO document_invitations (
+           id,document_id,invited_by_user_id,target_user_id,
+           target_identifier_hash,target_identifier_kind,
+           target_identifier_lookup_hash,
+           target_identifier_lookup_key_version,
+           role,party_number,token_hash,expires_at,
+           accepted_at,declined_at,revoked_at,created_at,updated_at
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,NULL,?,?)`,
+      ).bind(
+        invitationId,
+        id,
+        user.id,
+        invitee?.id ?? null,
+        await sha256(legacyNormalizedIdentifier),
+        identityEvidence.lookupHash ? identifierKind : null,
+        identityEvidence.lookupHash,
+        identityEvidence.lookupKeyVersion,
+        requestedRole,
+        partyNumber,
+        await sha256(token),
+        expiresAt,
+        now,
+        now,
+      ).run();
       if (invitee) {
         const existing = await db.prepare("SELECT id FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1").bind(id, invitee.id).first<{ id: string }>();
         if (existing) {
-          await db.prepare("UPDATE document_collaborators SET invited_by_user_id = ?, role = ?, party_number = ?, permission_set_json = NULL, invitation_status = 'invited', approval_status = 'pending', can_view = 1, status = 'invited', opened_at = NULL, confirmed_at = NULL, joined_at = NULL, revoked_at = NULL, updated_at = ? WHERE id = ?")
+          const staged = await db.prepare("UPDATE document_collaborators SET invited_by_user_id = ?, role = ?, party_number = ?, permission_set_json = NULL, invitation_status = 'invited', approval_status = 'pending', can_view = 0, can_download = 0, status = 'invited', opened_at = NULL, confirmed_at = NULL, joined_at = NULL, revoked_at = NULL, updated_at = ? WHERE id = ? AND NOT (invitation_status = 'accepted' AND can_view = 1 AND status IN ('active', 'opened', 'confirmed'))")
             .bind(user.id, requestedRole, partyNumber, now, existing.id).run();
+          if (!staged.meta.changes) {
+            await db.prepare("UPDATE document_invitations SET revoked_at = ?, updated_at = ? WHERE id = ? AND accepted_at IS NULL")
+              .bind(now, now, invitationId).run();
+            return jsonResponse(
+              {
+                error: "Этот пользователь уже имеет доступ к документу.",
+                code: "ALREADY_COLLABORATOR",
+              },
+              { status: 409 },
+            );
+          }
         } else {
           await db.prepare(
-            "INSERT INTO document_collaborators (id, document_id, user_id, invited_by_user_id, role, party_number, permission_set_json, invitation_status, approval_status, can_view, can_download, status, opened_at, confirmed_at, joined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'invited', 'pending', 1, 0, 'invited', NULL, NULL, NULL, NULL, ?, ?)",
+            "INSERT INTO document_collaborators (id, document_id, user_id, invited_by_user_id, role, party_number, permission_set_json, invitation_status, approval_status, can_view, can_download, status, opened_at, confirmed_at, joined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'invited', 'pending', 0, 0, 'invited', NULL, NULL, NULL, NULL, ?, ?)",
           ).bind(crypto.randomUUID(), id, invitee.id, user.id, requestedRole, partyNumber, now, now).run();
         }
         await addNotification(invitee.id, id, "invitation", "Приглашение к документу", `${user.fullName || user.email} приглашает вас проверить документ «${document.title}».`);
@@ -137,7 +313,7 @@ export async function POST(request: Request, context: Context): Promise<Response
       if (access.role === "collaborator") {
         await addNotification(document.ownerUserId, id, "comment_added", "Добавлен комментарий", `${user.fullName || user.email} оставил(а) комментарий к документу.`);
       } else {
-        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).all<{ userId: string }>();
+        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).all<{ userId: string }>();
         await Promise.all(collaborators.results.map((item) => addNotification(item.userId, id, "comment_added", "Добавлен комментарий", "Создатель документа оставил комментарий.")));
       }
       return jsonResponse({ created: true, snapshot: await snapshot(id) }, { status: 201 });
@@ -168,7 +344,7 @@ export async function POST(request: Request, context: Context): Promise<Response
       ).bind(proposalId, id, user.id, oldText, newText, typeof body.anchor === "string" ? body.anchor : null, access.role === "owner" ? 1 : 0, access.role === "collaborator" ? 1 : 0, now, now).run();
       if (access.role === "collaborator") await addNotification(document.ownerUserId, id, "change_proposed", "Предложено изменение", `${user.fullName || user.email} предложил(а) изменение документа.`);
       else {
-        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).all<{ userId: string }>();
+        const collaborators = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).all<{ userId: string }>();
         await Promise.all(collaborators.results.map((item) => addNotification(item.userId, id, "change_proposed", "Предложено изменение", "Создатель предложил изменение документа.")));
       }
       await addActivity(id, user.id, "change_proposed");
@@ -185,23 +361,40 @@ export async function POST(request: Request, context: Context): Promise<Response
       const ownerAccepted = access.role === "owner" ? true : Boolean(proposal.ownerAccepted);
       const collaboratorAccepted = access.role === "collaborator" ? true : Boolean(proposal.collaboratorAccepted);
       if (ownerAccepted && collaboratorAccepted) {
+        if (!access.workspaceId) return forbidden();
         const current = await db.prepare("SELECT final_content AS finalContent FROM document_current_content WHERE document_id = ?").bind(id).first<{ finalContent: string }>();
         if (!current?.finalContent.includes(proposal.oldText)) return jsonResponse({ error: "Документ уже изменён; предложение устарело.", code: "STALE_PROPOSAL" }, { status: 409 });
         const nextText = current.finalContent.replace(proposal.oldText, proposal.newText);
-        await db.batch([
-          db.prepare("UPDATE document_change_proposals SET owner_accepted = 1, collaborator_accepted = 1, status = 'applied', updated_at = ? WHERE id = ?").bind(now, proposalId),
-          db.prepare("UPDATE document_current_content SET final_content = ?, manually_edited = 1, updated_at = ? WHERE document_id = ?").bind(nextText, now, id),
-          db.prepare("UPDATE documents SET status = CASE WHEN status = 'Согласован' THEN 'Готов' ELSE status END, revision = revision + 1, updated_at = ? WHERE id = ?").bind(now, id),
-          db.prepare("INSERT INTO document_revisions (id, document_id, revision, actor_user_id, source, changes_json, created_at) VALUES (?, ?, ?, ?, 'suggestion', ?, ?)")
-            .bind(crypto.randomUUID(), id, document.revision + 1, user.id, JSON.stringify({ proposalId, anchor: proposal.id, oldText: proposal.oldText, newText: proposal.newText }), now),
-        ]);
+        await applyProjectedDocumentContentVersion({
+          db,
+          bucket: requireR2(),
+          documentId: id,
+          workspaceId: access.workspaceId,
+          ownerUserId: document.ownerUserId,
+          actorUserId: user.id,
+          revision: document.revision,
+          source: "suggestion",
+          sourceEntityId: proposal.id,
+          idempotencyKey: `builder-proposal-apply-${proposal.id}`,
+          finalContent: nextText,
+          nextStatus: document.status === "Согласован" ? "Готов" : document.status,
+          revisionSource: "suggestion",
+          changes: { proposalId, anchor: proposal.id, oldText: proposal.oldText, newText: proposal.newText },
+          mutationStatements: (appliedAt) => [
+            db.prepare(
+              `UPDATE document_change_proposals
+               SET owner_accepted=1,collaborator_accepted=1,status='applied',updated_at=?
+               WHERE id=? AND document_id=? AND status='pending'`,
+            ).bind(appliedAt, proposalId, id),
+          ],
+        });
         await addActivity(id, user.id, "change_agreed");
       } else {
         await db.prepare("UPDATE document_change_proposals SET owner_accepted = ?, collaborator_accepted = ?, updated_at = ? WHERE id = ?")
           .bind(ownerAccepted ? 1 : 0, collaboratorAccepted ? 1 : 0, now, proposalId).run();
       }
       const notifyUserIds = access.role === "owner"
-        ? (await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND status <> 'revoked'").bind(id).all<{ userId: string }>()).results.map((item) => item.userId)
+        ? (await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed')").bind(id).all<{ userId: string }>()).results.map((item) => item.userId)
         : [document.ownerUserId];
       await Promise.all(notifyUserIds.map((userId) => addNotification(userId, id, "change_confirmed", "Изменение подтверждено", ownerAccepted && collaboratorAccepted ? "Изменение согласовано обеими сторонами и применено." : "Одна из сторон подтвердила предложенное изменение.")));
       return jsonResponse({ accepted: true, applied: ownerAccepted && collaboratorAccepted, snapshot: await snapshot(id) });
@@ -218,6 +411,12 @@ export async function POST(request: Request, context: Context): Promise<Response
 
     if (action === "confirm_data") {
       if (access.role !== "collaborator" || !hasDocumentPermission(access, "approve_document")) return forbidden();
+      if (!access.workspaceId) return forbidden();
+      await createDocumentVersion({
+        db, bucket: requireR2(), documentId: id, workspaceId: access.workspaceId,
+        ownerUserId: document.ownerUserId, revision: document.revision, source: "approval",
+        idempotencyKey: `builder-auto-collaborator-approval-${id}-${document.revision}-${user.id}`,
+      });
       await db.batch([
         db.prepare("UPDATE document_collaborators SET confirmed_at = ?, approval_status = 'approved', status = 'confirmed', joined_at = COALESCE(joined_at, ?), updated_at = ? WHERE document_id = ? AND user_id = ?")
           .bind(now, now, now, id, user.id),
@@ -231,7 +430,7 @@ export async function POST(request: Request, context: Context): Promise<Response
     if (action === "signed_access") {
       if (!hasDocumentPermission(access, "invite_participant") || !document.signedFileId) return forbidden();
       const collaboratorUserId = typeof body.collaboratorUserId === "string" ? body.collaboratorUserId : "";
-      const collaborator = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND user_id = ? AND status <> 'revoked' LIMIT 1")
+      const collaborator = await db.prepare("SELECT user_id AS userId FROM document_collaborators WHERE document_id = ? AND user_id = ? AND invitation_status = 'accepted' AND status IN ('active', 'opened', 'confirmed') LIMIT 1")
         .bind(id, collaboratorUserId).first<{ userId: string }>();
       if (!collaborator) return notFound("Участник не найден.");
       const existing = await db.prepare("SELECT id, restored_view_only AS restoredViewOnly FROM signed_document_access WHERE document_id = ? AND collaborator_user_id = ? LIMIT 1")

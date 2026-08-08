@@ -14,7 +14,8 @@ export async function POST(request: Request, context: Context): Promise<Response
     assertSafeWrite(request);
     const user = await requireApiUser();
     const { id } = await context.params;
-    if (!(await requireOwner(id, user.id))) return forbidden();
+    const access = await requireOwner(id, user.id);
+    if (!access?.workspaceId) return forbidden();
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) return badRequest("Файл не выбран.");
@@ -30,8 +31,8 @@ export async function POST(request: Request, context: Context): Promise<Response
     const visible = form.get("visibleToCollaborator") === "true";
     const db = requireD1();
     await db.batch([
-      db.prepare("INSERT INTO document_files (id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, 'attachment', ?, ?, ?, ?, NULL, ?, ?)")
-        .bind(fileId, id, user.id, key, safeName, file.type, file.size, now, now),
+      db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'attachment', ?, ?, ?, ?, NULL, ?, ?)")
+        .bind(fileId, access.workspaceId, id, user.id, key, safeName, file.type, file.size, now, now),
       db.prepare("INSERT INTO document_attachments (id, document_id, file_id, visible_to_collaborator, created_at) VALUES (?, ?, ?, ?, ?)")
         .bind(attachmentId, id, fileId, visible ? 1 : 0, now),
     ]);

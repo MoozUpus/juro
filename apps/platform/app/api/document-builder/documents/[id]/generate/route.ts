@@ -10,6 +10,7 @@ import { addActivity, isoNow } from "../../../../../../lib/document-builder/stor
 import { putPrivateObject, sanitizeFileName } from "../../../../../../lib/document-builder/storage/files";
 import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
 import { renderReceipt } from "../../../../../../lib/document-builder/templates/receipt";
+import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export async function POST(request: Request, context: Context): Promise<Response
     const user = await requireApiUser();
     const { id } = await context.params;
     const ownerAccess = await requireOwner(id, user.id);
-    if (!ownerAccess) return forbidden();
+    if (!ownerAccess?.workspaceId) return forbidden();
     if (ownerAccess.document.status === "Архив") return badRequest("Сначала восстановите документ из архива.");
     const document = await loadStoredDocument(id, user.id);
     if (!document) return notFound();
@@ -58,6 +59,11 @@ export async function POST(request: Request, context: Context): Promise<Response
     const docxKey = `${prefix}/${docxId}.docx`;
     const pdfKey = `${prefix}/${pdfId}.pdf`;
     const zipKey = `${prefix}/${zipId}.zip`;
+    await createDocumentVersion({
+      db, bucket, documentId: id, workspaceId: ownerAccess.workspaceId,
+      ownerUserId: user.id, revision: document.revision, source: "finalize",
+      idempotencyKey: `builder-auto-finalize-${id}-${document.revision}-${user.id}`,
+    });
     await Promise.all([
       putPrivateObject(docxKey, docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", { documentId: id, kind: "docx" }),
       putPrivateObject(pdfKey, pdf, "application/pdf", { documentId: id, kind: "pdf" }),
@@ -65,12 +71,12 @@ export async function POST(request: Request, context: Context): Promise<Response
     ]);
     await db.batch([
       db.prepare("DELETE FROM document_files WHERE document_id = ? AND kind IN ('docx', 'pdf', 'zip')").bind(id),
-      db.prepare("INSERT INTO document_files (id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, 'docx', ?, ?, ?, ?, NULL, ?, ?)")
-        .bind(docxId, id, user.id, docxKey, `${baseName}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docx.byteLength, now, now),
-      db.prepare("INSERT INTO document_files (id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, 'pdf', ?, ?, 'application/pdf', ?, NULL, ?, ?)")
-        .bind(pdfId, id, user.id, pdfKey, `${baseName}.pdf`, pdf.byteLength, now, now),
-      db.prepare("INSERT INTO document_files (id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, 'zip', ?, ?, 'application/zip', ?, NULL, ?, ?)")
-        .bind(zipId, id, user.id, zipKey, `${baseName}.zip`, zip.byteLength, now, now),
+      db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'docx', ?, ?, ?, ?, NULL, ?, ?)")
+        .bind(docxId, ownerAccess.workspaceId, id, user.id, docxKey, `${baseName}.docx`, "application/vnd.openxmlformats-officedocument.wordprocessingml.document", docx.byteLength, now, now),
+      db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'pdf', ?, ?, 'application/pdf', ?, NULL, ?, ?)")
+        .bind(pdfId, ownerAccess.workspaceId, id, user.id, pdfKey, `${baseName}.pdf`, pdf.byteLength, now, now),
+      db.prepare("INSERT INTO document_files (id, workspace_id, document_id, owner_user_id, kind, r2_key, file_name, mime_type, size_bytes, archived_at, created_at, updated_at) VALUES (?, ?, ?, ?, 'zip', ?, ?, 'application/zip', ?, NULL, ?, ?)")
+        .bind(zipId, ownerAccess.workspaceId, id, user.id, zipKey, `${baseName}.zip`, zip.byteLength, now, now),
       db.prepare("UPDATE documents SET status = 'Готов', generated_at = ?, revision = revision + 1, updated_at = ? WHERE id = ?").bind(now, now, id),
     ]);
     if (old.results.length) await bucket.delete(old.results.map((file) => file.r2Key));

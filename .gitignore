@@ -10,6 +10,7 @@ dist/
 out/
 coverage/
 *.tsbuildinfo
+.tmp/
 
 # Cloudflare / Sites local state
 .wrangler/

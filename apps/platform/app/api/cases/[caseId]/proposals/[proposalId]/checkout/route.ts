@@ -1,0 +1,10 @@
+import { parseJsonRequest } from "../../../../../../../lib/auth/input";
+import { createMarketplaceServiceCheckout } from "../../../../../../../lib/billing/marketplace-service";
+import { BillingDomainError } from "../../../../../../../lib/billing/checkout-service";
+import { paymentFoundationStatus } from "../../../../../../../lib/billing/foundation";
+import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
+import { requireD1, runtimeEnv } from "../../../../../../../lib/document-builder/storage/runtime";
+import { workspaceForUser, workspaceForUserById } from "../../../../../../../lib/platform/workspace";
+import { z } from "zod";
+const body=z.object({requestId:z.uuid(),workspaceId:z.string().min(3).max(128).optional()}).strict();type Ctx={params:Promise<{caseId:string;proposalId:string}>};
+export const POST=withApiErrors(async(r:Request,c:Ctx)=>{assertSafeWrite(r);const u=await requireApiUser(),p=await parseJsonRequest(r,body,1024),{caseId,proposalId}=await c.params;if(!p.ok)return Response.json({code:"INVALID_INPUT"},{status:400});const w=p.data.workspaceId?await workspaceForUserById(u.id,p.data.workspaceId):await workspaceForUser(u);if(!w)return Response.json({code:"WORKSPACE_UNAVAILABLE"},{status:404});if(!paymentFoundationStatus(runtimeEnv()).enabled)return Response.json({code:"CHECKOUT_UNAVAILABLE"},{status:503});const owned=await requireD1().prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? AND owner_user_id=? LIMIT 1").bind(caseId,w.id,u.id).first();if(!owned)return Response.json({code:"CASE_UNAVAILABLE"},{status:404});try{return Response.json(await createMarketplaceServiceCheckout(requireD1(),{userId:u.id,workspaceId:w.id},{proposalId,requestId:p.data.requestId}),{status:201});}catch(e){if(e instanceof BillingDomainError)return Response.json({code:e.code,error:e.message},{status:e.status});throw e;}});

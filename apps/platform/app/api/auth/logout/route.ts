@@ -1,10 +1,32 @@
-import { clearSessionCookie, SESSION_COOKIE } from "../../../../lib/auth/session";
-import { sha256 } from "../../../../lib/auth/crypto";
+import {
+  clearMfaChallengeCookie,
+  clearSessionCookie,
+} from "../../../../lib/auth/session";
+import {
+  localSessionFromCookie,
+  revokeOneSession,
+} from "../../../../lib/auth/session-management";
+import {
+  assertSafeWrite,
+  withApiErrors,
+} from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 
-export async function POST(request: Request) {
+export const POST = withApiErrors(async function POST(request: Request) {
+  assertSafeWrite(request);
   const raw = request.headers.get("cookie") ?? "";
-  const token = raw.split(";").map(value => value.trim()).find(value => value.startsWith(`${SESSION_COOKIE}=`))?.slice(SESSION_COOKIE.length + 1);
-  if (token) await requireD1().prepare("UPDATE auth_sessions SET revoked_at = ? WHERE token_hash = ?").bind(new Date().toISOString(), await sha256(decodeURIComponent(token))).run();
-  return new Response(null, { status: 204, headers: { "set-cookie": clearSessionCookie(), "cache-control": "private, no-store" } });
-}
+  const db = requireD1();
+  const session = await localSessionFromCookie(db, raw, { touch: false });
+  if (session) {
+    await revokeOneSession(db, {
+      userId: session.userId,
+      sessionId: session.sessionId,
+      currentSessionId: session.sessionId,
+      revokeDeviceContinuity: false,
+    });
+  }
+  const headers = new Headers({ "cache-control": "private, no-store" });
+  headers.append("set-cookie", clearSessionCookie());
+  headers.append("set-cookie", clearMfaChallengeCookie());
+  return new Response(null, { status: 204, headers });
+});

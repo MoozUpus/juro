@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { FormEvent, useState } from "react";
 import { ArrowRight, FileCheck2, LockKeyhole } from "lucide-react";
 
@@ -35,7 +36,7 @@ export function SignedShareAccessClient({ token }: { token: string }) {
   };
   return <main className="dbt-signed-access">
     <section>
-      <img src="/juro-logo-primary.png" alt="JURO"/>
+      <Image src="/juro-logo-primary.png" alt="JURO" width={125} height={122} unoptimized/>
       <span className="dbt-access-icon"><FileCheck2 size={30}/></span>
       <h1>Подписанный документ</h1>
       <p>Введите четырёхзначный код доступа, который сообщил владелец файла.</p>

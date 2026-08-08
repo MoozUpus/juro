@@ -29,8 +29,6 @@ type Props = {
   contacts: ContactRecord[];
   onSaveProfile: (party: PartyDetails) => Promise<void>;
   onUpdateContact: (contactId: string, party: PartyDetails) => Promise<void>;
-  onRunReview: () => void;
-  reviewState: "idle" | "loading" | "completed" | "unavailable";
 };
 
 function setPath<T extends object>(object: T, path: string, value: unknown): T {
@@ -150,7 +148,7 @@ function TransferDynamicFields({ answers, update, prefix, method }: { answers: R
   </div>;
 }
 
-export function BuilderQuestionnaire({ answers, onChange, step, profile, contacts, onSaveProfile, onUpdateContact, onRunReview, reviewState }: Props) {
+export function BuilderQuestionnaire({ answers, onChange, step, profile, contacts, onSaveProfile, onUpdateContact }: Props) {
   const update = (path: string, value: unknown) => onChange(setPath(answers, path, value));
   const profileSide = answers.participantMode === "self" ? answers.actingSide : null;
   if (step === 0) return <div className="dbt-step-content">
@@ -230,8 +228,7 @@ export function BuilderQuestionnaire({ answers, onChange, step, profile, contact
 
   return <div className="dbt-step-content">
     <FormSection title="Проверка перед созданием" description="Предупреждения не блокируют формирование документа.">
-      <div className="dbt-final-checks"><p><span className={answers.lender.fullName && answers.borrower.fullName ? "ok" : "warn"}/><strong>Данные сторон заполнены</strong><small>Допускаются неполные данные, но это влияет на оценку.</small></p><p><span className={parseAmount(answers.loanAmountNumeric) ? "ok" : "warn"}/><strong>Сумма указана</strong></p><p><span className={answers.loanRepaymentDate ? "ok" : "warn"}/><strong>Срок возврата указан</strong></p><p><span className="ok"/><strong>Обязательные поля проверены</strong><small>Технически документ можно сформировать и с предупреждениями.</small></p><p><span className={reviewState === "completed" || reviewState === "unavailable" ? "ok" : "warn"}/><strong>AI-проверка {reviewState === "completed" ? "завершена" : reviewState === "unavailable" ? "недоступна — выполнена детерминированная" : "ещё не запускалась"}</strong></p></div>
-      <button type="button" className="dbt-review-button" onClick={onRunReview} disabled={reviewState === "loading"}>{reviewState === "loading" ? "JURO проверяет документ…" : "Проверить документ с JURO AI"}</button>
+      <div className="dbt-final-checks"><p><span className={answers.lender.fullName && answers.borrower.fullName ? "ok" : "warn"}/><strong>Данные сторон заполнены</strong><small>Допускаются неполные данные, но это влияет на оценку.</small></p><p><span className={parseAmount(answers.loanAmountNumeric) ? "ok" : "warn"}/><strong>Сумма указана</strong></p><p><span className={answers.loanRepaymentDate ? "ok" : "warn"}/><strong>Срок возврата указан</strong></p><p><span className="ok"/><strong>Обязательные поля проверены</strong><small>Технически документ можно сформировать и с предупреждениями.</small></p></div>
       <label className="dbt-confirmation"><input type="checkbox" checked={answers.accuracyConfirmed} onChange={(event) => update("accuracyConfirmed", event.target.checked)}/><span>Я подтверждаю, что введённые данные достоверны, JURO не является стороной расписки, а шаблон не заменяет индивидуальную консультацию юриста.</span></label>
     </FormSection>
   </div>;

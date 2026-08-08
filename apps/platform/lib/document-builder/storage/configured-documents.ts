@@ -5,6 +5,7 @@ import type { GenericStoredDocument, UserProfile } from "../types";
 import { getDocumentAccess } from "../permissions";
 import { ensureConfiguredTemplateSeed, isoNow, parseJson } from "./db";
 import { requireD1 } from "./runtime";
+import { workspaceForUser } from "../../platform/workspace";
 
 export interface CreateConfiguredDocumentInput {
   definition: DocumentDefinition;
@@ -15,7 +16,20 @@ export interface CreateConfiguredDocumentInput {
   manuallyEdited?: boolean;
   caseId?: string;
   planStepId?: string;
+  aiHandoff?: {
+    id: string;
+    assistantMessageId: string;
+    idempotencyKeySha256: string;
+    selectionSha256: string;
+    selectedFieldIds: string[];
+    locale: "ru" | "uz";
+  };
 }
+
+type CreateConfiguredDocumentDependencies = {
+  db?: D1Database;
+  workspace?: { id: string };
+};
 
 interface ConfiguredRow {
   id: string;
@@ -55,9 +69,14 @@ export function suggestedConfiguredTitle(definition: DocumentDefinition, languag
   return `${base} — ${new Intl.DateTimeFormat(language === "uz" ? "uz-UZ" : "ru-RU").format(new Date())}`;
 }
 
-export async function createConfiguredDocument(user: UserProfile, input: CreateConfiguredDocumentInput): Promise<GenericStoredDocument> {
-  const db = requireD1();
-  await ensureConfiguredTemplateSeed(input.definition);
+export async function createConfiguredDocument(
+  user: UserProfile,
+  input: CreateConfiguredDocumentInput,
+  dependencies: CreateConfiguredDocumentDependencies = {},
+): Promise<GenericStoredDocument> {
+  const db = dependencies.db ?? requireD1();
+  const workspace = dependencies.workspace ?? await workspaceForUser(user);
+  await ensureConfiguredTemplateSeed(input.definition, db);
   const id = crypto.randomUUID();
   const now = isoNow();
   const rendered = renderConfiguredDocument(input.definition, input.answers, input.language);
@@ -69,11 +88,11 @@ export async function createConfiguredDocument(user: UserProfile, input: CreateC
   const statements = [
     db.prepare(
       `INSERT INTO documents
-      (id, owner_user_id, template_id, template_code, template_version, language, participant_mode, acting_side,
+      (id, workspace_id, owner_user_id, template_id, template_code, template_version, language, participant_mode, acting_side,
        title, category, status, case_id, plan_step_id, lender_name, borrower_name, is_favorite, archived_at, generated_at,
        signed_file_id, revision, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 'configurable', NULL, ?, ?, 'Черновик', ?, ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
-    ).bind(id, user.id, input.definition.id, input.definition.code, input.definition.version, input.language, title, category?.title.ru ?? input.definition.categorySlug, input.caseId ?? null, input.planStepId ?? null, primary, secondary, now, now),
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'configurable', NULL, ?, ?, 'Черновик', ?, ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
+    ).bind(id, workspace.id, user.id, input.definition.id, input.definition.code, input.definition.version, input.language, title, category?.title.ru ?? input.definition.categorySlug, input.caseId ?? null, input.planStepId ?? null, primary, secondary, now, now),
     db.prepare("INSERT INTO document_answers (document_id, answers_json, updated_at) VALUES (?, ?, ?)").bind(id, JSON.stringify(input.answers), now),
     db.prepare("INSERT INTO document_current_content (document_id, auto_content, final_content, manually_edited, updated_at) VALUES (?, ?, ?, ?, ?)")
       .bind(id, rendered.plainText, finalContent, input.manuallyEdited ? 1 : 0, now),
@@ -82,6 +101,24 @@ export async function createConfiguredDocument(user: UserProfile, input: CreateC
   ];
   if (input.caseId) statements.push(db.prepare("INSERT INTO case_events (id,case_id,actor_user_id,event_type,metadata_json,created_at) VALUES (?,?,?,'document_created',?,?)").bind(crypto.randomUUID(),input.caseId,user.id,JSON.stringify({documentId:id,templateCode:input.definition.code,planStepId:input.planStepId??null}),now));
   if (input.planStepId) statements.push(db.prepare("UPDATE action_plan_steps SET status='in_progress',revision=revision+1,updated_at=? WHERE id=?").bind(now,input.planStepId));
+  if (input.aiHandoff) statements.push(db.prepare(
+    `INSERT INTO ai_document_prefill_handoffs
+     (id,workspace_id,user_id,assistant_message_id,template_code,document_id,locale,
+      selected_field_ids_json,selection_sha256,idempotency_key_sha256,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+  ).bind(
+    input.aiHandoff.id,
+    workspace.id,
+    user.id,
+    input.aiHandoff.assistantMessageId,
+    input.definition.code,
+    id,
+    input.aiHandoff.locale,
+    JSON.stringify(input.aiHandoff.selectedFieldIds),
+    input.aiHandoff.selectionSha256,
+    input.aiHandoff.idempotencyKeySha256,
+    now,
+  ));
   await db.batch(statements);
   return {
     id, ownerUserId: user.id, templateId: input.definition.id, templateCode: input.definition.code, templateVersion: input.definition.version,

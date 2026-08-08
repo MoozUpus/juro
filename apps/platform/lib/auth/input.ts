@@ -1,0 +1,140 @@
+import { z } from "zod";
+
+const emailInput = z.string().trim().min(3).max(254);
+const localeInput = z.enum(["ru", "uz"]).default("ru");
+const purposeInput = z.enum(["login", "register"]);
+const accountTypeInput = z.enum([
+  "individual",
+  "entrepreneur",
+  "lawyer",
+]).default(
+  "individual",
+);
+
+export const requestOtpInputSchema = z.object({
+  email: emailInput,
+  purpose: purposeInput,
+  locale: localeInput,
+  accountType: accountTypeInput,
+  turnstileToken: z.string().trim().min(1).max(2_048),
+}).strict();
+
+export const verifyOtpInputSchema = z.object({
+  challengeId: z.string().uuid(),
+  email: emailInput,
+  code: z.string().regex(/^\d{6}$/),
+  purpose: purposeInput,
+  locale: localeInput,
+  accountType: accountTypeInput.optional(),
+  firstName: z.string().max(80).optional(),
+  lastName: z.string().max(80).optional(),
+  acceptTerms: z.boolean().optional(),
+  acceptPrivacy: z.boolean().optional(),
+  acceptPersonalData: z.boolean().optional(),
+  marketing: z.boolean().optional(),
+  rememberMe: z.boolean().default(false),
+}).strict();
+
+const mfaCodeInput = z.string().trim().min(6).max(64);
+
+export const verifyMfaInputSchema = z.object({
+  code: mfaCodeInput,
+  locale: localeInput,
+  rememberMe: z.boolean().default(false),
+}).strict();
+
+export const confirmTotpEnrollmentInputSchema = z.object({
+  credentialId: z.string().uuid(),
+  code: z.string().regex(/^\d{6}$/),
+  locale: localeInput,
+}).strict();
+
+export const manageMfaInputSchema = z.object({
+  code: mfaCodeInput,
+  locale: localeInput,
+}).strict();
+
+export const accountDeletionInputSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("request_code"),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("confirm"),
+    challengeId: z.string().uuid(),
+    code: z.string().regex(/^\d{6}$/),
+    confirmation: z.literal("DELETE"),
+    deletionMode: z.enum(["immediate", "recoverable_30d"])
+      .default("recoverable_30d"),
+    reason: z.string().trim().max(500).optional(),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("cancel"),
+    requestId: z.string().uuid(),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("retry"),
+    requestId: z.string().uuid(),
+    locale: localeInput,
+  }).strict(),
+]);
+
+export const emailChangeInputSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("request_codes"),
+    newEmail: emailInput,
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("confirm"),
+    challengeId: z.string().uuid(),
+    currentCode: z.string().regex(/^\d{6}$/),
+    newCode: z.string().regex(/^\d{6}$/),
+    locale: localeInput,
+  }).strict(),
+  z.object({
+    action: z.literal("cancel"),
+    challengeId: z.string().uuid(),
+    locale: localeInput,
+  }).strict(),
+]);
+
+export type JsonRequestError =
+  | "invalid_content_type"
+  | "invalid_json"
+  | "invalid_input"
+  | "payload_too_large";
+
+export async function parseJsonRequest<T>(
+  request: Request,
+  schema: z.ZodType<T>,
+  maxBytes = 4_096,
+): Promise<
+  | { ok: true; data: T }
+  | { ok: false; error: JsonRequestError }
+> {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (!contentType.toLocaleLowerCase().startsWith("application/json")) {
+    return { ok: false, error: "invalid_content_type" };
+  }
+  const declaredLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    return { ok: false, error: "payload_too_large" };
+  }
+  const text = await request.text();
+  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+    return { ok: false, error: "payload_too_large" };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(text);
+  } catch {
+    return { ok: false, error: "invalid_json" };
+  }
+  const parsed = schema.safeParse(raw);
+  return parsed.success
+    ? { ok: true, data: parsed.data }
+    : { ok: false, error: "invalid_input" };
+}

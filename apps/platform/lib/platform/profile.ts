@@ -1,11 +1,43 @@
 import { requireD1 } from "../document-builder/storage/runtime";
-import type { AccountType, PlatformLocale } from "./routing";
+import { userIdByEmail } from "../auth/identity-protection";
+import { runtimeIdentityProtection } from "../auth/identity-runtime";
+import {
+  isPersonalAccountType,
+  type AccountType,
+  type PlatformLocale,
+} from "./routing";
 
-export async function workspaceProfile(email: string): Promise<{ locale: PlatformLocale; accountType: AccountType } | null> {
+export async function workspaceProfile(email: string): Promise<{ locale: PlatformLocale; accountType: AccountType; onboardingCompleted: boolean } | null> {
   try {
-    const row = await requireD1().prepare("SELECT locale, account_type AS accountType FROM user_profiles WHERE lower(email)=lower(?) LIMIT 1")
-      .bind(email).first<{ locale: string; accountType: string }>();
+    const db = requireD1();
+    const userId = await userIdByEmail(
+      db,
+      runtimeIdentityProtection(),
+      email,
+    );
+    if (!userId) return null;
+    const row = await db.prepare(
+      `SELECT p.locale,p.account_type AS accountPersona,
+        w.type AS workspaceType,
+        p.onboarding_completed_at AS onboardingCompletedAt
+       FROM user_profiles p LEFT JOIN workspaces w ON w.id=p.default_workspace_id
+       WHERE p.id=? LIMIT 1`,
+    )
+      .bind(userId).first<{
+        locale: string;
+        accountPersona: string;
+        workspaceType: string | null;
+        onboardingCompletedAt: string | null;
+      }>();
     if (!row) return null;
-    return { locale: row.locale === "uz" ? "uz" : "ru", accountType: row.accountType === "business" ? "business" : "individual" };
+    return {
+      locale: row.locale === "uz" ? "uz" : "ru",
+      accountType: row.workspaceType === "business"
+        ? "business"
+        : isPersonalAccountType(row.accountPersona)
+          ? row.accountPersona
+          : "individual",
+      onboardingCompleted: Boolean(row.onboardingCompletedAt),
+    };
   } catch { return null; }
 }

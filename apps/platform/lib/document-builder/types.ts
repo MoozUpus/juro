@@ -122,6 +122,7 @@ export interface RenderedParagraph {
   text: string;
   kind: "title" | "subtitle" | "heading" | "body" | "list" | "signature" | "spacer";
   keepWithNext?: boolean;
+  reviewMark?: "deleted" | "inserted";
 }
 
 export interface RenderedReceipt {
@@ -171,6 +172,8 @@ export interface DocumentRecord {
   title: string;
   category: string;
   status: DocumentStatus;
+  caseId?: string | null;
+  caseLinkRevision?: number;
   language: DocumentLanguage;
   lenderName: string | null;
   borrowerName: string | null;

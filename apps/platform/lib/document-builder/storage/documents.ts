@@ -2,6 +2,7 @@ import { renderReceipt, suggestedDocumentTitle } from "../templates/receipt";
 import type { ReceiptAnswers, StoredDocument, UserProfile } from "../types";
 import { ensureTemplateSeed, isoNow } from "./db";
 import { requireD1 } from "./runtime";
+import { workspaceForUser } from "../../platform/workspace";
 
 export interface CreateDocumentInput {
   answers: ReceiptAnswers;
@@ -14,6 +15,7 @@ export interface CreateDocumentInput {
 
 export async function createStoredDocument(user: UserProfile, input: CreateDocumentInput): Promise<StoredDocument> {
   const db = requireD1();
+  const workspace = await workspaceForUser(user);
   await ensureTemplateSeed();
   const id = crypto.randomUUID();
   const now = isoNow();
@@ -25,10 +27,10 @@ export async function createStoredDocument(user: UserProfile, input: CreateDocum
   await db.batch([
     db.prepare(
       `INSERT INTO documents
-      (id, owner_user_id, template_id, template_code, template_version, language, participant_mode, acting_side, title, category, status,
+      (id, workspace_id, owner_user_id, template_id, template_code, template_version, language, participant_mode, acting_side, title, category, status,
        lender_name, borrower_name, is_favorite, archived_at, generated_at, signed_file_id, revision, created_at, updated_at)
-      VALUES (?, ?, 'receipt-money-v1', 'receipt-money', '1.0.0', ?, ?, ?, ?, 'Займы и расписки', ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
-    ).bind(id, user.id, input.answers.language, input.answers.participantMode, input.answers.actingSide, title, status, input.answers.lender.fullName || null, input.answers.borrower.fullName || null, now, now),
+      VALUES (?, ?, ?, 'receipt-money-v1', 'receipt-money', '1.0.0', ?, ?, ?, ?, 'Займы и расписки', ?, ?, ?, 0, NULL, NULL, NULL, 1, ?, ?)`,
+    ).bind(id, workspace.id, user.id, input.answers.language, input.answers.participantMode, input.answers.actingSide, title, status, input.answers.lender.fullName || null, input.answers.borrower.fullName || null, now, now),
     db.prepare("INSERT INTO document_answers (document_id, answers_json, updated_at) VALUES (?, ?, ?)")
       .bind(id, JSON.stringify(input.answers), now),
     db.prepare("INSERT INTO document_current_content (document_id, auto_content, final_content, manually_edited, updated_at) VALUES (?, ?, ?, ?, ?)")

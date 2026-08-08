@@ -1,0 +1,468 @@
+import assert from "node:assert/strict";
+import { DatabaseSync } from "node:sqlite";
+import test from "node:test";
+import {
+  enforceLegalChatSourceBoundary,
+  forceClarificationWithoutVerifiedSources,
+  legalChatJsonSchema,
+  legalChatResponseSchema,
+} from "../lib/ai/legal-chat-schema";
+import {
+  AiRunConflictError,
+  beginAiRunFinalization,
+  failAiRun,
+  completeAiRun,
+  completeAiRunStatements,
+  readAiRunStatus,
+  reserveAiRun,
+} from "../lib/ai/run-store";
+import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
+
+const validLegalResponse = {
+  responseKind: "clarification_required" as const,
+  summary: "Нужно уточнить дату события.",
+  answer: "Без даты нельзя надёжно определить применимую редакцию нормы.",
+  language: "ru" as const,
+  jurisdiction: "UZ" as const,
+  answerMode: "detailed" as const,
+  reasoningMode: "fast" as const,
+  clarificationQuestions: ["Когда произошло событие?"],
+  confirmedFindings: [],
+  assumptions: [{ statement: "Дата события пока неизвестна.", impact: "Срок и редакция нормы предварительны." }],
+  risks: [],
+  sources: [],
+  requiredDocuments: [],
+  actionPlan: [{ title: "Уточнить дату", description: "Найдите документ с датой события.", sourceIds: [] }],
+  deadlines: [{ title: "Предварительный срок", dueDate: null, sourceDate: null, calculationMethod: "Нужна дата события.", confidence: "preliminary" as const, sourceIds: [] }],
+  successOutlook: null,
+  urgency: "normal" as const,
+  suggestedDocument: null,
+  suggestLawyer: false,
+  legalDatabaseAsOf: "unavailable",
+};
+
+test("LegalChatResponse is strict, bilingual, and JSON-schema backed", () => {
+  assert.deepEqual(legalChatResponseSchema.parse(validLegalResponse), validLegalResponse);
+  assert.equal(legalChatResponseSchema.safeParse({ ...validLegalResponse, jurisdiction: "US" }).success, false);
+  assert.equal(legalChatResponseSchema.safeParse({ ...validLegalResponse, hidden: "not allowed" }).success, false);
+  assert.equal(legalChatJsonSchema.type, "object");
+  assert.ok(Array.isArray(legalChatJsonSchema.required));
+});
+
+test("source boundary rejects a provider-invented source id", () => {
+  const result = {
+    ...validLegalResponse,
+    responseKind: "answer" as const,
+    confirmedFindings: [{ title: "Вывод", explanation: "Текст", sourceIds: ["fake-source"] }],
+  };
+  assert.throws(
+    () => enforceLegalChatSourceBoundary(result, new Set(["verified-source"])),
+    /AI_SOURCE_NOT_ALLOWED:fake-source/,
+  );
+});
+
+test("source boundary requires replayable citation references and unique sources", () => {
+  const source = {
+    sourceId: "verified-source",
+    actTitle: "Проверенный акт",
+    actIdentifier: "№ 1",
+    article: "Статья 1",
+    excerpt: "Проверенный фрагмент",
+    originalUrl: "https://lex.uz/ru/docs/1",
+    status: "current" as const,
+    effectiveDate: "2026-01-01",
+    verifiedAt: "2026-07-31T00:00:00.000Z",
+  };
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      responseKind: "answer",
+      confirmedFindings: [{
+        title: "Подтверждённый вывод",
+        explanation: "Основан на проверенном фрагменте.",
+        sourceIds: [source.sourceId],
+      }],
+    }, new Set([source.sourceId])),
+    /AI_CITATION_REFERENCE_MISSING:verified-source/,
+  );
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      responseKind: "answer",
+      confirmedFindings: [{
+        title: "Вывод без основания",
+        explanation: "Не должен пройти.",
+        sourceIds: [],
+      }],
+    }, new Set([source.sourceId])),
+    /AI_CONFIRMED_FINDING_REQUIRES_CITATION/,
+  );
+  assert.throws(
+    () => enforceLegalChatSourceBoundary({
+      ...validLegalResponse,
+      sources: [source, source],
+    }, new Set([source.sourceId])),
+    /AI_SOURCE_DUPLICATED:verified-source/,
+  );
+  const valid = {
+    ...validLegalResponse,
+    responseKind: "answer" as const,
+    confirmedFindings: [{
+      title: "Подтверждённый вывод",
+      explanation: "Основан на проверенном фрагменте.",
+      sourceIds: [source.sourceId],
+    }],
+    deadlines: [{
+      ...validLegalResponse.deadlines[0],
+      confidence: "confirmed" as const,
+      sourceIds: [source.sourceId],
+    }],
+    sources: [source],
+  };
+  assert.deepEqual(
+    enforceLegalChatSourceBoundary(valid, new Set([source.sourceId])),
+    valid,
+  );
+});
+
+test("no-source output is canonicalized to a non-chargeable clarification without legal claims", () => {
+  const result = forceClarificationWithoutVerifiedSources({
+    ...validLegalResponse,
+    responseKind: "answer",
+    confirmedFindings: [{ title: "Неподтверждённый вывод", explanation: "Не должен пройти", sourceIds: ["fake"] }],
+    risks: [{ level: "high", title: "Риск", explanation: "Не подтверждён", sourceIds: ["fake"] }],
+    sources: [{ sourceId: "fake", actTitle: "Fake", actIdentifier: null, article: null, excerpt: null, originalUrl: "https://example.com", status: "unconfirmed", effectiveDate: null, verifiedAt: "never" }],
+    deadlines: [{ ...validLegalResponse.deadlines[0], dueDate: "2026-08-01", confidence: "confirmed", sourceIds: ["fake"] }],
+    suggestedDocument: { templateCode: "fake", title: "Документ", reason: "Неподтверждённо" },
+  }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast", legalDatabaseAsOf: "unavailable" });
+  assert.equal(result.responseKind, "clarification_required");
+  assert.deepEqual(result.confirmedFindings, []);
+  assert.deepEqual(result.risks, []);
+  assert.deepEqual(result.sources, []);
+  assert.deepEqual(result.deadlines, []);
+  assert.equal(result.suggestedDocument, null);
+});
+
+test("OpenAI Responses SSE parser handles split structured-output frames and reports bounded progress", async () => {
+  const serialized = JSON.stringify(validLegalResponse);
+  const stream = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: serialized.slice(0, 180) })}\r\n\r\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: serialized.slice(180) })}\n\n`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        id: "resp-stream",
+        model: "gpt-5.6-sol",
+        status: "completed",
+        output: [],
+        usage: { input_tokens: 11, output_tokens: 22, input_tokens_details: { cached_tokens: 3 } },
+      },
+    })}\n\n`,
+  ].join("");
+  const bytes = new TextEncoder().encode(stream);
+  const response = chunkedResponse(bytes, [7, 31, 89, 211]);
+  const progress: number[] = [];
+  const payload = await readResponsesSse(response, (event) => {
+    if (event.stage === "provider_delta") progress.push(event.receivedCharacters);
+  });
+  const text = payload.output?.flatMap((item) => item.content ?? [])
+    .find((item) => item.type === "output_text")?.text;
+  assert.equal(text, serialized);
+  assert.deepEqual(JSON.parse(text || "{}"), validLegalResponse);
+  assert.ok(progress.length >= 1);
+  assert.equal(progress.at(-1), serialized.length);
+});
+
+test("OpenAI Responses SSE parser fails closed on malformed provider events", async () => {
+  const response = chunkedResponse(new TextEncoder().encode("event: response.output_text.delta\ndata: {not-json}\n\n"), [9]);
+  await assert.rejects(
+    readResponsesSse(response, () => undefined),
+    (error: unknown) => error instanceof ResponsesSseError && error.code === "INVALID_AI_OUTPUT",
+  );
+});
+test("cancelled AI run releases reserved usage and records no charge", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "cancelled-request", 1));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  await failAiRun({
+    db: d1,
+    runId: reserved.runId,
+    ledgerId: reserved.ledgerId,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "cancelled-request",
+    errorCode: "AI_CANCELLED",
+  });
+
+  const run = sqlite.prepare("SELECT status,error_code AS errorCode FROM ai_runs WHERE id=?")
+    .get(reserved.runId) as { status: string; errorCode: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?")
+    .get(reserved.ledgerId) as { status: string };
+  const idempotency = sqlite.prepare("SELECT status FROM idempotency_keys WHERE key=?")
+    .get("legal-chat:workspace-1:user-1:cancelled-request") as { status: string };
+  assert.equal(run.status, "failed");
+  assert.equal(run.errorCode, "AI_CANCELLED");
+  assert.equal(ledger.status, "released");
+  assert.equal(idempotency.status, "failed");
+
+  const terminalReplay = await reserveAiRun(reservationInput(d1, "cancelled-request", 1));
+  assert.equal(terminalReplay.kind, "failed");
+  if (terminalReplay.kind === "failed") {
+    assert.equal(terminalReplay.runId, reserved.runId);
+    assert.equal(terminalReplay.errorCode, "AI_CANCELLED");
+  }
+  assert.deepEqual(await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "cancelled-request",
+  }), { kind: "failed", runId: reserved.runId, errorCode: "AI_CANCELLED" });
+  assert.deepEqual(await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-2",
+    idempotencyKey: "cancelled-request",
+  }), { kind: "missing" });
+});
+
+
+function chunkedResponse(bytes: Uint8Array, boundaries: number[]): Response {
+  const chunks: Uint8Array[] = [];
+  let offset = 0;
+  for (const boundary of boundaries) {
+    const end = Math.min(boundary, bytes.length);
+    if (end > offset) chunks.push(bytes.slice(offset, end));
+    offset = end;
+  }
+  if (offset < bytes.length) chunks.push(bytes.slice(offset));
+  return new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      controller.close();
+    },
+  }), {
+    headers: { "content-type": "text/event-stream" },
+  });
+}
+
+test("AI run reservation is idempotent and clarification does not consume a cycle", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const input = reservationInput(d1, "request-one", 1);
+  const first = await reserveAiRun(input);
+  assert.equal(first.kind, "reserved");
+  if (first.kind !== "reserved") return;
+  assert.deepEqual(await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "request-one",
+  }), { kind: "processing", runId: first.runId });
+
+  const inProgress = await reserveAiRun(input);
+  assert.equal(inProgress.kind, "processing");
+  if (inProgress.kind === "processing") assert.equal(inProgress.runId, first.runId);
+
+  sqlite.prepare("INSERT INTO conversations(id) VALUES (?)").run("conversation-1");
+  sqlite.prepare("INSERT INTO conversation_messages(id,conversation_id,structured_json) VALUES (?,?,?)")
+    .run("assistant-1", "conversation-1", JSON.stringify(validLegalResponse));
+  await completeAiRun({
+    db: d1, runId: first.runId, ledgerId: first.ledgerId,
+    workspaceId: "workspace-1", userId: "user-1", idempotencyKey: "request-one",
+    conversationId: "conversation-1", requestMessageId: "user-1-message", responseMessageId: "assistant-1",
+    providerResponseId: "resp-1", model: "gpt-5.6-sol", inputTokens: 100,
+    provider: "openai",
+    fallbackFromProvider: null,
+    outputTokens: 50, cachedInputTokens: 10, attempts: 1, latencyMs: 200,
+    chargeable: false,
+  });
+
+  const replay = await reserveAiRun(input);
+  assert.equal(replay.kind, "completed");
+  if (replay.kind === "completed") {
+    assert.equal(replay.conversationId, "conversation-1");
+    assert.deepEqual(replay.response, validLegalResponse);
+  }
+  const ledger = sqlite.prepare("SELECT status,input_tokens AS inputTokens FROM ai_usage_ledger WHERE id=?")
+    .get(first.ledgerId) as { status: string; inputTokens: number };
+  assert.equal(ledger.status, "released");
+  assert.equal(ledger.inputTokens, 100);
+  const completedStatus = await readAiRunStatus({
+    db: d1,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "request-one",
+  });
+  assert.equal(completedStatus.kind, "completed");
+  if (completedStatus.kind === "completed") {
+    assert.equal(completedStatus.runId, first.runId);
+    assert.equal(completedStatus.conversationId, "conversation-1");
+    assert.equal(completedStatus.responseMessageId, "assistant-1");
+    assert.equal(completedStatus.branchId, null);
+  }
+});
+
+test("AI completion persists the actual fallback provider and model", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "fallback-request", 2));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+  sqlite.prepare("INSERT INTO conversations(id) VALUES (?)").run("conversation-fallback");
+  sqlite.prepare("INSERT INTO conversation_messages(id,conversation_id,structured_json) VALUES (?,?,?)").run("assistant-fallback", "conversation-fallback", JSON.stringify(validLegalResponse));
+  await completeAiRun({ db: d1, runId: reserved.runId, ledgerId: reserved.ledgerId, workspaceId: "workspace-1", userId: "user-1", idempotencyKey: "fallback-request", conversationId: "conversation-fallback", requestMessageId: "user-fallback", responseMessageId: "assistant-fallback", providerResponseId: "msg-fallback", provider: "anthropic", fallbackFromProvider: "openai", model: "claude-sonnet-4-6", inputTokens: 80, outputTokens: 40, cachedInputTokens: 0, attempts: 1, latencyMs: 150, chargeable: true });
+  const run = sqlite.prepare("SELECT provider,model,fallback_from_provider AS fallbackFromProvider FROM ai_runs WHERE id=?").get(reserved.runId) as Record<string, string>;
+  assert.equal(run.provider, "anthropic");
+  assert.equal(run.model, "claude-sonnet-4-6");
+  assert.equal(run.fallbackFromProvider, "openai");
+  const ledger = sqlite.prepare("SELECT provider,model,status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as Record<string, string>;
+  assert.equal(ledger.provider, "anthropic");
+  assert.equal(ledger.model, "claude-sonnet-4-6");
+  assert.equal(ledger.status, "consumed");
+});
+
+test("AI completion cannot commit its ledger when an earlier conversation write fails", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "atomic-completion-request", 2));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  await assert.rejects(d1.batch([
+    d1.prepare("INSERT INTO conversations(id) VALUES (?)").bind("conversation-atomic"),
+    d1.prepare("INSERT INTO conversations(id) VALUES (?)").bind("conversation-atomic"),
+    ...completeAiRunStatements({
+      db: d1, runId: reserved.runId, ledgerId: reserved.ledgerId,
+      workspaceId: "workspace-1", userId: "user-1", idempotencyKey: "atomic-completion-request",
+      conversationId: "conversation-atomic", requestMessageId: "request-atomic", responseMessageId: "response-atomic",
+      providerResponseId: "response-provider-atomic", provider: "openai", fallbackFromProvider: null,
+      model: "gpt-5.6-sol", inputTokens: 10, outputTokens: 20, cachedInputTokens: 0,
+      attempts: 1, latencyMs: 100, chargeable: true,
+    }),
+  ]));
+
+  const run = sqlite.prepare("SELECT status FROM ai_runs WHERE id=?").get(reserved.runId) as { status: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  const idempotency = sqlite.prepare("SELECT status FROM idempotency_keys WHERE key=?")
+    .get("legal-chat:workspace-1:user-1:atomic-completion-request") as { status: string };
+  assert.equal(run.status, "reserved");
+  assert.equal(ledger.status, "reserved");
+  assert.equal(idempotency.status, "started");
+});
+
+test("a genuinely stale AI reservation releases its cycle and requires a fresh idempotency key", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const input = reservationInput(d1, "stale-reservation-request", 2);
+  const reserved = await reserveAiRun(input);
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+  const staleAt = new Date(Date.now() - 16 * 60 * 1_000).toISOString();
+  sqlite.prepare("UPDATE ai_runs SET updated_at=? WHERE id=?").run(staleAt, reserved.runId);
+  sqlite.prepare("UPDATE idempotency_keys SET updated_at=? WHERE key=?")
+    .run(staleAt, "legal-chat:workspace-1:user-1:stale-reservation-request");
+
+  const replay = await reserveAiRun(input);
+  assert.equal(replay.kind, "expired");
+  if (replay.kind === "expired") assert.equal(replay.runId, reserved.runId);
+  const run = sqlite.prepare("SELECT status,error_code AS errorCode FROM ai_runs WHERE id=?").get(reserved.runId) as { status: string; errorCode: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  const idempotency = sqlite.prepare("SELECT status FROM idempotency_keys WHERE key=?")
+    .get("legal-chat:workspace-1:user-1:stale-reservation-request") as { status: string };
+  assert.equal(run.status, "failed");
+  assert.equal(run.errorCode, "AI_RUN_EXPIRED");
+  assert.equal(ledger.status, "released");
+  assert.equal(idempotency.status, "failed");
+
+});
+
+test("a finalizing AI run cannot be expired by an old idempotency timestamp", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const input = reservationInput(d1, "finalizing-reservation-request", 2);
+  const reserved = await reserveAiRun(input);
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+  assert.equal(await beginAiRunFinalization({
+    db: d1, runId: reserved.runId, workspaceId: "workspace-1", userId: "user-1",
+  }), true);
+  const staleAt = new Date(Date.now() - 16 * 60 * 1_000).toISOString();
+  sqlite.prepare("UPDATE idempotency_keys SET updated_at=? WHERE key=?")
+    .run(staleAt, "legal-chat:workspace-1:user-1:finalizing-reservation-request");
+
+  const replay = await reserveAiRun(input);
+  assert.equal(replay.kind, "processing");
+  const run = sqlite.prepare("SELECT status FROM ai_runs WHERE id=?").get(reserved.runId) as { status: string };
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  assert.equal(run.status, "finalizing");
+  assert.equal(ledger.status, "reserved");
+});
+
+test("AI usage reservation enforces a monthly limit and request hash binding", async () => {
+  const { d1 } = aiDatabase();
+  const firstInput = reservationInput(d1, "request-one", 1);
+  await reserveAiRun(firstInput);
+  await assert.rejects(
+    reserveAiRun({ ...firstInput, idempotencyKey: "request-two", requestHash: "hash-two" }),
+    (error: unknown) => error instanceof AiRunConflictError && error.code === "PLAN_LIMIT",
+  );
+  await assert.rejects(
+    reserveAiRun({ ...firstInput, requestHash: "different-hash" }),
+    (error: unknown) => error instanceof AiRunConflictError && error.code === "IDEMPOTENCY_CONFLICT",
+  );
+});
+
+function reservationInput(db: D1Database, idempotencyKey: string, monthlyLimit: number) {
+  return {
+    db,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey,
+    requestHash: "hash-one",
+    conversationId: null,
+    provider: "openai",
+    model: "gpt-5.6-sol",
+    answerMode: "detailed" as const,
+    reasoningMode: "fast" as const,
+    legalDatabaseAsOf: "unavailable",
+    instructionHash: "instruction-hash",
+    sourceVersionHash: "source-hash",
+    monthlyLimit,
+  };
+}
+
+class SqliteD1Statement {
+  constructor(private readonly database: DatabaseSync, private readonly sql: string, private readonly values: unknown[] = []) {}
+  bind(...values: unknown[]) { return new SqliteD1Statement(this.database, this.sql, values); }
+  first<T>(): T | null { return (this.database.prepare(this.sql).get(...this.bindings()) as T | undefined) ?? null; }
+  run() { return this.execute(); }
+  execute() {
+    const result = this.database.prepare(this.sql).run(...this.bindings());
+    return { results: [], success: true as const, meta: { changes: Number(result.changes) } };
+  }
+  private bindings() { return this.values as Array<null | number | bigint | string>; }
+}
+
+function aiDatabase(): { sqlite: DatabaseSync; d1: D1Database } {
+  const sqlite = new DatabaseSync(":memory:");
+  sqlite.exec(`
+    CREATE TABLE idempotency_keys (key TEXT PRIMARY KEY,scope TEXT NOT NULL,request_hash TEXT NOT NULL,status TEXT NOT NULL,result_ref TEXT,expires_at TEXT NOT NULL,completed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+    CREATE TABLE conversations (id TEXT PRIMARY KEY);
+    CREATE TABLE conversation_messages (id TEXT PRIMARY KEY,conversation_id TEXT NOT NULL,structured_json TEXT);
+    CREATE TABLE message_branches (id TEXT PRIMARY KEY,response_message_id TEXT NOT NULL,workspace_id TEXT NOT NULL,owner_user_id TEXT NOT NULL);
+    CREATE TABLE ai_runs (id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,conversation_id TEXT,request_message_id TEXT,response_message_id TEXT,idempotency_key TEXT NOT NULL,correlation_id TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,provider_response_id TEXT,fallback_from_provider TEXT,answer_mode TEXT NOT NULL,reasoning_mode TEXT NOT NULL,status TEXT NOT NULL,legal_database_as_of TEXT NOT NULL,instruction_hash TEXT NOT NULL,source_version_hash TEXT NOT NULL,input_tokens INTEGER NOT NULL,output_tokens INTEGER NOT NULL,cached_input_tokens INTEGER NOT NULL,estimated_cost_microusd INTEGER,attempt_count INTEGER NOT NULL,latency_ms INTEGER,error_code TEXT,started_at TEXT NOT NULL,completed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(workspace_id,user_id,idempotency_key));
+    CREATE TABLE ai_usage_ledger (id TEXT PRIMARY KEY,workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,ai_run_id TEXT NOT NULL,idempotency_key TEXT NOT NULL,feature TEXT NOT NULL,period_start TEXT NOT NULL,period_end TEXT NOT NULL,units INTEGER NOT NULL,status TEXT NOT NULL,provider TEXT NOT NULL,model TEXT NOT NULL,input_tokens INTEGER NOT NULL,output_tokens INTEGER NOT NULL,cached_input_tokens INTEGER NOT NULL,estimated_cost_microusd INTEGER,released_at TEXT,consumed_at TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(ai_run_id),UNIQUE(workspace_id,user_id,idempotency_key));
+  `);
+  const d1 = {
+    prepare(sql: string) { return new SqliteD1Statement(sqlite, sql); },
+    async batch(statements: D1PreparedStatement[]) {
+      sqlite.exec("BEGIN");
+      try {
+        const results = statements.map((statement) => (statement as unknown as SqliteD1Statement).execute());
+        sqlite.exec("COMMIT");
+        return results;
+      } catch (error) {
+        sqlite.exec("ROLLBACK");
+        throw error;
+      }
+    },
+  } as unknown as D1Database;
+  return { sqlite, d1 };
+}

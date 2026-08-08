@@ -31,10 +31,10 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Use Node.js 22
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: npm
@@ -42,6 +42,10 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci
+
+      - name: Verify generated Cloudflare types
+        if: matrix.app == 'apps/platform'
+        run: npm run cf:types:check
 
       - name: Lint
         run: npm run lint
@@ -54,3 +58,11 @@ jobs:
 
       - name: Validate deployable artifact
         run: npm run validate:artifact
+
+      - name: Validate Cloudflare environment matrix
+        if: matrix.app == 'apps/platform'
+        run: npm run validate:cloudflare:matrix
+
+      - name: Audit platform production dependencies
+        if: matrix.app == 'apps/platform'
+        run: npm audit --omit=dev --audit-level=high

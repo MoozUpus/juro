@@ -56,9 +56,9 @@ async function download(path: string, user: string): Promise<{ response: Respons
 }
 
 async function main(): Promise<void> {
-  const page = await fetch(`${baseUrl}/document-builder`);
-  assert.equal(page.status, 200);
-  assert.match(await page.text(), /<title>Создать документ — JURO<\/title>/);
+  const anonymousEntry = await fetch(`${baseUrl}/document-builder`, { redirect: "manual" });
+  assert.equal(anonymousEntry.status, 307);
+  assert.match(anonymousEntry.headers.get("location") ?? "", /\/ru\/individual\/document-builder/);
 
   const anonymous = await api("/api/document-builder/documents", { expected: 401 });
   assert.equal((anonymous.data as { code?: string }).code, "UNAUTHORIZED");
@@ -70,12 +70,46 @@ async function main(): Promise<void> {
   const collaboratorBootstrap = await api<{ user: { id: string } }>("/api/document-builder/bootstrap", { user: collaboratorEmail });
   const collaboratorId = collaboratorBootstrap.data.user.id;
 
+  await api("/api/onboarding", {
+    method: "POST",
+    user: ownerEmail,
+    json: {
+      lastName: "Tester",
+      firstName: "Owner",
+      middleName: "",
+      phone: "+998901234567",
+      locale: "ru",
+      accountPersona: "individual",
+      primaryGoal: "create_document",
+    },
+  });
+  await api("/api/onboarding", {
+    method: "POST",
+    user: collaboratorEmail,
+    json: {
+      lastName: "Tester",
+      firstName: "Counterparty",
+      middleName: "",
+      phone: "+998909876543",
+      locale: "ru",
+      accountPersona: "individual",
+      primaryGoal: "manage_case",
+    },
+  });
+
+  const page = await fetch(`${baseUrl}/ru/individual/document-builder`, { headers: authHeaders(ownerEmail, false) });
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /<title>Создать документ — JURO<\/title>/);
+  const helpPage = await fetch(`${baseUrl}/ru/individual/help`, { headers: authHeaders(ownerEmail, false) });
+  assert.equal(helpPage.status, 200);
+  assert.match(await helpPage.text(), /Короткие маршруты к рабочим функциям/);
+
   await api("/api/document-builder/drafts", {
     method: "POST",
     user: ownerEmail,
     headers: { "x-juro-csrf": "0" },
     json: { answers: EXAMPLE_RU },
-    expected: 401,
+    expected: 403,
   });
 
   const answers = { ...EXAMPLE_RU, accuracyConfirmed: true };
@@ -97,6 +131,33 @@ async function main(): Promise<void> {
     json: { title: "Интеграционная расписка JURO", answers, autoContent: rendered.plainText, finalContent: rendered.plainText, manuallyEdited: false, revision: 1 },
   });
   assert.equal(saved.data.revision, 2);
+
+  const analysisKey = `builder-analysis-smoke-${crypto.randomUUID()}`;
+  const analysis = await api<{ analysisId: string; documentId: string; documentRevision: number; status: string; replayed: boolean }>(
+    `/api/document-builder/documents/${documentId}/analysis`,
+    {
+      method: "POST",
+      user: ownerEmail,
+      headers: { "idempotency-key": analysisKey },
+      json: { mode: "quick", locale: "ru" },
+      expected: 202,
+    },
+  );
+  assert.equal(analysis.data.documentId, documentId);
+  assert.equal(analysis.data.documentRevision, 2);
+  assert.equal(analysis.data.status, "queued");
+  assert.equal(analysis.data.replayed, false);
+  const analysisReplay = await api<{ analysisId: string; replayed: boolean }>(
+    `/api/document-builder/documents/${documentId}/analysis`,
+    {
+      method: "POST",
+      user: ownerEmail,
+      headers: { "idempotency-key": analysisKey },
+      json: { mode: "quick", locale: "ru" },
+    },
+  );
+  assert.equal(analysisReplay.data.analysisId, analysis.data.analysisId);
+  assert.equal(analysisReplay.data.replayed, true);
 
   const review = await api<{ status: string; issues: unknown[]; quality: { legalCompleteness: number } }>("/api/document-builder/ai-review", {
     method: "POST",
@@ -194,12 +255,26 @@ async function main(): Promise<void> {
   assert.match(publicResponse.headers.get("x-robots-tag") ?? "", /noindex/);
   assert.match(publicResponse.headers.get("cache-control") ?? "", /no-store/);
 
-  const invited = await api<{ user: { id: string } }>(`/api/document-builder/documents/${documentId}/collaboration`, {
+  const invited = await api<{
+    user: { id: string };
+    invitation: { path: string };
+  }>(`/api/document-builder/documents/${documentId}/collaboration`, {
     method: "POST",
     user: ownerEmail,
     json: { action: "invite", identifier: collaboratorEmail },
   });
   assert.equal(invited.data.user.id, collaboratorId);
+  await api(`/api/document-builder/documents/${documentId}`, {
+    user: collaboratorEmail,
+    expected: 404,
+  });
+  const invitationToken = invited.data.invitation.path.split("/").at(-1);
+  assert.ok(invitationToken);
+  await api(`/api/document-builder/invitations/${invitationToken}`, {
+    method: "POST",
+    user: collaboratorEmail,
+    json: { action: "accept" },
+  });
 
   const collaboratorDocument = await api<{ document: { accessRole: string }; files: unknown[] }>(`/api/document-builder/documents/${documentId}`, { user: collaboratorEmail });
   assert.equal(collaboratorDocument.data.document.accessRole, "collaborator");
@@ -318,7 +393,8 @@ async function main(): Promise<void> {
       zip: zip.bytes.byteLength,
     },
     aiStatus: review.data.status,
-    scenarios: 34,
+    builderAnalysisId: analysis.data.analysisId,
+    scenarios: 36,
   }, null, 2));
 }
 

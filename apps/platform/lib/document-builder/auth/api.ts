@@ -1,13 +1,15 @@
 import { getChatGPTUser } from "../../../app/chatgpt-auth";
+import { IdentityProtectionError } from "../../auth/identity-protection";
+import {
+  ApiAuthError,
+} from "../../auth/safe-write";
 import type { UserProfile } from "../types";
 import { getOrCreateUserProfile } from "../storage/db";
 
-export class ApiAuthError extends Error {
-  constructor(message = "Для этого действия необходимо войти в JURO.", public readonly status = 401) {
-    super(message);
-    this.name = "ApiAuthError";
-  }
-}
+export {
+  ApiAuthError,
+  assertSafeWrite,
+} from "../../auth/safe-write";
 
 export async function optionalApiUser(): Promise<UserProfile | null> {
   const user = await getChatGPTUser();
@@ -20,17 +22,6 @@ export async function requireApiUser(): Promise<UserProfile> {
   return profile;
 }
 
-export function assertSafeWrite(request: Request): void {
-  const url = new URL(request.url);
-  const origin = request.headers.get("origin");
-  if (origin && origin !== url.origin) {
-    throw new ApiAuthError("Запрос отклонён проверкой происхождения.", 403);
-  }
-  if (request.headers.get("x-juro-csrf") !== "1") {
-    throw new ApiAuthError("Запрос отклонён: отсутствует защитный заголовок.", 403);
-  }
-}
-
 export function withApiErrors<TArgs extends unknown[]>(handler: (...args: TArgs) => Promise<Response>) {
   return async (...args: TArgs): Promise<Response> => {
     try {
@@ -40,6 +31,21 @@ export function withApiErrors<TArgs extends unknown[]>(handler: (...args: TArgs)
         return Response.json(
           { error: error.message },
           { status: error.status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } },
+        );
+      }
+      if (error instanceof IdentityProtectionError) {
+        return Response.json(
+          {
+            code: "IDENTITY_PROTECTION_UNAVAILABLE",
+            error: "Защищённое хранилище идентификационных данных временно недоступно.",
+          },
+          {
+            status: 503,
+            headers: {
+              "cache-control": "private, no-store",
+              pragma: "no-cache",
+            },
+          },
         );
       }
       throw error;

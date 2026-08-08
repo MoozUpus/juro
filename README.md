@@ -6,7 +6,7 @@ This repository is a monorepo containing the current source snapshots behind:
 
 - `https://juro.uz` — public website;
 - `https://app.juro.uz` — user platform;
-- `https://app.juro.uz/document-builder` — canonical document-builder module.
+- `https://app.juro.uz/:locale/:accountType/document-builder` — canonical document-builder module (for example `/ru/individual/document-builder`).
 
 The source code is complete enough to build both deployed applications. Runtime data, hosted database contents, private object-storage files, DNS configuration, TLS certificates and secret values are intentionally not stored in Git.
 
@@ -50,7 +50,7 @@ The two applications retain their original package manifests, lockfiles, build s
 
 - Node.js `>=22.13.0`;
 - npm compatible with the committed lockfiles;
-- Linux for the provided bounded install/build helper scripts (`bash`, `flock`, `curl`, GNU `timeout`);
+- Windows, Linux, or macOS for `apps/platform`; its bounded lifecycle uses shell-neutral Node launchers. `apps/website` still retains the legacy Bash lifecycle and therefore needs Bash plus its documented POSIX tools;
 - Cloudflare-compatible D1 and R2 bindings for persistent document-builder functions;
 - an OpenAI API key only if live AI review is required.
 
@@ -66,7 +66,7 @@ Or install one application:
 
 ```bash
 npm --prefix apps/website ci
-npm --prefix apps/platform ci
+npm --prefix apps/platform run install:ci
 ```
 
 ## Local development
@@ -114,7 +114,7 @@ npm run build
 npm run validate:artifact
 ```
 
-The application-level test scripts also validate the deployable Worker artifact. The platform test suite checks the document-builder logic and generated file structures.
+The application-level test scripts also validate the deployable Worker artifact. The platform test suite checks rendered routes, identity and tenant boundaries, document workflows, migrations, and the disabled-by-default Cloudflare async contract. Run `npm --prefix apps/platform run validate:cloudflare:matrix` for development/staging/production builds, artifact validation, and Wrangler dry-runs without deployment.
 
 ## Routes
 
@@ -214,6 +214,3 @@ Security reports should follow [SECURITY.md](SECURITY.md).
 ## Current product boundaries
 
 The repository contains production-capable document-builder backend code, but several screens in the broader platform remain interactive prototypes. In particular, the main registration/login flow, general AI chat, voice/avatar, operator queue, payments and much of the dashboard use browser-local state or demonstration data. They require separate backend integrations before being represented as live services.
-
-
-<!-- Trigger Cloudflare production deployment -->

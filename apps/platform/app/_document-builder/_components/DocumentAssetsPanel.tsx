@@ -1,8 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname } from "next/navigation";
 import { Bot, Check, Copy, Download, Eye, FileCheck2, FilePlus2, Link2, Paperclip, ShieldCheck, Trash2, UploadCloud } from "lucide-react";
 import type { CollaborationSnapshot, FileRecord, StoredDocument } from "../../../lib/document-builder/types";
+import { builderNavigationPaths } from "../../../lib/platform/builder-paths";
 import { apiFetch, downloadAuthenticatedFile } from "./api-client";
 
 interface Attachment {
@@ -16,6 +18,7 @@ interface Attachment {
 }
 
 export function DocumentAssetsPanel({ documentId, onDocumentChange }: { documentId: string; onDocumentChange: (document: StoredDocument) => void }) {
+  const paths = builderNavigationPaths(usePathname());
   const [document, setDocument] = useState<StoredDocument | null>(null);
   const [files, setFiles] = useState<FileRecord[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -83,7 +86,7 @@ export function DocumentAssetsPanel({ documentId, onDocumentChange }: { document
   const downloadGenerated = async (file: FileRecord) => {
     try {
       await downloadAuthenticatedFile(`/api/document-builder/documents/${documentId}/files/${file.id}`, file.fileName);
-      window.location.assign("/document-builder/documents");
+      window.location.assign(paths.documents);
     } catch (caught) { setError(caught instanceof Error ? caught.message : "Файл не скачан."); }
   };
   const setSignedAccess = async (collaboratorUserId: string, viewAllowed: boolean, downloadAllowed: boolean) => {

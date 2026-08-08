@@ -1,8 +1,19 @@
 import { assertSafeWrite, requireApiUser } from "../../../../../lib/document-builder/auth/api";
+import { normalizeEmail } from "../../../../../lib/auth/crypto";
+import { identityEvidenceMatches } from "../../../../../lib/auth/identity-evidence";
+import {
+  IdentityProtectionError,
+  normalizePhoneForLookup,
+} from "../../../../../lib/auth/identity-protection";
+import { runtimeIdentityProtection } from "../../../../../lib/auth/identity-runtime";
 import { apiError, forbidden, jsonResponse, notFound } from "../../../../../lib/document-builder/auth/responses";
 import { sha256 } from "../../../../../lib/document-builder/share-links/crypto";
-import { addActivity, isoNow } from "../../../../../lib/document-builder/storage/db";
+import { isoNow } from "../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
+import {
+  acceptDocumentInvitation,
+  declineDocumentInvitation,
+} from "../../../../../lib/document-builder/permissions/invitation-transition";
 
 export const dynamic = "force-dynamic";
 type Context = { params: Promise<{ token: string }> };
@@ -14,6 +25,9 @@ interface InvitationRow {
   invitedByUserId: string;
   targetUserId: string | null;
   targetIdentifierHash: string | null;
+  targetIdentifierKind: string | null;
+  targetIdentifierLookupHash: string | null;
+  targetIdentifierLookupKeyVersion: string | null;
   role: string;
   partyNumber: number | null;
   expiresAt: string;
@@ -27,7 +41,11 @@ async function loadInvitation(token: string): Promise<InvitationRow | null> {
   return db.prepare(
     `SELECT i.id, i.document_id AS documentId, d.title AS documentTitle,
       i.invited_by_user_id AS invitedByUserId, i.target_user_id AS targetUserId,
-      i.target_identifier_hash AS targetIdentifierHash, i.role, i.party_number AS partyNumber,
+      i.target_identifier_hash AS targetIdentifierHash,
+      i.target_identifier_kind AS targetIdentifierKind,
+      i.target_identifier_lookup_hash AS targetIdentifierLookupHash,
+      i.target_identifier_lookup_key_version AS targetIdentifierLookupKeyVersion,
+      i.role, i.party_number AS partyNumber,
       i.expires_at AS expiresAt, i.accepted_at AS acceptedAt, i.declined_at AS declinedAt, i.revoked_at AS revokedAt
      FROM document_invitations i JOIN documents d ON d.id = i.document_id
      WHERE i.token_hash = ? LIMIT 1`,
@@ -36,10 +54,63 @@ async function loadInvitation(token: string): Promise<InvitationRow | null> {
 
 async function canUseInvitation(invitation: InvitationRow, user: { id: string; email: string; phone: string | null }): Promise<boolean> {
   if (invitation.targetUserId) return invitation.targetUserId === user.id;
-  if (!invitation.targetIdentifierHash) return false;
-  const candidateHashes = [await sha256(user.email.toLocaleLowerCase())];
-  if (user.phone) candidateHashes.push(await sha256(user.phone.toLocaleLowerCase()));
-  return candidateHashes.includes(invitation.targetIdentifierHash);
+  const identityContext = runtimeIdentityProtection();
+  const keyedFields = [
+    invitation.targetIdentifierKind,
+    invitation.targetIdentifierLookupHash,
+    invitation.targetIdentifierLookupKeyVersion,
+  ];
+  const keyedCount = keyedFields.filter(value => value !== null).length;
+  if (keyedCount !== 0 && keyedCount !== keyedFields.length) {
+    throw new IdentityProtectionError("IDENTITY_ROW_CORRUPT");
+  }
+  if (keyedCount === 0 && !invitation.targetIdentifierHash) return false;
+
+  // Legacy mode is also the explicit rollback path, so it retains the exact
+  // historical SHA-256 comparison even for rows that already carry keyed data.
+  if (identityContext.mode === "legacy") {
+    if (!invitation.targetIdentifierHash) return false;
+    const candidateHashes = [await sha256(user.email.toLocaleLowerCase())];
+    if (user.phone) {
+      candidateHashes.push(await sha256(user.phone.toLocaleLowerCase()));
+    }
+    return candidateHashes.includes(invitation.targetIdentifierHash);
+  }
+
+  if (keyedCount === keyedFields.length) {
+    const kind = invitation.targetIdentifierKind;
+    if (kind !== "email" && kind !== "phone") {
+      throw new IdentityProtectionError("IDENTITY_ROW_CORRUPT");
+    }
+    if (kind === "phone" && !user.phone) return false;
+    return identityEvidenceMatches(identityContext, {
+      normalizedValue: kind === "email"
+        ? normalizeEmail(user.email)
+        : normalizePhoneForLookup(user.phone!),
+      purpose: kind === "email"
+        ? "document-invitation-email"
+        : "document-invitation-phone",
+      legacyHash: invitation.targetIdentifierHash,
+      lookupHash: invitation.targetIdentifierLookupHash,
+      lookupKeyVersion: invitation.targetIdentifierLookupKeyVersion,
+    });
+  }
+
+  const emailMatches = await identityEvidenceMatches(identityContext, {
+    normalizedValue: user.email.toLocaleLowerCase(),
+    purpose: "document-invitation-email",
+    legacyHash: invitation.targetIdentifierHash,
+    lookupHash: null,
+    lookupKeyVersion: null,
+  });
+  if (emailMatches || !user.phone) return emailMatches;
+  return identityEvidenceMatches(identityContext, {
+    normalizedValue: user.phone.toLocaleLowerCase(),
+    purpose: "document-invitation-phone",
+    legacyHash: invitation.targetIdentifierHash,
+    lookupHash: null,
+    lookupKeyVersion: null,
+  });
 }
 
 function activeError(invitation: InvitationRow): Response | null {
@@ -79,23 +150,39 @@ export async function POST(request: Request, context: Context): Promise<Response
     const db = requireD1();
     const now = isoNow();
     if (body.action === "decline") {
-      await db.prepare("UPDATE document_invitations SET declined_at = ?, updated_at = ? WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL").bind(now, now, invitation.id).run();
-      await addActivity(invitation.documentId, user.id, "invitation_declined");
+      const declined = await declineDocumentInvitation(db, {
+        invitationId: invitation.id,
+        documentId: invitation.documentId,
+        userId: user.id,
+        now,
+      });
+      if (!declined) {
+        const current = await loadInvitation(token);
+        return current
+          ? activeError(current) ?? jsonResponse(
+            { error: "Приглашение уже изменено.", code: "INVITATION_CONFLICT" },
+            { status: 409 },
+          )
+          : notFound("Приглашение не найдено.");
+      }
       return jsonResponse({ declined: true });
     }
     if (body.action !== "accept") return jsonResponse({ error: "Неизвестное действие.", code: "BAD_ACTION" }, { status: 400 });
-    const existing = await db.prepare("SELECT id FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1").bind(invitation.documentId, user.id).first<{ id: string }>();
-    if (existing) {
-      await db.prepare("UPDATE document_collaborators SET role = ?, party_number = ?, invitation_status = 'accepted', approval_status = 'pending', status = 'active', can_view = 1, joined_at = ?, revoked_at = NULL, updated_at = ? WHERE id = ?")
-        .bind(invitation.role, invitation.partyNumber, now, now, existing.id).run();
-    } else {
-      await db.prepare(
-        "INSERT INTO document_collaborators (id, document_id, user_id, invited_by_user_id, role, party_number, permission_set_json, invitation_status, approval_status, can_view, can_download, status, opened_at, confirmed_at, joined_at, revoked_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, NULL, 'accepted', 'pending', 1, 0, 'active', NULL, NULL, ?, NULL, ?, ?)",
-      ).bind(crypto.randomUUID(), invitation.documentId, user.id, invitation.invitedByUserId, invitation.role, invitation.partyNumber, now, now, now).run();
+    const accepted = await acceptDocumentInvitation(db, {
+      invitationId: invitation.id,
+      documentId: invitation.documentId,
+      userId: user.id,
+      now,
+    });
+    if (!accepted) {
+      const current = await loadInvitation(token);
+      return current
+        ? activeError(current) ?? jsonResponse(
+          { error: "Приглашение уже изменено.", code: "INVITATION_CONFLICT" },
+          { status: 409 },
+        )
+        : notFound("Приглашение не найдено.");
     }
-    await db.prepare("UPDATE document_invitations SET target_user_id = ?, accepted_at = ?, updated_at = ? WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL")
-      .bind(user.id, now, now, invitation.id).run();
-    await addActivity(invitation.documentId, user.id, "invitation_accepted", { role: invitation.role, partyNumber: invitation.partyNumber ?? 0 });
     return jsonResponse({ accepted: true, documentId: invitation.documentId });
   } catch (error) {
     return apiError(error);

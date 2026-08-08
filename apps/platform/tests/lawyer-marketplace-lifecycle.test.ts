@@ -1,0 +1,135 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { readFileSync } from "node:fs";
+import {
+  isLawyerMarketplaceProfileComplete,
+  isRestrictedLawyerMarketplaceStatus,
+  marketplaceStatusAfterProfileEdit,
+  mayReceiveLawyerRequests,
+  missingLawyerMarketplaceFields,
+  type LawyerMarketplaceCompletionInput,
+} from "../lib/platform/lawyer-marketplace";
+import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
+import { localizedLawyerProfileStatusNotification } from "../lib/platform/lawyer-profile-notifications";
+
+const completeProfile: LawyerMarketplaceCompletionInput = {
+  displayName: "Юрист JURO",
+  specialties: ["Договоры"],
+  languages: ["ru", "uz"],
+  experienceYears: 5,
+  education: "Ташкентский государственный юридический университет",
+  firmName: "JURO Legal",
+  city: "Ташкент",
+  region: "Ташкент",
+  priceDescription: "По договорённости",
+  consultationFormats: ["чат", "телефон"],
+  availabilityStatus: "available",
+  profilePhotoKey: "lawyer-profiles/user/photo.webp",
+  hasPhone: true,
+};
+
+test("a lawyer profile is reviewable only after every required professional field is present", () => {
+  assert.equal(isLawyerMarketplaceProfileComplete(completeProfile), true);
+  assert.equal(marketplaceStatusAfterProfileEdit(completeProfile), "pending_review");
+
+  const incomplete = { ...completeProfile, profilePhotoKey: null, hasPhone: false };
+  assert.deepEqual(missingLawyerMarketplaceFields(incomplete), ["profilePhoto", "phone"]);
+  assert.equal(isLawyerMarketplaceProfileComplete(incomplete), false);
+  assert.equal(marketplaceStatusAfterProfileEdit(incomplete), "profile_incomplete");
+});
+
+test("only an approved profile may receive a client request", () => {
+  assert.equal(mayReceiveLawyerRequests("profile_incomplete"), false);
+  assert.equal(mayReceiveLawyerRequests("pending_review"), false);
+  assert.equal(mayReceiveLawyerRequests("changes_requested"), false);
+  assert.equal(mayReceiveLawyerRequests("rejected"), false);
+  assert.equal(mayReceiveLawyerRequests("suspended"), false);
+  assert.equal(mayReceiveLawyerRequests("blocked"), false);
+  assert.equal(mayReceiveLawyerRequests("archived"), false);
+  assert.equal(mayReceiveLawyerRequests("public_approved"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("suspended"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("blocked"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("archived"), true);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("pending_review"), false);
+});
+
+test("restricted profiles are locked for edits and excluded from new handoff work", () => {
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  const photoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
+  const handoffRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/route.ts", import.meta.url), "utf8");
+  const lifecycleRoute = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/lifecycle/route.ts", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../drizzle/0110_lawyer_profile_lifecycle_controls.sql", import.meta.url), "utf8");
+  assert.match(profileRoute, /PROFILE_LOCKED/);
+  assert.match(photoRoute, /PROFILE_LOCKED/);
+  assert.match(handoffRoute, /marketplace_status='public_approved'/);
+  assert.match(lifecycleRoute, /staff\.operations\.manage/);
+  assert.match(lifecycleRoute, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(migration, /lawyer_profile_lifecycle_events/);
+  assert.match(migration, /append-only/);
+  assert.match(migration, /lifecycle evidence required/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|DELETE\s+FROM/iu);
+});
+
+test("profile status notifications are localized and preserve only a bounded review reason", () => {
+  const ru = localizedLawyerProfileStatusNotification("ru", "changes_requested", "Уточните формат консультации.");
+  assert.equal(ru.title, "Профиль юриста нужно доработать");
+  assert.match(ru.body, /Уточните формат консультации\./u);
+  const uz = localizedLawyerProfileStatusNotification("uz", "pending_review");
+  assert.equal(uz.title, "Yurist profilingiz tekshiruvga yuborildi");
+  assert.doesNotMatch(uz.body, /Izoh:/u);
+});
+
+test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {
+  const [lawyer] = projectPublicLawyerDirectory([{
+    id: "correction-requested-lawyer",
+    displayName: "Юрист JURO",
+    specialtiesJson: '["Договоры"]',
+    languagesJson: '["ru","uz"]',
+    experienceYears: 5,
+    priceDescription: "По договорённости",
+    availabilityStatus: "available",
+    nextAvailableAt: null,
+    advocateStatus: "not_verified",
+    firmName: null,
+    bio: null,
+    marketplaceStatus: "changes_requested",
+  }], [], []);
+  assert.equal(lawyer.marketplaceStatus, "pending_review");
+  assert.equal(lawyer.canReceiveRequests, false);
+});
+
+test("profile photos remain fail-closed until the malware scanner verifies their checksum", () => {
+  const route = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
+  assert.match(route, /malwareScannerResponseSchema/);
+  assert.match(route, /MALWARE_SCANNER_UNAVAILABLE/);
+  assert.match(route, /scanVerdict !== "clean"/);
+  assert.match(route, /parsed\.data\.sourceSha256 !== checksum/);
+  assert.ok(route.indexOf("const scanVerdict") < route.indexOf("const objectKey"));
+});
+
+test("a completed profile under review is visible but cannot receive a request", () => {
+  const publicPhotoRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/photo/route.ts", import.meta.url), "utf8");
+  const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
+  const publicDirectoryRoute = readFileSync(new URL("../app/api/public/lawyers/route.ts", import.meta.url), "utf8");
+  const publicDetailRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/route.ts", import.meta.url), "utf8");
+  const directoryClient = readFileSync(new URL("../app/_platform/LawyerDirectoryClient.tsx", import.meta.url), "utf8");
+  const detailRoute = readFileSync(new URL("../app/api/platform/lawyers/[lawyerId]/route.ts", import.meta.url), "utf8");
+  const detailClient = readFileSync(new URL("../app/_platform/LawyerProfileClient.tsx", import.meta.url), "utf8");
+  const privatePhotoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
+  const privateProfileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  assert.match(publicPhotoRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(directoryRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(publicDirectoryRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(publicDetailRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.doesNotMatch(publicDirectoryRoute, /phone|user_profiles|moderation_notes/i);
+  assert.match(directoryClient, /Профиль на проверке JURO/);
+  assert.match(directoryClient, /Запись после проверки/);
+  assert.match(detailRoute, /marketplace_status='pending_review' AND status='pending'/);
+  assert.match(detailClient, /consultations\?lawyer=/);
+  assert.match(detailClient, /Запись после проверки/);
+  assert.match(detailClient, /Профиль на проверке JURO/);
+  assert.match(privatePhotoRoute, /export const GET/);
+  assert.match(privatePhotoRoute, /WHERE user_id=\?/);
+  assert.match(privatePhotoRoute, /lawyer_profile_status/);
+  assert.match(privateProfileRoute, /lawyer_profile_status/);
+});

@@ -1,0 +1,108 @@
+.review-version-downloads {
+  max-width: 44rem;
+}
+
+.review-version-export {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .4rem;
+  padding: .55rem;
+  border: 1px solid var(--review-border);
+  border-radius: .65rem;
+  background: #f8f7f2;
+}
+
+.review-version-export > strong {
+  width: 100%;
+  color: var(--review-navy);
+  font-size: .72rem;
+  text-align: end;
+}
+
+.review-version-export > span {
+  display: inline-flex;
+  gap: .25rem;
+}
+
+.review-version-export a,
+.review-version-export button {
+  min-height: 2.75rem;
+  padding: 0 .65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .35rem;
+  border: 1px solid var(--review-border);
+  border-radius: .5rem;
+  background: #fff;
+  color: var(--review-navy);
+  font: inherit;
+  font-size: .68rem;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 120ms var(--ease-out), background-color 160ms ease, border-color 160ms ease;
+}
+
+.review-version-export button.icon {
+  width: 2.75rem;
+  padding: 0;
+}
+
+.review-version-export svg {
+  width: 1rem;
+}
+
+.review-version-export button:disabled {
+  cursor: not-allowed;
+  opacity: .5;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .review-version-export a:hover,
+  .review-version-export button:hover:not(:disabled) {
+    border-color: var(--review-navy);
+    background: #eef2f3;
+  }
+}
+
+.review-version-export a:active,
+.review-version-export button:active:not(:disabled) {
+  transform: scale(.98);
+}
+
+@media (max-width: 760px) {
+  .review-version-export {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+  }
+
+  .review-version-export > strong {
+    text-align: start;
+  }
+
+  .review-version-export > span {
+    display: grid;
+    grid-template-columns: 1fr auto;
+  }
+
+  .review-version-export a,
+  .review-version-export button:not(.icon) {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .review-version-export a,
+  .review-version-export button {
+    transition: background-color 120ms ease, border-color 120ms ease;
+  }
+
+  .review-version-export a:active,
+  .review-version-export button:active:not(:disabled) {
+    transform: none;
+  }
+}

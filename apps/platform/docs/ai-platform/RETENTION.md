@@ -1,0 +1,102 @@
+# JURO retention and account deletion
+
+## Guest AI retention
+
+Guest sessions expire 24 hours after creation. Encrypted questions and answers
+live only in `guest_ai_runs`; deletion of the parent session cascades to its
+runs. The five-minute scheduler releases stale in-flight reservations and
+deletes expired sessions in bounded batches. It checks `sqlite_master` first,
+so a Worker deployed before additive migration `0065` remains inert. Logs contain
+counts only, never tokens, IP digests, content, ciphertext or sources. Local
+tests prove active-session preservation, stale recovery, cascade deletion and
+the pre-migration no-op. Remote scheduler proof remains pending staging apply.
+
+Updated: 2026-08-03
+Status: the account-deletion lifecycle and purge implementation is locally verified and deployed to owner-only protected staging. Schema, bindings, consumers, cron, and fail-closed probe dispatch are verified. A controlled rerun after secret re-entry still rejected the malformed identity keyring before fixture creation; the full synthetic D1/R2 purge remains open pending owner correction. Production is unchanged.
+
+## Policy boundary
+
+The configured policy targets remain:
+
+- guest content: 24 hours;
+- original voice audio: 30 days;
+- technical logs: 90 days;
+- access audit: 3 years;
+- consent history: account lifetime plus required legal retention;
+- cost history: retained for financial accounting;
+- user content: until user deletion, subject to the rules below.
+
+Only the account-deletion path described here is implemented by the current slice. Guest purge, voice purge, general log retention, legal holds, scheduled backup retention, and cross-provider deletion are not claimed as complete.
+
+## User-selected deletion modes
+
+`recoverable_30d` schedules purge 30 days after verified email-OTP confirmation. The user may sign in again and cancel while the request is `scheduled` or pre-purge `blocked`, provided the irreversible boundary has not been crossed.
+
+`immediate` schedules the same protected purge without a recovery window. It cannot be cancelled. Both modes revoke current sessions, devices, and opaque device continuity when confirmed.
+
+The API requires a recent local JURO email session, same-origin CSRF proof, a six-digit account-deletion code, one-time challenge consumption, and a purpose-separated keyed subject hash. It does not accept a platform header as authentication.
+
+## Durable state machine
+
+The implemented states are `scheduled`, `purging`, `blocked`, `cancelled`, `completed`, and retryable `failed` handling where the operation already crossed its irreversible boundary. Legacy `requested` or `reviewing` rows are migrated to `blocked` for explicit review.
+
+The irreversible boundary is persisted before the first R2 or D1 deletion. Before that boundary, a recoverable request may be cancelled. After it, cancellation fails closed and the same request must retry to completion. Workspace sole ownership and an active privileged staff assignment block purge before this boundary and do not touch content. After the operator/user removes the blocker, a fresh authenticated retry creates exactly one new outbox job under concurrent requests.
+
+## Deletion order
+
+1. Acquire a bounded D1 lease for the due request.
+2. Validate the keyed deletion subject and blockers.
+3. Inventory only R2 keys owned by the subject or referenced by subject-owned documents/comparisons.
+4. Persist `purge_irreversible_at` for the lease.
+5. Delete the exact private R2 keys.
+6. Execute the D1 cleanup transaction.
+7. Tombstone the profile and complete append-only purge evidence.
+
+R2 is deleted before D1 because deleting D1 first would destroy the authoritative object inventory. A retryable R2 failure preserves D1 content and releases the lease. A retryable D1 failure keeps the irreversible marker and retries without permitting cancellation.
+
+## Removed, redacted, and retained data
+
+The purge removes owned documents/files, comparisons linked to targeted files, cases, chats, analyses, contacts, sessions/devices, MFA credentials, memberships, and other user-owned operational content covered by the tested SQL plan. Contributions on content owned by another user are redacted rather than deleting that owner's object.
+
+The profile becomes a non-reversible tombstone: direct identifiers and personal fields are cleared, email becomes a deterministic non-routable pseudonym, `lifecycle_status=deleted`, and `deletion_completed_at` is recorded. Database guards prevent mutation, resurrection, or deletion of that tombstone.
+
+Minimum records retained for documented security, consent, access-audit, confirmation/signature, and financial purposes remain referentially stable. The append-only lifecycle chain and purge-evidence row contain keyed subject evidence, counts, policy version, timestamps, and hashes, not deleted text or original object names.
+
+## Retry, cancellation, and idempotency
+
+- cancellation and blocker retry are guarded by the keyed subject;
+- cancellation rejects pending/retrying cleanup outbox rows atomically;
+- blocker retry uses a transient transaction marker so concurrent retries create one outbox row and one lifecycle edge;
+- queue execution is idempotent by request/job identifiers;
+- a completed or cancelled request is terminal;
+- duplicate delivery cannot repeat a completed purge.
+
+## Known boundaries
+
+Migration `0080` and the local Worker candidate connect owner-scoped user-document vectors to account deletion. The purge loads vector IDs from D1, submits bounded Vectorize deletions before deleting D1/R2 content, records mutation evidence when available, and releases the deletion request for retry on failure. No remote index contains tenant vectors at this checkpoint, and this behavior is not claimed in staging until `0080` and the exact Worker are deployed and tested. Provider-side AI deletion, guest cleanup, voice-audio cleanup, legal holds, and production retention automation remain deferred and feature-gated.
+
+## User memory lifecycle — locally verified candidate
+
+An individual memory deletion is immediately hidden from reads and excluded
+from AI context through `status=deleted` and `deleted_at`. The reviewed five-
+minute scheduled runtime now permanently deletes only tombstones whose
+`deleted_at` is at least seven days old. Selection is deterministic and bounded
+to 100 rows per invocation; the final delete repeats the status/time guard so a
+changed row cannot be removed from a stale selection. Cascading foreign keys
+remove its `memory_sources`. Active rows and future tombstones are preserved.
+
+The cleanup checks `sqlite_master` before querying memory tables. An application
+deploy therefore remains inert in an environment where additive migration
+`0062` has not been applied. Scheduled logs contain only eligible/purged counts,
+never ciphertext, plaintext, identifiers or source metadata. Focused service
+and scheduled-runtime tests prove the cutoff, batch bound, cascade, active/future
+preservation, pre-migration no-op and no-content logging. Remote migration,
+scheduled-run and authenticated staging evidence remain open, so this is not
+claimed as active outside the locally verified candidate.
+
+Account closure is different: the real deletion transaction now inventories
+and deletes `user_memory_settings`, `user_memories`, and cascading
+`memory_sources` before the profile tombstone is written. The purge regression
+uses actual memory/source/settings rows and proves all three are absent while
+retained consent/security/audit evidence remains. This local behavior depends
+on additive migration `0062` and is not yet staging evidence.

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { X } from "lucide-react";
 import type { RenderedReceipt } from "../../../lib/document-builder/types";
 
@@ -12,7 +13,7 @@ export function DocumentPreview({ document, mobileOpen = false, onClose, example
         {document.paragraphs.map((paragraph) => paragraph.kind === "spacer"
           ? <div className="dbt-doc-spacer" key={paragraph.id}/>
           : <p id={paragraph.id} className={`dbt-doc-${paragraph.kind}`} key={paragraph.id}>{paragraph.kind === "list" && <span aria-hidden="true">• </span>}{paragraph.text}</p>)}
-        <footer><img src="/juro-mark.png" alt=""/><span>Создано в JURO</span><span>Страница 1 из ~{Math.max(1, Math.ceil(document.plainText.length / 3_500))}</span></footer>
+        <footer><Image src="/juro-mark.png" alt="" width={18} height={18} unoptimized/><span>Создано в JURO</span><span>Страница 1 из ~{Math.max(1, Math.ceil(document.plainText.length / 3_500))}</span></footer>
       </article>
     </div>
   </aside>;

@@ -5,6 +5,7 @@ import { requireR2 } from "../../../../../lib/document-builder/storage/runtime";
 import { loadStoredDocument, requireOwner } from "../../../../../lib/document-builder/permissions";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import { saveDocumentSchema } from "../../../../../lib/document-builder/validation/schema";
+import { createDocumentVersion } from "../../../../../lib/document-builder/document-versions";
 
 export const dynamic = "force-dynamic";
 
@@ -122,6 +123,12 @@ export async function PATCH(request: Request, context: Context): Promise<Respons
     }
     if (body.action === "confirm_agreement") {
       if (access.document.status !== "Готов") return badRequest("Подтвердить можно документ со статусом «Готов».");
+      if (!access.workspaceId) return forbidden();
+      await createDocumentVersion({
+        db, bucket: requireR2(), documentId: id, workspaceId: access.workspaceId,
+        ownerUserId: user.id, revision: access.document.revision, source: "approval",
+        idempotencyKey: `builder-auto-approval-${id}-${access.document.revision}-${user.id}`,
+      });
       await db.prepare("UPDATE documents SET status = 'Согласован', revision = revision + 1, updated_at = ? WHERE id = ?").bind(now, id).run();
       await addActivity(id, user.id, "creator_confirmed");
       return jsonResponse({ status: "Согласован" });
@@ -130,6 +137,12 @@ export async function PATCH(request: Request, context: Context): Promise<Respons
       if (access.document.status !== "Готов" && access.document.status !== "Согласован") {
         return badRequest("Внутренне подтвердить можно готовый или согласованный документ.");
       }
+      if (!access.workspaceId) return forbidden();
+      await createDocumentVersion({
+        db, bucket: requireR2(), documentId: id, workspaceId: access.workspaceId,
+        ownerUserId: user.id, revision: access.document.revision, source: "signature",
+        idempotencyKey: `builder-auto-signature-${id}-${access.document.revision}-${user.id}`,
+      });
       await db.prepare("UPDATE documents SET status = 'Подписан', revision = revision + 1, updated_at = ? WHERE id = ?").bind(now, id).run();
       await addActivity(id, user.id, "internally_confirmed", { documentId: id, confirmedAt: now });
       return jsonResponse({ status: "Подписан", confirmation: { userId: user.id, documentId: id, confirmedAt: now, qualifiedSignature: false } });

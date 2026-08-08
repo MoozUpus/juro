@@ -36,27 +36,43 @@ function paragraphStyle(paragraph: RenderedParagraph): { size: number; lineHeigh
   return { size: 10.5, lineHeight: 14.2, before: 0, after: 5, bold: false, align: "justify", indent: 0 };
 }
 
-function drawJustifiedLine(page: PDFPage, line: string, x: number, y: number, width: number, font: PDFFont, size: number, justify: boolean): void {
+function drawJustifiedLine(page: PDFPage, line: string, x: number, y: number, width: number, font: PDFFont, size: number, justify: boolean, reviewMark?: "deleted" | "inserted"): void {
+  const color = reviewMark === "deleted" ? rgb(0.62, 0.17, 0.13) : reviewMark === "inserted" ? rgb(0.09, 0.4, 0.23) : rgb(0.08, 0.1, 0.12);
+  if (reviewMark) {
+    page.drawRectangle({ x: x - 3, y: y - 2, width: Math.min(width + 6, A4_WIDTH - x - MARGIN_X + 3), height: size + 5, color: reviewMark === "deleted" ? rgb(0.99, 0.91, 0.9) : rgb(0.91, 0.97, 0.93) });
+  }
   const words = line.split(" ");
   if (!justify || words.length < 2) {
-    page.drawText(line, { x, y, size, font, color: rgb(0.08, 0.1, 0.12) });
+    page.drawText(line, { x, y, size, font, color });
+    if (reviewMark === "deleted") page.drawLine({ start: { x, y: y + size * 0.38 }, end: { x: x + font.widthOfTextAtSize(line, size), y: y + size * 0.38 }, thickness: 0.7, color });
+    if (reviewMark === "inserted") page.drawLine({ start: { x, y: y - 1 }, end: { x: x + font.widthOfTextAtSize(line, size), y: y - 1 }, thickness: 0.6, color });
     return;
   }
   const wordsWidth = words.reduce((total, word) => total + font.widthOfTextAtSize(word, size), 0);
   const space = (width - wordsWidth) / (words.length - 1);
   let cursor = x;
   for (const word of words) {
-    page.drawText(word, { x: cursor, y, size, font, color: rgb(0.08, 0.1, 0.12) });
+    page.drawText(word, { x: cursor, y, size, font, color });
     cursor += font.widthOfTextAtSize(word, size) + space;
   }
+  if (reviewMark === "deleted") page.drawLine({ start: { x, y: y + size * 0.38 }, end: { x: x + width, y: y + size * 0.38 }, thickness: 0.7, color });
+  if (reviewMark === "inserted") page.drawLine({ start: { x, y: y - 1 }, end: { x: x + width, y: y - 1 }, thickness: 0.6, color });
 }
 
-function drawFooter(page: PDFPage, index: number, total: number, font: PDFFont, mark: PDFImage): void {
+function drawFooter(
+  page: PDFPage,
+  index: number,
+  total: number,
+  font: PDFFont,
+  mark: PDFImage,
+  footerLabel: string,
+  pageLabel: string,
+): void {
   const y = 22;
   page.drawLine({ start: { x: MARGIN_X, y: y + 17 }, end: { x: A4_WIDTH - MARGIN_X, y: y + 17 }, thickness: 0.4, color: rgb(0.78, 0.72, 0.62) });
   page.drawImage(mark, { x: MARGIN_X, y: y - 1, width: 13, height: 13 });
-  page.drawText("Создано в JURO", { x: MARGIN_X + 18, y: y + 1, size: 7.4, font, color: rgb(0.32, 0.36, 0.4) });
-  const numberText = `Страница ${index + 1} из ${total}`;
+  page.drawText(footerLabel, { x: MARGIN_X + 18, y: y + 1, size: 7.4, font, color: rgb(0.32, 0.36, 0.4) });
+  const numberText = `${pageLabel} ${index + 1} / ${total}`;
   page.drawText(numberText, { x: A4_WIDTH - MARGIN_X - font.widthOfTextAtSize(numberText, 7.4), y: y + 1, size: 7.4, font, color: rgb(0.32, 0.36, 0.4) });
 }
 
@@ -65,15 +81,21 @@ export async function generatePdf(
   regularBytes: ArrayBuffer,
   boldBytes: ArrayBuffer,
   markBytes: ArrayBuffer,
+  options: {
+    title?: string;
+    producer?: string;
+    footerLabel?: string;
+    pageLabel?: string;
+  } = {},
 ): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
   const regular = await pdf.embedFont(regularBytes, { subset: true });
   const bold = await pdf.embedFont(boldBytes, { subset: true });
   const mark = await pdf.embedPng(markBytes);
-  pdf.setTitle("JURO — Расписка в получении денежных средств");
+  pdf.setTitle(options.title || "JURO — Расписка в получении денежных средств");
   pdf.setCreator("JURO");
-  pdf.setProducer("JURO Document Builder");
+  pdf.setProducer(options.producer || "JURO Document Builder");
 
   let page = pdf.addPage([A4_WIDTH, A4_HEIGHT]);
   let y = A4_HEIGHT - TOP;
@@ -94,14 +116,22 @@ export async function generatePdf(
       const lineWidth = font.widthOfTextAtSize(line, style.size);
       const x = style.align === "center" ? (A4_WIDTH - lineWidth) / 2 : MARGIN_X + style.indent;
       const isLast = lineIndex === lines.length - 1;
-      drawJustifiedLine(page, line, x, y - style.lineHeight, availableWidth, font, style.size, style.align === "justify" && !isLast && line.length > 35);
+      drawJustifiedLine(page, line, x, y - style.lineHeight, availableWidth, font, style.size, style.align === "justify" && !isLast && line.length > 35, paragraph.reviewMark);
       y -= style.lineHeight;
     });
     y -= style.after;
   }
 
   const pages = pdf.getPages();
-  pages.forEach((pdfPage, index) => drawFooter(pdfPage, index, pages.length, regular, mark));
+  pages.forEach((pdfPage, index) => drawFooter(
+    pdfPage,
+    index,
+    pages.length,
+    regular,
+    mark,
+    options.footerLabel || "Создано в JURO",
+    options.pageLabel || "Страница",
+  ));
   const bytes = await pdf.save({ useObjectStreams: false });
   if (bytes.byteLength < 1_000 || String.fromCharCode(...bytes.slice(0, 4)) !== "%PDF") {
     throw new Error("Generated PDF is invalid");
