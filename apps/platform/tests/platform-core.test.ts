@@ -405,6 +405,7 @@ test("auth locale links retain the canonical locale URL and query string", async
   const authForm = await readFile(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8");
   assert.match(authForm, /usePathname/);
   assert.match(authForm, /useSearchParams/);
+  assert.match(authForm, /const locale = initialLocale/);
   assert.match(authForm, /pathname\.replace/);
   assert.match(authForm, /searchParams\.toString\(\)/);
   assert.match(authForm, /hrefFor\("ru"\)/);

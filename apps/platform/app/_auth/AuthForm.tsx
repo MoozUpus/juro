@@ -64,7 +64,9 @@ export function AuthForm({
   platformAuthEnabled,
   turnstileSiteKey,
 }: Props) {
-  const [locale] = useState<Locale>(initialLocale);
+  // Locale is route-owned. Keeping it in client state makes a Next soft
+  // navigation render the new /ru or /uz URL with the previous language.
+  const locale = initialLocale;
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [accountType, setAccountType] = useState<AccountType>(initialAccountType);
