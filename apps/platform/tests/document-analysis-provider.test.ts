@@ -8,7 +8,10 @@ import {
   parseDocumentAnalysisResult,
 } from "../lib/document-analysis/schema";
 import { buildDocumentAnalysisProviderInput } from "../lib/document-analysis/input";
-import { documentFallbackEligible } from "../lib/document-analysis/provider";
+import {
+  documentAnalysisProviderMaxAttempts,
+  documentFallbackEligible,
+} from "../lib/document-analysis/provider";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
 const base = {
@@ -218,4 +221,9 @@ test("document analysis fails over from an unavailable Anthropic request but nev
   );
   assert.equal(documentFallbackEligible(new AiUnavailableError("refused", "AI_REFUSED", false)), false);
   assert.equal(documentFallbackEligible(new AiUnavailableError("cancelled", "AI_CANCELLED", false)), false);
+});
+
+test("document analysis gives its fallback a turn after one primary attempt by default", () => {
+  assert.equal(documentAnalysisProviderMaxAttempts(), 1);
+  assert.equal(documentAnalysisProviderMaxAttempts(2), 2);
 });

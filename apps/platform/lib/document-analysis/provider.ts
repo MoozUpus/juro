@@ -28,6 +28,16 @@ export type { DocumentAnalysisProviderRequest } from "./input";
 
 export type DocumentAnalysisProviderResult = AiStructuredResult<DocumentAnalysisResult>;
 
+/**
+ * Document analysis already has a provider-level fallback. Retrying a slow
+ * primary twice before giving that fallback a turn can exhaust the asynchronous
+ * job window while producing no user result. Keep one attempt per provider by
+ * default; controlled probes and future recovery policies may opt into two.
+ */
+export function documentAnalysisProviderMaxAttempts(requested?: 1 | 2): 1 | 2 {
+  return requested ?? 1;
+}
+
 export function documentAnalysisProviderStatus() {
   const env = runtimeEnv();
   const anthropicConfigured = hasAnthropicConfiguration();
@@ -100,7 +110,7 @@ async function runAnthropicDocumentAnalysis(
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
     timeoutMs: options.providerTimeoutMs ?? (input.mode === "expert" ? 90_000 : 60_000),
-    maxAttempts: options.providerMaxAttempts,
+    maxAttempts: documentAnalysisProviderMaxAttempts(options.providerMaxAttempts),
     requestId: input.requestId,
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings),
@@ -130,7 +140,7 @@ async function runOpenAiDocumentAnalysis(
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
     timeoutMs: options.providerTimeoutMs ?? (input.mode === "expert" ? 90_000 : 60_000),
-    maxAttempts: options.providerMaxAttempts,
+    maxAttempts: documentAnalysisProviderMaxAttempts(options.providerMaxAttempts),
     requestId: input.requestId,
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings),
