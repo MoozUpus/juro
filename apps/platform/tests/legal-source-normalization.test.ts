@@ -585,6 +585,8 @@ test("the legal.parse queue handler normalizes a persisted source version", asyn
       ...acquisitionEnv,
       ASYNC_RUNTIME_ENABLED: "true",
       CRON_ENABLED: "false",
+      // This contract covers the explicitly enabled legacy migration path.
+      LEGAL_ADVICE_INGESTION_ENABLED: "true",
       JOB_SCHEMA_VERSION: "1",
       PLATFORM_ANALYTICS: { writeDataPoint() {} },
     } as unknown as PlatformJobEnv;

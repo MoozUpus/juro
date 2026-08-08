@@ -527,6 +527,8 @@ test("the legal.sync queue handler executes the persisted request contract", asy
       ...acquisitionEnv,
       ASYNC_RUNTIME_ENABLED: "true",
       CRON_ENABLED: "false",
+      // This contract covers the explicitly enabled legacy migration path.
+      LEGAL_ADVICE_INGESTION_ENABLED: "true",
       JOB_SCHEMA_VERSION: "1",
       PLATFORM_ANALYTICS: { writeDataPoint() {} },
     } as unknown as PlatformJobEnv;
