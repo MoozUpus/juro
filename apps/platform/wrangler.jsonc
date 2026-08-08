@@ -453,6 +453,10 @@
         {
           "binding": "MALWARE_SCANNER",
           "service": "juro"
+        },
+        {
+          "binding": "ADMIN_CONSOLE",
+          "service": "juro-admin"
         }
       ],
       "r2_buckets": [

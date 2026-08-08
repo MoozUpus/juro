@@ -828,3 +828,29 @@ origin-sensitive redirect and Turnstile contracts use that host. The old
 empty so a manual deploy cannot reclaim the staging host for production.
 Production hostname selection, functional deployment, and Cinematic UI
 activation remain separately owner-approved operations.
+
+## D-164 — production admin requests are isolated without rotating the legacy token
+
+Status: accepted; verified locally, pending staging deployment
+Date: 2026-08-09
+
+`admin.juro.uz` retains its existing public custom-domain attachment on the
+production `juro` Worker to avoid a DNS or custom-domain cutover. The Worker
+forwards that hostname only to the private `juro-admin` service binding. The
+isolated Worker keeps its own host-only session and CSRF cookies, then calls
+back to `juro` over the private `PLATFORM_ADMIN_API` service binding for the
+server-side role, fresh-MFA and audit checks.
+
+Production console traffic uses a new `ADMIN_CONSOLE_TOKEN`. The platform
+accepts that token in addition to the existing `ADMIN_INTERNAL_TOKEN`, so the
+pre-isolation admin path stays a rollback target and no existing secret needs
+to be read or rotated. The new token will be generated directly into the two
+production Workers immediately before the deployment, never committed,
+printed or copied into a client bundle. Staging deliberately keeps its
+existing admin token and calls `https://staging.app.juro.uz`, preserving the
+environment boundary.
+
+The companion encrypted-memory test was corrected to validate the Base64URL
+ciphertext envelope and record-bound decryption. It no longer searches random
+ciphertext for short ASCII fragments, which could occasionally yield a false
+failure without indicating a plaintext leak.

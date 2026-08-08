@@ -43,6 +43,8 @@ type FrameworkEnv = PlatformJobEnv & {
   PAYMENT_SANDBOX_WEBHOOK_SECRET?: string;
   ALLOW_PLATFORM_AUTH_HEADERS?: string;
   ADMIN_INTERNAL_TOKEN?: string;
+  ADMIN_CONSOLE_TOKEN?: string;
+  ADMIN_CONSOLE?: Fetcher;
 };
 
 type SupportedImageOutputFormat =
@@ -86,6 +88,17 @@ const worker = {
     const url = new URL(request.url);
     if (url.hostname === "malware-scanner.internal") {
       return handleMalwareScannerServiceRequest(request, env);
+    }
+    // Keep the existing custom domain on the production platform Worker while
+    // moving the admin UI and its host-only session cookie into the isolated
+    // juro-admin Worker. Internal admin API calls return through the juro
+    // service binding with a non-public hostname, so this cannot recurse.
+    if (
+      env.APP_ENV === "production"
+      && url.hostname.toLowerCase() === "admin.juro.uz"
+      && env.ADMIN_CONSOLE
+    ) {
+      return withSecurityHeaders(await env.ADMIN_CONSOLE.fetch(request), url);
     }
     const configuredStatusHostname = env.STATUS_HOSTNAME?.trim().toLowerCase();
     const isStatusHost = Boolean(configuredStatusHostname && url.hostname.toLowerCase() === configuredStatusHostname);

@@ -121,7 +121,12 @@ test("memory is record-bound encrypted and isolated by user and workspace", asyn
       "SELECT ciphertext,content_sha256 AS hash,workspace_id AS workspaceId,scope_key AS scopeKey FROM user_memories WHERE id=?",
     ).get(scoped.id) as { ciphertext: string; hash: string; workspaceId: string; scopeKey: string };
     assert.notEqual(stored.ciphertext, "Компания пользователя: Synthetic JURO LLC");
-    assert.doesNotMatch(stored.ciphertext, /Synthetic|JURO|LLC/);
+    // AES-GCM ciphertext is Base64URL text. Any short ASCII token can occur in
+    // a random Base64URL encoding, so substring matching here is statistically
+    // flaky and does not prove confidentiality. The assertions below verify the
+    // stored envelope and successful record-bound decryption instead.
+    assert.match(stored.ciphertext, /^[A-Za-z0-9_-]+$/);
+    assert.ok(stored.ciphertext.length > 48);
     assert.match(stored.hash, /^[a-f0-9]{64}$/);
     assert.equal(stored.workspaceId, "workspace-a");
     assert.equal(stored.scopeKey, "workspace:workspace-a");

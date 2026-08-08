@@ -21,6 +21,7 @@ function run(command, args, options = {}) {
 
 const wrangler = resolve(root, "node_modules", "wrangler", "bin", "wrangler.js");
 const requiredSecretNames = new Set([
+  "ADMIN_CONSOLE_TOKEN",
   "ADMIN_INTERNAL_TOKEN",
   "ANTHROPIC_API_KEY",
   "IDENTITY_KEYRING",

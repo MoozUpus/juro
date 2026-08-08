@@ -32,6 +32,10 @@ type AdminInternalEnv = {
   DB?: D1Database;
   APP_ENV?: string;
   ADMIN_INTERNAL_TOKEN?: string;
+  // Production's isolated admin Worker uses a separately provisioned token.
+  // Keep the existing token accepted during the rollout so the pre-isolation
+  // admin path remains a valid rollback target.
+  ADMIN_CONSOLE_TOKEN?: string;
 };
 
 function environment(value: unknown): AdminDomainEnvironment | null {
@@ -75,12 +79,23 @@ async function parseJson(request: Request, maxBytes = 4_096): Promise<unknown | 
 
 async function requireInternal(env: AdminInternalEnv): Promise<{ db: D1Database; environment: AdminDomainEnvironment }> {
   const appEnvironment = environment(env.APP_ENV);
-  if (!env.DB || !appEnvironment || !env.ADMIN_INTERNAL_TOKEN) throw new Error("ADMIN_INTERNAL_UNAVAILABLE");
+  if (!env.DB || !appEnvironment || (!env.ADMIN_INTERNAL_TOKEN && !env.ADMIN_CONSOLE_TOKEN)) {
+    throw new Error("ADMIN_INTERNAL_UNAVAILABLE");
+  }
   return { db: env.DB, environment: appEnvironment };
 }
 
+async function hasInternalToken(request: Request, env: AdminInternalEnv): Promise<boolean> {
+  const provided = request.headers.get(INTERNAL_TOKEN_HEADER);
+  const [legacy, console] = await Promise.all([
+    fixedTimeTokenMatch(provided, env.ADMIN_INTERNAL_TOKEN),
+    fixedTimeTokenMatch(provided, env.ADMIN_CONSOLE_TOKEN),
+  ]);
+  return legacy || console;
+}
+
 async function requirePrincipal(request: Request, env: AdminInternalEnv) {
-  const internal = await fixedTimeTokenMatch(request.headers.get(INTERNAL_TOKEN_HEADER), env.ADMIN_INTERNAL_TOKEN);
+  const internal = await hasInternalToken(request, env);
   if (!internal) return null;
   try {
     const runtime = await requireInternal(env);
@@ -256,7 +271,7 @@ async function moderateReview(request: Request, env: AdminInternalEnv, reviewId:
 }
 
 async function consume(request: Request, env: AdminInternalEnv): Promise<Response> {
-  const internal = await fixedTimeTokenMatch(request.headers.get(INTERNAL_TOKEN_HEADER), env.ADMIN_INTERNAL_TOKEN);
+  const internal = await hasInternalToken(request, env);
   if (!internal) return noStore({ code: "ACCESS_DENIED" }, 403);
   const runtime = await requireInternal(env);
   const payload = consumeSchema.safeParse(await parseJson(request, 1_024));
@@ -276,7 +291,7 @@ async function consume(request: Request, env: AdminInternalEnv): Promise<Respons
 }
 
 async function logout(request: Request, env: AdminInternalEnv): Promise<Response> {
-  const internal = await fixedTimeTokenMatch(request.headers.get(INTERNAL_TOKEN_HEADER), env.ADMIN_INTERNAL_TOKEN);
+  const internal = await hasInternalToken(request, env);
   if (!internal) return noStore({ code: "ACCESS_DENIED" }, 403);
   try {
     const runtime = await requireInternal(env);

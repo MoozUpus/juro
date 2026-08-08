@@ -41,12 +41,27 @@
       ],
       "vars": {
         "APP_ENV": "staging",
-        "PLATFORM_ORIGIN": "https://app.juro.uz"
+        "PLATFORM_ORIGIN": "https://staging.app.juro.uz"
       },
       "services": [
         {
           "binding": "PLATFORM_ADMIN_API",
           "service": "juro-platform-staging"
+        }
+      ]
+    },
+    "production": {
+      "name": "juro-admin",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "production",
+        "PLATFORM_ORIGIN": "https://app.juro.uz"
+      },
+      "services": [
+        {
+          "binding": "PLATFORM_ADMIN_API",
+          "service": "juro"
         }
       ]
     }

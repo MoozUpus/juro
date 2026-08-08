@@ -365,12 +365,15 @@ test("restricted lawyer lifecycle is append-only, blocks work, and restores only
 });
 
 test("admin handoff route requires same-origin write protection and current MFA", async () => {
-  const [route, migration, internal, adminWorker, reviewService] = await Promise.all([
+  const [route, migration, internal, adminWorker, reviewService, platformWorker, platformConfig, adminConfig] = await Promise.all([
     readFile(new URL("../app/api/platform/admin/handoff/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0109_admin_domain_handoff_sessions.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/auth/admin-internal-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../../admin/src/worker.ts", import.meta.url), "utf8"),
     readFile(new URL("../lib/platform/lawyer-review-moderation-service.ts", import.meta.url), "utf8"),
+    readFile(new URL("../worker/index.ts", import.meta.url), "utf8"),
+    readFile(new URL("../wrangler.jsonc", import.meta.url), "utf8"),
+    readFile(new URL("../../admin/wrangler.jsonc", import.meta.url), "utf8"),
   ]);
   assert.match(route, /assertSafeWrite\(request\)/u);
   assert.match(route, /requirePlatformStaffRequest\(request, "staff\.console\.view"/u);
@@ -382,8 +385,10 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(migration, /admin_domain_audit_events_no_(?:update|delete)/u);
   assert.doesNotMatch(migration, /DROP\s+TABLE/iu);
   assert.match(internal, /x-juro-admin-internal-token/u);
+  assert.match(internal, /ADMIN_CONSOLE_TOKEN/u);
   assert.match(internal, /session\/logout/u);
   assert.match(adminWorker, /PLATFORM_ADMIN_API\.fetch/u);
+  assert.match(adminWorker, /platformTokenSecretName/u);
   assert.match(adminWorker, /juro_admin_session/u);
   assert.match(adminWorker, /\/reviews/u);
   assert.match(adminWorker, /changes_requested/u);
@@ -397,4 +402,12 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(reviewService, /LIKELY_PERSONAL_DATA/u);
   assert.match(reviewService, /lawyer_review_moderated/u);
   assert.doesNotMatch(adminWorker, /D1Database|d1_databases/u);
+  assert.match(platformWorker, /url\.hostname\.toLowerCase\(\) === "admin\.juro\.uz"/u);
+  assert.match(platformWorker, /ADMIN_CONSOLE\.fetch\(request\)/u);
+  assert.match(platformConfig, /"binding": "ADMIN_CONSOLE"/u);
+  assert.match(platformConfig, /"service": "juro-admin"/u);
+  assert.match(adminConfig, /"name": "juro-admin"/u);
+  assert.match(adminConfig, /"PLATFORM_ORIGIN": "https:\/\/staging\.app\.juro\.uz"/u);
+  assert.match(adminConfig, /"APP_ENV": "production"/u);
+  assert.match(adminConfig, /"service": "juro"/u);
 });

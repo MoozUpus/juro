@@ -126,9 +126,13 @@ function requiredSecret(env: Env, name: string): string {
   return value;
 }
 
+function platformTokenSecretName(env: Env): "ADMIN_INTERNAL_TOKEN" | "ADMIN_CONSOLE_TOKEN" {
+  return env.APP_ENV === "production" ? "ADMIN_CONSOLE_TOKEN" : "ADMIN_INTERNAL_TOKEN";
+}
+
 async function platform<T>(env: Env, path: string, init: RequestInit & { session?: string } = {}): Promise<PlatformReply<T>> {
   const headers = new Headers(init.headers);
-  headers.set("x-juro-admin-internal-token", requiredSecret(env, "ADMIN_INTERNAL_TOKEN"));
+  headers.set("x-juro-admin-internal-token", requiredSecret(env, platformTokenSecretName(env)));
   if (init.session) headers.set("x-juro-admin-session", init.session);
   const response = await env.PLATFORM_ADMIN_API.fetch(new Request(`https://admin-service.internal${path}`, {
     method: init.method ?? "GET", headers, body: init.body,
