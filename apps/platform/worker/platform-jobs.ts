@@ -187,6 +187,7 @@ type JobErrorCode =
   | "JOB_SCHEMA_VERSION_MISMATCH"
   | "JOB_TRANSIENT_FAILURE"
   | "JOB_VALIDATION_FAILED"
+  | "LEGAL_CORPUS_DORMANT"
   | "LEGAL_SOURCE_SYNC_FAILED"
   | "LEGAL_SOURCE_PARSE_FAILED"
   | "LEGAL_SOURCE_INDEX_FAILED"
@@ -284,6 +285,7 @@ export type PlatformJobEnv = Omit<
   Env,
   | "ASYNC_RUNTIME_ENABLED"
   | "CRON_ENABLED"
+  | "LEGAL_ADVICE_INGESTION_ENABLED"
   | PlatformQueueBinding
 > & QueueBindingEnv & {
   ASYNC_RUNTIME_ENABLED: string;
@@ -734,6 +736,12 @@ async function executeJob(
     }
   }
   if (envelope.kind === "legal.sync") {
+    // Direct Lex/Advice retrieval is the active legal-source path. Legacy
+    // corpus jobs must be terminal when ingestion is disabled, including a
+    // message that was already present in a queue before the mode changed.
+    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+      throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
+    }
     try {
       await executeLegalSourceFetchRequest(env, envelope.subjectId);
       return;
@@ -748,6 +756,9 @@ async function executeJob(
     }
   }
   if (envelope.kind === "legal.parse") {
+    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+      throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
+    }
     try {
       await executeLegalSourceNormalization(env, envelope.subjectId);
       return;
@@ -762,6 +773,9 @@ async function executeJob(
     }
   }
   if (envelope.kind === "legal.index") {
+    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+      throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
+    }
     try {
       await executeLegalSourceIndexing(env, envelope.subjectId);
       return;

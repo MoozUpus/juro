@@ -640,6 +640,36 @@ test("unimplemented v2 handlers reject exactly once and redelivery is deduplicat
   }
 });
 
+test("dormant legacy legal-corpus jobs are terminal and never invoke a corpus handler", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const { env, metrics } = createEnv(d1);
+    const body = envelope("legal.sync", {
+      jobId: "job_legacy_corpus_sync",
+      idempotencyKey: "legacy_corpus_sync_key",
+      subjectId: "legacy_source_request",
+      correlationId: "legacy_corpus_sync",
+    });
+    const item = mockMessage(body, "legacy_corpus_message");
+    await runBatch(
+      env,
+      expectedQueueName("legal.sync", "development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    const row = sqlite.prepare(`
+      SELECT status,error_code FROM job_runs WHERE idempotency_key=?
+    `).get(body.idempotencyKey) as { status: string; error_code: string | null };
+    assert.equal(row.status, "rejected");
+    assert.equal(row.error_code, "LEGAL_CORPUS_DORMANT");
+    assert.equal(metrics.length, 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("idempotency hash conflicts are acknowledged without overwriting the original", async () => {
   const { sqlite, d1 } = createDatabase();
   try {

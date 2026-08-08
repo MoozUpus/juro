@@ -3330,3 +3330,21 @@ authenticated document browser QA must use the owner-protected
 `staging.app.juro.uz` boundary (or another separately verified staging
 hostname). No production deployment, routing change, migration or production
 configuration was made by this cleanup.
+
+## D-162 — direct retrieval keeps dormant corpus queue messages fail-closed
+
+Status: accepted and locally verified
+Date: 2026-08-09
+
+Direct `lex.uz`/`advice.uz` retrieval is the active legal-source path and
+`LEGAL_ADVICE_INGESTION_ENABLED` remains `false` in every environment. A
+legacy `legal.sync`, `legal.parse`, or `legal.index` message can nevertheless
+remain in a Queue after this mode changes. The Worker now records such a
+message as a terminal `LEGAL_CORPUS_DORMANT` rejection before any acquisition,
+normalization, or indexing handler is called.
+
+The guard prevents new corpus writes from stale messages without deleting the
+existing isolated Vectorize bindings or modifying legal-source data. It is
+covered by the Worker queue contract test and passed `test:cloudflare`,
+type-check, lint, and artifact validation locally. It has not yet been
+deployed to staging or production.
