@@ -341,7 +341,7 @@ for (const path of sourceFiles) {
 }
 
 if (requestedEnvironment === "production") {
-  assert.equal(selected.name, "juro", "production must update the Worker attached to app.juro.uz");
+  assert.equal(selected.name, "juro", "production must update the isolated production platform Worker");
   assert.equal(selected.workers_dev, false, "production must not expose a workers.dev endpoint");
   assert.equal(selected.preview_urls, false, "production must not expose version preview URLs");
   assert.deepEqual(selected.routes, [

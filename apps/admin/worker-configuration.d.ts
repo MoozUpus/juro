@@ -3,7 +3,7 @@
 // Runtime types generated with workerd@1.20260801.1 2026-08-06 global_fetch_strictly_public,nodejs_compat
 interface __BaseEnv_Env {
 	APP_ENV: "staging" | "development";
-	PLATFORM_ORIGIN: "https://staging.app.juro.uz" | "http://localhost:3000";
+	PLATFORM_ORIGIN: "https://app.juro.uz" | "http://localhost:3000";
 	PLATFORM_ADMIN_API: Fetcher /* juro-platform-staging */ | Fetcher /* juro-platform-development */;
 }
 declare namespace Cloudflare {
@@ -12,7 +12,7 @@ declare namespace Cloudflare {
 	}
 	interface StagingEnv {
 		APP_ENV: "staging";
-		PLATFORM_ORIGIN: "https://staging.app.juro.uz";
+		PLATFORM_ORIGIN: "https://app.juro.uz";
 		PLATFORM_ADMIN_API: Fetcher /* juro-platform-staging */;
 	}
 	interface Env extends __BaseEnv_Env {}

@@ -1,7 +1,8 @@
 # Current state audit — direct-source transition
 
-Date: 2026-08-07. Scope: local branch `feature/juro-ai-platform`, configured
-staging, and current browser evidence. No production mutation was made.
+Date: 2026-08-09. Scope: local branch `feature/juro-ai-platform`, configured
+staging, and current browser evidence. The owner-designated staging host is
+`https://app.juro.uz`; no production mutation was made.
 
 ## Finding
 
@@ -16,6 +17,11 @@ official search endpoints, exact canonical document URL classification,
 bounded fetches, robots/rate policy checks for documents, structural parsing,
 content hashing, and an allowlisted source card. Migration 0106 persists only
 per-run citation metadata and a bounded excerpt.
+
+The former `staging.app.juro.uz` appears only in historical evidence. Current
+admin staging redirects and origin-sensitive contracts use `app.juro.uz`; the
+legacy production-router config is detached to prevent an accidental hostname
+reclaim while production routing remains unapproved.
 
 ## Module status
 

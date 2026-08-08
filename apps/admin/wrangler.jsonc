@@ -41,7 +41,7 @@
       ],
       "vars": {
         "APP_ENV": "staging",
-        "PLATFORM_ORIGIN": "https://staging.app.juro.uz"
+        "PLATFORM_ORIGIN": "https://app.juro.uz"
       },
       "services": [
         {

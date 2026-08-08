@@ -811,3 +811,20 @@ Cloudflare never exposes existing secret values, therefore the final release is
 correctly refused until independently configured production bindings exist for
 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` and `TURNSTILE_SECRET_KEY`. This avoids a
 public deployment that would make AI or anti-abuse controls fail closed.
+
+## D-163 — staging now owns the app hostname; the legacy production router stays detached
+
+Status: accepted and source-guarded
+Date: 2026-08-09
+
+The owner designated `https://app.juro.uz` as the current staging entrypoint.
+The staging Worker keeps its isolated `juro-staging` D1, staging R2 buckets,
+queues, analytics dataset and Vectorize bindings; this source change neither
+changes a Cloudflare route nor attaches a production Worker to that hostname.
+
+The staging admin Worker now returns to `https://app.juro.uz`, and the
+origin-sensitive redirect and Turnstile contracts use that host. The old
+`wrangler.app-production-router.jsonc` custom-domain route is intentionally
+empty so a manual deploy cannot reclaim the staging host for production.
+Production hostname selection, functional deployment, and Cinematic UI
+activation remain separately owner-approved operations.

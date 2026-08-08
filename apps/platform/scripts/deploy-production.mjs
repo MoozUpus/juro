@@ -48,6 +48,6 @@ if (
   || serializedConfig.includes("juro-staging")
   || serializedConfig.includes("staging-")
 ) {
-  throw new Error("Refusing deployment: generated artifact is not an isolated production configuration for app.juro.uz.");
+  throw new Error("Refusing deployment: generated artifact is not an isolated production platform configuration.");
 }
 await run(process.execPath, [wrangler, "deploy", "--config", configPath, ...arguments_]);

@@ -1,8 +1,12 @@
-# Route inventory — 2026-08-07
+# Route inventory — 2026-08-09
 
 This is a security-oriented inventory of the current authenticated platform
 and public website routes. It records what exists, rather than treating a
 desirable URL as implemented.
+
+`https://app.juro.uz` is the owner-designated staging entrypoint. The former
+`staging.app.juro.uz` URLs in historical evidence are not current routes. This
+does not authorize a production hostname or traffic change.
 
 | Area | Canonical route | Access boundary | Status |
 |---|---|---|---|
