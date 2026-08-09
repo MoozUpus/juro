@@ -1,0 +1,106 @@
+.logo.logo {
+  color: inherit;
+  gap: .72rem;
+  width: auto;
+}
+
+.markFrame {
+  display: block;
+  height: 44px;
+  overflow: hidden;
+  position: relative;
+  width: 44px;
+}
+
+.mark.mark {
+  height: auto;
+  max-width: none;
+  transform: translate(-7px, -1px);
+  width: 58px;
+}
+
+.wordmark {
+  font-family: var(--font-display);
+  font-size: 1.38rem;
+  font-weight: 600;
+  letter-spacing: .18em;
+  line-height: 1;
+}
+
+.mobileBrand {
+  align-items: center;
+  display: flex;
+  gap: .58rem;
+}
+
+.mobileMarkFrame {
+  display: block;
+  height: 39px;
+  overflow: hidden;
+  width: 39px;
+}
+
+.mobileMark.mobileMark {
+  height: auto;
+  max-width: none;
+  transform: translate(-6px, -1px);
+  width: 52px;
+}
+
+.mobileBrand span {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 650;
+  letter-spacing: .16em;
+}
+
+.footerLogo {
+  align-items: center;
+  color: #fff;
+  display: inline-flex;
+  gap: .72rem;
+  text-decoration: none;
+}
+
+.footerMarkFrame {
+  display: block;
+  height: 50px;
+  overflow: hidden;
+  width: 50px;
+}
+
+.footerMark.footerMark {
+  height: auto;
+  max-width: none;
+  transform: translate(-8px, -1px);
+  width: 66px;
+}
+
+.footerLogo span {
+  font-family: var(--font-display);
+  font-size: 1.32rem;
+  font-weight: 600;
+  letter-spacing: .2em;
+}
+
+@media (max-width: 620px) {
+  .logo.logo {
+    gap: .45rem;
+    width: auto;
+  }
+
+  .markFrame {
+    height: 40px;
+    width: 40px;
+  }
+
+  .mark.mark {
+    transform: translate(-6px, -1px);
+    width: 53px;
+  }
+
+  .wordmark {
+    font-size: 1.05rem;
+    letter-spacing: .14em;
+  }
+}

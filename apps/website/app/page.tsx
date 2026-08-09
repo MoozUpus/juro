@@ -1,21 +1,36 @@
 import type { Metadata } from "next";
-import { LandingTestPage } from "./components/landing-test/LandingTestPage";
+import { CinematicLandingPage } from "./components/cinematic/CinematicLandingPage";
+import { ru } from "../content/ru";
 
 export const metadata: Metadata = {
-  title: "JURO — Юрист в кармане для людей и бизнеса",
-  description: "AI-юрист, создание и проверка документов, планы действий и консультации живых юристов в одном защищённом пространстве.",
-  alternates: { canonical: "https://juro.uz/" },
-  openGraph: {
-    title: "JURO — Юрист в кармане",
-    description: "От юридического вопроса до документа, плана действий и консультации.",
-    url: "https://juro.uz/",
-    siteName: "JURO",
-    type: "website",
-    images: [{ url: "/juro-og.png", width: 1681, height: 909, alt: "JURO: от юридического вопроса к документу и плану действий" }],
+  title: ru.meta.title,
+  description: ru.meta.description,
+  alternates: {
+    canonical: "https://juro.uz/ru",
+    languages: {
+      ru: "https://juro.uz/ru",
+      uz: "https://juro.uz/uz",
+      "x-default": "https://juro.uz/ru",
+    },
   },
-  twitter: { card: "summary_large_image", title: "JURO — Юрист в кармане", description: "От юридического вопроса до документа, плана действий и консультации.", images: ["/juro-og.png"] },
+  openGraph: {
+    title: ru.meta.title,
+    description: ru.meta.description,
+    url: "https://juro.uz/ru",
+    siteName: "JURO",
+    locale: "ru_RU",
+    alternateLocale: ["uz_UZ"],
+    type: "website",
+    images: [{ url: "/juro-og.png", width: 1681, height: 909, alt: "JURO — AI и живой юрист в одном пространстве" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: ru.meta.title,
+    description: ru.meta.description,
+    images: ["/juro-og.png"],
+  },
 };
 
 export default function Home() {
-  return <LandingTestPage />;
+  return <CinematicLandingPage language="ru" />;
 }

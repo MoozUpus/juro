@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { PublicLawyer } from "./catalog";
 import { publicPhotoUrl } from "./catalog";
@@ -11,7 +12,7 @@ export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: "
   const photo = publicPhotoUrl(lawyer.profilePhotoUrl);
   return <article className={styles.card} data-pending={pending || undefined}>
     <div className={styles.cardHead}>
-      {photo ? <img className={styles.photo} src={photo} alt="" width={64} height={64} /> : <span className={styles.initials} aria-hidden="true">{lawyer.displayName.slice(0, 1)}</span>}
+      {photo ? <Image className={styles.photo} src={photo} alt="" width={64} height={64} unoptimized /> : <span className={styles.initials} aria-hidden="true">{lawyer.displayName.slice(0, 1)}</span>}
       <div><h2>{lawyer.displayName}</h2><p>{lawyer.firmName || (ru ? "Независимый специалист" : "Mustaqil mutaxassis")}</p></div>
     </div>
     <div className={styles.badges}>
