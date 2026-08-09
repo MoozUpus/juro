@@ -1,2 +1,13 @@
 import type { MetadataRoute } from "next";
-export default function robots(): MetadataRoute.Robots { return { rules: { userAgent: "*", allow: "/" }, sitemap: "https://juro.uz/sitemap.xml", host: "https://juro.uz" }; }
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: {
+      userAgent: "*",
+      allow: "/",
+      disallow: ["/api/", "/landing-test", "/lending-test"],
+    },
+    sitemap: "https://juro.uz/sitemap.xml",
+    host: "https://juro.uz",
+  };
+}
