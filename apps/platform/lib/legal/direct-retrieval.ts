@@ -283,11 +283,21 @@ function isRelevantDirectSource(source: LegalSourceContext, question: string): b
   const terms = directQueryTerms(question);
   if (terms.length === 0) return false;
   // Search-result pages can contain unrelated navigation and recommendation
-  // text. Relevance therefore relies on the parsed document title only, which
-  // is a deliberately conservative source-card criterion.
-  const searchable = source.actTitle.toLocaleLowerCase();
-  const matched = terms.filter((term) => searchable.includes(queryStem(term)));
-  return terms.length === 1 ? matched.length === 1 : matched.length >= 2;
+  // text, so a matching official act title remains mandatory. A foundational
+  // act, however, often has a broad title (for example, the Labour Code) while
+  // the user's narrower terms occur in the verified excerpt. Requiring a title
+  // match plus a second, independent match in the parsed official text keeps
+  // that citation path conservative without silently discarding that act.
+  const title = source.actTitle.toLocaleLowerCase();
+  const excerpt = source.excerpt?.toLocaleLowerCase() ?? "";
+  const titleMatches = terms.filter((term) => title.includes(queryStem(term)));
+  if (titleMatches.length === 0) return false;
+  if (terms.length === 1) return true;
+  const matchedTerms = new Set([
+    ...titleMatches,
+    ...terms.filter((term) => excerpt.includes(queryStem(term))),
+  ]);
+  return matchedTerms.size >= 2;
 }
 
 function officialDisplayTitle(value: string): string {
