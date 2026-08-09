@@ -7,18 +7,17 @@ product journey has passed a fresh production mutation test.
 
 ## Release identity
 
-- Runtime source commit: `45d9ab59317b60eb2b1dac7c1c72e1529b6ac077`.
-- Annotated release tag: `juro-production-2026-08-09.2` (published to origin,
+- Runtime source commit: `f55724e1dd8283557d33e0a91b665fc69940dbbf`.
+- Annotated release tag: `juro-production-2026-08-09.3` (published to origin,
   resolving to the runtime source commit above).
-- GitHub Actions run: `31286771652`; platform and website validation jobs
+- GitHub Actions run: `31288999276`; platform and website validation jobs
   succeeded for the runtime commit.
 - Production Worker: `juro`.
-- Active production deployment: `7b28b045-1706-47a1-b47f-a0f9dc046e50`.
-- Active production version: `254eb8d4-2b05-40a6-b1c4-f1c8d50d2a2f` at
+- Active production deployment: `900800ec-938e-4b46-8254-574577babdaa`.
+- Active production version: `ff1e4105-a8a7-4ccd-b632-a9d69ad7cb38` at
   100% traffic.
-- Upload version from the same release: `dc629417-aa97-4906-921b-b153b4ad628e`.
-- Previous known functional rollback version:
-  `8c16ada9-5aeb-4b82-8175-58556ba5fb52`.
+- Previous verified production-bound rollback version:
+  `dc629417-aa97-4906-921b-b153b4ad628e`.
 - The deployed runtime includes the Cinematic Legal Intelligence application
   shell. AI-avatar work remains intentionally excluded.
 
@@ -47,8 +46,8 @@ applicable. No value was copied, logged, or committed.
 The staging release was separately redeployed from the same source commit:
 
 - Worker: `juro-platform-staging`.
-- Deployment: `acf4043f-d556-499c-b04a-855279012010`.
-- Version: `b7b98fca-e0e9-4e20-8802-93007a5c3d1e` at 100% traffic.
+- Deployment: `09590775-4625-4947-80a6-43ccfbdd8658`.
+- Version: `8dee8fe6-00f2-4006-988e-03fffd0db282` at 100% traffic.
 - D1/R2/Queues/Vectorize remain `juro-staging`, `juro-staging-*`, and
   `staging-*`. No staging database, file, session, token, or secret was copied
   into production.
@@ -58,6 +57,25 @@ labelled payment sandbox, while production has
 `PAYMENT_SANDBOX_ENABLED=false` and
 `PAYMENT_PRODUCTION_APPROVED=false`. Direct legal retrieval is enabled in both;
 synthetic probes and legacy ingestion remain disabled.
+
+## Binding-drift incident and permanent recovery
+
+The prior production upload correctly created version
+`dc629417-aa97-4906-921b-b153b4ad628e` with production bindings. Wrangler then
+created a separate automatic Container rollout version whose bindings were
+derived from the top-level development environment. That follow-up version
+temporarily became active and caused public production APIs to read development
+resources.
+
+Recovery first restored 100% traffic to the verified production-bound upload.
+Release `2026-08-09.3` then changed the production deployment entry point to use
+`--containers-rollout none`; the pinned scanner Container is managed
+independently. Contract tests now require this guard and require the
+`app.juro.uz` router service binding to target the production `juro` Worker.
+Version `ff1e4105-a8a7-4ccd-b632-a9d69ad7cb38` was re-inspected after deployment:
+`APP_ENV=production`, D1 `4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`, production R2,
+all `production-*` queues, and all `production-*` Vectorize indexes were present.
+No later automatic Container deployment replaced it.
 
 ## Database and backup point
 
@@ -102,8 +120,13 @@ Unauthenticated checks on 2026-08-09 produced:
 
 | URL | Result |
 | --- | --- |
-| `https://app.juro.uz/` | `200` after redirect to `/uz/auth/login` |
-| `https://app.juro.uz/ru/individual/document-builder` | `200` after the expected localized login redirect with `returnTo` |
+| `https://app.juro.uz/api/status` | `200`, operational status JSON |
+| `https://app.juro.uz/api/public/lawyers?locale=ru` | `200`, public projection only |
+| `https://app.juro.uz/api/platform/cases` | `401`, private session boundary |
+| `https://app.juro.uz/api/platform/admin/jobs` | `401 LOCAL_SESSION_REQUIRED`; the former unauthenticated `500` is fixed |
+| `https://app.juro.uz/ru/auth/login` | `200` |
+| `https://app.juro.uz/ru/individual/document-builder` | `307` to the localized login route with the original `returnTo` and `private, no-store` |
+| `https://app.juro.uz/ru/individual/dashboard` | `307` to the localized login route with the original `returnTo` and `private, no-store` |
 | `https://admin.juro.uz/` | `200` after redirect to the admin-host login route |
 | `https://juro.uz/ru/lawyers` | `200` without redirect |
 | `https://staging.app.juro.uz/` | Cloudflare Access login, confirming the staging access boundary remains active |
@@ -146,7 +169,7 @@ production smoke and clean it up with audit evidence.
 ## Rollback
 
 For an application regression, restore Worker traffic to
-`8c16ada9-5aeb-4b82-8175-58556ba5fb52` first and disable the affected
+`dc629417-aa97-4906-921b-b153b4ad628e` first and disable the affected
 server-side feature flag or queue producer/consumer. The migrations are
 additive and may remain in place when the prior Worker can ignore them. Restore
 D1 only for demonstrated data corruption, using the verified private backup
