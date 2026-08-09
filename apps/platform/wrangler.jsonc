@@ -375,6 +375,11 @@
       "preview_urls": false,
       "routes": [
         {
+          "pattern": "app.juro.uz",
+          "zone_name": "juro.uz",
+          "custom_domain": true
+        },
+        {
           "pattern": "admin.juro.uz",
           "zone_name": "juro.uz",
           "custom_domain": true

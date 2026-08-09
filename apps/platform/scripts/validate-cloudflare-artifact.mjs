@@ -346,11 +346,16 @@ if (requestedEnvironment === "production") {
   assert.equal(selected.preview_urls, false, "production must not expose version preview URLs");
   assert.deepEqual(selected.routes, [
     {
+      pattern: "app.juro.uz",
+      zone_name: "juro.uz",
+      custom_domain: true,
+    },
+    {
       pattern: "admin.juro.uz",
       zone_name: "juro.uz",
       custom_domain: true,
     },
-  ], "production must keep admin.juro.uz attached directly to Worker juro");
+  ], "production must keep app.juro.uz and admin.juro.uz attached directly to Worker juro");
   assert.equal(artifact.workers_dev, false, "production artifact must disable workers.dev exposure");
   assert.equal(artifact.preview_urls, false, "production artifact must disable version preview URLs");
   assert.deepEqual(
