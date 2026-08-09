@@ -1,5 +1,10 @@
 # JURO platform — completion matrix
 
+> **Historical pre-cutover matrix.** See
+> [`PRODUCTION-CUTOVER-2026-08-09.md`](./PRODUCTION-CUTOVER-2026-08-09.md) for
+> the exact deployed release, production/staging resource boundary,
+> backup/restore evidence and remaining authenticated E2E gates.
+
 Updated: 2026-08-09  
 Scope: current `feature/juro-ai-platform`, protected `staging.app.juro.uz`, and read-only production inventory. A passing unit test or applied migration is not treated as authenticated-flow evidence.
 

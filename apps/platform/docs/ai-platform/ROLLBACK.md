@@ -1,5 +1,12 @@
 # JURO rollback plan
 
+> **Production update — 2026-08-09.** The staging-only authorization text below
+> is historical. The current production version, verified D1 restore point,
+> environment inventory, rollback version and stop conditions are recorded in
+> [`PRODUCTION-CUTOVER-2026-08-09.md`](./PRODUCTION-CUTOVER-2026-08-09.md).
+> Application rollback is authorized by the owner's production instruction;
+> D1 restore remains reserved for demonstrated corruption.
+
 Updated: 2026-07-30
 Scope: protected staging; production execution is not authorized.
 

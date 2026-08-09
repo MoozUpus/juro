@@ -1,5 +1,11 @@
 # Phase 10 production readiness
 
+> **Superseded on 2026-08-09.** Production was subsequently deployed under the
+> owner's two explicit approvals. Use
+> [`PRODUCTION-CUTOVER-2026-08-09.md`](./PRODUCTION-CUTOVER-2026-08-09.md) as
+> the authoritative release record. The historical notes below are retained as
+> pre-cutover evidence only.
+
 Updated: 2026-08-06
 Status: not production-ready; no production approval requested.
 
