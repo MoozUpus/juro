@@ -42,4 +42,8 @@
 .platform-shell.is-collapsed .platform-nav-section{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 @media(max-width:800px){.platform-shell.is-collapsed .platform-nav-section{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal}}
 
+.platform-topbar button,.platform-topbar a,.platform-menu{min-width:44px;height:44px}
+.platform-sidebar nav a{min-height:44px}
+@media(max-width:800px){.platform-brand button{width:44px;height:44px}}
+
 @media(prefers-reduced-transparency:reduce){.platform-topbar{background:var(--p-cream);backdrop-filter:none}}

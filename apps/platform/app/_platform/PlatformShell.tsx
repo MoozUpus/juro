@@ -61,6 +61,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   const router = useRouter();
   const searchParams = useSearchParams();
   const [open, setOpen] = useState(false);
+  const [mobile, setMobile] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
@@ -78,6 +79,13 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   ]);
   useEffect(() => {
     setCollapsed(localStorage.getItem("juro-sidebar-collapsed") === "1");
+  }, []);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 800px)");
+    const sync = () => setMobile(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
   }, []);
   useEffect(() => {
     document.documentElement.lang = locale;
@@ -125,6 +133,10 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
     setCollapsed(next);
     localStorage.setItem("juro-sidebar-collapsed", next ? "1" : "0");
   };
+  const closeMobileMenu = () => {
+    setOpen(false);
+    window.requestAnimationFrame(() => openButtonRef.current?.focus());
+  };
   const switchWorkspace = async (workspaceId: string) => {
     if (!workspaceId || workspaceId === activeWorkspaceId || switchingWorkspace) return;
     setSwitchingWorkspace(true);
@@ -149,8 +161,8 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   };
   return <PlatformRouteProvider basePath={base}><div className={`platform-shell ${collapsed ? "is-collapsed" : ""}`}>
     <a className="platform-skip-link" href="#main-content">{locale === "ru" ? "Перейти к содержанию" : "Asosiy mazmunga o‘tish"}</a>
-    <aside ref={sidebarRef} id="platform-navigation" className={`platform-sidebar ${open ? "open" : ""}`} aria-label={locale === "ru" ? "Основная навигация" : "Asosiy navigatsiya"}>
-      <div className="platform-brand"><Image src="/juro-logo-light.png" alt="JURO" width={236} height={120} priority unoptimized/><button className="platform-mobile-close" ref={closeButtonRef} onClick={()=>setOpen(false)} aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}><X/></button></div>
+    <aside ref={sidebarRef} id="platform-navigation" className={`platform-sidebar ${open ? "open" : ""}`} aria-label={locale === "ru" ? "Основная навигация" : "Asosiy navigatsiya"} aria-hidden={mobile && !open ? true : undefined} inert={mobile && !open ? true : undefined}>
+      <div className="platform-brand"><Image src="/juro-logo-light.png" alt="JURO" width={236} height={120} priority unoptimized/><button type="button" className="platform-mobile-close" ref={closeButtonRef} onClick={closeMobileMenu} aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}><X/></button></div>
       <div className={`platform-account ${switchingWorkspace ? "switching" : ""}`}>
         <span>{business ? <BriefcaseBusiness/> : <UserRound/>}</span>
         <div>
@@ -191,7 +203,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
         {collapsed ? <PanelLeftOpen/> : <PanelLeftClose/>}<span>{locale === "ru" ? "Свернуть" : "Yig‘ish"}</span>
       </button>
     </aside>
-    {open && <button className="platform-backdrop" aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"} onClick={()=>setOpen(false)}/>}
+    {open && <button type="button" className="platform-backdrop" aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"} onClick={closeMobileMenu}/>}
     <div className="platform-main"><header className="platform-topbar"><div><small>{locale === "ru" ? "JURO · защищённое пространство" : "JURO · himoyalangan makon"}</small><strong>{userName}</strong></div><div><GlobalSearch locale={locale} accountType={accountType}/><button onClick={switchLanguage} aria-label={locale === "ru" ? "Переключить на узбекский" : "Rus tiliga o‘tish"}><Languages/>{locale.toUpperCase()}</button><Link href={`${base}/profile`} aria-label={locale === "ru" ? "Профиль" : "Profil"}><UserRound/></Link><LogoutButton locale={locale} label={locale === "ru" ? "Выйти" : "Chiqish"}/></div></header><main className="platform-content" id="main-content">{children}</main>
       <nav className="platform-mobile-nav" aria-label={locale === "ru" ? "Мобильная навигация" : "Mobil navigatsiya"}>
         {[
