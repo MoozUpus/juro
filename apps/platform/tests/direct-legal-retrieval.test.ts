@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { directSourceCards, retrieveDirectLegalSources } from "../lib/legal/direct-retrieval";
+import {
+  DIRECT_RETRIEVAL_BUDGET_MS,
+  directSourceCards,
+  retrieveDirectLegalSources,
+} from "../lib/legal/direct-retrieval";
 
 type Call = { url: string; init: RequestInit | undefined };
 
@@ -79,9 +83,38 @@ test("direct retrieval narrows a natural-language registration question before s
     },
   );
 
-  assert.equal(new URL(calls[0]!.url).searchParams.get("searchtitle"), "регистрации ооо");
+  assert.equal(new URL(calls[0]!.url).searchParams.get("searchtitle"), "регистрации");
   assert.equal(result.sourceValidationStatus, "validated");
   assert.deepEqual(result.sources.map((source) => source.officialUrl), ["https://lex.uz/ru/docs/42"]);
+});
+
+test("one-source mode leaves enough compliant time for a Lex source and stops before another provider", async () => {
+  const calls: Call[] = [];
+  const responses = [
+    responseHtml('<a href="/ru/docs/42">Lex result</a>'),
+    new Response("User-agent: *\nCrawl-delay: 20\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Трудовой договор", "Статья 12. Условия")),
+  ];
+  const requestedDelays: number[] = [];
+  const result = await retrieveDirectLegalSources("трудовой договор", "ru", {
+    limit: 1,
+    fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return responses.shift() ?? new Response("unexpected", { status: 503 });
+    }) as typeof fetch,
+    now: () => new Date("2026-08-09T12:00:00.000Z"),
+    wait: async (delayMs) => { requestedDelays.push(delayMs); },
+  });
+
+  assert.equal(DIRECT_RETRIEVAL_BUDGET_MS >= 45_000, true);
+  assert.equal(result.sourceValidationStatus, "validated");
+  assert.equal(result.sources.length, 1);
+  assert.deepEqual(requestedDelays, [20_000]);
+  assert.deepEqual(calls.map((item) => item.url), [
+    "https://lex.uz/ru/search/all?searchtitle=%D1%82%D1%80%D1%83%D0%B4%D0%BE%D0%B2%D0%BE%D0%B9+%D0%B4%D0%BE%D0%B3%D0%BE%D0%B2%D0%BE%D1%80",
+    "https://lex.uz/robots.txt",
+    "https://lex.uz/ru/docs/42",
+  ]);
 });
 
 test("direct retrieval supports the official UZ and oz paths without relaxing the allowlist", async () => {
