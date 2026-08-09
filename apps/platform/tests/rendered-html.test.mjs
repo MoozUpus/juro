@@ -680,6 +680,26 @@ test("account deletion requires CSRF and a recent local JURO session", async () 
   assert.match(await platformOnly.text(), /LOCAL_SESSION_REQUIRED/);
 });
 
+test("admin handoff rejects missing CSRF proof without an empty 500", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(new Request(
+    "http://localhost/api/platform/admin/handoff",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ locale: "ru" }),
+    },
+  ), runtime, context);
+
+  assert.equal(response.status, 403);
+  assert.match(response.headers.get("cache-control") ?? "", /private, no-store/u);
+  assert.equal(response.headers.get("pragma"), "no-cache");
+  assert.deepEqual(await response.json(), {
+    code: "REQUEST_REJECTED",
+    error: "Запрос отклонён проверкой безопасности.",
+  });
+});
+
 test("serves app-specific legal pages in both languages with noindex", async () => {
   const worker = await createWorker();
   for (const route of ["/legal/terms?lang=ru", "/legal/privacy?lang=uz", "/legal/cookies?lang=ru", "/legal/ai-rules?lang=uz", "/legal/personal-data?lang=ru"]) {

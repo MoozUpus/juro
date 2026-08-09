@@ -1,6 +1,7 @@
 import {
   requireD1,
 } from "../document-builder/storage/runtime";
+import { ApiAuthError } from "./safe-write";
 import {
   localSessionForRequest,
   mfaErrorResponse,
@@ -52,6 +53,29 @@ export function withPlatformStaffErrors<TArgs extends [Request, ...unknown[]]>(
     } catch (error) {
       const mfa = mfaErrorResponse(error, staffRequestLocale(args[0]));
       if (mfa) return mfa;
+      if (error instanceof ApiAuthError) {
+        const ru = staffRequestLocale(args[0]) === "ru";
+        const rejected = error.status === 403;
+        return Response.json(
+          {
+            code: rejected ? "REQUEST_REJECTED" : "UNAUTHORIZED",
+            error: rejected
+              ? (ru
+                ? "Запрос отклонён проверкой безопасности."
+                : "So‘rov xavfsizlik tekshiruvi tomonidan rad etildi.")
+              : (ru
+                ? "Для этого действия необходимо войти в JURO."
+                : "Bu amal uchun JURO hisobiga kiring."),
+          },
+          {
+            status: rejected ? 403 : 401,
+            headers: {
+              "cache-control": "private, no-store",
+              pragma: "no-cache",
+            },
+          },
+        );
+      }
       if (error instanceof PlatformStaffAccessError) {
         return Response.json(
           { code: "PLATFORM_STAFF_ACCESS_DENIED" },
