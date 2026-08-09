@@ -136,6 +136,7 @@ export class AiQualityReviewError extends Error {
     | "AI_QUALITY_REVIEW_INVALID"
     | "AI_QUALITY_REVIEW_NOT_FOUND"
     | "AI_QUALITY_REVIEW_STALE"
+    | "AI_QUALITY_REVIEW_ACCESS_DENIED"
     | "AI_QUALITY_REVIEW_ACCESS_INTEGRITY_FAILED"
     | "AI_QUALITY_REVIEW_ACCESS_WRITE_FAILED") {
     super(code);
@@ -407,6 +408,9 @@ async function appendEvent(input: {
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
+      if (message.includes("AI_QUALITY_REVIEW_ACCESS_DENIED")) {
+        throw new AiQualityReviewError("AI_QUALITY_REVIEW_ACCESS_DENIED");
+      }
       if (message.includes("AI_QUALITY_REVIEW_STALE") || message.includes("version_uidx")) {
         throw new AiQualityReviewError("AI_QUALITY_REVIEW_STALE");
       }

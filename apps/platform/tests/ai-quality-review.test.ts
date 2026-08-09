@@ -178,7 +178,7 @@ test("0087 D1 guards reject forged roles and corrupted history fails closed", as
   try {
     await assert.rejects(
       executeAiQualityReview({ db: forged.d1, staff: staff("support"), now: new Date(NOW), request: { action: "query", filters: { reviewStatus: "pending", limit: 10 } } }),
-      (error: unknown) => error instanceof AiQualityReviewError && error.code === "AI_QUALITY_REVIEW_ACCESS_WRITE_FAILED",
+      (error: unknown) => error instanceof AiQualityReviewError && error.code === "AI_QUALITY_REVIEW_ACCESS_DENIED",
     );
     assert.equal((forged.sqlite.prepare("SELECT count(*) AS count FROM ai_quality_review_events").get() as { count: number }).count, 0);
   } finally { forged.sqlite.close(); }
@@ -203,6 +203,7 @@ test("AI quality request and route boundaries are strict, POST-only and fresh-MF
   const route = source("app/api/platform/admin/ai-quality/route.ts");
   const page = source("app/[locale]/admin/ai-quality/page.tsx");
   const client = source("app/_staff/AiQualityConsole.tsx");
+  const styles = source("app/_staff/legal-source-reviews.css");
   assert.match(route, /assertSafeWrite\(request\)/);
   assert.match(route, /ai\.quality\.review/);
   assert.match(route, /freshMfaWithinMs:\s*15 \* 60 \* 1_000/);
@@ -213,5 +214,8 @@ test("AI quality request and route boundaries are strict, POST-only and fresh-MF
   assert.match(client, /x-juro-csrf/);
   assert.match(client, /aria-live="polite"/);
   assert.match(client, /staff-skip/);
+  assert.match(client, /AI_QUALITY_REVIEW_ACCESS_DENIED/);
+  assert.match(client, /AI_QUALITY_REVIEW_ACCESS_WRITE_FAILED/);
+  assert.match(styles, /\.staff-console,\.staff-console \*,/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML/);
 });

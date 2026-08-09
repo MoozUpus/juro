@@ -31,6 +31,7 @@ async function postAiQuality(request: Request): Promise<Response> {
     if (!(error instanceof AiQualityReviewError)) throw error;
     if (error.code === "AI_QUALITY_REVIEW_INVALID") return json({ code: error.code }, 400);
     if (error.code === "AI_QUALITY_REVIEW_NOT_FOUND") return json({ code: error.code }, 404);
+    if (error.code === "AI_QUALITY_REVIEW_ACCESS_DENIED") return json({ code: error.code }, 403);
     if (error.code === "AI_QUALITY_REVIEW_STALE") return json({ code: error.code }, 409);
     return json({ code: error.code }, 409);
   }
