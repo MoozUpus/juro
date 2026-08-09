@@ -7,17 +7,17 @@ product journey has passed a fresh production mutation test.
 
 ## Release identity
 
-- Runtime source commit: `f55724e1dd8283557d33e0a91b665fc69940dbbf`.
-- Annotated release tag: `juro-production-2026-08-09.3` (published to origin,
+- Runtime source commit: `1779a2c3e255bdd8f3d0fa31775318023bdb1691`.
+- Annotated release tag: `juro-production-2026-08-09.4` (published to origin,
   resolving to the runtime source commit above).
-- GitHub Actions run: `31288999276`; platform and website validation jobs
+- GitHub Actions run: `31289908439`; platform and website validation jobs
   succeeded for the runtime commit.
 - Production Worker: `juro`.
-- Active production deployment: `900800ec-938e-4b46-8254-574577babdaa`.
-- Active production version: `ff1e4105-a8a7-4ccd-b632-a9d69ad7cb38` at
+- Active production deployment: `8e6089a6-53b0-4580-bc4a-35ec6f7478b9`.
+- Active production version: `20905936-0156-4f02-b58b-f2d77d1cb060` at
   100% traffic.
 - Previous verified production-bound rollback version:
-  `dc629417-aa97-4906-921b-b153b4ad628e`.
+  `ff1e4105-a8a7-4ccd-b632-a9d69ad7cb38`.
 - The deployed runtime includes the Cinematic Legal Intelligence application
   shell. AI-avatar work remains intentionally excluded.
 
@@ -46,8 +46,8 @@ applicable. No value was copied, logged, or committed.
 The staging release was separately redeployed from the same source commit:
 
 - Worker: `juro-platform-staging`.
-- Deployment: `09590775-4625-4947-80a6-43ccfbdd8658`.
-- Version: `8dee8fe6-00f2-4006-988e-03fffd0db282` at 100% traffic.
+- Deployment: `157f1016-432e-4204-bacd-b5d28a6d131f`.
+- Version: `d69fe537-5a27-462f-9a73-cc3e6f5de97b` at 100% traffic.
 - D1/R2/Queues/Vectorize remain `juro-staging`, `juro-staging-*`, and
   `staging-*`. No staging database, file, session, token, or secret was copied
   into production.
@@ -72,7 +72,7 @@ Release `2026-08-09.3` then changed the production deployment entry point to use
 `--containers-rollout none`; the pinned scanner Container is managed
 independently. Contract tests now require this guard and require the
 `app.juro.uz` router service binding to target the production `juro` Worker.
-Version `ff1e4105-a8a7-4ccd-b632-a9d69ad7cb38` was re-inspected after deployment:
+Version `20905936-0156-4f02-b58b-f2d77d1cb060` was re-inspected after deployment:
 `APP_ENV=production`, D1 `4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`, production R2,
 all `production-*` queues, and all `production-*` Vectorize indexes were present.
 No later automatic Container deployment replaced it.
@@ -134,6 +134,31 @@ Unauthenticated checks on 2026-08-09 produced:
 These checks prove routing and unauthenticated protection, not a fresh signed-in
 end-to-end transaction.
 
+## Authenticated browser and mobile accessibility QA
+
+An existing owner-controlled lawyer session was used only for read-only QA; no
+question, file, case, document, consultation, request, offer, or payment was
+created. The exact `2026-08-09.4` runtime was checked in Chrome after deployment.
+
+- Desktop routes previously covered the dashboard, AI chat, document review,
+  document builder, cases, consultations, and security surfaces in RU, with a
+  single logical `h1`, no horizontal overflow, and no console warnings/errors.
+- Mobile checks covered 390x844 and 360x800; tablet checks covered 768x1024;
+  RU and UZ language routing and `lang` attributes were correct and no
+  horizontal overflow or console warnings/errors were observed.
+- A real mobile accessibility defect was found in `2026-08-09.3`: the visually
+  closed off-canvas navigation remained exposed to sequential focus and its
+  close control was 42x42 CSS pixels.
+- `2026-08-09.4` gives the closed mobile sidebar both `inert` and
+  `aria-hidden=true`; opening removes both restrictions, Escape closes it and
+  restores focus to the menu trigger, and the close control measures 44x44 CSS
+  pixels. These behaviours were rechecked at 390x844 RU and 768x1024 UZ.
+
+The available browser controller did not provide a faithful fresh 200% browser
+zoom or `prefers-reduced-motion` emulation. Automated CSS/accessibility contracts
+cover text scaling and reduced-motion rules, but this record does not substitute
+those contracts for the missing fresh manual/emulated observations.
+
 ## Production data observations
 
 Read-only counts after cleanup showed five user profiles, three conversations,
@@ -158,8 +183,9 @@ complete:
 4. Demo-payment presentation in production. The foundation is deployed, but
    both production approval and sandbox flags are false, and no payment row
    exists. No real payment provider or card collection is active.
-5. Fresh authenticated desktop/mobile/keyboard/reduced-motion/accessibility
-   browser evidence after the exact runtime deployment.
+5. Fresh 200% browser zoom and `prefers-reduced-motion` observations on the
+   exact runtime. Authenticated desktop/mobile/tablet, RU/UZ, keyboard focus
+   restoration, overflow, and console checks are recorded above.
 
 Do not create synthetic production profiles, cases, files, requests, or payment
 records merely to close these gates. Use a real owner-controlled journey, or
@@ -169,7 +195,7 @@ production smoke and clean it up with audit evidence.
 ## Rollback
 
 For an application regression, restore Worker traffic to
-`dc629417-aa97-4906-921b-b153b4ad628e` first and disable the affected
+`ff1e4105-a8a7-4ccd-b632-a9d69ad7cb38` first and disable the affected
 server-side feature flag or queue producer/consumer. The migrations are
 additive and may remain in place when the prior Worker can ignore them. Restore
 D1 only for demonstrated data corruption, using the verified private backup
