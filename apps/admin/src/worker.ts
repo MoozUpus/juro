@@ -93,11 +93,12 @@ function lawyerStatusLabel(status: string): string {
   }[status] ?? status;
 }
 
-function page(title: string, body: string, options: { notice?: string; role?: string } = {}): Response {
+function page(environment: Env["APP_ENV"], title: string, body: string, options: { notice?: string; role?: string } = {}): Response {
   const notice = options.notice ? `<p class="notice">${escaped(options.notice)}</p>` : "";
   const role = options.role ? `<span class="role">${escaped(options.role)}</span>` : "";
+  const environmentLabel = environment === "production" ? "production" : environment === "staging" ? "staging" : "development";
   return new Response(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>${escaped(title)} · JURO</title><style>
-    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}.filters{display:flex;flex-wrap:wrap;gap:.45rem;margin:1rem 0}.filters a{border:1px solid #8596a5;border-radius:999px;color:#102a43;padding:.4rem .65rem;text-decoration:none}.filters a[aria-current=page]{background:#062844;border-color:#062844;color:#fff}.filters a:hover,.filters a:focus-visible{outline:3px solid #be974f;outline-offset:2px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}.review-body{max-width:34rem;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль staging</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="/reviews">Отзывы</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}.filters{display:flex;flex-wrap:wrap;gap:.45rem;margin:1rem 0}.filters a{border:1px solid #8596a5;border-radius:999px;color:#102a43;padding:.4rem .65rem;text-decoration:none}.filters a[aria-current=page]{background:#062844;border-color:#062844;color:#fff}.filters a:hover,.filters a:focus-visible{outline:3px solid #be974f;outline-offset:2px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}.review-body{max-width:34rem;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль ${environmentLabel}</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="/reviews">Отзывы</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
 }
 
 function securityHeaders(): Headers {
@@ -188,13 +189,13 @@ function redirect(location: string, cookies: string[] = []): Response {
 
 async function consumeTicket(request: Request, env: Env): Promise<Response> {
   const ticket = new URL(request.url).searchParams.get("ticket");
-  if (!ticket || !TOKEN_PATTERN.test(ticket)) return page("Вход недоступен", "<p>Одноразовая ссылка недействительна или уже использована.</p>");
+  if (!ticket || !TOKEN_PATTERN.test(ticket)) return page(env.APP_ENV, "Вход недоступен", "<p>Одноразовая ссылка недействительна или уже использована.</p>");
   const result = await platform<{ token: string; csrfToken: string; expiresAt: string; roles: string[] }>(env, "/api/internal/admin/session/consume", {
     method: "POST",
     headers: { "content-type": "application/json", "x-juro-admin-origin": new URL(request.url).origin },
     body: JSON.stringify({ ticket }),
   });
-  if (!result.response.ok || !result.body?.token || !result.body.csrfToken || !result.body.expiresAt) return page("Вход недоступен", `<p>Не удалось подтвердить отдельную admin-сессию. Обновите MFA в <a href="${escaped(env.PLATFORM_ORIGIN)}/ru/admin/console">JURO</a> и повторите переход.</p>`);
+  if (!result.response.ok || !result.body?.token || !result.body.csrfToken || !result.body.expiresAt) return page(env.APP_ENV, "Вход недоступен", `<p>Не удалось подтвердить отдельную admin-сессию. Обновите MFA в <a href="${escaped(env.PLATFORM_ORIGIN)}/ru/admin/console">JURO</a> и повторите переход.</p>`);
   const destination = result.body.roles?.includes("super_admin") ? "/" : "/lawyers";
   return redirect(destination, sessionCookies(result.body.token, result.body.csrfToken, result.body.expiresAt));
 }
@@ -203,7 +204,7 @@ async function dashboard(request: Request, env: Env, session: string): Promise<R
   const result = await platform<Dashboard>(env, "/api/internal/admin/dashboard", { session });
   if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
   const data = result.body;
-  return page("Операционный обзор", `<p>Роль: ${escaped(data.roles.join(", "))}. Сеанс действует до ${escaped(data.expiresAt)}.</p><section class="metrics"><div class="metric"><span>Профили на проверке</span><strong>${data.counts.pendingLawyerProfiles}</strong></div><div class="metric"><span>Одобренные профили</span><strong>${data.counts.approvedLawyerProfiles}</strong></div><div class="metric"><span>Активные заявки</span><strong>${data.counts.activeLawyerRequests}</strong></div><div class="metric"><span>Audit events</span><strong>${data.counts.adminAuditEvents}</strong></div></section><section class="panel"><h2>Граница доступа</h2><p>Консоль использует отдельную host-only cookie и обращается к платформе только через service binding. Текущая сессия требует активный TOTP и свежую MFA исходного JURO-сеанса.</p></section>`, { role: data.roles.join(" · ") });
+  return page(env.APP_ENV, "Операционный обзор", `<p>Роль: ${escaped(data.roles.join(", "))}. Сеанс действует до ${escaped(data.expiresAt)}.</p><section class="metrics"><div class="metric"><span>Профили на проверке</span><strong>${data.counts.pendingLawyerProfiles}</strong></div><div class="metric"><span>Одобренные профили</span><strong>${data.counts.approvedLawyerProfiles}</strong></div><div class="metric"><span>Активные заявки</span><strong>${data.counts.activeLawyerRequests}</strong></div><div class="metric"><span>Audit events</span><strong>${data.counts.adminAuditEvents}</strong></div></section><section class="panel"><h2>Граница доступа</h2><p>Консоль использует отдельную host-only cookie и обращается к платформе только через service binding. Текущая сессия требует активный TOTP и свежую MFA исходного JURO-сеанса.</p></section>`, { role: data.roles.join(" · ") });
 }
 
 async function lawyerList(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
@@ -225,11 +226,11 @@ async function lawyerList(request: Request, env: Env, session: string, notice?: 
       : "";
     return `<tr><td>${escaped(profile.displayName)}<br><small>${escaped(lawyerStatusLabel(profile.marketplaceStatus))}</small></td><td>${escaped(profile.city ?? "—")}</td><td>${escaped(profile.experienceYears ?? "—")}</td><td>${escaped(profile.updatedAt)}</td><td>${moderation}${lifecycleForm(profile)}</td></tr>`;
   }).join("");
-  return page("Профили юристов", `<section class="panel"><p>Телефон и личный email не выдаются этой поверхности. Lifecycle-действия требуют отдельной причины; сервер повторно проверяет роль и свежую MFA.</p><nav class="filters" aria-label="Статус профиля">${filters}</nav><table><thead><tr><th>Профиль</th><th>Город</th><th>Стаж</th><th>Изменён</th><th>Модерация и lifecycle</th></tr></thead><tbody>${rows || `<tr><td colspan="5">Нет профилей со статусом «${escaped(lawyerStatusLabel(selectedStatus))}».</td></tr>`}</tbody></table></section>`, { notice, role: "lawyer moderation" });
+  return page(env.APP_ENV, "Профили юристов", `<section class="panel"><p>Телефон и личный email не выдаются этой поверхности. Lifecycle-действия требуют отдельной причины; сервер повторно проверяет роль и свежую MFA.</p><nav class="filters" aria-label="Статус профиля">${filters}</nav><table><thead><tr><th>Профиль</th><th>Город</th><th>Стаж</th><th>Изменён</th><th>Модерация и lifecycle</th></tr></thead><tbody>${rows || `<tr><td colspan="5">Нет профилей со статусом «${escaped(lawyerStatusLabel(selectedStatus))}».</td></tr>`}</tbody></table></section>`, { notice, role: "lawyer moderation" });
 }
 
 async function moderate(request: Request, env: Env, session: string, profileId: string): Promise<Response> {
-  if (!await csrf(request)) return page("Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
+  if (!await csrf(request)) return page(env.APP_ENV, "Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
   const form = await request.formData();
   const decision = form.get("decision"); const reason = form.get("reason");
   if ((decision !== "approved" && decision !== "changes_requested" && decision !== "rejected") || typeof reason !== "string" || reason.trim().length < 1 || reason.trim().length > 2_000) return lawyerList(request, env, session, "Проверьте решение и причину.");
@@ -240,7 +241,7 @@ async function moderate(request: Request, env: Env, session: string, profileId: 
 }
 
 async function transitionLifecycle(request: Request, env: Env, session: string, profileId: string): Promise<Response> {
-  if (!await csrf(request)) return page("Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
+  if (!await csrf(request)) return page(env.APP_ENV, "Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
   const form = await request.formData();
   const action = form.get("action"); const reason = form.get("reason");
   if ((action !== "suspend" && action !== "block" && action !== "archive" && action !== "restore") || typeof reason !== "string" || reason.trim().length < 1 || reason.trim().length > 2_000) {
@@ -260,11 +261,11 @@ async function reviewList(request: Request, env: Env, session: string, notice?: 
   if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
   const csrfToken = cookie(request, ADMIN_CSRF_COOKIE) ?? "";
   const rows = result.body.reviews.map((review) => `<tr><td>${escaped(review.lawyerName)}<br><small>${escaped(review.createdAt)}</small></td><td>${escaped(`${review.overallRating}/5`)}<br><small>Скорость ${escaped(review.speedRating)}, качество ${escaped(review.qualityRating)}, коммуникация ${escaped(review.communicationRating)}</small></td><td class="review-body">${escaped(review.body ?? "Без текста")}</td><td><form method="post" action="/reviews/${encodeURIComponent(review.id)}/moderate"><input type="hidden" name="_csrf" value="${escaped(csrfToken)}"><label>Редакция без персональных данных<textarea name="moderatedBody" maxlength="2000"></textarea></label><label>Причина<textarea name="reason" required maxlength="2000" minlength="1"></textarea></label><div class="actions"><button name="decision" value="approved">Одобрить</button><button class="danger" name="decision" value="rejected">Отклонить</button></div></form></td></tr>`).join("");
-  return page("Модерация отзывов", `<section class="panel"><p>Отзыв публикуется только после проверки. При обнаружении контактов одобрение отклоняется, пока текст не будет отредактирован.</p><table><thead><tr><th>Юрист</th><th>Оценка</th><th>Отзыв</th><th>Решение</th></tr></thead><tbody>${rows || "<tr><td colspan=\"4\">Нет отзывов на проверке.</td></tr>"}</tbody></table></section>`, { notice, role: "lawyer moderation" });
+  return page(env.APP_ENV, "Модерация отзывов", `<section class="panel"><p>Отзыв публикуется только после проверки. При обнаружении контактов одобрение отклоняется, пока текст не будет отредактирован.</p><table><thead><tr><th>Юрист</th><th>Оценка</th><th>Отзыв</th><th>Решение</th></tr></thead><tbody>${rows || "<tr><td colspan=\"4\">Нет отзывов на проверке.</td></tr>"}</tbody></table></section>`, { notice, role: "lawyer moderation" });
 }
 
 async function moderateReview(request: Request, env: Env, session: string, reviewId: string): Promise<Response> {
-  if (!await csrf(request)) return page("Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
+  if (!await csrf(request)) return page(env.APP_ENV, "Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
   const form = await request.formData();
   const decision = form.get("decision"); const reason = form.get("reason"); const rawModeratedBody = form.get("moderatedBody");
   const moderatedBody = typeof rawModeratedBody === "string" && rawModeratedBody.trim() ? rawModeratedBody.trim() : undefined;
@@ -283,9 +284,9 @@ export default {
     try {
       if (request.method === "GET" && url.pathname === "/health") return Response.json({ status: "ok", environment: env.APP_ENV }, { headers: { "cache-control": "no-store" } });
       if (request.method === "GET" && url.pathname === "/auth/handoff") return consumeTicket(request, env);
-      if (request.method === "GET" && url.pathname === "/logout") return page("Выход", `<form method="post" action="/logout"><input type="hidden" name="_csrf" value="${escaped(cookie(request, ADMIN_CSRF_COOKIE) ?? "")}"><button>Завершить admin-сеанс</button></form>`);
+      if (request.method === "GET" && url.pathname === "/logout") return page(env.APP_ENV, "Выход", `<form method="post" action="/logout"><input type="hidden" name="_csrf" value="${escaped(cookie(request, ADMIN_CSRF_COOKIE) ?? "")}"><button>Завершить admin-сеанс</button></form>`);
       if (request.method === "POST" && url.pathname === "/logout") {
-        if (!await csrf(request)) return page("Запрос отклонён", "<p>CSRF не пройдена.</p>");
+        if (!await csrf(request)) return page(env.APP_ENV, "Запрос отклонён", "<p>CSRF не пройдена.</p>");
         const session = cookie(request, ADMIN_SESSION_COOKIE);
         if (session) {
           await platform<{ ok: boolean }>(env, "/api/internal/admin/session/logout", { method: "POST", session });
@@ -303,10 +304,10 @@ export default {
       if (request.method === "POST" && lifecycleMatch && profileIdValid(lifecycleMatch[1])) return transitionLifecycle(request, env, session, lifecycleMatch[1]);
       const reviewMatch = /^\/reviews\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
       if (request.method === "POST" && reviewMatch && profileIdValid(reviewMatch[1])) return moderateReview(request, env, session, reviewMatch[1]);
-      return page("Не найдено", "<p>Этот административный маршрут отсутствует.</p>");
+      return page(env.APP_ENV, "Не найдено", "<p>Этот административный маршрут отсутствует.</p>");
     } catch (error) {
       console.error(JSON.stringify({ event: "admin.request_failed", path: url.pathname, message: error instanceof Error ? error.message : "unknown" }));
-      return page("Временно недоступно", "<p>Защищённая операция не выполнена. Повторите позже или обновите MFA.</p>");
+      return page(env.APP_ENV, "Временно недоступно", "<p>Защищённая операция не выполнена. Повторите позже или обновите MFA.</p>");
     }
   },
 } satisfies ExportedHandler<Env>;
