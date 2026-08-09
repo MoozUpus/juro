@@ -75,9 +75,19 @@ export function BillingClient({ locale, accountType, workspaceId }: { locale: Pl
         fetch("/api/subscriptions/plans", { cache: "no-store" }),
       ]);
       const billingBody = await billingResponse.json() as BillingData & { error?: string };
-      const plansBody = await plansResponse.json() as { plans?: Plan[]; error?: string };
+      const plansBody = await plansResponse.json() as {
+        plans?: Plan[];
+        error?: string;
+        code?: string;
+      };
       if (!billingResponse.ok) throw new Error(billingBody.error || (ru ? "Тарифы не загрузились." : "Tariflar yuklanmadi."));
-      if (!plansResponse.ok) throw new Error(plansBody.error || (ru ? "Утверждённые цены недоступны." : "Tasdiqlangan narxlar mavjud emas."));
+      // A production checkout is deliberately closed until the owner approves a
+      // real provider and price catalogue.  That is an expected safe state, not
+      // a loading failure: keep the billing workspace visible so the explicitly
+      // isolated demo flow remains reachable.
+      if (!plansResponse.ok && plansBody.code !== "BILLING_UNAVAILABLE") {
+        throw new Error(plansBody.error || (ru ? "Утверждённые цены недоступны." : "Tasdiqlangan narxlar mavjud emas."));
+      }
       setData(billingBody);
       setPlans(plansBody.plans ?? []);
     } catch (value) {
