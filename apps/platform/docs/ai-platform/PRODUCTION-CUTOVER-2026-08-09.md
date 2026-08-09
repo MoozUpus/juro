@@ -183,11 +183,12 @@ end-to-end transaction.
 
 ## Authenticated browser and mobile accessibility QA
 
-An existing owner-controlled lawyer session was used for route QA and one
-explicitly labelled demo-payment mutation. No question, file, case, document,
-consultation, request, offer, real payment, subscription, entitlement,
-settlement, or payable was created. The exact `2026-08-09.5` runtime was checked
-in Chrome after deployment.
+An existing owner-controlled lawyer session was used for route QA, a labelled
+AI/case smoke, and one explicitly labelled demo-payment mutation. The QA case
+was completed and archived through the product UI after verification. No file,
+document, analysis, consultation request, offer, real payment, subscription,
+entitlement, settlement, or payable was created. The exact `2026-08-09.5`
+runtime was checked in Chrome after deployment.
 
 - Desktop routes previously covered the dashboard, AI chat, document review,
   document builder, cases, consultations, and security surfaces in RU, with a
@@ -196,6 +197,32 @@ in Chrome after deployment.
   document builder, cases, action plan, calendar, lawyers, consultations, and
   billing; all nine resolved to their intended localized route with an `h1`,
   no Not Found state, and no browser console messages.
+- The first labelled AI question deliberately requested a conclusion that the
+  two directly retrieved Advice.uz pages did not support. JURO refused to
+  fabricate the requested legal basis, separated the assumption, and did not
+  charge the limit. A second narrowly scoped question about official
+  Advice.uz document `2920` completed successfully in conversation
+  `d8dbecab-72ed-4b72-ab9f-e9a7a6174156`: the UI rendered a structured answer,
+  linked `https://advice.uz/ru/document/2920`, identified the direct fetch date,
+  and labelled the source-supported findings. The conversation contains four
+  messages. The general `conversation_sources` projection remains empty, so
+  the link observation is browser evidence rather than a claim about that
+  projection table.
+- Labelled case `245bd342-0902-47d3-bcd2-a0e159499b16` exercised plan and task
+  persistence. Confirming revision 1 created exactly four tenant-scoped tasks
+  and one idempotent `tasks_created` event. Updating the first step to
+  `in_progress` advanced the plan to revision 2, synchronized the matching task,
+  and added `plan_changes_confirmed`. The case workspace rendered all four
+  steps and tasks without an error. No real deadline was assigned, deliberately
+  avoiding a future reminder to the production email address. The case was then
+  completed and archived through the UI at
+  `2026-08-09T04:26:49.933Z`; it is absent from active work lists and retained
+  only as clearly labelled archived audit evidence.
+- The production lawyer directory correctly exposed only approved profiles.
+  With zero approved profiles it rendered the empty state and did not expose a
+  selectable recipient. The authenticated session belongs to a lawyer profile,
+  so its localized `consultations` route correctly shows assigned requests and
+  does not expose the individual handoff form.
 - The payment demo rendered in RU and UZ with `provider=demo` and
   `isSimulation=true`. Run `demo_eb4dc7be25dd405eb01015b022a7d4b3` completed
   `previewed -> succeeded -> refunded` with three append-only events. Production
@@ -220,26 +247,31 @@ those contracts for the missing fresh manual/emulated observations.
 
 ## Production data observations
 
-Read-only counts after cleanup showed five user profiles, three conversations,
-six AI runs, three comparison records, one lawyer profile, and no document,
-analysis, case, action-plan, task, lawyer-request, offer, real payment, approved
-public lawyer, or active staff-assignment records. One clearly labelled
-demo-payment run exists solely as cutover evidence. Those remaining zero rows
-are not failures of the schema, but they prevent a truthful claim that the
-complete production mutation journey has been freshly demonstrated.
+Read-only counts after the labelled smoke showed four conversations, eight AI
+runs, zero documents, zero document analyses, one archived case, zero active
+cases, one action plan, four tasks, zero lawyer requests, zero offers, zero
+approved public lawyers, and zero active staff assignments. One clearly
+labelled demo-payment run and one clearly labelled archived case exist solely
+as cutover evidence. These zero rows are not failures of the schema; they are
+the reason the document-analysis and marketplace/admin positive paths remain
+open rather than being simulated through privileged database writes.
 
 ## Open release gates
 
 The following remain unverified in production and must not be described as
 complete:
 
-1. A fresh authenticated owner journey from AI question and direct official
-   sources through structured answer, safe document analysis, plan, case,
-   task/deadline, lawyer request, offer, and labelled demo payment.
+1. The AI question, direct official-source rendering, structured answer,
+   plan, case, four tasks, synchronized task status, archive lifecycle, and
+   labelled demo payment are freshly proven. A safe production document upload
+   and analysis was intentionally not created, so upload/scanner/Claude remains
+   unproven in production despite staging coverage.
 2. Admin mandatory-TOTP and role checks with an active production staff
    assignment. Production currently has no active assignment to test.
 3. Marketplace request/proposal flow with a real approved production lawyer.
-   Production currently has no approved public lawyer.
+   Production currently has no approved public lawyer. The empty state and
+   public-projection restriction are proven; request and offer mutations are
+   not.
 4. Fresh 200% browser zoom and `prefers-reduced-motion` observations on the
    exact runtime. Authenticated desktop/mobile/tablet, RU/UZ, keyboard focus
    restoration, overflow, and console checks are recorded above.
