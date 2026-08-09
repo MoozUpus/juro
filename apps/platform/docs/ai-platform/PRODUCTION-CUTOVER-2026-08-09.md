@@ -308,6 +308,51 @@ Worker `juro` therefore cannot change that public application host; this must
 be resolved by a deliberate, validated Sites release rather than by changing
 DNS or attaching a second worker.
 
+## Subsequent production releases: billing safety and application-domain cutover
+
+This section supersedes the earlier Sites-ownership observation above for the
+public application host.
+
+- Release `.14` (`f0b62b2`) keeps the payment path fail-closed when the
+  production provider or price catalogue is not approved. The authenticated UI
+  now states that checkout is temporarily unavailable, identifies the only
+  available path as `PROVIDER=DEMO · SIMULATION`, and offers a separately
+  labelled demo which cannot create a card charge, subscription, or tariff
+  change.
+- Before the application-domain transition, the former Sites binding for
+  `app.juro.uz` was recorded as rollback version
+  `appgver_bf17f65464ec819185ea6bff77b38275` in Sites project
+  `appgprj_6a5f404b623081919cbfa1e3c85d412a`. The only active custom-domain
+  mapping was then removed from that project. No D1 or R2 data was modified.
+- Release `.15` (`8acc53127e08c10ad5f2fc00e83294b7af4cb338`, tag
+  `juro-production-2026-08-09.15`) makes Worker `juro` the sole runtime for
+  both `app.juro.uz` and `admin.juro.uz`. Deployment
+  `1c75e4bd-10a8-41a3-b122-8ff70803b6e1` published Worker version
+  `48bc7241-468c-4440-824a-67d0154489d4` at 100% traffic.
+- The active Worker binding record confirms `APP_ENV=production`, D1
+  `juro-production` (`4cce509b-0e02-4ca9-a3ba-a5ce1327aeda`), private R2
+  `juro-private-documents`, the production queue/vector bindings, and the
+  isolated `juro-admin` service. No staging D1, R2, queue, Vectorize binding,
+  or runtime secret is attached to this production version.
+- Post-cutover HTTP smoke: `https://app.juro.uz/api/status` returned `200`;
+  `/` and the document-builder route returned the intended localized login
+  redirects; `https://admin.juro.uz/` returned the intended handoff redirect
+  to the app's admin session boundary. An unauthenticated direct request to
+  `/ru/admin/console` returns `404` by design to avoid exposing the protected
+  admin surface.
+- An owner-authenticated browser session rendered the full Worker-backed
+  billing route, localized navigation, and the explicit safe payment state
+  after this domain transition. The browser was unable to make a direct admin
+  request because Chrome locally produced `ERR_BLOCKED_BY_CLIENT` before a
+  server request; this is not treated as an admin MFA pass or failure.
+
+Rollback for an application-domain regression is two-part and does not reset
+data: first return Worker `juro` to the verified pre-cutover version
+`cb09acab-d990-45cb-936a-7f226b020852`, then restore the recorded Sites custom
+domain only if the former static application host is required. Validate the
+domain owner before reattaching it; do not operate both runtimes for the same
+host simultaneously.
+
 ## Production data observations
 
 Read-only counts after the labelled smoke showed four conversations, eight AI
@@ -348,11 +393,10 @@ complete:
    `prefers-reduced-motion` observation on the `.6` runtime. Equivalent
    production reflow and active CSS checks are recorded above; they must not
    be relabelled as the missing OS-level reduced-motion observation.
-5. Reconcile the Sites application release with the verified Worker-side
-   platform release. The current Sites runtime exposes only its pre-existing
-   environment contract and cannot safely be replaced with the Worker build
-   until its D1/R2 bindings, server-only secrets and rollback version are
-   validated together.
+5. **Completed in release `.15`:** `app.juro.uz` is now served only by the
+   verified production Worker with production D1/R2 bindings. The former Sites
+   mapping is retained only as a documented rollback reference and has no live
+   `app.juro.uz` custom-domain mapping.
 
 Do not create synthetic production profiles, cases, files, requests, or payment
 records merely to close these gates. Use a real owner-controlled journey, or
