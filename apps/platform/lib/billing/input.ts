@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { DEMO_PAYMENT_ACTIONS, DEMO_PAYMENT_FLOW_TYPES } from "./demo-payments";
+
 export const checkoutOrderParamsSchema = z.object({ orderId: z.uuid() }).strict();
 export const checkoutWorkspaceQuerySchema = z.object({
   workspaceId: z.string().regex(/^[A-Za-z0-9_-]{3,128}$/).optional(),
@@ -51,3 +53,23 @@ export const subscriptionEntitlementsConfigSchema = z.object({
     metadata: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).default({}),
   }).strict()).max(64).default([]),
 }).strict();
+
+const demoBaseSchema = z.object({
+  requestId: z.uuid(),
+  locale: z.enum(["ru", "uz"]),
+  workspaceId: z.string().regex(/^[A-Za-z0-9_-]{3,128}$/).optional(),
+});
+
+export const demoPaymentInputSchema = z.discriminatedUnion("action", [
+  demoBaseSchema.extend({
+    action: z.literal("create"),
+    flowType: z.enum(DEMO_PAYMENT_FLOW_TYPES),
+    amountMinor: z.number().int().positive().max(100_000_000_000),
+    installmentCount: z.union([z.literal(3), z.literal(6), z.literal(12)]).optional(),
+  }).strict(),
+  demoBaseSchema.extend({
+    action: z.literal("transition"),
+    runId: z.uuid(),
+    outcome: z.enum(DEMO_PAYMENT_ACTIONS),
+  }).strict(),
+]);

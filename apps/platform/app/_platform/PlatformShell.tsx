@@ -21,6 +21,7 @@ import {
   Menu,  PanelLeftClose,
   PanelLeftOpen,
   ReceiptText,
+  CreditCard,
   Scale,
   ShieldCheck,
   UserRound,
@@ -53,6 +54,7 @@ const nav = [
   ["action-plan", CalendarCheck2, "План действий", "Harakatlar rejasi"], ["consultations", ReceiptText, "Консультации", "Maslahatlar"],
   ["calendar", CalendarDays, "Календарь", "Kalendar"],
   ["history", History, "История", "Tarix"], ["archive", Archive, "Архив", "Arxiv"],
+  ["billing", CreditCard, "Тариф", "Tarif"],
   ["team", UsersRound, "Команда", "Jamoa"], ["notifications", Bell, "Уведомления", "Bildirishnomalar"],
 ] as const;
 

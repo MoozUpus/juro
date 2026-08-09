@@ -3,7 +3,7 @@ import { parseJsonRequest } from "../../../../lib/auth/input";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { billingPlanSelectionSchema } from "../../../../lib/billing/input";
 import { paymentProviderStatus } from "../../../../lib/billing/provider";
-import { paymentFoundationStatus } from "../../../../lib/billing/foundation";
+import { paymentDemoStatus, paymentFoundationStatus } from "../../../../lib/billing/foundation";
 import {
   assertSafeWrite,
   requireApiUser,
@@ -40,6 +40,7 @@ export const GET = withApiErrors(async function GET() {
   const [subscription, payments] = records;
   return response({
     provider: paymentFoundationStatus(runtimeEnv()),
+    demo: paymentDemoStatus(runtimeEnv()),
     config: pricingConfig,
     subscription: subscription.results[0] ?? null,
     payments: payments.results,

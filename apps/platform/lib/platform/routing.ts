@@ -30,6 +30,7 @@ export const PLATFORM_MODULES = [
   "archive",
   "team",
   "billing",
+  "demo-payments",
   "security",
   "help",
   "profile",

@@ -4,6 +4,7 @@ type PaymentFoundationEnv = {
   PAYMENT_FOUNDATION_ENABLED?: string;
   PAYMENT_SANDBOX_ENABLED?: string;
   PAYMENT_PRODUCTION_APPROVED?: string;
+  PAYMENT_PRODUCTION_DEMO_ENABLED?: string;
 };
 
 export type PaymentFoundationStatus = Readonly<{
@@ -31,4 +32,27 @@ export function paymentFoundationStatus(
     return Object.freeze({ enabled: productionApproved, sandboxEnabled: false, productionApproved, reason: "sandbox_forbidden" });
   }
   return Object.freeze({ enabled: true, sandboxEnabled, productionApproved, reason: "ready" });
+}
+
+export type PaymentDemoStatus = Readonly<{
+  enabled: boolean;
+  provider: "demo";
+  isSimulation: true;
+  externalNetwork: false;
+  entitlementsActivated: false;
+  reason: "ready" | "disabled" | "database_unavailable";
+}>;
+
+export function paymentDemoStatus(env: PaymentFoundationEnv): PaymentDemoStatus {
+  const base = {
+    provider: "demo" as const,
+    isSimulation: true as const,
+    externalNetwork: false as const,
+    entitlementsActivated: false as const,
+  };
+  if (!env.DB) return Object.freeze({ ...base, enabled: false, reason: "database_unavailable" as const });
+  if (env.PAYMENT_PRODUCTION_DEMO_ENABLED !== "true") {
+    return Object.freeze({ ...base, enabled: false, reason: "disabled" as const });
+  }
+  return Object.freeze({ ...base, enabled: true, reason: "ready" as const });
 }
