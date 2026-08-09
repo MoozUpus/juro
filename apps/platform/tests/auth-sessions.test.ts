@@ -17,6 +17,7 @@ import {
 } from "../lib/auth/security-events";
 import {
   createEmailOtpSession,
+  createLocalDevelopmentSession,
   deviceDisplayName,
   localSessionFromCookie,
   revokeOneSession,
@@ -759,6 +760,43 @@ test("email OTP session creation atomically stores device, primary assurance, an
     assert.equal(current?.email, "user-a@example.test");
     assert.equal(current?.fullName, "Alice Example");
     assert.equal(current?.deviceName, "Chrome · Windows");
+    assert.equal(current?.assuranceLevel, "primary");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("local development login creates an ordinary audited session", async () => {
+  const { sqlite, d1 } = databaseFixture();
+  try {
+    insertUser(sqlite, "local-developer", "developer@local.juro.uz", "JURO Local Developer");
+    const now = new Date("2026-08-10T02:00:00.000Z");
+    const created = await createLocalDevelopmentSession(d1, {
+      userId: "local-developer",
+      userAgent: "Mozilla/5.0 Windows Chrome/126.0",
+      now,
+    });
+
+    const session = sessionRow(sqlite, created.sessionId);
+    assert.equal(session.authMethod, "development_bypass");
+    assert.equal(session.assuranceLevel, "primary");
+    assert.equal(session.revokedAt, null);
+
+    const events = securityEventsFor(sqlite, "local-developer");
+    assert.equal(events.length, 1);
+    assert.equal(events[0].eventType, "session.created");
+    assert.equal(events[0].authSource, "local_session");
+    assert.deepEqual(events[0].metadata, {
+      authMethod: "development_bypass",
+      deviceName: "Chrome · Windows",
+    });
+
+    const current = await localSessionFromCookie(
+      d1,
+      `juro_session=${created.token}`,
+      { now, touch: false },
+    );
+    assert.equal(current?.userId, "local-developer");
     assert.equal(current?.assuranceLevel, "primary");
   } finally {
     sqlite.close();

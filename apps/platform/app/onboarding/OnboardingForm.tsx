@@ -30,6 +30,7 @@ type Props = {
   initialFirstName: string;
   initialMiddleName: string;
   initialPhone: string;
+  developmentPolicyBypass: boolean;
 };
 
 const personaOptions = [
@@ -84,6 +85,7 @@ export function OnboardingForm({
   initialFirstName,
   initialMiddleName,
   initialPhone,
+  developmentPolicyBypass,
 }: Props) {
   const [locale, setLocale] = useState(initialLocale);
   const [accountPersona, setAccountPersona] = useState<AccountPersona>(
@@ -272,9 +274,13 @@ export function OnboardingForm({
             </div>
           </fieldset>
           <p className="onboarding-policy-evidence">
-            {ru
-              ? "Обязательные документы подтверждены при регистрации по email-коду: "
-              : "Majburiy hujjatlar email-kod orqali ro‘yxatdan o‘tishda tasdiqlangan: "}
+            {developmentPolicyBypass
+              ? (ru
+                ? "Локальный режим разработки: подтверждение обязательных документов пропущено и не записывается как согласие пользователя. Документы: "
+                : "Mahalliy ishlab chiqish rejimi: majburiy hujjatlarni tasdiqlash o‘tkazib yuborildi va foydalanuvchi roziligi sifatida yozilmaydi. Hujjatlar: ")
+              : (ru
+                ? "Обязательные документы подтверждены при регистрации по email-коду: "
+                : "Majburiy hujjatlar email-kod orqali ro‘yxatdan o‘tishda tasdiqlangan: ")}
             <Link href={`/legal/terms?lang=${locale}`} target="_blank">
               {ru ? "условия" : "shartlar"}
             </Link>

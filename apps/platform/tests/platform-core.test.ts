@@ -429,6 +429,27 @@ test("production identity prefers OTP sessions and gates trusted edge headers", 
   assert.match(source, /runtimeIdentityProtection/);
 });
 
+test("local development login is explicit, loopback-only, and creates a real session", async () => {
+  const [route, developmentAuth, authPage, authForm, launcher] = await Promise.all([
+    readFile(new URL("../app/api/auth/dev-login/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../lib/auth/development-auth.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/_auth/AuthPage.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_auth/AuthForm.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/platform-tasks.mjs", import.meta.url), "utf8"),
+  ]);
+  assert.match(developmentAuth, /NODE_ENV !== "production"/);
+  assert.match(developmentAuth, /APP_ENV === "development"/);
+  assert.match(developmentAuth, /LOCAL_AUTH_BYPASS === "true"/);
+  assert.match(developmentAuth, /authMethod === "development_bypass"/);
+  assert.match(route, /isLoopbackDevelopmentHost/);
+  assert.match(route, /createLocalDevelopmentSession/);
+  assert.match(route, /sessionCookie\(session\.token\)/);
+  assert.match(authPage, /developmentAuthEnabled/);
+  assert.match(authForm, /\/api\/auth\/dev-login\?returnTo=/);
+  assert.match(launcher, /LOCAL_AUTH_BYPASS: process\.env\.LOCAL_AUTH_BYPASS \?\? "true"/);
+  assert.match(launcher, /CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false"/);
+});
+
 test("canonical identity expand stays disabled and public projections omit protected fields", async () => {
   const [
     identity,
@@ -1126,7 +1147,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shell, /platform-sidebar nav a\{min-height:44px\}/);
   const aiClient = await readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8");
   assert.match(aiClient, /href=\{aiLocation\(new URLSearchParams\(\{ conversationId: item\.id \}\)\)\}/);
-  assert.match(aiClient, /window\.location\.assign\(aiLocation\(nextParams\)\)/);
+  assert.match(aiClient, /router\.replace\(aiLocation\(nextParams\), \{ scroll: false \}\)/);
   assert.doesNotMatch(shellComponent, /MoreHorizontal/);
   assert.match(dashboard, /max-width:820px/);
   assert.match(dashboard, /max-width:460px/);

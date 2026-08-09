@@ -4,6 +4,7 @@ import {
   access,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   rm,
   writeFile,
@@ -658,6 +659,36 @@ async function normalizeGeneratedWranglerConfig() {
   await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`, "utf8");
 }
 
+async function removePackagedSecretFiles() {
+  const artifactRoot = resolve(projectRoot, "dist");
+  const secretFileName = (name) =>
+    name === ".env" ||
+    name.startsWith(".env.") ||
+    name === ".dev.vars" ||
+    name.startsWith(".dev.vars.");
+
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      const artifactRelativePath = relative(artifactRoot, path);
+      if (
+        artifactRelativePath === "" ||
+        artifactRelativePath.startsWith(`..${sep}`) ||
+        artifactRelativePath === ".."
+      ) {
+        throw new Error(`Refusing to sanitize path outside build artifact: ${path}`);
+      }
+      if (entry.isDirectory()) {
+        await visit(path);
+      } else if (entry.isFile() && secretFileName(entry.name)) {
+        await rm(path, { force: true });
+      }
+    }
+  }
+
+  await visit(artifactRoot);
+}
+
 async function build(environment) {
   const { environment: commandEnvironment } = await prepareEnvironment(
     environment === "development"
@@ -682,6 +713,7 @@ async function build(environment) {
       "SITES_BUILD_KILL_AFTER",
     ),
   });
+  await removePackagedSecretFiles();
   await normalizeGeneratedWranglerConfig();
   await validateArtifact(environment);
 }
@@ -763,7 +795,7 @@ async function runInteractiveTask(packageName, binaryName, args, overrides) {
 
 async function runWranglerTypes(check, args) {
   const { environment } = await prepareEnvironment(
-    {},
+    { CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV: "false" },
     { policy: "offline" },
   );
   await runPackageBinary(
@@ -932,7 +964,11 @@ async function main() {
         args,
         {
           JURO_AGENT_PREVIEW_COMPATIBILITY_DATE: "2026-05-22",
-          ALLOW_PLATFORM_AUTH_HEADERS: "true",
+          LOCAL_AUTH_BYPASS: process.env.LOCAL_AUTH_BYPASS ?? "true",
+          LOCAL_AUTH_EMAIL:
+            process.env.LOCAL_AUTH_EMAIL ?? "developer@local.juro.uz",
+          LOCAL_AUTH_FULL_NAME:
+            process.env.LOCAL_AUTH_FULL_NAME ?? "JURO Local Developer",
         },
       );
       return;

@@ -83,6 +83,7 @@ type OnboardingDependencies = {
   db: D1Database;
   identityContext: IdentityProtectionContext;
   userId: string;
+  allowDevelopmentPolicyBypass?: boolean;
   now?: string;
 };
 
@@ -228,7 +229,11 @@ export async function completeOnboarding(
     };
   }
 
-  if (!await hasCurrentRegistrationPolicyEvidence(db, userId)) {
+  const hasPolicyEvidence = await hasCurrentRegistrationPolicyEvidence(
+    db,
+    userId,
+  );
+  if (!hasPolicyEvidence && !dependencies.allowDevelopmentPolicyBypass) {
     return { status: "policy_evidence_required" };
   }
 
@@ -362,7 +367,9 @@ export async function completeOnboarding(
         accountPersona: input.accountPersona,
         primaryGoal: input.primaryGoal,
         lawyerProfileProvisioned: input.accountPersona === "lawyer",
-        policyEvidence: "registration_digests",
+        policyEvidence: hasPolicyEvidence
+          ? "registration_digests"
+          : "development_bypass",
       }),
       now,
       userId,

@@ -1,6 +1,10 @@
 import { runtimeEnv } from "../storage/runtime";
 import { readResponsesSse, ResponsesSseError } from "../../ai/responses-sse";
 import { openAiCompatibleJsonSchema } from "../../ai/openai-schema";
+import {
+  ProviderRequestAbortError,
+  runProviderRequestWithTimeouts,
+} from "../../ai/provider-request-timeout";
 import { resolveAiRuntimeSettings } from "../../ai/runtime-settings";
 
 export type AiProviderErrorCode =
@@ -86,6 +90,8 @@ export async function callOpenAiJson<T>(options: {
   schemaName: string;
   schema: Record<string, unknown>;
   timeoutMs?: number;
+  firstByteTimeoutMs?: number;
+  totalResponseTimeoutMs?: number;
   rawInput?: boolean;
 }): Promise<T> {
   const result = await callOpenAiStructured<T>({
@@ -102,6 +108,8 @@ export async function callOpenAiStructured<T>(options: {
   schema: Record<string, unknown>;
   parse: (value: unknown) => T;
   timeoutMs?: number;
+  firstByteTimeoutMs?: number;
+  totalResponseTimeoutMs?: number;
   rawInput?: boolean;
   requestId?: string;
   model?: string;
@@ -126,47 +134,54 @@ export async function callOpenAiStructured<T>(options: {
   const startedAt = Date.now();
   const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const maxAttempts = options.maxAttempts ?? 2;
+  const legacyTimeoutMs = options.timeoutMs ?? 45_000;
+  const firstByteTimeoutMs = options.firstByteTimeoutMs ?? legacyTimeoutMs;
+  const totalResponseTimeoutMs = options.totalResponseTimeoutMs ?? legacyTimeoutMs;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = new AbortController();
-    const cancelFromCaller = () => controller.abort();
     if (options.signal?.aborted) {
       throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
     }
-    options.signal?.addEventListener("abort", cancelFromCaller, { once: true });
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
     try {
       await options.onProgress?.({ stage: "provider_started", provider: "openai", model });
-      const response = await fetch("https://api.openai.com/v1/responses", {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${apiKey}`,
-          "content-type": "application/json",
-          ...(options.requestId ? { "x-client-request-id": options.requestId } : {}),
-        },
-        body: JSON.stringify({
-          model,
-          instructions: options.instructions,
-          input: options.rawInput ? options.input : typeof options.input === "string" ? options.input : JSON.stringify(options.input),
-          ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
-          ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort } } : {}),
-          ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
-          stream: Boolean(options.onProgress),
-          text: {
-            ...(options.textVerbosity ? { verbosity: options.textVerbosity } : {}),
-            format: {
-              type: "json_schema",
-              name: options.schemaName,
-              strict: true,
-              schema: openAiCompatibleJsonSchema(options.schema),
-            },
+      const { response, payload } = await runProviderRequestWithTimeouts({
+        firstByteTimeoutMs,
+        totalResponseTimeoutMs,
+        callerSignal: options.signal,
+        start: (signal) => fetch("https://api.openai.com/v1/responses", {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${apiKey}`,
+            "content-type": "application/json",
+            ...(options.requestId ? { "x-client-request-id": options.requestId } : {}),
           },
+          body: JSON.stringify({
+            model,
+            instructions: options.instructions,
+            input: options.rawInput ? options.input : typeof options.input === "string" ? options.input : JSON.stringify(options.input),
+            ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
+            ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort } } : {}),
+            ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
+            stream: Boolean(options.onProgress),
+            text: {
+              ...(options.textVerbosity ? { verbosity: options.textVerbosity } : {}),
+              format: {
+                type: "json_schema",
+                name: options.schemaName,
+                strict: true,
+                schema: openAiCompatibleJsonSchema(options.schema),
+              },
+            },
+          }),
+          signal,
         }),
-        signal: controller.signal,
+        consume: async (response) => ({
+          response,
+          payload: options.onProgress && response.ok
+            ? await readOpenAiEventStream(response, options.onProgress)
+            : await response.json().catch(() => ({})) as ResponsesApiPayload,
+        }),
       });
-      const payload = options.onProgress && response.ok
-        ? await readOpenAiEventStream(response, options.onProgress)
-        : await response.json().catch(() => ({})) as ResponsesApiPayload;
       totalUsage.inputTokens += payload.usage?.input_tokens ?? 0;
       totalUsage.outputTokens += payload.usage?.output_tokens ?? 0;
       totalUsage.cachedInputTokens += payload.usage?.input_tokens_details?.cached_tokens ?? 0;
@@ -218,19 +233,27 @@ export async function callOpenAiStructured<T>(options: {
         if (error.retryable && attempt < maxAttempts) continue;
         throw error;
       }
-      if (error instanceof DOMException && error.name === "AbortError") {
-        if (options.signal?.aborted) {
+      if (error instanceof ProviderRequestAbortError) {
+        if (error.reason === "caller") {
           throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
         }
         if (attempt < maxAttempts) continue;
-        throw new AiUnavailableError("AI-проверка превысила допустимое время ожидания.", "PROVIDER_TIMEOUT", true);
+        const providerErrorType = error.reason === "first_byte_timeout"
+          ? "first_byte_timeout"
+          : options.onProgress ? "total_stream_timeout" : "total_response_timeout";
+        throw new AiUnavailableError(
+          error.reason === "first_byte_timeout"
+            ? "AI-провайдер не начал ответ в допустимое время."
+            : "AI-проверка превысила допустимое полное время ответа.",
+          "PROVIDER_TIMEOUT",
+          true,
+          null,
+          providerErrorType,
+        );
       }
       if (attempt >= maxAttempts) {
         throw new AiUnavailableError("AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);
       }
-    } finally {
-      clearTimeout(timeout);
-      options.signal?.removeEventListener("abort", cancelFromCaller);
     }
   }
   throw new AiUnavailableError("AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);

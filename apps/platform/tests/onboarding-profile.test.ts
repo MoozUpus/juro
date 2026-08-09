@@ -497,6 +497,39 @@ test("onboarding fails closed when one mandatory policy digest is missing", asyn
   }
 });
 
+test("onboarding permits an explicit development policy bypass without fabricating acceptance evidence", async () => {
+  const { sqlite, d1 } = onboardingDatabase();
+  try {
+    const userId = insertProfile(sqlite);
+    const response = await handleOnboardingRequest(
+      request(validInput),
+      {
+        ...dependencies(d1, userId),
+        allowDevelopmentPolicyBypass: true,
+      },
+    );
+    assert.equal(response.status, 200);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT count(*) AS total FROM user_acceptances WHERE user_id=?",
+      ).get(userId) as { total: number }).total,
+      0,
+    );
+    const audit = sqlite.prepare(
+      `SELECT metadata_json AS metadataJson
+       FROM workspace_audit_events
+       WHERE actor_user_id=? AND action='onboarding_completed'`,
+    ).get(userId) as { metadataJson: string };
+    assert.equal(
+      (JSON.parse(audit.metadataJson) as { policyEvidence: string })
+        .policyEvidence,
+      "development_bypass",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("repeated onboarding creates at most one default personal workspace", async () => {
   const { sqlite, d1 } = onboardingDatabase();
   try {
@@ -553,6 +586,8 @@ test("onboarding UI exposes complete RU/UZ profile and goal contracts", async ()
   assert.match(client, /autoComplete="given-name"/);
   assert.match(client, /autoComplete="additional-name"/);
   assert.match(client, /autoComplete="tel"/);
+  assert.match(client, /developmentPolicyBypass/);
+  assert.match(client, /не записывается как согласие пользователя/);
   assert.doesNotMatch(client, /acceptPolicies|onboarding-consent/);
   assert.match(route, /handleOnboardingRequest/);
   assert.match(route, /assertSafeWrite\(request\)/);

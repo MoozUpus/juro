@@ -2,6 +2,10 @@ import { anthropicCompatibleJsonSchema } from "../../ai/anthropic-schema";
 import { runtimeEnv } from "../storage/runtime";
 import { resolveAiRuntimeSettings } from "../../ai/runtime-settings";
 import {
+  ProviderRequestAbortError,
+  runProviderRequestWithTimeouts,
+} from "../../ai/provider-request-timeout";
+import {
   AiUnavailableError,
   type AiProviderUsage,
   type AiStructuredResult,
@@ -53,6 +57,8 @@ export async function callAnthropicStructured<T>(options: {
   schema: Record<string, unknown>;
   parse: (value: unknown) => T;
   timeoutMs?: number;
+  firstByteTimeoutMs?: number;
+  totalResponseTimeoutMs?: number;
   requestId?: string;
   model?: string;
   maxAttempts?: 1 | 2;
@@ -73,53 +79,60 @@ export async function callAnthropicStructured<T>(options: {
   const startedAt = Date.now();
   const totalUsage: AiProviderUsage = { inputTokens: 0, outputTokens: 0, cachedInputTokens: 0 };
   const maxAttempts = options.maxAttempts ?? 2;
+  const legacyTimeoutMs = options.timeoutMs ?? 45_000;
+  const firstByteTimeoutMs = options.firstByteTimeoutMs ?? legacyTimeoutMs;
+  const totalResponseTimeoutMs = options.totalResponseTimeoutMs ?? legacyTimeoutMs;
   const providerSchema = anthropicCompatibleJsonSchema(options.schema);
   const systemInstructions = options.strictOutput === false
     ? `${options.instructions}\n\nCall emit_result exactly once. Its payload_json field must be a JSON string matching this schema: ${JSON.stringify(providerSchema)}`
     : options.instructions;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
-    const controller = new AbortController();
-    const cancelFromCaller = () => controller.abort();
     if (options.signal?.aborted) {
       throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
     }
-    options.signal?.addEventListener("abort", cancelFromCaller, { once: true });
-    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 45_000);
     try {
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "content-type": "application/json",
-          ...(options.requestId ? { "x-client-request-id": options.requestId } : {}),
-        },
-        body: JSON.stringify({
-          model,
-          max_tokens: options.maxTokens ?? 8_192,
-          system: systemInstructions,
-          messages: [{
-            role: "user",
-            content: typeof options.input === "string" ? options.input : JSON.stringify(options.input),
-          }],
-          ...(options.strictOutput === false ? {
-            tools: [{
-              name: "emit_result",
-              description: "Return the complete validated JURO result.",
-              input_schema: anthropicJsonEnvelopeSchema,
+      const { response, payload } = await runProviderRequestWithTimeouts({
+        firstByteTimeoutMs,
+        totalResponseTimeoutMs,
+        callerSignal: options.signal,
+        start: (signal) => fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: {
+            "x-api-key": apiKey,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+            ...(options.requestId ? { "x-client-request-id": options.requestId } : {}),
+          },
+          body: JSON.stringify({
+            model,
+            max_tokens: options.maxTokens ?? 8_192,
+            system: systemInstructions,
+            messages: [{
+              role: "user",
+              content: typeof options.input === "string" ? options.input : JSON.stringify(options.input),
             }],
-            tool_choice: { type: "tool", name: "emit_result" },
-          } : { output_config: {
-            format: {
-              type: "json_schema",
-              schema: providerSchema,
-            },
-          } }),
+            ...(options.strictOutput === false ? {
+              tools: [{
+                name: "emit_result",
+                description: "Return the complete validated JURO result.",
+                input_schema: anthropicJsonEnvelopeSchema,
+              }],
+              tool_choice: { type: "tool", name: "emit_result" },
+            } : { output_config: {
+              format: {
+                type: "json_schema",
+                schema: providerSchema,
+              },
+            } }),
+          }),
+          signal,
         }),
-        signal: controller.signal,
+        consume: async (response) => ({
+          response,
+          payload: await response.json().catch(() => ({})) as AnthropicMessagesPayload,
+        }),
       });
-      const payload = await response.json().catch(() => ({})) as AnthropicMessagesPayload;
       totalUsage.inputTokens += payload.usage?.input_tokens ?? 0;
       totalUsage.outputTokens += payload.usage?.output_tokens ?? 0;
       totalUsage.cachedInputTokens += payload.usage?.cache_read_input_tokens ?? 0;
@@ -174,19 +187,24 @@ export async function callAnthropicStructured<T>(options: {
         if (error.retryable && attempt < maxAttempts) continue;
         throw error;
       }
-      if (error instanceof DOMException && error.name === "AbortError") {
-        if (options.signal?.aborted) {
+      if (error instanceof ProviderRequestAbortError) {
+        if (error.reason === "caller") {
           throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
         }
         if (attempt < maxAttempts) continue;
-        throw new AiUnavailableError("Резервная AI-проверка превысила время ожидания.", "PROVIDER_TIMEOUT", true);
+        throw new AiUnavailableError(
+          error.reason === "first_byte_timeout"
+            ? "Резервный AI-провайдер не начал ответ в допустимое время."
+            : "Резервная AI-проверка превысила допустимое полное время ответа.",
+          "PROVIDER_TIMEOUT",
+          true,
+          null,
+          error.reason,
+        );
       }
       if (attempt >= maxAttempts) {
         throw new AiUnavailableError("Резервная AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);
       }
-    } finally {
-      clearTimeout(timeout);
-      options.signal?.removeEventListener("abort", cancelFromCaller);
     }
   }
   throw new AiUnavailableError("Резервная AI-проверка временно недоступна.", "PROVIDER_UNAVAILABLE", true);

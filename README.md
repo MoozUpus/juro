@@ -83,6 +83,12 @@ User platform:
 npm run dev:platform
 ```
 
+Admin console Worker:
+
+```bash
+npm run dev:admin
+```
+
 Copy `.env.example` to a local ignored environment file and supply only the values required for the feature being tested. Never commit `.env`, API keys, access tokens, database exports or user data.
 
 Local D1 and R2 resources are simulated by the existing Vite/Cloudflare configuration. Production bindings are supplied by the hosting platform.
@@ -96,6 +102,7 @@ Local D1 and R2 resources are simulated by the existing Vite/Cloudflare configur
 | `RESEND_API_KEY` | For email OTP | Server | Resend API authentication; never exposed to the client |
 | `EMAIL_FROM` | For email OTP | Server | Verified JURO sender address |
 | `JURO_SMOKE_BASE_URL` | No | Test process | Base URL for the document-builder smoke test |
+| `CLOUDFLARE_REMOTE_BINDINGS` | No | Local development | Set to `true` to opt into remote Cloudflare bindings; requires Wrangler login |
 | `DB` | Yes for persisted builder features | Worker binding | Cloudflare D1 database |
 | `BUCKET` | Yes for generated/uploaded files | Worker binding | Private Cloudflare R2 bucket |
 | `ASSETS` / `IMAGES` | Hosting-managed | Worker bindings | Static assets and image optimization |

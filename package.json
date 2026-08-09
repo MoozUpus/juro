@@ -7,9 +7,10 @@
     "node": ">=22.13.0"
   },
   "scripts": {
-    "install:all": "npm --prefix apps/website run install:ci && npm --prefix apps/platform run install:ci",
+    "install:all": "npm --prefix apps/website ci && npm --prefix apps/platform run install:ci",
     "dev:website": "npm --prefix apps/website run dev",
     "dev:platform": "npm --prefix apps/platform run dev",
+    "dev:admin": "npm --prefix apps/admin run dev",
     "lint": "npm --prefix apps/website run lint && npm --prefix apps/platform run lint",
     "type-check": "npm --prefix apps/website run type-check && npm --prefix apps/platform run type-check",
     "build": "npm --prefix apps/website run build && npm --prefix apps/platform run build",

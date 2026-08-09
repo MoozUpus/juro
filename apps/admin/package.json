@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "dev": "node ../platform/node_modules/wrangler/bin/wrangler.js dev --local --config wrangler.jsonc",
     "types": "node ../platform/node_modules/wrangler/bin/wrangler.js types worker-configuration.d.ts --config wrangler.jsonc",
     "type-check": "node ../platform/node_modules/typescript/bin/tsc --project tsconfig.json",
     "check": "node ../platform/node_modules/wrangler/bin/wrangler.js deploy --dry-run --env staging --config wrangler.jsonc",

@@ -28,6 +28,7 @@ type Props = {
   returnTo?: string;
   otpEnabled: boolean;
   platformAuthEnabled: boolean;
+  developmentAuthEnabled: boolean;
   turnstileSiteKey?: string;
 };
 
@@ -62,6 +63,7 @@ export function AuthForm({
   returnTo,
   otpEnabled,
   platformAuthEnabled,
+  developmentAuthEnabled,
   turnstileSiteKey,
 }: Props) {
   // Locale is route-owned. Keeping it in client state makes a Next soft
@@ -285,7 +287,9 @@ export function AuthForm({
                 : "Server yuborish xizmati sozlanmagani uchun email-kod mavjud emas. Yuborildi degan soxta xabar ko‘rsatilmaydi."}</p>
             </div>
           </header>
-          {platformAuthEnabled
+          {developmentAuthEnabled
+            ? <Link className="auth-submit" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}</Link>
+            : platformAuthEnabled
             ? <Link className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Продолжить защищённый вход" : "Himoyalangan kirishni davom ettirish"}</Link>
             : <p className="auth-error" role="status">{ru ? "Владелец проекта должен подключить Resend и Cloudflare Turnstile через защищённое хранилище." : "Loyiha egasi Resend va Cloudflare Turnstile xizmatlarini himoyalangan saqlash orqali ulashi kerak."}</p>}
         </section>
@@ -463,9 +467,13 @@ export function AuthForm({
             ? <>{ru ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href={`/${locale}/auth/login`}>{ru ? "Войти" : "Kirish"}</Link></>
             : <>{ru ? "Нет аккаунта?" : "Hisob yo‘qmi?"} <Link href={`/${locale}/auth/register?accountType=${accountType}`}>{ru ? "Создать" : "Yaratish"}</Link></>}
         </div>
-        {platformAuthEnabled && <Link className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
-          {ru ? "Войти через защищённую учётную запись" : "Himoyalangan hisob orqali kirish"}
-        </Link>}
+        {developmentAuthEnabled
+          ? <Link className="auth-siwc" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}>
+              {ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}
+            </Link>
+          : platformAuthEnabled && <Link className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
+              {ru ? "Войти через защищённую учётную запись" : "Himoyalangan hisob orqali kirish"}
+            </Link>}
       </section>
     </main>
   );

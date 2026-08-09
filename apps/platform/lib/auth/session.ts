@@ -22,6 +22,7 @@ export type SessionUser = {
   displayName: string;
   userId: string;
   sessionId: string;
+  authMethod: string;
   authSource: "local_session";
   assuranceLevel: LocalAssuranceLevel;
   authenticatedAt: string | null;
@@ -43,6 +44,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       displayName: session.fullName || session.email,
       userId: session.userId,
       sessionId: session.sessionId,
+      authMethod: session.authMethod,
       authSource: "local_session",
       assuranceLevel: session.assuranceLevel,
       authenticatedAt: session.authenticatedAt,

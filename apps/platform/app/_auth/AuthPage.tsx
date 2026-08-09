@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { localDevelopmentAuthEnabled } from "../../lib/auth/development-auth";
 import { runtimeEnv } from "../../lib/document-builder/storage/runtime";
 import { getChatGPTUser } from "../chatgpt-auth";
 import { AuthForm } from "./AuthForm";
@@ -40,6 +41,7 @@ export async function AuthPage({
       )}
       turnstileSiteKey={env.TURNSTILE_SITE_KEY}
       platformAuthEnabled={env.ALLOW_PLATFORM_AUTH_HEADERS === "true"}
+      developmentAuthEnabled={localDevelopmentAuthEnabled()}
     />
   );
 }
