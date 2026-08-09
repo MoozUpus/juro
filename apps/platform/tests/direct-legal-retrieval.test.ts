@@ -58,6 +58,32 @@ test("direct retrieval uses only query-scoped official links and keeps Lex befor
   assert.equal(calls.every((item) => new URL(item.url).hostname.endsWith(".uz") || new URL(item.url).hostname === "lex.uz" || new URL(item.url).hostname === "advice.uz"), true);
 });
 
+test("direct retrieval narrows a natural-language registration question before searching official sources", async () => {
+  const calls: Call[] = [];
+  const responses = [
+    responseHtml('<a href="/ru/docs/42">Lex result</a>'),
+    new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Регистрация ООО", "Статья 12. Порядок регистрации")),
+    responseHtml(""),
+  ];
+  const result = await retrieveDirectLegalSources(
+    "Какие основные шаги нужны для регистрации ООО в Узбекистане? Дайте краткий ответ с официальными источниками.",
+    "ru",
+    {
+      fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        calls.push({ url: String(input), init });
+        return responses.shift() ?? new Response("offline", { status: 503 });
+      }) as typeof fetch,
+      now: () => new Date("2026-08-09T12:00:00.000Z"),
+      wait: async () => undefined,
+    },
+  );
+
+  assert.equal(new URL(calls[0]!.url).searchParams.get("searchtitle"), "регистрации ооо");
+  assert.equal(result.sourceValidationStatus, "validated");
+  assert.deepEqual(result.sources.map((source) => source.officialUrl), ["https://lex.uz/ru/docs/42"]);
+});
+
 test("direct retrieval supports the official UZ and oz paths without relaxing the allowlist", async () => {
   const calls: Call[] = [];
   const responses = [
