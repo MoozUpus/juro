@@ -6,6 +6,7 @@ import {
   forceClarificationWithoutVerifiedSources,
   legalChatJsonSchema,
   legalChatResponseSchema,
+  parseLegalChatResponse,
 } from "../lib/ai/legal-chat-schema";
 import {
   AiRunConflictError,
@@ -17,6 +18,13 @@ import {
   reserveAiRun,
 } from "../lib/ai/run-store";
 import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
+import {
+  aiAnswerPreferencesSchema,
+  clarificationAnswerSchema,
+  clarificationAnswersSchema,
+  formatClarificationAnswers,
+  parseStoredUserMessageMeta,
+} from "../lib/ai/chat-dialog";
 
 const validLegalResponse = {
   responseKind: "clarification_required" as const,
@@ -47,6 +55,44 @@ test("LegalChatResponse is strict, bilingual, and JSON-schema backed", () => {
   assert.equal(legalChatResponseSchema.safeParse({ ...validLegalResponse, hidden: "not allowed" }).success, false);
   assert.equal(legalChatJsonSchema.type, "object");
   assert.ok(Array.isArray(legalChatJsonSchema.required));
+});
+
+test("clarifications are limited to three and extra provider questions are safely normalized", () => {
+  const questions = ["Когда?", "Какая сумма?", "Кто подписал?", "Лишний вопрос?"];
+  const parsed = legalChatResponseSchema.parse({ ...validLegalResponse, clarificationQuestions: questions.slice(0, 3) });
+  assert.equal(parsed.clarificationQuestions.length, 3);
+  assert.deepEqual(
+    parseLegalChatResponse({ ...validLegalResponse, clarificationQuestions: questions }).clarificationQuestions,
+    questions.slice(0, 3),
+  );
+  assert.equal(clarificationAnswersSchema.safeParse([
+    { question: "Когда произошло событие?", answer: "2026-08-01" },
+    { question: "Какая сумма?", answer: "100000" },
+    { question: "Кто подписал документ?", answer: "Директор" },
+  ]).success, true);
+  assert.equal(clarificationAnswersSchema.safeParse([
+    { question: "Один?", answer: "Да" },
+    { question: "Два?", answer: "Да" },
+    { question: "Три?", answer: "Да" },
+    { question: "Четыре?", answer: "Да" },
+  ]).success, false);
+  assert.equal(clarificationAnswerSchema.safeParse({ question: "Один?", answer: "" }).success, false);
+});
+
+test("clarification metadata is structured, localized, and never needs a URL parameter", () => {
+  const answers = [
+    { question: "Когда произошла выплата?", answer: "1 августа 2026" },
+    { question: "Какая сумма?", answer: "100 000 сум" },
+  ];
+  assert.match(formatClarificationAnswers("ru", answers), /^Уточнения пользователя:/);
+  assert.match(formatClarificationAnswers("uz", answers), /^Foydalanuvchi aniqliklari:/);
+  assert.deepEqual(parseStoredUserMessageMeta({
+    kind: "juro_ai_user_message",
+    clarificationAnswers: answers,
+    legalContextDate: "2026-08-01",
+    preferences: { responseStyle: "plain", clarificationPolicy: "critical_only", solutionPath: "recommended", includeLegalDetails: true },
+  })?.clarificationAnswers, answers);
+  assert.equal(aiAnswerPreferencesSchema.safeParse({ responseStyle: "plain", clarificationPolicy: "critical_only", solutionPath: "recommended", includeLegalDetails: false }).success, true);
 });
 
 test("source boundary rejects a provider-invented source id", () => {

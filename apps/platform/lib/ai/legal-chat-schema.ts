@@ -68,7 +68,7 @@ export const legalChatResponseSchema = z.object({
   jurisdiction: z.literal("UZ"),
   answerMode: z.enum(["short", "detailed"]),
   reasoningMode: z.enum(["fast", "deep"]),
-  clarificationQuestions: z.array(z.string().min(1).max(500)).max(8),
+  clarificationQuestions: z.array(z.string().min(1).max(500)).max(3),
   confirmedFindings: z.array(legalFindingSchema).max(16),
   assumptions: z.array(legalAssumptionSchema).max(16),
   risks: z.array(legalRiskSchema).max(16),
@@ -110,7 +110,16 @@ export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, 
 }) as Record<string, unknown>;
 
 export function parseLegalChatResponse(value: unknown): LegalChatResponse {
-  return legalChatResponseSchema.parse(value);
+  // Provider prompts and the JSON Schema both cap this at three. This final
+  // normalization protects the user flow if a non-strict fallback still
+  // returns extra clarification prompts; it does not alter legal findings.
+  const record = value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+  const normalized = record && Array.isArray(record.clarificationQuestions)
+    ? { ...record, clarificationQuestions: record.clarificationQuestions.slice(0, 3) }
+    : value;
+  return legalChatResponseSchema.parse(normalized);
 }
 
 export function forceClarificationWithoutVerifiedSources(
@@ -123,7 +132,7 @@ export function forceClarificationWithoutVerifiedSources(
   },
 ): LegalChatResponse {
   const clarificationQuestions = result.clarificationQuestions.length > 0
-    ? result.clarificationQuestions
+    ? result.clarificationQuestions.slice(0, 3)
     : [options.locale === "ru" ? "Какие факты и даты можно уточнить?" : "Qaysi faktlar va sanalarni aniqlashtirish mumkin?"];
   return {
     ...result,

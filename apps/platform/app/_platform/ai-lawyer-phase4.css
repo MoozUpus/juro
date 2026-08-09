@@ -726,3 +726,201 @@
 .ai-branch-history a[aria-current="page"] { border-color:#be974f; background:#fff8e9; }
 .ai-branch-history a:focus-visible { outline:3px solid #be974f; outline-offset:2px; }
 @media (hover: hover) and (pointer: fine) { .ai-branch-history a:hover { background:#f4f0e8; } }
+
+/* Conversational AI flow: content only appears after the server has saved a
+   validated response. These transitions communicate state, never reasoning. */
+.ai-message-list {
+  display: grid;
+  max-width: 780px;
+  gap: .875rem;
+}
+
+.ai-user-message,
+.ai-pending-message,
+.ai-answer,
+.ai-clarification-form {
+  box-sizing: border-box;
+  transition: opacity 180ms cubic-bezier(.23, 1, .32, 1), transform 180ms cubic-bezier(.23, 1, .32, 1);
+}
+
+@starting-style {
+  .ai-user-message { opacity: 0; transform: translateY(4px); }
+  .ai-pending-message { opacity: 0; transform: translateY(6px); }
+  .ai-answer,
+  .ai-clarification-form { opacity: 0; transform: translateY(4px); }
+}
+
+.ai-user-message {
+  justify-self: end;
+  width: min(100%, 42rem);
+  border: 1px solid #c8d7df;
+  border-radius: 1rem 1rem .25rem 1rem;
+  background: #edf4f6;
+  color: #173346;
+  padding: .875rem 1rem;
+}
+
+.ai-user-message > header,
+.ai-pending-message > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  color: #405c6c;
+  font-size: .6875rem;
+}
+
+.ai-user-message p,
+.ai-user-message dd { margin: .5rem 0 0; white-space: pre-wrap; line-height: 1.55; }
+.ai-user-message section > small,
+.ai-message-meta { display: block; margin-top: .55rem; color: #5b7481; font-size: .6875rem; }
+.ai-user-message dl { margin: .6rem 0 0; }
+.ai-user-message dt { color: #405c6c; font-size: .75rem; font-weight: 800; }
+.ai-user-message dd { margin-left: 0; }
+
+.ai-pending-message {
+  width: min(100%, 46rem);
+  border: 1px solid #d5dce1;
+  border-radius: .25rem 1rem 1rem 1rem;
+  background: #fff;
+  box-shadow: 0 .75rem 2rem rgba(6, 40, 68, .05);
+  padding: 1rem;
+}
+
+.ai-pending-message > p { margin: .6rem 0; color: #183b52; font-size: .875rem; font-weight: 750; }
+.ai-pending-message ol { display: grid; margin: 0 0 .85rem; padding: 0; gap: .375rem; list-style: none; }
+.ai-pending-message li { color: #72828b; font-size: .75rem; }
+.ai-pending-message li::before { content: "○"; display: inline-block; width: 1.125rem; color: #899aa4; }
+.ai-pending-message li[data-complete]::before { content: "✓"; color: #2d7253; }
+.ai-pending-message li[data-current] { color: #062844; font-weight: 800; }
+.ai-pending-message li[data-current]::before { content: "•"; color: #be974f; font-size: 1.2em; }
+.ai-pending-message button,
+.ai-clarification-form footer button,
+.ai-response-preset button,
+.ai-settings-trigger {
+  display: inline-flex;
+  width: auto;
+  min-height: 2.75rem;
+  height: auto;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  border: 1px solid rgba(6, 40, 68, .18);
+  border-radius: .625rem;
+  background: #fff;
+  color: #062844;
+  padding: .5rem .75rem;
+  font: inherit;
+  font-size: .75rem;
+  font-weight: 780;
+}
+.ai-pending-message button { color: #7d302c; }
+
+.ai-answer { width: min(100%, 48rem); }
+.ai-answer > header { margin-bottom: .6rem; }
+.ai-validated-content { display: grid; gap: .85rem; }
+.ai-validated-content > * { margin: 0; transition: opacity 160ms cubic-bezier(.23, 1, .32, 1), transform 160ms cubic-bezier(.23, 1, .32, 1); }
+.ai-validated-content > *:nth-child(2) { transition-delay: 35ms; }
+.ai-validated-content > *:nth-child(n + 3) { transition-delay: 70ms; }
+@starting-style { .ai-validated-content > * { opacity: 0; transform: translateY(4px); } }
+
+.ai-clarification-form {
+  display: grid;
+  width: min(100%, 48rem);
+  margin-top: .875rem;
+  gap: .875rem;
+  border: 1px solid #d6c08c;
+  border-radius: 1rem;
+  background: #fffdf7;
+  padding: 1rem;
+}
+.ai-clarification-form header > small { color: #8a692a; font-size: .6875rem; font-weight: 850; letter-spacing: .08em; }
+.ai-clarification-form h2 { margin: .3rem 0; color: #062844; font-size: 1.125rem; }
+.ai-clarification-form header p,
+.ai-clarification-original { margin: 0; color: #536873; font-size: .8125rem; line-height: 1.5; }
+.ai-clarification-original { border-inline-start: 3px solid #be974f; background: #fff8e9; padding: .65rem .75rem; }
+.ai-clarification-form > div { display: grid; gap: .75rem; }
+.ai-clarification-form label { display: grid; gap: .35rem; color: #18384c; font-size: .8125rem; font-weight: 750; }
+.ai-clarification-form input,
+.ai-clarification-form textarea,
+.ai-answer-settings select {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  border: 1px solid rgba(6, 40, 68, .22);
+  border-radius: .625rem;
+  background: #fff;
+  color: #062844;
+  padding: .625rem .75rem;
+  font: inherit;
+}
+.ai-clarification-form textarea { min-height: 6.5rem; resize: vertical; }
+.ai-clarification-form input[aria-invalid="true"],
+.ai-clarification-form textarea[aria-invalid="true"] { border-color: #a33934; }
+.ai-clarification-form label small,
+.ai-form-errors { color: #963a36; font-size: .75rem; }
+.ai-form-errors { margin: 0; border-inline-start: 3px solid #a33934; background: #fff1f0; padding: .625rem .75rem; }
+.ai-clarification-form footer { display: flex; flex-wrap: wrap; gap: .5rem; }
+.ai-clarification-form footer button:last-child { border-color: #062844; background: #062844; color: #fff; }
+
+.ai-modes { align-items: center; flex-wrap: wrap; }
+.ai-response-preset { display: flex; min-width: 0; margin: 0; padding: 0; gap: .25rem; border: 0; }
+.ai-response-preset legend { width: 100%; margin-bottom: .25rem; color: #526571; font-size: .6875rem; font-weight: 800; }
+.ai-response-preset button { min-height: 2.25rem; padding: .375rem .55rem; }
+.ai-response-preset button[aria-pressed="true"] { border-color: #be974f; background: #fff8e9; }
+.ai-settings-trigger { min-height: 2.25rem; padding: .375rem .55rem; }
+.ai-settings-summary { width: 100%; margin: 0; color: #526571; font-size: .6875rem; line-height: 1.45; }
+.ai-answer-settings { display: grid; width: min(100%, 46rem); grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem; margin: .25rem 0 0; border: 1px solid rgba(6, 40, 68, .14); border-radius: .75rem; background: #f8faf9; padding: .8rem; }
+.ai-answer-settings legend { color: #062844; font-size: .75rem; font-weight: 850; }
+.ai-answer-settings label { display: grid; gap: .3rem; color: #405a68; font-size: .75rem; font-weight: 750; }
+.ai-answer-settings output { color: #5e6e78; font-weight: 500; line-height: 1.45; }
+.ai-answer-settings .ai-settings-check { grid-column: 1 / -1; display: flex; align-items: center; gap: .5rem; }
+.ai-answer-settings .ai-settings-check input { width: 1.125rem; min-height: 1.125rem; accent-color: #062844; }
+.ai-event-date { display: grid; gap: .3rem; color: #526571; font-size: .6875rem; font-weight: 750; }
+.ai-event-date input { min-height: 2.25rem; border: 1px solid rgba(6, 40, 68, .18); border-radius: .5rem; background: #fff; color: #062844; padding: 0 .625rem; font: inherit; }
+
+.ai-pending-message button:focus-visible,
+.ai-response-preset button:focus-visible,
+.ai-settings-trigger:focus-visible,
+.ai-answer-settings select:focus-visible,
+.ai-clarification-form input:focus-visible,
+.ai-clarification-form textarea:focus-visible,
+.ai-clarification-form button:focus-visible,
+.ai-event-date input:focus-visible { outline: 3px solid #be974f; outline-offset: 2px; }
+
+.ai-pending-message button:active,
+.ai-response-preset button:active,
+.ai-settings-trigger:active,
+.ai-clarification-form button:active { transform: scale(.98); }
+
+@media (hover: hover) and (pointer: fine) {
+  .ai-pending-message button:hover,
+  .ai-response-preset button:hover,
+  .ai-settings-trigger:hover,
+  .ai-clarification-form .secondary:hover { background: #f4f0e8; }
+}
+
+@media (max-width: 560px) {
+  .ai-user-message,
+  .ai-pending-message,
+  .ai-answer,
+  .ai-clarification-form { width: 100%; }
+  .ai-answer-settings { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-user-message,
+  .ai-pending-message,
+  .ai-answer,
+  .ai-clarification-form,
+  .ai-validated-content > * { transition: opacity 100ms ease; }
+  .ai-user-message,
+  .ai-pending-message,
+  .ai-answer,
+  .ai-clarification-form,
+  .ai-validated-content > *,
+  .ai-pending-message button:active,
+  .ai-response-preset button:active,
+  .ai-settings-trigger:active,
+  .ai-clarification-form button:active { transform: none; }
+}

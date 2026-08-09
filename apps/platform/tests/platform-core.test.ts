@@ -1126,7 +1126,11 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shell, /platform-sidebar nav a\{min-height:44px\}/);
   const aiClient = await readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8");
   assert.match(aiClient, /href=\{aiLocation\(new URLSearchParams\(\{ conversationId: item\.id \}\)\)\}/);
-  assert.match(aiClient, /window\.location\.assign\(aiLocation\(nextParams\)\)/);
+  assert.match(aiClient, /router\.replace\(aiLocation\(nextParams\), \{ scroll: false \}\)/);
+  assert.doesNotMatch(aiClient, /window\.location\.assign/);
+  assert.match(aiClient, /<UserMessageBubble/);
+  assert.match(aiClient, /<PendingAssistantBubble/);
+  assert.match(aiClient, /<ClarificationForm/);
   assert.doesNotMatch(shellComponent, /MoreHorizontal/);
   assert.match(dashboard, /max-width:820px/);
   assert.match(dashboard, /max-width:460px/);

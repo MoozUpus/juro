@@ -12,12 +12,18 @@ import {
   sha256Json,
 } from "../../../../lib/ai/run-store";
 import { AiBranchInputError, listAiBranches, resolveAiBranchInput } from "../../../../lib/ai/branch-store";
-import { selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
+import { listAiConversationBranchMessages, selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
 import {
   enforceLegalDatabaseFreshness,
   enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../../../../lib/ai/legal-chat-schema";
+import {
+  formatClarificationAnswers,
+  normalizeAiAnswerPreferences,
+  parseClarificationAnswers,
+  parseStoredUserMessageMeta,
+} from "../../../../lib/ai/chat-dialog";
 import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
@@ -123,6 +129,8 @@ async function executePost(
     reasoningMode?: string;
     voiceRecordingId?: string;
     legalContextDate?: string;
+    clarificationAnswers?: unknown;
+    preferences?: unknown;
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
   const db = requireD1();
@@ -133,6 +141,27 @@ async function executePost(
     return response({ code: error.code, error: operationalFeatureMessage(locale) }, 503);
   }
   const submittedQuestion = body?.question?.trim();
+  const clarificationAnswers = body?.clarificationAnswers === undefined
+    ? null
+    : parseClarificationAnswers(body.clarificationAnswers);
+  if (body?.clarificationAnswers !== undefined && !clarificationAnswers) {
+    return response({
+      code: "INVALID_CLARIFICATION_ANSWERS",
+      error: locale === "ru"
+        ? "Проверьте ответы на уточняющие вопросы: можно отправить от одного до трёх непустых ответов."
+        : "Aniqlashtiruvchi savollarga javoblarni tekshiring: birdan uchgacha bo‘sh bo‘lmagan javob yuborish mumkin.",
+    }, 400);
+  }
+  const preferences = normalizeAiAnswerPreferences(body?.preferences);
+  if (!preferences) {
+    return response({
+      code: "INVALID_AI_PREFERENCES",
+      error: locale === "ru" ? "Настройки ответа имеют неподдерживаемый формат." : "Javob sozlamalari qo‘llab-quvvatlanmaydigan formatda.",
+    }, 400);
+  }
+  const questionForBranch = clarificationAnswers
+    ? formatClarificationAnswers(locale, clarificationAnswers)
+    : submittedQuestion;
   const answerMode = body?.answerMode === "short" ? "short" : "detailed";
   const reasoningMode = body?.reasoningMode === "deep" ? "deep" : "fast";
   const applicableAt = body?.legalContextDate
@@ -153,10 +182,10 @@ async function executePost(
       error: locale === "ru" ? "Повторите отправку: идентификатор запроса отсутствует или некорректен." : "Qayta yuboring: so‘rov identifikatori yo‘q yoki noto‘g‘ri.",
     }, 400);
   }
-  if (body?.operation !== "regenerate" && (!submittedQuestion || submittedQuestion.length < 5)) {
+  if (body?.operation !== "regenerate" && (!questionForBranch || questionForBranch.length < 5)) {
     return response({ error: locale === "ru" ? "Опишите ситуацию чуть подробнее." : "Vaziyatni biroz batafsil yozing." }, 400);
   }
-  if (submittedQuestion && submittedQuestion.length > 8_000) {
+  if (questionForBranch && questionForBranch.length > 8_000) {
     return response({ error: locale === "ru" ? "Сообщение слишком длинное. Сократите его до 8 000 символов." : "Xabar juda uzun. Uni 8 000 belgigacha qisqartiring." }, 413);
   }
 
@@ -195,7 +224,7 @@ async function executePost(
       conversationId: existingConversation ? conversationId : null,
       requestedOperation: body?.operation,
       sourceMessageId: body?.sourceMessageId,
-      question: submittedQuestion,
+      question: questionForBranch,
     });
   } catch (error) {
     if (!(error instanceof AiBranchInputError)) throw error;
@@ -244,9 +273,11 @@ async function executePost(
       workspaceIdHash: await sha256Json({ workspaceId: workspace.id }),
     });
   }
+  await onProgress?.({ stage: "retrieval_started" });
   const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
     ? await retrieveDirectLegalSources(question, locale, { limit: 1, signal })
     : unavailableDirectLegalRetrieval();
+  await onProgress?.({ stage: "retrieval_completed" });
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({
     question,
@@ -254,6 +285,8 @@ async function executePost(
     answerMode,
     reasoningMode,
     legalContextDate: body?.legalContextDate || null,
+    clarificationAnswers,
+    preferences,
     conversationId: body?.conversationId || null,
     caseId: body?.caseId || null,
     operation: branchInput.operation,
@@ -374,6 +407,7 @@ async function executePost(
         statement: memory.statement,
         scope: memory.scope,
       })),
+      preferences,
       runtimeSettings,
     }, {
       signal,
@@ -458,6 +492,7 @@ async function executePost(
 
   let result;
   try {
+    await onProgress?.({ stage: "validation_started" });
     const boundedResult = enforceLegalChatSourceBoundary(
       parseLegalChatResponse(aiResult.data),
       new Set(sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
@@ -520,6 +555,7 @@ async function executePost(
   }
 
   try {
+    await onProgress?.({ stage: "persisting" });
     const completedAt = isoNow();
     for (const call of providerCalls.filter((call) => call.provider !== aiResult.provider)) {
       await recordProviderUsage({
@@ -582,8 +618,13 @@ async function executePost(
     ...(existingConversation ? [] : [db.prepare(
       "INSERT INTO conversations (id,workspace_id,owner_user_id,case_id,title,locale,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',?,?)",
     ).bind(conversationId, workspace.id, user.id, body?.caseId || null, question.slice(0, 120), locale, now, now)]),
-    db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,created_at) VALUES (?,?,'user',?,?)")
-      .bind(userMessageId, conversationId, question, now),
+    db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,'user',?,?,?)")
+      .bind(userMessageId, conversationId, question, JSON.stringify({
+        kind: "juro_ai_user_message",
+        clarificationAnswers: clarificationAnswers ?? undefined,
+        legalContextDate: body?.legalContextDate || null,
+        preferences,
+      }), now),
     db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,'assistant',?,?,?)")
       .bind(assistantMessageId, conversationId, result.answer, JSON.stringify(result), now),
     db.prepare(
@@ -672,10 +713,19 @@ async function executePost(
     }
   }
 
+  const persisted = await loadConversationResult(
+    db,
+    conversationId,
+    workspace.id,
+    user.id,
+    branchId,
+    assistantMessageId,
+  );
+  if (!persisted) throw new Error("AI_PERSISTED_CONVERSATION_MISSING");
   return response({
+    ...persisted,
     conversationId, messageId: assistantMessageId, runId: reservation.runId,
     requestMessageId: userMessageId, branchId, operation: branchInput.operation,
-    branches: await listAiBranches({ db, conversationId, workspaceId: workspace.id, userId: user.id }),
     correlationId: reservation.correlationId, result, facts, sources: result.sources,
     sourceFreshness: freshness,
     technicalDetails: {
@@ -779,6 +829,44 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
     requestMessageId: conversation.requestMessageId,
     operation: conversation.operation,
     question: conversation.question || "",
+    messages: (await listAiConversationBranchMessages({
+      db,
+      conversationId,
+      workspaceId,
+      userId,
+      selectedBranchId: conversation.branchId,
+      selectedResponseMessageId: conversation.messageId,
+    })).map((message) => {
+      if (message.authorType === "assistant") {
+        const stored = parseLegalChatResponse(parseJson(message.structuredJson || "", null));
+        const messageFreshness = legalDatabaseFreshnessFromAsOf(stored.legalDatabaseAsOf);
+        const result = stored.sourceAccessMode === "direct"
+          ? stored
+          : enforceLegalDatabaseFreshness(stored, messageFreshness, {
+            locale: stored.language,
+            answerMode: stored.answerMode,
+            reasoningMode: stored.reasoningMode,
+          });
+        return {
+          id: message.id,
+          authorType: message.authorType,
+          content: message.content,
+          createdAt: message.createdAt,
+          branchId: message.branchId,
+          result,
+        };
+      }
+      const meta = parseStoredUserMessageMeta(parseJson(message.structuredJson || "", null));
+      return {
+        id: message.id,
+        authorType: message.authorType,
+        content: message.content,
+        createdAt: message.createdAt,
+        branchId: message.branchId,
+        clarificationAnswers: meta?.clarificationAnswers ?? null,
+        legalContextDate: meta?.legalContextDate ?? null,
+      };
+    }),
     branches: await listAiBranches({ db, conversationId, workspaceId, userId }),
     result,
     sourceFreshness,
