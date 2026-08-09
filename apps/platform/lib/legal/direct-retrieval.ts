@@ -31,10 +31,11 @@ const QUERY_STOPWORDS = new Set([
   // not a legal subject.  They must never make an otherwise unrelated page
   // eligible as a citation card (for example, an apostille page for an LLC
   // registration query just because both mention Uzbekistan and documents).
-  "быть", "какие", "какой", "когда", "нужны", "обычно", "после", "права", "праву", "порядок", "почему", "сейчас", "также", "чтобы", "этом",
-  "официальные", "официальный", "источники", "источник", "ответ", "ответьте", "кратко", "подробно", "узбекистан", "узбекистана", "juro", "staging", "smoke",
+  "быть", "какие", "какой", "когда", "нужны", "нужно", "основные", "главные", "шаги", "дайте", "обычно", "после", "права", "праву", "порядок", "почему", "сейчас", "также", "чтобы", "этом",
+  "официальные", "официальный", "официальными", "источники", "источник", "ответ", "ответьте", "кратко", "подробно", "узбекистан", "узбекистана", "узбекистане", "juro", "staging", "smoke",
   "bilan", "uchun", "qanday", "kerak", "keyin", "oldin", "qayerda", "qonun", "bo‘yicha", "boyicha", "rasmiy", "manba", "javob", "qisqa", "o‘zbekiston", "ozbekiston",
 ]);
+const DIRECT_SEARCH_NOISE_PREFIXES = ["официаль", "источник", "кратк", "подробн", "узбекистан"];
 
 type FetchLike = typeof fetch;
 
@@ -262,9 +263,17 @@ function relevantExcerpt(plainText: string, query: string): string {
 
 function directQueryTerms(query: string): string[] {
   return [...new Set(
-    (query.toLocaleLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])
+    (query.toLocaleLowerCase().match(/[\p{L}\p{N}]{2,}/gu) ?? [])
+      .filter((term) => term.length >= 4 || term === "ооо" || term === "ип")
       .filter((term) => !QUERY_STOPWORDS.has(term)),
   )].slice(0, 12);
+}
+
+function directSearchQuery(question: string): string {
+  const terms = directQueryTerms(question).filter((term) =>
+    !DIRECT_SEARCH_NOISE_PREFIXES.some((prefix) => term.startsWith(prefix)),
+  );
+  return terms.length ? terms.slice(0, 6).join(" ") : question.trim().slice(0, 240);
 }
 
 function queryStem(term: string): string {
@@ -350,7 +359,7 @@ class OfficialDirectProvider implements LegalSourceProvider {
 
   async search(query: string, locale: "ru" | "uz"): Promise<string[]> {
     return officialDocumentUrls(
-      await boundedSearchHtml(directSearchUrl(this.kind, query, locale), this.kind, this.fetchImpl, this.signal),
+      await boundedSearchHtml(directSearchUrl(this.kind, directSearchQuery(query), locale), this.kind, this.fetchImpl, this.signal),
       this.kind,
     );
   }
