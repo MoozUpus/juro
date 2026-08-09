@@ -361,6 +361,12 @@ public application host.
   after this domain transition. The browser was unable to make a direct admin
   request because Chrome locally produced `ERR_BLOCKED_BY_CLIENT` before a
   server request; this is not treated as an admin MFA pass or failure.
+- Production marketplace smoke is positive and non-mutating: both
+  `https://juro.uz/ru/lawyers` and `https://juro.uz/uz/lawyers` returned the
+  localized public catalogue, while `https://app.juro.uz/api/public/lawyers`
+  returned one owner-provided `public_approved` profile with
+  `canReceiveRequests=true`. The public response schema contains no phone or
+  email field. No consultation request or review was created by this check.
 
 Rollback for an application-domain regression is two-part and does not reset
 data: first return Worker `juro` to the verified pre-cutover version
