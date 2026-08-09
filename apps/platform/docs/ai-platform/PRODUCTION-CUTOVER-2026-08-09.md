@@ -159,6 +159,27 @@ Three completed scanner/analyse/index job-run records remain as immutable audit
 evidence. They are terminal records, not pending work, and were intentionally
 not deleted.
 
+The immutable records also provide bounded functional evidence for the deleted
+synthetic document pipeline:
+
+- `production-malware-scan` / `malware.scan` completed on attempt 1 without an
+  error code;
+- `production-document-analysis` / `document.analyze` completed on attempt 1
+  without a job error;
+- the primary Anthropic `claude-sonnet-4-6` provider attempt is recorded as
+  failed with `FALLBACK_USED`;
+- the configured OpenAI fallback `gpt-5.6-sol` then succeeded with provider
+  response `resp_030ad9e98b6224f9006a779f68af44819a8ed5c0f86e57ea54`;
+- `document.index` completed on attempt 1, and the OpenAI
+  `text-embedding-3-large` usage record reports three indexed items and a
+  successful provider request.
+
+This proves the production upload/scan/analysis/indexing path completed through
+the designed provider fallback. It does not prove a successful primary Claude
+analysis. The user-facing analysis, source R2 object, D1 projection, pending
+outbox row, and three temporary vectors were removed under the owner's explicit
+cleanup authorization; only immutable operational evidence remains.
+
 ## Public HTTP smoke
 
 Unauthenticated checks on 2026-08-09 produced:
@@ -253,8 +274,10 @@ cases, one action plan, four tasks, zero lawyer requests, zero offers, zero
 approved public lawyers, and zero active staff assignments. One clearly
 labelled demo-payment run and one clearly labelled archived case exist solely
 as cutover evidence. These zero rows are not failures of the schema; they are
-the reason the document-analysis and marketplace/admin positive paths remain
-open rather than being simulated through privileged database writes.
+consistent with the owner-approved cleanup of the synthetic document result.
+The immutable job/provider records prove the analysis fallback path, while the
+marketplace/admin positive paths remain open rather than being simulated through
+privileged database writes.
 
 ## Open release gates
 
@@ -262,10 +285,11 @@ The following remain unverified in production and must not be described as
 complete:
 
 1. The AI question, direct official-source rendering, structured answer,
-   plan, case, four tasks, synchronized task status, archive lifecycle, and
-   labelled demo payment are freshly proven. A safe production document upload
-   and analysis was intentionally not created, so upload/scanner/Claude remains
-   unproven in production despite staging coverage.
+   production malware scan, document analysis through the configured OpenAI
+   fallback, document indexing, plan, case, four tasks, synchronized task
+   status, archive lifecycle, and labelled demo payment are proven. A successful
+   primary Anthropic/Claude production analysis is not proven: that attempt
+   failed safely and the fallback completed the job.
 2. Admin mandatory-TOTP and role checks with an active production staff
    assignment. Production currently has no active assignment to test.
 3. Marketplace request/proposal flow with a real approved production lawyer.
