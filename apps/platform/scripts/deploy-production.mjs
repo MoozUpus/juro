@@ -51,4 +51,18 @@ if (
 ) {
   throw new Error("Refusing deployment: generated artifact is not an isolated production platform configuration.");
 }
-await run(process.execPath, [wrangler, "deploy", "--config", configPath, ...arguments_]);
+// The platform Worker has an attached Container definition. A normal Wrangler
+// deploy may follow the application upload with a separately generated
+// Container rollout version. That follow-up version is derived from the
+// top-level development environment and can replace the verified production
+// bindings. The scanner Container is deployed independently; the application
+// release must therefore leave its rollout unchanged.
+await run(process.execPath, [
+  wrangler,
+  "deploy",
+  "--config",
+  configPath,
+  "--containers-rollout",
+  "none",
+  ...arguments_,
+]);

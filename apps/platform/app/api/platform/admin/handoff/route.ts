@@ -3,7 +3,7 @@ import { z } from "zod";
 import { issueAdminDomainHandoff } from "../../../../../lib/auth/admin-domain-handoff";
 import { parseJsonRequest } from "../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
-import { requirePlatformStaffRequest } from "../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 
 const requestSchema = z.object({ locale: z.enum(["ru", "uz"]) }).strict();
@@ -29,7 +29,7 @@ function adminOrigin(): string | null {
   }
 }
 
-export async function POST(request: Request) {
+async function postAdminHandoff(request: Request) {
   assertSafeWrite(request);
   const parsed = await parseJsonRequest(request, requestSchema, 512);
   if (!parsed.ok) return Response.json({ code: "INVALID_INPUT" }, { status: 400 });
@@ -60,3 +60,5 @@ export async function POST(request: Request) {
     },
   );
 }
+
+export const POST = withPlatformStaffErrors(postAdminHandoff);

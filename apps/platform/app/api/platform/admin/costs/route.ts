@@ -1,7 +1,7 @@
 import { parseJsonRequest } from "../../../../../lib/auth/input";
 import { z } from "zod";
 import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
-import { requirePlatformStaffRequest } from "../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
 import {
   aiModelPriceMutationSchema,
   createAiModelPriceVersion,
@@ -34,12 +34,12 @@ function environment(): "development" | "staging" | "production" {
   throw new Error("APP_ENV_INVALID");
 }
 
-export async function GET(request: Request): Promise<Response> {
+async function getCosts(request: Request): Promise<Response> {
   await requirePlatformStaffRequest(request, "staff.operations.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   return json(await readAiCostDashboard({ db: requireD1(), environment: environment() }));
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function postCosts(request: Request): Promise<Response> {
   assertSafeWrite(request);
   const staff = await requirePlatformStaffRequest(request, "staff.operations.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   const parsed = await parseJsonRequest(request, mutationSchema, 16 * 1024);
@@ -85,3 +85,6 @@ export async function POST(request: Request): Promise<Response> {
     throw error;
   }
 }
+
+export const GET = withPlatformStaffErrors(getCosts);
+export const POST = withPlatformStaffErrors(postCosts);

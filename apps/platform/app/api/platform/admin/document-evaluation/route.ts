@@ -1,6 +1,6 @@
 import { parseJsonRequest } from "../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
-import { requirePlatformStaffRequest } from "../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import {
   documentEvaluationReviewRequestSchema,
@@ -14,7 +14,7 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: privateHeaders });
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function postDocumentEvaluation(request: Request): Promise<Response> {
   assertSafeWrite(request);
   const staff = await requirePlatformStaffRequest(request, "ai.quality.review", {
     freshMfaWithinMs: 15 * 60 * 1_000,
@@ -38,3 +38,5 @@ export async function POST(request: Request): Promise<Response> {
     return json({ code: error.code }, 409);
   }
 }
+
+export const POST = withPlatformStaffErrors(postDocumentEvaluation);

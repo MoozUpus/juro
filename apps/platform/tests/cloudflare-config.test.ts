@@ -567,6 +567,32 @@ test("rejects incomplete Sites binding metadata", () => {
     /requires bucketName/,
   );
 });
+
+test("production deployment cannot activate a development-bound container follow-up", () => {
+  const deployment = readFileSync(
+    new URL("../scripts/deploy-production.mjs", import.meta.url),
+    "utf8",
+  );
+  const router = JSON.parse(
+    readFileSync(
+      new URL("../wrangler.app-production-router.jsonc", import.meta.url),
+      "utf8",
+    ).replace(/^\s*\/\/.*$/gm, ""),
+  ) as {
+    routes: unknown[];
+    services: Array<{ binding: string; service: string; environment: string }>;
+  };
+
+  assert.match(
+    deployment,
+    /"deploy",\s*"--config",\s*configPath,\s*"--containers-rollout",\s*"none"/s,
+  );
+  assert.deepEqual(router.routes, []);
+  assert.deepEqual(router.services, [
+    { binding: "PLATFORM", service: "juro", environment: "production" },
+  ]);
+});
+
 test("ignores every supported local secret-file convention", () => {
   const candidates = [
     ".env",

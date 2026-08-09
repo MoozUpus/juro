@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { parseJsonRequest } from "../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
-import { requirePlatformStaffRequest } from "../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
 import { requireD1, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import {
   AiRuntimeSettingsError,
@@ -21,7 +21,7 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: privateHeaders });
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function postAiSettings(request: Request): Promise<Response> {
   assertSafeWrite(request);
   const staff = await requirePlatformStaffRequest(request, "ai.settings.manage", {
     freshMfaWithinMs: 15 * 60 * 1_000,
@@ -45,3 +45,5 @@ export async function POST(request: Request): Promise<Response> {
     throw error;
   }
 }
+
+export const POST = withPlatformStaffErrors(postAiSettings);

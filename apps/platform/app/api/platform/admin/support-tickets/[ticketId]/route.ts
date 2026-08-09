@@ -1,13 +1,13 @@
 import { z } from "zod";
 import { parseJsonRequest } from "../../../../../../lib/auth/input";
-import { requirePlatformStaffRequest } from "../../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../../lib/auth/staff-http";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 
 const replySchema = z.object({ body: z.string().trim().min(1).max(8_000), status: z.enum(["open", "waiting_user", "resolved"]) }).strict();
 type Context = { params: Promise<{ ticketId: string }> };
 
-export async function GET(request: Request, context: Context) {
+async function getSupportTicket(request: Request, context: Context) {
   const staff = await requirePlatformStaffRequest(request, "support.tickets.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   const { ticketId } = await context.params;
   const db = requireD1();
@@ -18,7 +18,7 @@ export async function GET(request: Request, context: Context) {
   return Response.json({ ticket, messages: messages.results }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
 
-export async function POST(request: Request, context: Context) {
+async function postSupportTicket(request: Request, context: Context) {
   const staff = await requirePlatformStaffRequest(request, "support.tickets.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   const parsed = await parseJsonRequest(request, replySchema, 10_240);
   if (!parsed.ok) return Response.json({ code: "INVALID_INPUT" }, { status: 400 });
@@ -32,3 +32,6 @@ export async function POST(request: Request, context: Context) {
   ]);
   return Response.json({ ok: true, status: parsed.data.status }, { headers: { "cache-control": "private, no-store" } });
 }
+
+export const GET = withPlatformStaffErrors(getSupportTicket);
+export const POST = withPlatformStaffErrors(postSupportTicket);
