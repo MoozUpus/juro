@@ -27,5 +27,8 @@ export default async function AdminConsolePage({ params }: { params: Promise<{ l
   } catch {
     notFound();
   }
-  return <AdminConsoleLaunch locale={locale} />;
+  return <AdminConsoleLaunch
+    locale={locale}
+    environment={runtime.APP_ENV === "production" ? "production" : "staging"}
+  />;
 }

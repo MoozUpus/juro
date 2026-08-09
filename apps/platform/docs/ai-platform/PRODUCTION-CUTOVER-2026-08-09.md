@@ -21,6 +21,27 @@ product journey has passed a fresh production mutation test.
 - The deployed runtime includes the Cinematic Legal Intelligence application
   shell. AI-avatar work remains intentionally excluded.
 
+### Subsequent production accessibility recovery — `.6`
+
+The core cutover above was followed by a deliberately small application-only
+accessibility recovery. It is recorded separately so that the `.5` cutover
+facts remain reproducible rather than being overwritten by a later asset-only
+deployment.
+
+- Runtime source commit: `293ef02a4e48f30c7919e235851ca44d892b852f`.
+- Annotated tag: `juro-production-2026-08-09.6`.
+- Production Worker version: `2459ac87-f2ff-4c71-a220-eb5d54feb3cd`.
+- Staging Worker version: `dd5e09ab-39f7-4c05-91d2-0985a9deca46`.
+- Scope: auth language links, consent labels, the remembered-device label and
+  auth account links now each expose a 44 px minimum touch target. The release
+  changed one CSS asset only; it introduced no D1 migration, R2 write, queue
+  message, production data mutation, provider request or runtime flag change.
+- Before release, platform type-check, lint and the complete platform suite
+  passed (131/131). The production artifact was generated with the guarded
+  production deployment entry point and its binding inventory confirmed
+  `juro-production`, private production R2 buckets, `production-*` queues and
+  production Vectorize indexes.
+
 ## Production resources and separation
 
 The production deployment uses the existing production resources:
@@ -261,10 +282,19 @@ runtime was checked in Chrome after deployment.
   restores focus to the menu trigger, and the close control measures 44x44 CSS
   pixels. These behaviours were rechecked at 390x844 RU and 768x1024 UZ.
 
-The available browser controller did not provide a faithful fresh 200% browser
-zoom or `prefers-reduced-motion` emulation. Automated CSS/accessibility contracts
-cover text scaling and reduced-motion rules, but this record does not substitute
-those contracts for the missing fresh manual/emulated observations.
+For the `.6` recovery, an owner-authenticated production Chrome session was
+checked with an explicit 720×450 viewport (the 200%-reflow equivalent of a
+1440×900 desktop): the dashboard had a single `h1`, a `main` landmark, and
+`scrollWidth === clientWidth` (705 px). The same check at 360×800 found no
+horizontal overflow (345 px). The live anonymous login HTML referenced the
+new `index-ClDU7ffe.css` asset, which contains the 44 px rules for the language
+links, consent labels and account links.
+
+The browser controller cannot apply a fresh OS-level
+`prefers-reduced-motion: reduce` override to the owner-authenticated production
+tab. The `.6` patch adds no animation; the live CSS still disables the auth
+spinner under that media query. This is strong regression evidence, but it is
+not a substitute for a fresh reduced-motion device observation.
 
 ## Production data observations
 
@@ -291,14 +321,19 @@ complete:
    primary Anthropic/Claude production analysis is not proven: that attempt
    failed safely and the fallback completed the job.
 2. Admin mandatory-TOTP and role checks with an active production staff
-   assignment. Production currently has no active assignment to test.
-3. Marketplace request/proposal flow with a real approved production lawyer.
-   Production currently has no approved public lawyer. The empty state and
-   public-projection restriction are proven; request and offer mutations are
-   not.
-4. Fresh 200% browser zoom and `prefers-reduced-motion` observations on the
-   exact runtime. Authenticated desktop/mobile/tablet, RU/UZ, keyboard focus
-   restoration, overflow, and console checks are recorded above.
+   assignment. `administrator` and `legal_reviewer` assignments are now
+   present for the owner-controlled account, but both server access and
+   lawyer-profile moderation remain correctly blocked until the pending
+   production TOTP enrollment is confirmed and a fresh MFA claim exists.
+3. Marketplace request/proposal flow with the real owner-controlled lawyer
+   profile. The profile has been completed with approved owner-provided public
+   details and photo, but remains `pending_review` until the MFA-gated admin
+   moderation decision. It is therefore not publicly listed or selectable
+   before the protected approval path is tested.
+4. A literal fresh 200% browser-zoom observation and an OS-level
+   `prefers-reduced-motion` observation on the `.6` runtime. Equivalent
+   production reflow and active CSS checks are recorded above; they must not
+   be relabelled as the missing OS-level reduced-motion observation.
 
 Do not create synthetic production profiles, cases, files, requests, or payment
 records merely to close these gates. Use a real owner-controlled journey, or

@@ -2,18 +2,25 @@
 
 import { useState } from "react";
 
-export function AdminConsoleLaunch({ locale }: { locale: "ru" | "uz" }) {
+export function AdminConsoleLaunch({
+  locale,
+  environment,
+}: {
+  locale: "ru" | "uz";
+  environment: "production" | "staging";
+}) {
   const [state, setState] = useState<"idle" | "working" | "error">("idle");
+  const isProduction = environment === "production";
   const copy = locale === "ru"
     ? {
         title: "Изолированная административная консоль",
-        body: "Откроется отдельный staging-домен с независимой 15‑минутной admin-сессией. Роль и свежий TOTP проверяются снова на каждом запросе.",
+        body: `Откроется отдельный ${isProduction ? "production" : "staging"}-домен с независимой 15‑минутной admin-сессией. Роль и свежий TOTP проверяются снова на каждом запросе.`,
         button: "Открыть защищённую консоль",
         error: "Не удалось открыть отдельную сессию. Обновите TOTP/MFA и повторите попытку.",
       }
     : {
         title: "Ajratilgan administrator konsoli",
-        body: "Alohida staging domeni 15 daqiqalik mustaqil admin-sessiya bilan ochiladi. Rol va yangi TOTP har bir so‘rovda qayta tekshiriladi.",
+        body: `Alohida ${isProduction ? "production" : "staging"} domeni 15 daqiqalik mustaqil admin-sessiya bilan ochiladi. Rol va yangi TOTP har bir so‘rovda qayta tekshiriladi.`,
         button: "Himoyalangan konsolni ochish",
         error: "Alohida sessiyani ochib bo‘lmadi. TOTP/MFA ni yangilang va qayta urinib ko‘ring.",
       };
@@ -35,7 +42,9 @@ export function AdminConsoleLaunch({ locale }: { locale: "ru" | "uz" }) {
   }
 
   return <main style={{ maxWidth: "44rem", margin: "4rem auto", padding: "1.5rem", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
-    <p style={{ color: "#6b541f", fontWeight: 700, letterSpacing: ".08em" }}>JURO · STAGING ADMIN</p>
+    <p style={{ color: "#6b541f", fontWeight: 700, letterSpacing: ".08em" }}>
+      {isProduction ? "JURO · ADMIN" : "JURO · STAGING ADMIN"}
+    </p>
     <h1 style={{ color: "#062844" }}>{copy.title}</h1>
     <p style={{ lineHeight: 1.6, color: "#334e68" }}>{copy.body}</p>
     <button type="button" onClick={() => void launch()} disabled={state === "working"} style={{ minHeight: 44, border: 0, borderRadius: 8, padding: "0.75rem 1rem", background: "#062844", color: "white", fontWeight: 700, cursor: state === "working" ? "wait" : "pointer" }}>
