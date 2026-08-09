@@ -368,6 +368,31 @@ public application host.
   `canReceiveRequests=true`. The public response schema contains no phone or
   email field. No consultation request or review was created by this check.
 
+### Release `.16`: rejected staff writes fail closed
+
+Release `.16` (`c79bd283e77120f5ddbcea4d5aaf113dae03ad7b`, tag
+`juro-production-2026-08-09.16`) corrects an error boundary shared by staff
+write endpoints. A write rejected by `assertSafeWrite` previously escaped the
+staff wrapper as an empty `500`; it is now a localized, private `403` with
+`code: REQUEST_REJECTED`. Missing local staff sessions remain a private `401`.
+The change does not alter authorization grants, MFA state, data, migrations,
+bindings, or routes.
+
+- The merge commit passed the focused wrapper suite (2/2), a production build,
+  rendered-worker routes (31/31, including the rejected admin handoff case),
+  and production artifact validation. GitHub validation passed for both the
+  platform and website before merge.
+- Worker `juro` version `6975bb96-8d29-4b89-8f8a-bfa5b0a39285` is at 100%
+  traffic. Its binding inventory again confirms `juro-production`,
+  `juro-private-documents`, production queues and Vectorize indexes, the
+  isolated `juro-admin` service, and production secret names only.
+- Post-deploy, unauthenticated `POST
+  https://app.juro.uz/api/platform/admin/handoff` without browser CSRF context
+  returned `403`, `REQUEST_REJECTED`, `Cache-Control: no-store, max-age=0,
+  private`, and `Pragma: no-cache` rather than `500`. `GET /api/status`
+  returned `200` with `overallStatus: operational`; the canonical document
+  builder still redirected unauthenticated users to its localized login route.
+
 Rollback for an application-domain regression is two-part and does not reset
 data: first return Worker `juro` to the verified pre-cutover version
 `cb09acab-d990-45cb-936a-7f226b020852`, then restore the recorded Sites custom
@@ -402,15 +427,17 @@ complete:
 2. Admin mandatory-TOTP and role checks through the live public application.
    The owner-controlled account now has an active, verified production TOTP
    credential and active `administrator` and `legal_reviewer` assignments.
-   Moderation is still intentionally unperformed: the published Sites app does
-   not yet contain the MFA-gated admin handoff route, and Chrome currently
-   blocks that route before DOM interaction. Do not bypass this gate with a D1
-   write.
+   The Worker-backed application now contains the MFA-gated handoff route, but
+   Chrome currently blocks `app.juro.uz` locally with
+   `ERR_BLOCKED_BY_CLIENT` before any server request. Moderation remains
+   intentionally unperformed until that browser block is removed and the live
+   MFA journey is observed. Do not bypass this gate with a D1 write.
 3. Marketplace request/proposal flow with the real owner-controlled lawyer
-   profile. The profile has been completed with approved owner-provided public
-   details and photo, but remains `pending_review` until the MFA-gated admin
-   moderation decision. It is therefore not publicly listed or selectable
-   before the protected approval path is tested.
+   profile. The owner-provided profile is now `public_approved`, listed in the
+   RU and UZ catalogues, and exposed by the intentionally limited public API.
+   A real request/proposal lifecycle is still unverified; it must be exercised
+   by the owner-controlled participants through the MFA-gated flow, not by a
+   privileged database write.
 4. A literal fresh 200% browser-zoom observation and an OS-level
    `prefers-reduced-motion` observation on the `.6` runtime. Equivalent
    production reflow and active CSS checks are recorded above; they must not
@@ -427,8 +454,8 @@ production smoke and clean it up with audit evidence.
 
 ## Rollback
 
-For an application regression, restore Worker traffic to
-`20905936-0156-4f02-b58b-f2d77d1cb060` first and disable the affected
+For a `.16` application regression, restore Worker traffic to the verified
+pre-`.16` version `48bc7241-468c-4440-824a-67d0154489d4` first and disable the affected
 server-side feature flag or queue producer/consumer. The migrations are
 additive and may remain in place when the prior Worker can ignore them. Restore
 D1 only for demonstrated data corruption, using the verified private backup
