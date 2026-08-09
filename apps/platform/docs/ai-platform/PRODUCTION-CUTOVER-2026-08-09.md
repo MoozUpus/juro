@@ -296,6 +296,18 @@ tab. The `.6` patch adds no animation; the live CSS still disables the auth
 spinner under that media query. This is strong regression evidence, but it is
 not a substitute for a fresh reduced-motion device observation.
 
+Release `.7` was deployed to Worker `juro` as version
+`d6a541fa-019f-42e3-9349-4569e3ba8d26` and tagged
+`juro-production-2026-08-09.7`. It corrects the isolated admin launcher label
+so a production surface renders `JURO · ADMIN`, not `JURO · STAGING ADMIN`.
+The Worker is attached to `admin.juro.uz` only. A read-only ownership check
+also established that `app.juro.uz` is currently served by its separate Sites
+project (version 20, source `40310786188eb545f224e906c2c9506c146a907c`), where
+`/ru/admin/console` and the security/MFA API are not yet published. Deploying
+Worker `juro` therefore cannot change that public application host; this must
+be resolved by a deliberate, validated Sites release rather than by changing
+DNS or attaching a second worker.
+
 ## Production data observations
 
 Read-only counts after the labelled smoke showed four conversations, eight AI
@@ -320,11 +332,13 @@ complete:
    status, archive lifecycle, and labelled demo payment are proven. A successful
    primary Anthropic/Claude production analysis is not proven: that attempt
    failed safely and the fallback completed the job.
-2. Admin mandatory-TOTP and role checks with an active production staff
-   assignment. `administrator` and `legal_reviewer` assignments are now
-   present for the owner-controlled account, but both server access and
-   lawyer-profile moderation remain correctly blocked until the pending
-   production TOTP enrollment is confirmed and a fresh MFA claim exists.
+2. Admin mandatory-TOTP and role checks through the live public application.
+   The owner-controlled account now has an active, verified production TOTP
+   credential and active `administrator` and `legal_reviewer` assignments.
+   Moderation is still intentionally unperformed: the published Sites app does
+   not yet contain the MFA-gated admin handoff route, and Chrome currently
+   blocks that route before DOM interaction. Do not bypass this gate with a D1
+   write.
 3. Marketplace request/proposal flow with the real owner-controlled lawyer
    profile. The profile has been completed with approved owner-provided public
    details and photo, but remains `pending_review` until the MFA-gated admin
@@ -334,6 +348,11 @@ complete:
    `prefers-reduced-motion` observation on the `.6` runtime. Equivalent
    production reflow and active CSS checks are recorded above; they must not
    be relabelled as the missing OS-level reduced-motion observation.
+5. Reconcile the Sites application release with the verified Worker-side
+   platform release. The current Sites runtime exposes only its pre-existing
+   environment contract and cannot safely be replaced with the Worker build
+   until its D1/R2 bindings, server-only secrets and rollback version are
+   validated together.
 
 Do not create synthetic production profiles, cases, files, requests, or payment
 records merely to close these gates. Use a real owner-controlled journey, or

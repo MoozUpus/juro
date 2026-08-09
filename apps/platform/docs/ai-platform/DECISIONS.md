@@ -3348,3 +3348,21 @@ existing isolated Vectorize bindings or modifying legal-source data. It is
 covered by the Worker queue contract test and passed `test:cloudflare`,
 type-check, lint, and artifact validation locally. It has not yet been
 deployed to staging or production.
+
+## D-163 — Sites and Worker production hosts are separate release surfaces
+
+Status: accepted after production ownership audit
+Date: 2026-08-09
+
+`admin.juro.uz` is the custom domain of Worker `juro`; its isolated
+administrative service is versioned and released through Wrangler. In contrast,
+`app.juro.uz` is served by a separate Sites project. The live Sites release is
+not automatically updated when Worker `juro` is deployed, and it does not yet
+publish the MFA-gated admin-handoff route.
+
+No release may treat a successful Worker deployment as proof that the public
+application host has changed. A future public-platform release must validate
+the Sites runtime bindings and server-only configuration, save a version from
+the exact pushed source, retain the current Sites version for rollback, and
+then deploy through the Sites workflow. Direct D1 changes or DNS/route swaps
+are not permitted as a substitute for that release.
