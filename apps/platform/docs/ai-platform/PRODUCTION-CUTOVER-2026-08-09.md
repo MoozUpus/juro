@@ -334,6 +334,22 @@ public application host.
   `juro-private-documents`, the production queue/vector bindings, and the
   isolated `juro-admin` service. No staging D1, R2, queue, Vectorize binding,
   or runtime secret is attached to this production version.
+- The isolated `juro-admin` production Worker is version
+  `deab8f1b-7033-4b3c-a475-94fcbeb32361` at 100% traffic. Its only service
+  binding is production Worker `juro`, its `PLATFORM_ORIGIN` is
+  `https://app.juro.uz`, and it contains no D1 or R2 binding of its own.
+- Independent staging remains active as Worker `juro-platform-staging`, version
+  `d3df39cd-3390-480a-8153-bbe7a1592f2b` at 100% traffic. Its binding inventory
+  is correctly isolated to `juro-staging`, `juro-staging-files`, staging queues
+  and staging Vectorize indexes. It was not copied into production.
+- The promotion lineage is explicit: the production `.15` commit differs from
+  the already verified application source only by the production custom-domain
+  attachment for `app.juro.uz` and the artifact assertion that prevents either
+  application domain from being omitted. It changes no application route,
+  database migration, user data, static asset, AI contract, or staging runtime
+  configuration. This is why the production Worker can safely be newer than
+  the still-independent staging Worker while serving the same verified product
+  artifact with production environment bindings.
 - Post-cutover HTTP smoke: `https://app.juro.uz/api/status` returned `200`;
   `/` and the document-builder route returned the intended localized login
   redirects; `https://admin.juro.uz/` returned the intended handoff redirect
