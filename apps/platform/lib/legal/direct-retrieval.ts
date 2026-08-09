@@ -19,10 +19,11 @@ const SEARCH_TIMEOUT_MS = 10_000;
 const SEARCH_MAX_BYTES = 512 * 1024;
 const SEARCH_MAX_REDIRECTS = 2;
 const DOCUMENT_MAX_BYTES = 1_500_000;
-// Interactive chat must leave a bounded window for the AI provider. A direct
-// source miss is safe: the answer is constrained to clarification rather than
-// spending the full request lifetime retrying public websites.
-const DIRECT_RETRIEVAL_BUDGET_MS = 15_000;
+// Lex.uz currently publishes a 20-second crawl delay. The interactive request
+// therefore needs enough wall-clock time for one compliant search → robots →
+// document sequence before the AI provider runs. Callers request one validated
+// source, so this remains bounded instead of serially waiting for every result.
+export const DIRECT_RETRIEVAL_BUDGET_MS = 45_000;
 const MAX_CANDIDATES_PER_PROVIDER = 3;
 const MAX_SOURCES_PER_PROVIDER = 2;
 const QUERY_STOPWORDS = new Set([
@@ -36,6 +37,7 @@ const QUERY_STOPWORDS = new Set([
   "bilan", "uchun", "qanday", "kerak", "keyin", "oldin", "qayerda", "qonun", "bo‘yicha", "boyicha", "rasmiy", "manba", "javob", "qisqa", "o‘zbekiston", "ozbekiston",
 ]);
 const DIRECT_SEARCH_NOISE_PREFIXES = ["официаль", "источник", "кратк", "подробн", "узбекистан"];
+const DIRECT_SEARCH_ACRONYMS = new Set(["ооо", "ип"]);
 
 type FetchLike = typeof fetch;
 
@@ -271,9 +273,10 @@ function directQueryTerms(query: string): string[] {
 
 function directSearchQuery(question: string): string {
   const terms = directQueryTerms(question).filter((term) =>
-    !DIRECT_SEARCH_NOISE_PREFIXES.some((prefix) => term.startsWith(prefix)),
+    !DIRECT_SEARCH_NOISE_PREFIXES.some((prefix) => term.startsWith(prefix))
+      && !DIRECT_SEARCH_ACRONYMS.has(term),
   );
-  return terms.length ? terms.slice(0, 6).join(" ") : question.trim().slice(0, 240);
+  return terms.length ? terms.slice(0, 4).join(" ") : question.trim().slice(0, 240);
 }
 
 function queryStem(term: string): string {
