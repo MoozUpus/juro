@@ -1,5 +1,10 @@
 # JURO completion matrix — protected staging beta
 
+> **Historical ledger.** Production was subsequently deployed on 2026-08-09.
+> Current deployment, cleanup, backup/restore, separation, smoke and open-gate
+> evidence is maintained in
+> [`../../apps/platform/docs/ai-platform/PRODUCTION-CUTOVER-2026-08-09.md`](../../apps/platform/docs/ai-platform/PRODUCTION-CUTOVER-2026-08-09.md).
+
 Last updated: 2026-08-09. This is an evidence ledger, not a release claim.
 `VERIFIED_WORKING` means that the stated staging evidence and regression tests
 exist; it does not authorize or describe a production change.

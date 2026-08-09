@@ -23,6 +23,7 @@
     "evaluate:legal:validate": "tsx scripts/validate-legal-evaluation.ts",
     "evaluate:documents:materialize": "tsx scripts/materialize-document-evaluation.ts",
     "evaluate:documents:validate": "tsx scripts/validate-document-evaluation.ts",
+    "verify:d1-backup": "node scripts/verify-d1-full-export-restore.mjs",
     "validate:artifact": "node scripts/platform-tasks.mjs artifact",
     "cf:types": "node scripts/platform-tasks.mjs cf-types",
     "cf:types:check": "node scripts/platform-tasks.mjs cf-types-check",
