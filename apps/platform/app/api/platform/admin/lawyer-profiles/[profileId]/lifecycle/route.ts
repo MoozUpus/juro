@@ -1,6 +1,6 @@
 import { parseJsonRequest } from "../../../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../../../lib/auth/safe-write";
-import { requirePlatformStaffRequest } from "../../../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../../../lib/auth/staff-http";
 import { requireD1, runtimeEnv } from "../../../../../../../lib/document-builder/storage/runtime";
 import { lawyerProfileLifecycleSchema } from "../../../../../../../lib/platform/lawyer-profile";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../../../../../../../lib/platform/lawyer-profile-preview";
@@ -12,7 +12,7 @@ import { z } from "zod";
 
 type Context = { params: Promise<{ profileId: string }> };
 
-export async function POST(request: Request, context: Context) {
+async function postLawyerProfileLifecycle(request: Request, context: Context) {
   const runtime = runtimeEnv();
   if (!isLawyerProfileDirectoryPreviewEnabled(runtime)) {
     return Response.json({ code: "NOT_AVAILABLE" }, { status: 404, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -39,3 +39,5 @@ export async function POST(request: Request, context: Context) {
     return Response.json({ code: "PROFILE_UNAVAILABLE" }, { status: 409 });
   }
 }
+
+export const POST = withPlatformStaffErrors(postLawyerProfileLifecycle);

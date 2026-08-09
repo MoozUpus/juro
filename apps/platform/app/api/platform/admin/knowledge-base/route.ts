@@ -1,6 +1,6 @@
 import { parseJsonRequest } from "../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../lib/auth/safe-write";
-import { requirePlatformStaffRequest } from "../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import {
   KnowledgeBaseAdminError,
@@ -19,7 +19,7 @@ function json(body: unknown, status = 200): Response {
   return Response.json(body, { status, headers: privateHeaders });
 }
 
-export async function GET(request: Request): Promise<Response> {
+async function getKnowledgeBase(request: Request): Promise<Response> {
   await requirePlatformStaffRequest(request, "knowledge.base.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   const url = new URL(request.url);
   const parsed = knowledgeBaseAdminQuerySchema.safeParse({
@@ -35,7 +35,7 @@ export async function GET(request: Request): Promise<Response> {
   return json({ articles: await listKnowledgeBaseAdminArticles({ db, status: parsed.data.status }) });
 }
 
-export async function POST(request: Request): Promise<Response> {
+async function postKnowledgeBase(request: Request): Promise<Response> {
   assertSafeWrite(request);
   const staff = await requirePlatformStaffRequest(request, "knowledge.base.manage", { freshMfaWithinMs: 15 * 60 * 1000 });
   const parsed = await parseJsonRequest(request, knowledgeBaseAdminMutationSchema, 128 * 1024);
@@ -54,3 +54,6 @@ export async function POST(request: Request): Promise<Response> {
     throw error;
   }
 }
+
+export const GET = withPlatformStaffErrors(getKnowledgeBase);
+export const POST = withPlatformStaffErrors(postKnowledgeBase);

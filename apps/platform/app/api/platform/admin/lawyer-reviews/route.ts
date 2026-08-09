@@ -1,9 +1,9 @@
 import { lawyerReviewModerationListSchema } from "../../../../../lib/platform/lawyer-review-moderation";
-import { requirePlatformStaffRequest } from "../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../lib/auth/staff-http";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import { listLawyerReviews } from "../../../../../lib/platform/lawyer-review-moderation-service";
 
-export async function GET(request: Request) {
+async function getLawyerReviews(request: Request) {
   await requirePlatformStaffRequest(request, "lawyer.reviews.moderate", { freshMfaWithinMs: 15 * 60 * 1000 });
   const url = new URL(request.url);
   const parsed = lawyerReviewModerationListSchema.safeParse({
@@ -14,3 +14,5 @@ export async function GET(request: Request) {
   const reviews = await listLawyerReviews(requireD1(), parsed.data);
   return Response.json({ reviews: reviews.results }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }
+
+export const GET = withPlatformStaffErrors(getLawyerReviews);

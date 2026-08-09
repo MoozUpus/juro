@@ -798,7 +798,24 @@ test("platform staff access is separate, local-MFA-only, and grants no customer-
   );
   assert.match(httpBoundary, /localSessionForRequest/);
   assert.match(httpBoundary, /requirePlatformStaffAccess/);
+  assert.match(httpBoundary, /mfaErrorResponse/);
+  assert.match(httpBoundary, /PlatformStaffAccessError/);
+  assert.match(httpBoundary, /status: 403/);
+  assert.match(httpBoundary, /withPlatformStaffErrors/);
   assert.doesNotMatch(httpBoundary, /getChatGPTUser|getAuthPrincipal/);
+
+  const projectRoot = fileURLToPath(new URL("../", import.meta.url));
+  for await (const path of glob("app/api/platform/admin/**/route.ts", {
+    cwd: projectRoot,
+  })) {
+    const route = await readFile(new URL(`../${path}`, import.meta.url), "utf8");
+    if (!route.includes("requirePlatformStaffRequest")) continue;
+    assert.match(
+      route,
+      /withPlatformStaffErrors/,
+      `${path} must translate session, MFA, and capability failures into typed HTTP responses`,
+    );
+  }
 });
 
 test("staff role lifecycle is internal, fresh-MFA-gated, and atomically audited", async () => {
@@ -1451,7 +1468,7 @@ test("staff support inbox requires capability, fresh MFA, and private ticket det
     readFile(new URL("../app/_staff/SupportInbox.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(page, /support\.tickets\.manage/); assert.match(page, /freshMfaWithinMs:15\*60\*1_000/);
-  assert.match(route, /support\.tickets\.manage/); assert.match(detail, /export async function GET/); assert.match(detail, /support\.tickets\.manage/); assert.match(detail, /ORDER BY created_at ASC,id ASC LIMIT 200/); assert.match(detail, /support_ticket_viewed/); assert.match(detail, /private, no-store/);
+  assert.match(route, /support\.tickets\.manage/); assert.match(detail, /export const GET = withPlatformStaffErrors/); assert.match(detail, /support\.tickets\.manage/); assert.match(detail, /ORDER BY created_at ASC,id ASC LIMIT 200/); assert.match(detail, /support_ticket_viewed/); assert.match(detail, /private, no-store/);
   assert.match(client, /admin\/support-tickets/); assert.match(client, /x-juro-csrf/); assert.match(client, /waiting_user/); assert.match(client, /aria-live="polite"/); assert.match(client, /t\[ticket\.status\]/); assert.match(client, /t\.requester/);
 });
 test("user support form exposes only validated categories, localized status, and tenant ticket history", async () => {

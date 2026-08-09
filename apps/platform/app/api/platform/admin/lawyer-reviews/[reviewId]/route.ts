@@ -1,13 +1,13 @@
 import { parseJsonRequest } from "../../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../../lib/auth/safe-write";
-import { requirePlatformStaffRequest } from "../../../../../../lib/auth/staff-http";
+import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../../lib/auth/staff-http";
 import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
 import { assertReviewId, lawyerReviewModerationSchema } from "../../../../../../lib/platform/lawyer-review-moderation";
 import { LawyerReviewModerationServiceError, moderateLawyerReview } from "../../../../../../lib/platform/lawyer-review-moderation-service";
 
 type Context = { params: Promise<{ reviewId: string }> };
 
-export async function PATCH(request: Request, context: Context) {
+async function patchLawyerReview(request: Request, context: Context) {
   assertSafeWrite(request);
   const staff = await requirePlatformStaffRequest(request, "lawyer.reviews.moderate", { freshMfaWithinMs: 15 * 60 * 1000 });
   const parsed = await parseJsonRequest(request, lawyerReviewModerationSchema, 8_192);
@@ -31,3 +31,5 @@ export async function PATCH(request: Request, context: Context) {
     return Response.json({ code: "REVIEW_UNAVAILABLE" }, { status: 409 });
   }
 }
+
+export const PATCH = withPlatformStaffErrors(patchLawyerReview);
