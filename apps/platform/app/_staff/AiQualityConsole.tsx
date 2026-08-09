@@ -17,14 +17,14 @@ const copy = {
     protected: "Защищённый контур · свежая 2FA", refresh: "Обновить", status: "Статус", pending: "Новые", reviewed: "Проверенные", all: "Все",
     empty: "По выбранному фильтру сигналов нет.", open: "Открыть для проверки", type: "Тип сигнала", model: "Технический контекст", updated: "Обновлено", comment: "Комментарий пользователя", noComment: "Комментарий не добавлен.",
     question: "Вопрос пользователя", answer: "AI-ответ", decision: "Юридическое решение", classification: "Классификация", notes: "Обоснование", corrected: "Исправленный ответ (необязательно)", golden: "Эталонный ответ (необязательно)", save: "Зафиксировать новую версию", success: "Решение сохранено в неизменяемом журнале.",
-    loading: "Загрузка…", error: "Не удалось выполнить запрос.", integrity: "Цепочка доступа проверена", stale: "Сигнал изменён после последней проверки", version: "Версия проверки", close: "Закрыть детали",
+    loading: "Загрузка…", error: "Не удалось выполнить запрос.", accessDenied: "Свежая проверка 2FA истекла. Подтвердите TOTP и обновите страницу.", auditWrite: "Не удалось записать защищённый журнал доступа. Данные не были раскрыты или изменены.", integrity: "Цепочка доступа проверена", stale: "Сигнал изменён после последней проверки", version: "Версия проверки", close: "Закрыть детали",
   },
   uz: {
     title: "AI-javoblarni yuridik tekshirish", description: "Foydalanuvchi signallari navbati. Savol va javob matni faqat alohida audit qilinadigan amaldan keyin ochiladi.",
     protected: "Himoyalangan kontur · yangi 2FA", refresh: "Yangilash", status: "Holat", pending: "Yangi", reviewed: "Tekshirilgan", all: "Barchasi",
     empty: "Tanlangan filtr bo‘yicha signal yo‘q.", open: "Tekshirish uchun ochish", type: "Signal turi", model: "Texnik kontekst", updated: "Yangilangan", comment: "Foydalanuvchi izohi", noComment: "Izoh qo‘shilmagan.",
     question: "Foydalanuvchi savoli", answer: "AI-javob", decision: "Yuridik qaror", classification: "Tasnif", notes: "Asos", corrected: "Tuzatilgan javob (ixtiyoriy)", golden: "Etalon javob (ixtiyoriy)", save: "Yangi versiyani qayd etish", success: "Qaror o‘zgarmas jurnalga saqlandi.",
-    loading: "Yuklanmoqda…", error: "So‘rov bajarilmadi.", integrity: "Kirish zanjiri tekshirildi", stale: "Signal oxirgi tekshiruvdan keyin o‘zgargan", version: "Tekshiruv versiyasi", close: "Tafsilotlarni yopish",
+    loading: "Yuklanmoqda…", error: "So‘rov bajarilmadi.", accessDenied: "Yangi 2FA tekshiruvi muddati tugadi. TOTP-ni tasdiqlang va sahifani yangilang.", auditWrite: "Himoyalangan kirish jurnalini yozib bo‘lmadi. Ma’lumotlar ochilmadi yoki o‘zgartirilmadi.", integrity: "Kirish zanjiri tekshirildi", stale: "Signal oxirgi tekshiruvdan keyin o‘zgargan", version: "Tekshiruv versiyasi", close: "Tafsilotlarni yopish",
   },
 } as const;
 
@@ -57,6 +57,12 @@ export function AiQualityConsole({ locale, reviewerName }: { locale: Locale; rev
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
   const detailHeading = useRef<HTMLHeadingElement>(null);
+  const messageForError = useCallback((value: unknown) => {
+    const code = value instanceof Error ? value.message : "";
+    if (code === "AI_QUALITY_REVIEW_ACCESS_DENIED") return t.accessDenied;
+    if (code === "AI_QUALITY_REVIEW_ACCESS_WRITE_FAILED") return t.auditWrite;
+    return code || t.error;
+  }, [t]);
 
   const load = useCallback(async () => {
     setBusy(true); setError("");
@@ -64,9 +70,9 @@ export function AiQualityConsole({ locale, reviewerName }: { locale: Locale; rev
       const result = await post<{ rows: AiQualityQueueRow[]; accessIntegrity: { valid: boolean } }>({ action: "query", filters: { reviewStatus: status, limit: 100 } });
       if (!result.accessIntegrity.valid) throw new Error("AI_QUALITY_REVIEW_ACCESS_INTEGRITY_FAILED");
       setRows(result.rows); setDetail(null); setAnnouncement(t.integrity);
-    } catch (value) { setError(value instanceof Error ? value.message : t.error); }
+    } catch (value) { setError(messageForError(value)); }
     finally { setBusy(false); }
-  }, [status, t.error, t.integrity]);
+  }, [messageForError, status, t.integrity]);
 
   useEffect(() => { const timer = window.setTimeout(() => void load(), 0); return () => window.clearTimeout(timer); }, [load]);
 
@@ -77,7 +83,7 @@ export function AiQualityConsole({ locale, reviewerName }: { locale: Locale; rev
       if (!result.accessIntegrity.valid) throw new Error("AI_QUALITY_REVIEW_ACCESS_INTEGRITY_FAILED");
       setDetail(result.detail); setClassification("correct"); setNotes(""); setCorrectedAnswer(""); setGoldenAnswer("");
       window.setTimeout(() => detailHeading.current?.focus(), 0);
-    } catch (value) { setError(value instanceof Error ? value.message : t.error); }
+    } catch (value) { setError(messageForError(value)); }
     finally { setBusy(false); }
   };
 
@@ -87,7 +93,7 @@ export function AiQualityConsole({ locale, reviewerName }: { locale: Locale; rev
     try {
       await post({ action: "resolve", feedbackId: detail.feedbackId, classification, notes, correctedAnswer, goldenAnswer });
       setAnnouncement(t.success); await load();
-    } catch (value) { setError(value instanceof Error ? value.message : t.error); }
+    } catch (value) { setError(messageForError(value)); }
     finally { setBusy(false); }
   };
 
