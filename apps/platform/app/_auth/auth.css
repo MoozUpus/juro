@@ -84,8 +84,8 @@
 }
 
 .auth-language a {
-  min-width: 38px;
-  min-height: 38px;
+  min-width: 44px;
+  min-height: 44px;
   padding: 8px;
   border: 0;
   border-radius: 9px;
@@ -163,6 +163,7 @@
 
 .auth-card .auth-remember {
   display: flex;
+  min-height: 44px;
   align-items: flex-start;
   gap: 9px;
   font-size: 14px;
@@ -171,8 +172,12 @@
 }
 
 .auth-card .auth-remember input {
-  min-height: auto;
-  margin-top: 2px;
+  width: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  height: 20px;
+  margin-top: 0;
+  padding: 0;
 }
 
 .auth-row,
@@ -219,6 +224,7 @@
 
 .auth-consents label {
   display: flex;
+  min-height: 44px;
   align-items: flex-start;
   font-size: 14px;
   font-weight: 500;
@@ -226,8 +232,12 @@
 }
 
 .auth-consents input {
-  min-height: auto;
-  margin-top: 2px;
+  width: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  height: 20px;
+  margin-top: 0;
+  padding: 0;
 }
 
 .auth-consents a {
@@ -369,12 +379,19 @@
 }
 
 .auth-switch a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 6px;
   color: #8b651f;
   font-weight: 800;
 }
 
 .auth-siwc {
-  display: block;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
   margin-top: 15px;
   color: #53627a;
   font-size: 14px;
