@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
-import { basename, relative, resolve } from "node:path";
+import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const projectRoot = resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -152,16 +152,30 @@ assert.deepEqual(selected.r2_buckets, [
   },
 ]);
 assert.equal(artifact.d1_databases?.length, 1);
+const expectedD1Database = replacesSitesPrimaryBindings
+  ? {
+      binding: "DB",
+      database_name: "site-creator-d1",
+      database_id: "00000000-0000-4000-8000-000000000000",
+      migrations_dir: "./drizzle",
+    }
+  : selected.d1_databases[0];
+const {
+  migrations_dir: artifactMigrationsDirectory,
+  ...artifactD1Database
+} = artifact.d1_databases[0];
+const {
+  migrations_dir: expectedMigrationsDirectory,
+  ...expectedD1DatabaseBinding
+} = expectedD1Database;
 assert.deepEqual(
-  artifact.d1_databases[0],
-  replacesSitesPrimaryBindings
-    ? {
-        binding: "DB",
-        database_name: "site-creator-d1",
-        database_id: "00000000-0000-4000-8000-000000000000",
-        migrations_dir: "./drizzle",
-      }
-    : selected.d1_databases[0],
+  artifactD1Database,
+  expectedD1DatabaseBinding,
+);
+assert.equal(
+  resolve(dirname(artifactConfigPath), artifactMigrationsDirectory),
+  resolve(dirname(sourceConfigPath), expectedMigrationsDirectory),
+  "artifact D1 migrations_dir must resolve to the configured migration directory",
 );
 
 assert.equal(artifact.r2_buckets?.length, 3);

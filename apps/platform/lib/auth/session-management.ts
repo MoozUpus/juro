@@ -345,6 +345,44 @@ export async function createEmailOtpSession(
   return prepared.session;
 }
 
+/**
+ * Creates a normal revocable session for the explicitly enabled local
+ * development login route. Environment and hostname guards belong at that
+ * HTTP boundary so this primitive cannot accidentally weaken production auth.
+ */
+export async function createLocalDevelopmentSession(
+  db: D1Database,
+  input: {
+    userId: string;
+    userAgent: string | null;
+    now?: Date;
+  },
+): Promise<CreatedSession> {
+  const prepared = await prepareLocalSessionCreation(db, {
+    ...input,
+    authMethod: "development_bypass",
+    assuranceLevel: "primary",
+  });
+  await batchWithSecurityEvent(
+    db,
+    {
+      userId: input.userId,
+      sessionId: prepared.session.sessionId,
+      deviceId: prepared.session.deviceId,
+      eventType: "session.created",
+      authSource: "local_session",
+      assuranceLevel: "primary",
+      metadata: {
+        authMethod: "development_bypass",
+        deviceName: prepared.displayName,
+      },
+      createdAt: prepared.createdAt,
+    },
+    () => prepared.statements,
+  );
+  return prepared.session;
+}
+
 export async function createPrimarySessionIfMfaDisabled(
   db: D1Database,
   input: {

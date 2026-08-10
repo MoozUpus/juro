@@ -336,6 +336,14 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     Object.hasOwn(source.env.staging.vars, "ALLOW_PLATFORM_AUTH_HEADERS"),
     false,
   );
+  assert.equal(
+    Object.hasOwn(source.env.staging.vars, "LOCAL_AUTH_BYPASS"),
+    false,
+  );
+  assert.equal(
+    Object.hasOwn(source.env.production.vars, "LOCAL_AUTH_BYPASS"),
+    false,
+  );
 });
 
 test("pins verified D1 identifiers for every isolated environment and excludes secrets", () => {

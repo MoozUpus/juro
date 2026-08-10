@@ -45,6 +45,9 @@ export interface BuilderRuntimeEnv {
   PAYMENT_PRODUCTION_APPROVED?: string;
   PAYMENT_SANDBOX_WEBHOOK_SECRET?: string;
   ALLOW_PLATFORM_AUTH_HEADERS?: string;
+  LOCAL_AUTH_BYPASS?: string;
+  LOCAL_AUTH_EMAIL?: string;
+  LOCAL_AUTH_FULL_NAME?: string;
   LEGISLATION_FEED_PROVIDER?: string;
   LEGISLATION_FEED_API_KEY?: string;
   IDENTITY_KEYRING?: string;

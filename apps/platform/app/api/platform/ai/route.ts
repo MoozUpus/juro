@@ -11,8 +11,8 @@ import {
   reserveAiRun,
   sha256Json,
 } from "../../../../lib/ai/run-store";
-import { AiBranchInputError, listAiBranches, resolveAiBranchInput } from "../../../../lib/ai/branch-store";
-import { selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
+import { AiBranchInputError, deleteAiConversation, listAiAnswerVersions, resolveAiBranchInput } from "../../../../lib/ai/branch-store";
+import { loadAiConversationTurns, selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
 import {
   enforceLegalDatabaseFreshness,
   enforceLegalChatSourceBoundary,
@@ -59,7 +59,7 @@ import {
   operationalFeatureMessage,
 } from "../../../../lib/operations/operational-feature-flags";
 
-const INSTRUCTION_VERSION = "juro-legal-chat-v1";
+const INSTRUCTION_VERSION = "juro-legal-chat-v2-conversation";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -102,6 +102,29 @@ export const GET = withApiErrors(async function GET(request: Request) {
     cases: cases.results,
     selected,
   });
+});
+
+export const DELETE = withApiErrors(async function DELETE(request: Request) {
+  assertSafeWrite(request);
+  const user = await requireApiUser();
+  const workspace = await workspaceForUser(user);
+  const conversationId = new URL(request.url).searchParams.get("conversationId") || "";
+  if (!/^[0-9a-z_-]{1,128}$/i.test(conversationId)) {
+    return response({ code: "INVALID_CONVERSATION_ID", error: "Некорректный идентификатор диалога." }, 400);
+  }
+  const result = await deleteAiConversation({
+    db: requireD1(),
+    conversationId,
+    workspaceId: workspace.id,
+    userId: user.id,
+  });
+  if (result === "busy") {
+    return response({ code: "CONVERSATION_BUSY", error: "Дождитесь завершения текущего ответа перед удалением диалога." }, 409);
+  }
+  if (result === "unavailable") {
+    return response({ code: "CONVERSATION_UNAVAILABLE", error: "Диалог не найден." }, 404);
+  }
+  return response({ deleted: true, conversationId });
 });
 
 async function executePost(
@@ -207,6 +230,24 @@ async function executePost(
     }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
   }
   const question = branchInput.question;
+  const branchTurns = existingConversation && branchInput.parentBranchId
+    ? await loadAiConversationTurns({
+      db,
+      conversationId,
+      workspaceId: workspace.id,
+      userId: user.id,
+      leafBranchId: branchInput.parentBranchId,
+      limit: 12,
+    })
+    : [];
+  // Editing/regenerating replaces the selected turn for model purposes. The
+  // immutable old version remains available in history, but is not presented
+  // as an earlier statement that the user made twice.
+  const conversationHistory = boundedConversationHistory(
+    branchInput.operation === "edit" || branchInput.operation === "regenerate"
+      ? branchTurns.slice(0, -1)
+      : branchTurns,
+  );
   let voiceRecording: VoiceRecordingRow | null = null;
   if (body?.voiceRecordingId) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.voiceRecordingId)) {
@@ -244,8 +285,9 @@ async function executePost(
       workspaceIdHash: await sha256Json({ workspaceId: workspace.id }),
     });
   }
+  const retrievalQuestion = contextualRetrievalQuestion(conversationHistory, question);
   const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
-    ? await retrieveDirectLegalSources(question, locale, { limit: 1, signal })
+    ? await retrieveDirectLegalSources(retrievalQuestion, locale, { limit: 1, signal })
     : unavailableDirectLegalRetrieval();
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({
@@ -258,6 +300,7 @@ async function executePost(
     caseId: body?.caseId || null,
     operation: branchInput.operation,
     sourceMessageId: branchInput.forkedFromMessageId,
+    parentBranchId: branchInput.parentBranchId,
     memory: memories.map((memory) => ({
       id: memory.id,
       category: memory.category,
@@ -369,6 +412,7 @@ async function executePost(
       question, locale, answerMode, reasoningMode, sources, legalDatabaseAsOf,
       applicableAt: applicableAt?.toISOString(),
       requestId: reservation.correlationId, safetyIdentifier,
+      conversationHistory,
       memories: memories.map((memory) => ({
         category: memory.category,
         statement: memory.statement,
@@ -672,10 +716,19 @@ async function executePost(
     }
   }
 
+  const turns = await conversationTurnsForClient({
+    db,
+    conversationId,
+    workspaceId: workspace.id,
+    userId: user.id,
+    leafBranchId: branchId,
+  });
   return response({
     conversationId, messageId: assistantMessageId, runId: reservation.runId,
     requestMessageId: userMessageId, branchId, operation: branchInput.operation,
-    branches: await listAiBranches({ db, conversationId, workspaceId: workspace.id, userId: user.id }),
+    question,
+    branches: await listAiAnswerVersions({ db, conversationId, workspaceId: workspace.id, userId: user.id, branchId }),
+    turns,
     correlationId: reservation.correlationId, result, facts, sources: result.sources,
     sourceFreshness: freshness,
     technicalDetails: {
@@ -723,6 +776,11 @@ export async function POST(request: Request) {
             code: "STREAM_RESPONSE_INVALID",
             error: "AI stream returned a non-JSON terminal response.",
           }));
+          if (result.ok) {
+            await emitValidatedAnswerStream(body, (content) => {
+              emit("status", { stage: "answer_delta", content });
+            }, () => cancelled);
+          }
           emit(result.ok ? "complete" : "error", { status: result.status, body });
         } catch {
           emit("error", {
@@ -754,6 +812,28 @@ export async function POST(request: Request) {
   });
 }
 
+async function emitValidatedAnswerStream(
+  body: unknown,
+  emitContent: (content: string) => void,
+  isCancelled: () => boolean,
+) {
+  const record = body && typeof body === "object" ? body as Record<string, unknown> : null;
+  const result = record?.result && typeof record.result === "object"
+    ? record.result as Record<string, unknown>
+    : null;
+  const summary = typeof result?.summary === "string" ? result.summary.trim() : "";
+  const answer = typeof result?.answer === "string" ? result.answer.trim() : "";
+  const content = [summary, answer].filter(Boolean).join("\n\n");
+  if (!content) return;
+  const chunkSize = Math.max(28, Math.ceil(content.length / 18));
+  for (let end = chunkSize; end < content.length; end += chunkSize) {
+    if (isCancelled()) return;
+    emitContent(content.slice(0, end));
+    await new Promise<void>((resolve) => setTimeout(resolve, 12));
+  }
+  if (!isCancelled()) emitContent(content);
+}
+
 async function loadConversationResult(db: D1Database, conversationId: string, workspaceId: string, userId: string, branchId?: string | null, responseMessageId?: string | null) {
   const conversation = await selectAiConversationMessage(
     { db, conversationId, workspaceId, userId, branchId, responseMessageId },
@@ -761,17 +841,7 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
   if (!conversation?.structuredJson) return null;
   const facts = await db.prepare("SELECT id,statement,status FROM confirmed_facts WHERE conversation_id=? ORDER BY created_at")
     .bind(conversationId).all();
-  const storedResult = parseLegalChatResponse(
-    parseJson(conversation.structuredJson, null),
-  );
-  const sourceFreshness = legalDatabaseFreshnessFromAsOf(
-    storedResult.legalDatabaseAsOf,
-  );
-  const result = storedResult.sourceAccessMode === "direct"
-    ? storedResult
-    : enforceLegalDatabaseFreshness(storedResult, sourceFreshness, {
-    locale: storedResult.language, answerMode: storedResult.answerMode, reasoningMode: storedResult.reasoningMode,
-  });
+  const { result, sourceFreshness } = storedConversationResult(conversation.structuredJson);
   return {
     conversationId: conversation.conversationId,
     messageId: conversation.messageId,
@@ -779,12 +849,81 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
     requestMessageId: conversation.requestMessageId,
     operation: conversation.operation,
     question: conversation.question || "",
-    branches: await listAiBranches({ db, conversationId, workspaceId, userId }),
+    branches: await listAiAnswerVersions({ db, conversationId, workspaceId, userId, branchId: conversation.branchId }),
+    turns: await conversationTurnsForClient({
+      db,
+      conversationId,
+      workspaceId,
+      userId,
+      leafBranchId: conversation.branchId,
+    }),
     result,
     sourceFreshness,
     facts: facts.results,
     sources: result.sources,
   };
+}
+
+function storedConversationResult(structuredJson: string) {
+  const storedResult = parseLegalChatResponse(parseJson(structuredJson, null));
+  const sourceFreshness = legalDatabaseFreshnessFromAsOf(storedResult.legalDatabaseAsOf);
+  const result = storedResult.sourceAccessMode === "direct"
+    ? storedResult
+    : enforceLegalDatabaseFreshness(storedResult, sourceFreshness, {
+      locale: storedResult.language,
+      answerMode: storedResult.answerMode,
+      reasoningMode: storedResult.reasoningMode,
+    });
+  return { result, sourceFreshness };
+}
+
+async function conversationTurnsForClient(input: {
+  db: D1Database;
+  conversationId: string;
+  workspaceId: string;
+  userId: string;
+  leafBranchId: string | null;
+}) {
+  const turns = await loadAiConversationTurns(input);
+  return turns.flatMap((turn) => {
+    if (!turn.structuredJson) return [];
+    const { result, sourceFreshness } = storedConversationResult(turn.structuredJson);
+    return [{
+      branchId: turn.branchId,
+      requestMessageId: turn.requestMessageId,
+      responseMessageId: turn.responseMessageId,
+      question: turn.question,
+      createdAt: turn.createdAt,
+      result,
+      sourceFreshness,
+    }];
+  });
+}
+
+function boundedConversationHistory(
+  turns: Array<{ question: string; answer: string }>,
+): Array<{ user: string; assistant: string }> {
+  const selected: Array<{ user: string; assistant: string }> = [];
+  let characters = 0;
+  for (const turn of turns.slice(-12).reverse()) {
+    const user = turn.question.trim().slice(0, 8_000);
+    const assistant = turn.answer.trim().slice(0, 8_000);
+    const size = user.length + assistant.length;
+    if (selected.length > 0 && characters + size > 24_000) break;
+    selected.push({ user, assistant });
+    characters += size;
+  }
+  return selected.reverse();
+}
+
+function contextualRetrievalQuestion(
+  history: Array<{ user: string; assistant: string }>,
+  question: string,
+) {
+  const earlierQuestion = history.at(-1)?.user;
+  return earlierQuestion
+    ? `${earlierQuestion.slice(0, 2_000)}\n${question}`.slice(0, 4_000)
+    : question;
 }
 
 async function usageSummary(db: D1Database, workspaceId: string, userId: string, limit: number) {

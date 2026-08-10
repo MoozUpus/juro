@@ -5,10 +5,17 @@ import { sites } from "./build/sites-vite-plugin";
 
 // macOS Seatbelt blocks FSEvents, so Codex previews need polling for HMR.
 const isCodexSeatbeltSandbox = process.env.CODEX_SANDBOX === "seatbelt";
-const localVars: Record<string, string> =
-  process.env.ALLOW_PLATFORM_AUTH_HEADERS === "true"
-    ? { ALLOW_PLATFORM_AUTH_HEADERS: "true" }
-    : {};
+const useRemoteBindings = process.env.CLOUDFLARE_REMOTE_BINDINGS === "true";
+const localVars: Record<string, string> = {};
+for (const name of [
+  "ALLOW_PLATFORM_AUTH_HEADERS",
+  "LOCAL_AUTH_BYPASS",
+  "LOCAL_AUTH_EMAIL",
+  "LOCAL_AUTH_FULL_NAME",
+]) {
+  const value = process.env[name]?.trim();
+  if (value) localVars[name] = value;
+}
 
 export default defineConfig(async ({ command }) => {
   // Keep Wrangler and Miniflare state project-local. These are non-secret tool
@@ -41,6 +48,7 @@ export default defineConfig(async ({ command }) => {
       cloudflare({
         viteEnvironment: { name: "rsc", childEnvironments: ["ssr"] },
         inspectorPort: false,
+        remoteBindings: useRemoteBindings,
         configPath: "./wrangler.jsonc",
         config(userConfig) {
           if (agentPreviewCompatibilityDate) {

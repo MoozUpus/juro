@@ -1,4 +1,6 @@
 import { redirect } from "next/navigation";
+import { isLocalDevelopmentSession } from "../../lib/auth/development-auth";
+import { getSessionUser } from "../../lib/auth/session";
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { getOrCreateUserProfile } from "../../lib/document-builder/storage/db";
 import { requireD1 } from "../../lib/document-builder/storage/runtime";
@@ -17,7 +19,10 @@ export async function OnboardingScreen({ locale: requestedLocale }: {
   const authUser = await requireChatGPTUser(
     `/${requestedLocale}/onboarding`,
   );
-  const user = await getOrCreateUserProfile(authUser);
+  const [user, session] = await Promise.all([
+    getOrCreateUserProfile(authUser),
+    getSessionUser(),
+  ]);
   const profile = await requireD1().prepare(
     `SELECT locale,account_type AS accountType,full_name AS fullName,
        last_name AS lastName,first_name AS firstName,
@@ -51,6 +56,7 @@ export async function OnboardingScreen({ locale: requestedLocale }: {
       initialFirstName={profile?.firstName ?? legacyName[0] ?? ""}
       initialMiddleName={profile?.middleName ?? ""}
       initialPhone={user.phone ?? ""}
+      developmentPolicyBypass={isLocalDevelopmentSession(session)}
     />
   );
 }

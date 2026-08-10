@@ -139,7 +139,7 @@ export function VoiceMessageControls(props: {
   const busy = new Set<VoiceRecorderPhase>(["hashing", "uploading", "finalizing", "transcribing"]).has(phase);
   return <section className={`ai-voice-controls ${props.presentation === "stage" ? "is-stage" : ""}`} data-phase={phase} aria-label={ru ? "Голосовой ввод" : "Ovozli kiritish"}>
     <div className="ai-voice-actions">
-      {phase === "idle" && <button type="button" disabled={props.disabled} onClick={() => void start()}><Mic />{ru ? "Записать вопрос" : "Savolni yozish"}</button>}
+      {phase === "idle" && <button type="button" disabled={props.disabled} aria-label={ru ? "Записать вопрос голосом" : "Savolni ovoz bilan yozish"} title={ru ? "Записать вопрос голосом" : "Savolni ovoz bilan yozish"} onClick={() => void start()}><Mic /><span>{ru ? "Записать вопрос" : "Savolni yozish"}</span></button>}
       {(phase === "listening" || phase === "paused") && <>
         <button type="button" onClick={pauseOrResume}>{phase === "paused" ? <Play /> : <Pause />}{phase === "paused" ? (ru ? "Продолжить" : "Davom etish") : (ru ? "Пауза" : "Pauza")}</button>
         <button type="button" onClick={() => recorderRef.current?.stop()}><Square />{ru ? "Завершить" : "Tugatish"}</button>

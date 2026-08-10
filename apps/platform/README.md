@@ -31,6 +31,14 @@ Generated `.sites-runtime/`, `.wrangler/`, and dry-run directories are disposabl
 
 JURO's production identity path uses email OTP and revocable server-side sessions. Trusted hosting identity headers are compatibility inputs only and are gated by the production identity policy; they never prove workspace membership or object authorization. Every protected operation must still check the local session, active workspace, membership, object ownership, action permission, and audit requirement.
 
+`npm run dev` enables a loopback-only, credential-free developer login. The
+login button creates the fixed `developer@local.juro.uz` profile and a normal
+revocable, audited session in the development D1 database. Set
+`LOCAL_AUTH_BYPASS=false` to disable it, or override `LOCAL_AUTH_EMAIL` and
+`LOCAL_AUTH_FULL_NAME` before starting the server. The route also requires
+`APP_ENV=development`, a non-production build, and a loopback development host;
+staging and production do not declare the bypass binding.
+
 ## Diagnostic Commands
 
 - `npm run install:ci`: perform the one bounded lockfile install
