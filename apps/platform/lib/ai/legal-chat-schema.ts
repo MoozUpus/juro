@@ -132,17 +132,17 @@ export function forceClarificationWithoutVerifiedSources(
   },
 ): LegalChatResponse {
   const clarificationQuestions = result.clarificationQuestions.length > 0
-    ? result.clarificationQuestions.slice(0, 3)
-    : [options.locale === "ru" ? "Какие факты и даты можно уточнить?" : "Qaysi faktlar va sanalarni aniqlashtirish mumkin?"];
+    ? result.clarificationQuestions.slice(0, 1)
+    : [options.locale === "ru" ? "Какой факт или дата могут изменить ваш следующий шаг?" : "Qaysi fakt yoki sana keyingi qadamingizni o‘zgartirishi mumkin?"];
   return {
     ...result,
     responseKind: "clarification_required",
     summary: options.locale === "ru"
-      ? "Для надёжного ответа нужны дополнительные факты и проверенный правовой источник."
-      : "Ishonchli javob uchun qo‘shimcha faktlar va tekshirilgan huquqiy manba kerak.",
+      ? "Что можно сделать уже сейчас"
+      : "Hozir nima qilish mumkin",
     answer: options.locale === "ru"
-      ? "JURO пока не сформировал правовой вывод: релевантный фрагмент не удалось получить напрямую из доступных официальных источников. Ответьте на уточняющие вопросы или попробуйте позже — этот шаг не списывает лимит ответа."
-      : "JURO hozircha huquqiy xulosa tuzmadi: tegishli parcha mavjud rasmiy manbalardan bevosita olinmadi. Aniqlashtiruvchi savollarga javob bering yoki keyinroq urinib ko‘ring — bu bosqich javob limitidan yechilmaydi.",
+      ? "Сохраните документы и даты по ситуации и не принимайте необратимое решение, опираясь на непроверенную норму. JURO не смог подтвердить релевантный фрагмент напрямую в Lex.uz, поэтому сейчас не указывает статью, срок или юридический вывод как подтверждённые. Повторите проверку позже или передайте вопрос юристу, если срок или риск критичны."
+      : "Vaziyatga oid hujjatlar va sanalarni saqlang hamda tekshirilmagan normaga tayanib qaytarib bo‘lmaydigan qaror qabul qilmang. JURO hozir Lex.uzdan tegishli parchani bevosita tasdiqlay olmadi, shuning uchun modda, muddat yoki huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi. Keyinroq qayta tekshiring yoki muddat yoki xavf jiddiy bo‘lsa, savolni yuristga bering.",
     language: options.locale,
     jurisdiction: "UZ",
     answerMode: options.answerMode,

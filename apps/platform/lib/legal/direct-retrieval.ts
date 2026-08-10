@@ -443,6 +443,12 @@ export async function retrieveDirectLegalSources(
     wait?: (delayMs: number) => Promise<void>;
     signal?: AbortSignal;
     budgetMs?: number;
+    /**
+     * A caller can restrict this query-scoped fetch to a source kind. The AI
+     * chat uses Lex only for legal citations; Advice is retrieved through its
+     * reviewed internal scenario store and is never exposed as a legal source.
+     */
+    sourceKinds?: readonly LegalSourceKind[];
   } = {},
 ): Promise<DirectLegalRetrieval> {
   const fetchImpl = options.fetchImpl ?? fetch;
@@ -461,10 +467,14 @@ export async function retrieveDirectLegalSources(
   const evidence: DirectLegalSourceEvidence[] = [];
   const errors: Array<{ provider: LegalSourceKind; code: string }> = [];
   try {
-    const providers = [
+    const availableProviders = [
       new OfficialDirectProvider("lex", question, locale, boundedFetch, now, wait, signal),
       new OfficialDirectProvider("advice", question, locale, boundedFetch, now, wait, signal),
     ] as const;
+    const requestedKinds = options.sourceKinds?.length
+      ? new Set(options.sourceKinds)
+      : new Set<LegalSourceKind>(["lex", "advice"]);
+    const providers = availableProviders.filter((provider) => requestedKinds.has(provider.kind));
     const sourceLimit = Math.max(1, Math.min(options.limit ?? 4, 8));
     for (const provider of providers) {
       throwIfRequestAborted(options.signal);

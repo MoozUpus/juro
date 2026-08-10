@@ -17,6 +17,7 @@ import {
   enforceLegalDatabaseFreshness,
   enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
+  type LegalChatResponse,
 } from "../../../../lib/ai/legal-chat-schema";
 import {
   formatClarificationAnswers,
@@ -32,6 +33,7 @@ import {
   retrieveDirectLegalSources,
   unavailableDirectLegalRetrieval,
 } from "../../../../lib/legal/direct-retrieval";
+import { findReviewedAdviceScenarioContext } from "../../../../lib/legal/advice-scenario-context";
 import { directCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
@@ -130,6 +132,7 @@ async function executePost(
     voiceRecordingId?: string;
     legalContextDate?: string;
     clarificationAnswers?: unknown;
+    clarificationSourceMessageId?: string;
     preferences?: unknown;
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
@@ -141,10 +144,10 @@ async function executePost(
     return response({ code: error.code, error: operationalFeatureMessage(locale) }, 503);
   }
   const submittedQuestion = body?.question?.trim();
-  const clarificationAnswers = body?.clarificationAnswers === undefined
+  const parsedClarificationAnswers = body?.clarificationAnswers === undefined
     ? null
     : parseClarificationAnswers(body.clarificationAnswers);
-  if (body?.clarificationAnswers !== undefined && !clarificationAnswers) {
+  if (body?.clarificationAnswers !== undefined && !parsedClarificationAnswers) {
     return response({
       code: "INVALID_CLARIFICATION_ANSWERS",
       error: locale === "ru"
@@ -152,6 +155,9 @@ async function executePost(
         : "Aniqlashtiruvchi savollarga javoblarni tekshiring: birdan uchgacha bo‘sh bo‘lmagan javob yuborish mumkin.",
     }, 400);
   }
+  // Older clients could submit a bounded batch. Keep that request compatible,
+  // but this answer-first flow processes one fact per turn.
+  const clarificationAnswers = parsedClarificationAnswers?.slice(0, 1) ?? null;
   const preferences = normalizeAiAnswerPreferences(body?.preferences);
   if (!preferences) {
     return response({
@@ -214,6 +220,29 @@ async function executePost(
     ).bind(conversationId, workspace.id, user.id).first();
     if (!accessible) return response({ code: "ACCESS_DENIED", error: locale === "ru" ? "Диалог не найден." : "Suhbat topilmadi." }, 404);
   }
+  const clarificationSourceMessageId = body?.clarificationSourceMessageId?.trim() || null;
+  if (clarificationSourceMessageId && (!clarificationAnswers || !existingConversation)) {
+    return response({
+      code: "INVALID_CLARIFICATION_SOURCE",
+      error: locale === "ru" ? "Исходный ответ для уточнения не найден." : "Aniqlik uchun boshlang‘ich javob topilmadi.",
+    }, 400);
+  }
+  if (clarificationSourceMessageId) {
+    const sourceMessage = await db.prepare(`
+      SELECT assistant.id
+      FROM conversations conversation
+      INNER JOIN conversation_messages assistant
+        ON assistant.conversation_id=conversation.id AND assistant.id=? AND assistant.author_type='assistant'
+      WHERE conversation.id=? AND conversation.workspace_id=? AND conversation.owner_user_id=?
+      LIMIT 1
+    `).bind(clarificationSourceMessageId, conversationId, workspace.id, user.id).first();
+    if (!sourceMessage) {
+      return response({
+        code: "INVALID_CLARIFICATION_SOURCE",
+        error: locale === "ru" ? "Исходный ответ для уточнения не найден." : "Aniqlik uchun boshlang‘ich javob topilmadi.",
+      }, 404);
+    }
+  }
 
   let branchInput: Awaited<ReturnType<typeof resolveAiBranchInput>>;
   try {
@@ -236,6 +265,18 @@ async function executePost(
     }, error.code === "SOURCE_MESSAGE_NOT_FOUND" ? 404 : 400);
   }
   const question = branchInput.question;
+  const clarificationTurnsUsed = existingConversation
+    ? await completedClarificationCount(db, conversationId)
+    : 0;
+  const remainingClarifications = Math.max(0, 3 - clarificationTurnsUsed);
+  if (clarificationAnswers && remainingClarifications === 0) {
+    return response({
+      code: "MAX_CLARIFICATIONS_REACHED",
+      error: locale === "ru"
+        ? "Достигнут предел уточнений для этого пути. Можно задать новый вопрос в свободной форме."
+        : "Bu yo‘l uchun aniqliklar limiti tugadi. Yangi savolni erkin shaklda berishingiz mumkin.",
+    }, 409);
+  }
   let voiceRecording: VoiceRecordingRow | null = null;
   if (body?.voiceRecordingId) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.voiceRecordingId)) {
@@ -274,9 +315,12 @@ async function executePost(
     });
   }
   await onProgress?.({ stage: "retrieval_started" });
-  const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
-    ? await retrieveDirectLegalSources(question, locale, { limit: 1, signal })
-    : unavailableDirectLegalRetrieval();
+  const [retrieval, adviceScenarios] = await Promise.all([
+    runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
+      ? retrieveDirectLegalSources(question, locale, { limit: 1, signal, sourceKinds: ["lex"] })
+      : Promise.resolve(unavailableDirectLegalRetrieval()),
+    findReviewedAdviceScenarioContext({ db, question, locale }),
+  ]);
   await onProgress?.({ stage: "retrieval_completed" });
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   const requestHash = await sha256Json({
@@ -286,6 +330,7 @@ async function executePost(
     reasoningMode,
     legalContextDate: body?.legalContextDate || null,
     clarificationAnswers,
+    clarificationSourceMessageId,
     preferences,
     conversationId: body?.conversationId || null,
     caseId: body?.caseId || null,
@@ -298,6 +343,7 @@ async function executePost(
       scope: memory.scope,
       updatedAt: memory.updatedAt,
     })),
+    adviceScenarioTitles: adviceScenarios.map((scenario) => scenario.title),
   });
   const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
   const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
@@ -408,6 +454,7 @@ async function executePost(
         scope: memory.scope,
       })),
       preferences,
+      adviceScenarios,
       runtimeSettings,
     }, {
       signal,
@@ -524,11 +571,11 @@ async function executePost(
       sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
       sourceValidationStatus: retrieval.sourceValidationStatus,
     };
-    result = enforceLegalDatabaseFreshness(
+    result = answerFirstResult(enforceLegalDatabaseFreshness(
       canonicalResult,
       freshness,
       { locale, answerMode, reasoningMode },
-    );
+    ), { remainingClarifications });
   } catch {
     await failAiRun({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
@@ -622,6 +669,9 @@ async function executePost(
       .bind(userMessageId, conversationId, question, JSON.stringify({
         kind: "juro_ai_user_message",
         clarificationAnswers: clarificationAnswers ?? undefined,
+        clarificationOrigin: clarificationAnswers && clarificationSourceMessageId
+          ? { assistantMessageId: clarificationSourceMessageId, branchId: branchInput.parentBranchId }
+          : undefined,
         legalContextDate: body?.legalContextDate || null,
         preferences,
       }), now),
@@ -682,7 +732,10 @@ async function executePost(
       fallbackFromProvider: aiResult.fallbackFromProvider,
       inputTokens: aiResult.usage.inputTokens, outputTokens: aiResult.usage.outputTokens,
       cachedInputTokens: aiResult.usage.cachedInputTokens, attempts: aiResult.attempts,
-      latencyMs: aiResult.latencyMs, chargeable: result.responseKind === "answer",
+      // A follow-up that supplies one of JURO's optional post-answer facts
+      // updates the same legal turn. It must not reserve or consume a second
+      // answer cycle merely because the refreshed result is an answer.
+      latencyMs: aiResult.latencyMs, chargeable: result.responseKind === "answer" && !clarificationAnswers,
     })]);
   } catch (error) {
     await failAiRun({
@@ -804,6 +857,31 @@ export async function POST(request: Request) {
   });
 }
 
+/** A clarification is a follow-up aid, never a gate before the first answer. */
+function answerFirstResult(
+  result: LegalChatResponse,
+  options: { remainingClarifications: number },
+): LegalChatResponse {
+  return {
+    ...result,
+    responseKind: "answer",
+    clarificationQuestions: options.remainingClarifications > 0
+      ? result.clarificationQuestions.slice(0, 1)
+      : [],
+  };
+}
+
+async function completedClarificationCount(db: D1Database, conversationId: string): Promise<number> {
+  const messages = await db.prepare(`
+    SELECT structured_json AS structuredJson
+    FROM conversation_messages
+    WHERE conversation_id=? AND author_type='user'
+  `).bind(conversationId).all<{ structuredJson: string | null }>();
+  return messages.results.reduce((count, message) => (
+    count + (parseStoredUserMessageMeta(parseJson(message.structuredJson || "", null))?.clarificationAnswers?.length ?? 0)
+  ), 0);
+}
+
 async function loadConversationResult(db: D1Database, conversationId: string, workspaceId: string, userId: string, branchId?: string | null, responseMessageId?: string | null) {
   const conversation = await selectAiConversationMessage(
     { db, conversationId, workspaceId, userId, branchId, responseMessageId },
@@ -853,6 +931,7 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
           content: message.content,
           createdAt: message.createdAt,
           branchId: message.branchId,
+          clarificationDismissed: message.clarificationDismissed,
           result,
         };
       }
@@ -863,6 +942,7 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
         content: message.content,
         createdAt: message.createdAt,
         branchId: message.branchId,
+        clarificationDismissed: false,
         clarificationAnswers: meta?.clarificationAnswers ?? null,
         legalContextDate: meta?.legalContextDate ?? null,
       };

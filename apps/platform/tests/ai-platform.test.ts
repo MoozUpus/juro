@@ -89,9 +89,15 @@ test("clarification metadata is structured, localized, and never needs a URL par
   assert.deepEqual(parseStoredUserMessageMeta({
     kind: "juro_ai_user_message",
     clarificationAnswers: answers,
+    clarificationOrigin: { assistantMessageId: "550e8400-e29b-41d4-a716-446655440000", branchId: "123e4567-e89b-42d3-a456-426614174000" },
     legalContextDate: "2026-08-01",
     preferences: { responseStyle: "plain", clarificationPolicy: "critical_only", solutionPath: "recommended", includeLegalDetails: true },
   })?.clarificationAnswers, answers);
+  assert.equal(parseStoredUserMessageMeta({
+    kind: "juro_ai_user_message",
+    clarificationAnswers: answers,
+    clarificationOrigin: { assistantMessageId: "not-a-uuid", branchId: null },
+  }), null);
   assert.equal(aiAnswerPreferencesSchema.safeParse({ responseStyle: "plain", clarificationPolicy: "critical_only", solutionPath: "recommended", includeLegalDetails: false }).success, true);
 });
 

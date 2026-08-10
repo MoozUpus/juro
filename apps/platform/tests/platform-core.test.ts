@@ -1130,7 +1130,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.doesNotMatch(aiClient, /window\.location\.assign/);
   assert.match(aiClient, /<UserMessageBubble/);
   assert.match(aiClient, /<PendingAssistantBubble/);
-  assert.match(aiClient, /<ClarificationForm/);
+  assert.match(aiClient, /<PostAnswerClarification/);
   assert.doesNotMatch(shellComponent, /MoreHorizontal/);
   assert.match(dashboard, /max-width:820px/);
   assert.match(dashboard, /max-width:460px/);

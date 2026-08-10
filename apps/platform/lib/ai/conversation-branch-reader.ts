@@ -18,6 +18,7 @@ export type AiConversationMessage = {
   structuredJson: string | null;
   createdAt: string;
   branchId: string;
+  clarificationDismissed: boolean;
 };
 
 export async function selectAiConversationMessage(input: {
@@ -110,8 +111,28 @@ export async function listAiConversationBranchMessages(input: {
     structuredJson: string | null;
     createdAt: string;
   }>();
-  return rows.results.flatMap((row) => {
+  const visibleRows = rows.results.flatMap((row) => {
     const branchId = branchByMessageId.get(row.id);
     return branchId ? [{ ...row, branchId }] : [];
   });
+  const assistantMessageIds = visibleRows
+    .filter((row) => row.authorType === "assistant")
+    .map((row) => row.id);
+  const dismissed = new Set<string>();
+  if (assistantMessageIds.length > 0) {
+    const placeholders = assistantMessageIds.map(() => "?").join(",");
+    const rows = await input.db.prepare(`
+      SELECT DISTINCT entity_id AS messageId
+      FROM workspace_audit_events
+      WHERE workspace_id=? AND actor_user_id=?
+        AND entity_type='conversation_message'
+        AND action='ai_post_answer_clarification_dismissed'
+        AND entity_id IN (${placeholders})
+    `).bind(input.workspaceId, input.userId, ...assistantMessageIds).all<{ messageId: string }>();
+    for (const row of rows.results) dismissed.add(row.messageId);
+  }
+  return visibleRows.map((row) => ({
+    ...row,
+    clarificationDismissed: row.authorType === "assistant" && dismissed.has(row.id),
+  }));
 }

@@ -31,6 +31,10 @@ export type AiAnswerPreferences = z.infer<typeof aiAnswerPreferencesSchema>;
 export const storedUserMessageMetaSchema = z.object({
   kind: z.literal("juro_ai_user_message").optional(),
   clarificationAnswers: clarificationAnswersSchema.optional(),
+  clarificationOrigin: z.object({
+    assistantMessageId: z.string().uuid(),
+    branchId: z.string().uuid().nullable(),
+  }).strict().optional(),
   legalContextDate: z.string().date().nullable().optional(),
   preferences: aiAnswerPreferencesSchema.optional(),
 }).strict();

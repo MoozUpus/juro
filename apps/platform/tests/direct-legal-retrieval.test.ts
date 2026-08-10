@@ -117,6 +117,28 @@ test("one-source mode leaves enough compliant time for a Lex source and stops be
   ]);
 });
 
+test("AI-chat mode retrieves direct Lex evidence without exposing Advice as a citation", async () => {
+  const calls: Call[] = [];
+  const responses = [
+    responseHtml('<a href="/ru/docs/42">Lex result</a>'),
+    new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } }),
+    responseHtml(officialDocument("Трудовой договор", "Статья 12. Условия")),
+  ];
+  const result = await retrieveDirectLegalSources("трудовой договор", "ru", {
+    limit: 1,
+    sourceKinds: ["lex"],
+    fetchImpl: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ url: String(input), init });
+      return responses.shift() ?? new Response("unexpected", { status: 503 });
+    }) as typeof fetch,
+    now: () => new Date("2026-08-09T12:00:00.000Z"),
+    wait: async () => undefined,
+  });
+  assert.deepEqual(result.sources.map((source) => source.sourceType), ["lex"]);
+  assert.equal(calls.every((call) => new URL(call.url).hostname === "lex.uz"), true);
+  assert.equal(result.evidence.every((evidence) => evidence.sourceKind === "lex"), true);
+});
+
 test("direct retrieval supports the official UZ and oz paths without relaxing the allowlist", async () => {
   const calls: Call[] = [];
   const responses = [
