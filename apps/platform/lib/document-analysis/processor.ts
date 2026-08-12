@@ -57,6 +57,8 @@ type AnalysisRow = {
   analysisId: string;
   workspaceId: string;
   ownerUserId: string;
+  consentVersion: string;
+  createdAt: string;
   status: string;
   summaryJson: string | null;
   fileId: string;
@@ -67,6 +69,11 @@ type AnalysisRow = {
   sizeBytes: number;
   sha256: string | null;
 };
+
+// This marker is written only by the explicitly enabled, non-user staging
+// lifecycle probe. It lets its append-only provider-cost evidence use a
+// per-seeded-analysis identity without changing any user analysis event ID.
+const stagingSyntheticProbeConsentVersion = "synthetic-probe";
 
 type PersistedAnalysis = {
   sourceFreshness: LegalDatabaseFreshness;
@@ -243,6 +250,59 @@ export type DocumentAnalysisProcessorDependencies = {
     runtimeSettings?: AiRuntimeSettings;
   }) => Promise<AiStructuredResult<DocumentAnalysisResult>>;
 };
+
+async function opaqueProbeUsageEventId(input: {
+  analysisId: string;
+  createdAt: string;
+  provider: "openai" | "anthropic";
+}): Promise<string> {
+  // The provider usage ledger is visible to privileged operational tooling.
+  // Hash all lifecycle dimensions so neither a raw analysis ID nor a timestamp
+  // is carried into the append-only event identifier.
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode([
+      "staging-document-analysis-probe-usage-v1",
+      input.analysisId,
+      input.createdAt,
+      input.provider,
+    ].join("\n")),
+  );
+  const hex = Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return `provider_usage_document_probe_${hex.slice(0, 48)}`;
+}
+
+/**
+ * Keeps the user document-analysis ledger identity stable. A controlled
+ * staging probe reseeds a fixed analysis ID on each run, so it instead hashes
+ * that run's immutable creation timestamp into a content-free event ID. This
+ * preserves append-only evidence across probe runs without exposing any raw
+ * document, tenant, analysis, or provider request identifier.
+ */
+export async function documentAnalysisProviderUsageEventId(input: {
+  row: {
+    analysisId: string;
+    consentVersion: string;
+    createdAt: string;
+  };
+  environment: "development" | "staging" | "production";
+  provider: "openai" | "anthropic";
+}): Promise<string> {
+  if (
+    input.environment === "staging"
+    && input.row.consentVersion === stagingSyntheticProbeConsentVersion
+  ) {
+    return opaqueProbeUsageEventId({
+      analysisId: input.row.analysisId,
+      createdAt: input.row.createdAt,
+      provider: input.provider,
+    });
+  }
+  return `provider_usage_document_${input.row.analysisId}_${input.provider}`;
+}
 
 function withSequentialAnalysisSession(
   env: DocumentAnalysisProcessorEnv,
@@ -475,7 +535,11 @@ async function analyzeObject(
             errorCode,
             startedAt: call.startedAt,
             completedAt,
-            eventId: `provider_usage_document_${row.analysisId}_${call.provider}`,
+            eventId: await documentAnalysisProviderUsageEventId({
+              row,
+              environment: providerEnvironment,
+              provider: call.provider,
+            }),
           });
         }
       } catch {
@@ -502,7 +566,11 @@ async function analyzeObject(
           errorCode: "FALLBACK_USED",
           startedAt: call.startedAt,
           completedAt,
-          eventId: `provider_usage_document_${row.analysisId}_${call.provider}`,
+          eventId: await documentAnalysisProviderUsageEventId({
+            row,
+            environment: providerEnvironment,
+            provider: call.provider,
+          }),
         });
       }
       const successfulCall = [...providerCalls].reverse().find((call) => call.provider === ai.provider)!;
@@ -522,7 +590,11 @@ async function analyzeObject(
         status: "succeeded",
         startedAt: successfulCall.startedAt,
         completedAt,
-        eventId: `provider_usage_document_${row.analysisId}_${ai.provider}`,
+        eventId: await documentAnalysisProviderUsageEventId({
+          row,
+          environment: providerEnvironment,
+          provider: ai.provider,
+        }),
       });
     }
     const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
@@ -803,6 +875,7 @@ async function loadAnalysis(
 ): Promise<AnalysisRow | null> {
   return db.prepare(
     `SELECT a.id AS analysisId,a.workspace_id AS workspaceId,a.owner_user_id AS ownerUserId,
+      a.consent_version AS consentVersion,a.created_at AS createdAt,
       a.status,a.summary_json AS summaryJson,f.id AS fileId,f.kind AS fileKind,f.r2_key AS r2Key,
       f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,f.sha256
      FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id

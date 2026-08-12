@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
+  documentAnalysisProviderUsageEventId,
   documentAnalysisDiagnosticDetail,
   type DocumentAnalysisProcessorDependencies,
   DocumentAnalysisProcessingError,
@@ -81,6 +82,49 @@ test("provider diagnostics expose only an allow-listed HTTP category", () => {
   assert.equal(
     documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_TIMEOUT", true)),
     "PROVIDER_TIMEOUT",
+  );
+});
+
+test("controlled staging document probes keep append-only provider usage opaque and unique per seeded run", async () => {
+  const base = {
+    analysisId: "staging-document-analysis-v1-analysis",
+    consentVersion: "synthetic-probe",
+  };
+  const first = await documentAnalysisProviderUsageEventId({
+    row: { ...base, createdAt: "2026-08-12T10:00:00.000Z" },
+    environment: "staging",
+    provider: "anthropic",
+  });
+  const firstRepeat = await documentAnalysisProviderUsageEventId({
+    row: { ...base, createdAt: "2026-08-12T10:00:00.000Z" },
+    environment: "staging",
+    provider: "anthropic",
+  });
+  const laterRun = await documentAnalysisProviderUsageEventId({
+    row: { ...base, createdAt: "2026-08-12T10:05:00.000Z" },
+    environment: "staging",
+    provider: "anthropic",
+  });
+
+  assert.match(first, /^provider_usage_document_probe_[a-f0-9]{48}$/);
+  assert.equal(firstRepeat, first);
+  assert.notEqual(laterRun, first);
+  assert.equal(first.includes(base.analysisId), false);
+  assert.equal(first.includes("2026-08-12"), false);
+});
+
+test("ordinary document analysis preserves its existing deterministic provider usage event ID", async () => {
+  assert.equal(
+    await documentAnalysisProviderUsageEventId({
+      row: {
+        analysisId: "analysis-a",
+        consentVersion: "2026-07-30",
+        createdAt: "2026-07-30T00:00:00.000Z",
+      },
+      environment: "staging",
+      provider: "openai",
+    }),
+    "provider_usage_document_analysis-a_openai",
   );
 });
 
