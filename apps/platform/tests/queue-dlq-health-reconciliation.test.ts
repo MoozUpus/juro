@@ -89,6 +89,28 @@ test("records operational DLQ health only after live zero backlog, no dead-lette
   }
 });
 
+test("each successful scheduled DLQ reconciliation refreshes evidence instead of drifting into a throttle gap", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const first = await reconcileQueueDlqHealth(environment(d1), { now });
+    const second = await reconcileQueueDlqHealth(
+      environment(d1),
+      { now: new Date("2026-08-12T07:14:59.000Z") },
+    );
+    assert.equal(first.state, "operational_recorded");
+    assert.equal(second.state, "operational_recorded");
+    assert.equal(
+      (sqlite.prepare(`
+        SELECT COUNT(*) AS count FROM dependency_health_checks
+        WHERE environment='staging' AND dependency_key='queue_dlq' AND state='operational'
+      `).get() as { count: number }).count,
+      2,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("does not clear a recent DLQ event or a current backlog", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {

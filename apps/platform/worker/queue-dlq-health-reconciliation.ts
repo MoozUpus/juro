@@ -9,8 +9,6 @@ import { expectedQueueName, type PlatformJobEnv } from "./platform-jobs";
  */
 export const QUEUE_DLQ_HEALTH_QUIET_WINDOW_MS = 5 * 60_000;
 
-const operationalEvidenceIntervalMs = 10 * 60_000;
-
 type QueueMetricsBinding = Pick<Queue, "metrics">;
 
 type QueueDlqHealthEnv = Pick<PlatformJobEnv, "APP_ENV" | "DB"> & {
@@ -303,12 +301,14 @@ export async function reconcileQueueDlqHealth(
     );
   }
 
+  // The outer scheduled run is durably idempotent. Persist every completed
+  // zero-backlog check so a near-boundary cron delivery cannot outlive the
+  // 15-minute freshness age through a separate throttle.
   const recorded = await recordDependencyHealthEvidence(env, {
     key: "queue_dlq",
     state: "operational",
     evidenceKind: "scheduled_job",
     startedAt: now.getTime(),
-    minimumOperationalIntervalMs: operationalEvidenceIntervalMs,
   }, now);
   return emptySummary(
     recorded ? "operational_recorded" : "operational_not_recorded",

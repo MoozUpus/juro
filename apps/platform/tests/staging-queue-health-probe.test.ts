@@ -8,6 +8,7 @@ import {
   stagingQueueHealthProbeKey,
   STAGING_QUEUE_HEALTH_PROBE_QUEUE_NAME,
 } from "../worker/staging-queue-health-probe";
+import { readDependencyHealth } from "../lib/operations/dependency-health";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 type ProbeBody = Record<string, unknown>;
@@ -161,6 +162,48 @@ test("only the actual dedicated Queue consumer publishes operational queues evid
       `).get() as { count: number }).count,
       1,
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a completed probe just before the nominal 15-minute boundary still refreshes Queue evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const sends: ProbeBody[] = [];
+    const env = {
+      APP_ENV: "staging",
+      STAGING_QUEUE_HEALTH_PROBE_ENABLED: "true",
+      STAGING_QUEUE_HEALTH_PROBE_QUEUE: probeQueue(sends),
+      DB: d1,
+    };
+    await enqueueStagingQueueHealthProbe(env, { now: new Date("2026-08-12T09:00:00.000Z") });
+    await handleStagingQueueHealthProbeBatch(probeBatch(sends[0]).batch, {
+      APP_ENV: "staging",
+      STAGING_QUEUE_HEALTH_PROBE_ENABLED: "true",
+      DB: d1,
+    }, { now: new Date("2026-08-12T09:00:03.000Z") });
+
+    await enqueueStagingQueueHealthProbe(env, { now: new Date("2026-08-12T09:15:00.000Z") });
+    await handleStagingQueueHealthProbeBatch(probeBatch(sends[1]).batch, {
+      APP_ENV: "staging",
+      STAGING_QUEUE_HEALTH_PROBE_ENABLED: "true",
+      DB: d1,
+    }, { now: new Date("2026-08-12T09:15:02.000Z") });
+
+    assert.equal(
+      (sqlite.prepare(`
+        SELECT COUNT(*) AS count FROM dependency_health_checks
+        WHERE environment='staging' AND dependency_key='queues' AND state='operational'
+      `).get() as { count: number }).count,
+      2,
+    );
+    const health = await readDependencyHealth({
+      db: d1,
+      environment: "staging",
+      now: new Date("2026-08-12T09:15:03.000Z"),
+    });
+    assert.equal(health.find((entry) => entry.key === "queues")?.state, "operational");
   } finally {
     sqlite.close();
   }

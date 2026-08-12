@@ -597,12 +597,14 @@ export async function handleScheduled(
     const corpusAlerts = (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
       ? await evaluateLegalCorpusAlerts(env, { now: new Date(now) })
       : { created: 0, failedRuns: 0, staleSources: 0 };
+    // `scheduled_runs` makes this completion idempotent per cron slot. This
+    // must be a heartbeat, not a throttled product event, otherwise cron
+    // jitter can suppress a real D1 success immediately before its age limit.
     await recordDependencyHealthEvidence(env, {
       key: "d1",
       state: "operational",
       evidenceKind: "scheduled_job",
       startedAt,
-      minimumOperationalIntervalMs: 5 * 60_000,
     });
     failureCode = "SCHEDULE_COMPLETION_FAILED";
     await finishSchedule(env, run, "completed", null);

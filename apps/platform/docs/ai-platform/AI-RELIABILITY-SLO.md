@@ -129,11 +129,19 @@ evidence trail.
 
 Status starts at **unknown**. A component becomes operational only when every
 required dependency has fresh operational evidence in the same environment.
-Missing evidence remains unknown; aged operational/unknown evidence becomes
-stale; an explicit failure remains degraded/partial-outage/outage. An active
+Missing or explicitly unknown evidence remains unknown; only aged operational
+evidence becomes stale; an explicit failure remains degraded/partial-outage/outage. An active
 operator incident may make the public projection more severe, but cannot turn
 missing evidence green. See [system status](./ARCHITECTURE.md#operational-status)
 for the architectural boundary.
+
+For durable, idempotent scheduled checks (the five-minute D1/DLQ reconciliation
+and the staging Queue round trip), every completed check records its own
+content-free operational observation. Their freshness limit is an age limit,
+not a throttle interval: otherwise a correctly completed check that arrives a
+few seconds before a nominal boundary could be suppressed and create a false
+`stale` window. High-frequency product integration events remain throttled and
+are not treated as scheduler heartbeats.
 
 ## Staging probes and flags
 

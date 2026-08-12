@@ -253,6 +253,7 @@ async function currentProbeRow(
 async function consumeProbeMessage(
   env: Pick<StagingQueueHealthProbeEnv, "APP_ENV" | "DB">,
   message: Message<unknown>,
+  now: Date,
 ): Promise<"ack" | "retry"> {
   const parsed = probeMessageSchema.safeParse(message.body);
   if (!parsed.success) {
@@ -281,7 +282,6 @@ async function consumeProbeMessage(
       return "ack";
     }
 
-    const now = new Date();
     const completed = await env.DB.prepare(`
       UPDATE scheduled_runs
       SET status='completed',error_code=NULL,finished_at=?,updated_at=?
@@ -300,12 +300,14 @@ async function consumeProbeMessage(
     }
 
     const startedAt = Date.parse(row.startedAt);
+    // A durable probe claim is already one per 15-minute bucket. Do not add a
+    // second time throttle here: normal delivery can occur seconds before the
+    // age boundary and would otherwise leave a false stale interval.
     await recordDependencyHealthEvidence(env, {
       key: "queues",
       state: "operational",
       evidenceKind: "synthetic_probe",
       startedAt: Number.isFinite(startedAt) ? startedAt : now.getTime(),
-      minimumOperationalIntervalMs: STAGING_QUEUE_HEALTH_PROBE_INTERVAL_MS,
     }, now);
     return "ack";
   } catch {
@@ -324,6 +326,7 @@ async function consumeProbeMessage(
 export async function handleStagingQueueHealthProbeBatch(
   batch: MessageBatch<unknown>,
   env: Pick<StagingQueueHealthProbeEnv, "APP_ENV" | "DB" | "STAGING_QUEUE_HEALTH_PROBE_ENABLED">,
+  options: { now?: Date } = {},
 ): Promise<void> {
   if (!isStagingQueueHealthProbeQueue(batch.queue, env)) {
     throw new TypeError("STAGING_QUEUE_HEALTH_PROBE_QUEUE_MISMATCH");
@@ -335,8 +338,9 @@ export async function handleStagingQueueHealthProbeBatch(
     for (const message of batch.messages) message.ack();
     return;
   }
+  const now = options.now ?? new Date();
   for (const message of batch.messages) {
-    const outcome = await consumeProbeMessage(env, message);
+    const outcome = await consumeProbeMessage(env, message, now);
     if (outcome === "retry") message.retry({ delaySeconds: queueRetryDelaySeconds });
     else message.ack();
   }
