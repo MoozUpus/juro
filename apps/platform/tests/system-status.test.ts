@@ -146,6 +146,26 @@ test("0112 never publishes operational status without dependency evidence", asyn
   } finally { sqlite.close(); }
 });
 
+test("0112 publishes unknown rather than stale when a mandatory dependency has no evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await recordDependencyHealth({
+      db: d1,
+      now: new Date("2026-08-05T08:49:00.000Z"),
+      value: {
+        environment: "development",
+        key: "d1",
+        state: "operational",
+        latencyMs: 8,
+        evidenceKind: "probe",
+      },
+    });
+    const snapshot = await readPublicStatus({ db: d1, locale: "ru", environment: "development", now });
+    assert.equal(snapshot.overallStatus, "unknown");
+    assert.ok(snapshot.components.every((component) => component.status === "unknown"));
+  } finally { sqlite.close(); }
+});
+
 test("0083 rejects duplicate components and exposes no client-supplied actor", async () => {
   assert.equal(createStatusIncidentSchema.safeParse({
     titleRu: "Тестовый инцидент",

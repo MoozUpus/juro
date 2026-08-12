@@ -76,8 +76,10 @@ const impactRank: Readonly<Record<StatusImpact, number>> = {
 
 const publicStateRank: Readonly<Record<PublicComponentState, number>> = {
   operational: 0,
-  unknown: 1,
-  stale: 2,
+  // Keep the public aggregate aligned with dependency aggregation: an
+  // unverified required dependency must never be hidden by stale evidence.
+  stale: 1,
+  unknown: 2,
   maintenance: 3,
   degraded: 4,
   partial_outage: 5,

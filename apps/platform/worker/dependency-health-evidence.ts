@@ -116,6 +116,73 @@ export async function recordDependencyHealthEvidence(
   }
 }
 
+/**
+ * A completed Builder generation has already written the final files to
+ * private R2 and committed their metadata in D1. Record only that completed
+ * technical fact, never document IDs, file names, workspace IDs or content.
+ *
+ * These are integration events rather than synthetic probes. The per-key
+ * throttle keeps routine user traffic from turning the append-only health
+ * ledger into a copy of product activity.
+ */
+export async function recordDocumentBuilderCompletionEvidence(
+  env: DependencyHealthEvidenceEnv,
+  startedAt: number,
+  now = new Date(),
+): Promise<void> {
+  await Promise.all([
+    recordDependencyHealthEvidence(env, {
+      key: "document_builder",
+      state: "operational",
+      evidenceKind: "integration_event",
+      startedAt,
+      minimumOperationalIntervalMs: 30 * 60_000,
+    }, now),
+    recordDependencyHealthEvidence(env, {
+      key: "private_r2",
+      state: "operational",
+      evidenceKind: "integration_event",
+      startedAt,
+      minimumOperationalIntervalMs: 10 * 60_000,
+    }, now),
+    recordDependencyHealthEvidence(env, {
+      key: "d1",
+      state: "operational",
+      evidenceKind: "integration_event",
+      startedAt,
+      minimumOperationalIntervalMs: 10 * 60_000,
+    }, now),
+  ]);
+}
+
+/**
+ * A lawyer-area observation is emitted only after the access-grant batch
+ * atomically creates the grant, updates the handoff, records consent and
+ * writes the audit event. It contains no participant or case identifiers.
+ */
+export async function recordLawyerAccessGrantCompletionEvidence(
+  env: DependencyHealthEvidenceEnv,
+  startedAt: number,
+  now = new Date(),
+): Promise<void> {
+  await Promise.all([
+    recordDependencyHealthEvidence(env, {
+      key: "lawyer_area",
+      state: "operational",
+      evidenceKind: "integration_event",
+      startedAt,
+      minimumOperationalIntervalMs: 30 * 60_000,
+    }, now),
+    recordDependencyHealthEvidence(env, {
+      key: "d1",
+      state: "operational",
+      evidenceKind: "integration_event",
+      startedAt,
+      minimumOperationalIntervalMs: 10 * 60_000,
+    }, now),
+  ]);
+}
+
 export function providerFailureEvidence(
   provider: "openai" | "anthropic",
   code: string,

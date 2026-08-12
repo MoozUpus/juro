@@ -52,6 +52,12 @@ export async function startScheduledCorpusSync(
     discoveryWait?: (delayMs: number) => Promise<void>;
   } = {},
 ): Promise<ScheduledCorpusSyncSummary> {
+  // The queue consumer rejects all legacy corpus jobs while ingestion is
+  // disabled. Do not create source-run or outbox records that it can only
+  // reject later; no result is health evidence while the feature is dormant.
+  if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+    return { started: 0, busy: 0, empty: 0 };
+  }
   const now = options.now ?? new Date();
   const timestamp = now.toISOString();
   let started = 0;

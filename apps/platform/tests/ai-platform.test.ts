@@ -7,6 +7,7 @@ import {
   legalChatJsonSchema,
   legalChatResponseSchema,
 } from "../lib/ai/legal-chat-schema";
+import { createUnavailableVerifiedSourceClarification } from "../lib/ai/fast-clarification";
 import {
   AiRunConflictError,
   beginAiRunFinalization,
@@ -171,6 +172,28 @@ test("OpenAI Responses SSE parser handles split structured-output frames and rep
   assert.deepEqual(JSON.parse(text || "{}"), validLegalResponse);
   assert.ok(progress.length >= 1);
   assert.equal(progress.at(-1), serialized.length);
+});
+
+test("server-owned unavailable-source preliminary is strict, source-bound, and contains no legal conclusion", () => {
+  for (const locale of ["ru", "uz"] as const) {
+    const result = createUnavailableVerifiedSourceClarification({
+      locale,
+      answerMode: "short",
+      reasoningMode: "fast",
+      legalDatabaseAsOf: "unavailable",
+    });
+    assert.equal(legalChatResponseSchema.safeParse(result).success, true);
+    assert.deepEqual(enforceLegalChatSourceBoundary(result, new Set()), result);
+    assert.equal(result.responseKind, "clarification_required");
+    assert.equal(result.language, locale);
+    assert.equal(result.jurisdiction, "UZ");
+    assert.deepEqual(result.confirmedFindings, []);
+    assert.deepEqual(result.risks, []);
+    assert.deepEqual(result.sources, []);
+    assert.deepEqual(result.deadlines, []);
+    assert.ok(result.clarificationQuestions.length > 0);
+    assert.match(result.answer, locale === "ru" ? /не делает правовой вывод/ : /huquqiy xulosa bermaydi/i);
+  }
 });
 
 test("OpenAI Responses SSE parser records the first actual non-empty provider delta once", async () => {

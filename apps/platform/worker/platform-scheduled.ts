@@ -281,6 +281,18 @@ export async function handleScheduled(
   }
 
   if (controller.cron === LEGAL_CORPUS_SYNC_CRON) {
+    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+      // Do not enqueue the legacy corpus pipeline while its consumer is in its
+      // terminal dormant mode. Health remains unknown until real evidence is
+      // produced after a separately approved activation.
+      logScheduled("info", {
+        event: "scheduled.legal_corpus_disabled",
+        environment: env.APP_ENV,
+        cron: controller.cron,
+      });
+      controller.noRetry();
+      return;
+    }
     const summary = await startScheduledCorpusSync(env, {
       discoveryWait: (delayMs) => scheduler.wait(delayMs),
     });

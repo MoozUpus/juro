@@ -18,6 +18,7 @@ import {
   enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../../../../lib/ai/legal-chat-schema";
+import { createUnavailableVerifiedSourceClarification } from "../../../../lib/ai/fast-clarification";
 import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
@@ -45,7 +46,6 @@ import {
   UserMemoryError,
   type UserMemory,
 } from "../../../../lib/ai/user-memory";
-import type { IdentityKeyring } from "../../../../lib/auth/keyring";
 import {
   assertVoiceTranscriptMatches,
   linkVoiceRecordingStatement,
@@ -332,49 +332,56 @@ async function executePostWithinBudget(
       return response({ code: error.code, error: error.message }, error.status);
     }
   }
-  let memoryEncryption: IdentityKeyring | null = null;
-  let memories: UserMemory[] = [];
-  const memoryStage = budget.beginStage("memory_context", { timeoutMs: 1_250 });
-  try {
-    memoryEncryption = memoryKeyring(runtimeEnv().IDENTITY_KEYRING);
-    memories = (await listUserMemories({
-      db,
-      keyring: memoryEncryption,
-      userId: user.id,
-      workspaceId: workspace.id,
-    })).slice(0, 20);
-    memoryStage.complete();
-  } catch (error) {
-    memoryStage.fail();
-    if (!(error instanceof UserMemoryError)) throw error;
-    console.warn({
-      event: "ai.memory_context_unavailable",
-      code: error.code,
-      workspaceIdHash: await sha256Json({ workspaceId: workspace.id }),
-    });
-  }
   const retrievalQuestion = contextualRetrievalQuestion(conversationHistory, question);
+  // These two bounded reads are independent. Start them together so a slow
+  // encrypted-memory lookup cannot delay the first source-bound SSE brief.
+  const memoryStage = budget.beginStage("memory_context", { timeoutMs: 1_250 });
   const retrievalStage = budget.beginStage("verified_retrieval", { timeoutMs: 2_250 });
-  let retrieval: InteractiveVerifiedLegalRetrieval;
-  try {
-    retrieval = await retrieveInteractiveVerifiedLegalSources({
-      db,
-      query: retrievalQuestion,
-      locale,
-      applicableAt: applicableAt ?? undefined,
-      signal: retrievalStage.signal,
-      limit: 2,
-    });
-    retrievalStage.complete();
-  } catch (error) {
-    retrievalStage.fail();
-    if (signal.aborted) throw error;
-    retrieval = unavailableInteractiveVerifiedLegalRetrieval("VERIFIED_RETRIEVAL_TIMEOUT");
-  }
+  const memoryContext = (async () => {
+    try {
+      const keyring = memoryKeyring(runtimeEnv().IDENTITY_KEYRING);
+      const loaded = (await listUserMemories({
+        db,
+        keyring,
+        userId: user.id,
+        workspaceId: workspace.id,
+      })).slice(0, 20);
+      memoryStage.complete();
+      return { memoryEncryption: keyring, memories: loaded };
+    } catch (error) {
+      memoryStage.fail();
+      if (!(error instanceof UserMemoryError)) throw error;
+      console.warn({
+        event: "ai.memory_context_unavailable",
+        code: error.code,
+        workspaceIdHash: await sha256Json({ workspaceId: workspace.id }),
+      });
+      return { memoryEncryption: null, memories: [] as UserMemory[] };
+    }
+  })();
+  const verifiedRetrieval = (async (): Promise<InteractiveVerifiedLegalRetrieval> => {
+    try {
+      const result = await retrieveInteractiveVerifiedLegalSources({
+        db,
+        query: retrievalQuestion,
+        locale,
+        applicableAt: applicableAt ?? undefined,
+        signal: retrievalStage.signal,
+        limit: 2,
+      });
+      retrievalStage.complete();
+      return result;
+    } catch (error) {
+      retrievalStage.fail();
+      if (signal.aborted) throw error;
+      return unavailableInteractiveVerifiedLegalRetrieval("VERIFIED_RETRIEVAL_TIMEOUT");
+    }
+  })();
+  const [{ memoryEncryption, memories }, retrieval] = await Promise.all([memoryContext, verifiedRetrieval]);
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   await emitProgress({
     stage: "preliminary",
-    preliminary: preliminaryForVerifiedRetrieval({ retrieval, locale }),
+    preliminary: preliminaryForVerifiedRetrieval({ retrieval, locale, answerMode, reasoningMode }),
   });
   const requestHash = await sha256Json({
     question,
@@ -1115,6 +1122,8 @@ function verifiedSourceCards(sources: ReadonlyArray<{
 function preliminaryForVerifiedRetrieval(input: {
   retrieval: InteractiveVerifiedLegalRetrieval;
   locale: "ru" | "uz";
+  answerMode: "short" | "detailed";
+  reasoningMode: "fast" | "deep";
 }) {
   const sources = input.retrieval.sources.slice(0, 2).map((source) => ({
     actTitle: source.actTitle,
@@ -1126,15 +1135,21 @@ function preliminaryForVerifiedRetrieval(input: {
   const hasVerifiedSources = sources.length > 0
     && Boolean(firstExcerpt)
     && input.retrieval.sourceValidationStatus === "validated";
+  const clarification = hasVerifiedSources
+    ? null
+    : createUnavailableVerifiedSourceClarification({
+      locale: input.locale,
+      answerMode: input.answerMode,
+      reasoningMode: input.reasoningMode,
+      legalDatabaseAsOf: input.retrieval.legalDatabaseAsOf,
+    });
   return {
     kind: hasVerifiedSources ? "verified_excerpt" as const : "clarification_required" as const,
     message: hasVerifiedSources
       ? (input.locale === "ru"
         ? "Проверенный фрагмент официального источника по вашему вопросу:"
         : "Savolingiz bo‘yicha rasmiy manbaning tasdiqlangan parchasi:")
-      : (input.locale === "ru"
-        ? "Для правового вывода JURO нужны уточнения или свежий проверенный источник. Этот этап не списывает лимит ответа."
-        : "Huquqiy xulosa uchun JUROga aniqlik yoki yangi tasdiqlangan manba kerak. Bu bosqich javob limitidan yechilmaydi."),
+      : clarification!.answer,
     ...(hasVerifiedSources ? { excerpt: firstExcerpt } : {}),
     sources,
     sourceFreshness: input.retrieval.freshness.status,

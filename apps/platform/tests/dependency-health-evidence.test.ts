@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { readDependencyHealth } from "../lib/operations/dependency-health";
 import {
   dependencyHealthLatencyMs,
   providerFailureEvidence,
+  recordDocumentBuilderCompletionEvidence,
   recordDependencyHealthEvidence,
+  recordLawyerAccessGrantCompletionEvidence,
 } from "../worker/dependency-health-evidence";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -65,4 +68,64 @@ test("dependency evidence classifies provider configuration/auth failures withou
     safeErrorCode: "PROBE_AUTH_ERROR",
   });
   assert.equal(dependencyHealthLatencyMs(0, 120_000), 60_000);
+});
+
+test("completed Builder generation and confirmed lawyer access emit only factual, content-free integration evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const now = new Date("2026-08-12T06:00:00.000Z");
+    const env = { APP_ENV: "staging", DB: d1 };
+    await recordDocumentBuilderCompletionEvidence(env, now.getTime() - 42, now);
+    await recordLawyerAccessGrantCompletionEvidence(env, now.getTime() - 42, now);
+    // A routine second success is intentionally throttled; the health ledger
+    // is not a product-activity log.
+    await recordDocumentBuilderCompletionEvidence(env, now.getTime() - 21, now);
+
+    const rows = (sqlite.prepare(
+      `SELECT dependency_key AS dependencyKey,state,latency_ms AS latencyMs,
+              safe_error_code AS safeErrorCode,evidence_kind AS evidenceKind
+       FROM dependency_health_checks ORDER BY dependency_key`,
+    ).all() as Array<{
+      dependencyKey: string;
+      state: string;
+      latencyMs: number | null;
+      safeErrorCode: string | null;
+      evidenceKind: string;
+    }>).map((row) => ({ ...row }));
+    assert.deepEqual(rows, [
+      { dependencyKey: "d1", state: "operational", latencyMs: 42, safeErrorCode: null, evidenceKind: "integration_event" },
+      { dependencyKey: "document_builder", state: "operational", latencyMs: 42, safeErrorCode: null, evidenceKind: "integration_event" },
+      { dependencyKey: "lawyer_area", state: "operational", latencyMs: 42, safeErrorCode: null, evidenceKind: "integration_event" },
+      { dependencyKey: "private_r2", state: "operational", latencyMs: 42, safeErrorCode: null, evidenceKind: "integration_event" },
+    ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("real-flow routes emit evidence only after their successful D1 commit", async () => {
+  const root = new URL("../", import.meta.url);
+  const [receiptGeneration, configuredGeneration, accessGrant] = await Promise.all([
+    readFile(new URL("app/api/document-builder/documents/[id]/generate/route.ts", root), "utf8"),
+    readFile(new URL("app/api/document-builder/configured-documents/[id]/generate/route.ts", root), "utf8"),
+    readFile(new URL("app/api/platform/lawyer-requests/[requestId]/access-grant/route.ts", root), "utf8"),
+  ]);
+
+  for (const route of [receiptGeneration, configuredGeneration]) {
+    const committed = route.indexOf("await db.batch([", route.indexOf("await Promise.all(["));
+    const evidence = route.indexOf("await recordDocumentBuilderCompletionEvidence");
+    assert.ok(committed >= 0 && evidence > committed);
+    assert.ok(evidence < route.indexOf("await bucket.delete", evidence));
+    assert.match(route, /APP_ENV: runtimeEnv\(\)\.APP_ENV \?\? "development"/);
+    const invocation = route.slice(evidence, route.indexOf("}, startedAt);", evidence) + "}, startedAt);".length);
+    assert.doesNotMatch(invocation, /documentId|workspaceId|userId|r2Key/);
+  }
+
+  const committed = accessGrant.indexOf("await db.batch([");
+  const evidence = accessGrant.indexOf("await recordLawyerAccessGrantCompletionEvidence");
+  assert.ok(committed >= 0 && evidence > committed);
+  assert.ok(evidence < accessGrant.indexOf("return response", evidence));
+  assert.match(accessGrant, /APP_ENV: runtimeEnv\(\)\.APP_ENV \?\? "development"/);
+  const invocation = accessGrant.slice(evidence, accessGrant.indexOf("}, startedAt);", evidence) + "}, startedAt);".length);
+  assert.doesNotMatch(invocation, /requestId|caseId|lawyerUserId|grantId/);
 });

@@ -115,3 +115,69 @@ test("0112 marks old green evidence stale without erasing the last success", asy
     assert.equal(d1Health?.safeErrorCode, null);
   } finally { sqlite.close(); }
 });
+
+test("0112 gives missing mandatory evidence precedence over stale evidence, but not a hard failure", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await recordDependencyHealth({
+      db: d1,
+      now: new Date("2026-08-12T04:49:00.000Z"),
+      value: {
+        environment: "staging",
+        key: "d1",
+        state: "operational",
+        latencyMs: 5,
+        evidenceKind: "probe",
+      },
+    });
+    const withStaleD1 = await readDependencyHealth({
+      db: d1,
+      environment: "staging",
+      now,
+    });
+    assert.equal(withStaleD1.find((entry) => entry.key === "d1")?.state, "stale");
+    assert.equal(
+      deriveComponentHealth(withStaleD1).find((component) => component.key === "platform")?.status,
+      "unknown",
+      "missing queue and DLQ evidence must not be masked by stale D1 evidence",
+    );
+
+    await recordDependencyHealth({
+      db: d1,
+      now,
+      value: {
+        environment: "staging",
+        key: "d1",
+        state: "degraded",
+        latencyMs: 10,
+        safeErrorCode: "DEPENDENCY_UNAVAILABLE",
+        evidenceKind: "probe",
+      },
+    });
+    const withFailure = await readDependencyHealth({ db: d1, environment: "staging", now });
+    assert.equal(
+      deriveComponentHealth(withFailure).find((component) => component.key === "platform")?.status,
+      "degraded",
+      "an explicit failure remains higher priority than missing evidence",
+    );
+  } finally { sqlite.close(); }
+});
+
+test("0112 never ages an explicit unknown observation into stale", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await recordDependencyHealth({
+      db: d1,
+      now: new Date("2026-08-12T04:00:00.000Z"),
+      value: {
+        environment: "staging",
+        key: "resend",
+        state: "unknown",
+        latencyMs: null,
+        evidenceKind: "manual_verification",
+      },
+    });
+    const health = await readDependencyHealth({ db: d1, environment: "staging", now });
+    assert.equal(health.find((entry) => entry.key === "resend")?.state, "unknown");
+  } finally { sqlite.close(); }
+});

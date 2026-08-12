@@ -13,7 +13,11 @@ test("0089 creates one content-free failed and stale alert per corpus epoch", as
   const originalFetch = globalThis.fetch;
   let deliveries = 0;
   try {
-    const env = { APP_ENV: "staging", DB: d1 } as unknown as LegalSourceAcquisitionEnv;
+    const env = {
+      APP_ENV: "staging",
+      DB: d1,
+      LEGAL_ADVICE_INGESTION_ENABLED: "true",
+    } as unknown as LegalSourceAcquisitionEnv;
     assert.deepEqual(
       await startScheduledCorpusSync(env, { now: new Date("2026-08-05T19:00:00.000Z") }),
       { started: 0, busy: 0, empty: 2 },

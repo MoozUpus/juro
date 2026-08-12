@@ -9,6 +9,7 @@ import {
 } from "../lib/document-analysis/schema";
 import { buildDocumentAnalysisProviderInput } from "../lib/document-analysis/input";
 import {
+  documentAnalysisFallbackAllowed,
   documentAnalysisProviderMaxAttempts,
   documentFallbackEligible,
 } from "../lib/document-analysis/provider";
@@ -226,4 +227,30 @@ test("document analysis fails over from an unavailable Anthropic request but nev
 test("document analysis gives its fallback a turn after one primary attempt by default", () => {
   assert.equal(documentAnalysisProviderMaxAttempts(), 1);
   assert.equal(documentAnalysisProviderMaxAttempts(2), 2);
+});
+
+test("controlled document probes never begin a fallback after their shared deadline or explicit one-shot policy", () => {
+  const retryableFailure = new AiUnavailableError("timeout", "PROVIDER_TIMEOUT", true);
+  assert.equal(
+    documentAnalysisFallbackAllowed(retryableFailure, {
+      fallbackEnabled: false,
+      deadlineAt: 2_000,
+      now: () => 1_000,
+    }),
+    false,
+  );
+  assert.equal(
+    documentAnalysisFallbackAllowed(retryableFailure, {
+      deadlineAt: 1_000,
+      now: () => 1_000,
+    }),
+    false,
+  );
+  assert.equal(
+    documentAnalysisFallbackAllowed(retryableFailure, {
+      deadlineAt: 2_000,
+      now: () => 1_000,
+    }),
+    true,
+  );
 });

@@ -13,6 +13,7 @@ import {
   stagingAiChatProbeLocaleForExecution,
   stagingAiChatSyntheticIds,
 } from "../worker/staging-ai-chat-lifecycle-probe";
+import { createUnavailableVerifiedSourceClarification } from "../lib/ai/fast-clarification";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 import { recordStagingAiSloProbe } from "../lib/ai/slo-telemetry";
 
@@ -83,6 +84,19 @@ test("AI chat lifecycle probe is staging-only and uses isolated rolling locale f
   assert.match(ru.userId, /^staging-ai-chat-v27-ru-00000000-0000-4000-8000-000000000010-user$/);
   assert.match(uz.userId, /^staging-ai-chat-v27-uz-00000000-0000-4000-8000-000000000011-user$/);
   assert.equal(ru.registryKey, `legal-chat:${ru.workspaceId}:${ru.userId}:${ru.idempotencyKey}`);
+});
+
+test("lifecycle probe's early no-source message is a validated clarification, not provider text", () => {
+  const preliminary = createUnavailableVerifiedSourceClarification({
+    locale: "ru",
+    answerMode: "short",
+    reasoningMode: "fast",
+    legalDatabaseAsOf: "unavailable",
+  });
+  assert.equal(preliminary.responseKind, "clarification_required");
+  assert.deepEqual(preliminary.confirmedFindings, []);
+  assert.deepEqual(preliminary.sources, []);
+  assert.match(preliminary.answer, /не делает правовой вывод/);
 });
 
 test("rolling probe retention prunes only expired v27 technical rows and preserves historic evidence", async () => {

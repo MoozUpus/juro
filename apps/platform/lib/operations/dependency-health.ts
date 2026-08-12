@@ -210,8 +210,11 @@ function maxAge(values: readonly (number | null)[]): number | null {
 
 const stateRank: Readonly<Record<DependencyHealthState, number>> = {
   operational: 0,
-  unknown: 1,
-  stale: 2,
+  // Missing mandatory evidence is more important than an old observation:
+  // `stale` says a check once succeeded, while `unknown` says no check exists
+  // for a dependency the component requires. Explicit failures still win.
+  stale: 1,
+  unknown: 2,
   maintenance: 3,
   degraded: 4,
   partial_outage: 5,
@@ -227,10 +230,10 @@ function highestState(states: readonly DependencyHealthState[]): DependencyHealt
 
 function effectiveState(row: DependencyHealthRow, now: Date): { state: DependencyHealthState; ageMs: number } {
   const ageMs = Math.max(0, now.getTime() - Date.parse(row.checkedAt));
-  if (
-    (row.state === "operational" || row.state === "unknown")
-    && ageMs > dependencyHealthMaxAgeMs[row.key]
-  ) {
+  // Only a formerly healthy observation can age into stale. `unknown` is not
+  // a successful observation, so it must remain unknown until real evidence
+  // replaces it.
+  if (row.state === "operational" && ageMs > dependencyHealthMaxAgeMs[row.key]) {
     return { state: "stale", ageMs };
   }
   return { state: row.state, ageMs };

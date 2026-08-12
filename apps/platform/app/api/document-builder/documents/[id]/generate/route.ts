@@ -8,15 +8,17 @@ import { generateZip } from "../../../../../../lib/document-builder/generation/z
 import { loadStoredDocument, requireOwner } from "../../../../../../lib/document-builder/permissions";
 import { addActivity, isoNow } from "../../../../../../lib/document-builder/storage/db";
 import { putPrivateObject, sanitizeFileName } from "../../../../../../lib/document-builder/storage/files";
-import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireR2, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import { renderReceipt } from "../../../../../../lib/document-builder/templates/receipt";
 import { createDocumentVersion } from "../../../../../../lib/document-builder/document-versions";
+import { recordDocumentBuilderCompletionEvidence } from "../../../../../../worker/dependency-health-evidence";
 
 export const dynamic = "force-dynamic";
 
 type Context = { params: Promise<{ id: string }> };
 
 export async function POST(request: Request, context: Context): Promise<Response> {
+  const startedAt = Date.now();
   try {
     assertSafeWrite(request);
     const user = await requireApiUser();
@@ -79,6 +81,10 @@ export async function POST(request: Request, context: Context): Promise<Response
         .bind(zipId, ownerAccess.workspaceId, id, user.id, zipKey, `${baseName}.zip`, zip.byteLength, now, now),
       db.prepare("UPDATE documents SET status = 'Готов', generated_at = ?, revision = revision + 1, updated_at = ? WHERE id = ?").bind(now, now, id),
     ]);
+    await recordDocumentBuilderCompletionEvidence({
+      APP_ENV: runtimeEnv().APP_ENV ?? "development",
+      DB: db,
+    }, startedAt);
     if (old.results.length) await bucket.delete(old.results.map((file) => file.r2Key));
     await addActivity(id, user.id, "document_generated");
     const filePath = (fileId: string) => `/api/document-builder/documents/${id}/files/${fileId}`;

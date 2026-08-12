@@ -26,7 +26,11 @@ test("midnight corpus schedule records an explicit empty-corpus failure", async 
     },
   };
   const result = await startScheduledCorpusSync(
-    { APP_ENV: "staging", DB: db } as unknown as LegalSourceAcquisitionEnv,
+    {
+      APP_ENV: "staging",
+      DB: db,
+      LEGAL_ADVICE_INGESTION_ENABLED: "true",
+    } as unknown as LegalSourceAcquisitionEnv,
     { now: new Date("2026-08-01T19:00:00.000Z") },
   );
 
@@ -39,4 +43,32 @@ assert.equal(
     ).length,
     2,
   );
+});
+
+test("disabled scheduled corpus sync stays inert and creates no legacy queue work", async () => {
+  let prepareCalls = 0;
+  const db = {
+    prepare() {
+      prepareCalls += 1;
+      throw new Error("disabled sync must not access D1");
+    },
+  };
+  const result = await startScheduledCorpusSync(
+    {
+      APP_ENV: "staging",
+      DB: db,
+      LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    } as unknown as LegalSourceAcquisitionEnv,
+    {
+      now: new Date("2026-08-01T19:00:00.000Z"),
+      discoverAdvice: async () => {
+        throw new Error("disabled sync must not discover Advice sources");
+      },
+      discoverLex: async () => {
+        throw new Error("disabled sync must not discover Lex sources");
+      },
+    },
+  );
+  assert.deepEqual(result, { started: 0, busy: 0, empty: 0 });
+  assert.equal(prepareCalls, 0);
 });

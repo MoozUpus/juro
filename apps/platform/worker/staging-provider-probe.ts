@@ -390,7 +390,7 @@ async function executeProviderProbe(input: {
       timing.providerTtftMs = result.timing.providerTtftMs;
       timing.validationLatencyMs = result.timing.validationLatencyMs;
       timing.persistenceLatencyMs = result.timing.persistenceLatencyMs;
-      timing.firstUsefulStage = "provider_validated";
+      timing.firstUsefulStage = result.timing.firstUsefulStage;
       timing.firstUsefulLatencyMs = result.timing.firstUsefulLatencyMs;
       return {
         model: result.model,

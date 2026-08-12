@@ -244,7 +244,7 @@ test("scheduled corpus keeps a two-source run open until the aggregate reconcili
     APP_ENV: "development",
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
-    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_ADVICE_INGESTION_ENABLED: "true",
   };
   const now = new Date("2026-08-01T19:00:00.000Z");
   try {
@@ -387,7 +387,7 @@ test("scheduled corpus is successful only when fetched content matches the activ
     APP_ENV: "development",
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
-    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_ADVICE_INGESTION_ENABLED: "true",
   };
   const now = new Date("2026-08-03T19:00:00.000Z");
   const html = documentHtml("-201");
@@ -443,7 +443,7 @@ test("scheduled Lex RSS candidates enter the normal immutable review-only acquis
     APP_ENV: "development",
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
-    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_ADVICE_INGESTION_ENABLED: "true",
     LEGAL_LEX_RSS_DISCOVERY_ENABLED: "true",
   };
   const now = new Date("2026-08-05T19:00:00.000Z");

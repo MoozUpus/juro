@@ -38,6 +38,27 @@ export function documentAnalysisProviderMaxAttempts(requested?: 1 | 2): 1 | 2 {
   return requested ?? 1;
 }
 
+/**
+ * Decides whether the optional provider fallback may begin. A caller with an
+ * absolute deadline must not start a new provider request after that budget
+ * has elapsed. The staging document lifecycle probe also deliberately turns
+ * fallback off: it is a one-shot pipeline check, whereas a user analysis
+ * retains the normal Anthropic -> OpenAI recovery path.
+ */
+export function documentAnalysisFallbackAllowed(
+  error: unknown,
+  options: {
+    fallbackEnabled?: boolean;
+    deadlineAt?: number;
+    now?: () => number;
+  } = {},
+): boolean {
+  if (options.fallbackEnabled === false || !documentFallbackEligible(error)) return false;
+  if (options.deadlineAt === undefined) return true;
+  if (!Number.isFinite(options.deadlineAt)) return false;
+  return options.deadlineAt > (options.now ?? Date.now)();
+}
+
 export function documentAnalysisProviderStatus() {
   const env = runtimeEnv();
   const anthropicConfigured = hasAnthropicConfiguration();
@@ -68,6 +89,10 @@ export async function runDocumentAnalysis(
      */
     providerTimeoutMs?: number;
     providerMaxAttempts?: 1 | 2;
+    /** Absolute shared request budget for a controlled caller. */
+    deadlineAt?: number;
+    /** Disable only for an explicitly bounded non-user verification probe. */
+    fallbackEnabled?: boolean;
   } = {},
 ): Promise<DocumentAnalysisProviderResult> {
   const runtimeSettings = options.runtimeSettings ?? await resolveAiRuntimeSettings({
@@ -83,7 +108,7 @@ export async function runDocumentAnalysis(
   try {
     return await runAnthropicDocumentAnalysis(input, runtimeOptions);
   } catch (error) {
-    if (!hasAiConfiguration() || !documentFallbackEligible(error)) throw error;
+    if (!hasAiConfiguration() || !documentAnalysisFallbackAllowed(error, runtimeOptions)) throw error;
     const fallback = await runOpenAiDocumentAnalysis(input, runtimeOptions);
     return { ...fallback, fallbackFromProvider: "anthropic" };
   }
@@ -102,6 +127,8 @@ async function runAnthropicDocumentAnalysis(
     runtimeSettings: AiRuntimeSettings;
     providerTimeoutMs?: number;
     providerMaxAttempts?: 1 | 2;
+    deadlineAt?: number;
+    fallbackEnabled?: boolean;
   },
 ) {
   const model = options.runtimeSettings.anthropicDocumentModel;
@@ -110,6 +137,7 @@ async function runAnthropicDocumentAnalysis(
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
     timeoutMs: options.providerTimeoutMs ?? (input.mode === "expert" ? 90_000 : 60_000),
+    deadlineAt: options.deadlineAt,
     maxAttempts: documentAnalysisProviderMaxAttempts(options.providerMaxAttempts),
     requestId: input.requestId,
     model,
@@ -131,6 +159,8 @@ async function runOpenAiDocumentAnalysis(
     runtimeSettings: AiRuntimeSettings;
     providerTimeoutMs?: number;
     providerMaxAttempts?: 1 | 2;
+    deadlineAt?: number;
+    fallbackEnabled?: boolean;
   },
 ) {
   const model = options.runtimeSettings.openaiDocumentFallbackModel;
@@ -140,6 +170,7 @@ async function runOpenAiDocumentAnalysis(
     schema: documentAnalysisJsonSchema,
     parse: parseDocumentAnalysisResult,
     timeoutMs: options.providerTimeoutMs ?? (input.mode === "expert" ? 90_000 : 60_000),
+    deadlineAt: options.deadlineAt,
     maxAttempts: documentAnalysisProviderMaxAttempts(options.providerMaxAttempts),
     requestId: input.requestId,
     model,

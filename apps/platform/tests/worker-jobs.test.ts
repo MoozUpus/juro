@@ -1055,6 +1055,28 @@ test("scheduled runtime remains inert when disabled and rejects unknown cron", a
   }
 });
 
+test("disabled legal corpus cron does not enqueue work the consumer would reject", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const { env } = createEnv(d1, {
+      asyncEnabled: "true",
+      cronEnabled: "true",
+    });
+    let noRetryCalls = 0;
+    await handleScheduled({
+      scheduledTime: Date.UTC(2026, 7, 12, 19, 0),
+      cron: "0 19 * * *",
+      noRetry() {
+        noRetryCalls += 1;
+      },
+    }, env);
+    assert.equal(noRetryCalls, 1);
+    assert.equal(d1.prepareCalls, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("reviewed outbox cron is locked, durable, and idempotent", async () => {
   const { sqlite, d1 } = createDatabase();
   try {

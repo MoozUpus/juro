@@ -13,6 +13,11 @@ import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 
 const probeKey = "staging-document-analysis-v1";
 const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+// This is a staging-only control, not the asynchronous user-analysis SLA.
+// The absolute deadline is shared by the normal extraction/retrieval path and
+// the single provider request. Cleanup deliberately runs afterward so probe
+// residue is never traded for a fast-but-misleading result.
+const stagingDocumentAnalysisProbeDeadlineMs = 30_000;
 const probeIds = {
   userId: `${probeKey}-user`,
   workspaceId: `${probeKey}-workspace`,
@@ -37,6 +42,20 @@ export function stagingDocumentAnalysisProbeEnabled(
 ): boolean {
   return env.APP_ENV === "staging"
     && env.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED === "true";
+}
+
+export function stagingDocumentAnalysisProbeProviderOptions(startedAt: number): {
+  providerTimeoutMs: number;
+  providerMaxAttempts: 1;
+  deadlineAt: number;
+  fallbackEnabled: false;
+} {
+  return {
+    providerTimeoutMs: stagingDocumentAnalysisProbeDeadlineMs,
+    providerMaxAttempts: 1,
+    deadlineAt: startedAt + stagingDocumentAnalysisProbeDeadlineMs,
+    fallbackEnabled: false,
+  };
 }
 
 function xmlEscape(value: string): string {
@@ -245,15 +264,16 @@ export async function runStagingDocumentAnalysisProbe(
     const scan = await executeMalwareScanJob(env, probeIds.analysisId, probeIds.workspaceId);
     if (scan.status !== "safe") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_SCAN_FAILED");
     stage = "analysis";
-    // This probe must leave room for cleanup within one scheduled invocation.
-    // Its short one-attempt policy is strictly an injected test dependency;
-    // user analyses keep their production timeout and retry policy.
+    // One shared, absolute provider deadline prevents a slow Anthropic request
+    // from starting a second full OpenAI window. User analyses retain their
+    // standard recovery behavior; this synthetic lifecycle control is one-shot
+    // by design and records a failure rather than manufacturing a success.
+    const providerOptions = stagingDocumentAnalysisProbeProviderOptions(startedAt);
     const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId, {
       analyze: (input) => runDocumentAnalysis(input, {
         beforeProviderCall: input.beforeProviderCall,
         runtimeSettings: input.runtimeSettings,
-        providerTimeoutMs: 20_000,
-        providerMaxAttempts: 1,
+        ...providerOptions,
       }),
     });
     if (analysis.status !== "completed") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_ANALYSIS_FAILED");

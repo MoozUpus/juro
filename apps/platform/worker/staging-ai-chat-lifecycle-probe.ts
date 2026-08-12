@@ -2,7 +2,10 @@ import {
   enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../lib/ai/legal-chat-schema";
+import { createUnavailableVerifiedSourceClarification } from "../lib/ai/fast-clarification";
 import { aiProviderStatus, legalAiProvider } from "../lib/ai/provider";
+import { retrieveInteractiveVerifiedLegalSources } from "../lib/legal/interactive-verified-retrieval";
+import { listUserMemories, memoryKeyring, UserMemoryError } from "../lib/ai/user-memory";
 import {
   beginAiRunFinalization,
   completeAiRunStatements,
@@ -47,6 +50,7 @@ type ScenarioEvidence = {
   latencyMs: number;
   attempts: number;
   providerTtftMs: number | null;
+  firstUsefulStage: "preliminary";
   firstUsefulLatencyMs: number;
   validationLatencyMs: number;
   persistenceLatencyMs: number;
@@ -206,10 +210,14 @@ async function prepareSyntheticScenario(
   ]);
 }
 
-function question(locale: ProbeLocale): string {
+function noSourceProbeMarker(executionId: string): string {
+  return `juro_staging_no_source_${executionId.replaceAll("-", "")}`;
+}
+
+function question(locale: ProbeLocale, opaqueNoSourceMarker: string): string {
   return locale === "ru"
-    ? "Синтетическая staging-проверка: данных недостаточно, задайте один уточняющий вопрос о дате события."
-    : "Sintetik staging tekshiruvi: ma’lumot yetarli emas, voqea sanasi haqida bitta aniqlashtiruvchi savol bering.";
+    ? `Синтетическая staging-проверка ${opaqueNoSourceMarker}: данных недостаточно, задайте один уточняющий вопрос о дате события.`
+    : `Sintetik staging tekshiruvi ${opaqueNoSourceMarker}: ma’lumot yetarli emas, voqea sanasi haqida bitta aniqlashtiruvchi savol bering.`;
 }
 
 type RunScenarioOptions = Required<Pick<StagingAiChatLifecycleProbeOptions, "executionId" | "budget">> & {
@@ -243,8 +251,76 @@ async function runScenario(
       throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_OPENAI_NOT_CONFIGURED");
     }
 
-    const prompt = question(locale);
-    const legalDatabaseAsOf = "unavailable";
+    const opaqueNoSourceMarker = noSourceProbeMarker(options.executionId);
+    const prompt = question(locale, opaqueNoSourceMarker);
+    // Match the interactive route's independent preflight reads. An empty
+    // synthetic memory set is still read through the normal encrypted path;
+    // an unavailable keyring degrades exactly as it does for a user request.
+    const memoryStage = options.budget.beginStage("probe.memory_context", { timeoutMs: 1_250 });
+    const retrievalStage = options.budget.beginStage("probe.verified_retrieval", { timeoutMs: 2_250 });
+    const memoryContext = (async () => {
+      try {
+        const keyring = memoryKeyring(env.IDENTITY_KEYRING);
+        const memories = await listUserMemories({
+          db: env.DB,
+          keyring,
+          userId: ids.userId,
+          workspaceId: ids.workspaceId,
+        });
+        memoryStage.complete();
+        return memories.slice(0, 20);
+      } catch (error) {
+        memoryStage.fail();
+        if (!(error instanceof UserMemoryError)) throw error;
+        return [];
+      }
+    })();
+    const sourceRetrieval = (async () => {
+      try {
+        const result = await retrieveInteractiveVerifiedLegalSources({
+          db: env.DB,
+          query: opaqueNoSourceMarker,
+          locale,
+          signal: retrievalStage.signal,
+          limit: 2,
+        });
+        retrievalStage.complete();
+        return result;
+      } catch (error) {
+        retrievalStage.fail();
+        throw error;
+      }
+    })();
+    const [memories, retrieval] = await Promise.all([memoryContext, sourceRetrieval]);
+    // This is intentionally a no-source lifecycle: the opaque marker makes a
+    // source match unexpected. Fail closed rather than silently measuring a
+    // generic clarification for a request which actually had source context.
+    if (retrieval.sources.length !== 0 || retrieval.sourceValidationStatus !== "unavailable") {
+      throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_PROBE_SOURCE_EXPECTED_EMPTY");
+    }
+    const legalDatabaseAsOf = retrieval.legalDatabaseAsOf;
+    // The production route emits the same server-owned clarification after a
+    // bounded verified-source lookup finds no usable official excerpt. It is
+    // strict-schema parsed and source-bound here too, so the probe measures a
+    // genuine first useful message rather than a provider delta or terminal
+    // completion timestamp. The real OpenAI call still follows and proves the
+    // full lifecycle independently. This remains a `staging_synthetic_probe`;
+    // only authenticated/guest `legal_chat` telemetry can establish the user
+    // SLO, because this fixture intentionally has no browser auth overhead.
+    const preliminary = createUnavailableVerifiedSourceClarification({
+      locale,
+      answerMode: "short",
+      reasoningMode: "fast",
+      legalDatabaseAsOf,
+    });
+    if (
+      preliminary.responseKind !== "clarification_required"
+      || preliminary.sources.length !== 0
+      || preliminary.confirmedFindings.length !== 0
+    ) {
+      throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_PRELIMINARY_BOUNDARY_FAILED");
+    }
+    const firstUsefulLatencyMs = Math.max(0, Date.now() - scenarioStartedAt);
     const requestHash = await sha256Json({
       prompt,
       locale,
@@ -289,6 +365,11 @@ async function runScenario(
         legalDatabaseAsOf,
         requestId: reservation.correlationId,
         safetyIdentifier: await sha256Json({ scope: "staging-ai-chat-probe", userId: ids.userId }),
+        memories: memories.map((memory) => ({
+          category: memory.category,
+          statement: memory.statement,
+          scope: memory.scope,
+        })),
       }, {
         budget: options.budget,
         signal: options.signal,
@@ -336,7 +417,6 @@ async function runScenario(
     // A provider delta is deliberately not considered useful: only this
     // validated, source-boundary-checked result qualifies for the probe SLO.
     const validationLatencyMs = Math.max(0, Date.now() - validationStartedAt);
-    const firstUsefulLatencyMs = Math.max(0, Date.now() - scenarioStartedAt);
     if (!await beginAiRunFinalization({
       db: env.DB,
       runId: reservation.runId,
@@ -485,6 +565,7 @@ async function runScenario(
       latencyMs: aiResult.latencyMs,
       attempts: aiResult.attempts,
       providerTtftMs,
+      firstUsefulStage: "preliminary",
       firstUsefulLatencyMs,
       validationLatencyMs,
       persistenceLatencyMs,
@@ -557,6 +638,7 @@ export async function runStagingAiChatLifecycleProbe(
       },
       timing: {
         providerTtftMs: scenario.providerTtftMs,
+        firstUsefulStage: scenario.firstUsefulStage,
         firstUsefulLatencyMs: scenario.firstUsefulLatencyMs,
         validationLatencyMs: scenario.validationLatencyMs,
         persistenceLatencyMs: scenario.persistenceLatencyMs,
