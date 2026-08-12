@@ -147,6 +147,7 @@ export type DocumentAnalysisDiagnosticDetail =
   | "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX"
   | "LEGAL_RETRIEVAL_SQLITE_ERROR"
   | "LEGAL_RETRIEVAL_FAILED"
+  | "PROVIDER_HTTP_400"
   | "PROVIDER_HTTP_401"
   | "PROVIDER_HTTP_403"
   | "PROVIDER_HTTP_404"
@@ -165,6 +166,7 @@ export function documentAnalysisDiagnosticDetail(error: unknown): DocumentAnalys
     if (error.code === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
     if (error.code === "PROVIDER_CIRCUIT_OPEN") return "PROVIDER_CIRCUIT_OPEN";
     switch (error.providerStatus) {
+      case 400: return "PROVIDER_HTTP_400";
       case 401: return "PROVIDER_HTTP_401";
       case 403: return "PROVIDER_HTTP_403";
       case 404: return "PROVIDER_HTTP_404";
