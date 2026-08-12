@@ -263,7 +263,7 @@ test("quick document analysis has an explicit compact output budget", () => {
   assert.equal(documentAnalysisTimeoutMs("expert"), 90_000);
 });
 
-test("document analysis sends Anthropic a native JSON-schema response request without tools", async () => {
+test("document analysis sends Anthropic a forced envelope and restores the canonical validated result", async () => {
   const runtime = env as unknown as {
     ANTHROPIC_API_KEY?: string;
     OPENAI_API_KEY?: string;
@@ -301,16 +301,16 @@ test("document analysis sends Anthropic a native JSON-schema response request wi
         model?: string;
         max_tokens?: number;
         output_config?: { format?: { type?: string; schema?: Record<string, unknown> } };
-        tools?: unknown;
-        tool_choice?: unknown;
+        tools?: Array<{ name?: string; input_schema?: Record<string, unknown> }>;
+        tool_choice?: { type?: string; name?: string };
       };
       assert.equal(request.model, "claude-sonnet-4-6");
       assert.equal(request.max_tokens, 2_400);
-      assert.equal(request.output_config?.format?.type, "json_schema");
-      assert.equal(request.output_config?.format?.schema?.type, "object");
-      assert.equal(countSchemaKeyword(request.output_config?.format?.schema ?? {}, "anyOf"), 0);
-      assert.equal(request.tools, undefined);
-      assert.equal(request.tool_choice, undefined);
+      assert.equal(request.output_config, undefined);
+      assert.equal(request.tools?.length, 1);
+      assert.equal(request.tools?.[0]?.name, "emit_result");
+      assert.equal(request.tools?.[0]?.input_schema?.type, "object");
+      assert.deepEqual(request.tool_choice, { type: "tool", name: "emit_result" });
       const nativeWireResult = {
         ...base,
         userSide: "",
@@ -325,8 +325,8 @@ test("document analysis sends Anthropic a native JSON-schema response request wi
       return Response.json({
         id: "msg_document_native_json",
         model: "claude-sonnet-4-6",
-        stop_reason: "end_turn",
-        content: [{ type: "text", text: JSON.stringify(nativeWireResult) }],
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "emit_result", input: { payload_json: JSON.stringify(nativeWireResult) } }],
         usage: { input_tokens: 20, output_tokens: 30 },
       });
     };

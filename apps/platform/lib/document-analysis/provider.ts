@@ -169,8 +169,13 @@ async function runAnthropicDocumentAnalysis(
     ].join(" "),
     input: providerInput(input),
     // Keep native JSON-schema output, but use a provider-only wire schema
-    // without nullable unions. The parser restores sentinels and immediately
-    // applies the canonical Zod contract before any downstream use.
+    // without nullable unions. Anthropic's native JSON-output grammar still
+    // rejects this deeply nested contract in staging, even after its nullable
+    // unions are removed. Use its small forced-tool envelope instead; the
+    // JSON string is immediately parsed through the same canonical Zod,
+    // source, and excerpt boundaries below. This is an output transport
+    // choice, never a relaxation of JURO's validation contract.
+    strictOutput: false,
     maxTokens: documentAnalysisMaxOutputTokens(input.mode),
   });
   return constrainResult(result, input);

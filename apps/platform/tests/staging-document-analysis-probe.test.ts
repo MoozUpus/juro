@@ -39,11 +39,11 @@ test("document analysis probe has one durable, versioned claim per UTC window", 
     const secondWindow = new Date("2026-08-13T00:00:00.000Z");
     assert.equal(
       stagingDocumentAnalysisProbeExecutionKey(firstWindow),
-      "staging-document-analysis-v3-20260812",
+      "staging-document-analysis-v4-20260812",
     );
     assert.equal(
       stagingDocumentAnalysisProbeExecutionKey(secondWindow),
-      "staging-document-analysis-v3-20260813",
+      "staging-document-analysis-v4-20260813",
     );
 
     const first = await claimStagingDocumentAnalysisProbe(
@@ -52,7 +52,7 @@ test("document analysis probe has one durable, versioned claim per UTC window", 
     );
     assert.deepEqual(first, {
       claimed: true,
-      probeExecutionKey: "staging-document-analysis-v3-20260812",
+      probeExecutionKey: "staging-document-analysis-v4-20260812",
       runId: "11111111-1111-4111-8111-111111111111",
     });
 
@@ -62,7 +62,7 @@ test("document analysis probe has one durable, versioned claim per UTC window", 
     );
     assert.deepEqual(sameWindow, {
       claimed: false,
-      probeExecutionKey: "staging-document-analysis-v3-20260812",
+      probeExecutionKey: "staging-document-analysis-v4-20260812",
       runId: null,
     });
 
@@ -84,7 +84,7 @@ test("document analysis probe has one durable, versioned claim per UTC window", 
           scheduleName: "staging-document-analysis-probe",
           cron: "one-shot-utc",
           scheduledFor: "2026-08-12T00:00:00.000Z",
-          idempotencyKey: "staging-document-analysis-probe:staging-document-analysis-v3-20260812",
+          idempotencyKey: "staging-document-analysis-probe:staging-document-analysis-v4-20260812",
           status: "running",
           errorCode: null,
         },
@@ -92,7 +92,7 @@ test("document analysis probe has one durable, versioned claim per UTC window", 
           scheduleName: "staging-document-analysis-probe",
           cron: "one-shot-utc",
           scheduledFor: "2026-08-13T00:00:00.000Z",
-          idempotencyKey: "staging-document-analysis-probe:staging-document-analysis-v3-20260813",
+          idempotencyKey: "staging-document-analysis-probe:staging-document-analysis-v4-20260813",
           status: "running",
           errorCode: null,
         },
@@ -112,7 +112,7 @@ test("failed one-shot document probe remains blocked until an operator resets it
       { now: at, runId: "44444444-4444-4444-8444-444444444444" },
     );
     assert.equal(first.claimed, true);
-    const idempotencyKey = "staging-document-analysis-probe:staging-document-analysis-v3-20260812";
+    const idempotencyKey = "staging-document-analysis-probe:staging-document-analysis-v4-20260812";
     sqlite.prepare(
       "UPDATE scheduled_runs SET status='failed',error_code='DOCUMENT_ANALYSIS_PROBE_ANALYSIS_FAILED' WHERE idempotency_key=?",
     ).run(idempotencyKey);

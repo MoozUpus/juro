@@ -16,7 +16,7 @@ import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 // The *execution* key below is bumped deliberately when an operator needs a
 // new one-shot validation window; it is not derived from any tenant data.
 const probeKey = "staging-document-analysis-v1";
-const probeExecutionVersion = "v3";
+const probeExecutionVersion = "v4";
 const probeExecutionKeyPrefix = `staging-document-analysis-${probeExecutionVersion}`;
 const probeScheduleName = "staging-document-analysis-probe";
 const probeScheduleCron = "one-shot-utc";
