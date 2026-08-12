@@ -17,6 +17,7 @@ import type {
   DeadlineCalculationInput,
   DeadlineCalculationResult,
 } from "../../lib/platform/deadline-calculator";
+import { formatPlatformDate, formatPlatformDateTime, formatPlatformDayMonth } from "../../lib/platform/date-time";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
@@ -404,7 +405,7 @@ export function ActionPlanClient({
                         {versionsByCase[item.id].map((entry) => <li key={entry.id}>
                           <button type="button" aria-pressed={selectedHistoryVersionByCase[item.id] === entry.id} onClick={() => setSelectedHistoryVersionByCase((all) => ({ ...all, [item.id]: entry.id }))}>
                             <strong>{ru ? "Версия " + entry.version : entry.version + "-versiya"}</strong>
-                            <span>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(entry.createdAt))}</span>
+                            <span>{formatPlatformDateTime(entry.createdAt, ru ? "ru" : "uz")}</span>
                             <small>{entry.snapshot ? entry.snapshot.progressPercent + "% · " + entry.snapshot.steps.filter((step) => step.status === "completed").length + "/" + entry.snapshot.steps.length : (ru ? "Снимок недоступен" : "Snapshot mavjud emas")}</small>
                           </button>
                         </li>)}
@@ -464,7 +465,7 @@ export function ActionPlanClient({
                         <span>{step.status === "completed" ? <Check /> : step.ordinal}</span>
                         <div>
                           <strong>{step.title}</strong>
-                          {step.dueAt && <small>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(step.dueAt))}</small>}
+                          {step.dueAt && <small>{formatPlatformDate(step.dueAt, ru ? "ru" : "uz")}</small>}
                         </div>
                         <label className="plan-step-date">
                           <span>{ru ? "Срок" : "Muddat"}</span>
@@ -578,10 +579,10 @@ export function ActionPlanClient({
       </section>
       <aside className="plan-calendar">
         <h2>{ru ? "Ближайшие сроки" : "Yaqin muddatlar"}</h2>
-        <div className="today"><CalendarDays /><div><small>{ru ? "Сегодня" : "Bugun"}</small><strong>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "long", timeZone: "Asia/Tashkent" }).format(new Date())}</strong></div></div>
+        <div className="today"><CalendarDays /><div><small>{ru ? "Сегодня" : "Bugun"}</small><strong>{formatPlatformDate(new Date(), ru ? "ru" : "uz", { dateStyle: "long" })}</strong></div></div>
         {deadlines.length
           ? deadlines.slice(0, 8).map((item) => <div className="deadline" key={`${item.date}-${item.title}`}>
-            <time dateTime={item.date}>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { day: "2-digit", month: "short", timeZone: "Asia/Tashkent" }).format(new Date(item.date))}</time>
+            <time dateTime={item.date}>{formatPlatformDayMonth(item.date, ru ? "ru" : "uz")}</time>
             <div><strong>{item.title}</strong><small>{item.caseTitle}</small></div>
           </div>)
           : <p>{ru ? "Сроки появятся после назначения дат конкретным шагам." : "Aniq qadamlar uchun sana belgilangandan keyin muddatlar ko‘rinadi."}</p>}

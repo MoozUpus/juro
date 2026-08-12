@@ -16,6 +16,25 @@ export function anthropicModel(): string {
   return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
 }
 
+/**
+ * Resolves the amount of time a non-streaming Anthropic request may wait for
+ * its HTTP response to begin. This is deliberately not a TTFT metric: the
+ * endpoint returns one complete JSON/tool payload, so only a validated result
+ * can be user-visible provider content.
+ *
+ * The optional override exists for the staging connectivity probe. It can
+ * never exceed the provider's already bounded total-response deadline.
+ */
+export function anthropicResponseStartTimeoutMs(input: {
+  interactive: boolean;
+  providerTimeoutMs: number;
+  nonStreamingResponseStartTimeoutMs?: number;
+}): number {
+  const defaultTimeoutMs = input.interactive ? 4_500 : 30_000;
+  const requestedTimeoutMs = input.nonStreamingResponseStartTimeoutMs ?? defaultTimeoutMs;
+  return Math.max(1, Math.min(requestedTimeoutMs, input.providerTimeoutMs));
+}
+
 function normalizeAnthropicLegalChatResponse(
   value: unknown,
   input: LegalChatRequest,
@@ -80,15 +99,26 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
   let result: LegalAiRunResult;
   try {
     const interactive = input.reasoningMode === "fast";
+    const providerBudgetMs = options.providerTimeoutMs ?? (interactive
+      ? Math.max(1, Math.min(25_500, options.budget?.remainingMs ?? 25_500))
+      : Math.max(1, Math.min(120_000, options.budget?.remainingMs ?? 120_000)));
+    const responseStartTimeoutMs = anthropicResponseStartTimeoutMs({
+      interactive,
+      providerTimeoutMs: providerBudgetMs,
+      nonStreamingResponseStartTimeoutMs: options.nonStreamingResponseStartTimeoutMs,
+    });
     result = await callAnthropicStructured<LegalChatResponse>({
       schema: legalChatJsonSchema,
       parse: (value) => normalizeAnthropicLegalChatResponse(value, input),
-      // Apply the same phased deadlines to fallback responses so a provider
-      // that starts normally is not aborted while its full body is arriving.
-      firstByteTimeoutMs: interactive ? 26_000 : 75_000,
-      totalResponseTimeoutMs: interactive ? 90_000 : 180_000,
+      // `callAnthropicStructured` is non-streaming: this bounds when its
+      // response headers/body start, not an unvalidated model delta.
+      firstByteTimeoutMs: responseStartTimeoutMs,
+      totalResponseTimeoutMs: providerBudgetMs,
+      deadlineAt: options.budget ? Date.now() + options.budget.remainingMs : undefined,
       maxAttempts: 1,
-      maxTokens: input.answerMode === "short" ? 2_400 : 4_200,
+      maxTokens: interactive
+        ? (input.answerMode === "short" ? 600 : 900)
+        : (input.answerMode === "short" ? 2_400 : 4_200),
       requestId: input.requestId,
       model,
       signal: options.signal,

@@ -1,11 +1,15 @@
 import PizZip from "pizzip";
-import { executeMalwareScanJob } from "../lib/document-analysis/malware-scanner";
+import {
+  executeMalwareScanJob,
+  MalwareScanError,
+} from "../lib/document-analysis/malware-scanner";
 import {
   DocumentAnalysisProcessingError,
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
 import { runDocumentAnalysis } from "../lib/document-analysis/provider";
 import type { PlatformJobEnv } from "./platform-jobs";
+import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 
 const probeKey = "staging-document-analysis-v1";
 const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -229,6 +233,7 @@ export async function runStagingDocumentAnalysisProbe(
   if (env.MALWARE_SCAN_ENABLED !== "true" || !env.MALWARE_SCANNER) {
     return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode: "DOCUMENT_ANALYSIS_PROBE_SCANNER_DISABLED" };
   }
+  const startedAt = Date.now();
   let stage: ProbeStage = "prepare";
   let summary: StagingDocumentAnalysisProbeSummary;
   try {
@@ -254,6 +259,29 @@ export async function runStagingDocumentAnalysisProbe(
     if (analysis.status !== "completed") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_ANALYSIS_FAILED");
     stage = "verify";
     await assertCompleted(env);
+    await Promise.all([
+      recordDependencyHealthEvidence(env, {
+        key: "document_analysis",
+        state: "operational",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+        minimumOperationalIntervalMs: 30 * 60_000,
+      }),
+      recordDependencyHealthEvidence(env, {
+        key: "private_r2",
+        state: "operational",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+        minimumOperationalIntervalMs: 10 * 60_000,
+      }),
+      recordDependencyHealthEvidence(env, {
+        key: "malware_scanner",
+        state: "operational",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+        minimumOperationalIntervalMs: 15 * 60_000,
+      }),
+    ]);
     summary = { attempted: 1, completed: 1, failed: 0, skipped: 0 };
   } catch (error) {
     const processorCode = error instanceof DocumentAnalysisProcessingError
@@ -273,6 +301,29 @@ export async function runStagingDocumentAnalysisProbe(
         ? `DOCUMENT_ANALYSIS_PROBE_ANALYSIS_${processorCode}`
       : `DOCUMENT_ANALYSIS_PROBE_${stage.toUpperCase()}_FAILED`;
     console.error(JSON.stringify({ event: "staging.document_analysis_probe_failed", stage, errorCode }));
+    if (stage === "analysis") {
+      await recordDependencyHealthEvidence(env, {
+        key: "document_analysis",
+        state: "degraded",
+        safeErrorCode: "ANALYSIS_JOB_FAILED",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+      });
+    }
+    if (
+      stage === "scan"
+      && (!(error instanceof MalwareScanError)
+        || error.code === "MALWARE_SCANNER_UNAVAILABLE"
+        || error.code === "MALWARE_SCANNER_INVALID_RESPONSE")
+    ) {
+      await recordDependencyHealthEvidence(env, {
+        key: "malware_scanner",
+        state: "degraded",
+        safeErrorCode: "SCANNER_UNAVAILABLE",
+        evidenceKind: "synthetic_probe",
+        startedAt,
+      });
+    }
     summary = { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode };
   }
   try {

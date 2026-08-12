@@ -22,11 +22,19 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
-  directSourceCards,
-  retrieveDirectLegalSources,
-  unavailableDirectLegalRetrieval,
-} from "../../../../lib/legal/direct-retrieval";
-import { directCitationStatements } from "../../../../lib/legal/direct-citation-store";
+  retrieveInteractiveVerifiedLegalSources,
+  unavailableInteractiveVerifiedLegalRetrieval,
+  type InteractiveVerifiedLegalRetrieval,
+} from "../../../../lib/legal/interactive-verified-retrieval";
+import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
+import {
+  createAiExecutionBudget,
+  type AiExecutionBudget,
+} from "../../../../lib/ai/execution-budget";
+import {
+  tryRecordAiSloTelemetry,
+  type AiSloFirstUsefulStage,
+} from "../../../../lib/ai/slo-telemetry";
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
@@ -127,14 +135,54 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
   return response({ deleted: true, conversationId });
 });
 
+type AiRouteProgress = LegalAiProgress | {
+  stage: "preliminary";
+  preliminary: {
+    kind: "verified_excerpt" | "clarification_required";
+    message: string;
+    excerpt?: string;
+    sources: Array<{
+      actTitle: string;
+      article: string | null;
+      originalUrl: string;
+      verifiedAt: string;
+    }>;
+    sourceFreshness: "fresh" | "stale" | "unavailable";
+    legalDatabaseAsOf: string;
+  };
+};
+
 async function executePost(
   request: Request,
-  onProgress?: (event: LegalAiProgress) => void | Promise<void>,
+  onProgress?: (event: AiRouteProgress) => void | Promise<void>,
+  signal: AbortSignal = request.signal,
+) {
+  const budget = createAiExecutionBudget({ callerSignal: signal });
+  try {
+    return await executePostWithinBudget(request, budget, onProgress, budget.signal);
+  } finally {
+    budget.dispose();
+  }
+}
+
+async function executePostWithinBudget(
+  request: Request,
+  budget: AiExecutionBudget,
+  onProgress?: (event: AiRouteProgress) => void | Promise<void>,
   signal: AbortSignal = request.signal,
 ) {
   assertSafeWrite(request);
-  const user = await requireApiUser();
-  const workspace = await workspaceForUser(user);
+  const authStage = budget.beginStage("auth");
+  let user: Awaited<ReturnType<typeof requireApiUser>>;
+  let workspace: Awaited<ReturnType<typeof workspaceForUser>>;
+  try {
+    user = await requireApiUser();
+    workspace = await workspaceForUser(user);
+    authStage.complete();
+  } catch (error) {
+    authStage.fail();
+    throw error;
+  }
   const body = await request.json().catch(() => null) as {
     question?: string;
     locale?: string;
@@ -149,6 +197,23 @@ async function executePost(
   } | null;
   const locale = body?.locale === "uz" ? "uz" : "ru";
   const db = requireD1();
+  let preliminaryAtMs: number | null = null;
+  let providerFirstDeltaAtMs: number | null = null;
+  let fallbackFromProgress: "openai" | "anthropic" | null = null;
+  const emitProgress = async (event: AiRouteProgress) => {
+    await onProgress?.(event);
+    // These are only recorded after an SSE client has actually received the
+    // useful event. A regular JSON POST has no early user-visible response.
+    if (onProgress && event.stage === "preliminary" && preliminaryAtMs === null) {
+      preliminaryAtMs = budget.elapsedMs;
+    }
+    if (onProgress && event.stage === "provider_delta" && providerFirstDeltaAtMs === null) {
+      providerFirstDeltaAtMs = budget.elapsedMs;
+    }
+    if (event.stage === "fallback") {
+      fallbackFromProgress = event.from;
+    }
+  };
   try {
     await assertOperationalFeatureEnabled({ db, environment: operationalEnvironment(runtimeEnv().APP_ENV), key: "ai_chat" });
   } catch (error) {
@@ -269,6 +334,7 @@ async function executePost(
   }
   let memoryEncryption: IdentityKeyring | null = null;
   let memories: UserMemory[] = [];
+  const memoryStage = budget.beginStage("memory_context", { timeoutMs: 1_250 });
   try {
     memoryEncryption = memoryKeyring(runtimeEnv().IDENTITY_KEYRING);
     memories = (await listUserMemories({
@@ -277,7 +343,9 @@ async function executePost(
       userId: user.id,
       workspaceId: workspace.id,
     })).slice(0, 20);
+    memoryStage.complete();
   } catch (error) {
+    memoryStage.fail();
     if (!(error instanceof UserMemoryError)) throw error;
     console.warn({
       event: "ai.memory_context_unavailable",
@@ -286,10 +354,28 @@ async function executePost(
     });
   }
   const retrievalQuestion = contextualRetrievalQuestion(conversationHistory, question);
-  const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
-    ? await retrieveDirectLegalSources(retrievalQuestion, locale, { limit: 1, signal })
-    : unavailableDirectLegalRetrieval();
+  const retrievalStage = budget.beginStage("verified_retrieval", { timeoutMs: 2_250 });
+  let retrieval: InteractiveVerifiedLegalRetrieval;
+  try {
+    retrieval = await retrieveInteractiveVerifiedLegalSources({
+      db,
+      query: retrievalQuestion,
+      locale,
+      applicableAt: applicableAt ?? undefined,
+      signal: retrievalStage.signal,
+      limit: 2,
+    });
+    retrievalStage.complete();
+  } catch (error) {
+    retrievalStage.fail();
+    if (signal.aborted) throw error;
+    retrieval = unavailableInteractiveVerifiedLegalRetrieval("VERIFIED_RETRIEVAL_TIMEOUT");
+  }
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
+  await emitProgress({
+    stage: "preliminary",
+    preliminary: preliminaryForVerifiedRetrieval({ retrieval, locale }),
+  });
   const requestHash = await sha256Json({
     question,
     locale,
@@ -407,6 +493,10 @@ async function executePost(
   };
 
   let aiResult;
+  // Provider-level deadlines are derived from the same absolute request
+  // budget. A separate short stage signal would abort a viable fallback, so
+  // this stage is telemetry-only and the provider receives budget.signal.
+  const providerStage = budget.beginStage("provider_execution");
   try {
     aiResult = await provider.runLegalChat({
       question, locale, answerMode, reasoningMode, sources, legalDatabaseAsOf,
@@ -421,11 +511,14 @@ async function executePost(
       runtimeSettings,
     }, {
       signal,
-      onProgress,
+      budget,
+      onProgress: emitProgress,
       beforeProviderCall,
       onProviderFailure: async (failure) => { providerFailures.push(failure); },
     });
+    providerStage.complete();
   } catch (error) {
+    providerStage.fail();
     const code = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";
     // Keep staging/provider incidents diagnosable without emitting the legal
     // question, user identifiers, source excerpts, or provider response body.
@@ -493,6 +586,22 @@ async function executePost(
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey, errorCode: code,
     });
+    const lastProviderCall = providerCalls.at(-1);
+    const telemetryProvider = lastProviderCall?.provider
+      ?? (provider.name === "anthropic" ? "anthropic" : "openai");
+    await recordLegalChatSlo({
+      db,
+      budget,
+      correlationId: reservation.correlationId,
+      answerMode,
+      reasoningMode,
+      provider: telemetryProvider,
+      model: lastProviderCall?.model ?? providerStatus.model,
+      fallbackFromProvider: fallbackFromProgress,
+      preliminaryAtMs,
+      providerFirstDeltaAtMs,
+      outcome: aiSloFailureOutcome(code, budget),
+    });
     return response({
       code,
       correlationId: reservation.correlationId,
@@ -501,18 +610,18 @@ async function executePost(
   }
 
   let result;
+  const validationStage = budget.beginStage("validation");
   try {
     const boundedResult = enforceLegalChatSourceBoundary(
       parseLegalChatResponse(aiResult.data),
       new Set(sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
     );
     const sourceById = new Map(sources.map((source) => [source.id, source]));
-    // The model may correctly decline to cite a page. In direct mode the
-    // technically validated, query-relevant page can still be shown as an
-    // official source card; it does not turn any model claim into a cited fact.
+    // A verified corpus card can be shown even if the model elects not to cite
+    // it. It is server-owned metadata, not a model legal assertion.
     const returnedSources = boundedResult.sources.length > 0
       ? boundedResult.sources
-      : directSourceCards(sources);
+      : verifiedSourceCards(sources);
     const canonicalResult = {
       ...boundedResult,
       sources: returnedSources.map((reference) => {
@@ -538,11 +647,26 @@ async function executePost(
       freshness,
       { locale, answerMode, reasoningMode },
     );
+    validationStage.complete();
   } catch {
+    validationStage.fail();
     await failAiRun({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey,
       errorCode: "INVALID_AI_OUTPUT",
+    });
+    await recordLegalChatSlo({
+      db,
+      budget,
+      correlationId: reservation.correlationId,
+      answerMode,
+      reasoningMode,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      fallbackFromProvider: aiResult.fallbackFromProvider ?? fallbackFromProgress,
+      preliminaryAtMs,
+      providerFirstDeltaAtMs,
+      outcome: aiSloFailureOutcome("INVALID_AI_OUTPUT", budget),
     });
     return response({
       code: "INVALID_AI_OUTPUT",
@@ -550,10 +674,51 @@ async function executePost(
       error: localizedProviderError(locale, "INVALID_AI_OUTPUT"),
     }, 422);
   }
+  // Preserve enough time for one atomic completion batch. If the full model
+  // answer consumed the user-facing deadline, release the reservation rather
+  // than storing/charging a response that arrived too late.
+  if (budget.signal.aborted || budget.remainingMs < 450) {
+    await failAiRun({
+      db, runId: reservation.runId, ledgerId: reservation.ledgerId,
+      workspaceId: workspace.id, userId: user.id, idempotencyKey,
+      errorCode: "PROVIDER_TIMEOUT",
+    });
+    await recordLegalChatSlo({
+      db,
+      budget,
+      correlationId: reservation.correlationId,
+      answerMode,
+      reasoningMode,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      fallbackFromProvider: aiResult.fallbackFromProvider ?? fallbackFromProgress,
+      preliminaryAtMs,
+      providerFirstDeltaAtMs,
+      outcome: aiSloFailureOutcome("PROVIDER_TIMEOUT", budget),
+    });
+    return response({
+      code: "PROVIDER_TIMEOUT",
+      correlationId: reservation.correlationId,
+      error: localizedProviderError(locale, "PROVIDER_TIMEOUT"),
+    }, 503);
+  }
   const now = isoNow();
   if (!await beginAiRunFinalization({
     db, runId: reservation.runId, workspaceId: workspace.id, userId: user.id,
   })) {
+    await recordLegalChatSlo({
+      db,
+      budget,
+      correlationId: reservation.correlationId,
+      answerMode,
+      reasoningMode,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      fallbackFromProvider: aiResult.fallbackFromProvider ?? fallbackFromProgress,
+      preliminaryAtMs,
+      providerFirstDeltaAtMs,
+      outcome: { outcome: "timed_out", safeErrorCode: "AI_SLO_TIMEOUT" },
+    });
     return response({
       code: "AI_RUN_EXPIRED",
       runId: reservation.runId,
@@ -605,16 +770,12 @@ async function executePost(
       eventId: `provider_usage_${reservation.runId}_${aiResult.provider}`,
     });
   } catch {
-    await failAiRun({
-      db, runId: reservation.runId, ledgerId: reservation.ledgerId,
-      workspaceId: workspace.id, userId: user.id, idempotencyKey,
-      errorCode: "PROVIDER_USAGE_PERSISTENCE_FAILED",
-    });
-    return response({
-      code: "PROVIDER_UNAVAILABLE",
+    // Cost telemetry is reconciled from the completed ai_run. It must never
+    // turn an otherwise durable, validated legal result into a 503.
+    console.warn(JSON.stringify({
+      event: "ai.provider_usage_deferred",
       correlationId: reservation.correlationId,
-      error: localizedProviderError(locale, "PROVIDER_UNAVAILABLE"),
-    }, 503);
+    }));
   }
   const userMessageId = crypto.randomUUID();
   const assistantMessageId = crypto.randomUUID();
@@ -640,7 +801,7 @@ async function executePost(
     ...facts.map((fact) => db.prepare(
       "INSERT INTO confirmed_facts (id,conversation_id,case_id,statement,status,created_at,updated_at) VALUES (?,?,?,?,'proposed',?,?)",
     ).bind(fact.id, conversationId, body?.caseId || null, fact.statement, now, now)),
-    ...directCitationStatements({
+    ...legalCitationStatements({
       db,
       sources,
       citations: result.sources,
@@ -648,6 +809,7 @@ async function executePost(
       conversationId,
       messageId: assistantMessageId,
       now,
+      sourceAccessMode: "approved_package",
     }),
     ...(voiceRecording ? [linkVoiceRecordingStatement({
       db,
@@ -667,14 +829,12 @@ async function executePost(
       sourceCount: result.sources.length, responseKind: result.responseKind,
       sourceFreshnessStatus: freshness.status,
       sourceFreshnessAsOf: freshness.asOf,
-      // Direct retrieval errors are bounded public codes only. Keeping them in
-      // the workspace audit record makes a staging source outage diagnosable
-      // without retaining a source page, question, or provider response.
-      directSourceErrorCodes: retrieval.errors.map((error) => error.code).slice(0, 4),
+      verifiedRetrievalErrorCodes: retrieval.errors.map((error) => error.code).slice(0, 4),
       branchId, operation: branchInput.operation,
       sourceMessageId: branchInput.forkedFromMessageId,
     }), now),
   ];
+  const persistenceStage = budget.beginStage("persistence");
   try {
     await db.batch([...statements, ...completeAiRunStatements({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
@@ -687,13 +847,42 @@ async function executePost(
       cachedInputTokens: aiResult.usage.cachedInputTokens, attempts: aiResult.attempts,
       latencyMs: aiResult.latencyMs, chargeable: result.responseKind === "answer",
     })]);
+    persistenceStage.complete();
   } catch (error) {
+    persistenceStage.fail();
     await failAiRun({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey, errorCode: "PERSISTENCE_FAILED",
     });
+    await recordLegalChatSlo({
+      db,
+      budget,
+      correlationId: reservation.correlationId,
+      answerMode,
+      reasoningMode,
+      provider: aiResult.provider,
+      model: aiResult.model,
+      fallbackFromProvider: aiResult.fallbackFromProvider ?? fallbackFromProgress,
+      preliminaryAtMs,
+      providerFirstDeltaAtMs,
+      outcome: aiSloFailureOutcome("PERSISTENCE_FAILED", budget),
+    });
     throw error;
   }
+
+  await recordLegalChatSlo({
+    db,
+    budget,
+    correlationId: reservation.correlationId,
+    answerMode,
+    reasoningMode,
+    provider: aiResult.provider,
+    model: aiResult.model,
+    fallbackFromProvider: aiResult.fallbackFromProvider ?? fallbackFromProgress,
+    preliminaryAtMs,
+    providerFirstDeltaAtMs,
+    outcome: { outcome: "completed", safeErrorCode: null },
+  });
 
   if (memoryEncryption) {
     try {
@@ -776,11 +965,6 @@ export async function POST(request: Request) {
             code: "STREAM_RESPONSE_INVALID",
             error: "AI stream returned a non-JSON terminal response.",
           }));
-          if (result.ok) {
-            await emitValidatedAnswerStream(body, (content) => {
-              emit("status", { stage: "answer_delta", content });
-            }, () => cancelled);
-          }
           emit(result.ok ? "complete" : "error", { status: result.status, body });
         } catch {
           emit("error", {
@@ -810,28 +994,6 @@ export async function POST(request: Request) {
       "x-accel-buffering": "no",
     },
   });
-}
-
-async function emitValidatedAnswerStream(
-  body: unknown,
-  emitContent: (content: string) => void,
-  isCancelled: () => boolean,
-) {
-  const record = body && typeof body === "object" ? body as Record<string, unknown> : null;
-  const result = record?.result && typeof record.result === "object"
-    ? record.result as Record<string, unknown>
-    : null;
-  const summary = typeof result?.summary === "string" ? result.summary.trim() : "";
-  const answer = typeof result?.answer === "string" ? result.answer.trim() : "";
-  const content = [summary, answer].filter(Boolean).join("\n\n");
-  if (!content) return;
-  const chunkSize = Math.max(28, Math.ceil(content.length / 18));
-  for (let end = chunkSize; end < content.length; end += chunkSize) {
-    if (isCancelled()) return;
-    emitContent(content.slice(0, end));
-    await new Promise<void>((resolve) => setTimeout(resolve, 12));
-  }
-  if (!isCancelled()) emitContent(content);
 }
 
 async function loadConversationResult(db: D1Database, conversationId: string, workspaceId: string, userId: string, branchId?: string | null, responseMessageId?: string | null) {
@@ -926,6 +1088,60 @@ function contextualRetrievalQuestion(
     : question;
 }
 
+function verifiedSourceCards(sources: ReadonlyArray<{
+  id: string;
+  actTitle: string;
+  actIdentifier: string | null;
+  article?: string | null;
+  excerpt?: string | null;
+  officialUrl: string;
+  applicabilityStatus?: "current" | "historical";
+  effectiveDate?: string | null;
+  verifiedAt: string;
+}>) {
+  return sources.map((source) => ({
+    sourceId: source.id,
+    actTitle: source.actTitle,
+    actIdentifier: source.actIdentifier,
+    article: source.article ?? null,
+    excerpt: source.excerpt ?? null,
+    originalUrl: source.officialUrl,
+    status: source.applicabilityStatus ?? "current" as const,
+    effectiveDate: source.effectiveDate ?? null,
+    verifiedAt: source.verifiedAt,
+  }));
+}
+
+function preliminaryForVerifiedRetrieval(input: {
+  retrieval: InteractiveVerifiedLegalRetrieval;
+  locale: "ru" | "uz";
+}) {
+  const sources = input.retrieval.sources.slice(0, 2).map((source) => ({
+    actTitle: source.actTitle,
+    article: source.article ?? null,
+    originalUrl: source.officialUrl,
+    verifiedAt: source.verifiedAt,
+  }));
+  const firstExcerpt = input.retrieval.sources[0]?.excerpt?.trim().slice(0, 700);
+  const hasVerifiedSources = sources.length > 0
+    && Boolean(firstExcerpt)
+    && input.retrieval.sourceValidationStatus === "validated";
+  return {
+    kind: hasVerifiedSources ? "verified_excerpt" as const : "clarification_required" as const,
+    message: hasVerifiedSources
+      ? (input.locale === "ru"
+        ? "Проверенный фрагмент официального источника по вашему вопросу:"
+        : "Savolingiz bo‘yicha rasmiy manbaning tasdiqlangan parchasi:")
+      : (input.locale === "ru"
+        ? "Для правового вывода JURO нужны уточнения или свежий проверенный источник. Этот этап не списывает лимит ответа."
+        : "Huquqiy xulosa uchun JUROga aniqlik yoki yangi tasdiqlangan manba kerak. Bu bosqich javob limitidan yechilmaydi."),
+    ...(hasVerifiedSources ? { excerpt: firstExcerpt } : {}),
+    sources,
+    sourceFreshness: input.retrieval.freshness.status,
+    legalDatabaseAsOf: input.retrieval.legalDatabaseAsOf,
+  };
+}
+
 async function usageSummary(db: D1Database, workspaceId: string, userId: string, limit: number) {
   const now = new Date();
   const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
@@ -965,4 +1181,117 @@ function publicAiFailureCode(code: string) {
     "PROVIDER_UNAVAILABLE",
     "PROVIDER_CIRCUIT_OPEN",
   ]).has(code) ? code : "AI_RUN_FAILED";
+}
+
+type AiSloRouteOutcome = {
+  outcome: "completed" | "failed" | "timed_out" | "cancelled";
+  safeErrorCode:
+    | "AI_SLO_TIMEOUT"
+    | "AI_SLO_PROVIDER_UNAVAILABLE"
+    | "AI_SLO_ABORTED"
+    | "AI_SLO_VALIDATION_FAILED"
+    | "AI_SLO_PERSISTENCE_FAILED"
+    | "AI_SLO_INTERNAL_ERROR"
+    | null;
+};
+
+function aiSloFailureOutcome(code: string, budget: AiExecutionBudget): AiSloRouteOutcome {
+  if (code === "AI_CANCELLED" || budget.abortReason === "caller") {
+    return { outcome: "cancelled", safeErrorCode: "AI_SLO_ABORTED" };
+  }
+  if (code === "PROVIDER_TIMEOUT" || budget.abortReason === "overall_timeout") {
+    return { outcome: "timed_out", safeErrorCode: "AI_SLO_TIMEOUT" };
+  }
+  if (code === "INVALID_AI_OUTPUT") {
+    return { outcome: "failed", safeErrorCode: "AI_SLO_VALIDATION_FAILED" };
+  }
+  if (code === "PERSISTENCE_FAILED") {
+    return { outcome: "failed", safeErrorCode: "AI_SLO_PERSISTENCE_FAILED" };
+  }
+  return { outcome: "failed", safeErrorCode: "AI_SLO_PROVIDER_UNAVAILABLE" };
+}
+
+function fallbackForAiSlo(
+  provider: "openai" | "anthropic" | "none",
+  fallbackFromProvider: "openai" | "anthropic" | null,
+) {
+  if (fallbackFromProvider === "openai" && provider === "anthropic") return "openai_to_anthropic" as const;
+  if (fallbackFromProvider === "anthropic" && provider === "openai") return "anthropic_to_openai" as const;
+  return "none" as const;
+}
+
+/**
+ * This is deliberately a post-durability best-effort tail. It contains only
+ * bounded timings plus the opaque run correlation; `tryRecord…` hashes that
+ * correlation before persistence and this helper never changes an AI result.
+ */
+async function recordLegalChatSlo(input: {
+  db: D1Database;
+  budget: AiExecutionBudget;
+  correlationId: string;
+  answerMode: "short" | "detailed";
+  reasoningMode: "fast" | "deep";
+  provider: "openai" | "anthropic" | "none";
+  model: string | null;
+  fallbackFromProvider: "openai" | "anthropic" | null;
+  preliminaryAtMs: number | null;
+  providerFirstDeltaAtMs: number | null;
+  outcome: AiSloRouteOutcome;
+}): Promise<void> {
+  try {
+    const snapshot = input.budget.snapshot();
+    const stage = (name: string) => snapshot.stages.find((timing) => timing.stage === name);
+    const auth = stage("auth");
+    const context = stage("memory_context");
+    const retrieval = stage("verified_retrieval");
+    const provider = stage("provider_execution");
+    const validation = stage("validation");
+    const persistence = stage("persistence");
+    let firstUsefulStage: AiSloFirstUsefulStage = "none";
+    let firstUsefulLatencyMs: number | null = null;
+    if (input.preliminaryAtMs !== null) {
+      firstUsefulStage = "preliminary";
+      firstUsefulLatencyMs = Math.min(input.preliminaryAtMs, snapshot.elapsedMs);
+    } else if (input.outcome.outcome === "completed") {
+      // Non-SSE clients receive their first useful result only after the
+      // durable completion batch, so do not claim a preliminary answer.
+      firstUsefulStage = "persistence";
+      firstUsefulLatencyMs = Math.min(persistence?.endedAtMs ?? snapshot.elapsedMs, snapshot.elapsedMs);
+    }
+    const providerTtftMs = input.providerFirstDeltaAtMs !== null && provider
+      ? Math.min(
+        provider.elapsedMs,
+        Math.max(0, input.providerFirstDeltaAtMs - provider.startedAtMs),
+      )
+      : null;
+    await tryRecordAiSloTelemetry({
+      db: input.db,
+      value: {
+        correlationId: input.correlationId,
+        environment: operationalEnvironment(runtimeEnv().APP_ENV),
+        requestKind: "legal_chat",
+        authKind: "authenticated",
+        answerMode: input.answerMode,
+        reasoningMode: input.reasoningMode,
+        provider: input.provider,
+        model: input.provider === "none" ? null : input.model,
+        outcome: input.outcome.outcome,
+        fallback: fallbackForAiSlo(input.provider, input.fallbackFromProvider),
+        authLatencyMs: auth?.elapsedMs ?? null,
+        contextLatencyMs: context?.elapsedMs ?? null,
+        retrievalLatencyMs: retrieval?.elapsedMs ?? null,
+        providerTtftMs,
+        providerTotalMs: provider?.elapsedMs ?? null,
+        validationLatencyMs: validation?.elapsedMs ?? null,
+        persistenceLatencyMs: persistence?.elapsedMs ?? null,
+        endToEndMs: snapshot.elapsedMs,
+        firstUsefulStage,
+        firstUsefulLatencyMs,
+        safeErrorCode: input.outcome.safeErrorCode,
+      },
+    });
+  } catch {
+    // SLO telemetry is intentionally non-critical after a durable AI result
+    // or run failure; do not make legal work or usage reconciliation fail.
+  }
 }

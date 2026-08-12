@@ -7,14 +7,13 @@ Status: owner-approved rigged source asset not present; 3D/avatar feature remain
 
 No editable 3D source was found in the reconciled GitHub/Sites checkouts, synced workspace sources, or the two inspected delivery archives. The audit covered `GLB`, `GLTF`, `FBX`, `USDZ`, `BLEND`, `DAE`, `OBJ`, `MTL`, `STL`, `3DS`, `ABC`, and `VRM` formats. No Jurobek SVG/vector source was found.
 
-The canonical platform fallback files are:
+The canonical platform fallback file is:
 
 | Path | Format | Dimensions | Bytes | SHA-256 |
 |---|---|---:|---:|---|
 | `apps/platform/public/jurobek-avatar.webp` | WebP, sRGB RGBA | 1024×1792 | 60,670 | `9f42f50c39b71abb8a1792ab67780b08b010b28439437d4789d55aa72a83c8df` |
-| `apps/platform/public/jurobek-avatar.png` | PNG, sRGB RGBA | 1024×1792 | 1,517,797 | `ea7df2dd2a694548eb852d6c052630dcc61d24704e03bc87d1124c1a43e030ca` |
 
-The WebP is the preferred static poster/fallback. The PNG is a lossless source render, not a rigged or editable character model.
+The WebP is the static poster/fallback. There is no rigged or editable character model in the repository.
 
 An adjacent asset audit found three additional static poses outside the canonical platform package (`wave`, `point`, and `approve`) plus neutral AVIF/WebP derivatives. They are raster renders and do not establish an animation system or permission to synthesize missing 3D states.
 

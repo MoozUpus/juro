@@ -2,13 +2,13 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, Plus, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, Trash2, UserRoundX, X } from "lucide-react";
-import Image from "next/image";
+import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, Plus, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, Trash2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
+import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { uzbekistanCalendarDate } from "../../lib/legal/applicability-date";
 import { usePlatformBasePath } from "./PlatformRouteContext";
@@ -22,6 +22,14 @@ type Conversation = { id: string; title: string; locale: string; status: string;
 type CaseOption = { id: string; title: string; status: string; updatedAt: string };
 type Fact = { id: string; statement: string; status: string };
 type Source = { sourceId: string; actTitle: string; actIdentifier: string | null; article: string | null; excerpt: string | null; originalUrl: string; status: string; effectiveDate: string | null; verifiedAt: string };
+type AiPreliminary = {
+  kind: "verified_excerpt" | "clarification_required";
+  message: string;
+  excerpt?: string;
+  sources: Array<Pick<Source, "actTitle" | "article" | "originalUrl" | "verifiedAt">>;
+  sourceFreshness: SourceFreshness["status"];
+  legalDatabaseAsOf: string;
+};
 type LegalResult = {
   responseKind: "answer" | "clarification_required";
   summary: string;
@@ -92,7 +100,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [error, setError] = useState("");
   const [streamStatus, setStreamStatus] = useState("");
   const [optimisticQuestion, setOptimisticQuestion] = useState("");
-  const [streamedAnswer, setStreamedAnswer] = useState("");
+  const [preliminary, setPreliminary] = useState<AiPreliminary | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
@@ -160,8 +168,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   useEffect(() => {
     const transcript = transcriptRef.current;
     if (!transcript) return;
-    transcript.scrollTo({ top: transcript.scrollHeight, behavior: streamedAnswer ? "auto" : "smooth" });
-  }, [answer?.messageId, optimisticQuestion, streamedAnswer]);
+    transcript.scrollTo({ top: transcript.scrollHeight, behavior: preliminary ? "auto" : "smooth" });
+  }, [answer?.messageId, optimisticQuestion, preliminary]);
 
   useEffect(() => {
     if (!answer?.messageId) { setFeedback([]); setFeedbackStatus(""); return; }
@@ -202,7 +210,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       if (resultBody.usage) setUsage(resultBody.usage);
       setQuestion("");
       setOptimisticQuestion("");
-      setStreamedAnswer("");
+      setPreliminary(null);
       setVoiceRecordingId("");
       setEditSourceMessageId("");
       pendingAiRequestRef.current = null;
@@ -240,7 +248,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     streamAbortRef.current = controller;
     const visibleQuestion = pending.payload.question?.trim() || answer?.question?.trim() || "";
     setOptimisticQuestion(visibleQuestion);
-    setStreamedAnswer("");
+    setPreliminary(null);
     if (operation !== "regenerate") setQuestion("");
     setSending(true);
     setError("");
@@ -272,9 +280,9 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
             setStreamStatus(ru ? "AI формирует структурированный ответ…" : "AI tuzilgan javobni tayyorlamoqda…");
           } else if (progress.stage === "provider_delta") {
             setStreamStatus(ru ? "JURO проверяет структуру и источники…" : "JURO tuzilma va manbalarni tekshirmoqda…");
-          } else if (progress.stage === "answer_delta") {
-            setStreamedAnswer(progress.content || "");
-            setStreamStatus(ru ? "JURO формирует ответ…" : "JURO javobni tayyorlamoqda…");
+          } else if (progress.stage === "preliminary" && progress.preliminary) {
+            setPreliminary(progress.preliminary);
+            setStreamStatus(progress.preliminary.message);
           } else if (progress.stage === "fallback") {
             setStreamStatus(ru ? "Основной провайдер недоступен — включён резервный…" : "Asosiy provayder ishlamayapti — zaxira yoqildi…");
           }
@@ -293,7 +301,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       if (terminal.status === 202) throw new AiRetryableRequestError(ru ? "Запрос уже обрабатывается. Повторите проверку через несколько секунд." : "So‘rov qayta ishlanmoqda. Bir necha soniyadan so‘ng qayta tekshiring.");
       setAnswer(body);
       setOptimisticQuestion("");
-      setStreamedAnswer("");
+      setPreliminary(null);
       if (body.usage) setUsage(body.usage);
       setQuestion("");
       setVoiceRecordingId("");
@@ -495,7 +503,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""}`}>
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setStreamedAnswer(""); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{ru ? "Новый вопрос" : "Yangi savol"}</button>
+        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setPreliminary(null); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{ru ? "Новый вопрос" : "Yangi savol"}</button>
         <nav className="ai-conversation-list" aria-label={ru ? "История диалогов" : "Suhbatlar tarixi"}>
           {conversationDeleteError && <p className="ai-conversation-delete-error" role="alert">{conversationDeleteError}</p>}
           {conversations.length ? conversations.map((item) => <div className="ai-conversation-item" key={item.id}>
@@ -506,7 +514,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         </nav>
       </aside>
       <section className="ai-dialog" aria-labelledby="ai-lawyer-heading">
-        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button><button type="button" disabled title={ru ? "Нужен утверждённый 3D-ассет Журобека" : "Tasdiqlangan Jurobek 3D asseti kerak"}><UserRoundX />{ru ? "С аватаром · скоро" : "Avatar bilan · tez orada"}</button></nav></header>
+        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
         {voiceMode && <VoiceModeStage
           locale={locale}
           configured={Boolean(status?.configured)}
@@ -578,7 +586,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               <div>{answer.branches.map((branch) => <a aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} href={aiLocation(new URLSearchParams({ conversationId: answer.conversationId, branchId: branch.branchId }))}>{branch.versionNumber === 1 ? (ru ? "Исходный ответ" : "Asl javob") : `${ru ? "Версия" : "Versiya"} ${branch.versionNumber}`}</a>)}</div>
             </nav>}
             </>}
-            {optimisticQuestion && <PendingConversationTurn question={optimisticQuestion} content={streamedAnswer} status={streamStatus} failed={Boolean(error) && !sending} ru={ru} />}
+            {optimisticQuestion && <PendingConversationTurn question={optimisticQuestion} preliminary={preliminary} status={streamStatus} failed={Boolean(error) && !sending} ru={ru} />}
           </>}
         </div>
         <form className="ai-composer" onSubmit={submit}>
@@ -617,7 +625,7 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState((value || max).slice(0, 7));
   const pickerRef = useRef<HTMLDivElement | null>(null);
-  const locale = ru ? "ru-RU" : "uz-UZ";
+  const locale = ru ? "ru" : "uz";
   const monthStart = `${visibleMonth}-01`;
   const firstWeekday = (new Date(`${monthStart}T12:00:00.000Z`).getUTCDay() + 6) % 7;
   const nextMonth = shiftCalendarMonth(visibleMonth, 1);
@@ -640,10 +648,8 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
     };
   }, [open]);
 
-  const displayValue = value
-    ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00.000Z`))
-    : (ru ? "Выберите дату" : "Sanani tanlang");
-  const monthLabel = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${monthStart}T12:00:00.000Z`));
+  const displayValue = value ? formatPlatformLongDate(value, locale) : (ru ? "Выберите дату" : "Sanani tanlang");
+  const monthLabel = formatPlatformMonth(monthStart, locale);
 
   return <div className="ai-date-field">
     <span id="ai-legal-date-label">{ru ? "Дата события — если важна редакция закона" : "Voqea sanasi — qonun tahriri muhim bo‘lsa"}</span>
@@ -666,7 +672,7 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
           {Array.from({ length: daysInMonth }, (_, index) => {
             const day = `${visibleMonth}-${String(index + 1).padStart(2, "0")}`;
             const disabled = day > max;
-            const fullLabel = new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00.000Z`));
+            const fullLabel = formatPlatformDate(day, locale, { dateStyle: "long" });
             return <button type="button" key={day} disabled={disabled} aria-label={fullLabel} aria-current={day === max ? "date" : undefined} aria-pressed={day === value} className={day === value ? "is-selected" : undefined} onClick={() => { onChange(day); setOpen(false); }}>{index + 1}</button>;
           })}
         </div>
@@ -699,13 +705,13 @@ function ConversationTurnPair({ turn, ru }: { turn: ConversationTurn; ru: boolea
 
 function PendingConversationTurn({
   question,
-  content,
+  preliminary,
   status,
   failed,
   ru,
 }: {
   question: string;
-  content: string;
+  preliminary: AiPreliminary | null;
   status: string;
   failed: boolean;
   ru: boolean;
@@ -714,8 +720,12 @@ function PendingConversationTurn({
     <HumanMessage question={question} ru={ru} />
     <article className={`ai-assistant-draft ${failed ? "is-failed" : ""}`}>
       <small>JURO · {failed ? (ru ? "ответ не завершён" : "javob yakunlanmadi") : (ru ? "отвечает" : "javob bermoqda")}</small>
-      {content
-        ? <p>{content}<span className="ai-stream-caret" aria-hidden="true" /></p>
+      {preliminary
+        ? <div className="ai-preliminary" role="status">
+          <strong>{preliminary.message}</strong>
+          {preliminary.excerpt && <p>{preliminary.excerpt}</p>}
+          {preliminary.sources.length > 0 && <ul>{preliminary.sources.map((source) => <li key={source.originalUrl}>{source.actTitle}{source.article ? ` · ${source.article}` : ""}</li>)}</ul>}
+        </div>
         : <div className="ai-thinking"><LoaderCircle className={failed ? undefined : "spin"} /><span>{failed ? (ru ? "Не удалось завершить ответ. Можно безопасно повторить запрос." : "Javobni yakunlab bo‘lmadi. So‘rovni xavfsiz takrorlash mumkin.") : status || (ru ? "Проверяю факты и источники…" : "Faktlar va manbalarni tekshiryapman…")}</span></div>}
     </article>
   </section>;
@@ -793,16 +803,6 @@ function VoiceModeStage(props: {
     error: ["Голосовой этап не завершён — можно повторить или перейти к тексту", "Ovoz bosqichi yakunlanmadi — qayta urinib ko‘ring yoki matnga o‘ting"],
   };
   return <section className="ai-voice-stage" data-state={state} aria-labelledby="ai-voice-stage-title">
-    <div className="ai-voice-stage-portrait">
-      <Image
-        src="/jurobek-avatar.webp"
-        alt={ru ? "Журобек, статичный цифровой помощник JURO" : "Jurobek, JUROning statik raqamli yordamchisi"}
-        width={1024}
-        height={1792}
-        sizes="(max-width: 760px) 92px, 116px"
-        priority={false}
-      />
-    </div>
     <div className="ai-voice-stage-copy">
       <span><AudioLines aria-hidden="true" />{ru ? "Голосовой режим" : "Ovozli rejim"}</span>
       <h2 id="ai-voice-stage-title">{labels[state][ru ? 0 : 1]}</h2>
@@ -810,19 +810,19 @@ function VoiceModeStage(props: {
         ? "Микрофон включается только по вашему нажатию. Перед отправкой вы увидите и сможете исправить расшифровку."
         : "Mikrofon faqat siz bosganda yoqiladi. Yuborishdan oldin matnni ko‘rib, tahrirlashingiz mumkin."}</p>
       <small>{ru
-        ? "Изображение Журобека статично: утверждённый 3D-rig ещё не предоставлен. Это AI, а не живой юрист."
-        : "Jurobek tasviri statik: tasdiqlangan 3D rig hali taqdim etilmagan. Bu AI, tirik yurist emas."}</small>
+        ? "Это AI-инструмент JURO, а не живой юрист."
+        : "Bu JURO AI vositasi, tirik yurist emas."}</small>
     </div>
     <output role={state === "error" ? "alert" : "status"} aria-live="polite">{state}</output>
   </section>;
 }
 
 type AiStreamStatus = {
-  stage?: "accepted" | "provider_started" | "provider_delta" | "answer_delta" | "fallback";
+  stage?: "accepted" | "provider_started" | "provider_delta" | "preliminary" | "fallback";
   provider?: string;
   model?: string;
   receivedCharacters?: number;
-  content?: string;
+  preliminary?: AiPreliminary;
 };
 
 async function readAiEventStream(
@@ -896,7 +896,7 @@ function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness
 }
 
 function formatDate(value: string, ru: boolean) {
-  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(value));
+  return formatPlatformDate(value, ru ? "ru" : "uz");
 }
 
 function safeOfficialUrl(value: string) {

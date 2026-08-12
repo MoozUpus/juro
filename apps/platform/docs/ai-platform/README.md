@@ -57,6 +57,10 @@ No document in this directory authorizes or implies a production schema, traffic
 
 - `AI-SAFETY.md` — implemented provider/source/freshness safety boundaries and
   remaining live-provider gates.
+- `AI-RELIABILITY-SLO.md` — deployed staging 30-second interactive-chat budget,
+  source-bound preliminary SSE contract, content-free SLO telemetry,
+  evidence-based dependency health, staging-probe controls and open statistical
+  and provider-health gates.
 - `LEGAL-EVALUATION.md` — automated legal-source evidence tests and the still
   unfulfilled 250+50 human-reviewed release matrix.
 - `DOCUMENT-EVALUATION.md` — implemented document-analysis contract evidence

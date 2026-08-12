@@ -4,6 +4,7 @@ import { openAiCompatibleJsonSchema } from "../../ai/openai-schema";
 import {
   ProviderRequestAbortError,
   runProviderRequestWithTimeouts,
+  type ProviderRequestFirstContentTiming,
 } from "../../ai/provider-request-timeout";
 import { resolveAiRuntimeSettings } from "../../ai/runtime-settings";
 
@@ -92,6 +93,8 @@ export async function callOpenAiJson<T>(options: {
   timeoutMs?: number;
   firstByteTimeoutMs?: number;
   totalResponseTimeoutMs?: number;
+  /** Absolute request deadline shared with caller orchestration. */
+  deadlineAt?: number;
   rawInput?: boolean;
 }): Promise<T> {
   const result = await callOpenAiStructured<T>({
@@ -110,12 +113,19 @@ export async function callOpenAiStructured<T>(options: {
   timeoutMs?: number;
   firstByteTimeoutMs?: number;
   totalResponseTimeoutMs?: number;
+  /** Absolute request deadline shared with caller orchestration. */
+  deadlineAt?: number;
   rawInput?: boolean;
   requestId?: string;
   model?: string;
   maxAttempts?: 1 | 2;
   signal?: AbortSignal;
   onProgress?: (event: AiStructuredProgress) => void | Promise<void>;
+  /**
+   * Diagnostic-only timing from the first actual streaming provider delta.
+   * It deliberately carries no model output or request content.
+   */
+  onFirstContent?: (timing: ProviderRequestFirstContentTiming) => void | Promise<void>;
   safetyIdentifier?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   textVerbosity?: "low" | "medium" | "high";
@@ -147,6 +157,9 @@ export async function callOpenAiStructured<T>(options: {
       const { response, payload } = await runProviderRequestWithTimeouts({
         firstByteTimeoutMs,
         totalResponseTimeoutMs,
+        deadlineAt: options.deadlineAt,
+        requireFirstContent: Boolean(options.onProgress),
+        onFirstContent: options.onFirstContent,
         callerSignal: options.signal,
         start: (signal) => fetch("https://api.openai.com/v1/responses", {
           method: "POST",
@@ -175,10 +188,10 @@ export async function callOpenAiStructured<T>(options: {
           }),
           signal,
         }),
-        consume: async (response) => ({
+        consume: async (response, _signal, timing) => ({
           response,
           payload: options.onProgress && response.ok
-            ? await readOpenAiEventStream(response, options.onProgress)
+            ? await readOpenAiEventStream(response, options.onProgress, timing.markFirstContent)
             : await response.json().catch(() => ({})) as ResponsesApiPayload,
         }),
       });
@@ -272,9 +285,12 @@ export function arrayBufferToBase64(buffer: ArrayBuffer): string {
 async function readOpenAiEventStream(
   response: Response,
   onProgress: (event: AiStructuredProgress) => void | Promise<void>,
+  markFirstContent?: () => Promise<void>,
 ): Promise<ResponsesApiPayload> {
   try {
-    return await readResponsesSse(response, onProgress) as ResponsesApiPayload;
+    return await readResponsesSse(response, onProgress, {
+      onFirstDelta: async () => { await markFirstContent?.(); },
+    }) as ResponsesApiPayload;
   } catch (error) {
     if (error instanceof ResponsesSseError) {
       throw new AiUnavailableError(error.message, error.code, error.retryable);

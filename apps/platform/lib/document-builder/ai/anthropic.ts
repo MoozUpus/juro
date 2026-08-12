@@ -59,6 +59,8 @@ export async function callAnthropicStructured<T>(options: {
   timeoutMs?: number;
   firstByteTimeoutMs?: number;
   totalResponseTimeoutMs?: number;
+  /** Absolute request deadline shared with caller orchestration. */
+  deadlineAt?: number;
   requestId?: string;
   model?: string;
   maxAttempts?: 1 | 2;
@@ -95,6 +97,7 @@ export async function callAnthropicStructured<T>(options: {
       const { response, payload } = await runProviderRequestWithTimeouts({
         firstByteTimeoutMs,
         totalResponseTimeoutMs,
+        deadlineAt: options.deadlineAt,
         callerSignal: options.signal,
         start: (signal) => fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",

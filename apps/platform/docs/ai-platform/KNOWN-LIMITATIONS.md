@@ -1,5 +1,12 @@
 # JURO known limitations checkpoint
 
+> **Local reliability candidate — 2026-08-12.** Migrations `0112` and `0113`,
+> the common 30-second interactive-chat budget, D1-only retrieval, preliminary
+> SSE state, SLO telemetry and evidence-based status projection are not remote
+> staging evidence yet. No p50/p95, provider availability, browser result or
+> production readiness is implied. Details and rollout gates are in
+> [AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).
+
 > **Authoritative remote state — 2026-08-06.** This section supersedes every
 > older "current checkpoint" below; those entries remain historical evidence,
 > not a description of the active staging release. Worker

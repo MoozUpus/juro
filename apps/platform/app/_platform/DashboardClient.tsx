@@ -348,23 +348,13 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
 }
 
 function GoldenRoute({ locale, label, steps }: { locale: PlatformLocale; label: string; steps: readonly string[] }) {
-  const [motionState, setMotionState] = useState<"pending" | "animate" | "static">("pending");
-  useEffect(() => {
-    const key = "juro-golden-route-seen";
-    if (sessionStorage.getItem(key)) {
-      setMotionState("static");
-      return;
-    }
-    sessionStorage.setItem(key, "1");
-    setMotionState("animate");
-  }, []);
   return (
     <div className="golden-route" aria-label={label}>
       <div className="golden-route-heading">
         <span>JURO</span>
         <p>{locale === "ru" ? "От проблемы к обоснованному действию" : "Muammodan asoslangan harakatgacha"}</p>
       </div>
-      <div className={`golden-route-track ${motionState}`}>
+      <div className="golden-route-track">
         <svg viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true">
           <path className="golden-route-base" d="M42 40 H558" />
           <path className="golden-route-progress" d="M42 40 H558" pathLength="1" />

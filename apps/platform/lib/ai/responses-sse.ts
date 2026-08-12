@@ -27,9 +27,34 @@ export class ResponsesSseError extends Error {
   }
 }
 
+export type ResponsesSseFirstDeltaTiming = {
+  /** Epoch time at which the Responses stream parser was entered. */
+  startedAt: number;
+  /** Epoch time at which the first non-empty provider delta was received. */
+  firstDeltaAt: number;
+  /** Time elapsed to the first actual delta, never inferred from response headers. */
+  elapsedMs: number;
+  /** Number of output characters available after applying that first delta. */
+  receivedCharacters: number;
+};
+
+export type ResponsesSseOptions = {
+  /** Start time of the provider request. Defaults to when this parser begins. */
+  startedAt?: number;
+  /** Injectable clock for deterministic timing tests. */
+  now?: () => number;
+  /**
+   * Invoked once for the first non-empty `response.output_text.delta` event.
+   * This is intentionally independent from progress throttling and HTTP
+   * headers so callers can measure actual provider output timing.
+   */
+  onFirstDelta?: (timing: ResponsesSseFirstDeltaTiming) => void | Promise<void>;
+};
+
 export async function readResponsesSse(
   response: Response,
   onProgress: (event: { stage: "provider_delta"; receivedCharacters: number }) => void | Promise<void>,
+  options: ResponsesSseOptions = {},
 ): Promise<ResponsesSsePayload> {
   if (!response.body) {
     throw new ResponsesSseError("AI-провайдер не вернул поток ответа.", "PROVIDER_UNAVAILABLE", true);
@@ -41,6 +66,9 @@ export async function readResponsesSse(
   let refusal = "";
   let finalResponse: ResponsesSsePayload | null = null;
   let lastReported = 0;
+  let firstDeltaRecorded = false;
+  const now = options.now ?? Date.now;
+  const startedAt = options.startedAt ?? now();
 
   const processFrame = async (frame: string) => {
     const data = frame.split("\n")
@@ -60,6 +88,21 @@ export async function readResponsesSse(
       throw new ResponsesSseError("AI-провайдер вернул некорректное событие потока.", "INVALID_AI_OUTPUT", false);
     }
     if (event.type === "response.output_text.delta" && typeof event.delta === "string") {
+      if (event.delta && !firstDeltaRecorded) {
+        firstDeltaRecorded = true;
+        const firstDeltaAt = now();
+        try {
+          await options.onFirstDelta?.({
+            startedAt,
+            firstDeltaAt,
+            elapsedMs: Math.max(0, firstDeltaAt - startedAt),
+            receivedCharacters: outputText.length + event.delta.length,
+          });
+        } catch {
+          // Timing observers are diagnostic-only. A failed metric must not
+          // discard a valid, schema-constrained provider response.
+        }
+      }
       outputText += event.delta;
       if (outputText.length - lastReported >= 128) {
         lastReported = outputText.length;

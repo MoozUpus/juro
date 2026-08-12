@@ -1009,7 +1009,7 @@ test("AI conversations and facts remain owner-scoped inside a tenant", async () 
   ]);
   assert.match(conversationRoute, /owner_user_id=\?/);
   assert.match(conversationRoute, /c\.owner_user_id=\?/);
-  assert.match(conversationRoute, /directSourceErrorCodes: retrieval\.errors\.map/);
+  assert.match(conversationRoute, /verifiedRetrievalErrorCodes: retrieval\.errors\.map/);
   assert.match(factRoute, /conversations WHERE workspace_id=\? AND owner_user_id=\?/);
   assert.doesNotMatch(conversationRoute, /WHERE workspace_id=\?\s+ORDER BY updated_at/s);
 });
@@ -1101,7 +1101,7 @@ test("legislation monitoring never auto-publishes or invents feed entries", asyn
   assert.match(source, /trustedSourceStatusRows\.length/);
 });
 
-test("JURO motion tokens are bounded and reduced motion resolves to a static route", async () => {
+test("JURO motion tokens are bounded and the dashboard route is static", async () => {
   const [globals, dashboard] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/dashboard.css", import.meta.url), "utf8"),
@@ -1110,8 +1110,9 @@ test("JURO motion tokens are bounded and reduced motion resolves to a static rou
   assert.ok(globals.includes("cubic-bezier(.16,1,.3,1)"));
   assert.ok(globals.includes("cubic-bezier(.2,.8,.2,1)"));
   assert.match(globals, /prefers-reduced-motion:\s*reduce/);
-  assert.match(dashboard, /stroke-dashoffset/);
   assert.match(dashboard, /golden-route/);
+  assert.doesNotMatch(dashboard, /stroke-dashoffset/);
+  assert.doesNotMatch(dashboard, /golden-route[^}]*animation/);
   assert.doesNotMatch(dashboard, /infinite|parallax|perspective/);
 });
 
@@ -1145,6 +1146,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shellComponent, /window\.requestAnimationFrame\(\(\) => openButtonRef\.current\?\.focus\(\)\)/);
   assert.match(shell, /platform-brand button\{width:44px;height:44px/);
   assert.match(shell, /platform-sidebar nav a\{min-height:44px\}/);
+  assert.match(shell, /platform-account select\{width:100%;min-height:44px/);
   const aiClient = await readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8");
   assert.match(aiClient, /href=\{aiLocation\(new URLSearchParams\(\{ conversationId: item\.id \}\)\)\}/);
   assert.match(aiClient, /router\.replace\(aiLocation\(nextParams\), \{ scroll: false \}\)/);

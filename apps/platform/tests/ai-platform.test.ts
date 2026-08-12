@@ -173,6 +173,45 @@ test("OpenAI Responses SSE parser handles split structured-output frames and rep
   assert.equal(progress.at(-1), serialized.length);
 });
 
+test("OpenAI Responses SSE parser records the first actual non-empty provider delta once", async () => {
+  const stream = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "" })}\n\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "{" })}\n\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "}" })}\n\n`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        id: "resp-first-delta",
+        model: "gpt-5.6-sol",
+        status: "completed",
+        output: [],
+      },
+    })}\n\n`,
+  ].join("");
+  let clock = 1_000;
+  const firstDeltas: Array<{ elapsedMs: number; receivedCharacters: number }> = [];
+  await readResponsesSse(
+    chunkedResponse(new TextEncoder().encode(stream), [13, 37, 89]),
+    () => undefined,
+    {
+      startedAt: 975,
+      now: () => {
+        clock += 10;
+        return clock;
+      },
+      onFirstDelta: (timing) => {
+        firstDeltas.push(timing);
+      },
+    },
+  );
+  assert.deepEqual(firstDeltas, [{
+    startedAt: 975,
+    firstDeltaAt: 1_010,
+    elapsedMs: 35,
+    receivedCharacters: 1,
+  }]);
+});
+
 test("OpenAI Responses SSE parser fails closed on malformed provider events", async () => {
   const response = chunkedResponse(new TextEncoder().encode("event: response.output_text.delta\ndata: {not-json}\n\n"), [9]);
   await assert.rejects(
@@ -372,6 +411,23 @@ test("a genuinely stale AI reservation releases its cycle and requires a fresh i
   assert.equal(ledger.status, "released");
   assert.equal(idempotency.status, "failed");
 
+});
+
+test("interactive stale AI reservations recover inside the bounded retry window", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "interactive-stale-window", 1));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  sqlite.prepare("UPDATE idempotency_keys SET updated_at=? WHERE key=?")
+    .run(new Date(Date.now() - 91_000).toISOString(), "legal-chat:workspace-1:user-1:interactive-stale-window");
+  sqlite.prepare("UPDATE ai_runs SET updated_at=? WHERE id=?")
+    .run(new Date(Date.now() - 91_000).toISOString(), reserved.runId);
+
+  const retry = await reserveAiRun(reservationInput(d1, "interactive-stale-window", 1));
+  assert.equal(retry.kind, "expired");
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  assert.equal(ledger.status, "released");
 });
 
 test("a finalizing AI run cannot be expired by an old idempotency timestamp", async () => {

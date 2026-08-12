@@ -17,8 +17,7 @@ export default async function BusinessDocuments({
 }) {
   const { locale, workspaceId } = await params;
   if (!isLocale(locale) || !isWorkspaceId(workspaceId)) notFound();
-  await requireChatGPTUser(
-    platformPath(locale, "business", "documents", workspaceId),
-  );
-  return <DocumentsPage />;
+  const returnTo = platformPath(locale, "business", "documents", workspaceId);
+  const user = await requireChatGPTUser(returnTo);
+  return <DocumentsPage embedded returnTo={returnTo} user={user}/>;
 }

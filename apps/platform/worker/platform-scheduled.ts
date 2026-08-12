@@ -15,6 +15,7 @@ import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/doc
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
 import { taskReminderEmailJobId } from "../lib/notifications/task-reminder-email";
 import type { PlatformJobEnv } from "./platform-jobs";
+import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 
 const OUTBOX_CRON = "*/5 * * * *";
 const LOCK_NAME = "outbox-dispatch";
@@ -304,6 +305,7 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
+  const startedAt = Date.now();
   let failureCode = "OUTBOX_DISPATCH_FAILED";
   try {
     failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
@@ -371,6 +373,13 @@ export async function handleScheduled(
     const corpusAlerts = (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
       ? await evaluateLegalCorpusAlerts(env, { now: new Date(now) })
       : { created: 0, failedRuns: 0, staleSources: 0 };
+    await recordDependencyHealthEvidence(env, {
+      key: "d1",
+      state: "operational",
+      evidenceKind: "scheduled_job",
+      startedAt,
+      minimumOperationalIntervalMs: 5 * 60_000,
+    });
     failureCode = "SCHEDULE_COMPLETION_FAILED";
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {

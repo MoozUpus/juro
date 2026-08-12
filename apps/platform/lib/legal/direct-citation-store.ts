@@ -12,12 +12,14 @@ type ReturnedCitation = {
   verifiedAt: string;
 };
 
+export type LegalCitationAccessMode = "direct" | "approved_package";
+
 /**
- * Persists only source metadata already exposed in a completed answer. The
- * direct retrieval implementation never provides this helper with raw HTML or
- * a complete legal document.
+ * Persists only source metadata already exposed in a completed answer. It is
+ * shared by direct staff retrieval and the interactive verified corpus path;
+ * neither path supplies raw HTML or a complete legal document here.
  */
-export function directCitationStatements(input: {
+export function legalCitationStatements(input: {
   db: D1Database;
   sources: readonly LegalSourceContext[];
   citations: readonly ReturnedCitation[];
@@ -26,6 +28,7 @@ export function directCitationStatements(input: {
   conversationId?: string | null;
   messageId?: string | null;
   now: string;
+  sourceAccessMode: LegalCitationAccessMode;
 }): D1PreparedStatement[] {
   if ((!input.aiRunId && !input.guestRunId) || (input.aiRunId && input.guestRunId)) {
     throw new TypeError("A direct citation must belong to exactly one AI run.");
@@ -34,7 +37,10 @@ export function directCitationStatements(input: {
   const seen = new Set<string>();
   return input.citations.flatMap((citation) => {
     const source = contexts.get(citation.sourceId);
-    if (!source || source.verificationState !== "direct_validated" || seen.has(source.officialUrl)) return [];
+    const validated = input.sourceAccessMode === "direct"
+      ? source?.verificationState === "direct_validated"
+      : source?.verificationState === "verified";
+    if (!source || !validated || seen.has(source.officialUrl)) return [];
     seen.add(source.officialUrl);
     return [input.db.prepare(
       `INSERT INTO legal_source_references (
@@ -65,8 +71,13 @@ export function directCitationStatements(input: {
       source.contentSha256,
       "success",
       "validated",
-      "direct",
+      input.sourceAccessMode,
       input.now,
     )];
   });
+}
+
+/** Compatibility wrapper for staff-only live direct retrieval callers. */
+export function directCitationStatements(input: Omit<Parameters<typeof legalCitationStatements>[0], "sourceAccessMode">) {
+  return legalCitationStatements({ ...input, sourceAccessMode: "direct" });
 }

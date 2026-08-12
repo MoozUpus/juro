@@ -28,3 +28,7 @@
   height:20px;
   margin-top:1px;
 }
+
+/* Opening a completed source file is a primary review action; keep the same
+   44px minimum touch target as its neighboring export controls. */
+.review-result-head a{min-height:44px}

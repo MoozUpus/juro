@@ -2369,6 +2369,60 @@ export const legalSourceHealthChecks = sqliteTable("legal_source_health_checks",
   index("legal_source_health_checks_lookup_idx").on(table.environment, table.sourceKind, table.checkedAt),
 ]);
 
+// Content-free evidence for platform dependency health. Source content, user
+// data, provider payloads, credentials and stack traces are intentionally not
+// represented in this operational table.
+export const dependencyHealthChecks = sqliteTable("dependency_health_checks", {
+  id: text("id").primaryKey(),
+  environment: text("environment").notNull(),
+  dependencyKey: text("dependency_key").notNull(),
+  state: text("state").notNull(),
+  checkedAt: text("checked_at").notNull(),
+  latencyMs: integer("latency_ms"),
+  safeErrorCode: text("safe_error_code"),
+  evidenceKind: text("evidence_kind").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  index("dependency_health_checks_latest_idx")
+    .on(table.environment, table.dependencyKey, table.checkedAt, table.id),
+]);
+
+// Append-only operational latency evidence. It intentionally has no account,
+// user, workspace, prompt, answer, document, URL, provider payload, or secret
+// column; correlationHash is a one-way hash of an opaque request UUID.
+export const aiSloTelemetryEvents = sqliteTable("ai_slo_telemetry_events", {
+  id: text("id").primaryKey(),
+  environment: text("environment").notNull(),
+  correlationHash: text("correlation_hash").notNull(),
+  requestKind: text("request_kind").notNull(),
+  authKind: text("auth_kind").notNull(),
+  answerMode: text("answer_mode").notNull(),
+  reasoningMode: text("reasoning_mode").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model"),
+  outcome: text("outcome").notNull(),
+  fallback: text("fallback").notNull(),
+  authLatencyMs: integer("auth_latency_ms"),
+  contextLatencyMs: integer("context_latency_ms"),
+  retrievalLatencyMs: integer("retrieval_latency_ms"),
+  providerTtftMs: integer("provider_ttft_ms"),
+  providerTotalMs: integer("provider_total_ms"),
+  validationLatencyMs: integer("validation_latency_ms"),
+  persistenceLatencyMs: integer("persistence_latency_ms"),
+  endToEndMs: integer("end_to_end_ms").notNull(),
+  firstUsefulStage: text("first_useful_stage").notNull(),
+  firstUsefulLatencyMs: integer("first_useful_latency_ms"),
+  firstUsefulPass: integer("first_useful_pass", { mode: "boolean" }).notNull(),
+  fullResponsePass: integer("full_response_pass", { mode: "boolean" }).notNull(),
+  safeErrorCode: text("safe_error_code"),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("ai_slo_telemetry_correlation_uidx").on(table.environment, table.correlationHash),
+  index("ai_slo_telemetry_window_idx").on(table.environment, table.requestKind, table.occurredAt, table.id),
+  index("ai_slo_telemetry_outcome_idx").on(table.environment, table.outcome, table.occurredAt, table.id),
+]);
+
 export const legislationUpdates = sqliteTable("legislation_updates", {
   id: text("id").primaryKey(),
   sourceId: text("source_id").notNull().references(() => legalSources.id, { onDelete: "restrict" }),

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 
 const RESEND_ENDPOINT = "https://api.resend.com/emails";
 const PROBE_KEY = "staging-resend-delivery-v1";
@@ -169,7 +170,9 @@ export async function runStagingEmailDeliveryProbe(
   }
 
   let response: Response | null = null;
+  let providerStartedAt: number | null = null;
   try {
+    providerStartedAt = Date.now();
     response = await fetch(RESEND_ENDPOINT, {
       method: "POST",
       headers: {
@@ -189,6 +192,13 @@ export async function runStagingEmailDeliveryProbe(
       const code = responseErrorCode(response.status);
       await response.body?.cancel();
       await recordFailure(env, code);
+      await recordDependencyHealthEvidence(env, {
+        key: "resend",
+        state: "degraded",
+        safeErrorCode: "EMAIL_DELIVERY_FAILED",
+        evidenceKind: "synthetic_probe",
+        startedAt: providerStartedAt,
+      });
       return { attempted: 1, accepted: 0, failed: 1, skipped: 0, alreadyAccepted: 0, providerMessageId: null };
     }
     const parsed = resendResponseSchema.parse(await boundedJson(response));
@@ -201,6 +211,13 @@ export async function runStagingEmailDeliveryProbe(
     if (Number(committed.meta.changes ?? 0) !== 1) {
       throw new Error("STAGING_EMAIL_PROBE_RECEIPT_UNAVAILABLE");
     }
+    await recordDependencyHealthEvidence(env, {
+      key: "resend",
+      state: "operational",
+      evidenceKind: "synthetic_probe",
+      startedAt: providerStartedAt,
+      minimumOperationalIntervalMs: 30 * 60_000,
+    });
     return { attempted: 1, accepted: 1, failed: 0, skipped: 0, alreadyAccepted: 0, providerMessageId: parsed.id };
   } catch (error) {
     try {
@@ -209,6 +226,15 @@ export async function runStagingEmailDeliveryProbe(
       // The bounded provider response is no longer usable.
     }
     await recordFailure(env, errorCode(error));
+    if (providerStartedAt !== null) {
+      await recordDependencyHealthEvidence(env, {
+        key: "resend",
+        state: "degraded",
+        safeErrorCode: "EMAIL_DELIVERY_FAILED",
+        evidenceKind: "synthetic_probe",
+        startedAt: providerStartedAt,
+      });
+    }
     return { attempted: 1, accepted: 0, failed: 1, skipped: 0, alreadyAccepted: 0, providerMessageId: null };
   }
 }

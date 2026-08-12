@@ -16,7 +16,7 @@
 }
 
 .ai-modes select {
-  min-height: 2.25rem;
+  min-height: 2.75rem;
   border: 1px solid rgba(6, 40, 68, .18);
   border-radius: .5rem;
   background: #fff;
@@ -127,6 +127,7 @@
 .ai-answer-actions button,
 .ai-branch-history button {
   display: inline-flex;
+  min-width: 2.75rem;
   min-height: 2.75rem;
   align-items: center;
   gap: .4rem;
@@ -182,7 +183,8 @@
 
 .ai-composer .ai-edit-notice button {
   width: auto;
-  height: 2.25rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: 0 .75rem;
 }
 
@@ -215,11 +217,13 @@
 
 .ai-voice-actions button,
 .ai-speech-controls button {
+  min-width: 2.75rem;
   min-height: 2.75rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: .45rem;
+  transition: transform 140ms var(--ease-out, cubic-bezier(.23, 1, .32, 1)), background-color 140ms ease, border-color 140ms ease;
 }
 
 /* Composer buttons are square by default; voice actions keep their label and touch target. */
@@ -410,6 +414,7 @@
 .ai-feedback-actions > button,
 .ai-feedback-form button {
   display: inline-flex;
+  min-width: 2.75rem;
   min-height: 2.75rem;
   align-items: center;
   gap: .4rem;
@@ -478,6 +483,7 @@
 }
 
 .ai-plan-confirmation button {
+  min-width: 2.75rem;
   min-height: 2.75rem;
 }
 
@@ -542,7 +548,7 @@
   font: inherit;
 }
 
-.ai-feedback-form select { min-height: 2.5rem; padding: 0 .625rem; }
+.ai-feedback-form select { min-height: 2.75rem; padding: 0 .625rem; }
 .ai-feedback-form textarea { min-height: 5.25rem; resize: vertical; padding: .625rem; }
 .ai-feedback-form button { justify-self: start; }
 
@@ -565,7 +571,8 @@
 }
 
 .ai-error button {
-  min-height: 2.25rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   justify-self: start;
   border: 1px solid currentColor;
   border-radius: .5rem;
@@ -592,6 +599,7 @@
 
 .ai-composer-mode button {
   display: inline-flex;
+  min-width: 2.75rem;
   min-height: 2.75rem;
   align-items: center;
   justify-content: center;
@@ -633,23 +641,10 @@
     radial-gradient(circle at 12% 18%, rgba(190, 151, 79, .18), transparent 34%),
     linear-gradient(135deg, #062844, #0a3655 68%, #0c2a42);
   color: #fff;
-  grid-template-columns: 7rem minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 1rem;
   padding: .875rem 1rem 0;
-}
-
-.ai-voice-stage-portrait {
-  height: 9rem;
-  overflow: hidden;
-  align-self: end;
-}
-
-.ai-voice-stage-portrait img {
-  display: block;
-  width: 100%;
-  height: auto;
-  transform: translateY(-1.2rem);
 }
 
 .ai-voice-stage-copy {
@@ -753,11 +748,10 @@
   }
 
   .ai-voice-stage {
-    grid-template-columns: 5.5rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  .ai-voice-stage-portrait { height: 7.5rem; }
-  .ai-voice-stage > output { grid-column: 2; justify-self: start; margin-bottom: .75rem; }
+  .ai-voice-stage > output { justify-self: start; margin-bottom: .75rem; }
 }
 
 @media (max-width: 560px) {
@@ -765,12 +759,11 @@
 
   .ai-voice-stage {
     margin: .625rem .75rem 0;
-    grid-template-columns: 4.25rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: .75rem;
     padding: .75rem .75rem 0;
   }
 
-  .ai-voice-stage-portrait { height: 6.5rem; }
   .ai-voice-stage-copy { padding-bottom: .625rem; }
   .ai-voice-stage-copy small { display: none; }
   .ai-voice-stage > output { min-width: 0; }
@@ -832,7 +825,8 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  height: 2.25rem;
+  min-height: 2.75rem;
+  height: auto;
   align-items: center;
   justify-content: center;
   border: 1px solid transparent;
@@ -895,7 +889,7 @@
   width: 1rem;
   height: 1rem;
   flex: 0 0 auto;
-  transition: transform 160ms ease;
+  transition: transform 160ms var(--ease-out, cubic-bezier(.23, 1, .32, 1));
 }
 
 .ai-select-trigger[aria-expanded="true"] {
@@ -928,7 +922,7 @@
   display: flex;
   width: 100%;
   min-width: 0;
-  min-height: 2.5rem;
+  min-height: 2.75rem;
   height: auto;
   align-items: center;
   justify-content: space-between;
@@ -1032,7 +1026,8 @@
 }
 
 .ai-branch-history a {
-  min-height: 2.35rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
   padding: .4rem .7rem;
   font-size: .7rem;
 }
@@ -1145,22 +1140,29 @@
   color: #be974f;
 }
 
-.ai-stream-caret {
-  display: inline-block;
-  width: .12rem;
-  height: 1em;
-  margin-left: .18rem;
-  translate: 0 .13em;
-  background: #be974f;
-  animation: ai-stream-caret 1s steps(1, end) infinite;
+.ai-preliminary {
+  display: grid;
+  gap: .55rem;
+  margin-top: .55rem;
+  padding: .8rem .9rem;
+  border: 1px solid rgba(190, 151, 79, .35);
+  border-radius: .75rem;
+  background: #fffcf5;
+  color: #243f51;
+  font-size: .8125rem;
+  line-height: 1.55;
 }
 
-@keyframes ai-stream-caret {
-  50% { opacity: 0; }
-}
+.ai-preliminary strong { font-weight: 750; }
 
-@media (prefers-reduced-motion: reduce) {
-  .ai-stream-caret { animation: none; }
+.ai-preliminary p { margin: 0; white-space: pre-wrap; }
+
+.ai-preliminary ul {
+  display: grid;
+  gap: .3rem;
+  margin: 0;
+  padding-left: 1.1rem;
+  color: #526671;
 }
 
 @media (max-width: 560px) {
@@ -1249,8 +1251,8 @@
   top: 1.15rem;
   right: .55rem;
   display: grid;
-  width: 2rem;
-  height: 2rem;
+  width: 2.75rem;
+  height: 2.75rem;
   place-items: center;
   border: 1px solid transparent;
   border-radius: .55rem;
@@ -1298,7 +1300,7 @@
 
 .ai-conversation-delete-confirm button {
   width: 100%;
-  min-height: 2rem;
+  min-height: 2.75rem;
   border: 1px solid rgba(6, 40, 68, .14);
   border-radius: .5rem;
   background: #fff;
@@ -1455,7 +1457,7 @@
 }
 
 .ai-composer .ai-date-clear {
-  width: 2.6rem;
+  width: 2.75rem;
   height: 2.75rem;
   flex: none;
   border: 1px solid rgba(6, 40, 68, .2);
@@ -1470,7 +1472,7 @@
   z-index: 100;
   right: 0;
   bottom: calc(100% + .55rem);
-  width: min(20.5rem, calc(100vw - 2rem));
+  width: min(22rem, calc(100vw - .75rem));
   overflow: hidden;
   border: 1px solid rgba(6, 40, 68, .16);
   border-radius: 1rem;
@@ -1482,7 +1484,7 @@
 .ai-date-popover > header {
   display: grid;
   min-height: 3.6rem;
-  grid-template-columns: 2.35rem 1fr 2.35rem;
+  grid-template-columns: 2.75rem 1fr 2.75rem;
   align-items: center;
   gap: .4rem;
   padding: .55rem .7rem;
@@ -1500,8 +1502,8 @@
 
 .ai-composer .ai-date-popover > header button {
   display: grid;
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.75rem;
+  height: 2.75rem;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, .24);
   border-radius: .65rem;
@@ -1516,8 +1518,8 @@
 .ai-date-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: .18rem;
-  padding: .75rem;
+  gap: .125rem;
+  padding: .5rem;
 }
 
 .ai-date-grid > span {
@@ -1537,6 +1539,7 @@
 .ai-composer .ai-date-grid > button {
   display: grid;
   width: 100%;
+  min-height: 2.75rem;
   height: auto;
   aspect-ratio: 1;
   place-items: center;
@@ -1578,7 +1581,8 @@
 
 .ai-composer .ai-date-popover > footer button {
   width: auto;
-  height: 2.15rem;
+  min-height: 2.75rem;
+  height: auto;
   border: 1px solid rgba(6, 40, 68, .14);
   border-radius: .6rem;
   background: #fff;
@@ -1685,6 +1689,19 @@
   .ai-date-popover {
     right: auto;
     left: 0;
+  }
+}
+
+/* Seven 44px calendar targets still fit the 320px reference viewport without
+   horizontal overflow; larger viewports retain the breathing room above. */
+@media (max-width: 340px) {
+  .ai-date-grid {
+    gap: 0;
+    padding: 0;
+  }
+
+  .ai-composer .ai-date-grid > button {
+    border-radius: .45rem;
   }
 }
 

@@ -1,6 +1,9 @@
 const CHAT_FEATURE = "legal_chat";
 const FREE_MONTHLY_CYCLES = 20;
-const STALE_RESERVATION_MS = 15 * 60 * 1_000;
+// Interactive requests share a hard 30 second execution budget. A short
+// recovery grace prevents an interrupted response from pinning a user's
+// idempotency key and reserved usage for fifteen minutes.
+const STALE_RESERVATION_MS = 90 * 1_000;
 
 export type AiRunReservation = {
   kind: "reserved";

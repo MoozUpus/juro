@@ -66,6 +66,7 @@ import {
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
 } from "./staging-account-deletion-probe";
+import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 
 export const JOB_KINDS = [
   "document.analyze",
@@ -617,17 +618,40 @@ async function executeJob(
     throw new SafeJobError("JOB_QUEUE_MISMATCH", false);
   }
   if (envelope.kind === "document.analyze") {
+    const startedAt = Date.now();
     try {
-      await executeDocumentAnalysisJob(
+      const result = await executeDocumentAnalysisJob(
         env,
         envelope.subjectId,
         envelope.workspaceId!,
       );
+      if (result.status === "completed") {
+        await recordDependencyHealthEvidence(env, {
+          key: "document_analysis",
+          state: "operational",
+          evidenceKind: "integration_event",
+          startedAt,
+          minimumOperationalIntervalMs: 30 * 60_000,
+        });
+      }
       return;
     } catch (error) {
       if (error instanceof DocumentAnalysisProcessingError) {
         if (error.code === "DOCUMENT_ANALYSIS_OCR_REQUIRED") {
           return;
+        }
+        if (
+          error.code === "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
+          || error.code === "DOCUMENT_ANALYSIS_INVALID_OUTPUT"
+          || error.code === "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "document_analysis",
+            state: "degraded",
+            safeErrorCode: "ANALYSIS_JOB_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
         }
         throw new SafeJobError(error.code, error.retryable);
       }
@@ -707,6 +731,7 @@ async function executeJob(
     }
   }
   if (envelope.kind === "email.send") {
+    const startedAt = Date.now();
     const operationalAlert = await env.DB.prepare(
       `SELECT 1 AS found FROM operational_alert_jobs WHERE id=?
        UNION ALL
@@ -714,28 +739,75 @@ async function executeJob(
        LIMIT 1`,
     ).bind(envelope.subjectId, envelope.subjectId).first<{ found: number }>();
     try {
+      let delivery: { providerMessageId: string | null; alreadySent: boolean };
       if (isTaskReminderEmailJobId(envelope.subjectId)) {
-        await executeTaskReminderEmail(env, envelope.subjectId);
+        delivery = await executeTaskReminderEmail(env, envelope.subjectId);
       } else if (operationalAlert?.found) {
-        await executeOperationalAlertEmail(env, envelope.subjectId);
+        delivery = await executeOperationalAlertEmail(env, envelope.subjectId);
       } else {
-        await executeSecurityEmailJob(env, envelope.subjectId);
+        delivery = await executeSecurityEmailJob(env, envelope.subjectId);
+      }
+      if (delivery.providerMessageId && !delivery.alreadySent) {
+        await recordDependencyHealthEvidence(env, {
+          key: "resend",
+          state: "operational",
+          evidenceKind: "integration_event",
+          startedAt,
+          minimumOperationalIntervalMs: 30 * 60_000,
+        });
       }
       return;
     } catch (error) {
       if (error instanceof OperationalAlertEmailError) {
+        if (
+          error.code === "OPERATIONAL_ALERT_PROVIDER_REJECTED"
+          || error.code === "OPERATIONAL_ALERT_PROVIDER_UNAVAILABLE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "resend",
+            state: "degraded",
+            safeErrorCode: "EMAIL_DELIVERY_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       if (error instanceof SecurityEmailError) {
+        if (
+          error.code === "EMAIL_PROVIDER_REJECTED"
+          || error.code === "EMAIL_PROVIDER_UNAVAILABLE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "resend",
+            state: "degraded",
+            safeErrorCode: "EMAIL_DELIVERY_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       if (error instanceof TaskReminderEmailError) {
+        if (
+          error.code === "EMAIL_PROVIDER_REJECTED"
+          || error.code === "EMAIL_PROVIDER_UNAVAILABLE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "resend",
+            state: "degraded",
+            safeErrorCode: "EMAIL_DELIVERY_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;
     }
   }
   if (envelope.kind === "legal.sync") {
+    const startedAt = Date.now();
     // Direct Lex/Advice retrieval is the active legal-source path. Legacy
     // corpus jobs must be terminal when ingestion is disabled, including a
     // message that was already present in a queue before the mode changed.
@@ -744,9 +816,23 @@ async function executeJob(
     }
     try {
       await executeLegalSourceFetchRequest(env, envelope.subjectId);
+      await recordDependencyHealthEvidence(env, {
+        key: "legal_source_sync",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt,
+        minimumOperationalIntervalMs: 26 * 60 * 60_000,
+      });
       return;
     } catch (error) {
       if (error instanceof LegalSourceAcquisitionError) {
+        await recordDependencyHealthEvidence(env, {
+          key: "legal_source_sync",
+          state: "degraded",
+          safeErrorCode: "LEGAL_SYNC_FAILED",
+          evidenceKind: "integration_event",
+          startedAt,
+        });
         throw new SafeJobError(
           "LEGAL_SOURCE_SYNC_FAILED",
           error.retryable,
@@ -756,14 +842,29 @@ async function executeJob(
     }
   }
   if (envelope.kind === "legal.parse") {
+    const startedAt = Date.now();
     if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {
       await executeLegalSourceNormalization(env, envelope.subjectId);
+      await recordDependencyHealthEvidence(env, {
+        key: "legal_source_sync",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt,
+        minimumOperationalIntervalMs: 26 * 60 * 60_000,
+      });
       return;
     } catch (error) {
       if (error instanceof LegalSourceNormalizationError) {
+        await recordDependencyHealthEvidence(env, {
+          key: "legal_source_sync",
+          state: "degraded",
+          safeErrorCode: "LEGAL_SYNC_FAILED",
+          evidenceKind: "integration_event",
+          startedAt,
+        });
         throw new SafeJobError(
           "LEGAL_SOURCE_PARSE_FAILED",
           error.retryable,
@@ -773,14 +874,29 @@ async function executeJob(
     }
   }
   if (envelope.kind === "legal.index") {
+    const startedAt = Date.now();
     if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {
       await executeLegalSourceIndexing(env, envelope.subjectId);
+      await recordDependencyHealthEvidence(env, {
+        key: "legal_source_sync",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt,
+        minimumOperationalIntervalMs: 26 * 60 * 60_000,
+      });
       return;
     } catch (error) {
       if (error instanceof LegalSourceIndexingError) {
+        await recordDependencyHealthEvidence(env, {
+          key: "legal_source_sync",
+          state: "degraded",
+          safeErrorCode: "LEGAL_SYNC_FAILED",
+          evidenceKind: "integration_event",
+          startedAt,
+        });
         throw new SafeJobError("LEGAL_SOURCE_INDEX_FAILED", error.retryable);
       }
       throw error;
@@ -819,15 +935,54 @@ async function executeJob(
     }
   }
   if (envelope.kind === "malware.scan" && env.MALWARE_SCAN_ENABLED === "true") {
+    const startedAt = Date.now();
     try {
-      await executeMalwareScanJob(
+      const result = await executeMalwareScanJob(
         env,
         envelope.subjectId,
         envelope.workspaceId!,
       );
+      if (result.status === "safe" || result.status === "infected") {
+        await Promise.all([
+          recordDependencyHealthEvidence(env, {
+            key: "malware_scanner",
+            state: "operational",
+            evidenceKind: "integration_event",
+            startedAt,
+            minimumOperationalIntervalMs: 15 * 60_000,
+          }),
+          recordDependencyHealthEvidence(env, {
+            key: "private_r2",
+            state: "operational",
+            evidenceKind: "integration_event",
+            startedAt,
+            minimumOperationalIntervalMs: 10 * 60_000,
+          }),
+        ]);
+      } else if (result.status === "already_safe") {
+        await recordDependencyHealthEvidence(env, {
+          key: "private_r2",
+          state: "operational",
+          evidenceKind: "integration_event",
+          startedAt,
+          minimumOperationalIntervalMs: 10 * 60_000,
+        });
+      }
       return;
     } catch (error) {
       if (error instanceof MalwareScanError) {
+        if (
+          error.code === "MALWARE_SCANNER_UNAVAILABLE"
+          || error.code === "MALWARE_SCANNER_INVALID_RESPONSE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "malware_scanner",
+            state: "degraded",
+            safeErrorCode: "SCANNER_UNAVAILABLE",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;
@@ -912,6 +1067,26 @@ async function processMessage(
       claim.leaseOwner,
       new Date().toISOString(),
     );
+    // Reaching a consumer and completing durable job bookkeeping is actual
+    // evidence for the queue path and D1; it is not an inference from config.
+    // Operational observations are throttled inside the helper so the
+    // append-only health ledger cannot grow with every routine message.
+    await Promise.all([
+      recordDependencyHealthEvidence(env, {
+        key: "queues",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt: started,
+        minimumOperationalIntervalMs: 15 * 60_000,
+      }),
+      recordDependencyHealthEvidence(env, {
+        key: "d1",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt: started,
+        minimumOperationalIntervalMs: 5 * 60_000,
+      }),
+    ]);
     writeMetric(env, {
       queueName,
       kind: envelope.kind,

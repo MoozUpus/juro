@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CalendarDays, ChevronLeft, ChevronRight, CircleAlert, LoaderCircle } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { addCalendarDays, monthStart, nextMonthStart, tashkentToday } from "../../lib/platform/calendar";
+import { formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
 type View = "month" | "week" | "list" | "cases" | "overdue";
@@ -19,8 +20,8 @@ function startOfWeek(value: string) {
   const weekday = new Date(`${value}T00:00:00.000Z`).getUTCDay() || 7;
   return addCalendarDays(value, 1 - weekday);
 }
-function displayDate(value: string, locale: "ru" | "uz") { return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Tashkent" }).format(new Date(`${value}T12:00:00.000Z`)); }
-function monthLabel(value: string, locale: "ru" | "uz") { return new Intl.DateTimeFormat(locale === "ru" ? "ru-RU" : "uz-UZ", { month: "long", year: "numeric", timeZone: "Asia/Tashkent" }).format(new Date(`${value}T12:00:00.000Z`)); }
+function displayDate(value: string, locale: "ru" | "uz") { return formatPlatformLongDate(value, locale); }
+function monthLabel(value: string, locale: "ru" | "uz") { return formatPlatformMonth(value, locale); }
 
 export function CalendarClient({ locale }: { locale: "ru" | "uz" }) {
   const t = labels[locale];

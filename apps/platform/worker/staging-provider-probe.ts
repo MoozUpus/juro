@@ -1,7 +1,23 @@
 import { z } from "zod";
 import { runAnthropicLegalChat } from "../lib/ai/anthropic-provider";
+import {
+  AiExecutionBudgetAbortError,
+  createAiExecutionBudget,
+  type AiExecutionBudget,
+} from "../lib/ai/execution-budget";
+import {
+  createStagingAiSloProbeCorrelationId,
+  recordStagingAiSloProbe,
+  type AiSloFirstUsefulStage,
+} from "../lib/ai/slo-telemetry";
 import type { PlatformJobEnv } from "./platform-jobs";
-import { runStagingAiChatLifecycleProbe } from "./staging-ai-chat-lifecycle-probe";
+import {
+  runStagingAiChatLifecycleProbe,
+} from "./staging-ai-chat-lifecycle-probe";
+import {
+  providerFailureEvidence,
+  recordDependencyHealthEvidence,
+} from "./dependency-health-evidence";
 
 // v1 completed for OpenAI and terminally failed for Anthropic before the
 // owner rotated the staging Anthropic key. Keep those records immutable. v5
@@ -25,7 +41,16 @@ import { runStagingAiChatLifecycleProbe } from "./staging-ai-chat-lifecycle-prob
 // the provider-supported Structured Outputs subset. v26 runs complete RU and
 // UZ synthetic tenant lifecycles: reservation, provider, persistence, released
 // clarification usage, idempotent replay, audit evidence, and full cleanup.
-const PROBE_KEY = "staging-openai-legal-chat-v26";
+// v27 intentionally leaves those historical rows untouched and adds bounded,
+// rolling execution records plus append-only, content-free SLO evidence.
+const ROLLING_PROBE_VERSION = "v27";
+const ROLLING_PROBE_KEY_PREFIX = `staging-provider-slo-${ROLLING_PROBE_VERSION}`;
+export const STAGING_PROVIDER_PROBE_EXECUTION_BUDGET_MS = 30_000;
+const STAGING_PROVIDER_PROBE_PROVIDER_TIMEOUT_MS = 25_500;
+const STAGING_PROVIDER_PROBE_POST_PROVIDER_RESERVE_MS = 2_000;
+const STAGING_PROVIDER_PROBE_RETENTION_MS = 30 * 24 * 60 * 60_000;
+const STAGING_PROVIDER_PROBE_MAX_RECORDS_PER_PROVIDER = 2_000;
+const STAGING_PROVIDER_PROBE_ABANDONED_AFTER_MS = 2 * 60_000;
 type Provider = "openai" | "anthropic";
 // Staging probes exercise both configured server-side providers with a fixed,
 // content-free clarification request. This is deliberately opt-in and
@@ -43,6 +68,36 @@ export type StagingProviderProbeSummary = {
   succeeded: number;
   failed: number;
   skipped: number;
+  retentionDeleted: number;
+};
+
+export type RollingProbeExecution = {
+  id: string;
+  probeKey: string;
+  startedAt: number;
+  startedAtIso: string;
+  /** Alternates every five-minute scheduled slot without storing a counter. */
+  locale: "ru" | "uz";
+};
+
+type ProviderProbeTiming = {
+  model: string | null;
+  providerStartedAt: number | null;
+  providerTtftMs: number | null;
+  validationLatencyMs: number | null;
+  persistenceLatencyMs: number | null;
+  firstUsefulStage: AiSloFirstUsefulStage;
+  firstUsefulLatencyMs: number | null;
+};
+
+type ProviderProbeResult = {
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  cachedInputTokens: number;
+  latencyMs: number;
+  attempts: number;
+  timing: ProviderProbeTiming;
 };
 
 class ProviderProbeStageError extends Error {
@@ -59,8 +114,47 @@ export function stagingProviderProbeEnabled(
     && (env as Record<string, unknown>).STAGING_SYNTHETIC_PROBES_ENABLED === "true";
 }
 
-function probeId(provider: Provider): string {
-  return `${PROBE_KEY}-${provider}`;
+function normalizedExecutionId(value: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new ProviderProbeStageError("PROBE_EXECUTION_ID_INVALID");
+  }
+  return value.toLowerCase();
+}
+
+/** Creates one opaque, timestamped execution identifier shared by both providers. */
+export function createRollingStagingProviderProbeExecution(
+  now = new Date(),
+  id = crypto.randomUUID(),
+): RollingProbeExecution {
+  const executionId = normalizedExecutionId(id);
+  const startedAt = now.getTime();
+  if (!Number.isFinite(startedAt)) throw new ProviderProbeStageError("PROBE_EXECUTION_TIME_INVALID");
+  const startedAtIso = now.toISOString();
+  const timestampKey = startedAtIso.replace(/[-:.]/g, "");
+  const locale = Math.floor(startedAt / (5 * 60_000)) % 2 === 0 ? "ru" : "uz";
+  return {
+    id: executionId,
+    probeKey: `${ROLLING_PROBE_KEY_PREFIX}-${timestampKey}-${executionId}`,
+    startedAt,
+    startedAtIso,
+    locale,
+  };
+}
+
+function probeId(provider: Provider, execution: RollingProbeExecution): string {
+  return `${execution.id}-${provider}`;
+}
+
+function newProviderTiming(): ProviderProbeTiming {
+  return {
+    model: null,
+    providerStartedAt: null,
+    providerTtftMs: null,
+    validationLatencyMs: null,
+    persistenceLatencyMs: null,
+    firstUsefulStage: "none",
+    firstUsefulLatencyMs: null,
+  };
 }
 
 function providerErrorCode(error: unknown): string {
@@ -115,21 +209,154 @@ function openAiHttpFailureCode(error: unknown): string {
   return error instanceof TypeError ? "PROBE_OPENAI_CALL_TYPE_ERROR" : "PROBE_OPENAI_CALL_FAILED";
 }
 
-async function executeProviderProbe(env: PlatformJobEnv, provider: Provider) {
+function providerTimeoutMs(budget: AiExecutionBudget): number {
+  const remaining = budget.remainingMs - STAGING_PROVIDER_PROBE_POST_PROVIDER_RESERVE_MS;
+  if (budget.signal.aborted || remaining < 1) {
+    throw new ProviderProbeStageError("PROBE_BUDGET_EXHAUSTED");
+  }
+  return Math.min(STAGING_PROVIDER_PROBE_PROVIDER_TIMEOUT_MS, remaining);
+}
+
+function stageTimeoutMs(budget: AiExecutionBudget): number {
+  return Math.max(1, Math.min(
+    STAGING_PROVIDER_PROBE_PROVIDER_TIMEOUT_MS + 1_500,
+    budget.remainingMs,
+  ));
+}
+
+function requireProbeBudget(budget: AiExecutionBudget): void {
+  if (budget.signal.aborted || budget.remainingMs < STAGING_PROVIDER_PROBE_POST_PROVIDER_RESERVE_MS) {
+    throw new AiExecutionBudgetAbortError(budget.abortReason ?? "overall_timeout");
+  }
+}
+
+function sloFailure(input: {
+  error: unknown;
+  budget: AiExecutionBudget;
+}): {
+  outcome: "failed" | "timed_out" | "cancelled";
+  safeErrorCode: "AI_SLO_TIMEOUT" | "AI_SLO_PROVIDER_UNAVAILABLE" | "AI_SLO_ABORTED" |
+    "AI_SLO_VALIDATION_FAILED" | "AI_SLO_PERSISTENCE_FAILED" | "AI_SLO_INTERNAL_ERROR";
+} {
+  const code = providerErrorCode(input.error);
+  if (
+    input.error instanceof AiExecutionBudgetAbortError
+    || input.budget.abortReason === "overall_timeout"
+    || code.includes("TIMEOUT")
+    || code.includes("BUDGET_EXHAUSTED")
+  ) {
+    return { outcome: "timed_out", safeErrorCode: "AI_SLO_TIMEOUT" };
+  }
+  if (code.includes("CANCELLED") || input.budget.abortReason === "caller") {
+    return { outcome: "cancelled", safeErrorCode: "AI_SLO_ABORTED" };
+  }
+  if (code.includes("INVALID_AI_OUTPUT") || code.includes("SCHEMA") || code.includes("BOUNDARY")) {
+    return { outcome: "failed", safeErrorCode: "AI_SLO_VALIDATION_FAILED" };
+  }
+  if (code.includes("PERSISTENCE") || code.includes("FINALIZATION") || code.includes("RESERVATION")) {
+    return { outcome: "failed", safeErrorCode: "AI_SLO_PERSISTENCE_FAILED" };
+  }
+  if (code.includes("PROVIDER") || code.includes("ANTHROPIC") || code.includes("OPENAI") || code.includes("CONFIG")) {
+    return { outcome: "failed", safeErrorCode: "AI_SLO_PROVIDER_UNAVAILABLE" };
+  }
+  return { outcome: "failed", safeErrorCode: "AI_SLO_INTERNAL_ERROR" };
+}
+
+/**
+ * Prunes only completed/failed v27 technical probe rows. It never deletes the
+ * prior fixed-key evidence or the append-only SLO telemetry ledger.
+ */
+export async function pruneRollingStagingProviderProbeRows(
+  env: PlatformJobEnv,
+  now = new Date(),
+): Promise<number> {
+  const cutoff = new Date(now.getTime() - STAGING_PROVIDER_PROBE_RETENTION_MS).toISOString();
+  const abandonedBefore = new Date(now.getTime() - STAGING_PROVIDER_PROBE_ABANDONED_AFTER_MS).toISOString();
+  const prefix = `${ROLLING_PROBE_KEY_PREFIX}-%`;
+  // Only v27 rolling rows are mutable/retained here. Historical probe rows and
+  // append-only ai_slo_telemetry_events are intentionally never touched.
+  await env.DB.prepare(`
+    UPDATE staging_provider_probes
+    SET status='failed',error_code='PROBE_EXECUTION_ABANDONED',finished_at=?,updated_at=?
+    WHERE probe_key LIKE ? AND status='running' AND started_at<?
+  `).bind(now.toISOString(), now.toISOString(), prefix, abandonedBefore).run();
+  const expired = await env.DB.prepare(`
+    DELETE FROM staging_provider_probes
+    WHERE probe_key LIKE ? AND status IN ('succeeded','failed') AND created_at<?
+  `).bind(prefix, cutoff).run();
+  let deleted = Number(expired.meta.changes ?? 0);
+  for (const provider of providers) {
+    const result = await env.DB.prepare(`
+      DELETE FROM staging_provider_probes
+      WHERE id IN (
+        SELECT id FROM staging_provider_probes
+        WHERE probe_key LIKE ? AND provider=? AND status IN ('succeeded','failed')
+        ORDER BY created_at DESC,id DESC
+        LIMIT -1 OFFSET ?
+      )
+    `).bind(prefix, provider, STAGING_PROVIDER_PROBE_MAX_RECORDS_PER_PROVIDER).run();
+    deleted += Number(result.meta.changes ?? 0);
+  }
+  return deleted;
+}
+
+async function executeProviderProbe(input: {
+  env: PlatformJobEnv;
+  provider: Provider;
+  execution: RollingProbeExecution;
+  budget: AiExecutionBudget;
+  timing: ProviderProbeTiming;
+}): Promise<ProviderProbeResult> {
+  const { env, provider, execution, budget, timing } = input;
   if (provider === "anthropic") {
-    let result;
+    const stage = budget.beginStage("probe.anthropic.provider", {
+      timeoutMs: stageTimeoutMs(budget),
+    });
     try {
-      result = await runAnthropicLegalChat({
+      // This technical probe is not an interactive user response. Anthropic's
+      // non-streaming Messages endpoint may not resolve fetch until it has a
+      // complete JSON/tool payload, so use the full already-reserved provider
+      // window for connectivity rather than the user's 4.5 s response-start
+      // threshold. The shared 30 s budget remains authoritative.
+      const timeoutMs = providerTimeoutMs(budget);
+      const result = await runAnthropicLegalChat({
         question: "Synthetic staging check: request clarification only.",
         locale: "ru",
         answerMode: "short",
         reasoningMode: "fast",
         sources: [],
-        legalDatabaseAsOf: "2026-08-03T00:00:00.000Z",
-        requestId: probeId(provider),
+        legalDatabaseAsOf: "unavailable",
+        requestId: probeId(provider, execution),
         safetyIdentifier: "staging-synthetic-provider-probe",
+      }, {
+        budget,
+        signal: stage.signal,
+        providerTimeoutMs: timeoutMs,
+        nonStreamingResponseStartTimeoutMs: timeoutMs,
+        beforeProviderCall: ({ model }) => {
+          timing.model = model;
+          timing.providerStartedAt = Date.now();
+        },
       });
+      if (result.data.responseKind !== "clarification_required" || result.data.sources.length !== 0
+        || result.data.confirmedFindings.length !== 0) {
+        throw new ProviderProbeStageError("PROBE_LEGAL_BOUNDARY_FAILED");
+      }
+      timing.firstUsefulStage = "provider_validated";
+      timing.firstUsefulLatencyMs = Math.max(0, Date.now() - execution.startedAt);
+      stage.complete();
+      return {
+        model: result.model,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        cachedInputTokens: result.usage.cachedInputTokens,
+        latencyMs: result.latencyMs,
+        attempts: result.attempts,
+        timing,
+      };
     } catch (error) {
+      stage.fail();
+      if (error instanceof AiExecutionBudgetAbortError || budget.signal.aborted) throw error;
       const stackFrames = error instanceof Error && typeof error.stack === "string"
         ? error.stack.split("\n").slice(1, 6).map((frame) => frame.trim().replace(/[?#].*$/, ""))
         : undefined;
@@ -142,18 +369,35 @@ async function executeProviderProbe(env: PlatformJobEnv, provider: Provider) {
       });
       throw new ProviderProbeStageError(anthropicHttpFailureCode(error));
     }
-    if (result.data.responseKind !== "clarification_required" || result.data.sources.length !== 0
-      || result.data.confirmedFindings.length !== 0) {
-      throw new ProviderProbeStageError(
-        "PROBE_LEGAL_BOUNDARY_FAILED",
-      );
-    }
-    return result;
   }
   if (provider === "openai") {
     try {
-      return await runStagingAiChatLifecycleProbe(env);
+      const result = await runStagingAiChatLifecycleProbe(env, {
+        budget,
+        executionId: execution.id,
+        locale: execution.locale,
+        onProviderPrepared: ({ model }) => {
+          timing.model = model;
+          timing.providerStartedAt = Date.now();
+        },
+      });
+      timing.model = result.model;
+      timing.providerTtftMs = result.timing.providerTtftMs;
+      timing.validationLatencyMs = result.timing.validationLatencyMs;
+      timing.persistenceLatencyMs = result.timing.persistenceLatencyMs;
+      timing.firstUsefulStage = "provider_validated";
+      timing.firstUsefulLatencyMs = result.timing.firstUsefulLatencyMs;
+      return {
+        model: result.model,
+        inputTokens: result.usage.inputTokens,
+        outputTokens: result.usage.outputTokens,
+        cachedInputTokens: result.usage.cachedInputTokens,
+        latencyMs: result.latencyMs,
+        attempts: result.attempts,
+        timing,
+      };
     } catch (error) {
+      if (error instanceof AiExecutionBudgetAbortError || budget.signal.aborted) throw error;
       console.error({
         event: "staging.provider_probe_exception",
         provider: "openai",
@@ -163,15 +407,69 @@ async function executeProviderProbe(env: PlatformJobEnv, provider: Provider) {
       throw new ProviderProbeStageError(openAiHttpFailureCode(error));
     }
   }
-  throw new Error("PROVIDER_PROBE_NOT_IMPLEMENTED");
+  throw new ProviderProbeStageError("PROVIDER_PROBE_NOT_IMPLEMENTED");
 }
 
-async function runOne(
-  env: PlatformJobEnv,
-  provider: Provider,
-): Promise<"succeeded" | "failed" | "skipped"> {
-  const id = probeId(provider);
-  const now = new Date().toISOString();
+async function markProbeFailed(input: {
+  env: PlatformJobEnv;
+  id: string;
+  safeCode: string;
+  startedAt: number;
+  allowedStatuses?: readonly ("running" | "succeeded")[];
+}): Promise<void> {
+  const finishedAt = new Date().toISOString();
+  const statuses = input.allowedStatuses ?? ["running"];
+  const statusPredicate = statuses.map(() => "?").join(",");
+  await input.env.DB.prepare(`
+    UPDATE staging_provider_probes
+    SET status='failed',error_code=?,latency_ms=?,finished_at=?,updated_at=?
+    WHERE id=? AND status IN (${statusPredicate})
+  `).bind(
+    input.safeCode,
+    Math.max(0, Date.now() - input.startedAt),
+    finishedAt,
+    finishedAt,
+    input.id,
+    ...statuses,
+  ).run();
+}
+
+async function recordProbeSloSuccess(input: {
+  env: PlatformJobEnv;
+  provider: Provider;
+  correlationId: string;
+  result: ProviderProbeResult;
+  startedAt: number;
+}): Promise<void> {
+  await recordStagingAiSloProbe({
+    db: input.env.DB,
+    correlationId: input.correlationId,
+    answerMode: "short",
+    reasoningMode: "fast",
+    provider: input.provider,
+    model: input.result.model,
+    outcome: "completed",
+    fallback: "none",
+    providerTtftMs: input.result.timing.providerTtftMs,
+    providerTotalMs: input.result.latencyMs,
+    validationLatencyMs: input.result.timing.validationLatencyMs,
+    persistenceLatencyMs: input.result.timing.persistenceLatencyMs,
+    endToEndMs: Math.max(0, Date.now() - input.startedAt),
+    firstUsefulStage: input.result.timing.firstUsefulStage,
+    firstUsefulLatencyMs: input.result.timing.firstUsefulLatencyMs,
+  });
+}
+
+async function runOne(input: {
+  env: PlatformJobEnv;
+  provider: Provider;
+  execution: RollingProbeExecution;
+  budget: AiExecutionBudget;
+}): Promise<"succeeded" | "failed" | "skipped"> {
+  const { env, provider, execution, budget } = input;
+  const id = probeId(provider, execution);
+  const correlationId = createStagingAiSloProbeCorrelationId();
+  const timing = newProviderTiming();
   const insert = await env.DB.prepare(`
     INSERT INTO staging_provider_probes (
       id,probe_key,provider,status,model,provider_response_id,input_tokens,
@@ -179,55 +477,163 @@ async function runOne(
       finished_at,created_at,updated_at
     ) VALUES (?,?,?,'running',NULL,NULL,0,0,0,0,NULL,?,NULL,?,?)
     ON CONFLICT(probe_key,provider) DO NOTHING
-  `).bind(id, PROBE_KEY, provider, now, now, now).run();
+  `).bind(
+    id,
+    execution.probeKey,
+    provider,
+    execution.startedAtIso,
+    execution.startedAtIso,
+    execution.startedAtIso,
+  ).run();
   if (Number(insert.meta.changes ?? 0) !== 1) return "skipped";
 
   try {
-    const result = await executeProviderProbe(env, provider);
+    const result = await executeProviderProbe({ env, provider, execution, budget, timing });
+    requireProbeBudget(budget);
     const finishedAt = new Date().toISOString();
     const updated = await env.DB.prepare(`
       UPDATE staging_provider_probes
-      SET status='succeeded',model=?,provider_response_id=?,input_tokens=?,
+      SET status='succeeded',model=?,provider_response_id=NULL,input_tokens=?,
           output_tokens=?,cached_input_tokens=?,latency_ms=?,finished_at=?,
           updated_at=?
       WHERE id=? AND status='running'
     `).bind(
       result.model,
-      result.providerResponseId,
-      result.usage.inputTokens,
-      result.usage.outputTokens,
-      result.usage.cachedInputTokens,
-      result.latencyMs,
+      result.inputTokens,
+      result.outputTokens,
+      result.cachedInputTokens,
+      Math.max(0, Date.now() - execution.startedAt),
       finishedAt,
       finishedAt,
       id,
     ).run();
-    if (Number(updated.meta.changes ?? 0) !== 1) throw new Error("PROVIDER_PROBE_LEASE_LOST");
+    if (Number(updated.meta.changes ?? 0) !== 1) {
+      throw new ProviderProbeStageError("PROBE_EXECUTION_LEASE_LOST");
+    }
+    requireProbeBudget(budget);
+    try {
+      await recordProbeSloSuccess({
+        env,
+        provider,
+        correlationId,
+        result,
+        startedAt: execution.startedAt,
+      });
+    } catch {
+      // A successful provider call without durable, safe SLO evidence must
+      // never create a green provider signal. The probe result remains
+      // inspectable, but is explicitly downgraded instead of hidden.
+      await markProbeFailed({
+        env,
+        id,
+        startedAt: execution.startedAt,
+        safeCode: "PROBE_SLO_TELEMETRY_FAILED",
+        allowedStatuses: ["succeeded"],
+      });
+      console.error(JSON.stringify({
+        event: "staging.provider_probe_slo_persistence_failed",
+        provider,
+        executionId: execution.id,
+      }));
+      return "failed";
+    }
+    await recordDependencyHealthEvidence(env, {
+      key: provider,
+      state: "operational",
+      evidenceKind: "synthetic_probe",
+      startedAt: execution.startedAt,
+      minimumOperationalIntervalMs: 15 * 60_000,
+    });
     return "succeeded";
   } catch (error) {
-    const finishedAt = new Date().toISOString();
-    await env.DB.prepare(`
-      UPDATE staging_provider_probes
-      SET status='failed',error_code=?,finished_at=?,updated_at=?
-      WHERE id=? AND status='running'
-    `).bind(providerErrorCode(error), finishedAt, finishedAt, id).run();
+    const safeCode = providerErrorCode(error);
+    await markProbeFailed({
+      env,
+      id,
+      startedAt: execution.startedAt,
+      safeCode,
+    });
+    const failure = sloFailure({ error, budget });
+    try {
+      await recordStagingAiSloProbe({
+        db: env.DB,
+        correlationId,
+        answerMode: "short",
+        reasoningMode: "fast",
+        provider: timing.model ? provider : "none",
+        model: timing.model,
+        outcome: failure.outcome,
+        fallback: "none",
+        providerTtftMs: timing.providerTtftMs,
+        providerTotalMs: timing.providerStartedAt === null
+          ? null
+          : Math.max(0, Date.now() - timing.providerStartedAt),
+        validationLatencyMs: timing.validationLatencyMs,
+        persistenceLatencyMs: timing.persistenceLatencyMs,
+        endToEndMs: Math.max(0, Date.now() - execution.startedAt),
+        firstUsefulStage: "none",
+        firstUsefulLatencyMs: null,
+        safeErrorCode: failure.safeErrorCode,
+      });
+    } catch {
+      console.error(JSON.stringify({
+        event: "staging.provider_probe_slo_persistence_failed",
+        provider,
+        executionId: execution.id,
+      }));
+    }
+    await recordDependencyHealthEvidence(env, {
+      ...providerFailureEvidence(provider, safeCode),
+      evidenceKind: "synthetic_probe",
+      startedAt: execution.startedAt,
+    });
     return "failed";
   }
 }
 
 /**
- * Closed, one-time, staging-only real-provider validation. No HTTP route or
- * user content is involved; D1 holds only technical result metadata.
+ * Rolling, staging-only real-provider validation. Every invocation has an
+ * opaque execution ID, new technical rows for both providers, one shared hard
+ * 30-second deadline, and append-only SLO measurements. It has no HTTP entry
+ * point and never records prompts, outputs, user IDs, account IDs, URLs, or
+ * provider response bodies. Retention affects only its v27 technical table;
+ * historical provider evidence and append-only SLO telemetry are preserved.
  */
 export async function runStagingProviderProbes(
   env: PlatformJobEnv,
 ): Promise<StagingProviderProbeSummary | null> {
   if (!stagingProviderProbeEnabled(env)) return null;
-  const outcomes = await Promise.all(providers.map((provider) => runOne(env, provider)));
-  return {
-    attempted: outcomes.filter((outcome) => outcome !== "skipped").length,
-    succeeded: outcomes.filter((outcome) => outcome === "succeeded").length,
-    failed: outcomes.filter((outcome) => outcome === "failed").length,
-    skipped: outcomes.filter((outcome) => outcome === "skipped").length,
-  };
+  // Retention is deliberately outside the provider execution window. A
+  // retention fault must never make an interactive provider check run late or
+  // be reported as a provider outage.
+  let retentionDeleted = 0;
+  try {
+    retentionDeleted = await pruneRollingStagingProviderProbeRows(env);
+  } catch {
+    console.error(JSON.stringify({
+      event: "staging.provider_probe_retention_failed",
+      environment: env.APP_ENV,
+    }));
+  }
+  const execution = createRollingStagingProviderProbeExecution();
+  const budget = createAiExecutionBudget({
+    totalBudgetMs: STAGING_PROVIDER_PROBE_EXECUTION_BUDGET_MS,
+  });
+  try {
+    const outcomes = await Promise.all(providers.map((provider) => runOne({
+      env,
+      provider,
+      execution,
+      budget,
+    })));
+    return {
+      attempted: outcomes.filter((outcome) => outcome !== "skipped").length,
+      succeeded: outcomes.filter((outcome) => outcome === "succeeded").length,
+      failed: outcomes.filter((outcome) => outcome === "failed").length,
+      skipped: outcomes.filter((outcome) => outcome === "skipped").length,
+      retentionDeleted,
+    };
+  } finally {
+    budget.dispose();
+  }
 }

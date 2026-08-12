@@ -1,4 +1,12 @@
 import { z } from "zod";
+import {
+  deriveComponentHealth,
+  readDependencyHealth,
+} from "./dependency-health";
+import type {
+  DependencyHealthEnvironment,
+  DependencyHealthState,
+} from "./dependency-health";
 
 export const statusComponentKeys = [
   "platform",
@@ -28,7 +36,7 @@ export const statusIncidentStates = [
 export type StatusComponentKey = (typeof statusComponentKeys)[number];
 export type StatusImpact = (typeof statusImpactValues)[number];
 export type StatusIncidentState = (typeof statusIncidentStates)[number];
-export type PublicComponentState = "operational" | StatusImpact;
+export type PublicComponentState = DependencyHealthState;
 export type StatusLocale = "ru" | "uz";
 
 const componentMutationSchema = z.object({
@@ -59,12 +67,21 @@ export const appendStatusUpdateSchema = z.object({
   messageUz: z.string().trim().min(10).max(2_000),
 }).strict();
 
-const impactRank: Readonly<Record<PublicComponentState, number>> = {
-  operational: 0,
+const impactRank: Readonly<Record<StatusImpact, number>> = {
   maintenance: 1,
   degraded: 2,
   partial_outage: 3,
   outage: 4,
+};
+
+const publicStateRank: Readonly<Record<PublicComponentState, number>> = {
+  operational: 0,
+  unknown: 1,
+  stale: 2,
+  maintenance: 3,
+  degraded: 4,
+  partial_outage: 5,
+  outage: 6,
 };
 
 const componentLabels: Readonly<Record<StatusComponentKey, { ru: string; uz: string }>> = {
@@ -124,7 +141,14 @@ export type PublicStatusSnapshot = {
   overallStatus: PublicComponentState;
   generatedAt: string;
   lastIncidentUpdateAt: string | null;
-  components: Array<{ key: StatusComponentKey; label: string; status: PublicComponentState }>;
+  components: Array<{
+    key: StatusComponentKey;
+    label: string;
+    status: PublicComponentState;
+    lastCheckedAt: string | null;
+    lastSuccessfulAt: string | null;
+    checkAgeMs: number | null;
+  }>;
   activeIncidents: PublicStatusIncident[];
   recentIncidents: PublicStatusIncident[];
 };
@@ -156,9 +180,18 @@ function publicReference(): string {
   return `INC-${crypto.randomUUID().replaceAll("-", "").slice(0, 12).toUpperCase()}`;
 }
 
-function highestImpact(values: readonly PublicComponentState[]): PublicComponentState {
-  return values.reduce<PublicComponentState>(
+function highestImpact(values: readonly StatusImpact[]): StatusImpact {
+  const [first, ...rest] = values;
+  if (!first) throw new SystemStatusError("SYSTEM_STATUS_INVALID");
+  return rest.reduce<StatusImpact>(
     (current, value) => impactRank[value] > impactRank[current] ? value : current,
+    first,
+  );
+}
+
+function highestPublicState(values: readonly PublicComponentState[]): PublicComponentState {
+  return values.reduce<PublicComponentState>(
+    (current, value) => publicStateRank[value] > publicStateRank[current] ? value : current,
     "operational",
   );
 }
@@ -221,17 +254,38 @@ export async function readStatusIncidentAdminDashboard(db: D1Database): Promise<
 export async function readPublicStatus(input: {
   db: D1Database;
   locale: StatusLocale;
+  environment: DependencyHealthEnvironment;
   now?: Date;
 }): Promise<PublicStatusSnapshot> {
-  const rows = await readRows(input.db);
+  const now = input.now ?? new Date();
+  const [rows, dependencyHealth] = await Promise.all([
+    readRows(input.db),
+    readDependencyHealth({
+      db: input.db,
+      environment: input.environment,
+      now,
+    }),
+  ]);
+  const componentHealth = deriveComponentHealth(dependencyHealth);
+  const componentHealthByKey = new Map(componentHealth.map((component) => [component.key, component]));
   const statusByComponent = new Map<StatusComponentKey, PublicComponentState>(
-    statusComponentKeys.map((key) => [key, "operational"]),
+    componentHealth.map((component) => [component.key, component.status]),
   );
+
+  // A staffed incident is an explicit operations decision. It intentionally
+  // overrides automatic evidence for its component until the incident resolves.
+  const manualImpactByComponent = new Map<StatusComponentKey, StatusImpact>();
   for (const component of rows.components) {
     const incident = rows.incidents.find((item) => item.id === component.incidentId);
     if (!incident || incident.state === "resolved") continue;
-    const current = statusByComponent.get(component.key) ?? "operational";
-    statusByComponent.set(component.key, highestImpact([current, component.impact]));
+    const current = manualImpactByComponent.get(component.key);
+    manualImpactByComponent.set(
+      component.key,
+      current ? highestImpact([current, component.impact]) : component.impact,
+    );
+  }
+  for (const [key, impact] of manualImpactByComponent) {
+    statusByComponent.set(key, impact);
   }
 
   const projectIncident = (incident: IncidentRow): PublicStatusIncident => ({
@@ -264,14 +318,20 @@ export async function readPublicStatus(input: {
     (latest, incident) => !latest || incident.updatedAt > latest ? incident.updatedAt : latest,
     null,
   );
-  const components = statusComponentKeys.map((key) => ({
-    key,
-    label: componentLabels[key][input.locale],
-    status: statusByComponent.get(key) ?? "operational",
-  }));
+  const components = statusComponentKeys.map((key) => {
+    const health = componentHealthByKey.get(key);
+    return {
+      key,
+      label: componentLabels[key][input.locale],
+      status: statusByComponent.get(key) ?? "unknown",
+      lastCheckedAt: health?.lastCheckedAt ?? null,
+      lastSuccessfulAt: health?.lastSuccessfulAt ?? null,
+      checkAgeMs: health?.checkAgeMs ?? null,
+    };
+  });
   return {
-    overallStatus: highestImpact(components.map((component) => component.status)),
-    generatedAt: (input.now ?? new Date()).toISOString(),
+    overallStatus: highestPublicState(components.map((component) => component.status)),
+    generatedAt: now.toISOString(),
     lastIncidentUpdateAt,
     components,
     activeIncidents: active.map(projectIncident),
@@ -296,7 +356,6 @@ export async function createStatusIncident(input: {
   const updateId = crypto.randomUUID();
   const reference = publicReference();
   const severity = highestImpact(value.components.map((component) => component.impact));
-  if (severity === "operational") throw new SystemStatusError("SYSTEM_STATUS_INVALID");
   try {
     await input.db.batch([
       input.db.prepare(

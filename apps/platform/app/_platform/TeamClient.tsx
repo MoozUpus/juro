@@ -4,6 +4,7 @@
 
 import { CircleAlert, LoaderCircle, MailPlus, ShieldCheck, Trash2, UserRound, UsersRound } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import { formatPlatformDate } from "../../lib/platform/date-time";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 type Member = { id: string; userId: string; role: string; status: string; joinedAt: string; fullName: string | null; email: string };
@@ -125,5 +126,5 @@ function roleLabel(role: string, ru: boolean) {
 }
 
 function formatDate(value: string, ru: boolean) {
-  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(value));
+  return formatPlatformDate(value, ru ? "ru" : "uz");
 }
