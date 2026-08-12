@@ -210,7 +210,7 @@ if (["staging", "production"].includes(requestedEnvironment)) {
   );
   assert.equal(
     artifact.vars?.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED,
-      "false",
+      requestedEnvironment === "staging" ? "true" : "false",
   );
   assert.deepEqual(artifact.migrations, selected.migrations);
   assert.deepEqual(artifact.durable_objects, selected.durable_objects);
