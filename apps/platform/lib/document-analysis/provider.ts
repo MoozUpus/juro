@@ -35,7 +35,12 @@ export type DocumentAnalysisProviderResult = AiStructuredResult<DocumentAnalysis
  * complete clause-by-clause result.
  */
 export function documentAnalysisMaxOutputTokens(mode: DocumentAnalysisProviderRequest["mode"]): number {
-  if (mode === "quick") return 1_600;
+  // A quick pass still has to populate the complete fail-closed structured
+  // contract (including empty arrays/nulls).  1,600 left too little room for
+  // the envelope on an ordinary document and produced schema-invalid answers
+  // in controlled staging runs.  This is a bounded compact result, not a
+  // hidden full/expert review.
+  if (mode === "quick") return 2_400;
   return 8_192;
 }
 
@@ -158,11 +163,11 @@ async function runAnthropicDocumentAnalysis(
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode),
     input: providerInput(input),
-    // The analysis contract contains nested legal findings and revisions. The
-    // Anthropic tool envelope keeps the provider request shallow while the
-    // complete result is still parsed and fail-closed against the same Zod
-    // schema below. This avoids provider-side rejection of a deep JSON schema.
-    strictOutput: false,
+    // Use Anthropic's native JSON-schema response format for the document
+    // contract. Unlike the chat fallback's deliberately shallow tool envelope,
+    // this keeps nested findings as JSON values rather than asking the model to
+    // serialize a second JSON document into a string. The returned value still
+    // passes the same Zod, source and excerpt boundaries below.
     maxTokens: documentAnalysisMaxOutputTokens(input.mode),
   });
   return constrainResult(result, input);
@@ -213,6 +218,7 @@ function documentAnalysisInstructions(
     "Оценка качества объясняет полноту/ясность документа, а не вероятность победы и не подлинность документа.",
     ...(mode === "quick" ? [
       "Режим quick — это компактный первый проход, а не полный постатейный обзор: дай краткое резюме, только наиболее существенные риски, сроки, вопросы и рекомендации. Не заполняй необязательные списки ради полноты, не предлагай длинные новые формулировки и не повторяй один вывод в нескольких полях.",
+      "Верни полный структурный контракт: каждый обязательный ключ должен присутствовать. Для отсутствующих фактов используй пустой массив или null строго по схеме, а не пропускай ключ. Не добавляй ключи вне схемы.",
     ] : []),
     aiResponseToneInstruction(settings.responseTone, locale),
     locale === "uz" ? "Natijani o‘zbek tilida lotin yozuvida ber." : "Верни результат полностью на русском языке.",
@@ -229,14 +235,27 @@ function constrainResult(
 ): DocumentAnalysisProviderResult {
   const usableSources = input.sources.filter((source) => source.excerpt?.trim());
   const allowed = new Set(usableSources.map((source) => source.id));
-  let data = enforceDocumentAnalysisSourceBoundary({
-    ...result.data,
-    outputLanguage: input.locale,
-    jurisdiction: "UZ",
-    mode: input.mode,
-    legalDatabaseAsOf: input.legalDatabaseAsOf,
-    extractionWarnings: [...new Set([...input.extractionWarnings, ...result.data.extractionWarnings])].slice(0, 20),
-  }, allowed);
+  let data: DocumentAnalysisResult;
+  try {
+    data = enforceDocumentAnalysisSourceBoundary({
+      ...result.data,
+      outputLanguage: input.locale,
+      jurisdiction: "UZ",
+      mode: input.mode,
+      legalDatabaseAsOf: input.legalDatabaseAsOf,
+      extractionWarnings: [...new Set([...input.extractionWarnings, ...result.data.extractionWarnings])].slice(0, 20),
+    }, allowed);
+  } catch {
+    // A fabricated or internally inconsistent citation is an invalid model
+    // output, never a retrieval or provider-availability error. Keeping this
+    // category lets an ordinary user analysis use its bounded fallback while
+    // preserving the fail-closed source boundary.
+    throw new AiUnavailableError(
+      "AI-проверка сослалась на непроверенный или неполный источник.",
+      "INVALID_AI_OUTPUT",
+      false,
+    );
+  }
   try {
     data = enforceDocumentExcerptBoundary(data, input.extractedText);
   } catch {

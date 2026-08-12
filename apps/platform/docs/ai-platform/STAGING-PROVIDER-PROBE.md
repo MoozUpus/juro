@@ -45,11 +45,17 @@ uses EICAR only; the document probe uses a synthetic DOCX and the normal
 scanner → analysis handlers. A failed scanner or analysis remains fail-closed
 and records degraded evidence rather than a false operational state.
 
-The document probe makes one bounded live provider attempt per scheduled
-execution, so it is a staging validation control, not a production health
-claim. Roll back either control by setting the corresponding staging flag to
-`false` or restoring the prior staging Worker; production remains inert even
-if a flag value were misconfigured because the runtime additionally requires
-`APP_ENV=staging`. Leave additive D1 evidence intact. A private backup and
-isolated restore are required before any new migrations are applied. See
-[AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).
+The document probe makes at most one bounded live provider attempt for each
+explicit `staging-document-analysis-vN-YYYYMMDD` UTC execution key. A durable
+`scheduled_runs` claim is created before any scanner, R2 or provider side
+effect, so repeated five-minute cron invocations cannot create repeated
+synthetic analyses. A failed or interrupted claim remains blocked rather than
+being retried automatically; a same-window retry requires a deliberate probe
+version change or an operator reset after inspecting the terminal record and
+synthetic-resource cleanup. It is therefore a staging validation control, not
+a production health claim. Roll back either control by setting the
+corresponding staging flag to `false` or restoring the prior staging Worker;
+production remains inert even if a flag value were misconfigured because the
+runtime additionally requires `APP_ENV=staging`. Leave additive D1 evidence
+intact. A private backup and isolated restore are required before any new
+migrations are applied. See [AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).

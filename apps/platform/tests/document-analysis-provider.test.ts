@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { env } from "cloudflare:workers";
 import {
   documentAnalysisResultSchema,
   documentAnalysisJsonSchema,
@@ -14,7 +15,9 @@ import {
   documentAnalysisProviderMaxAttempts,
   documentAnalysisTimeoutMs,
   documentFallbackEligible,
+  runDocumentAnalysis,
 } from "../lib/document-analysis/provider";
+import type { AiRuntimeSettings } from "../lib/ai/runtime-settings";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
 const base = {
@@ -232,11 +235,95 @@ test("document analysis gives its fallback a turn after one primary attempt by d
 });
 
 test("quick document analysis has an explicit compact output budget", () => {
-  assert.equal(documentAnalysisMaxOutputTokens("quick"), 1_600);
+  assert.equal(documentAnalysisMaxOutputTokens("quick"), 2_400);
   assert.equal(documentAnalysisMaxOutputTokens("full"), 8_192);
   assert.equal(documentAnalysisMaxOutputTokens("expert"), 8_192);
   assert.equal(documentAnalysisTimeoutMs("quick"), 60_000);
   assert.equal(documentAnalysisTimeoutMs("expert"), 90_000);
+});
+
+test("document analysis sends Anthropic a native JSON-schema response request without tools", async () => {
+  const runtime = env as unknown as {
+    ANTHROPIC_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    AI_PROVIDER?: string;
+    AI_PROVIDER_API_KEY?: string;
+  };
+  const originalRuntime = {
+    ANTHROPIC_API_KEY: runtime.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: runtime.OPENAI_API_KEY,
+    AI_PROVIDER: runtime.AI_PROVIDER,
+    AI_PROVIDER_API_KEY: runtime.AI_PROVIDER_API_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+  const settings: AiRuntimeSettings = {
+    environment: "staging",
+    version: 1,
+    openaiChatModel: "gpt-test",
+    openaiDeepModel: "gpt-test",
+    anthropicChatFallbackModel: "claude-test",
+    anthropicDocumentModel: "claude-sonnet-4-6",
+    openaiDocumentFallbackModel: "gpt-test",
+    responseTone: "clear",
+    configHash: "a".repeat(64),
+    source: "environment",
+    createdAt: null,
+  };
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    delete runtime.OPENAI_API_KEY;
+    delete runtime.AI_PROVIDER;
+    delete runtime.AI_PROVIDER_API_KEY;
+    globalThis.fetch = async (input, init) => {
+      assert.equal(String(input), "https://api.anthropic.com/v1/messages");
+      const request = JSON.parse(String(init?.body)) as {
+        model?: string;
+        max_tokens?: number;
+        output_config?: { format?: { type?: string; schema?: Record<string, unknown> } };
+        tools?: unknown;
+        tool_choice?: unknown;
+      };
+      assert.equal(request.model, "claude-sonnet-4-6");
+      assert.equal(request.max_tokens, 2_400);
+      assert.equal(request.output_config?.format?.type, "json_schema");
+      assert.equal(request.output_config?.format?.schema?.type, "object");
+      assert.equal(request.tools, undefined);
+      assert.equal(request.tool_choice, undefined);
+      return Response.json({
+        id: "msg_document_native_json",
+        model: "claude-sonnet-4-6",
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: JSON.stringify(base) }],
+        usage: { input_tokens: 20, output_tokens: 30 },
+      });
+    };
+    const result = await runDocumentAnalysis({
+      fileName: "synthetic-contract.txt",
+      mimeType: "text/plain",
+      extractedText: "срок определяется дополнительно",
+      detectedLanguage: "ru",
+      extractionWarnings: [],
+      packageContext: null,
+      locale: "ru",
+      mode: "quick",
+      userSide: null,
+      sources: [],
+      legalDatabaseAsOf: "unavailable",
+      requestId: "synthetic-document-native-json",
+    }, {
+      runtimeSettings: settings,
+      providerMaxAttempts: 1,
+      fallbackEnabled: false,
+    });
+    assert.equal(result.provider, "anthropic");
+    assert.equal(result.data.summary, base.summary);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalRuntime)) {
+      if (value === undefined) delete runtime[key as keyof typeof originalRuntime];
+      else runtime[key as keyof typeof originalRuntime] = value;
+    }
+  }
 });
 
 test("controlled document probes never begin a fallback after their shared deadline or explicit one-shot policy", () => {

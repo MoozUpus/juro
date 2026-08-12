@@ -11,7 +11,15 @@ import { runDocumentAnalysis } from "../lib/document-analysis/provider";
 import type { PlatformJobEnv } from "./platform-jobs";
 import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 
+// Keep the synthetic fixture identity stable so every new controlled
+// execution also cleans residue left by an interrupted earlier execution.
+// The *execution* key below is bumped deliberately when an operator needs a
+// new one-shot validation window; it is not derived from any tenant data.
 const probeKey = "staging-document-analysis-v1";
+const probeExecutionVersion = "v2";
+const probeExecutionKeyPrefix = `staging-document-analysis-${probeExecutionVersion}`;
+const probeScheduleName = "staging-document-analysis-probe";
+const probeScheduleCron = "one-shot-utc";
 const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 // This is a staging-only control, not the asynchronous user-analysis SLA.
 // The absolute deadline is shared by the normal extraction/retrieval path and
@@ -37,6 +45,12 @@ export type StagingDocumentAnalysisProbeSummary = {
   errorCode?: string;
 };
 
+export type StagingDocumentAnalysisProbeClaim = {
+  claimed: boolean;
+  probeExecutionKey: string;
+  runId: string | null;
+};
+
 type ProbeStage = "prepare" | "seed" | "scan" | "analysis" | "verify" | "cleanup";
 
 export function stagingDocumentAnalysisProbeEnabled(
@@ -44,6 +58,94 @@ export function stagingDocumentAnalysisProbeEnabled(
 ): boolean {
   return env.APP_ENV === "staging"
     && env.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED === "true";
+}
+
+/**
+ * A deterministic UTC-day execution key. The version is intentionally kept
+ * in source rather than inferred from a deployment timestamp: enabling the
+ * flag can therefore run this costly synthetic DOCX only once per version and
+ * UTC day. A further run in the same window requires an intentional version
+ * change or an operator reset of this durable gate record.
+ */
+export function stagingDocumentAnalysisProbeExecutionKey(now = new Date()): string {
+  const utcDay = now.toISOString().slice(0, 10).replaceAll("-", "");
+  return `${probeExecutionKeyPrefix}-${utcDay}`;
+}
+
+function stagingDocumentAnalysisProbeScheduledFor(now: Date): string {
+  return `${now.toISOString().slice(0, 10)}T00:00:00.000Z`;
+}
+
+function stagingDocumentAnalysisProbeIdempotencyKey(probeExecutionKey: string): string {
+  return `${probeScheduleName}:${probeExecutionKey}`;
+}
+
+/**
+ * Claims the one-shot gate before any scanner, R2, or provider side effect.
+ * `scheduled_runs.idempotency_key` is durable and unique, so concurrent cron
+ * invocations cannot both run the same probe window. We intentionally do not
+ * reclaim a stale or failed row automatically: repeating a costly probe after
+ * an uncertain terminal state would be less safe than an explicit operator
+ * reset.
+ */
+export async function claimStagingDocumentAnalysisProbe(
+  env: Pick<PlatformJobEnv, "DB">,
+  input: { now?: Date; runId?: string } = {},
+): Promise<StagingDocumentAnalysisProbeClaim> {
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const probeExecutionKey = stagingDocumentAnalysisProbeExecutionKey(now);
+  const idempotencyKey = stagingDocumentAnalysisProbeIdempotencyKey(probeExecutionKey);
+  const runId = input.runId ?? crypto.randomUUID();
+  const inserted = await env.DB.prepare(
+    `INSERT INTO scheduled_runs (
+       id,schedule_name,cron,scheduled_for,idempotency_key,holder_id,
+       status,error_code,started_at,finished_at,created_at,updated_at
+     ) VALUES (?,?,?,?,?,?,'running',NULL,?,NULL,?,?)
+     ON CONFLICT(idempotency_key) DO NOTHING`,
+  ).bind(
+    runId,
+    probeScheduleName,
+    probeScheduleCron,
+    stagingDocumentAnalysisProbeScheduledFor(now),
+    idempotencyKey,
+    runId,
+    nowIso,
+    nowIso,
+    nowIso,
+  ).run();
+  if (Number(inserted.meta.changes ?? 0) !== 1) {
+    return { claimed: false, probeExecutionKey, runId: null };
+  }
+  return { claimed: true, probeExecutionKey, runId };
+}
+
+async function finishStagingDocumentAnalysisProbe(
+  env: Pick<PlatformJobEnv, "DB">,
+  claim: StagingDocumentAnalysisProbeClaim,
+  outcome: { status: "completed" | "failed"; errorCode: string | null },
+): Promise<void> {
+  if (!claim.claimed || !claim.runId) return;
+  const finishedAt = new Date().toISOString();
+  const updated = await env.DB.prepare(
+    `UPDATE scheduled_runs
+     SET status=?,error_code=?,finished_at=?,updated_at=?
+     WHERE id=?
+       AND holder_id=?
+       AND idempotency_key=?
+       AND status='running'`,
+  ).bind(
+    outcome.status,
+    outcome.errorCode,
+    finishedAt,
+    finishedAt,
+    claim.runId,
+    claim.runId,
+    stagingDocumentAnalysisProbeIdempotencyKey(claim.probeExecutionKey),
+  ).run();
+  if (Number(updated.meta.changes ?? 0) !== 1) {
+    throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_GATE_FINALIZATION_FAILED");
+  }
 }
 
 export function stagingDocumentAnalysisProbeProviderOptions(startedAt: number): {
@@ -251,61 +353,88 @@ export async function runStagingDocumentAnalysisProbe(
   if (!stagingDocumentAnalysisProbeEnabled(env)) {
     return { attempted: 0, completed: 0, failed: 0, skipped: 1 };
   }
-  if (env.MALWARE_SCAN_ENABLED !== "true" || !env.MALWARE_SCANNER) {
-    return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode: "DOCUMENT_ANALYSIS_PROBE_SCANNER_DISABLED" };
+  const executionStartedAt = new Date();
+  const claim = await claimStagingDocumentAnalysisProbe(env, {
+    now: executionStartedAt,
+  });
+  if (!claim.claimed) {
+    return { attempted: 0, completed: 0, failed: 0, skipped: 1 };
   }
-  const startedAt = Date.now();
+  const startedAt = executionStartedAt.getTime();
   let stage: ProbeStage = "prepare";
-  let summary: StagingDocumentAnalysisProbeSummary;
+  let summary: StagingDocumentAnalysisProbeSummary = {
+    attempted: 1,
+    completed: 0,
+    failed: 1,
+    skipped: 0,
+    errorCode: "DOCUMENT_ANALYSIS_PROBE_PREPARE_FAILED",
+  };
   try {
     await cleanup(env);
     await assertCleanup(env);
-    stage = "seed";
-    await seedSyntheticAnalysis(env);
-    stage = "scan";
-    const scan = await executeMalwareScanJob(env, probeIds.analysisId, probeIds.workspaceId);
-    if (scan.status !== "safe") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_SCAN_FAILED");
-    stage = "analysis";
-    // Scanner verification is a separate pipeline stage and may legitimately
-    // take longer than an AI request. Start the single shared analysis budget
-    // only after the file is safe, so scanner latency cannot pre-expire the
-    // provider before it receives a real chance to run. The analysis itself
-    // still gets exactly one 60-second, no-fallback window.
-    const providerOptions = stagingDocumentAnalysisProbeProviderOptions(Date.now());
-    const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId, {
-      analyze: (input) => runDocumentAnalysis(input, {
-        beforeProviderCall: input.beforeProviderCall,
-        runtimeSettings: input.runtimeSettings,
-        ...providerOptions,
-      }),
-    });
-    if (analysis.status !== "completed") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_ANALYSIS_FAILED");
-    stage = "verify";
-    await assertCompleted(env);
-    await Promise.all([
-      recordDependencyHealthEvidence(env, {
-        key: "document_analysis",
-        state: "operational",
-        evidenceKind: "synthetic_probe",
-        startedAt,
-        minimumOperationalIntervalMs: 30 * 60_000,
-      }),
-      recordDependencyHealthEvidence(env, {
-        key: "private_r2",
-        state: "operational",
-        evidenceKind: "synthetic_probe",
-        startedAt,
-        minimumOperationalIntervalMs: 10 * 60_000,
-      }),
-      recordDependencyHealthEvidence(env, {
+    if (env.MALWARE_SCAN_ENABLED !== "true" || !env.MALWARE_SCANNER) {
+      await recordDependencyHealthEvidence(env, {
         key: "malware_scanner",
-        state: "operational",
+        state: "degraded",
+        safeErrorCode: "SCANNER_UNAVAILABLE",
         evidenceKind: "synthetic_probe",
         startedAt,
-        minimumOperationalIntervalMs: 15 * 60_000,
-      }),
-    ]);
-    summary = { attempted: 1, completed: 1, failed: 0, skipped: 0 };
+      });
+      summary = {
+        attempted: 1,
+        completed: 0,
+        failed: 1,
+        skipped: 0,
+        errorCode: "DOCUMENT_ANALYSIS_PROBE_SCANNER_DISABLED",
+      };
+    } else {
+      stage = "seed";
+      await seedSyntheticAnalysis(env);
+      stage = "scan";
+      const scan = await executeMalwareScanJob(env, probeIds.analysisId, probeIds.workspaceId);
+      if (scan.status !== "safe") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_SCAN_FAILED");
+      stage = "analysis";
+      // Scanner verification is a separate pipeline stage and may legitimately
+      // take longer than an AI request. Start the single shared analysis budget
+      // only after the file is safe, so scanner latency cannot pre-expire the
+      // provider before it receives a real chance to run. The analysis itself
+      // still gets exactly one 60-second, no-fallback window.
+      const providerOptions = stagingDocumentAnalysisProbeProviderOptions(Date.now());
+      const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId, {
+        analyze: (input) => runDocumentAnalysis(input, {
+          beforeProviderCall: input.beforeProviderCall,
+          runtimeSettings: input.runtimeSettings,
+          ...providerOptions,
+        }),
+      });
+      if (analysis.status !== "completed") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_ANALYSIS_FAILED");
+      stage = "verify";
+      await assertCompleted(env);
+      await Promise.all([
+        recordDependencyHealthEvidence(env, {
+          key: "document_analysis",
+          state: "operational",
+          evidenceKind: "synthetic_probe",
+          startedAt,
+          minimumOperationalIntervalMs: 30 * 60_000,
+        }),
+        recordDependencyHealthEvidence(env, {
+          key: "private_r2",
+          state: "operational",
+          evidenceKind: "synthetic_probe",
+          startedAt,
+          minimumOperationalIntervalMs: 10 * 60_000,
+        }),
+        recordDependencyHealthEvidence(env, {
+          key: "malware_scanner",
+          state: "operational",
+          evidenceKind: "synthetic_probe",
+          startedAt,
+          minimumOperationalIntervalMs: 15 * 60_000,
+        }),
+      ]);
+      summary = { attempted: 1, completed: 1, failed: 0, skipped: 0 };
+    }
   } catch (error) {
     const processorCode = error instanceof DocumentAnalysisProcessingError
       ? error.code
@@ -361,7 +490,34 @@ export async function runStagingDocumentAnalysisProbe(
       stage,
       errorCode: "DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED",
     }));
-    return { attempted: 1, completed: 0, failed: 1, skipped: 0, errorCode: "DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED" };
+    summary = {
+      attempted: 1,
+      completed: 0,
+      failed: 1,
+      skipped: 0,
+      errorCode: "DOCUMENT_ANALYSIS_PROBE_CLEANUP_FAILED",
+    };
+  }
+  try {
+    await finishStagingDocumentAnalysisProbe(env, claim, {
+      status: summary.completed === 1 ? "completed" : "failed",
+      errorCode: summary.completed === 1 ? null : (summary.errorCode ?? "DOCUMENT_ANALYSIS_PROBE_FAILED"),
+    });
+  } catch {
+    // Do not make a second execution eligible after a ledger-finalization
+    // fault. The durable running claim remains the safe stop state until an
+    // operator explicitly reviews and resets it.
+    console.error(JSON.stringify({
+      event: "staging.document_analysis_probe_gate_finalization_failed",
+      errorCode: "DOCUMENT_ANALYSIS_PROBE_GATE_FINALIZATION_FAILED",
+    }));
+    return {
+      attempted: 1,
+      completed: 0,
+      failed: 1,
+      skipped: 0,
+      errorCode: "DOCUMENT_ANALYSIS_PROBE_GATE_FINALIZATION_FAILED",
+    };
   }
   return summary;
 }

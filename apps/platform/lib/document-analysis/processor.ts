@@ -156,10 +156,12 @@ export type DocumentAnalysisDiagnosticDetail =
   | "PROVIDER_HTTP_5XX"
   | "PROVIDER_TIMEOUT"
   | "PROVIDER_CIRCUIT_OPEN"
+  | "INVALID_AI_OUTPUT"
   | "PROVIDER_UNAVAILABLE";
 
 export function documentAnalysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
   if (error instanceof AiUnavailableError) {
+    if (error.code === "INVALID_AI_OUTPUT") return "INVALID_AI_OUTPUT";
     if (error.code === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
     if (error.code === "PROVIDER_CIRCUIT_OPEN") return "PROVIDER_CIRCUIT_OPEN";
     switch (error.providerStatus) {

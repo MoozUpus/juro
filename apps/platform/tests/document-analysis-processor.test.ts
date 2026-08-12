@@ -83,6 +83,10 @@ test("provider diagnostics expose only an allow-listed HTTP category", () => {
     documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_TIMEOUT", true)),
     "PROVIDER_TIMEOUT",
   );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false)),
+    "INVALID_AI_OUTPUT",
+  );
 });
 
 test("controlled staging document probes keep append-only provider usage opaque and unique per seeded run", async () => {
