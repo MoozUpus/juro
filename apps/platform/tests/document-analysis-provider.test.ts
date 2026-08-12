@@ -10,7 +10,9 @@ import {
 import { buildDocumentAnalysisProviderInput } from "../lib/document-analysis/input";
 import {
   documentAnalysisFallbackAllowed,
+  documentAnalysisMaxOutputTokens,
   documentAnalysisProviderMaxAttempts,
+  documentAnalysisTimeoutMs,
   documentFallbackEligible,
 } from "../lib/document-analysis/provider";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
@@ -227,6 +229,14 @@ test("document analysis fails over from an unavailable Anthropic request but nev
 test("document analysis gives its fallback a turn after one primary attempt by default", () => {
   assert.equal(documentAnalysisProviderMaxAttempts(), 1);
   assert.equal(documentAnalysisProviderMaxAttempts(2), 2);
+});
+
+test("quick document analysis has an explicit compact output budget", () => {
+  assert.equal(documentAnalysisMaxOutputTokens("quick"), 1_600);
+  assert.equal(documentAnalysisMaxOutputTokens("full"), 8_192);
+  assert.equal(documentAnalysisMaxOutputTokens("expert"), 8_192);
+  assert.equal(documentAnalysisTimeoutMs("quick"), 60_000);
+  assert.equal(documentAnalysisTimeoutMs("expert"), 90_000);
 });
 
 test("controlled document probes never begin a fallback after their shared deadline or explicit one-shot policy", () => {

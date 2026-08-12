@@ -14,6 +14,13 @@ export const GET = withApiErrors(async function GET() {
   const [analysisRows, caseRows] = await db.batch([
     db.prepare(
     `SELECT a.id,a.status,a.case_id AS caseId,a.summary_json AS summaryJson,a.error_code AS errorCode,a.created_at AS createdAt,a.updated_at AS updatedAt,
+      CASE WHEN a.status <> 'completed' AND EXISTS (
+        SELECT 1 FROM job_runs AS job
+        WHERE job.job_type IN ('document.analyze','ocr.process')
+          AND job.subject_id=a.id
+          AND job.workspace_id=a.workspace_id
+          AND job.status='dead_lettered'
+      ) THEN 1 ELSE 0 END AS retryExhausted,
       f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
       (SELECT json_group_array(json_object('id',r.id,'level',r.level,'title',r.title,'description',r.description,'excerpt',r.excerpt,'confidencePercent',r.confidence_percent,'riskType',r.risk_type,'clause',r.clause,'page',r.page,'recommendation',r.recommendation,'proposedWording',r.proposed_wording,'legalBasisSourceIds',json(r.legal_basis_source_ids_json)))
        FROM document_risks r WHERE r.analysis_id=a.id) AS risksJson,
@@ -39,8 +46,8 @@ export const GET = withApiErrors(async function GET() {
   return response({
     analyses: analysisRows.results.map(row => {
       const item = row as Record<string, unknown>;
-      const { summaryJson, risksJson, exportsJson, ...publicItem } = item;
-      return { ...publicItem, summary: parseJson(String(summaryJson || "{}"), null), risks: parseJson(String(risksJson || "[]"), []), exports: parseJson(String(exportsJson || "[]"), []) };
+      const { summaryJson, risksJson, exportsJson, retryExhausted, ...publicItem } = item;
+      return { ...publicItem, retryExhausted: Number(retryExhausted) === 1, summary: parseJson(String(summaryJson || "{}"), null), risks: parseJson(String(risksJson || "[]"), []), exports: parseJson(String(exportsJson || "[]"), []) };
     }),
     cases: caseRows.results,
   });

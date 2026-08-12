@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -7,6 +8,8 @@ import {
   JOB_KINDS,
   LEGACY_JOB_KINDS,
   QUEUE_BINDING_BY_KIND,
+  expectedDocumentAnalysisDlqQueueName,
+  expectedOcrProcessingDlqQueueName,
   expectedQueueName,
   handleQueue,
   jobEnvelopeSchema,
@@ -18,6 +21,7 @@ import { dispatchOutbox } from "../worker/platform-outbox";
 import {
   enqueueDueTaskReminders,
   handleScheduled,
+  reconcileRetryExhaustedDocumentJobs,
 } from "../worker/platform-scheduled";
 
 class SqliteD1Statement {
@@ -292,6 +296,50 @@ function createDatabase(): {
       id text PRIMARY KEY NOT NULL,
       memory_id text NOT NULL REFERENCES user_memories(id) ON DELETE CASCADE
     );
+    CREATE TABLE IF NOT EXISTS document_analyses (
+      id text PRIMARY KEY NOT NULL,
+      workspace_id text NOT NULL,
+      owner_user_id text NOT NULL,
+      uploaded_file_id text NOT NULL,
+      status text NOT NULL,
+      summary_json text,
+      result_sha256 text,
+      error_code text,
+      consent_version text NOT NULL,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS user_document_index_jobs (
+      id text PRIMARY KEY NOT NULL,
+      analysis_id text NOT NULL,
+      document_version_id text NOT NULL,
+      workspace_id text NOT NULL,
+      owner_user_id text NOT NULL,
+      source_hash text NOT NULL,
+      language text NOT NULL,
+      access_scope text NOT NULL,
+      status text NOT NULL,
+      chunk_count integer NOT NULL DEFAULT 0,
+      attempt_count integer NOT NULL DEFAULT 0,
+      mutation_id text,
+      error_code text,
+      started_at text,
+      submitted_at text,
+      deleted_at text,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS dependency_health_checks (
+      id text PRIMARY KEY NOT NULL,
+      environment text NOT NULL,
+      dependency_key text NOT NULL,
+      state text NOT NULL,
+      checked_at text NOT NULL,
+      latency_ms integer,
+      safe_error_code text,
+      evidence_kind text NOT NULL,
+      created_at text NOT NULL
+    );
   `);
   const guestMigration = readFileSync(
     new URL("../drizzle/0065_guest_ai_sessions.sql", import.meta.url),
@@ -457,6 +505,18 @@ function envelope(
     enqueuedAt: "2026-07-26T00:00:00.000Z",
     ...overrides,
   };
+}
+
+function envelopeDigestForTest(value: JobEnvelope): string {
+  return createHash("sha256").update(JSON.stringify({
+    schemaVersion: value.schemaVersion,
+    jobId: value.jobId,
+    kind: value.kind,
+    idempotencyKey: value.idempotencyKey,
+    subjectId: value.subjectId,
+    workspaceId: value.workspaceId ?? null,
+    correlationId: value.correlationId,
+  })).digest("hex");
 }
 
 async function runBatch(
@@ -896,7 +956,7 @@ test("document analysis queue refuses quarantined tenant rows before R2 or AI ac
         mime_type TEXT NOT NULL, size_bytes INTEGER NOT NULL, sha256 TEXT,
         archived_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       );
-      CREATE TABLE document_analyses (
+      CREATE TABLE IF NOT EXISTS document_analyses (
         id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL, owner_user_id TEXT NOT NULL,
         uploaded_file_id TEXT NOT NULL, status TEXT NOT NULL, summary_json TEXT,
         result_sha256 TEXT, error_code TEXT, consent_version TEXT NOT NULL, created_at TEXT NOT NULL,
@@ -935,6 +995,560 @@ test("document analysis queue refuses quarantined tenant rows before R2 or AI ac
     ).get() as { status: string; errorCode: string };
     assert.equal(analysis.status, "quarantined");
     assert.equal(analysis.errorCode, "MALWARE_SCANNER_UNAVAILABLE");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("document-analysis DLQ terminalizes only the durable run, preserves retryable analysis state, and records health evidence", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const body = envelope("document.analyze", {
+      jobId: "job_document_dlq",
+      idempotencyKey: "idem_document_dlq",
+      subjectId: "analysis_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_dlq",
+    });
+    sqlite.prepare(`
+      INSERT INTO document_analyses (
+        id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,
+        result_sha256,error_code,consent_version,created_at,updated_at
+      ) VALUES (?,'ws_test','user_test','file_dlq','retrying',NULL,NULL,
+        'DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE','2026-08-12',?,?)
+    `).run(body.subjectId, "2026-08-12T00:00:00.000Z", "2026-08-12T00:00:00.000Z");
+    insertSourceQueueJobRun(sqlite, body);
+    insertOutbox(sqlite, {
+      id: "outbox_document_dlq",
+      queueBinding: "DOCUMENT_ANALYSIS_QUEUE",
+      kind: "document.analyze",
+      idempotencyKey: body.idempotencyKey,
+      subjectId: body.subjectId,
+      workspaceId: body.workspaceId ?? null,
+      correlationId: body.correlationId,
+      status: "dispatched",
+    });
+
+    const { env } = createEnv(d1);
+    const item = mockMessage(body, "document_dlq_delivery", 1);
+    await runBatch(
+      env,
+      expectedDocumentAnalysisDlqQueueName("development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    const run = sqlite.prepare(`
+      SELECT status,error_code AS errorCode,lease_owner AS leaseOwner,
+        next_attempt_at AS nextAttemptAt,finished_at AS finishedAt
+      FROM job_runs WHERE id=?
+    `).get(body.jobId) as {
+      status: string;
+      errorCode: string | null;
+      leaseOwner: string | null;
+      nextAttemptAt: string | null;
+      finishedAt: string | null;
+    };
+    assert.equal(run.status, "dead_lettered");
+    assert.equal(run.errorCode, "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE");
+    assert.equal(run.leaseOwner, null);
+    assert.equal(run.nextAttemptAt, null);
+    assert.ok(run.finishedAt);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT status FROM document_analyses WHERE id=?",
+      ).get(body.subjectId) as { status: string }).status,
+      "retrying",
+      "the existing audited redrive can still claim this analysis",
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT status FROM job_outbox WHERE id='outbox_document_dlq'",
+      ).get() as { status: string }).status,
+      "dispatched",
+      "the outbox remains eligible for the existing redrive path",
+    );
+    const health = sqlite.prepare(`
+      SELECT dependency_key AS dependencyKey,state,safe_error_code AS safeErrorCode,
+        evidence_kind AS evidenceKind
+      FROM dependency_health_checks
+      ORDER BY created_at DESC,id DESC LIMIT 1
+    `).get() as {
+      dependencyKey: string;
+      state: string;
+      safeErrorCode: string | null;
+      evidenceKind: string;
+    };
+    assert.equal(health.dependencyKey, "queue_dlq");
+    assert.equal(health.state, "degraded");
+    assert.equal(health.safeErrorCode, "DLQ_BACKLOG");
+    assert.equal(health.evidenceKind, "integration_event");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("document-analysis DLQ retries instead of racing an active source lease", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const body = envelope("document.analyze", {
+      jobId: "job_document_dlq_busy",
+      idempotencyKey: "idem_document_dlq_busy",
+      subjectId: "analysis_dlq_busy",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_dlq_busy",
+    });
+    sqlite.prepare(`
+      INSERT INTO document_analyses (
+        id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,
+        result_sha256,error_code,consent_version,created_at,updated_at
+      ) VALUES (?,'ws_test','user_test','file_dlq_busy','processing',NULL,NULL,
+        NULL,'2026-08-12',?,?)
+    `).run(body.subjectId, "2026-08-12T00:00:00.000Z", "2026-08-12T00:00:00.000Z");
+    insertSourceQueueJobRun(sqlite, body, {
+      status: "running",
+      errorCode: null,
+      leaseExpiresAt: "2999-01-01T00:00:00.000Z",
+    });
+    const { env } = createEnv(d1);
+    const item = mockMessage(body, "document_dlq_busy_delivery", 2);
+    await runBatch(
+      env,
+      expectedDocumentAnalysisDlqQueueName("development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 0);
+    assert.deepEqual(item.state.retries, [{ delaySeconds: 30 }]);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT status FROM job_runs WHERE id=?",
+      ).get(body.jobId) as { status: string }).status,
+      "running",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("document-analysis DLQ terminalizes an exact durable run even if its source subject was purged", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const body = envelope("document.analyze", {
+      jobId: "job_document_dlq_purged",
+      idempotencyKey: "idem_document_dlq_purged",
+      subjectId: "analysis_already_purged",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_dlq_purged",
+    });
+    insertSourceQueueJobRun(sqlite, body);
+    const { env } = createEnv(d1);
+    const item = mockMessage(body, "document_dlq_purged_delivery", 1);
+    await runBatch(
+      env,
+      expectedDocumentAnalysisDlqQueueName("development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT status FROM job_runs WHERE id=?",
+      ).get(body.jobId) as { status: string }).status,
+      "dead_lettered",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("shared document-analysis DLQ also terminalizes exhausted indexing jobs without mutating index state", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const body = envelope("document.index", {
+      jobId: "job_document_index_dlq",
+      idempotencyKey: "idem_document_index_dlq",
+      subjectId: "index_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_index_dlq",
+    });
+    sqlite.prepare(`
+      INSERT INTO user_document_index_jobs (
+        id,analysis_id,document_version_id,workspace_id,owner_user_id,source_hash,
+        language,access_scope,status,chunk_count,attempt_count,mutation_id,error_code,
+        started_at,submitted_at,deleted_at,created_at,updated_at
+      ) VALUES (?,'analysis_complete','version_dlq','ws_test','user_test',?,
+        'ru','owner','failed',0,3,NULL,'USER_DOCUMENT_VECTOR_EMBEDDING_FAILED',
+        NULL,NULL,NULL,?,?)
+    `).run(
+      body.subjectId,
+      "a".repeat(64),
+      "2026-08-12T00:00:00.000Z",
+      "2026-08-12T00:00:00.000Z",
+    );
+    insertSourceQueueJobRun(sqlite, body);
+    const { env } = createEnv(d1);
+    const item = mockMessage(body, "document_index_dlq_delivery", 1);
+    await runBatch(
+      env,
+      expectedDocumentAnalysisDlqQueueName("development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM job_runs WHERE id=?",
+      ).get(body.jobId) as { status: string; errorCode: string }).status,
+      "dead_lettered",
+    );
+    const indexJob = sqlite.prepare(
+      "SELECT status,error_code AS errorCode FROM user_document_index_jobs WHERE id=?",
+    ).get(body.subjectId) as { status: string; errorCode: string | null };
+    assert.equal(indexJob.status, "failed");
+    assert.equal(indexJob.errorCode, "USER_DOCUMENT_VECTOR_EMBEDDING_FAILED");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("OCR DLQ terminalizes only the ledger and preserves retryable OCR prerequisites", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    sqlite.exec(`
+      CREATE TABLE IF NOT EXISTS file_extractions (
+        id TEXT PRIMARY KEY,
+        analysis_id TEXT NOT NULL,
+        workspace_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error_code TEXT,
+        updated_at TEXT NOT NULL
+      );
+    `);
+    const body = envelope("ocr.process", {
+      jobId: "job_ocr_dlq",
+      idempotencyKey: "idem_ocr_dlq",
+      subjectId: "analysis_ocr_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_ocr_dlq",
+    });
+    sqlite.prepare(`
+      INSERT INTO document_analyses (
+        id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,
+        result_sha256,error_code,consent_version,created_at,updated_at
+      ) VALUES (?,'ws_test','user_test','file_ocr_dlq','awaiting_ocr',NULL,NULL,
+        'OCR_PROVIDER_UNAVAILABLE','2026-08-12',?,?)
+    `).run(body.subjectId, "2026-08-12T00:00:00.000Z", "2026-08-12T00:00:00.000Z");
+    sqlite.prepare(`
+      INSERT INTO file_extractions (id,analysis_id,workspace_id,status,error_code,updated_at)
+      VALUES ('ocr-analysis_ocr_dlq',?,'ws_test','retrying','OCR_PROVIDER_UNAVAILABLE',?)
+    `).run(body.subjectId, "2026-08-12T00:00:00.000Z");
+    insertSourceQueueJobRun(sqlite, body, {
+      errorCode: "OCR_PROVIDER_UNAVAILABLE",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_ocr_dlq",
+      queueBinding: "OCR_PROCESSING_QUEUE",
+      kind: "ocr.process",
+      idempotencyKey: body.idempotencyKey,
+      subjectId: body.subjectId,
+      workspaceId: body.workspaceId ?? null,
+      correlationId: body.correlationId,
+      status: "dispatched",
+    });
+    const { env } = createEnv(d1);
+    const item = mockMessage(body, "ocr_dlq_delivery", 1);
+    await runBatch(
+      env,
+      expectedOcrProcessingDlqQueueName("development"),
+      [item.message],
+    );
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM job_runs WHERE id=?",
+      ).get(body.jobId) as object },
+      { status: "dead_lettered", errorCode: "OCR_PROVIDER_UNAVAILABLE" },
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM document_analyses WHERE id=?",
+      ).get(body.subjectId) as object },
+      { status: "awaiting_ocr", errorCode: "OCR_PROVIDER_UNAVAILABLE" },
+      "OCR stays retryable for an audited redrive; the UI/API must project the dead-letter ledger, not claim completion.",
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM file_extractions WHERE analysis_id=?",
+      ).get(body.subjectId) as object },
+      { status: "retrying", errorCode: "OCR_PROVIDER_UNAVAILABLE" },
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("scheduled reconciliation fences stale document and OCR retry exhaustion without resubmitting work", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const document = envelope("document.analyze", {
+      jobId: "job_document_scheduled_dlq",
+      idempotencyKey: "idem_document_scheduled_dlq",
+      subjectId: "analysis_scheduled_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_scheduled_dlq",
+    });
+    const ocr = envelope("ocr.process", {
+      jobId: "job_ocr_scheduled_dlq",
+      idempotencyKey: "idem_ocr_scheduled_dlq",
+      subjectId: "analysis_ocr_scheduled_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_ocr_scheduled_dlq",
+    });
+    sqlite.exec(`
+      INSERT INTO document_analyses (
+        id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,
+        result_sha256,error_code,consent_version,created_at,updated_at
+      ) VALUES
+        ('analysis_scheduled_dlq','ws_test','user_test','file_scheduled_dlq','retrying',NULL,NULL,
+         'DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE','2026-08-12','2026-08-12T00:00:00.000Z','2026-08-12T00:00:00.000Z'),
+        ('analysis_ocr_scheduled_dlq','ws_test','user_test','file_ocr_scheduled_dlq','awaiting_ocr',NULL,NULL,
+         'OCR_PROVIDER_UNAVAILABLE','2026-08-12','2026-08-12T00:00:00.000Z','2026-08-12T00:00:00.000Z');
+    `);
+    insertSourceQueueJobRun(sqlite, document);
+    insertSourceQueueJobRun(sqlite, ocr, {
+      errorCode: "OCR_PROVIDER_UNAVAILABLE",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_document_scheduled_dlq",
+      queueBinding: "DOCUMENT_ANALYSIS_QUEUE",
+      kind: "document.analyze",
+      idempotencyKey: document.idempotencyKey,
+      subjectId: document.subjectId,
+      workspaceId: document.workspaceId ?? null,
+      correlationId: document.correlationId,
+      status: "dispatched",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_ocr_scheduled_dlq",
+      queueBinding: "OCR_PROCESSING_QUEUE",
+      kind: "ocr.process",
+      idempotencyKey: ocr.idempotencyKey,
+      subjectId: ocr.subjectId,
+      workspaceId: ocr.workspaceId ?? null,
+      correlationId: ocr.correlationId,
+      status: "retrying",
+    });
+    const { env, sends } = createEnv(d1);
+    const result = await reconcileRetryExhaustedDocumentJobs(env, {
+      now: new Date("2026-08-12T00:20:00.000Z"),
+    });
+    assert.deepEqual(result, { eligible: 2, terminalized: 2 });
+    assert.equal(sends.length, 0, "reconciliation never silently republishes work");
+    const states = sqlite.prepare(`
+      SELECT id,status,error_code AS errorCode,lease_owner AS leaseOwner,
+        next_attempt_at AS nextAttemptAt
+      FROM job_runs
+      WHERE id IN (?,?)
+      ORDER BY id ASC
+    `).all(document.jobId, ocr.jobId) as Array<{
+      id: string;
+      status: string;
+      errorCode: string | null;
+      leaseOwner: string | null;
+      nextAttemptAt: string | null;
+    }>;
+    assert.deepEqual(states.map((state) => ({ ...state })), [
+      {
+        id: document.jobId,
+        status: "dead_lettered",
+        errorCode: "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE",
+        leaseOwner: null,
+        nextAttemptAt: null,
+      },
+      {
+        id: ocr.jobId,
+        status: "dead_lettered",
+        errorCode: "OCR_PROVIDER_UNAVAILABLE",
+        leaseOwner: null,
+        nextAttemptAt: null,
+      },
+    ]);
+    assert.equal(
+      (sqlite.prepare("SELECT status FROM document_analyses WHERE id=?").get(document.subjectId) as { status: string }).status,
+      "retrying",
+    );
+    assert.equal(
+      (sqlite.prepare("SELECT status FROM document_analyses WHERE id=?").get(ocr.subjectId) as { status: string }).status,
+      "awaiting_ocr",
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(`
+        SELECT state,safe_error_code AS safeErrorCode,evidence_kind AS evidenceKind
+        FROM dependency_health_checks
+        WHERE dependency_key='queue_dlq'
+        ORDER BY created_at DESC,id DESC LIMIT 1
+      `).get() as object },
+      { state: "degraded", safeErrorCode: "DLQ_BACKLOG", evidenceKind: "scheduled_job" },
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("scheduled reconciliation never races fresh work, an active lease, or a pending redrive", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const fresh = envelope("document.analyze", {
+      jobId: "job_document_fresh_retry",
+      idempotencyKey: "idem_document_fresh_retry",
+      subjectId: "analysis_fresh_retry",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_fresh_retry",
+    });
+    const active = envelope("ocr.process", {
+      jobId: "job_ocr_active_retry",
+      idempotencyKey: "idem_ocr_active_retry",
+      subjectId: "analysis_ocr_active_retry",
+      workspaceId: "ws_test",
+      correlationId: "corr_ocr_active_retry",
+    });
+    const redrive = envelope("document.index", {
+      jobId: "job_index_pending_redrive",
+      idempotencyKey: "idem_index_pending_redrive",
+      subjectId: "index_pending_redrive",
+      workspaceId: "ws_test",
+      correlationId: "corr_index_pending_redrive",
+    });
+    insertSourceQueueJobRun(sqlite, fresh);
+    insertSourceQueueJobRun(sqlite, active, {
+      status: "running",
+      leaseExpiresAt: "2999-01-01T00:00:00.000Z",
+    });
+    insertSourceQueueJobRun(sqlite, redrive);
+    sqlite.prepare("UPDATE job_runs SET updated_at=? WHERE id=?").run(
+      "2026-08-12T00:19:00.000Z",
+      fresh.jobId,
+    );
+    insertOutbox(sqlite, {
+      id: "outbox_fresh_retry",
+      queueBinding: "DOCUMENT_ANALYSIS_QUEUE",
+      kind: "document.analyze",
+      idempotencyKey: fresh.idempotencyKey,
+      subjectId: fresh.subjectId,
+      workspaceId: fresh.workspaceId ?? null,
+      correlationId: fresh.correlationId,
+      status: "dispatched",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_ocr_active_retry",
+      queueBinding: "OCR_PROCESSING_QUEUE",
+      kind: "ocr.process",
+      idempotencyKey: active.idempotencyKey,
+      subjectId: active.subjectId,
+      workspaceId: active.workspaceId ?? null,
+      correlationId: active.correlationId,
+      status: "dispatched",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_index_pending_redrive",
+      queueBinding: "DOCUMENT_ANALYSIS_QUEUE",
+      kind: "document.index",
+      idempotencyKey: redrive.idempotencyKey,
+      subjectId: redrive.subjectId,
+      workspaceId: redrive.workspaceId ?? null,
+      correlationId: redrive.correlationId,
+      status: "pending",
+    });
+    const { env } = createEnv(d1);
+    assert.deepEqual(
+      await reconcileRetryExhaustedDocumentJobs(env, {
+        now: new Date("2026-08-12T00:20:00.000Z"),
+      }),
+      { eligible: 0, terminalized: 0 },
+    );
+    const statuses = sqlite.prepare(`
+      SELECT id,status FROM job_runs WHERE id IN (?,?,?) ORDER BY id ASC
+    `).all(fresh.jobId, active.jobId, redrive.jobId) as Array<{
+      id: string;
+      status: string;
+    }>;
+    assert.deepEqual(statuses.map((status) => ({ ...status })), [
+      { id: fresh.jobId, status: "retrying" },
+      { id: redrive.jobId, status: "retrying" },
+      { id: active.jobId, status: "running" },
+    ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("invalid document-analysis DLQ messages retain bounded retry instead of blind acknowledgement", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const { env } = createEnv(d1);
+    const invalid = mockMessage({ unexpected: "not a queue envelope" }, "document_dlq_invalid", 1);
+    await runBatch(
+      env,
+      expectedDocumentAnalysisDlqQueueName("development"),
+      [invalid.message],
+    );
+    assert.equal(invalid.state.acknowledgements, 0);
+    assert.deepEqual(invalid.state.retries, [{ delaySeconds: 15 }]);
+    const health = sqlite.prepare(`
+      SELECT dependency_key AS dependencyKey,state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks
+      WHERE dependency_key='queue_dlq'
+      ORDER BY created_at DESC,id DESC LIMIT 1
+    `).get() as {
+      dependencyKey: string;
+      state: string;
+      safeErrorCode: string | null;
+    };
+    assert.equal(health.dependencyKey, "queue_dlq");
+    assert.equal(health.state, "degraded");
+    assert.equal(health.safeErrorCode, "DLQ_INVALID_MESSAGE");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("unmatched document-analysis DLQ envelopes retain bounded retry instead of blind acknowledgement", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const { env } = createEnv(d1);
+    const body = envelope("document.analyze", {
+      jobId: "job_document_dlq_orphan",
+      idempotencyKey: "idem_document_dlq_orphan",
+      subjectId: "analysis_dlq_orphan",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_dlq_orphan",
+    });
+    const orphan = mockMessage(body, "document_dlq_orphan", 2);
+    await runBatch(
+      env,
+      expectedDocumentAnalysisDlqQueueName("development"),
+      [orphan.message],
+    );
+    assert.equal(orphan.state.acknowledgements, 0);
+    assert.deepEqual(orphan.state.retries, [{ delaySeconds: 30 }]);
+    assert.equal(
+      (sqlite.prepare("SELECT COUNT(*) AS count FROM job_runs").get() as { count: number }).count,
+      0,
+    );
+    assert.equal(
+      (sqlite.prepare(`
+        SELECT safe_error_code AS safeErrorCode
+        FROM dependency_health_checks
+        WHERE dependency_key='queue_dlq'
+        ORDER BY checked_at DESC,id DESC LIMIT 1
+      `).get() as { safeErrorCode: string | null }).safeErrorCode,
+      "DLQ_UNMATCHED_MESSAGE",
+    );
   } finally {
     sqlite.close();
   }
@@ -1496,6 +2110,51 @@ function insertOutbox(
     input.leaseExpiresAt,
     "2026-07-26T00:00:00.000Z",
     "2026-07-26T00:00:00.000Z",
+  );
+}
+
+function insertSourceQueueJobRun(
+  sqlite: DatabaseSync,
+  body: JobEnvelope,
+  overrides: Partial<{
+    status: "running" | "retrying";
+    errorCode: string | null;
+    leaseExpiresAt: string | null;
+  }> = {},
+): void {
+  const input = {
+    status: "retrying" as const,
+    errorCode: body.kind === "document.index"
+      ? "USER_DOCUMENT_INDEX_FAILED"
+      : "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE",
+    leaseExpiresAt: null,
+    ...overrides,
+  };
+  const now = "2026-08-12T00:00:00.000Z";
+  sqlite.prepare(`
+    INSERT INTO job_runs (
+      id,queue_name,message_id,job_type,schema_version,idempotency_key,
+      subject_id,workspace_id,correlation_id,envelope_hash,status,attempt,
+      lease_owner,lease_expires_at,next_attempt_at,error_code,started_at,
+      finished_at,created_at,updated_at
+    ) VALUES (?,?,?,?,1,?,?,?,?,?,?,3,NULL,?,?,?, ?,NULL,?,?)
+  `).run(
+    body.jobId,
+    expectedQueueName(body.kind, "development"),
+    `source_${body.jobId}`,
+    body.kind,
+    body.idempotencyKey,
+    body.subjectId,
+    body.workspaceId ?? null,
+    body.correlationId,
+    envelopeDigestForTest(body),
+    input.status,
+    input.leaseExpiresAt,
+    "2026-08-12T00:01:00.000Z",
+    input.errorCode,
+    now,
+    now,
+    now,
   );
 }
 

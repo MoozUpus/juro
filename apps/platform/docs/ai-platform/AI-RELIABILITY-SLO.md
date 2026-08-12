@@ -125,6 +125,13 @@ continues to govern staff/health tooling and does not permit live retrieval in
 interactive chat. The exact probe contract is in
 [STAGING-PROVIDER-PROBE.md](./STAGING-PROVIDER-PROBE.md).
 
+The asynchronous document-analysis reliability candidate is separate from this
+interactive-chat SLO. A compact `quick` analysis is not a 30-second chat
+response and must not be reported through chat p50/p95; it remains subject to
+its own scanner, OCR, provider, schema, Queue/DLQ, and durable-result gates.
+Its pending-deployment behavior is documented in
+[DOCUMENT-UPLOAD-PIPELINE.md](./DOCUMENT-UPLOAD-PIPELINE.md).
+
 ## Repeat rollout and rollback
 
 The checkpoint above followed the required private backup, isolated-restore,
@@ -146,3 +153,7 @@ rollout and needs separate approval. See [ROLLBACK.md](./ROLLBACK.md).
   enough data to certify its tail behavior or the end-to-end SLO.
 - Browser, accessibility, legal-quality, scanner and document-analysis gates
   are independent; no provider probe satisfies them.
+- A local document Queue/DLQ terminalization candidate and daily Resend
+  acceptance-probe candidate still need a staging deployment and fresh
+  evidence. Neither provides an inbox-delivery result or a successful document
+  analysis.

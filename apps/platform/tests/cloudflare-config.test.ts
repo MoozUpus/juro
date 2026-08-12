@@ -31,7 +31,7 @@ type EnvironmentConfig = {
       queue: string;
       max_batch_size: number;
       max_retries: number;
-      dead_letter_queue: string;
+      dead_letter_queue?: string;
     }>;
   };
   vectorize: NamedBinding[];
@@ -62,6 +62,13 @@ const queueContract = [
   ["LEGAL_SOURCES_SYNC_QUEUE", "legal-sources-sync"],
   ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
   ["NOTIFICATIONS_QUEUE", "notifications"],
+] as const;
+
+// These bindings are deliberately metrics-only readers for the two DLQs that
+// have a durable terminalizer. They are not job producer contracts.
+const documentDlqMetricsContract = [
+  ["DOCUMENT_ANALYSIS_DLQ", "document-analysis-dlq"],
+  ["OCR_PROCESSING_DLQ", "ocr-processing-dlq"],
 ] as const;
 
 const vectorContract = [
@@ -175,20 +182,35 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     const environmentQueueContract = hasAsyncConsumers
       ? [...queueContract, ["MALWARE_SCAN_QUEUE", "malware-scan"] as const]
       : queueContract;
+    const environmentProducerContract = [
+      environmentQueueContract[0]!,
+      documentDlqMetricsContract[0]!,
+      environmentQueueContract[1]!,
+      documentDlqMetricsContract[1]!,
+      ...environmentQueueContract.slice(2),
+    ];
     assert.deepEqual(
       config.queues.producers,
-      environmentQueueContract.map(([binding, name]) => ({
+      environmentProducerContract.map(([binding, name]) => ({
         binding,
         queue: `${environment}-${name}`,
       })),
     );
     assert.deepEqual(
-      config.queues.producers.map(({ binding }) => binding),
+      config.queues.producers
+        .map(({ binding }) => binding)
+        .filter((binding) => !binding.endsWith("_DLQ")),
       environment === "staging" || environment === "production"
         ? [...ATTACHED_PLATFORM_QUEUE_BINDINGS]
         : [...ATTACHED_PLATFORM_QUEUE_BINDINGS].filter((binding) =>
           binding !== "MALWARE_SCAN_QUEUE"
         ),
+    );
+    assert.deepEqual(
+      config.queues.producers
+        .map(({ binding }) => binding)
+        .filter((binding) => binding.endsWith("_DLQ")),
+      documentDlqMetricsContract.map(([binding]) => binding),
     );
     assert.deepEqual(
       [...PLATFORM_QUEUE_BINDINGS].filter((binding) =>
@@ -212,6 +234,17 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             retry_delay: 30,
           },
           {
+            // This second-level consumer has no further DLQ. It retries D1
+            // terminalization separately, then acknowledges only a durable
+            // terminal job ledger state.
+            queue: `${environment}-document-analysis-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
+          },
+          {
             queue: `${environment}-ocr-processing`,
             max_batch_size: 1,
             max_batch_timeout: 5,
@@ -219,6 +252,16 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             dead_letter_queue: `${environment}-ocr-processing-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
+          },
+          {
+            // OCR is a separate prerequisite path: its terminalizer must
+            // remain available even while document-analysis capacity is busy.
+            queue: `${environment}-ocr-processing-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
           },
           {
             queue: `${environment}-document-export`,
@@ -308,8 +351,8 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       ...config.d1_databases.map((entry) => String(entry.database_name)),
       ...config.r2_buckets.map((entry) => String(entry.bucket_name)),
       ...config.queues.producers.map(({ queue }) => queue),
-      ...config.queues.consumers.map(({ dead_letter_queue }) =>
-        dead_letter_queue
+      ...config.queues.consumers.flatMap(({ dead_letter_queue }) =>
+        dead_letter_queue ? [dead_letter_queue] : []
       ),
       ...config.vectorize.map((entry) => String(entry.index_name)),
       ...config.analytics_engine_datasets.map((entry) =>
@@ -417,13 +460,15 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
   assert.match(serialized, /"MALWARE_SCAN_QUEUE"/);
   assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
-  assert.equal(source.env.production.queues.consumers.length, 8);
-  assert.equal(source.env.staging.queues.consumers.length, 8);
+  assert.equal(source.env.production.queues.consumers.length, 10);
+  assert.equal(source.env.staging.queues.consumers.length, 10);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
     [
       "staging-document-analysis",
+      "staging-document-analysis-dlq",
       "staging-ocr-processing",
+      "staging-ocr-processing-dlq",
       "staging-document-export",
       "staging-legal-sources-sync",
       "staging-email-notifications",
@@ -436,7 +481,9 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
     source.env.production.queues.consumers.map(({ queue }) => queue),
     [
       "production-document-analysis",
+      "production-document-analysis-dlq",
       "production-ocr-processing",
+      "production-ocr-processing-dlq",
       "production-document-export",
       "production-legal-sources-sync",
       "production-email-notifications",

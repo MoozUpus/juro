@@ -14,13 +14,23 @@ import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/v
 import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
 import { taskReminderEmailJobId } from "../lib/notifications/task-reminder-email";
-import type { PlatformJobEnv } from "./platform-jobs";
+import {
+  expectedQueueName,
+  type PlatformJobEnv,
+} from "./platform-jobs";
 import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
+import { reconcileQueueDlqHealth } from "./queue-dlq-health-reconciliation";
 
 const OUTBOX_CRON = "*/5 * * * *";
 const LOCK_NAME = "outbox-dispatch";
 const LOCK_MS = 4 * 60 * 1_000;
 const TASK_REMINDER_BATCH_SIZE = 100;
+const DOCUMENT_DLQ_RECONCILIATION_BATCH_SIZE = 20;
+// Source consumers retry at most three times with short bounded delays. The
+// larger grace window prevents Cron from racing a delayed source delivery or a
+// five-minute execution lease, but still makes a dropped/busy DLQ observable
+// within one operational interval.
+export const DOCUMENT_DLQ_RECONCILIATION_GRACE_MS = 15 * 60 * 1_000;
 
 type DueTaskReminder = {
   reminderId: string;
@@ -82,6 +92,168 @@ function logScheduled(
   const entry = JSON.stringify(fields);
   if (level === "error") console.error(entry);
   else console.log(entry);
+}
+
+type RetryExhaustedDocumentJob = {
+  jobId: string;
+  idempotencyKey: string;
+  queueName: string;
+  jobType: "document.analyze" | "document.index" | "ocr.process";
+  subjectId: string;
+  workspaceId: string;
+  correlationId: string;
+  envelopeHash: string;
+  attempt: number;
+};
+
+export type DocumentDlqReconciliationSummary = {
+  eligible: number;
+  terminalized: number;
+};
+
+/**
+ * Recovers the small failure window in which a document/OCR DLQ cannot
+ * terminalize its own ledger entry before that DLQ consumer exhausts retries.
+ *
+ * This is deliberately a terminalization-only pass: it does not resubmit a
+ * provider call, mutate an analysis/OCR/index payload, or mark user work as
+ * successful. The existing append-only operational-redrive flow remains the
+ * only way to republish the original identifiers after review. Every UPDATE is
+ * fenced by the source queue, immutable envelope hash, attempt count, expired
+ * lease, and a dispatched/retrying outbox record.
+ */
+export async function reconcileRetryExhaustedDocumentJobs(
+  env: Pick<PlatformJobEnv, "APP_ENV" | "DB">,
+  input: {
+    now?: Date;
+    limit?: number;
+  } = {},
+): Promise<DocumentDlqReconciliationSummary> {
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const cutoffIso = new Date(
+    now.getTime() - DOCUMENT_DLQ_RECONCILIATION_GRACE_MS,
+  ).toISOString();
+  const limit = Math.max(
+    1,
+    Math.min(
+      DOCUMENT_DLQ_RECONCILIATION_BATCH_SIZE,
+      Math.trunc(input.limit ?? DOCUMENT_DLQ_RECONCILIATION_BATCH_SIZE),
+    ),
+  );
+  const documentAnalysisQueue = expectedQueueName(
+    "document.analyze",
+    env.APP_ENV,
+  );
+  const ocrQueue = expectedQueueName("ocr.process", env.APP_ENV);
+
+  const candidates = await env.DB.prepare(`
+    SELECT
+      j.id AS jobId,
+      j.idempotency_key AS idempotencyKey,
+      j.queue_name AS queueName,
+      j.job_type AS jobType,
+      j.subject_id AS subjectId,
+      j.workspace_id AS workspaceId,
+      j.correlation_id AS correlationId,
+      j.envelope_hash AS envelopeHash,
+      j.attempt AS attempt
+    FROM job_runs j
+    JOIN job_outbox o
+      ON o.idempotency_key=j.idempotency_key
+     AND o.job_type=j.job_type
+     AND o.subject_id=j.subject_id
+     AND COALESCE(o.workspace_id,'')=COALESCE(j.workspace_id,'')
+     AND o.correlation_id=j.correlation_id
+    WHERE (
+        (j.queue_name=? AND j.job_type IN ('document.analyze','document.index'))
+        OR (j.queue_name=? AND j.job_type='ocr.process')
+      )
+      AND j.status IN ('running','retrying')
+      AND j.attempt>=3
+      AND j.updated_at<=?
+      AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
+      AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=?)
+      AND o.status IN ('dispatched','retrying')
+      AND (o.lease_expires_at IS NULL OR o.lease_expires_at<=?)
+    ORDER BY j.updated_at ASC,j.id ASC
+    LIMIT ?
+  `).bind(
+    documentAnalysisQueue,
+    ocrQueue,
+    cutoffIso,
+    cutoffIso,
+    nowIso,
+    nowIso,
+    limit,
+  ).all<RetryExhaustedDocumentJob>();
+
+  let terminalized = 0;
+  for (const candidate of candidates.results) {
+    const updated = await env.DB.prepare(`
+      UPDATE job_runs
+      SET status='dead_lettered',
+          lease_owner=NULL,
+          lease_expires_at=NULL,
+          next_attempt_at=NULL,
+          error_code=COALESCE(error_code,'JOB_TRANSIENT_FAILURE'),
+          finished_at=?,
+          updated_at=?
+      WHERE id=?
+        AND idempotency_key=?
+        AND queue_name=?
+        AND job_type=?
+        AND subject_id=?
+        AND workspace_id=?
+        AND correlation_id=?
+        AND envelope_hash=?
+        AND attempt=?
+        AND status IN ('running','retrying')
+        AND updated_at<=?
+        AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+        AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+        AND EXISTS (
+          SELECT 1
+          FROM job_outbox o
+          WHERE o.idempotency_key=job_runs.idempotency_key
+            AND o.job_type=job_runs.job_type
+            AND o.subject_id=job_runs.subject_id
+            AND COALESCE(o.workspace_id,'')=COALESCE(job_runs.workspace_id,'')
+            AND o.correlation_id=job_runs.correlation_id
+            AND o.status IN ('dispatched','retrying')
+            AND (o.lease_expires_at IS NULL OR o.lease_expires_at<=?)
+        )
+    `).bind(
+      nowIso,
+      nowIso,
+      candidate.jobId,
+      candidate.idempotencyKey,
+      candidate.queueName,
+      candidate.jobType,
+      candidate.subjectId,
+      candidate.workspaceId,
+      candidate.correlationId,
+      candidate.envelopeHash,
+      candidate.attempt,
+      cutoffIso,
+      cutoffIso,
+      nowIso,
+      nowIso,
+    ).run();
+    terminalized += Number(updated.meta.changes ?? 0);
+  }
+
+  if (terminalized > 0) {
+    await recordDependencyHealthEvidence(env, {
+      key: "queue_dlq",
+      state: "degraded",
+      safeErrorCode: "DLQ_BACKLOG",
+      evidenceKind: "scheduled_job",
+      startedAt: now.getTime(),
+    }, now);
+  }
+
+  return { eligible: candidates.results.length, terminalized };
 }
 
 /**
@@ -335,6 +507,15 @@ export async function handleScheduled(
         : 0;
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
+    failureCode = "DOCUMENT_DLQ_RECONCILIATION_FAILED";
+    const documentDlqReconciliation = await reconcileRetryExhaustedDocumentJobs(
+      env,
+      { now: new Date(now) },
+    );
+    failureCode = "QUEUE_DLQ_HEALTH_RECONCILIATION_FAILED";
+    const queueDlqHealth = await reconcileQueueDlqHealth(env, {
+      now: new Date(now),
+    });
     failureCode = "MEMORY_RETENTION_CLEANUP_FAILED";
     const memoryRetention = await purgeDueDeletedUserMemories({
       db: env.DB,
@@ -402,6 +583,12 @@ export async function handleScheduled(
       dispatched: summary.dispatched,
       retrying: summary.retrying,
       rejected: summary.rejected,
+      documentDlqEligible: documentDlqReconciliation.eligible,
+      documentDlqTerminalized: documentDlqReconciliation.terminalized,
+      queueDlqHealthState: queueDlqHealth.state,
+      queueDlqDocumentBacklog: queueDlqHealth.documentAnalysisBacklog,
+      queueDlqOcrBacklog: queueDlqHealth.ocrBacklog,
+      queueDlqDurableDeadLettered: queueDlqHealth.durableDeadLettered,
       taskRemindersDue: taskReminders.due,
       taskRemindersEnqueued: taskReminders.enqueued,
       corpusRetriesRecovered,

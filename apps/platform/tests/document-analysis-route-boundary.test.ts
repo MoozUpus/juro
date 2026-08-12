@@ -63,6 +63,30 @@ test("dashboard and review surfaces use the secure upload client", () => {
   assert.doesNotMatch(`${dashboard}\n${review}`, /new FormData\(\)/);
 });
 
+test("review surface polls actual background analysis states and makes retry exhaustion explicit", () => {
+  const review = source("app/_platform/DocumentReviewClient.tsx");
+  const reviewRoute = source("app/api/platform/document-review/route.ts");
+  assert.match(review, /const analysisPending = analyses\.some/);
+  for (const status of [
+    "quarantined",
+    "ready",
+    "processing",
+    "persisting",
+    "awaiting_ocr",
+    "ocr_processing",
+    "retrying",
+  ]) {
+    assert.match(review, new RegExp(`"${status}"`));
+  }
+  assert.match(reviewRoute, /job\.job_type IN \('document\.analyze','ocr\.process'\)/);
+  assert.match(reviewRoute, /job\.workspace_id=a\.workspace_id/);
+  assert.match(reviewRoute, /job\.status='dead_lettered'/);
+  assert.match(reviewRoute, /retryExhausted: Number\(retryExhausted\) === 1/);
+  assert.match(review, /Автоматические попытки остановлены/);
+  assert.match(review, /Qayta ishga tushirish kerak/);
+  assert.match(review, /window\.setInterval\(\(\) => \{ void load\(\); \}, 5_000\)/);
+});
+
 test("analysis revision routes preserve auth, tenant, idempotency, and object-integrity boundaries", () => {
   const collection = source("app/api/platform/document-analysis/[analysisId]/revisions/route.ts");
   const decision = source("app/api/platform/document-analysis/[analysisId]/revisions/[revisionId]/route.ts");

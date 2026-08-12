@@ -220,7 +220,9 @@ if (["staging", "production"].includes(requestedEnvironment)) {
 
 const queueContract = [
   ["DOCUMENT_ANALYSIS_QUEUE", "document-analysis"],
+  ["DOCUMENT_ANALYSIS_DLQ", "document-analysis-dlq"],
   ["OCR_PROCESSING_QUEUE", "ocr-processing"],
+  ["OCR_PROCESSING_DLQ", "ocr-processing-dlq"],
   ["DOCUMENT_EXPORT_QUEUE", "document-export"],
   ["EMAIL_NOTIFICATIONS_QUEUE", "email-notifications"],
   ["LEGAL_SOURCES_SYNC_QUEUE", "legal-sources-sync"],
@@ -238,7 +240,7 @@ assert.deepEqual(
     queue: `${requestedEnvironment}-${suffix}`,
   })),
 );
-const consumerContract = [
+const sourceConsumerContract = [
   ["document-analysis", 1, 3, 1],
   ["ocr-processing", 1, 3, 1],
   ["document-export", 1, 3, 1],
@@ -251,15 +253,36 @@ const consumerContract = [
 assert.deepEqual(
   artifact.queues?.consumers,
   hasAsyncConsumers
-    ? consumerContract.map(([suffix, batchSize, retries, concurrency]) => ({
-      queue: `${requestedEnvironment}-${suffix}`,
-      max_batch_size: batchSize,
-      max_batch_timeout: 5,
-      max_retries: retries,
-      dead_letter_queue: `${requestedEnvironment}-${suffix}-dlq`,
-      max_concurrency: concurrency,
-      retry_delay: 30,
-    }))
+    ? (() => {
+      const sourceConsumers = sourceConsumerContract.map(([suffix, batchSize, retries, concurrency]) => ({
+        queue: `${requestedEnvironment}-${suffix}`,
+        max_batch_size: batchSize,
+        max_batch_timeout: 5,
+        max_retries: retries,
+        dead_letter_queue: `${requestedEnvironment}-${suffix}-dlq`,
+        max_concurrency: concurrency,
+        retry_delay: 30,
+      }));
+      const dlqConsumer = (suffix) => ({
+        // Document analysis and OCR terminalize durable job state after their
+        // source queue exhausts retries. These consumers have no recursive
+        // DLQ; their D1 bookkeeping retries are bounded here and a scheduled
+        // reconciler fences any residual busy delivery.
+        queue: `${requestedEnvironment}-${suffix}-dlq`,
+        max_batch_size: 1,
+        max_batch_timeout: 5,
+        max_retries: 10,
+        max_concurrency: 1,
+        retry_delay: 60,
+      });
+      return [
+        sourceConsumers[0],
+        dlqConsumer("document-analysis"),
+        sourceConsumers[1],
+        dlqConsumer("ocr-processing"),
+        ...sourceConsumers.slice(2),
+      ];
+    })()
     : [],
   "Only isolated staging or production consumers may be attached",
 );

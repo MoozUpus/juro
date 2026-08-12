@@ -193,6 +193,7 @@ const cloudflareTestFiles = [
   "tests/migration-0104-d1-case-lifecycle-hash-guard.test.ts",
   "tests/dependency-health.test.ts",
   "tests/dependency-health-evidence.test.ts",
+  "tests/queue-dlq-health-reconciliation.test.ts",
   "tests/task-reminder-email.test.ts",
   "tests/staging-email-delivery-probe.test.ts",
     "tests/staging-malware-scanner-probe.test.ts",

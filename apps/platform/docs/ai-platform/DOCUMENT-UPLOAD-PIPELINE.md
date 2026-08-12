@@ -1,11 +1,72 @@
 # Secure document upload pipeline
 
-Updated: 2026-08-06
+Updated: 2026-08-12
 Status: fail-closed upload and post-safe OCR/analysis pipeline deployed to
 protected staging. The private ClamAV scanner, immutable scan-evidence schema
 and malware Queue/DLQ are attached there. An EICAR probe proved the infected
 terminal path; it does not prove a clean user-file analysis or any production
 behavior.
+
+## Local reliability candidate — pending staging deployment
+
+The changes in this section are a **local candidate only**. They have not yet
+been deployed to staging and do not turn the prior scanner-only evidence into a
+successful clean-file, OCR, or provider-analysis claim.
+
+### Compact quick review
+
+`quick` remains an asynchronous document-analysis job. Its provider response is
+deliberately bounded to a compact first pass (currently 1,600 output tokens),
+so an ordinary document does not wait for an implicit clause-by-clause expert
+report. It still has to pass the same provider schema, excerpt/source boundary,
+and durable persistence checks as every other mode. A timeout, invalid
+structured output, unavailable provider, or failed persistence remains an
+honest non-completion; the UI must not call such a job completed.
+
+`full` and `expert` remain the detailed paths and retain the larger structured
+output budget (currently 8,192 tokens). The candidate does not relabel a
+compact quick result as a full/expert analysis, nor does it make a document
+analysis subject to the separate interactive-chat 30-second SLO.
+
+### Exhausted Queue retries and operator recovery
+
+`document.analyze` and `document.index` share the document-analysis source
+queue. Once Cloudflare has exhausted a source-message retry budget, the
+candidate consumes that queue's DLQ and terminalizes only the matching
+execution-ledger row (`job_runs.status = dead_lettered`). The
+analysis or indexing record is intentionally left in its retryable state. This
+preserves the existing audited operational redrive path; it avoids both a
+silent extra provider call and a record that appears permanently successful or
+permanently failed when it can still be reviewed and redriven safely.
+
+OCR uses its own source/DLQ pair and follows the same execution-ledger rule.
+When its retry budget is exhausted, the parent analysis remains in an active OCR
+state and its extraction stays retryable; the matching `ocr.process` ledger row
+is terminalized. A bounded scheduled reconciler covers the narrow case in which
+the DLQ consumer itself cannot persist that terminal ledger update after its
+own retry budget. It never republishes work or changes a user-visible record;
+audited operator redrive remains the sole recovery path.
+
+The terminalizer verifies the original envelope/job/workspace bindings before
+updating the ledger, records content-free degraded `queue_dlq` health evidence,
+and acknowledges only after it has made (or observed) a safe terminal outcome.
+An unavailable ledger is retried rather than discarded. Queue health can return
+to operational only after Cloudflare reports zero live backlog for both DLQs,
+there are no matching `dead_lettered` ledger rows, and a five-minute quiet
+window passes. Malformed or unmatched DLQ deliveries require an explicit manual
+verification; they are never automatically cleared. A DLQ delivery is therefore
+evidence of retry exhaustion, not evidence that a document result was created.
+
+### Document Review status projection
+
+The tenant-scoped Document Review list projects retry exhaustion from the
+matching `job_runs` row without exposing queue metadata to the browser. It
+polls actual active analysis states — quarantine, ready, processing,
+persistence, OCR waiting/processing, and retrying — as well as pending exports.
+When a matching analysis or OCR job is dead-lettered, the UI stops treating that
+analysis as a live background job and explains that automatic attempts stopped;
+it does not misrepresent the retained file as an analysis result. An authorized
+operator can use the audited redrive flow after investigation.
 
 ## Implemented lifecycle
 

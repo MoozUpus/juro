@@ -7,6 +7,14 @@
 > production readiness is implied. Details and rollout gates are in
 > [AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).
 
+> **Local document/recovery candidate — 2026-08-12.** A compact asynchronous
+> `quick` document-analysis pass, truthful Queue-DLQ terminalization, real
+> Document Review processing-state polling, and a once-per-UTC-day Resend
+> acceptance probe are local only. They do not prove a successful scanner → OCR
+> → provider run, an inbox delivery, or staging/production readiness. Exact
+> boundaries are in [DOCUMENT-UPLOAD-PIPELINE.md](./DOCUMENT-UPLOAD-PIPELINE.md)
+> and [RESEND-INTEGRATION.md](./RESEND-INTEGRATION.md).
+
 > **Authoritative remote state — 2026-08-06.** This section supersedes every
 > older "current checkpoint" below; those entries remain historical evidence,
 > not a description of the active staging release. Worker

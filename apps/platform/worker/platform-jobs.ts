@@ -319,6 +319,61 @@ export function expectedQueueName(
   return `${environment}-${stem}`;
 }
 
+/**
+ * `document.analyze` and `document.index` deliberately share one source
+ * queue. Their DLQ delivery must therefore be routed before the normal source
+ * consumer; metrics bindings, when present, do not publish job payloads.
+ */
+export const DOCUMENT_DLQ_JOB_KINDS = [
+  "document.analyze",
+  "document.index",
+  "ocr.process",
+] as const;
+
+export type DocumentDlqJobKind = (typeof DOCUMENT_DLQ_JOB_KINDS)[number];
+
+function isDocumentDlqJobKind(kind: JobKind): kind is DocumentDlqJobKind {
+  return (DOCUMENT_DLQ_JOB_KINDS as readonly JobKind[]).includes(kind);
+}
+
+/**
+ * `document.analyze` and `document.index` deliberately share one source
+ * queue. OCR has its own source/DLQ pair because an OCR retry must never
+ * consume document-analysis capacity.
+ */
+export function expectedDocumentDlqQueueName(
+  kind: DocumentDlqJobKind,
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  const sourceKind = kind === "document.index" ? "document.analyze" : kind;
+  return `${expectedQueueName(sourceKind, environment)}-dlq`;
+}
+
+export function expectedDocumentAnalysisDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedDocumentDlqQueueName("document.analyze", environment);
+}
+
+export function expectedOcrProcessingDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedDocumentDlqQueueName("ocr.process", environment);
+}
+
+function documentDlqKindsForQueue(
+  queueName: string,
+  environment: PlatformJobEnv["APP_ENV"],
+): readonly DocumentDlqJobKind[] | null {
+  if (queueName === expectedDocumentAnalysisDlqQueueName(environment)) {
+    return ["document.analyze", "document.index"];
+  }
+  if (queueName === expectedOcrProcessingDlqQueueName(environment)) {
+    return ["ocr.process"];
+  }
+  return null;
+}
+
 function operationalError(error: unknown): OperationalError {
   if (error instanceof SafeJobError) {
     return { code: error.code, retryable: error.retryable };
@@ -991,6 +1046,259 @@ async function executeJob(
   throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
 }
 
+type DocumentDlqTerminalization =
+  | "terminalized"
+  | "already_terminal"
+  | "busy"
+  | "unmatched";
+
+/**
+ * Cloudflare has already exhausted the source queue retries before a message
+ * reaches this consumer. Only the durable execution ledger becomes terminal:
+ * the analysis, OCR extraction, or document-index record stays retryable so
+ * the existing audited operational redrive can safely re-run it. We also
+ * preserve the root error_code on job_runs; `dead_lettered` is the truthful
+ * retry-exhausted state and must not replace the provider/scanner/D1 cause.
+ */
+async function terminalizeDocumentDlqJob(
+  env: PlatformJobEnv,
+  envelope: JobEnvelope,
+  now: string,
+): Promise<DocumentDlqTerminalization> {
+  if (!isDocumentDlqJobKind(envelope.kind)) return "unmatched";
+
+  const envelopeDigest = await envelopeHash(envelope);
+  const sourceQueue = expectedQueueName(envelope.kind, env.APP_ENV);
+  const exactBindings = [
+    envelope.jobId,
+    envelope.idempotencyKey,
+    envelope.kind,
+    envelope.subjectId,
+    envelope.workspaceId!,
+    envelope.correlationId,
+    envelopeDigest,
+    sourceQueue,
+  ];
+
+  const result = await env.DB.prepare(`
+    UPDATE job_runs
+    SET status='dead_lettered',
+        lease_owner=NULL,
+        lease_expires_at=NULL,
+        next_attempt_at=NULL,
+        error_code=COALESCE(error_code,'JOB_TRANSIENT_FAILURE'),
+        finished_at=?,
+        updated_at=?
+    WHERE id=?
+      AND idempotency_key=?
+      AND job_type=?
+      AND subject_id=?
+      AND workspace_id=?
+      AND correlation_id=?
+      AND envelope_hash=?
+      AND queue_name=?
+      AND status IN ('running','retrying')
+      AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+  `).bind(
+    now,
+    now,
+    ...exactBindings,
+    now,
+  ).run();
+  if (Number(result.meta.changes ?? 0) === 1) return "terminalized";
+
+  const job = await env.DB.prepare(`
+    SELECT status,lease_expires_at AS leaseExpiresAt
+    FROM job_runs
+    WHERE id=?
+      AND idempotency_key=?
+      AND job_type=?
+      AND subject_id=?
+      AND workspace_id=?
+      AND correlation_id=?
+      AND envelope_hash=?
+      AND queue_name=?
+    LIMIT 1
+  `).bind(...exactBindings).first<{
+    status: string;
+    leaseExpiresAt: string | null;
+  }>();
+  if (!job) return "unmatched";
+  if (["completed", "rejected", "dead_lettered"].includes(job.status)) {
+    return "already_terminal";
+  }
+  if (
+    job.leaseExpiresAt
+    && Number.isFinite(Date.parse(job.leaseExpiresAt))
+    && Date.parse(job.leaseExpiresAt) > Date.parse(now)
+  ) {
+    return "busy";
+  }
+  return ['running', 'retrying'].includes(job.status) ? "busy" : "unmatched";
+}
+
+async function recordDocumentDlqEvidence(
+  env: PlatformJobEnv,
+  startedAt: number,
+  safeErrorCode: "DLQ_BACKLOG" | "DLQ_INVALID_MESSAGE" | "DLQ_UNMATCHED_MESSAGE" = "DLQ_BACKLOG",
+): Promise<void> {
+  // A DLQ delivery is direct, content-free evidence that the source consumer
+  // exhausted its configured retries. This is intentionally not inferred from
+  // configuration or a source-queue metric.
+  await recordDependencyHealthEvidence(env, {
+    key: "queue_dlq",
+    state: "degraded",
+    safeErrorCode,
+    evidenceKind: "integration_event",
+    startedAt,
+  });
+}
+
+async function processDocumentDlqMessage(
+  queueName: string,
+  message: Message<unknown>,
+  env: PlatformJobEnv,
+  allowedKinds: readonly DocumentDlqJobKind[],
+): Promise<void> {
+  const startedAt = Date.now();
+  const parsed = jobEnvelopeSchema.safeParse(message.body);
+  if (!parsed.success) {
+    await recordDocumentDlqEvidence(env, startedAt, "DLQ_INVALID_MESSAGE");
+    logEvent("error", {
+      event: "queue.dlq_invalid_message",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      errorCode: "JOB_VALIDATION_FAILED",
+    });
+    // Do not blind-ack an opaque DLQ record. This consumer has bounded
+    // retries, while scheduled reconciliation can still terminalize a known
+    // durable job after its source delivery has demonstrably gone stale.
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+
+  const envelope = parsed.data;
+  const documentKind = envelope.kind;
+  if (!isDocumentDlqJobKind(documentKind)) {
+    await recordDocumentDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+    logEvent("error", {
+      event: "queue.dlq_unexpected_kind",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_QUEUE_MISMATCH",
+    });
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+  if (!allowedKinds.includes(documentKind)) {
+    await recordDocumentDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+    logEvent("error", {
+      event: "queue.dlq_unexpected_kind",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_QUEUE_MISMATCH",
+    });
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+
+  let outcome: DocumentDlqTerminalization;
+  try {
+    outcome = await terminalizeDocumentDlqJob(
+      env,
+      envelope,
+      new Date().toISOString(),
+    );
+  } catch {
+    await recordDocumentDlqEvidence(env, startedAt);
+    const delaySeconds = retryDelay(message.attempts);
+    logEvent("error", {
+      event: "queue.dlq_terminalization_retrying",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_TRANSIENT_FAILURE",
+      attempt: message.attempts,
+    });
+    message.retry({ delaySeconds });
+    return;
+  }
+
+  if (outcome === "busy") {
+    await recordDocumentDlqEvidence(env, startedAt);
+    const delaySeconds = retryDelay(message.attempts);
+    logEvent("error", {
+      event: "queue.dlq_terminalization_busy",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_LEASE_LOST",
+      attempt: message.attempts,
+    });
+    message.retry({ delaySeconds });
+    return;
+  }
+
+  if (outcome === "unmatched") {
+    await recordDocumentDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+    // A malformed or orphaned DLQ payload must not be silently discarded.
+    // Keeping it retryable gives scheduled reconciliation a chance to fence a
+    // matching durable run that becomes visible after a transient D1 delay.
+    const delaySeconds = retryDelay(message.attempts);
+    logEvent("error", {
+      event: "queue.dlq_terminalization_unmatched",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_IDEMPOTENCY_CONFLICT",
+      attempt: message.attempts,
+    });
+    message.retry({ delaySeconds });
+    return;
+  }
+
+  await recordDocumentDlqEvidence(env, startedAt);
+
+  writeMetric(env, {
+    queueName,
+    kind: envelope.kind,
+    status: outcome,
+    durationMs: Date.now() - startedAt,
+    correlationId: envelope.correlationId,
+  });
+  logEvent(outcome === "terminalized" ? "error" : "info", {
+    event: outcome === "terminalized"
+      ? "queue.dlq_terminalized"
+      : "queue.dlq_already_terminal",
+    environment: env.APP_ENV,
+    queue: queueName,
+    messageId: message.id,
+    correlationId: envelope.correlationId,
+    jobId: envelope.jobId,
+    jobKind: envelope.kind,
+    status: outcome,
+  });
+  message.ack();
+}
+
 async function processMessage(
   queueName: string,
   message: Message<unknown>,
@@ -1216,6 +1524,14 @@ export async function handleQueue(
       errorCode: "JOB_SCHEMA_VERSION_MISMATCH",
     });
     batch.retryAll({ delaySeconds: 300 });
+    return;
+  }
+
+  const dlqKinds = documentDlqKindsForQueue(batch.queue, env.APP_ENV);
+  if (dlqKinds) {
+    for (const message of batch.messages) {
+      await processDocumentDlqMessage(batch.queue, message, env, dlqKinds);
+    }
     return;
   }
 

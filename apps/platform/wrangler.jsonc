@@ -63,8 +63,16 @@
         "queue": "development-document-analysis"
       },
       {
+        "binding": "DOCUMENT_ANALYSIS_DLQ",
+        "queue": "development-document-analysis-dlq"
+      },
+      {
         "binding": "OCR_PROCESSING_QUEUE",
         "queue": "development-ocr-processing"
+      },
+      {
+        "binding": "OCR_PROCESSING_DLQ",
+        "queue": "development-ocr-processing-dlq"
       },
       {
         "binding": "DOCUMENT_EXPORT_QUEUE",
@@ -235,8 +243,16 @@
             "queue": "staging-document-analysis"
           },
           {
+            "binding": "DOCUMENT_ANALYSIS_DLQ",
+            "queue": "staging-document-analysis-dlq"
+          },
+          {
             "binding": "OCR_PROCESSING_QUEUE",
             "queue": "staging-ocr-processing"
+          },
+          {
+            "binding": "OCR_PROCESSING_DLQ",
+            "queue": "staging-ocr-processing-dlq"
           },
           {
             "binding": "DOCUMENT_EXPORT_QUEUE",
@@ -274,6 +290,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "staging-document-analysis-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "staging-ocr-processing",
             "max_batch_size": 1,
             "max_batch_timeout": 5,
@@ -281,6 +305,14 @@
             "dead_letter_queue": "staging-ocr-processing-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "staging-ocr-processing-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
           },
           {
             "queue": "staging-document-export",
@@ -488,8 +520,16 @@
             "queue": "production-document-analysis"
           },
           {
+            "binding": "DOCUMENT_ANALYSIS_DLQ",
+            "queue": "production-document-analysis-dlq"
+          },
+          {
             "binding": "OCR_PROCESSING_QUEUE",
             "queue": "production-ocr-processing"
+          },
+          {
+            "binding": "OCR_PROCESSING_DLQ",
+            "queue": "production-ocr-processing-dlq"
           },
           {
             "binding": "DOCUMENT_EXPORT_QUEUE",
@@ -527,6 +567,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "production-document-analysis-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "production-ocr-processing",
             "max_batch_size": 1,
             "max_batch_timeout": 5,
@@ -534,6 +582,14 @@
             "dead_letter_queue": "production-ocr-processing-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "production-ocr-processing-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
           },
           {
             "queue": "production-document-export",
