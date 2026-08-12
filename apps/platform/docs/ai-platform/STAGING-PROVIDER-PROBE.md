@@ -35,9 +35,21 @@ their documented retention; the append-only SLO ledger is not pruned by that
 cleanup.
 
 `MALWARE_SCANNER_PROBE_ENABLED` and
-`STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED` are independent feature flags. This
-provider flag does not enable scanner or document-analysis work. Roll back by
-turning this flag off or restoring the prior staging Worker; leave additive D1
-evidence intact. A private backup and isolated restore are required before the
-new migrations are applied. See
+`STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED` are independent staging-only feature
+flags. The source staging configuration enables both pending its next staging
+deployment, while production keeps both literal values at `false`. They run
+only after the regular outbox work,
+use a deterministic non-user tenant and private R2 objects, and remove the
+synthetic document/object projections when the check ends. The scanner probe
+uses EICAR only; the document probe uses a synthetic DOCX and the normal
+scanner → analysis handlers. A failed scanner or analysis remains fail-closed
+and records degraded evidence rather than a false operational state.
+
+The document probe makes one bounded live provider attempt per scheduled
+execution, so it is a staging validation control, not a production health
+claim. Roll back either control by setting the corresponding staging flag to
+`false` or restoring the prior staging Worker; production remains inert even
+if a flag value were misconfigured because the runtime additionally requires
+`APP_ENV=staging`. Leave additive D1 evidence intact. A private backup and
+isolated restore are required before any new migrations are applied. See
 [AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).

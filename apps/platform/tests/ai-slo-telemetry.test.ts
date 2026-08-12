@@ -45,6 +45,31 @@ function completedEvent(index: number, input: {
   };
 }
 
+function failedEvent(index: number, input: { endToEndMs: number; occurredAt?: string }) {
+  return {
+    correlationId: correlation(index),
+    environment: "staging" as const,
+    authKind: "authenticated" as const,
+    answerMode: "short" as const,
+    reasoningMode: "fast" as const,
+    provider: "openai" as const,
+    model: "gpt-4.1-mini",
+    outcome: "timed_out" as const,
+    authLatencyMs: 10,
+    contextLatencyMs: 20,
+    retrievalLatencyMs: 30,
+    providerTtftMs: null,
+    providerTotalMs: null,
+    validationLatencyMs: null,
+    persistenceLatencyMs: null,
+    endToEndMs: input.endToEndMs,
+    firstUsefulStage: "none" as const,
+    firstUsefulLatencyMs: null,
+    safeErrorCode: "AI_SLO_TIMEOUT" as const,
+    ...(input.occurredAt ? { occurredAt: input.occurredAt } : {}),
+  };
+}
+
 test("0113 persists a one-way correlation hash and rejects content or account fields", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -116,6 +141,7 @@ test("0113 computes exact bounded p50/p95 SLO aggregates and includes failed req
       now,
     });
     assert.equal(aggregate.sufficientSample, true);
+    assert.equal(aggregate.sampleStatus, "sufficient");
     assert.equal(aggregate.truncated, false);
     assert.equal(aggregate.sampledEvents, 5);
     assert.equal(aggregate.firstUseful.p50Ms, 3_000);
@@ -124,11 +150,14 @@ test("0113 computes exact bounded p50/p95 SLO aggregates and includes failed req
     assert.equal(aggregate.firstUseful.evaluated, 5);
     assert.equal(aggregate.firstUseful.passed, 4);
     assert.equal(aggregate.firstUseful.passRate, 0.8);
+    assert.equal(aggregate.firstUseful.sampleStatus, "sufficient");
+    assert.equal(aggregate.firstUseful.excludedUnmeasurable, 0);
     assert.equal(aggregate.fullResponse.p50Ms, 3_000);
     assert.equal(aggregate.fullResponse.p95Ms, 33_000);
     assert.equal(aggregate.fullResponse.targetMs, AI_FULL_RESPONSE_SLO_MS);
     assert.equal(aggregate.fullResponse.passed, 4);
     assert.equal(aggregate.fullResponse.passRate, 0.8);
+    assert.equal(aggregate.fullResponse.sampleStatus, "sufficient");
     assert.equal(aggregate.stages.providerTtft.p95Ms, 40);
     assert.deepEqual(aggregate.outcomes, {
       completed: 5,
@@ -175,6 +204,142 @@ test("0113 reports insufficient samples and bounds a staging synthetic probe to 
       environment: "development",
       requestKind: "staging_synthetic_probe",
     }).success, false);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("non-streaming staging probes contribute to full-response SLO without fabricating first useful content", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const record = await recordStagingAiSloProbe({
+      db: d1,
+      correlationId: createStagingAiSloProbeCorrelationId(),
+      answerMode: "short",
+      reasoningMode: "fast",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      outcome: "completed",
+      endToEndMs: 7_000,
+      firstUsefulStage: "none",
+      firstUsefulLatencyMs: null,
+      now,
+    });
+    assert.equal(record.firstUsefulPass, false);
+    assert.equal(record.fullResponsePass, true);
+    const aggregate = await aggregateAiSloTelemetry({
+      db: d1,
+      environment: "staging",
+      requestKind: "staging_synthetic_probe",
+      from: new Date(now.getTime() - 1_000).toISOString(),
+      until: new Date(now.getTime() + 1_000).toISOString(),
+      minimumSampleSize: 1,
+      now,
+    });
+    assert.equal(aggregate.firstUseful.observed, 0);
+    assert.equal(aggregate.firstUseful.p95Ms, null);
+    assert.equal(aggregate.firstUseful.evaluated, 0);
+    assert.equal(aggregate.firstUseful.excludedUnmeasurable, 1);
+    assert.equal(aggregate.firstUseful.sampleStatus, "unmeasurable");
+    assert.equal(aggregate.firstUseful.sufficientSample, false);
+    assert.equal(aggregate.fullResponse.p95Ms, 7_000);
+    assert.equal(aggregate.fullResponse.sampleStatus, "sufficient");
+    assert.equal(aggregate.sufficientSample, false);
+    assert.equal(aggregate.sampleStatus, "insufficient");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("percentiles use completed responses while interactive failures remain in each SLO pass-rate denominator", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await recordAiSloTelemetry({
+      db: d1,
+      now,
+      value: completedEvent(201, {
+        endToEndMs: 1_000,
+        firstUsefulLatencyMs: 500,
+        occurredAt: now.toISOString(),
+      }),
+    });
+    await recordAiSloTelemetry({
+      db: d1,
+      now,
+      value: completedEvent(202, {
+        endToEndMs: 2_000,
+        firstUsefulLatencyMs: 700,
+        occurredAt: new Date(now.getTime() + 1_000).toISOString(),
+      }),
+    });
+    await recordAiSloTelemetry({
+      db: d1,
+      now,
+      value: failedEvent(203, {
+        endToEndMs: 29_000,
+        occurredAt: new Date(now.getTime() + 2_000).toISOString(),
+      }),
+    });
+
+    const aggregate = await aggregateAiSloTelemetry({
+      db: d1,
+      environment: "staging",
+      from: now.toISOString(),
+      until: new Date(now.getTime() + 10_000).toISOString(),
+      minimumSampleSize: 2,
+      now,
+    });
+
+    assert.equal(aggregate.fullResponse.observed, 2);
+    assert.equal(aggregate.fullResponse.evaluated, 3);
+    assert.equal(aggregate.fullResponse.missingMeasurements, 1);
+    assert.equal(aggregate.fullResponse.p95Ms, 2_000);
+    assert.equal(aggregate.fullResponse.passed, 2);
+    assert.equal(aggregate.fullResponse.passRate, 2 / 3);
+    assert.equal(aggregate.firstUseful.observed, 2);
+    assert.equal(aggregate.firstUseful.evaluated, 3);
+    assert.equal(aggregate.firstUseful.missingMeasurements, 1);
+    assert.equal(aggregate.firstUseful.p95Ms, 700);
+    assert.equal(aggregate.firstUseful.passed, 2);
+    assert.equal(aggregate.firstUseful.passRate, 2 / 3);
+    assert.equal(aggregate.sufficientSample, true);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("unmeasurable non-streaming probes cannot satisfy the aggregate first-useful sample gate", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await Promise.all([1, 2, 3].map((index) => recordStagingAiSloProbe({
+      db: d1,
+      correlationId: createStagingAiSloProbeCorrelationId(),
+      answerMode: "short",
+      reasoningMode: "fast",
+      provider: "anthropic",
+      model: "claude-sonnet-4-6",
+      outcome: "completed",
+      endToEndMs: 1_000 + index,
+      firstUsefulStage: "none",
+      firstUsefulLatencyMs: null,
+      now,
+    })));
+    const aggregate = await aggregateAiSloTelemetry({
+      db: d1,
+      environment: "staging",
+      requestKind: "staging_synthetic_probe",
+      from: new Date(now.getTime() - 1_000).toISOString(),
+      until: new Date(now.getTime() + 1_000).toISOString(),
+      minimumSampleSize: 3,
+      now,
+    });
+    assert.equal(aggregate.fullResponse.sufficientSample, true);
+    assert.equal(aggregate.firstUseful.observed, 0);
+    assert.equal(aggregate.firstUseful.evaluated, 0);
+    assert.equal(aggregate.firstUseful.excludedUnmeasurable, 3);
+    assert.equal(aggregate.firstUseful.sampleStatus, "unmeasurable");
+    assert.equal(aggregate.sufficientSample, false);
+    assert.equal(aggregate.sampleStatus, "insufficient");
   } finally {
     sqlite.close();
   }

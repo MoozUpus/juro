@@ -1098,6 +1098,9 @@ test("legislation monitoring never auto-publishes or invents feed entries", asyn
   assert.match(source, /s\.content_sha256 IS NOT NULL/);
   assert.match(source, /automaticPublication: false/);
   assert.match(source, /isTrustedVerifiedLegalSource/);
+  assert.match(source, /isFreshTrustedMonitoringSource/);
+  assert.match(source, /controlledBeta: true/);
+  assert.match(source, /summarizeMonitoringFreshness/);
   assert.match(source, /trustedSourceStatusRows\.length/);
 });
 

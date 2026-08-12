@@ -342,8 +342,13 @@ async function executeProviderProbe(input: {
         || result.data.confirmedFindings.length !== 0) {
         throw new ProviderProbeStageError("PROBE_LEGAL_BOUNDARY_FAILED");
       }
-      timing.firstUsefulStage = "provider_validated";
-      timing.firstUsefulLatencyMs = Math.max(0, Date.now() - execution.startedAt);
+      // Anthropic currently returns one complete non-streaming structured
+      // response. That proves bounded provider completion, but it has no
+      // independently observable first useful content. Keep this probe out of
+      // the 5-second first-useful SLO instead of recording terminal arrival as
+      // a fake token/TTFT measurement.
+      timing.firstUsefulStage = "none";
+      timing.firstUsefulLatencyMs = null;
       stage.complete();
       return {
         model: result.model,

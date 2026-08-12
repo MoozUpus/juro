@@ -84,7 +84,11 @@ export const aiSloTelemetryEventSchema = z.object({
       message: "AI_SLO_FIRST_USEFUL_SHAPE_INVALID",
     });
   }
-  if (value.outcome === "completed" && !hasFirstUseful) {
+  // A non-streaming provider probe may complete a connectivity check without
+  // possessing a genuine first-useful-content measurement. It is valid for
+  // the 30-second completion SLO, but must remain excluded from the 5-second
+  // first-useful metric rather than inventing a terminal timestamp.
+  if (value.outcome === "completed" && !hasFirstUseful && value.requestKind !== "staging_synthetic_probe") {
     context.addIssue({
       code: "custom",
       path: ["firstUsefulStage"],
@@ -189,9 +193,21 @@ export type AiSloTelemetryRecord = {
 };
 
 export type AiSloMetricSummary = {
+  /** Numeric observations that can be used to calculate a percentile. */
   observed: number;
-  /** All requests evaluated for pass/fail, including requests with no value. */
+  /** Requests in this metric's denominator, including failed requests. */
   evaluated: number;
+  /**
+   * Events intentionally outside this metric's measurement contract. Today
+   * this is limited to a completed non-streaming staging probe, for which a
+   * real first-useful-content timestamp does not exist.
+   */
+  excludedUnmeasurable: number;
+  /** Evaluated requests that did not produce a numeric observation. */
+  missingMeasurements: number;
+  minimumSampleSize: number;
+  sufficientSample: boolean;
+  sampleStatus: "sufficient" | "insufficient" | "unmeasurable" | "truncated" | "invalid_rows";
   p50Ms: number | null;
   p95Ms: number | null;
   targetMs: number | null;
@@ -399,13 +415,40 @@ function percentile(values: readonly number[], fraction: number): number | null 
 
 function metricSummary(
   values: readonly number[],
-  options: { targetMs?: number; passValues?: readonly number[]; evaluated?: number } = {},
+  options: {
+    targetMs?: number;
+    passValues?: readonly number[];
+    evaluated?: number;
+    excludedUnmeasurable?: number;
+    minimumSampleSize: number;
+    truncated: boolean;
+    discardedEvents: number;
+  },
 ): AiSloMetricSummary {
   const passed = options.passValues ? options.passValues.reduce((sum, value) => sum + value, 0) : null;
   const evaluated = options.evaluated ?? values.length;
+  const excludedUnmeasurable = options.excludedUnmeasurable ?? 0;
+  const missingMeasurements = Math.max(0, evaluated - values.length);
+  const sufficientSample = !options.truncated
+    && options.discardedEvents === 0
+    && values.length >= options.minimumSampleSize;
+  const sampleStatus = options.truncated
+    ? "truncated"
+    : options.discardedEvents > 0
+      ? "invalid_rows"
+      : sufficientSample
+        ? "sufficient"
+        : values.length === 0 && evaluated === 0 && excludedUnmeasurable > 0
+          ? "unmeasurable"
+          : "insufficient";
   return {
     observed: values.length,
     evaluated,
+    excludedUnmeasurable,
+    missingMeasurements,
+    minimumSampleSize: options.minimumSampleSize,
+    sufficientSample,
+    sampleStatus,
     p50Ms: percentile(values, 0.5),
     p95Ms: percentile(values, 0.95),
     targetMs: options.targetMs ?? null,
@@ -482,7 +525,6 @@ export async function aggregateAiSloTelemetry(input: {
   const totalEvents = Number(count?.count ?? 0);
   const truncated = totalEvents > maxWindowEvents;
   const discardedEvents = rowsResult.results.length - rows.length;
-  const sufficientSample = !truncated && discardedEvents === 0 && rows.length >= minimumSampleSize;
   const outcomes: Record<(typeof aiSloOutcomes)[number], number> = {
     completed: 0,
     failed: 0,
@@ -490,7 +532,48 @@ export async function aggregateAiSloTelemetry(input: {
     cancelled: 0,
   };
   for (const row of rows) outcomes[row.outcome] += 1;
+  const explicitlyUnmeasurableFirstUsefulRows = rows.filter((row) => (
+    row.requestKind === "staging_synthetic_probe"
+    && row.outcome === "completed"
+    && row.firstUsefulStage === "none"
+    && row.firstUsefulLatencyMs === null
+  ));
   const firstUsefulRows = rows.filter((row) => row.firstUsefulLatencyMs !== null);
+  const firstUsefulEvaluatedRows = rows.filter((row) => !explicitlyUnmeasurableFirstUsefulRows.includes(row));
+  // A full-response percentile describes completed responses only. Failed or
+  // cancelled runs remain in the pass-rate denominator but their terminal
+  // duration is not a completed-response latency sample.
+  const completedResponseRows = rows.filter((row) => row.outcome === "completed");
+  const firstUseful = metricSummary(values(firstUsefulRows, "firstUsefulLatencyMs"), {
+    targetMs: AI_FIRST_USEFUL_SLO_MS,
+    passValues: firstUsefulEvaluatedRows.map((row) => row.firstUsefulPass),
+    evaluated: firstUsefulEvaluatedRows.length,
+    excludedUnmeasurable: explicitlyUnmeasurableFirstUsefulRows.length,
+    minimumSampleSize,
+    truncated,
+    discardedEvents,
+  });
+  const fullResponse = metricSummary(values(completedResponseRows, "endToEndMs"), {
+    targetMs: AI_FULL_RESPONSE_SLO_MS,
+    passValues: rows.map((row) => row.fullResponsePass),
+    evaluated: rows.length,
+    minimumSampleSize,
+    truncated,
+    discardedEvents,
+  });
+  // A top-level green sample must be adequate for both user-facing metrics.
+  // In particular, a batch of non-streaming Anthropic probes can validate
+  // completion but cannot make the first-useful SLO statistically sufficient.
+  const sufficientSample = firstUseful.sufficientSample && fullResponse.sufficientSample;
+  const stageSummary = (key: keyof Pick<AiSloTelemetryRow,
+    "authLatencyMs" | "contextLatencyMs" | "retrievalLatencyMs" | "providerTtftMs" | "providerTotalMs" |
+    "validationLatencyMs" | "persistenceLatencyMs"
+  >) => metricSummary(values(rows, key), {
+    minimumSampleSize,
+    truncated,
+    discardedEvents,
+    evaluated: rows.length,
+  });
   return {
     environment: input.environment,
     requestKind: input.requestKind ?? null,
@@ -509,24 +592,16 @@ export async function aggregateAiSloTelemetry(input: {
         : sufficientSample
           ? "sufficient"
           : "insufficient",
-    firstUseful: metricSummary(values(firstUsefulRows, "firstUsefulLatencyMs"), {
-      targetMs: AI_FIRST_USEFUL_SLO_MS,
-      passValues: rows.map((row) => row.firstUsefulPass),
-      evaluated: rows.length,
-    }),
-    fullResponse: metricSummary(values(rows, "endToEndMs"), {
-      targetMs: AI_FULL_RESPONSE_SLO_MS,
-      passValues: rows.map((row) => row.fullResponsePass),
-      evaluated: rows.length,
-    }),
+    firstUseful,
+    fullResponse,
     stages: {
-      auth: metricSummary(values(rows, "authLatencyMs")),
-      context: metricSummary(values(rows, "contextLatencyMs")),
-      retrieval: metricSummary(values(rows, "retrievalLatencyMs")),
-      providerTtft: metricSummary(values(rows, "providerTtftMs")),
-      providerTotal: metricSummary(values(rows, "providerTotalMs")),
-      validation: metricSummary(values(rows, "validationLatencyMs")),
-      persistence: metricSummary(values(rows, "persistenceLatencyMs")),
+      auth: stageSummary("authLatencyMs"),
+      context: stageSummary("contextLatencyMs"),
+      retrieval: stageSummary("retrievalLatencyMs"),
+      providerTtft: stageSummary("providerTtftMs"),
+      providerTotal: stageSummary("providerTotalMs"),
+      validation: stageSummary("validationLatencyMs"),
+      persistence: stageSummary("persistenceLatencyMs"),
     },
     outcomes,
   };

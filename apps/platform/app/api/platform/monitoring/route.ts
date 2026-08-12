@@ -5,6 +5,10 @@ import {
   filterTrustedVerifiedLegalSources,
   isTrustedVerifiedLegalSource,
 } from "../../../../lib/legal/source-trust";
+import {
+  isFreshTrustedMonitoringSource,
+  summarizeMonitoringFreshness,
+} from "../../../../lib/legal/monitoring-freshness";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const topics = new Set([
@@ -78,8 +82,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
   } : null;
   const selectedTopics = new Set(parsedPreference?.topics ?? []);
   const selectedAudience = String(parsedPreference?.audience || "");
-  const trustedSourceStatusRows = filterTrustedVerifiedLegalSources(
-    sourceCheck.results.map((raw) => {
+  const sourceStatusRows = sourceCheck.results.map((raw) => {
       const item = raw as Record<string, unknown>;
       return {
         ...item,
@@ -91,14 +94,10 @@ export const GET = withApiErrors(async function GET(request: Request) {
         contentSha256: String(item.contentSha256 || ""),
         lastCheckedAt: String(item.lastCheckedAt || ""),
       };
-    }),
-  );
-  const lastCheckedAt = trustedSourceStatusRows.reduce<string | null>(
-    (latest, source) => !latest || source.lastCheckedAt > latest
-      ? source.lastCheckedAt
-      : latest,
-    null,
-  );
+    });
+  const trustedSourceStatusRows = filterTrustedVerifiedLegalSources(sourceStatusRows);
+  const now = new Date();
+  const freshness = summarizeMonitoringFreshness(sourceStatusRows, now);
   const env = runtimeEnv();
   return response({
     preference: parsedPreference,
@@ -113,6 +112,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
           verificationState: String(item.verificationState || ""),
           sourceVerifiedAt: String(item.sourceVerifiedAt || ""),
           sourceContentSha256: String(item.sourceContentSha256 || ""),
+          sourceLastCheckedAt: String(item.sourceLastCheckedAt || ""),
           title: locale === "uz" ? (item.titleUz || item.titleOriginal) : (item.titleRu || item.titleOriginal),
           summary: locale === "uz" ? item.summaryUz : item.summaryRu,
           changeSummary: locale === "uz" ? item.changeSummaryUz : item.changeSummaryRu,
@@ -131,10 +131,19 @@ export const GET = withApiErrors(async function GET(request: Request) {
             verifiedAt: String(item.sourceVerifiedAt || ""),
             contentSha256: String(item.sourceContentSha256 || ""),
           });
+          const isFresh = isFreshTrustedMonitoringSource({
+            officialUrl: String(item.officialUrl),
+            status: String(item.sourceStatus || ""),
+            sourceType: String(item.sourceType || ""),
+            verificationState: String(item.verificationState || ""),
+            verifiedAt: String(item.sourceVerifiedAt || ""),
+            contentSha256: String(item.sourceContentSha256 || ""),
+            lastCheckedAt: String(item.sourceLastCheckedAt || ""),
+          }, now);
           const matchesTopic = !selectedTopics.size || item.topics.some((topic: string) => selectedTopics.has(topic));
           const matchesAudience = !selectedAudience || item.affectedAudiences.length === 0
             || item.affectedAudiences.includes(selectedAudience);
-          return hasSafeSource && matchesTopic && matchesAudience;
+          return hasSafeSource && isFresh && matchesTopic && matchesAudience;
         } catch {
           return false;
         }
@@ -142,9 +151,12 @@ export const GET = withApiErrors(async function GET(request: Request) {
     status: {
       integration: env.LEGISLATION_FEED_PROVIDER ? "adapter_pending" : "not_configured",
       automaticPublication: false,
+      controlledBeta: true,
       emailConfigured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
-      lastCheckedAt,
-      verifiedSourceCount: trustedSourceStatusRows.length,
+      lastCheckedAt: freshness.latestCheckedAt,
+      verifiedSourceCount: freshness.freshSourceCount,
+      freshness,
+      trustedSourceCount: trustedSourceStatusRows.length,
     },
   });
 });

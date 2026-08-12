@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Save,
   Scale,
+  ShieldAlert,
   ShieldCheck,
   UserRound,
 } from "lucide-react";
@@ -53,9 +54,19 @@ type Preference = {
 type MonitoringStatus = {
   integration: "not_configured" | "adapter_pending";
   automaticPublication: false;
+  controlledBeta: boolean;
   emailConfigured: boolean;
   lastCheckedAt: string | null;
   verifiedSourceCount: number;
+  trustedSourceCount: number;
+  freshness: {
+    state: "fresh" | "stale" | "unavailable";
+    latestCheckedAt: string | null;
+    ageDays: number | null;
+    maxAgeDays: number;
+    freshSourceCount: number;
+    trustedSourceCount: number;
+  };
 };
 type LegislationUpdate = {
   id: string;
@@ -81,7 +92,7 @@ const copy = {
   ru: {
     eyebrow: "JURO · проверяемые обновления",
     title: "Мониторинг законодательства",
-    intro: "Выберите области права. JURO показывает только опубликованные записи, связанные с проверенным официальным источником.",
+    intro: "Выберите области права. В контролируемой бета-версии JURO показывает только опубликованные записи с недавно проверенным официальным источником.",
     settings: "Настройки мониторинга",
     audience: "Кого затрагивают обновления",
     individual: "Физическое лицо",
@@ -101,13 +112,18 @@ const copy = {
     saved: "Настройки мониторинга сохранены.",
     integrationOff: "Автоматическая интеграция с официальной лентой пока не подключена.",
     integrationPending: "Адаптер официальной ленты настроен, но автоматическая публикация ещё не разрешена.",
-    honestStatus: "Автопубликация отключена. Ниже могут появляться только записи, вручную прошедшие проверку источника.",
-    feed: "Подтверждённые обновления",
-    empty: "Подтверждённых обновлений по выбранным темам пока нет",
+    honestStatus: "Автопубликация отключена. Лента — контролируемая бета-версия: она не доказывает полноту законодательства и показывает только записи с актуальной ручной проверкой источника.",
+    controlledBeta: "Контролируемая бета-версия",
+    fresh: "Показаны только свежие проверенные источники",
+    stale: "Публикация скрыта: проверка источников устарела",
+    unavailable: "Публикация скрыта: свежих проверенных источников нет",
+    coverage: "Покрытие не является полным реестром законодательства.",
+    feed: "Обновления · бета-версия",
+    empty: "Свежих проверенных обновлений по выбранным темам пока нет",
     emptyHint: "JURO не создаёт демонстрационную ленту и не подставляет вымышленные даты.",
     lastCheck: "Последняя проверка источников",
     never: "ещё не выполнялась",
-    sources: "Проверенных источников",
+    sources: "Свежих проверенных источников",
     adopted: "Принят",
     effective: "Вступает в силу",
     changed: "Что изменилось",
@@ -122,7 +138,7 @@ const copy = {
   uz: {
     eyebrow: "JURO · tekshiriladigan yangilanishlar",
     title: "Qonunchilik monitoringi",
-    intro: "Huquq sohalarini tanlang. JURO faqat tekshirilgan rasmiy manba bilan bog‘langan e’lon qilingan yozuvlarni ko‘rsatadi.",
+    intro: "Huquq sohalarini tanlang. Nazorat qilinadigan beta-versiyada JURO faqat yaqinda tekshirilgan rasmiy manbaga bog‘langan e’lon qilingan yozuvlarni ko‘rsatadi.",
     settings: "Monitoring sozlamalari",
     audience: "Yangilanishlar kimga taalluqli",
     individual: "Jismoniy shaxs",
@@ -142,13 +158,18 @@ const copy = {
     saved: "Monitoring sozlamalari saqlandi.",
     integrationOff: "Rasmiy lenta bilan avtomatik integratsiya hali ulanmagan.",
     integrationPending: "Rasmiy lenta adapteri sozlangan, ammo avtomatik e’lon qilishga hali ruxsat berilmagan.",
-    honestStatus: "Avtomatik e’lon o‘chirilgan. Quyida faqat manbasi qo‘lda tekshirilgan yozuvlar paydo bo‘lishi mumkin.",
-    feed: "Tasdiqlangan yangilanishlar",
-    empty: "Tanlangan mavzular bo‘yicha tasdiqlangan yangilanishlar hozircha yo‘q",
+    honestStatus: "Avtomatik e’lon o‘chirilgan. Lenta — nazorat qilinadigan beta-versiya: u qonunchilik to‘liqligini isbotlamaydi va faqat manbasi yaqinda qo‘lda tekshirilgan yozuvlarni ko‘rsatadi.",
+    controlledBeta: "Nazorat qilinadigan beta-versiya",
+    fresh: "Faqat yangi tekshirilgan manbalar ko‘rsatiladi",
+    stale: "Nashr yashirilgan: manbalar tekshiruvi eskirgan",
+    unavailable: "Nashr yashirilgan: yangi tekshirilgan manbalar yo‘q",
+    coverage: "Qamrov qonunchilikning to‘liq reyestri emas.",
+    feed: "Yangilanishlar · beta-versiya",
+    empty: "Tanlangan mavzular bo‘yicha yangi tekshirilgan yangilanishlar hozircha yo‘q",
     emptyHint: "JURO namoyish lentasini yaratmaydi va soxta sanalarni qo‘ymaydi.",
     lastCheck: "Manbalar oxirgi tekshirilgan vaqt",
     never: "hali bajarilmagan",
-    sources: "Tekshirilgan manbalar",
+    sources: "Yangi tekshirilgan manbalar",
     adopted: "Qabul qilingan",
     effective: "Kuchga kiradi",
     changed: "Nima o‘zgardi",
@@ -179,9 +200,19 @@ const topicLabels: Record<Topic, { ru: string; uz: string }> = {
 const defaultStatus: MonitoringStatus = {
   integration: "not_configured",
   automaticPublication: false,
+  controlledBeta: true,
   emailConfigured: false,
   lastCheckedAt: null,
   verifiedSourceCount: 0,
+  trustedSourceCount: 0,
+  freshness: {
+    state: "unavailable",
+    latestCheckedAt: null,
+    ageDays: null,
+    maxAgeDays: 7,
+    freshSourceCount: 0,
+    trustedSourceCount: 0,
+  },
 };
 
 export function MonitoringClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
@@ -271,7 +302,14 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
       {notice && <p className="monitoring-message success" role="status"><CheckCircle2 />{notice}</p>}
 
       <section className="monitoring-status" aria-label={locale === "ru" ? "Статус интеграции" : "Integratsiya holati"}>
-        <div className="monitoring-status-copy"><ShieldCheck /><div><strong>{status.integration === "not_configured" ? t.integrationOff : t.integrationPending}</strong><p>{t.honestStatus}</p></div></div>
+        <div className="monitoring-status-copy">
+          {status.freshness.state === "fresh" ? <ShieldCheck aria-hidden="true" /> : <ShieldAlert aria-hidden="true" />}
+          <div>
+            <small>{t.controlledBeta}</small>
+            <strong>{status.freshness.state === "fresh" ? t.fresh : status.freshness.state === "stale" ? t.stale : t.unavailable}</strong>
+            <p>{status.integration === "not_configured" ? t.integrationOff : t.integrationPending} {t.honestStatus}</p>
+          </div>
+        </div>
         <dl>
           <div><dt>{t.lastCheck}</dt><dd>{status.lastCheckedAt ? formatDate(status.lastCheckedAt, locale, true) : t.never}</dd></div>
           <div><dt>{t.sources}</dt><dd>{status.verifiedSourceCount}</dd></div>
@@ -317,7 +355,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         </form>
 
         <section className="monitoring-feed">
-          <div className="monitoring-section-heading"><Gavel /><div><h2>{t.feed}</h2><p>{locale === "ru" ? "Только проверенные записи, соответствующие вашим темам." : "Faqat mavzularingizga mos tekshirilgan yozuvlar."}</p></div></div>
+          <div className="monitoring-section-heading"><Gavel /><div><h2>{t.feed}</h2><p>{t.coverage}</p></div></div>
           {loading ? <div className="monitoring-loading"><LoaderCircle className="spin" /><span>{locale === "ru" ? "Проверяем сохранённые записи…" : "Saqlangan yozuvlar tekshirilmoqda…"}</span></div>
             : updates.length ? <div className="monitoring-updates">{updates.map(update => <UpdateCard key={update.id} update={update} locale={locale} />)}</div>
               : <div className="monitoring-empty"><Scale /><h3>{t.empty}</h3><p>{t.emptyHint}</p></div>}
