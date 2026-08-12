@@ -264,11 +264,12 @@ export async function runStagingDocumentAnalysisProbe(
     const scan = await executeMalwareScanJob(env, probeIds.analysisId, probeIds.workspaceId);
     if (scan.status !== "safe") throw new Error("STAGING_DOCUMENT_ANALYSIS_PROBE_SCAN_FAILED");
     stage = "analysis";
-    // One shared, absolute provider deadline prevents a slow Anthropic request
-    // from starting a second full OpenAI window. User analyses retain their
-    // standard recovery behavior; this synthetic lifecycle control is one-shot
-    // by design and records a failure rather than manufacturing a success.
-    const providerOptions = stagingDocumentAnalysisProbeProviderOptions(startedAt);
+    // Scanner verification is a separate pipeline stage and may legitimately
+    // take longer than an AI request. Start the single shared analysis budget
+    // only after the file is safe, so scanner latency cannot pre-expire the
+    // provider before it receives a real chance to run. The analysis itself
+    // still gets exactly one 30-second, no-fallback window.
+    const providerOptions = stagingDocumentAnalysisProbeProviderOptions(Date.now());
     const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId, {
       analyze: (input) => runDocumentAnalysis(input, {
         beforeProviderCall: input.beforeProviderCall,

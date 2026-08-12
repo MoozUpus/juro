@@ -20,3 +20,10 @@ test("document analysis probe shares one bounded deadline and intentionally has 
     fallbackEnabled: false,
   });
 });
+
+test("document analysis budget begins after the independent scanner stage", () => {
+  // The scanner can legitimately take tens of seconds. Its elapsed time must
+  // not reduce the controlled provider window once a file is safely promoted.
+  const analysisStartedAt = 47_000;
+  assert.equal(stagingDocumentAnalysisProbeProviderOptions(analysisStartedAt).deadlineAt, 77_000);
+});
