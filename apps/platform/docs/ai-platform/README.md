@@ -61,6 +61,8 @@ No document in this directory authorizes or implies a production schema, traffic
   source-bound preliminary SSE contract, content-free SLO telemetry,
   evidence-based dependency health, staging-probe controls and open statistical
   and provider-health gates.
+- `PERFORMANCE-BUDGETS.md` — emitted artifact regression guardrails and the
+  explicit boundary between byte budgets and measured Core Web Vitals.
 - `LEGAL-EVALUATION.md` — automated legal-source evidence tests and the still
   unfulfilled 250+50 human-reviewed release matrix.
 - `DOCUMENT-EVALUATION.md` — implemented document-analysis contract evidence

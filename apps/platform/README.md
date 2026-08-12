@@ -48,6 +48,7 @@ staging and production do not declare the bypass binding.
 - `npm run start`: start the built Vinext application
 - `npm test`: build and run rendered, core/security, migration, and Cloudflare tests
 - `npm run validate:artifact`: recheck an existing environment artifact
+- `npm run performance:artifact`: prove emitted artifact-byte budgets have not regressed; this is not a Core Web Vitals measurement
 - `npm run validate:cloudflare:matrix`: build, validate, and Wrangler-dry-run development, staging, and production without deploying
 - `npm run cf:types:check`: prove checked-in Worker binding types match `wrangler.jsonc`
 - `npm run db:generate`: generate Drizzle migrations after schema changes

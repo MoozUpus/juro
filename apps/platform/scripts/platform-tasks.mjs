@@ -656,6 +656,45 @@ async function validateArtifact(environment) {
       ),
     },
   );
+  await runNodeEntry(
+    resolve(projectRoot, "scripts", "verify-artifact-performance-budgets.mjs"),
+    [],
+    {
+      environment: commandEnvironment,
+      label: `${environment} artifact performance-budget verification`,
+      timeoutMs: parseDuration(
+        process.env.SITES_ARTIFACT_TIMEOUT || "2m",
+        "SITES_ARTIFACT_TIMEOUT",
+      ),
+      killAfterMs: parseDuration(
+        process.env.SITES_BUILD_KILL_AFTER || "10s",
+        "SITES_BUILD_KILL_AFTER",
+      ),
+    },
+  );
+}
+
+async function runArtifactPerformanceBudget(args) {
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) {
+    throw new Error("performance-budget accepts only --json");
+  }
+  const { environment } = await prepareEnvironment({}, { policy: "offline" });
+  await runNodeEntry(
+    resolve(projectRoot, "scripts", "verify-artifact-performance-budgets.mjs"),
+    args,
+    {
+      environment,
+      label: "artifact performance-budget verification",
+      timeoutMs: parseDuration(
+        process.env.SITES_ARTIFACT_TIMEOUT || "2m",
+        "SITES_ARTIFACT_TIMEOUT",
+      ),
+      killAfterMs: parseDuration(
+        process.env.SITES_BUILD_KILL_AFTER || "10s",
+        "SITES_BUILD_KILL_AFTER",
+      ),
+    },
+  );
 }
 
 async function normalizeGeneratedWranglerConfig() {
@@ -1057,6 +1096,9 @@ async function main() {
         selectedEnvironment(parseEnvironmentArgs("artifact", args)),
       );
       return;
+    case "performance-budget":
+      await runArtifactPerformanceBudget(args);
+      return;
     case "matrix":
       assertNoArgs("matrix", args);
       await validateCloudflareMatrix();
@@ -1095,7 +1137,7 @@ async function main() {
     }
     default:
       throw new Error(
-        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|matrix|cf-types|cf-types-check|db-generate>",
+        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|performance-budget|matrix|cf-types|cf-types-check|db-generate>",
       );
   }
 }

@@ -26,6 +26,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import {
+  monitoringPreferencesAreInformationalOnly,
   normalizeMonitoringAudience,
   type MonitoringAudience,
 } from "../../lib/platform/monitoring-preferences";
@@ -285,7 +286,11 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
   useEffect(() => { void load(); }, [load]);
 
   const selectedTopics = useMemo(() => new Set(preference.topics), [preference.topics]);
-  const preferenceOnly = !status.automaticPublication || status.freshness.state !== "fresh";
+  const preferenceOnly = monitoringPreferencesAreInformationalOnly({
+    automaticPublication: status.automaticPublication,
+    controlledBeta: status.controlledBeta,
+    freshnessState: status.freshness.state,
+  });
   function toggleTopic(topic: Topic) {
     setPreference(current => ({
       ...current,

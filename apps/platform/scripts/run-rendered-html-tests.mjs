@@ -10,6 +10,7 @@ const result = spawnSync(
     loaderUrl,
     "--test",
     "tests/rendered-html.test.mjs",
+    "tests/artifact-performance-budgets.test.mjs",
   ],
   {
     cwd: projectRoot,

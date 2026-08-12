@@ -1081,7 +1081,8 @@ test("monitoring stays explicitly beta and saves interests without implying deli
   assert.match(shell, /"Мониторинг · бета", "Monitoring · beta"/);
   assert.match(client, /normalizeMonitoringAudience\(accountType\)/);
   assert.match(client, /normalizeMonitoringAudience\(body\.preference\.audience\)/);
-  assert.match(client, /const preferenceOnly = !status\.automaticPublication \|\| status\.freshness\.state !== "fresh"/);
+  assert.match(client, /monitoringPreferencesAreInformationalOnly\(\{/);
+  assert.match(client, /controlledBeta: status\.controlledBeta/);
   assert.match(client, /t\.preferenceOnlyNotice/);
   assert.match(client, /disabled=\{preferenceOnly \|\| !status\.emailConfigured\}/);
   assert.match(client, /preferenceOnly \? t\.savePreferences : t\.save/);

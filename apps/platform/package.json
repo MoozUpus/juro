@@ -25,6 +25,7 @@
     "evaluate:documents:validate": "tsx scripts/validate-document-evaluation.ts",
     "verify:d1-backup": "node scripts/verify-d1-full-export-restore.mjs",
     "validate:artifact": "node scripts/platform-tasks.mjs artifact",
+    "performance:artifact": "node scripts/platform-tasks.mjs performance-budget",
     "cf:types": "node scripts/platform-tasks.mjs cf-types",
     "cf:types:check": "node scripts/platform-tasks.mjs cf-types-check",
     "validate:cloudflare:matrix": "node scripts/platform-tasks.mjs matrix",
