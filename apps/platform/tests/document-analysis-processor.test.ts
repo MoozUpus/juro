@@ -89,6 +89,34 @@ test("provider diagnostics expose only an allow-listed HTTP category", () => {
     "INVALID_AI_OUTPUT",
   );
   assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_output_max_tokens")),
+    "INVALID_AI_OUTPUT_MAX_TOKENS",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_tool_result_missing")),
+    "INVALID_AI_OUTPUT_TOOL_RESULT_MISSING",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_envelope_json_invalid")),
+    "INVALID_AI_OUTPUT_ENVELOPE_JSON_INVALID",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_envelope_schema_invalid")),
+    "INVALID_AI_OUTPUT_ENVELOPE_SCHEMA_INVALID",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "document_source_boundary")),
+    "INVALID_AI_OUTPUT_SOURCE_BOUNDARY",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "document_excerpt_boundary")),
+    "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("provider payload must never persist", "INVALID_AI_OUTPUT", false, null, "untrusted-provider-detail")),
+    "INVALID_AI_OUTPUT",
+  );
+  assert.equal(
     documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_UNAVAILABLE", false, 400)),
     "PROVIDER_HTTP_400",
   );

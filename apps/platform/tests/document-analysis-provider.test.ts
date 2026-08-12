@@ -256,7 +256,7 @@ test("document analysis gives its fallback a turn after one primary attempt by d
 });
 
 test("quick document analysis has an explicit compact output budget", () => {
-  assert.equal(documentAnalysisMaxOutputTokens("quick"), 2_400);
+  assert.equal(documentAnalysisMaxOutputTokens("quick"), 3_600);
   assert.equal(documentAnalysisMaxOutputTokens("full"), 8_192);
   assert.equal(documentAnalysisMaxOutputTokens("expert"), 8_192);
   assert.equal(documentAnalysisTimeoutMs("quick"), 60_000);
@@ -303,14 +303,17 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
         output_config?: { format?: { type?: string; schema?: Record<string, unknown> } };
         tools?: Array<{ name?: string; input_schema?: Record<string, unknown> }>;
         tool_choice?: { type?: string; name?: string };
+        system?: string;
       };
       assert.equal(request.model, "claude-sonnet-4-6");
-      assert.equal(request.max_tokens, 2_400);
+      assert.equal(request.max_tokens, 3_600);
       assert.equal(request.output_config, undefined);
       assert.equal(request.tools?.length, 1);
       assert.equal(request.tools?.[0]?.name, "emit_result");
       assert.equal(request.tools?.[0]?.input_schema?.type, "object");
       assert.deepEqual(request.tool_choice, { type: "tool", name: "emit_result" });
+      assert.match(request.system ?? "", /verifiedSources пусты/);
+      assert.match(request.system ?? "", /legalComplianceStatus обязан быть unverified/);
       const nativeWireResult = {
         ...base,
         userSide: "",
@@ -360,6 +363,136 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
     }
   }
 });
+
+test("Anthropic document failures carry bounded non-content output diagnostics", async () => {
+  await expectAnthropicDocumentFailure({
+    id: "msg_max_tokens",
+    model: "claude-sonnet-4-6",
+    stop_reason: "max_tokens",
+    content: [],
+  }, "anthropic_output_max_tokens");
+  await expectAnthropicDocumentFailure({
+    id: "msg_tool_missing",
+    model: "claude-sonnet-4-6",
+    stop_reason: "end_turn",
+    content: [],
+  }, "anthropic_tool_result_missing");
+  await expectAnthropicDocumentFailure({
+    id: "msg_envelope_json_invalid",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", name: "emit_result", input: { payload_json: "not valid json" } }],
+  }, "anthropic_envelope_json_invalid");
+  await expectAnthropicDocumentFailure({
+    id: "msg_envelope_schema_invalid",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", name: "emit_result", input: { payload_json: "{}" } }],
+  }, "anthropic_envelope_schema_invalid");
+  await expectAnthropicDocumentFailure({
+    id: "msg_source_boundary",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{
+      type: "tool_use",
+      name: "emit_result",
+      input: { payload_json: JSON.stringify(anthropicWireResult({ legalComplianceStatus: "verified" })) },
+    }],
+  }, "document_source_boundary");
+  await expectAnthropicDocumentFailure({
+    id: "msg_excerpt_boundary",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{
+      type: "tool_use",
+      name: "emit_result",
+      input: { payload_json: JSON.stringify(anthropicWireResult()) },
+    }],
+  }, "document_excerpt_boundary", "В синтетическом документе нет указанной цитаты.");
+});
+
+function anthropicWireResult(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...base,
+    userSide: "",
+    risks: base.risks.map((risk) => ({
+      ...risk,
+      clause: risk.clause ?? "",
+      page: risk.page ?? 0,
+      exactExcerpt: risk.exactExcerpt ?? "",
+      proposedWording: risk.proposedWording ?? "",
+    })),
+    ...overrides,
+  };
+}
+
+async function expectAnthropicDocumentFailure(
+  responseBody: unknown,
+  expectedProviderErrorType: string,
+  extractedText = "срок определяется дополнительно",
+): Promise<void> {
+  const runtime = env as unknown as {
+    ANTHROPIC_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    AI_PROVIDER?: string;
+    AI_PROVIDER_API_KEY?: string;
+  };
+  const originalRuntime = {
+    ANTHROPIC_API_KEY: runtime.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: runtime.OPENAI_API_KEY,
+    AI_PROVIDER: runtime.AI_PROVIDER,
+    AI_PROVIDER_API_KEY: runtime.AI_PROVIDER_API_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    delete runtime.OPENAI_API_KEY;
+    delete runtime.AI_PROVIDER;
+    delete runtime.AI_PROVIDER_API_KEY;
+    globalThis.fetch = async () => Response.json(responseBody);
+    await assert.rejects(
+      runDocumentAnalysis({
+        fileName: "synthetic-contract.txt",
+        mimeType: "text/plain",
+        extractedText,
+        detectedLanguage: "ru",
+        extractionWarnings: [],
+        packageContext: null,
+        locale: "ru",
+        mode: "quick",
+        userSide: null,
+        sources: [],
+        legalDatabaseAsOf: "unavailable",
+        requestId: `synthetic-document-${expectedProviderErrorType}`,
+      }, {
+        runtimeSettings: {
+          environment: "staging",
+          version: 1,
+          openaiChatModel: "gpt-test",
+          openaiDeepModel: "gpt-test",
+          anthropicChatFallbackModel: "claude-test",
+          anthropicDocumentModel: "claude-sonnet-4-6",
+          openaiDocumentFallbackModel: "gpt-test",
+          responseTone: "clear",
+          configHash: "a".repeat(64),
+          source: "environment",
+          createdAt: null,
+        },
+        providerMaxAttempts: 1,
+        fallbackEnabled: false,
+      }),
+      (error: unknown) => error instanceof AiUnavailableError
+        && error.code === "INVALID_AI_OUTPUT"
+        && error.providerErrorType === expectedProviderErrorType,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalRuntime)) {
+      if (value === undefined) delete runtime[key as keyof typeof originalRuntime];
+      else runtime[key as keyof typeof originalRuntime] = value;
+    }
+  }
+}
 
 function countSchemaKeyword(value: unknown, keyword: string): number {
   if (Array.isArray(value)) return value.reduce((total, item) => total + countSchemaKeyword(item, keyword), 0);

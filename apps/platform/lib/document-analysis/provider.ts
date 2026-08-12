@@ -38,11 +38,10 @@ export type DocumentAnalysisProviderResult = AiStructuredResult<DocumentAnalysis
  */
 export function documentAnalysisMaxOutputTokens(mode: DocumentAnalysisProviderRequest["mode"]): number {
   // A quick pass still has to populate the complete fail-closed structured
-  // contract (including empty arrays/nulls).  1,600 left too little room for
-  // the envelope on an ordinary document and produced schema-invalid answers
-  // in controlled staging runs.  This is a bounded compact result, not a
-  // hidden full/expert review.
-  if (mode === "quick") return 2_400;
+  // contract (including empty arrays/nulls).  2,400 can truncate an otherwise
+  // valid compact result before the forced Anthropic envelope closes.  3,600
+  // remains materially bounded and is still far below full/expert output.
+  if (mode === "quick") return 3_600;
   return 8_192;
 }
 
@@ -164,7 +163,7 @@ async function runAnthropicDocumentAnalysis(
     requestId: input.requestId,
     model,
     instructions: [
-      documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode),
+      documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode, hasUsableVerifiedSources(input)),
       "Для nullable строк native provider schema использует пустую строку вместо null; для risks[].page используй 0 вместо null. JURO безопасно восстановит эти sentinels в null до валидации. Не используй эти значения для фактически известного содержания.",
     ].join(" "),
     input: providerInput(input),
@@ -203,7 +202,7 @@ async function runOpenAiDocumentAnalysis(
     maxAttempts: documentAnalysisProviderMaxAttempts(options.providerMaxAttempts),
     requestId: input.requestId,
     model,
-    instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode),
+    instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode, hasUsableVerifiedSources(input)),
     input: providerInput(input),
     maxOutputTokens: documentAnalysisMaxOutputTokens(input.mode),
   });
@@ -214,6 +213,7 @@ function documentAnalysisInstructions(
   locale: "ru" | "uz",
   settings: AiRuntimeSettings,
   mode: DocumentAnalysisProviderRequest["mode"],
+  hasUsableVerifiedSources: boolean,
 ) {
   return [
     "Ты анализируешь юридический документ для JURO в юрисдикции Республики Узбекистан.",
@@ -226,11 +226,18 @@ function documentAnalysisInstructions(
     "Оценка качества объясняет полноту/ясность документа, а не вероятность победы и не подлинность документа.",
     ...(mode === "quick" ? [
       "Режим quick — это компактный первый проход, а не полный постатейный обзор: дай краткое резюме, только наиболее существенные риски, сроки, вопросы и рекомендации. Не заполняй необязательные списки ради полноты, не предлагай длинные новые формулировки и не повторяй один вывод в нескольких полях.",
+      ...(!hasUsableVerifiedSources ? [
+        "В этом запуске verifiedSources пусты: legalComplianceStatus обязан быть unverified, sources и missingClauses — пустыми массивами, legal_compliance risks запрещены. risks либо пуст, либо содержит не более одного краткого document_internal risk, который прямо опирается на текст документа.",
+      ] : []),
       "Верни полный структурный контракт: каждый обязательный ключ должен присутствовать. Для отсутствующих фактов используй пустой массив или null строго по схеме, а не пропускай ключ. Не добавляй ключи вне схемы.",
     ] : []),
     aiResponseToneInstruction(settings.responseTone, locale),
     locale === "uz" ? "Natijani o‘zbek tilida lotin yozuvida ber." : "Верни результат полностью на русском языке.",
   ].join(" ");
+}
+
+function hasUsableVerifiedSources(input: DocumentAnalysisProviderRequest): boolean {
+  return input.sources.some((source) => Boolean(source.excerpt?.trim()));
 }
 
 function providerInput(input: DocumentAnalysisProviderRequest) {
@@ -262,6 +269,8 @@ function constrainResult(
       "AI-проверка сослалась на непроверенный или неполный источник.",
       "INVALID_AI_OUTPUT",
       false,
+      null,
+      "document_source_boundary",
     );
   }
   try {
@@ -271,6 +280,8 @@ function constrainResult(
       "AI-проверка сослалась на отсутствующий в документе фрагмент.",
       "INVALID_AI_OUTPUT",
       false,
+      null,
+      "document_excerpt_boundary",
     );
   }
   const sourceById = new Map(usableSources.map((source) => [source.id, source]));

@@ -156,7 +156,13 @@ export async function callAnthropicStructured<T>(options: {
       }
       if (payload.stop_reason === "max_tokens") {
         if (attempt < maxAttempts) continue;
-        throw new AiUnavailableError("Резервный AI-ответ превысил допустимый размер.", "INVALID_AI_OUTPUT", false);
+        throw new AiUnavailableError(
+          "Резервный AI-ответ превысил допустимый размер.",
+          "INVALID_AI_OUTPUT",
+          false,
+          null,
+          "anthropic_output_max_tokens",
+        );
       }
       if (payload.stop_reason && payload.stop_reason !== "end_turn" && payload.stop_reason !== "stop_sequence"
         && !(options.strictOutput === false && payload.stop_reason === "tool_use")) {
@@ -168,11 +174,30 @@ export async function callAnthropicStructured<T>(options: {
       const text = payload.content?.find((item) => item.type === "text" && item.text)?.text;
       if (options.strictOutput === false ? toolInput === undefined : !text) {
         if (attempt < maxAttempts) continue;
-        throw new AiUnavailableError("Резервная AI-проверка не вернула структурированный результат.", "INVALID_AI_OUTPUT", false);
+        throw new AiUnavailableError(
+          "Резервная AI-проверка не вернула структурированный результат.",
+          "INVALID_AI_OUTPUT",
+          false,
+          null,
+          options.strictOutput === false ? "anthropic_tool_result_missing" : "anthropic_text_result_missing",
+        );
+      }
+      let structuredPayload: unknown;
+      try {
+        structuredPayload = options.strictOutput === false ? parseAnthropicJsonEnvelope(toolInput) : JSON.parse(text!);
+      } catch {
+        if (attempt < maxAttempts) continue;
+        throw new AiUnavailableError(
+          "Резервная AI-проверка вернула некорректный структурированный JSON.",
+          "INVALID_AI_OUTPUT",
+          false,
+          null,
+          options.strictOutput === false ? "anthropic_envelope_json_invalid" : "anthropic_json_invalid",
+        );
       }
       try {
         return {
-          data: options.parse(options.strictOutput === false ? parseAnthropicJsonEnvelope(toolInput) : JSON.parse(text!)),
+          data: options.parse(structuredPayload),
           provider: "anthropic",
           model: payload.model || model,
           providerResponseId: payload.id || response.headers.get("request-id"),
@@ -183,7 +208,13 @@ export async function callAnthropicStructured<T>(options: {
         };
       } catch {
         if (attempt < maxAttempts) continue;
-        throw new AiUnavailableError("Резервная AI-проверка вернула результат вне контракта.", "INVALID_AI_OUTPUT", false);
+        throw new AiUnavailableError(
+          "Резервная AI-проверка вернула результат вне структурированного контракта.",
+          "INVALID_AI_OUTPUT",
+          false,
+          null,
+          options.strictOutput === false ? "anthropic_envelope_schema_invalid" : "anthropic_schema_invalid",
+        );
       }
     } catch (error) {
       if (error instanceof AiUnavailableError) {

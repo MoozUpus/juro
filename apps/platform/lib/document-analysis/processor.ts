@@ -158,11 +158,31 @@ export type DocumentAnalysisDiagnosticDetail =
   | "PROVIDER_TIMEOUT"
   | "PROVIDER_CIRCUIT_OPEN"
   | "INVALID_AI_OUTPUT"
+  | "INVALID_AI_OUTPUT_MAX_TOKENS"
+  | "INVALID_AI_OUTPUT_TOOL_RESULT_MISSING"
+  | "INVALID_AI_OUTPUT_ENVELOPE_JSON_INVALID"
+  | "INVALID_AI_OUTPUT_ENVELOPE_SCHEMA_INVALID"
+  | "INVALID_AI_OUTPUT_SOURCE_BOUNDARY"
+  | "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY"
+  | "INVALID_AI_OUTPUT_SCHEMA_INVALID"
   | "PROVIDER_UNAVAILABLE";
 
 export function documentAnalysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
   if (error instanceof AiUnavailableError) {
-    if (error.code === "INVALID_AI_OUTPUT") return "INVALID_AI_OUTPUT";
+    if (error.code === "INVALID_AI_OUTPUT") {
+      // providerErrorType can originate at a provider boundary. Persist only
+      // fixed, content-free categories here; never propagate model output,
+      // parser errors, provider body text, or a dynamic upstream type.
+      switch (error.providerErrorType) {
+        case "anthropic_output_max_tokens": return "INVALID_AI_OUTPUT_MAX_TOKENS";
+        case "anthropic_tool_result_missing": return "INVALID_AI_OUTPUT_TOOL_RESULT_MISSING";
+        case "anthropic_envelope_json_invalid": return "INVALID_AI_OUTPUT_ENVELOPE_JSON_INVALID";
+        case "anthropic_envelope_schema_invalid": return "INVALID_AI_OUTPUT_ENVELOPE_SCHEMA_INVALID";
+        case "document_source_boundary": return "INVALID_AI_OUTPUT_SOURCE_BOUNDARY";
+        case "document_excerpt_boundary": return "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY";
+        default: return "INVALID_AI_OUTPUT";
+      }
+    }
     if (error.code === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
     if (error.code === "PROVIDER_CIRCUIT_OPEN") return "PROVIDER_CIRCUIT_OPEN";
     switch (error.providerStatus) {
@@ -612,15 +632,36 @@ async function analyzeObject(
     }
     const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
     let boundedResult: DocumentAnalysisResult;
+    diagnosticStage = "validation";
+    let schemaValidatedResult: DocumentAnalysisResult;
     try {
-      diagnosticStage = "validation";
-      const validatedResult = enforceDocumentExcerptBoundary(
-        enforceDocumentAnalysisSourceBoundary(
-          documentAnalysisResultSchema.parse(ai.data),
-          new Set(retrieval.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
-        ),
-        extracted.text,
+      schemaValidatedResult = documentAnalysisResultSchema.parse(ai.data);
+    } catch {
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT");
+      throw new DocumentAnalysisProcessingError(
+        "DOCUMENT_ANALYSIS_INVALID_OUTPUT",
+        false,
+        "validation",
+        "INVALID_AI_OUTPUT_SCHEMA_INVALID",
       );
+    }
+    let sourceBoundResult: DocumentAnalysisResult;
+    try {
+      sourceBoundResult = enforceDocumentAnalysisSourceBoundary(
+        schemaValidatedResult,
+        new Set(retrieval.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
+      );
+    } catch {
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT");
+      throw new DocumentAnalysisProcessingError(
+        "DOCUMENT_ANALYSIS_INVALID_OUTPUT",
+        false,
+        "validation",
+        "INVALID_AI_OUTPUT_SOURCE_BOUNDARY",
+      );
+    }
+    try {
+      const validatedResult = enforceDocumentExcerptBoundary(sourceBoundResult, extracted.text);
       boundedResult = {
         ...validatedResult,
         sources: validatedResult.sources.map((reference) => {
@@ -638,7 +679,12 @@ async function analyzeObject(
       };
     } catch {
       await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT");
-      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_INVALID_OUTPUT", false);
+      throw new DocumentAnalysisProcessingError(
+        "DOCUMENT_ANALYSIS_INVALID_OUTPUT",
+        false,
+        "validation",
+        "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY",
+      );
     }
     return {
       result: enforceDocumentAnalysisFreshness(boundedResult, retrieval.freshness),
