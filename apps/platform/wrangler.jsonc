@@ -15,6 +15,7 @@
     "ACCOUNT_DELETION_PURGE_ENABLED": "false",
     "GUEST_AI_ENABLED": "true",
     "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+    "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "false",
     "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
     "PAYMENT_FOUNDATION_ENABLED": "true",
     "PAYMENT_SANDBOX_ENABLED": "true",
@@ -162,6 +163,7 @@
         "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "true",
+        "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "true",
         "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "true",
@@ -287,6 +289,10 @@
           {
             "binding": "MALWARE_SCAN_DLQ",
             "queue": "staging-malware-scan-dlq"
+          },
+          {
+            "binding": "STAGING_QUEUE_HEALTH_PROBE_QUEUE",
+            "queue": "staging-queue-health"
           }
         ],
         "consumers": [
@@ -393,6 +399,14 @@
             "max_retries": 10,
             "max_concurrency": 1,
             "retry_delay": 60
+          },
+          {
+            "queue": "staging-queue-health",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "max_concurrency": 1,
+            "retry_delay": 30
           }
         ]
       },
@@ -460,6 +474,7 @@
         "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+        "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "false",
         "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "false",

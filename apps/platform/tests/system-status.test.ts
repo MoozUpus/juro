@@ -45,6 +45,9 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
     assert.equal(initial.overallStatus, "operational");
     assert.equal(initial.components.length, 8);
     assert.equal(initial.activeIncidents.length, 0);
+    const platformDependencies = initial.components.find((component) => component.key === "platform")?.dependencies;
+    assert.deepEqual(platformDependencies?.map((dependency) => dependency.key), ["d1", "queues", "queue_dlq"]);
+    assert.ok(platformDependencies?.every((dependency) => dependency.status === "operational" && dependency.latencyMs === 12));
 
     const created = await createStatusIncident({
       db: d1,
@@ -143,6 +146,7 @@ test("0112 never publishes operational status without dependency evidence", asyn
     assert.equal(snapshot.components.length, 8);
     assert.ok(snapshot.components.every((component) => component.status === "unknown"));
     assert.ok(snapshot.components.every((component) => component.lastCheckedAt === null));
+    assert.ok(snapshot.components.every((component) => component.dependencies.every((dependency) => dependency.status === "unknown" && dependency.checkedAt === null)));
   } finally { sqlite.close(); }
 });
 
@@ -222,5 +226,7 @@ test("status routes use a fresh-MFA operations boundary and a narrow public host
   assert.doesNotMatch(ui + publicUi, /dangerouslySetInnerHTML|transition:\s*all|window\.confirm/);
   assert.match(ui, /aria-live="polite"/);
   assert.match(publicUi, /role="status"/);
+  assert.match(publicUi, /public-status-dependencies/);
+  assert.match(publicUi, /dependency\.safeErrorCode/);
   assert.match(publicUi, /className="public-status-shell" lang=\{locale\}/);
 });

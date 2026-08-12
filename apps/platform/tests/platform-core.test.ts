@@ -1104,6 +1104,20 @@ test("legislation monitoring never auto-publishes or invents feed entries", asyn
   assert.match(source, /trustedSourceStatusRows\.length/);
 });
 
+test("monitoring stays explicitly beta and saves interests without implying delivery", async () => {
+  const [shell, client] = await Promise.all([
+    readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/MonitoringClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(shell, /"Мониторинг · бета", "Monitoring · beta"/);
+  assert.match(client, /normalizeMonitoringAudience\(accountType\)/);
+  assert.match(client, /normalizeMonitoringAudience\(body\.preference\.audience\)/);
+  assert.match(client, /const preferenceOnly = !status\.automaticPublication \|\| status\.freshness\.state !== "fresh"/);
+  assert.match(client, /t\.preferenceOnlyNotice/);
+  assert.match(client, /disabled=\{preferenceOnly \|\| !status\.emailConfigured\}/);
+  assert.match(client, /preferenceOnly \? t\.savePreferences : t\.save/);
+});
+
 test("JURO motion tokens are bounded and the dashboard route is static", async () => {
   const [globals, dashboard] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),

@@ -85,6 +85,15 @@ async function maybeRunStagingDocumentAnalysisProbe(env: PlatformJobEnv) {
   const { runStagingDocumentAnalysisProbe } = await import("./staging-document-analysis-probe");
   return runStagingDocumentAnalysisProbe(env);
 }
+
+async function maybeEnqueueStagingQueueHealthProbe(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "staging"
+    || (env as Record<string, unknown>).STAGING_QUEUE_HEALTH_PROBE_ENABLED !== "true"
+  ) return null;
+  const { enqueueStagingQueueHealthProbe } = await import("./staging-queue-health-probe");
+  return enqueueStagingQueueHealthProbe(env);
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -527,6 +536,8 @@ export async function handleScheduled(
         : 0;
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
+    failureCode = "QUEUE_HEALTH_PROBE_ENQUEUE_FAILED";
+    const queueHealthProbe = await maybeEnqueueStagingQueueHealthProbe(env);
     failureCode = "QUEUE_DLQ_RECONCILIATION_FAILED";
     const documentDlqReconciliation = await reconcileRetryExhaustedQueueJobs(
       env,
@@ -649,6 +660,10 @@ export async function handleScheduled(
       documentAnalysisProbeCompleted: documentAnalysisProbe?.completed ?? 0,
       documentAnalysisProbeFailed: documentAnalysisProbe?.failed ?? 0,
       documentAnalysisProbeSkipped: documentAnalysisProbe?.skipped ?? 0,
+      queueHealthProbeEnqueued: queueHealthProbe?.enqueued ?? 0,
+      queueHealthProbeStale: queueHealthProbe?.stale ?? 0,
+      queueHealthProbeFailed: queueHealthProbe?.failed ?? 0,
+      queueHealthProbeSkipped: queueHealthProbe?.skipped ?? 0,
       corpusRunsCompleted,
       corpusAlertsCreated: corpusAlerts.created,
       corpusFailedRunAlerts: corpusAlerts.failedRuns,

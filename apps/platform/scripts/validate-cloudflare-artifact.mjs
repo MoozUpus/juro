@@ -238,6 +238,9 @@ const isolatedDlqContract = [
   ["DOCUMENT_EXPORT_DLQ", "document-export-dlq"],
   ["MALWARE_SCAN_DLQ", "malware-scan-dlq"],
 ];
+const stagingQueueHealthProbeContract = [
+  ["STAGING_QUEUE_HEALTH_PROBE_QUEUE", "queue-health"],
+];
 const hasAsyncConsumers = ["staging", "production"].includes(requestedEnvironment);
 const queueContract = hasAsyncConsumers
   ? [
@@ -250,6 +253,7 @@ const queueContract = hasAsyncConsumers
     ...sourceQueueContract.slice(3),
     ["MALWARE_SCAN_QUEUE", "malware-scan"],
     isolatedDlqContract[3],
+    ...(requestedEnvironment === "staging" ? stagingQueueHealthProbeContract : []),
   ]
   : [
     sourceQueueContract[0],
@@ -310,6 +314,14 @@ assert.deepEqual(
         ...sourceConsumers.slice(3, -1),
         sourceConsumers.at(-1),
         dlqConsumer("malware-scan"),
+        ...(requestedEnvironment === "staging" ? [{
+          queue: `${requestedEnvironment}-queue-health`,
+          max_batch_size: 1,
+          max_batch_timeout: 5,
+          max_retries: 3,
+          max_concurrency: 1,
+          retry_delay: 30,
+        }] : []),
       ];
     })()
     : [],

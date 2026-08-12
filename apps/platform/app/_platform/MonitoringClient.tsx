@@ -25,6 +25,10 @@ import {
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
+import {
+  normalizeMonitoringAudience,
+  type MonitoringAudience,
+} from "../../lib/platform/monitoring-preferences";
 
 const topicKeys = [
   "civil",
@@ -42,7 +46,7 @@ const topicKeys = [
 
 type Topic = typeof topicKeys[number];
 type Preference = {
-  audience: AccountType;
+  audience: MonitoringAudience;
   topics: string[];
   channels: string[];
   frequency: "immediate" | "daily" | "weekly";
@@ -53,7 +57,7 @@ type Preference = {
 };
 type MonitoringStatus = {
   integration: "not_configured" | "adapter_pending";
-  automaticPublication: false;
+  automaticPublication: boolean;
   controlledBeta: boolean;
   emailConfigured: boolean;
   lastCheckedAt: string | null;
@@ -94,22 +98,32 @@ const copy = {
     title: "Мониторинг законодательства",
     intro: "Выберите области права. В контролируемой бета-версии JURO показывает только опубликованные записи с недавно проверенным официальным источником.",
     settings: "Настройки мониторинга",
+    preferences: "Предпочтения мониторинга",
+    preferencesHint: "Сохраняются только темы, аудитория и желаемая частота для текущего пространства.",
+    preferenceOnlyNotice: "Автоматическая публикация или свежие проверенные источники сейчас недоступны. JURO не отправляет уведомления и не запускает проверку документов автоматически.",
     audience: "Кого затрагивают обновления",
     individual: "Физическое лицо",
     business: "Бизнес",
     topics: "Области права",
     channels: "Каналы",
+    deliveryWhenActive: "Каналы доставки после включения мониторинга",
+    deliveryInactive: "Автоматическая доставка отключена",
+    inAppInactive: "Уведомления в приложении появятся только после включения мониторинга.",
+    emailInactive: "Email не будет отправляться, пока мониторинг не станет активен.",
     inApp: "В приложении",
     email: "Email",
     emailUnavailable: "Email станет доступен после подключения почтовой инфраструктуры.",
     frequency: "Частота",
+    frequencyWhenActive: "Желаемая частота после включения доставки",
     immediate: "Немедленно",
     daily: "Ежедневно",
     weekly: "Еженедельно",
     documentConsent: "Разрешить предлагать проверку выбранных мной документов при релевантном изменении закона.",
     consentHint: "JURO не сканирует все документы автоматически. Каждая проверка требует ваших прав доступа и отдельного запуска.",
     save: "Сохранить настройки",
+    savePreferences: "Сохранить предпочтения",
     saved: "Настройки мониторинга сохранены.",
+    savedPreferenceOnly: "Предпочтения сохранены. Автоматическая доставка пока отключена.",
     integrationOff: "Автоматическая интеграция с официальной лентой пока не подключена.",
     integrationPending: "Адаптер официальной ленты настроен, но автоматическая публикация ещё не разрешена.",
     honestStatus: "Автопубликация отключена. Лента — контролируемая бета-версия: она не доказывает полноту законодательства и показывает только записи с актуальной ручной проверкой источника.",
@@ -140,22 +154,32 @@ const copy = {
     title: "Qonunchilik monitoringi",
     intro: "Huquq sohalarini tanlang. Nazorat qilinadigan beta-versiyada JURO faqat yaqinda tekshirilgan rasmiy manbaga bog‘langan e’lon qilingan yozuvlarni ko‘rsatadi.",
     settings: "Monitoring sozlamalari",
+    preferences: "Monitoring afzalliklari",
+    preferencesHint: "Faqat joriy makon uchun mavzular, auditoriya va kerakli tezlik sifatida saqlanadi.",
+    preferenceOnlyNotice: "Avtomatik e’lon qilish yoki yangi tekshirilgan manbalar hozir mavjud emas. JURO bildirishnomalarni yubormaydi va hujjatlarni avtomatik tekshirmaydi.",
     audience: "Yangilanishlar kimga taalluqli",
     individual: "Jismoniy shaxs",
     business: "Biznes",
     topics: "Huquq sohalari",
     channels: "Kanallar",
+    deliveryWhenActive: "Monitoring faollashgandagi yetkazib berish kanallari",
+    deliveryInactive: "Avtomatik yetkazib berish o‘chirilgan",
+    inAppInactive: "Monitoring faollashmaguncha ilova ichida bildirishnomalar kelmaydi.",
+    emailInactive: "Monitoring faollashmaguncha email yuborilmaydi.",
     inApp: "Ilova ichida",
     email: "Email",
     emailUnavailable: "Email pochta infratuzilmasi ulangandan keyin mavjud bo‘ladi.",
     frequency: "Tezlik",
+    frequencyWhenActive: "Yetkazib berish yoqilgandan keyingi kerakli tezlik",
     immediate: "Darhol",
     daily: "Har kuni",
     weekly: "Har hafta",
     documentConsent: "Qonundagi tegishli o‘zgarishda men tanlagan hujjatlarni tekshirishni taklif qilishga ruxsat berish.",
     consentHint: "JURO barcha hujjatlarni avtomatik skanerlamaydi. Har bir tekshiruv kirish huquqlaringiz va alohida ishga tushirishni talab qiladi.",
     save: "Sozlamalarni saqlash",
+    savePreferences: "Afzalliklarni saqlash",
     saved: "Monitoring sozlamalari saqlandi.",
+    savedPreferenceOnly: "Afzalliklar saqlandi. Avtomatik yetkazib berish hozir o‘chirilgan.",
     integrationOff: "Rasmiy lenta bilan avtomatik integratsiya hali ulanmagan.",
     integrationPending: "Rasmiy lenta adapteri sozlangan, ammo avtomatik e’lon qilishga hali ruxsat berilmagan.",
     honestStatus: "Avtomatik e’lon o‘chirilgan. Lenta — nazorat qilinadigan beta-versiya: u qonunchilik to‘liqligini isbotlamaydi va faqat manbasi yaqinda qo‘lda tekshirilgan yozuvlarni ko‘rsatadi.",
@@ -218,7 +242,7 @@ const defaultStatus: MonitoringStatus = {
 export function MonitoringClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
   const t = copy[locale];
   const [preference, setPreference] = useState<Preference>({
-    audience: accountType,
+    audience: normalizeMonitoringAudience(accountType),
     topics: ["civil", "contract"],
     channels: ["in_app"],
     frequency: "weekly",
@@ -243,7 +267,12 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         error?: string;
       };
       if (!response.ok) throw new Error(body.error || (locale === "ru" ? "Мониторинг не загрузился." : "Monitoring yuklanmadi."));
-      if (body.preference) setPreference(body.preference);
+      if (body.preference) {
+        setPreference({
+          ...body.preference,
+          audience: normalizeMonitoringAudience(body.preference.audience),
+        });
+      }
       setUpdates(body.updates ?? []);
       setStatus(body.status ?? defaultStatus);
     } catch (value) {
@@ -256,6 +285,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
   useEffect(() => { void load(); }, [load]);
 
   const selectedTopics = useMemo(() => new Set(preference.topics), [preference.topics]);
+  const preferenceOnly = !status.automaticPublication || status.freshness.state !== "fresh";
   function toggleTopic(topic: Topic) {
     setPreference(current => ({
       ...current,
@@ -281,8 +311,13 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
       });
       const body = await response.json() as { preference?: Preference; error?: string };
       if (!response.ok) throw new Error(body.error || (locale === "ru" ? "Настройки не сохранены." : "Sozlamalar saqlanmadi."));
-      if (body.preference) setPreference(body.preference);
-      setNotice(t.saved);
+      if (body.preference) {
+        setPreference({
+          ...body.preference,
+          audience: normalizeMonitoringAudience(body.preference.audience),
+        });
+      }
+      setNotice(preferenceOnly ? t.savedPreferenceOnly : t.saved);
       await load();
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -318,7 +353,8 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
 
       <div className="monitoring-layout">
         <form className="monitoring-settings" onSubmit={save}>
-          <div className="monitoring-section-heading"><BellRing /><div><h2>{t.settings}</h2><p>{locale === "ru" ? "Настройки сохраняются только для текущего пространства." : "Sozlamalar faqat joriy makon uchun saqlanadi."}</p></div></div>
+          <div className="monitoring-section-heading"><BellRing /><div><h2>{preferenceOnly ? t.preferences : t.settings}</h2><p>{preferenceOnly ? t.preferencesHint : (locale === "ru" ? "Настройки сохраняются только для текущего пространства." : "Sozlamalar faqat joriy makon uchun saqlanadi.")}</p></div></div>
+          {preferenceOnly && <p className="monitoring-preference-note" role="note">{t.preferenceOnlyNotice}</p>}
 
           <fieldset>
             <legend>{t.audience}</legend>
@@ -336,22 +372,23 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
           </fieldset>
 
           <fieldset>
-            <legend>{t.channels}</legend>
+            <legend>{preferenceOnly ? t.deliveryWhenActive : t.channels}</legend>
+            {preferenceOnly && <p className="monitoring-field-hint">{t.deliveryInactive}</p>}
             <div className="monitoring-channels">
-              <label><input type="checkbox" checked readOnly /><BellRing /><span><strong>{t.inApp}</strong></span></label>
-              <label className={!status.emailConfigured ? "disabled" : ""}><input type="checkbox" checked={preference.channels.includes("email")} disabled={!status.emailConfigured} onChange={event => setPreference(current => ({ ...current, channels: event.target.checked ? ["in_app", "email"] : ["in_app"] }))} /><Mail /><span><strong>{t.email}</strong>{!status.emailConfigured && <small>{t.emailUnavailable}</small>}</span></label>
+              <label className={preferenceOnly ? "disabled" : ""}><input type="checkbox" checked={!preferenceOnly} readOnly disabled={preferenceOnly} /><BellRing /><span><strong>{t.inApp}</strong>{preferenceOnly && <small>{t.inAppInactive}</small>}</span></label>
+              <label className={preferenceOnly || !status.emailConfigured ? "disabled" : ""}><input type="checkbox" checked={!preferenceOnly && preference.channels.includes("email")} disabled={preferenceOnly || !status.emailConfigured} onChange={event => setPreference(current => ({ ...current, channels: event.target.checked ? ["in_app", "email"] : ["in_app"] }))} /><Mail /><span><strong>{t.email}</strong>{preferenceOnly ? <small>{t.emailInactive}</small> : !status.emailConfigured && <small>{t.emailUnavailable}</small>}</span></label>
             </div>
           </fieldset>
 
           <fieldset>
-            <legend>{t.frequency}</legend>
+            <legend>{preferenceOnly ? t.frequencyWhenActive : t.frequency}</legend>
             <div className="monitoring-segmented three">
               {(["immediate", "daily", "weekly"] as const).map(frequency => <label key={frequency} className={preference.frequency === frequency ? "selected" : ""}><input type="radio" name="frequency" value={frequency} checked={preference.frequency === frequency} onChange={() => setPreference(current => ({ ...current, frequency }))} /><CalendarClock />{t[frequency]}</label>)}
             </div>
           </fieldset>
 
           <label className="monitoring-consent"><input type="checkbox" checked={preference.documentImpactConsent} onChange={event => setPreference(current => ({ ...current, documentImpactConsent: event.target.checked }))} /><span><strong>{t.documentConsent}</strong><small>{t.consentHint}</small></span></label>
-          <button className="monitoring-save" disabled={saving || loading}>{saving ? <LoaderCircle className="spin" /> : <Save />}{t.save}</button>
+          <button className="monitoring-save" disabled={saving || loading}>{saving ? <LoaderCircle className="spin" /> : <Save />}{preferenceOnly ? t.savePreferences : t.save}</button>
         </form>
 
         <section className="monitoring-feed">

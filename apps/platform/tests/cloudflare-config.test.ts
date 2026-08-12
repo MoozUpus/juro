@@ -77,6 +77,13 @@ const isolatedDlqMetricsContract = [
   ["MALWARE_SCAN_DLQ", "malware-scan-dlq"],
 ] as const;
 
+// This deliberately stays outside the platform job/outbox binding contract:
+// it is a staging-only, content-free round-trip health probe.
+const stagingQueueHealthProbeContract = [
+  "STAGING_QUEUE_HEALTH_PROBE_QUEUE",
+  "queue-health",
+] as const;
+
 const vectorContract = [
   ["LEX_UZ_INDEX", "lex-uz"],
   ["ADVICE_UZ_INDEX", "advice-uz"],
@@ -122,6 +129,10 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       environment === "staging"
         ? (config.vars.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED === "true" ? "true" : "false")
         : environment === "production" ? "false" : undefined,
+    );
+    assert.equal(
+      config.vars.STAGING_QUEUE_HEALTH_PROBE_ENABLED,
+      environment === "staging" ? "true" : "false",
     );
     assert.equal(
       config.vars.MALWARE_SCANNER_PROBE_ENABLED,
@@ -212,9 +223,12 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
         environmentDlqMetricsContract[1]!,
         ...environmentQueueContract.slice(2),
       ];
+    const expectedProducerContract = environment === "staging"
+      ? [...environmentProducerContract, stagingQueueHealthProbeContract]
+      : environmentProducerContract;
     assert.deepEqual(
       config.queues.producers,
-      environmentProducerContract.map(([binding, name]) => ({
+      expectedProducerContract.map(([binding, name]) => ({
         binding,
         queue: `${environment}-${name}`,
       })),
@@ -224,7 +238,10 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
         .map(({ binding }) => binding)
         .filter((binding) => !binding.endsWith("_DLQ")),
       environment === "staging" || environment === "production"
-        ? [...ATTACHED_PLATFORM_QUEUE_BINDINGS]
+        ? [
+          ...ATTACHED_PLATFORM_QUEUE_BINDINGS,
+          ...(environment === "staging" ? [stagingQueueHealthProbeContract[0]] : []),
+        ]
         : [...ATTACHED_PLATFORM_QUEUE_BINDINGS].filter((binding) =>
           binding !== "MALWARE_SCAN_QUEUE"
         ),
@@ -360,6 +377,16 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             max_concurrency: 1,
             retry_delay: 60,
           },
+          ...(environment === "staging"
+            ? [{
+              queue: "staging-queue-health",
+              max_batch_size: 1,
+              max_batch_timeout: 5,
+              max_retries: 3,
+              max_concurrency: 1,
+              retry_delay: 30,
+            }]
+            : []),
         ]
         : [],
     );
@@ -504,7 +531,7 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
   assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
   assert.equal(source.env.production.queues.consumers.length, 12);
-  assert.equal(source.env.staging.queues.consumers.length, 12);
+  assert.equal(source.env.staging.queues.consumers.length, 13);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
     [
@@ -520,6 +547,7 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
       "staging-notifications",
       "staging-malware-scan",
       "staging-malware-scan-dlq",
+      "staging-queue-health",
     ],
   );
   assert.deepEqual(

@@ -4,7 +4,10 @@ import {
   readDependencyHealth,
 } from "./dependency-health";
 import type {
+  DependencyHealthEvidenceKind,
   DependencyHealthEnvironment,
+  DependencyHealthKey,
+  DependencyHealthSnapshot,
   DependencyHealthState,
 } from "./dependency-health";
 
@@ -97,6 +100,21 @@ const componentLabels: Readonly<Record<StatusComponentKey, { ru: string; uz: str
   lawyer_area: { ru: "Работа с юристами", uz: "Yuristlar bilan ishlash" },
 };
 
+const dependencyLabels: Readonly<Record<DependencyHealthKey, { ru: string; uz: string }>> = {
+  d1: { ru: "База данных", uz: "Ma’lumotlar bazasi" },
+  private_r2: { ru: "Защищённое хранилище файлов", uz: "Himoyalangan fayl ombori" },
+  queues: { ru: "Фоновые очереди", uz: "Fon navbatlari" },
+  queue_dlq: { ru: "Очередь ошибок", uz: "Xatolar navbati" },
+  malware_scanner: { ru: "Проверка файлов", uz: "Fayllarni tekshirish" },
+  openai: { ru: "AI-провайдер OpenAI", uz: "OpenAI AI-provayderi" },
+  anthropic: { ru: "AI-провайдер Anthropic", uz: "Anthropic AI-provayderi" },
+  resend: { ru: "Сервис email", uz: "Email xizmati" },
+  legal_source_sync: { ru: "Синхронизация правовых источников", uz: "Huquqiy manbalar sinxronizatsiyasi" },
+  document_analysis: { ru: "Обработка анализа документов", uz: "Hujjat tahlilini qayta ishlash" },
+  document_builder: { ru: "Генерация документов", uz: "Hujjatlarni yaratish" },
+  lawyer_area: { ru: "Передача юристу", uz: "Yuristga yuborish" },
+};
+
 type IncidentRow = {
   id: string;
   publicReference: string;
@@ -150,6 +168,16 @@ export type PublicStatusSnapshot = {
     lastCheckedAt: string | null;
     lastSuccessfulAt: string | null;
     checkAgeMs: number | null;
+    dependencies: Array<{
+      key: DependencyHealthKey;
+      label: string;
+      status: DependencyHealthState;
+      checkedAt: string | null;
+      checkAgeMs: number | null;
+      latencyMs: number | null;
+      safeErrorCode: string | null;
+      evidenceKind: DependencyHealthEvidenceKind | null;
+    }>;
   }>;
   activeIncidents: PublicStatusIncident[];
   recentIncidents: PublicStatusIncident[];
@@ -196,6 +224,20 @@ function highestPublicState(values: readonly PublicComponentState[]): PublicComp
     (current, value) => publicStateRank[value] > publicStateRank[current] ? value : current,
     "operational",
   );
+}
+
+function unknownDependency(key: DependencyHealthKey): DependencyHealthSnapshot {
+  return {
+    key,
+    state: "unknown",
+    recordedState: null,
+    checkedAt: null,
+    lastSuccessfulAt: null,
+    checkAgeMs: null,
+    latencyMs: null,
+    safeErrorCode: null,
+    evidenceKind: null,
+  };
 }
 
 function validTransition(from: StatusIncidentState, to: StatusIncidentState): boolean {
@@ -270,6 +312,7 @@ export async function readPublicStatus(input: {
   ]);
   const componentHealth = deriveComponentHealth(dependencyHealth);
   const componentHealthByKey = new Map(componentHealth.map((component) => [component.key, component]));
+  const dependencyHealthByKey = new Map(dependencyHealth.map((dependency) => [dependency.key, dependency]));
   const statusByComponent = new Map<StatusComponentKey, PublicComponentState>(
     componentHealth.map((component) => [component.key, component.status]),
   );
@@ -322,6 +365,19 @@ export async function readPublicStatus(input: {
   );
   const components = statusComponentKeys.map((key) => {
     const health = componentHealthByKey.get(key);
+    const dependencies = (health?.dependencyKeys ?? []).map((dependencyKey) => {
+      const dependency = dependencyHealthByKey.get(dependencyKey) ?? unknownDependency(dependencyKey);
+      return {
+        key: dependency.key,
+        label: dependencyLabels[dependency.key][input.locale],
+        status: dependency.state,
+        checkedAt: dependency.checkedAt,
+        checkAgeMs: dependency.checkAgeMs,
+        latencyMs: dependency.latencyMs,
+        safeErrorCode: dependency.safeErrorCode,
+        evidenceKind: dependency.evidenceKind,
+      };
+    });
     return {
       key,
       label: componentLabels[key][input.locale],
@@ -329,6 +385,7 @@ export async function readPublicStatus(input: {
       lastCheckedAt: health?.lastCheckedAt ?? null,
       lastSuccessfulAt: health?.lastSuccessfulAt ?? null,
       checkAgeMs: health?.checkAgeMs ?? null,
+      dependencies,
     };
   });
   return {
