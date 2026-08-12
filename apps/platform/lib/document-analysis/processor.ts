@@ -613,7 +613,16 @@ async function analyzeObject(
         ? "awaiting_ai_configuration"
         : error.retryable ? "retrying" : "failed";
       await setAnalysisState(env.DB, row, status, code);
-      throw new DocumentAnalysisProcessingError(code, error.retryable, "provider");
+      // Preserve only the already allow-listed provider diagnostic category.
+      // The outer worker/probe can then distinguish a bounded timeout from an
+      // HTTP/auth/circuit failure without retaining provider bodies, document
+      // text, credentials, or low-level error messages.
+      throw new DocumentAnalysisProcessingError(
+        code,
+        error.retryable,
+        "provider",
+        documentAnalysisDiagnosticDetail(error),
+      );
     }
     await setAnalysisState(env.DB, row, "retrying", "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE");
     throw new DocumentAnalysisProcessingError(

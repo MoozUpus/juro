@@ -36,8 +36,8 @@ cleanup.
 
 `MALWARE_SCANNER_PROBE_ENABLED` and
 `STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED` are independent staging-only feature
-flags. The source staging configuration enables both pending its next staging
-deployment, while production keeps both literal values at `false`. They run
+  flags. Both remain disabled by default after each bounded staging evidence
+  window; production also keeps both literal values at `false`. They run
 only after the regular outbox work,
 use a deterministic non-user tenant and private R2 objects, and remove the
 synthetic document/object projections when the check ends. The scanner probe

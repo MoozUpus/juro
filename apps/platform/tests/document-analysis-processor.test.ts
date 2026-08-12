@@ -84,6 +84,73 @@ test("provider diagnostics expose only an allow-listed HTTP category", () => {
   );
 });
 
+test("document analysis carries a safe provider diagnostic into its worker boundary", async () => {
+  const fixture = await databaseFixture("ready", "analysis_safe");
+  const bytes = new TextEncoder().encode("Сторона А. срок определяется дополнительно");
+  const sha256 = await sha256Hex(bytes);
+  fixture.sqlite.prepare("UPDATE document_files SET size_bytes=?,sha256=? WHERE id='file-a'")
+    .run(bytes.byteLength, sha256);
+  // The provider boundary is the subject of this test. Seed the immutable
+  // extracted-text version that would normally be written just before it.
+  fixture.sqlite.prepare(`INSERT INTO analysis_document_versions
+    (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,object_write_id,
+     file_name,mime_type,size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,created_by_user_id,created_at)
+    VALUES ('analysis-source-analysis-a','analysis-a','workspace-a','user-a',1,NULL,'extracted',
+      'analysis-versions/workspace-a/analysis-a/1.md',NULL,'contract.normalized-v1.md',
+      'text/markdown; charset=utf-8',?,?,NULL,NULL,'[]',NULL,'2026-07-30T00:00:00.000Z')`)
+    .run(bytes.byteLength, sha256);
+
+  await assert.rejects(
+    executeDocumentAnalysisJob({
+      DB: fixture.db,
+      BUCKET: {
+        async get() {
+          return {
+            async arrayBuffer() {
+              return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+            },
+          };
+        },
+      } as unknown as R2Bucket,
+    }, "analysis-a", "workspace-a", {
+      extract: async () => ({
+        fileName: "contract.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: bytes.byteLength,
+        pageCount: 1,
+        detectedLanguage: "ru",
+        textQuality: "good",
+        warningCode: null,
+        text: new TextDecoder().decode(bytes),
+        sections: [],
+        packageContext: null,
+      }),
+      retrieve: async () => ({
+        sources: [],
+        evidence: [],
+        freshness: { status: "unavailable", asOf: "unavailable", ageDays: null, maxAgeDays: 7 },
+        legalDatabaseAsOf: "unavailable",
+        retrievalMode: "lexical",
+        semanticStatus: "unavailable",
+        applicableAt: "2026-07-30T10:00:00.000Z",
+      }),
+      analyze: async () => {
+        throw new AiUnavailableError("provider body is intentionally withheld", "PROVIDER_TIMEOUT", true);
+      },
+    }),
+    (error: unknown) => error instanceof DocumentAnalysisProcessingError
+      && error.code === "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
+      && error.diagnosticStage === "provider"
+      && error.diagnosticDetail === "PROVIDER_TIMEOUT",
+  );
+
+  const analysis = fixture.sqlite.prepare("SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis-a'")
+    .get() as { status: string; errorCode: string };
+  assert.equal(analysis.status, "retrying");
+  assert.equal(analysis.errorCode, "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE");
+  fixture.sqlite.close();
+});
+
 test("safe retrying document analysis persists normalized result, usage, audit and is idempotent", async () => {
   const fixture = await databaseFixture("retrying", "analysis_safe");
   const bytes = new TextEncoder().encode("Сторона А. срок определяется дополнительно");
