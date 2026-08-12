@@ -3,7 +3,7 @@
 Updated: 2026-07-30
 Status: WebGL avatar disabled; text and work routes do not depend on it.
 
-The repository contains no owner-approved rigged GLB/FBX/USDZ/BLEND source and no Three.js, React Three Fiber, Rive, Lottie, or model-viewer dependency. The cinematic prototype therefore uses `/jurobek-avatar.webp` as a normal responsive image and labels it as a static fallback.
+The repository contains no owner-approved rigged GLB/FBX/USDZ/BLEND source and no Three.js, React Three Fiber, Rive, Lottie, or model-viewer dependency. The former cinematic prototype was retired on 2026-08-12; `/jurobek-avatar.webp` remains only as the normal static onboarding brand image.
 
 If the image fails, AI chat, dashboard, document analysis, builder, cases, plans, and specialist handoff links remain normal HTML controls. No recording/listening/speaking state is inferred from the image. `voice-with-avatar` remains disabled.
 

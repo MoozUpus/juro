@@ -72,7 +72,7 @@ No document in this directory authorizes or implies a production schema, traffic
 - `VISUAL-DIRECTION.md` — approved product direction and source-audit constraints.
 - `CINEMATIC-LEGAL-INTELLIGENCE.md` — shell/work-surface/token/motion/evidence contract.
 - `DESIGN-SYSTEM.md` — concrete semantic tokens, typography, component behavior, motion, accessibility, and migration order.
-- `PROTOTYPE-ROUTE.md` — staging-only route and verification boundary.
+- `PROTOTYPE-ROUTE.md` — retired staging prototype record and removal boundary.
 - `JUROBEK-3D.md` — asset hash/inventory, missing rig blocker, and static fallback.
 
 ## Documentation lifecycle

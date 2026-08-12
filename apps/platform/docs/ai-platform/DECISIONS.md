@@ -2670,8 +2670,9 @@ the actual MediaRecorder, upload/transcription request, AI stream and audio
 element. The microphone never starts automatically. The transcript remains
 editable and must match the encrypted recording transcript before the AI route
 links it to the persisted user message. The verified static Jurobek poster is
-not an avatar implementation; voice-with-avatar remains disabled until an
-owner-approved rig is supplied and audited. No migration or dependency is
+not an avatar implementation. It is now limited to onboarding brand identity;
+plain voice does not render it. Voice-with-avatar remains out of scope unless
+an owner-approved rig is supplied and audited. No migration or dependency is
 introduced beyond already-applied additive migration 0066. Production remains
 unchanged.
 
