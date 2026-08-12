@@ -14,9 +14,9 @@ test("document analysis probe is impossible outside explicitly enabled staging",
 
 test("document analysis probe shares one bounded deadline and intentionally has no provider fallback", () => {
   assert.deepEqual(stagingDocumentAnalysisProbeProviderOptions(10_000), {
-    providerTimeoutMs: 30_000,
+    providerTimeoutMs: 60_000,
     providerMaxAttempts: 1,
-    deadlineAt: 40_000,
+    deadlineAt: 70_000,
     fallbackEnabled: false,
   });
 });
@@ -25,5 +25,5 @@ test("document analysis budget begins after the independent scanner stage", () =
   // The scanner can legitimately take tens of seconds. Its elapsed time must
   // not reduce the controlled provider window once a file is safely promoted.
   const analysisStartedAt = 47_000;
-  assert.equal(stagingDocumentAnalysisProbeProviderOptions(analysisStartedAt).deadlineAt, 77_000);
+  assert.equal(stagingDocumentAnalysisProbeProviderOptions(analysisStartedAt).deadlineAt, 107_000);
 });

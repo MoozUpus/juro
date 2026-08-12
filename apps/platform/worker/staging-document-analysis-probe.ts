@@ -15,9 +15,11 @@ const probeKey = "staging-document-analysis-v1";
 const docxMime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 // This is a staging-only control, not the asynchronous user-analysis SLA.
 // The absolute deadline is shared by the normal extraction/retrieval path and
-// the single provider request. Cleanup deliberately runs afterward so probe
-// residue is never traded for a fast-but-misleading result.
-const stagingDocumentAnalysisProbeDeadlineMs = 30_000;
+// the single provider request. It intentionally matches the product's normal
+// quick-document provider window: a full structured document result is not an
+// interactive-chat 30-second SLA. Cleanup deliberately runs afterward so
+// probe residue is never traded for a fast-but-misleading result.
+const stagingDocumentAnalysisProbeDeadlineMs = 60_000;
 const probeIds = {
   userId: `${probeKey}-user`,
   workspaceId: `${probeKey}-workspace`,
@@ -268,7 +270,7 @@ export async function runStagingDocumentAnalysisProbe(
     // take longer than an AI request. Start the single shared analysis budget
     // only after the file is safe, so scanner latency cannot pre-expire the
     // provider before it receives a real chance to run. The analysis itself
-    // still gets exactly one 30-second, no-fallback window.
+    // still gets exactly one 60-second, no-fallback window.
     const providerOptions = stagingDocumentAnalysisProbeProviderOptions(Date.now());
     const analysis = await executeDocumentAnalysisJob(env, probeIds.analysisId, probeIds.workspaceId, {
       analyze: (input) => runDocumentAnalysis(input, {
