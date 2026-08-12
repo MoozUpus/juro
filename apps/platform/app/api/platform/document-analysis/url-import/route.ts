@@ -17,8 +17,18 @@ import {
   publicDocumentUrlIntentSchema,
   PublicDocumentUrlError,
 } from "../../../../../lib/document-analysis/url-import";
+import {
+  publicDocumentUrlImportDisabledMessage,
+  publicDocumentUrlImportEnabled,
+} from "../../../../../lib/document-analysis/public-url-import-feature";
 import { workspaceForUser } from "../../../../../lib/platform/workspace";
-import { assertOperationalFeatureEnabled, operationalEnvironment, OperationalFeatureError, operationalFeatureMessage } from "../../../../../lib/operations/operational-feature-flags";
+import {
+  assertOperationalFeatureEnabled,
+  operationalEnvironment,
+  operationalFeatureMessage,
+  operationalLocaleFromRequest,
+  OperationalFeatureError,
+} from "../../../../../lib/operations/operational-feature-flags";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -33,12 +43,19 @@ function invalidRequestResponse(error: JsonRequestError): Response {
 export const POST = withApiErrors(async function POST(request: Request) {
   assertSafeWrite(request);
   const user = await requireApiUser();
+  const environment = runtimeEnv();
+  if (!publicDocumentUrlImportEnabled(environment.PUBLIC_DOCUMENT_URL_IMPORT_ENABLED)) {
+    return response({
+      code: "PUBLIC_DOCUMENT_URL_IMPORT_DISABLED",
+      error: publicDocumentUrlImportDisabledMessage(operationalLocaleFromRequest(request)),
+    }, 503);
+  }
   const workspace = await workspaceForUser(user);
   const parsed = await parseJsonRequest(request, publicDocumentUrlIntentSchema, 4_096);
   if (!parsed.ok) return invalidRequestResponse(parsed.error);
   const db = requireD1();
   try {
-    await assertOperationalFeatureEnabled({ db, environment: operationalEnvironment(runtimeEnv().APP_ENV), key: "document_analysis_upload" });
+    await assertOperationalFeatureEnabled({ db, environment: operationalEnvironment(environment.APP_ENV), key: "document_analysis_upload" });
   } catch (error) {
     if (!(error instanceof OperationalFeatureError)) throw error;
     return response({ code: error.code, error: operationalFeatureMessage(parsed.data.locale) }, 503);

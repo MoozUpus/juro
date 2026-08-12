@@ -148,8 +148,10 @@ call the bounded deep verifier before it records quarantine success.
   provider.
 - The extractor must repeat deep archive verification and retain the 500-page
   aggregate PDF limit before provider access.
-- A member above 20 MB or decoded package above 50 MB must stop before PDF/DOCX
-  parsing and persist the external-extraction state without provider access.
+- A ZIP above 20 MB must be rejected before an upload record is created. A
+  member above 20 MB, decoded package above 50 MB, or extracted text above
+  160,000 characters must stop before provider access and terminally persist
+  `DOCUMENT_ANALYSIS_CAPACITY_REQUIRED`; it must not imply background work.
 
 # Local ZIP-package OCR checkpoint — 2026-08-04
 

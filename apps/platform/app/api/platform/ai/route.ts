@@ -29,6 +29,7 @@ import {
 } from "../../../../lib/legal/interactive-verified-retrieval";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
+  AI_INTERACTIVE_FINALIZATION_RESERVE_MS,
   createAiExecutionBudget,
   type AiExecutionBudget,
 } from "../../../../lib/ai/execution-budget";
@@ -377,12 +378,16 @@ async function executePostWithinBudget(
       return unavailableInteractiveVerifiedLegalRetrieval("VERIFIED_RETRIEVAL_TIMEOUT");
     }
   })();
-  const [{ memoryEncryption, memories }, retrieval] = await Promise.all([memoryContext, verifiedRetrieval]);
+  // The source-bound preliminary result is independent of personal-memory
+  // decryption. Do not make a bounded-but-slower optional memory read hold up
+  // the only safe <=5s user-visible result on the SSE path.
+  const retrieval = await verifiedRetrieval;
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
   await emitProgress({
     stage: "preliminary",
     preliminary: preliminaryForVerifiedRetrieval({ retrieval, locale, answerMode, reasoningMode }),
   });
+  const { memoryEncryption, memories } = await memoryContext;
   const requestHash = await sha256Json({
     question,
     locale,
@@ -684,7 +689,7 @@ async function executePostWithinBudget(
   // Preserve enough time for one atomic completion batch. If the full model
   // answer consumed the user-facing deadline, release the reservation rather
   // than storing/charging a response that arrived too late.
-  if (budget.signal.aborted || budget.remainingMs < 450) {
+  if (budget.signal.aborted || budget.remainingMs < AI_INTERACTIVE_FINALIZATION_RESERVE_MS) {
     await failAiRun({
       db, runId: reservation.runId, ledgerId: reservation.ledgerId,
       workspaceId: workspace.id, userId: user.id, idempotencyKey,

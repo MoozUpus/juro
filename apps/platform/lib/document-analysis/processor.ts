@@ -400,7 +400,10 @@ async function analyzeObject(
     if (!extracted) {
       if (row.sizeBytes > DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT) {
         if (row.mimeType === "application/zip") {
-          await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+          // There is no deployed streaming ZIP extractor.  Do not leave a
+          // file in a waiting state that no consumer can complete, and do not
+          // send it to OCR or an AI provider as a fallback.
+          await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
           throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
         }
         await scheduleOcrProcessing(env.DB, {
@@ -432,7 +435,10 @@ async function analyzeObject(
         });
       } catch (error) {
         if (error instanceof PackageExtractionError) {
-          await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+          // PackageExtractionError only represents the bounded inline
+          // capacity boundary.  A background handler does not exist yet, so
+          // terminalize truthfully instead of implying asynchronous progress.
+          await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
           throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
         }
         if (
@@ -457,7 +463,10 @@ async function analyzeObject(
       }
     }
     if (extracted.text.length > DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT) {
-      await setAnalysisState(env.DB, row, "awaiting_chunked_analysis", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+      // Chunk synthesis is intentionally not emulated.  Until a real,
+      // tenant-scoped chunking handler is deployed, the source text must not
+      // be sent to a provider or held in an unfinishable state.
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
     }
 
@@ -661,7 +670,7 @@ async function analyzeObject(
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_EXTRACTION_FAILED", error.retryable);
     }
     if (error instanceof PackageExtractionError) {
-      await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
     }
     if (error instanceof AnalysisRevisionError) {

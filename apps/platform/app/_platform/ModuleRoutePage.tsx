@@ -1,6 +1,8 @@
 import { notFound } from "next/navigation";
 
 import { requireChatGPTUser } from "../chatgpt-auth";
+import { publicDocumentUrlImportEnabled } from "../../lib/document-analysis/public-url-import-feature";
+import { runtimeEnv } from "../../lib/document-builder/storage/runtime";
 import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformPath, type AccountType, type PlatformLocale, type PlatformModule } from "../../lib/platform/routing";
 import { ModuleContent } from "./ModuleContent";
 
@@ -24,12 +26,14 @@ type BusinessModuleRouteInput = {
 export async function renderAccountModuleRoute({ locale, accountType, module }: AccountModuleRouteInput) {
   if (!isLocale(locale) || !isAccountType(accountType) || !isPlatformModule(module)) notFound();
   const user = await requireChatGPTUser(`/${locale}/${accountType}/${module}`);
+  const publicUrlImportEnabled = publicDocumentUrlImportEnabled(runtimeEnv().PUBLIC_DOCUMENT_URL_IMPORT_ENABLED);
   return (
     <ModuleContent
       locale={locale}
       accountType={accountType}
       module={module}
       userName={user.fullName ?? user.displayName}
+      publicUrlImportEnabled={publicUrlImportEnabled}
     />
   );
 }
@@ -39,6 +43,7 @@ export async function renderBusinessModuleRoute({ locale, workspaceId, module }:
   const typedLocale = locale as PlatformLocale;
   const destination = platformPath(typedLocale, "business", module, workspaceId);
   const user = await requireChatGPTUser(destination);
+  const publicUrlImportEnabled = publicDocumentUrlImportEnabled(runtimeEnv().PUBLIC_DOCUMENT_URL_IMPORT_ENABLED);
   return (
     <ModuleContent
       locale={typedLocale}
@@ -46,6 +51,7 @@ export async function renderBusinessModuleRoute({ locale, workspaceId, module }:
       module={module}
       userName={user.fullName ?? user.displayName}
       workspaceId={workspaceId}
+      publicUrlImportEnabled={publicUrlImportEnabled}
     />
   );
 }

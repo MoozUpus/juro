@@ -11,6 +11,7 @@ import {
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 import { ComparisonProcessingError } from "../lib/document-comparison/types";
 import { PackageExtractionError } from "../lib/document-analysis/package-extractor";
+import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "../lib/document-analysis/limits";
 import type { DocumentAnalysisResult } from "../lib/document-analysis/schema";
 
 const result: DocumentAnalysisResult = {
@@ -352,7 +353,7 @@ test("a ZIP member requiring OCR schedules the tenant-scoped package OCR queue",
   fixture.sqlite.close();
 });
 
-test("an expanded ZIP beyond the inline memory budget waits for external extraction", async () => {
+test("an expanded ZIP beyond the inline memory budget fails terminally without provider or queue work", async () => {
   const fixture = await databaseFixture("ready", "analysis_safe");
   const bytes = new TextEncoder().encode("synthetic-verified-zip-bytes");
   const sha256 = await sha256Hex(bytes);
@@ -378,8 +379,55 @@ test("an expanded ZIP beyond the inline memory budget waits for external extract
 
   const analysis = fixture.sqlite.prepare("SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis-a'")
     .get() as { status: string; errorCode: string };
-  assert.equal(analysis.status, "awaiting_external_extraction");
+  assert.equal(analysis.status, "failed");
   assert.equal(analysis.errorCode, "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+  assert.equal((fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 0);
+  fixture.sqlite.close();
+});
+
+test("extracted text beyond the single-request boundary fails terminally without an AI call", async () => {
+  const fixture = await databaseFixture("ready", "analysis_safe");
+  const bytes = new TextEncoder().encode("synthetic-verified-pdf-bytes");
+  const sha256 = await sha256Hex(bytes);
+  fixture.sqlite.prepare("UPDATE document_files SET mime_type='application/pdf',file_name='contract.pdf',size_bytes=?,sha256=? WHERE id='file-a'")
+    .run(bytes.byteLength, sha256);
+  let aiCalls = 0;
+
+  await assert.rejects(
+    executeDocumentAnalysisJob({
+      DB: fixture.db,
+      BUCKET: {
+        async get() {
+          return { async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); } };
+        },
+      } as unknown as R2Bucket,
+    }, "analysis-a", "workspace-a", {
+      extract: async () => ({
+        fileName: "contract.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: bytes.byteLength,
+        pageCount: 1,
+        detectedLanguage: "ru",
+        textQuality: "good",
+        warningCode: null,
+        text: "x".repeat(DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT + 1),
+        sections: [],
+        packageContext: null,
+      }),
+      analyze: async () => {
+        aiCalls += 1;
+        throw new Error("must not run");
+      },
+    }),
+    (error: unknown) => error instanceof DocumentAnalysisProcessingError
+      && error.code === "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED",
+  );
+
+  const analysis = fixture.sqlite.prepare("SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis-a'")
+    .get() as { status: string; errorCode: string };
+  assert.equal(analysis.status, "failed");
+  assert.equal(analysis.errorCode, "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+  assert.equal(aiCalls, 0);
   assert.equal((fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 0);
   fixture.sqlite.close();
 });

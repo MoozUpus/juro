@@ -3,9 +3,11 @@ import test from "node:test";
 import { env } from "cloudflare:workers";
 import {
   documentAnalysisResultSchema,
+  documentAnalysisAnthropicWireJsonSchema,
   documentAnalysisJsonSchema,
   enforceDocumentAnalysisSourceBoundary,
   enforceDocumentExcerptBoundary,
+  parseAnthropicDocumentAnalysisWireResult,
   parseDocumentAnalysisResult,
 } from "../lib/document-analysis/schema";
 import { buildDocumentAnalysisProviderInput } from "../lib/document-analysis/input";
@@ -62,6 +64,25 @@ test("document analysis output is strict, bounded and JSON-schema backed", () =>
   assert.deepEqual(parseDocumentAnalysisResult(base), base);
   assert.equal(documentAnalysisJsonSchema.type, "object");
   assert.equal(documentAnalysisResultSchema.safeParse({ ...base, hidden: true }).success, false);
+});
+
+test("Anthropic document wire schema removes nullable grammar unions and restores canonical nulls", () => {
+  assert.equal(countSchemaKeyword(documentAnalysisAnthropicWireJsonSchema, "anyOf"), 0);
+  const wire = {
+    ...base,
+    userSide: "",
+    risks: [{
+      ...base.risks[0],
+      clause: "",
+      page: 0,
+      exactExcerpt: "",
+      proposedWording: "",
+    }],
+  };
+  assert.deepEqual(parseAnthropicDocumentAnalysisWireResult(wire), {
+    ...base,
+    risks: [{ ...base.risks[0], clause: null, page: null, exactExcerpt: null, proposedWording: null }],
+  });
 });
 
 test("document analysis cannot claim legal compliance without a verified source", () => {
@@ -287,13 +308,25 @@ test("document analysis sends Anthropic a native JSON-schema response request wi
       assert.equal(request.max_tokens, 2_400);
       assert.equal(request.output_config?.format?.type, "json_schema");
       assert.equal(request.output_config?.format?.schema?.type, "object");
+      assert.equal(countSchemaKeyword(request.output_config?.format?.schema ?? {}, "anyOf"), 0);
       assert.equal(request.tools, undefined);
       assert.equal(request.tool_choice, undefined);
+      const nativeWireResult = {
+        ...base,
+        userSide: "",
+        risks: [{
+          ...base.risks[0],
+          clause: "",
+          page: 0,
+          exactExcerpt: "",
+          proposedWording: "",
+        }],
+      };
       return Response.json({
         id: "msg_document_native_json",
         model: "claude-sonnet-4-6",
         stop_reason: "end_turn",
-        content: [{ type: "text", text: JSON.stringify(base) }],
+        content: [{ type: "text", text: JSON.stringify(nativeWireResult) }],
         usage: { input_tokens: 20, output_tokens: 30 },
       });
     };
@@ -317,6 +350,8 @@ test("document analysis sends Anthropic a native JSON-schema response request wi
     });
     assert.equal(result.provider, "anthropic");
     assert.equal(result.data.summary, base.summary);
+    assert.equal(result.data.userSide, null);
+    assert.equal(result.data.risks[0]?.page, null);
   } finally {
     globalThis.fetch = originalFetch;
     for (const [key, value] of Object.entries(originalRuntime)) {
@@ -325,6 +360,15 @@ test("document analysis sends Anthropic a native JSON-schema response request wi
     }
   }
 });
+
+function countSchemaKeyword(value: unknown, keyword: string): number {
+  if (Array.isArray(value)) return value.reduce((total, item) => total + countSchemaKeyword(item, keyword), 0);
+  if (!value || typeof value !== "object") return 0;
+  return Object.entries(value as Record<string, unknown>).reduce(
+    (total, [key, nested]) => total + (key === keyword ? 1 : 0) + countSchemaKeyword(nested, keyword),
+    0,
+  );
+}
 
 test("controlled document probes never begin a fallback after their shared deadline or explicit one-shot policy", () => {
   const retryableFailure = new AiUnavailableError("timeout", "PROVIDER_TIMEOUT", true);

@@ -436,6 +436,31 @@ test("a genuinely stale AI reservation releases its cycle and requires a fresh i
 
 });
 
+test("timed-out AI run releases reserved usage before a retry can be offered", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "timed-out-request", 1));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  await failAiRun({
+    db: d1,
+    runId: reserved.runId,
+    ledgerId: reserved.ledgerId,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "timed-out-request",
+    errorCode: "PROVIDER_TIMEOUT",
+  });
+
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?")
+    .get(reserved.ledgerId) as { status: string };
+  const run = sqlite.prepare("SELECT status,error_code AS errorCode FROM ai_runs WHERE id=?")
+    .get(reserved.runId) as { status: string; errorCode: string };
+  assert.equal(run.status, "failed");
+  assert.equal(run.errorCode, "PROVIDER_TIMEOUT");
+  assert.equal(ledger.status, "released");
+});
+
 test("interactive stale AI reservations recover inside the bounded retry window", async () => {
   const { sqlite, d1 } = aiDatabase();
   const reserved = await reserveAiRun(reservationInput(d1, "interactive-stale-window", 1));

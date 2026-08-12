@@ -9,6 +9,8 @@ import {
   LEGACY_JOB_KINDS,
   QUEUE_BINDING_BY_KIND,
   expectedDocumentAnalysisDlqQueueName,
+  expectedDocumentExportDlqQueueName,
+  expectedMalwareScanDlqQueueName,
   expectedOcrProcessingDlqQueueName,
   expectedQueueName,
   handleQueue,
@@ -22,6 +24,7 @@ import {
   enqueueDueTaskReminders,
   handleScheduled,
   reconcileRetryExhaustedDocumentJobs,
+  reconcileRetryExhaustedQueueJobs,
 } from "../worker/platform-scheduled";
 
 class SqliteD1Statement {
@@ -1292,6 +1295,175 @@ test("OCR DLQ terminalizes only the ledger and preserves retryable OCR prerequis
   }
 });
 
+test("document-export DLQ terminalizes the durable run without mutating the retryable export or its audited redrive", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    sqlite.exec(`
+      CREATE TABLE analysis_exports (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        error_code TEXT
+      );
+      INSERT INTO analysis_exports (id,workspace_id,status,error_code)
+      VALUES ('export_dlq','ws_test','retrying','ANALYSIS_EXPORT_OBJECT_FAILED');
+    `);
+    const body = envelope("document.export", {
+      jobId: "job_document_export_dlq",
+      idempotencyKey: "idem_document_export_dlq",
+      subjectId: "export_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_export_dlq",
+    });
+    insertSourceQueueJobRun(sqlite, body, {
+      errorCode: "DOCUMENT_EXPORT_OBJECT_FAILED",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_document_export_dlq",
+      queueBinding: "DOCUMENT_EXPORT_QUEUE",
+      kind: "document.export",
+      idempotencyKey: body.idempotencyKey,
+      subjectId: body.subjectId,
+      workspaceId: body.workspaceId ?? null,
+      correlationId: body.correlationId,
+      status: "dispatched",
+    });
+    const { env, sends } = createEnv(d1);
+    const item = mockMessage(body, "document_export_dlq_delivery", 1);
+    await runBatch(
+      env,
+      expectedDocumentExportDlqQueueName("development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM job_runs WHERE id=?",
+      ).get(body.jobId) as object },
+      { status: "dead_lettered", errorCode: "DOCUMENT_EXPORT_OBJECT_FAILED" },
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM analysis_exports WHERE id='export_dlq'",
+      ).get() as object },
+      { status: "retrying", errorCode: "ANALYSIS_EXPORT_OBJECT_FAILED" },
+      "the DLQ consumer must not alter user-visible export state or claim a result",
+    );
+    assert.equal(
+      (sqlite.prepare(
+        "SELECT status FROM job_outbox WHERE id='outbox_document_export_dlq'",
+      ).get() as { status: string }).status,
+      "dispatched",
+      "the append-only operator redrive still owns republishing",
+    );
+    assert.equal(sends.length, 0, "DLQ terminalization never republishes an export");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("malware-scan DLQ keeps the file quarantined and only terminalizes the durable run", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    sqlite.exec(`
+      CREATE TABLE document_files (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        owner_user_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        r2_key TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        size_bytes INTEGER NOT NULL,
+        sha256 TEXT,
+        archived_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS document_analyses (
+        id TEXT PRIMARY KEY,
+        workspace_id TEXT NOT NULL,
+        owner_user_id TEXT NOT NULL,
+        uploaded_file_id TEXT NOT NULL,
+        status TEXT NOT NULL,
+        summary_json TEXT,
+        result_sha256 TEXT,
+        error_code TEXT,
+        consent_version TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO document_files VALUES (
+        'file_malware_dlq','ws_test','user_test','analysis_quarantined',
+        'quarantine/ws_test/file_malware_dlq','synthetic.pdf','application/pdf',10,
+        '${"0".repeat(64)}',NULL,'2026-08-12T00:00:00.000Z','2026-08-12T00:00:00.000Z'
+      );
+      INSERT INTO document_analyses VALUES (
+        'analysis_malware_dlq','ws_test','user_test','file_malware_dlq','quarantined',
+        NULL,NULL,'MALWARE_SCANNER_UNAVAILABLE','2026-08-12',
+        '2026-08-12T00:00:00.000Z','2026-08-12T00:00:00.000Z'
+      );
+    `);
+    const body = envelope("malware.scan", {
+      jobId: "job_malware_scan_dlq",
+      idempotencyKey: "idem_malware_scan_dlq",
+      subjectId: "analysis_malware_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_malware_scan_dlq",
+    });
+    insertSourceQueueJobRun(sqlite, body, {
+      errorCode: "MALWARE_SCANNER_UNAVAILABLE",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_malware_scan_dlq",
+      queueBinding: "MALWARE_SCAN_QUEUE",
+      kind: "malware.scan",
+      idempotencyKey: body.idempotencyKey,
+      subjectId: body.subjectId,
+      workspaceId: body.workspaceId ?? null,
+      correlationId: body.correlationId,
+      status: "dispatched",
+    });
+    const { env, sends } = createEnv(d1);
+    const item = mockMessage(body, "malware_scan_dlq_delivery", 1);
+    await runBatch(
+      env,
+      expectedMalwareScanDlqQueueName("development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM job_runs WHERE id=?",
+      ).get(body.jobId) as object },
+      { status: "dead_lettered", errorCode: "MALWARE_SCANNER_UNAVAILABLE" },
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT kind,r2_key AS r2Key FROM document_files WHERE id='file_malware_dlq'",
+      ).get() as object },
+      {
+        kind: "analysis_quarantined",
+        r2Key: "quarantine/ws_test/file_malware_dlq",
+      },
+      "a dead-lettered scanner job must never promote a quarantined file",
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare(
+        "SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis_malware_dlq'",
+      ).get() as object },
+      { status: "quarantined", errorCode: "MALWARE_SCANNER_UNAVAILABLE" },
+    );
+    assert.equal(sends.length, 0, "DLQ terminalization cannot enqueue extraction or analysis");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("scheduled reconciliation fences stale document and OCR retry exhaustion without resubmitting work", async () => {
   const { sqlite, d1 } = createDatabase();
   try {
@@ -1394,6 +1566,79 @@ test("scheduled reconciliation fences stale document and OCR retry exhaustion wi
         ORDER BY created_at DESC,id DESC LIMIT 1
       `).get() as object },
       { state: "degraded", safeErrorCode: "DLQ_BACKLOG", evidenceKind: "scheduled_job" },
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("scheduled reconciliation terminalizes retry-exhausted export and malware jobs without republishing or promoting files", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const exportJob = envelope("document.export", {
+      jobId: "job_document_export_scheduled_dlq",
+      idempotencyKey: "idem_document_export_scheduled_dlq",
+      subjectId: "export_scheduled_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_document_export_scheduled_dlq",
+    });
+    const malwareJob = envelope("malware.scan", {
+      jobId: "job_malware_scan_scheduled_dlq",
+      idempotencyKey: "idem_malware_scan_scheduled_dlq",
+      subjectId: "analysis_malware_scheduled_dlq",
+      workspaceId: "ws_test",
+      correlationId: "corr_malware_scan_scheduled_dlq",
+    });
+    insertSourceQueueJobRun(sqlite, exportJob, {
+      errorCode: "DOCUMENT_EXPORT_OBJECT_FAILED",
+    });
+    insertSourceQueueJobRun(sqlite, malwareJob, {
+      errorCode: "MALWARE_SCANNER_UNAVAILABLE",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_document_export_scheduled_dlq",
+      queueBinding: "DOCUMENT_EXPORT_QUEUE",
+      kind: "document.export",
+      idempotencyKey: exportJob.idempotencyKey,
+      subjectId: exportJob.subjectId,
+      workspaceId: exportJob.workspaceId ?? null,
+      correlationId: exportJob.correlationId,
+      status: "dispatched",
+    });
+    insertOutbox(sqlite, {
+      id: "outbox_malware_scan_scheduled_dlq",
+      queueBinding: "MALWARE_SCAN_QUEUE",
+      kind: "malware.scan",
+      idempotencyKey: malwareJob.idempotencyKey,
+      subjectId: malwareJob.subjectId,
+      workspaceId: malwareJob.workspaceId ?? null,
+      correlationId: malwareJob.correlationId,
+      status: "retrying",
+    });
+    const { env, sends } = createEnv(d1);
+    const result = await reconcileRetryExhaustedQueueJobs(env, {
+      now: new Date("2026-08-12T00:20:00.000Z"),
+    });
+
+    assert.deepEqual(result, { eligible: 2, terminalized: 2 });
+    assert.equal(sends.length, 0, "scheduled recovery is terminalization-only");
+    assert.deepEqual(
+      (sqlite.prepare(`
+        SELECT id,status,error_code AS errorCode FROM job_runs
+        WHERE id IN (?,?) ORDER BY id ASC
+      `).all(exportJob.jobId, malwareJob.jobId) as Array<object>).map((row) => ({ ...row })),
+      [
+        {
+          id: exportJob.jobId,
+          status: "dead_lettered",
+          errorCode: "DOCUMENT_EXPORT_OBJECT_FAILED",
+        },
+        {
+          id: malwareJob.jobId,
+          status: "dead_lettered",
+          errorCode: "MALWARE_SCANNER_UNAVAILABLE",
+        },
+      ].sort((left, right) => left.id.localeCompare(right.id)),
     );
   } finally {
     sqlite.close();

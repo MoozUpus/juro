@@ -128,10 +128,16 @@ capped at 120 prioritized edges, validated when the immutable derivative is
 reloaded, persisted with the normalized analysis and sent only inside
 `untrustedDocument.packageContext`. The RU/UZ result surface explains that these
 links are hypotheses to verify, not legal facts.
-Packages above 20 MB compressed input, 20 MB per expanded member, or 50 MB total
-expanded working set remain in `awaiting_external_extraction`. Scanned-PDF page
-count and page coordinates are not supplied by `toMarkdown` and remain release
-gates.
+ZIP packages above 20 MB compressed input are rejected before an upload state is
+created. A package that crosses a per-member or decoded working-set boundary
+only discovered after safe extraction, or text above the 160,000-character
+single-request boundary, is terminally marked `failed` with
+`DOCUMENT_ANALYSIS_CAPACITY_REQUIRED`. It is never sent to OCR as an opaque ZIP,
+never sent to a language-model provider, and is not presented as background work
+that will complete later. The UI directs the user to split the material until a
+privacy-approved streaming extractor and chunk-synthesis worker are actually
+deployed. Scanned-PDF page count and page coordinates are not supplied by
+`toMarkdown` and remain release gates.
 
 ## Supported intake formats
 

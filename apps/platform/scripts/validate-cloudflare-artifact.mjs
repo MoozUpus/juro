@@ -220,21 +220,44 @@ if (["staging", "production"].includes(requestedEnvironment)) {
   assert.deepEqual(artifact.services, selected.services);
 }
 
-const queueContract = [
+const sourceQueueContract = [
   ["DOCUMENT_ANALYSIS_QUEUE", "document-analysis"],
-  ["DOCUMENT_ANALYSIS_DLQ", "document-analysis-dlq"],
   ["OCR_PROCESSING_QUEUE", "ocr-processing"],
-  ["OCR_PROCESSING_DLQ", "ocr-processing-dlq"],
   ["DOCUMENT_EXPORT_QUEUE", "document-export"],
   ["EMAIL_NOTIFICATIONS_QUEUE", "email-notifications"],
   ["LEGAL_SOURCES_SYNC_QUEUE", "legal-sources-sync"],
   ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
   ["NOTIFICATIONS_QUEUE", "notifications"],
 ];
+const documentDlqContract = [
+  ["DOCUMENT_ANALYSIS_DLQ", "document-analysis-dlq"],
+  ["OCR_PROCESSING_DLQ", "ocr-processing-dlq"],
+];
+const isolatedDlqContract = [
+  ...documentDlqContract,
+  ["DOCUMENT_EXPORT_DLQ", "document-export-dlq"],
+  ["MALWARE_SCAN_DLQ", "malware-scan-dlq"],
+];
 const hasAsyncConsumers = ["staging", "production"].includes(requestedEnvironment);
-if (hasAsyncConsumers) {
-  queueContract.push(["MALWARE_SCAN_QUEUE", "malware-scan"]);
-}
+const queueContract = hasAsyncConsumers
+  ? [
+    sourceQueueContract[0],
+    isolatedDlqContract[0],
+    sourceQueueContract[1],
+    isolatedDlqContract[1],
+    sourceQueueContract[2],
+    isolatedDlqContract[2],
+    ...sourceQueueContract.slice(3),
+    ["MALWARE_SCAN_QUEUE", "malware-scan"],
+    isolatedDlqContract[3],
+  ]
+  : [
+    sourceQueueContract[0],
+    documentDlqContract[0],
+    sourceQueueContract[1],
+    documentDlqContract[1],
+    ...sourceQueueContract.slice(2),
+  ];
 assert.deepEqual(
   artifact.queues?.producers,
   queueContract.map(([binding, suffix]) => ({
@@ -266,8 +289,8 @@ assert.deepEqual(
         retry_delay: 30,
       }));
       const dlqConsumer = (suffix) => ({
-        // Document analysis and OCR terminalize durable job state after their
-        // source queue exhausts retries. These consumers have no recursive
+        // Terminalizable document work records retry exhaustion durably after
+        // its source queue exhausts retries. These consumers have no recursive
         // DLQ; their D1 bookkeeping retries are bounded here and a scheduled
         // reconciler fences any residual busy delivery.
         queue: `${requestedEnvironment}-${suffix}-dlq`,
@@ -282,7 +305,11 @@ assert.deepEqual(
         dlqConsumer("document-analysis"),
         sourceConsumers[1],
         dlqConsumer("ocr-processing"),
-        ...sourceConsumers.slice(2),
+        sourceConsumers[2],
+        dlqConsumer("document-export"),
+        ...sourceConsumers.slice(3, -1),
+        sourceConsumers.at(-1),
+        dlqConsumer("malware-scan"),
       ];
     })()
     : [],

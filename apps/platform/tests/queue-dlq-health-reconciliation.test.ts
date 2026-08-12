@@ -14,6 +14,8 @@ function environment(
   input: {
     documentBacklog?: number;
     ocrBacklog?: number;
+    documentExportBacklog?: number;
+    malwareScanBacklog?: number;
     documentMetricsError?: boolean;
   } = {},
 ) {
@@ -28,6 +30,8 @@ function environment(
     DB: db,
     DOCUMENT_ANALYSIS_DLQ: metrics(input.documentBacklog ?? 0, input.documentMetricsError),
     OCR_PROCESSING_DLQ: metrics(input.ocrBacklog ?? 0),
+    DOCUMENT_EXPORT_DLQ: metrics(input.documentExportBacklog ?? 0),
+    MALWARE_SCAN_DLQ: metrics(input.malwareScanBacklog ?? 0),
   };
 }
 
@@ -71,6 +75,8 @@ test("records operational DLQ health only after live zero backlog, no dead-lette
       state: "operational_recorded",
       documentAnalysisBacklog: 0,
       ocrBacklog: 0,
+      documentExportBacklog: 0,
+      malwareScanBacklog: 0,
       durableDeadLettered: 0,
     } satisfies QueueDlqHealthReconciliationSummary);
     assert.deepEqual(await latestHealth(d1), {
@@ -111,6 +117,27 @@ test("does not clear a recent DLQ event or a current backlog", async () => {
   }
 });
 
+test("keeps DLQ health degraded when export or malware-scan backlog is present", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const exportBacklog = await reconcileQueueDlqHealth(
+      environment(d1, { documentExportBacklog: 1 }),
+      { now },
+    );
+    assert.equal(exportBacklog.state, "backlog_present");
+    assert.equal(exportBacklog.documentExportBacklog, 1);
+
+    const malwareBacklog = await reconcileQueueDlqHealth(
+      environment(d1, { malwareScanBacklog: 2 }),
+      { now },
+    );
+    assert.equal(malwareBacklog.state, "backlog_present");
+    assert.equal(malwareBacklog.malwareScanBacklog, 2);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("does not clear DLQ health while a durable document/OCR job remains dead-lettered", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -133,6 +160,8 @@ test("does not clear DLQ health while a durable document/OCR job remains dead-le
       state: "durable_work_pending",
       documentAnalysisBacklog: 0,
       ocrBacklog: 0,
+      documentExportBacklog: 0,
+      malwareScanBacklog: 0,
       durableDeadLettered: 1,
     } satisfies QueueDlqHealthReconciliationSummary);
     assert.equal((await latestHealth(d1))?.state, "degraded");
@@ -182,6 +211,8 @@ test("records a degraded verification failure rather than inventing a zero-backl
       state: "verification_unavailable",
       documentAnalysisBacklog: null,
       ocrBacklog: null,
+      documentExportBacklog: null,
+      malwareScanBacklog: null,
       durableDeadLettered: null,
     } satisfies QueueDlqHealthReconciliationSummary);
     assert.deepEqual(await latestHealth(d1), {

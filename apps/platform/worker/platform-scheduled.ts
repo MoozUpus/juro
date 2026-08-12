@@ -25,12 +25,12 @@ const OUTBOX_CRON = "*/5 * * * *";
 const LOCK_NAME = "outbox-dispatch";
 const LOCK_MS = 4 * 60 * 1_000;
 const TASK_REMINDER_BATCH_SIZE = 100;
-const DOCUMENT_DLQ_RECONCILIATION_BATCH_SIZE = 20;
+const QUEUE_DLQ_RECONCILIATION_BATCH_SIZE = 20;
 // Source consumers retry at most three times with short bounded delays. The
 // larger grace window prevents Cron from racing a delayed source delivery or a
 // five-minute execution lease, but still makes a dropped/busy DLQ observable
 // within one operational interval.
-export const DOCUMENT_DLQ_RECONCILIATION_GRACE_MS = 15 * 60 * 1_000;
+export const QUEUE_DLQ_RECONCILIATION_GRACE_MS = 15 * 60 * 1_000;
 
 type DueTaskReminder = {
   reminderId: string;
@@ -94,11 +94,16 @@ function logScheduled(
   else console.log(entry);
 }
 
-type RetryExhaustedDocumentJob = {
+type RetryExhaustedQueueJob = {
   jobId: string;
   idempotencyKey: string;
   queueName: string;
-  jobType: "document.analyze" | "document.index" | "ocr.process";
+  jobType:
+    | "document.analyze"
+    | "document.index"
+    | "ocr.process"
+    | "document.export"
+    | "malware.scan";
   subjectId: string;
   workspaceId: string;
   correlationId: string;
@@ -106,39 +111,41 @@ type RetryExhaustedDocumentJob = {
   attempt: number;
 };
 
-export type DocumentDlqReconciliationSummary = {
+export type QueueDlqReconciliationSummary = {
   eligible: number;
   terminalized: number;
 };
 
 /**
- * Recovers the small failure window in which a document/OCR DLQ cannot
- * terminalize its own ledger entry before that DLQ consumer exhausts retries.
+ * Recovers the small failure window in which an implemented document-related
+ * DLQ cannot terminalize its own ledger entry before that DLQ consumer
+ * exhausts retries.
  *
  * This is deliberately a terminalization-only pass: it does not resubmit a
- * provider call, mutate an analysis/OCR/index payload, or mark user work as
- * successful. The existing append-only operational-redrive flow remains the
- * only way to republish the original identifiers after review. Every UPDATE is
- * fenced by the source queue, immutable envelope hash, attempt count, expired
- * lease, and a dispatched/retrying outbox record.
+ * provider call, mutate analysis/OCR/index/export state, promote a quarantined
+ * file, or mark user work as successful. The existing append-only
+ * operational-redrive flow remains the only way to republish the original
+ * identifiers after review. Every UPDATE is fenced by the source queue,
+ * immutable envelope hash, attempt count, expired lease, and a
+ * dispatched/retrying outbox record.
  */
-export async function reconcileRetryExhaustedDocumentJobs(
+export async function reconcileRetryExhaustedQueueJobs(
   env: Pick<PlatformJobEnv, "APP_ENV" | "DB">,
   input: {
     now?: Date;
     limit?: number;
   } = {},
-): Promise<DocumentDlqReconciliationSummary> {
+): Promise<QueueDlqReconciliationSummary> {
   const now = input.now ?? new Date();
   const nowIso = now.toISOString();
   const cutoffIso = new Date(
-    now.getTime() - DOCUMENT_DLQ_RECONCILIATION_GRACE_MS,
+    now.getTime() - QUEUE_DLQ_RECONCILIATION_GRACE_MS,
   ).toISOString();
   const limit = Math.max(
     1,
     Math.min(
-      DOCUMENT_DLQ_RECONCILIATION_BATCH_SIZE,
-      Math.trunc(input.limit ?? DOCUMENT_DLQ_RECONCILIATION_BATCH_SIZE),
+      QUEUE_DLQ_RECONCILIATION_BATCH_SIZE,
+      Math.trunc(input.limit ?? QUEUE_DLQ_RECONCILIATION_BATCH_SIZE),
     ),
   );
   const documentAnalysisQueue = expectedQueueName(
@@ -146,6 +153,8 @@ export async function reconcileRetryExhaustedDocumentJobs(
     env.APP_ENV,
   );
   const ocrQueue = expectedQueueName("ocr.process", env.APP_ENV);
+  const documentExportQueue = expectedQueueName("document.export", env.APP_ENV);
+  const malwareScanQueue = expectedQueueName("malware.scan", env.APP_ENV);
 
   const candidates = await env.DB.prepare(`
     SELECT
@@ -168,6 +177,8 @@ export async function reconcileRetryExhaustedDocumentJobs(
     WHERE (
         (j.queue_name=? AND j.job_type IN ('document.analyze','document.index'))
         OR (j.queue_name=? AND j.job_type='ocr.process')
+        OR (j.queue_name=? AND j.job_type='document.export')
+        OR (j.queue_name=? AND j.job_type='malware.scan')
       )
       AND j.status IN ('running','retrying')
       AND j.attempt>=3
@@ -181,12 +192,14 @@ export async function reconcileRetryExhaustedDocumentJobs(
   `).bind(
     documentAnalysisQueue,
     ocrQueue,
+    documentExportQueue,
+    malwareScanQueue,
     cutoffIso,
     cutoffIso,
     nowIso,
     nowIso,
     limit,
-  ).all<RetryExhaustedDocumentJob>();
+  ).all<RetryExhaustedQueueJob>();
 
   let terminalized = 0;
   for (const candidate of candidates.results) {
@@ -255,6 +268,13 @@ export async function reconcileRetryExhaustedDocumentJobs(
 
   return { eligible: candidates.results.length, terminalized };
 }
+
+/**
+ * Backward-compatible name retained for callers that only knew the original
+ * document/OCR recovery scope. It now reconciles the full set of durable
+ * document-related DLQ jobs, including export and malware scan.
+ */
+export const reconcileRetryExhaustedDocumentJobs = reconcileRetryExhaustedQueueJobs;
 
 /**
  * Enqueues opaque reminder identifiers through the durable outbox. The queue
@@ -507,8 +527,8 @@ export async function handleScheduled(
         : 0;
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
-    failureCode = "DOCUMENT_DLQ_RECONCILIATION_FAILED";
-    const documentDlqReconciliation = await reconcileRetryExhaustedDocumentJobs(
+    failureCode = "QUEUE_DLQ_RECONCILIATION_FAILED";
+    const documentDlqReconciliation = await reconcileRetryExhaustedQueueJobs(
       env,
       { now: new Date(now) },
     );
@@ -583,11 +603,13 @@ export async function handleScheduled(
       dispatched: summary.dispatched,
       retrying: summary.retrying,
       rejected: summary.rejected,
-      documentDlqEligible: documentDlqReconciliation.eligible,
-      documentDlqTerminalized: documentDlqReconciliation.terminalized,
+      queueDlqEligible: documentDlqReconciliation.eligible,
+      queueDlqTerminalized: documentDlqReconciliation.terminalized,
       queueDlqHealthState: queueDlqHealth.state,
       queueDlqDocumentBacklog: queueDlqHealth.documentAnalysisBacklog,
       queueDlqOcrBacklog: queueDlqHealth.ocrBacklog,
+      queueDlqDocumentExportBacklog: queueDlqHealth.documentExportBacklog,
+      queueDlqMalwareScanBacklog: queueDlqHealth.malwareScanBacklog,
       queueDlqDurableDeadLettered: queueDlqHealth.durableDeadLettered,
       taskRemindersDue: taskReminders.due,
       taskRemindersEnqueued: taskReminders.enqueued,

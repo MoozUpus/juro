@@ -64,11 +64,17 @@ const queueContract = [
   ["NOTIFICATIONS_QUEUE", "notifications"],
 ] as const;
 
-// These bindings are deliberately metrics-only readers for the two DLQs that
-// have a durable terminalizer. They are not job producer contracts.
+// These bindings are deliberately metrics-only readers for DLQs that have a
+// durable terminalizer. They are not job producer contracts.
 const documentDlqMetricsContract = [
   ["DOCUMENT_ANALYSIS_DLQ", "document-analysis-dlq"],
   ["OCR_PROCESSING_DLQ", "ocr-processing-dlq"],
+] as const;
+
+const isolatedDlqMetricsContract = [
+  ...documentDlqMetricsContract,
+  ["DOCUMENT_EXPORT_DLQ", "document-export-dlq"],
+  ["MALWARE_SCAN_DLQ", "malware-scan-dlq"],
 ] as const;
 
 const vectorContract = [
@@ -184,13 +190,28 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     const environmentQueueContract = hasAsyncConsumers
       ? [...queueContract, ["MALWARE_SCAN_QUEUE", "malware-scan"] as const]
       : queueContract;
-    const environmentProducerContract = [
-      environmentQueueContract[0]!,
-      documentDlqMetricsContract[0]!,
-      environmentQueueContract[1]!,
-      documentDlqMetricsContract[1]!,
-      ...environmentQueueContract.slice(2),
-    ];
+    const environmentDlqMetricsContract = hasAsyncConsumers
+      ? isolatedDlqMetricsContract
+      : documentDlqMetricsContract;
+    const environmentProducerContract = hasAsyncConsumers
+      ? [
+        environmentQueueContract[0]!,
+        environmentDlqMetricsContract[0]!,
+        environmentQueueContract[1]!,
+        environmentDlqMetricsContract[1]!,
+        environmentQueueContract[2]!,
+        environmentDlqMetricsContract[2]!,
+        ...environmentQueueContract.slice(3, -1),
+        environmentQueueContract.at(-1)!,
+        environmentDlqMetricsContract[3]!,
+      ]
+      : [
+        environmentQueueContract[0]!,
+        environmentDlqMetricsContract[0]!,
+        environmentQueueContract[1]!,
+        environmentDlqMetricsContract[1]!,
+        ...environmentQueueContract.slice(2),
+      ];
     assert.deepEqual(
       config.queues.producers,
       environmentProducerContract.map(([binding, name]) => ({
@@ -212,7 +233,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       config.queues.producers
         .map(({ binding }) => binding)
         .filter((binding) => binding.endsWith("_DLQ")),
-      documentDlqMetricsContract.map(([binding]) => binding),
+      environmentDlqMetricsContract.map(([binding]) => binding),
     );
     assert.deepEqual(
       [...PLATFORM_QUEUE_BINDINGS].filter((binding) =>
@@ -275,6 +296,16 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             retry_delay: 30,
           },
           {
+            // Exports have a durable source record, so a retry-exhausted
+            // delivery is terminalized by the same audited DLQ contract.
+            queue: `${environment}-document-export-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
+          },
+          {
             queue: `${environment}-legal-sources-sync`,
             max_batch_size: 5,
             max_batch_timeout: 5,
@@ -318,6 +349,16 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             dead_letter_queue: `${environment}-malware-scan-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
+          },
+          {
+            // The scanner DLQ only records retry exhaustion. It cannot mark a
+            // quarantined file safe or enqueue extraction/analysis work.
+            queue: `${environment}-malware-scan-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
           },
         ]
         : [],
@@ -462,8 +503,8 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
   assert.match(serialized, /"MALWARE_SCAN_QUEUE"/);
   assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
-  assert.equal(source.env.production.queues.consumers.length, 10);
-  assert.equal(source.env.staging.queues.consumers.length, 10);
+  assert.equal(source.env.production.queues.consumers.length, 12);
+  assert.equal(source.env.staging.queues.consumers.length, 12);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
     [
@@ -472,11 +513,13 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
       "staging-ocr-processing",
       "staging-ocr-processing-dlq",
       "staging-document-export",
+      "staging-document-export-dlq",
       "staging-legal-sources-sync",
       "staging-email-notifications",
       "staging-data-retention-cleanup",
       "staging-notifications",
       "staging-malware-scan",
+      "staging-malware-scan-dlq",
     ],
   );
   assert.deepEqual(
@@ -487,11 +530,13 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
       "production-ocr-processing",
       "production-ocr-processing-dlq",
       "production-document-export",
+      "production-document-export-dlq",
       "production-legal-sources-sync",
       "production-email-notifications",
       "production-data-retention-cleanup",
       "production-notifications",
       "production-malware-scan",
+      "production-malware-scan-dlq",
     ],
   );
 });

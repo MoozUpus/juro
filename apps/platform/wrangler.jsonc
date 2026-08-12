@@ -15,6 +15,7 @@
     "ACCOUNT_DELETION_PURGE_ENABLED": "false",
     "GUEST_AI_ENABLED": "true",
     "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+    "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
     "PAYMENT_FOUNDATION_ENABLED": "true",
     "PAYMENT_SANDBOX_ENABLED": "true",
     "PAYMENT_PRODUCTION_APPROVED": "false",
@@ -158,9 +159,10 @@
         "ACCOUNT_DELETION_PURGE_ENABLED": "true",
         "MALWARE_SCAN_ENABLED": "true",
         "MALWARE_SCANNER_PROBE_ENABLED": "false",
-        "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "true",
+        "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "true",
+        "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "true",
         "PAYMENT_PRODUCTION_APPROVED": "false",
@@ -259,6 +261,10 @@
             "queue": "staging-document-export"
           },
           {
+            "binding": "DOCUMENT_EXPORT_DLQ",
+            "queue": "staging-document-export-dlq"
+          },
+          {
             "binding": "EMAIL_NOTIFICATIONS_QUEUE",
             "queue": "staging-email-notifications"
           },
@@ -277,6 +283,10 @@
           {
             "binding": "MALWARE_SCAN_QUEUE",
             "queue": "staging-malware-scan"
+          },
+          {
+            "binding": "MALWARE_SCAN_DLQ",
+            "queue": "staging-malware-scan-dlq"
           }
         ],
         "consumers": [
@@ -324,6 +334,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "staging-document-export-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "staging-legal-sources-sync",
             "max_batch_size": 5,
             "max_batch_timeout": 5,
@@ -367,6 +385,14 @@
             "dead_letter_queue": "staging-malware-scan-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "staging-malware-scan-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
           }
         ]
       },
@@ -434,6 +460,7 @@
         "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+        "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "false",
         "PAYMENT_PRODUCTION_APPROVED": "false",
@@ -536,6 +563,10 @@
             "queue": "production-document-export"
           },
           {
+            "binding": "DOCUMENT_EXPORT_DLQ",
+            "queue": "production-document-export-dlq"
+          },
+          {
             "binding": "EMAIL_NOTIFICATIONS_QUEUE",
             "queue": "production-email-notifications"
           },
@@ -554,6 +585,10 @@
           {
             "binding": "MALWARE_SCAN_QUEUE",
             "queue": "production-malware-scan"
+          },
+          {
+            "binding": "MALWARE_SCAN_DLQ",
+            "queue": "production-malware-scan-dlq"
           }
         ],
         "consumers": [
@@ -601,6 +636,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "production-document-export-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "production-legal-sources-sync",
             "max_batch_size": 5,
             "max_batch_timeout": 5,
@@ -644,6 +687,14 @@
             "dead_letter_queue": "production-malware-scan-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "production-malware-scan-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
           }
         ]
       },

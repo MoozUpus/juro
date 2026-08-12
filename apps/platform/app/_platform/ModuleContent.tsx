@@ -22,7 +22,7 @@ const titles: Record<PlatformModule, { ru: string; uz: string }> = {
   dashboard:{ru:"Главная",uz:"Bosh sahifa"},"ai-chat":{ru:"AI-юрист",uz:"AI-yurist"},cases:{ru:"Мои дела",uz:"Mening ishlarim"},"document-review":{ru:"Проверить документ",uz:"Hujjatni tekshirish"},monitoring:{ru:"Мониторинг законодательства",uz:"Qonunchilik monitoringi"},"action-plan":{ru:"План действий",uz:"Harakatlar rejasi"},calendar:{ru:"Календарь",uz:"Kalendar"},consultations:{ru:"Консультации",uz:"Maslahatlar"},history:{ru:"История",uz:"Tarix"},archive:{ru:"Архив",uz:"Arxiv"},team:{ru:"Команда",uz:"Jamoa"},billing:{ru:"Тариф и оплата",uz:"Tarif va to‘lov"},"demo-payments":{ru:"Демонстрация платежей",uz:"To‘lovlar namoyishi"},security:{ru:"Безопасность",uz:"Xavfsizlik"},help:{ru:"Помощь",uz:"Yordam"},profile:{ru:"Профиль",uz:"Profil"},settings:{ru:"Настройки языка",uz:"Til sozlamalari"},
 };
 
-export function ModuleContent({ locale, accountType, module, userName, workspaceId }: { locale: PlatformLocale; accountType: AccountType; module: PlatformModule; userName: string; workspaceId?: string }) {
+export function ModuleContent({ locale, accountType, module, userName, workspaceId, publicUrlImportEnabled }: { locale: PlatformLocale; accountType: AccountType; module: PlatformModule; userName: string; workspaceId?: string; publicUrlImportEnabled: boolean }) {
   const ru=locale==="ru";
   if(module==="action-plan") return <ActionPlanClient locale={locale} accountType={accountType}/>;
   if(module==="calendar") return <CalendarClient locale={locale}/>;
@@ -34,7 +34,7 @@ export function ModuleContent({ locale, accountType, module, userName, workspace
   if(module==="billing") return <BillingClient locale={locale} accountType={accountType} workspaceId={workspaceId}/>;
   if(module==="demo-payments") return <DemoPaymentsClient locale={locale} accountType={accountType} workspaceId={workspaceId}/>;
   if(module==="profile"||module==="settings"||module==="security") return <ProfileSettingsClient locale={locale} accountType={accountType} view={module==="security"?"security":module}/>;
-  if(module==="document-review") return <DocumentReviewClient locale={locale} accountType={accountType}/>;
+  if(module==="document-review") return <DocumentReviewClient locale={locale} accountType={accountType} publicUrlImportEnabled={publicUrlImportEnabled}/>;
   if(module==="history") return <HistoryClient locale={locale}/>;
   if(module==="archive") return <ArchiveClient locale={locale} accountType={accountType}/>;
   if(module==="help") return <HelpClient locale={locale} accountType={accountType}/>;

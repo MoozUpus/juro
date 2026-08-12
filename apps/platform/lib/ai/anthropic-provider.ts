@@ -11,6 +11,7 @@ import {
 } from "./legal-chat-schema";
 import type { LegalAiRunOptions, LegalAiRunResult, LegalChatRequest } from "./provider";
 import { aiResponseToneInstruction, resolveAiRuntimeSettings } from "./runtime-settings";
+import { legalChatProviderTimeoutMs } from "./legal-chat-timeout";
 
 export function anthropicModel(): string {
   return runtimeEnv().ANTHROPIC_FALLBACK_MODEL || DEFAULT_ANTHROPIC_MODEL;
@@ -83,8 +84,6 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
     const settings = input.runtimeSettings ?? await resolveAiRuntimeSettings({ db: runtimeEnv().DB, env: runtimeEnv() });
     model = settings.anthropicChatFallbackModel;
     responseTone = settings.responseTone;
-    await options.beforeProviderCall?.({ provider: "anthropic", model });
-    await options.onProgress?.({ stage: "provider_started", provider: "anthropic", model });
     usableSourceIds = new Set(
       input.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id),
     );
@@ -99,9 +98,24 @@ export async function runAnthropicLegalChat(input: LegalChatRequest, options: Le
   let result: LegalAiRunResult;
   try {
     const interactive = input.reasoningMode === "fast";
-    const providerBudgetMs = options.providerTimeoutMs ?? (interactive
-      ? Math.max(1, Math.min(25_500, options.budget?.remainingMs ?? 25_500))
-      : Math.max(1, Math.min(120_000, options.budget?.remainingMs ?? 120_000)));
+    const providerBudgetMs = legalChatProviderTimeoutMs({
+      reasoningMode: input.reasoningMode,
+      budget: options.budget,
+      providerTimeoutMs: options.providerTimeoutMs,
+    });
+    if (providerBudgetMs === null) {
+      throw new AiUnavailableError(
+        "Резервный AI-провайдер не получил достаточно времени для безопасного завершения.",
+        "PROVIDER_TIMEOUT",
+        true,
+        null,
+        "shared_deadline",
+      );
+    }
+    // Do not create audit/cost evidence or a UI "started" state until there
+    // is actually enough common deadline left to issue the provider request.
+    await options.beforeProviderCall?.({ provider: "anthropic", model });
+    await options.onProgress?.({ stage: "provider_started", provider: "anthropic", model });
     const responseStartTimeoutMs = anthropicResponseStartTimeoutMs({
       interactive,
       providerTimeoutMs: providerBudgetMs,

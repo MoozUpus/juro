@@ -8,6 +8,19 @@ import {
   parsePublicDocumentUrlIntent,
   PublicDocumentUrlError,
 } from "../lib/document-analysis/url-import";
+import {
+  publicDocumentUrlImportDisabledMessage,
+  publicDocumentUrlImportEnabled,
+} from "../lib/document-analysis/public-url-import-feature";
+
+test("public URL import feature defaults fail closed and localizes its safe unavailable state", () => {
+  assert.equal(publicDocumentUrlImportEnabled(undefined), false);
+  assert.equal(publicDocumentUrlImportEnabled("false"), false);
+  assert.equal(publicDocumentUrlImportEnabled("TRUE"), false);
+  assert.equal(publicDocumentUrlImportEnabled("true"), true);
+  assert.equal(publicDocumentUrlImportDisabledMessage("ru"), "Импорт по публичной ссылке временно недоступен. Загрузите файл с устройства.");
+  assert.equal(publicDocumentUrlImportDisabledMessage("uz"), "Ommaviy havola orqali import vaqtincha mavjud emas. Faylni qurilmadan yuklang.");
+});
 
 test("public URL contract accepts only credential-free HTTPS hostnames", () => {
   assert.equal(parsePublicDocumentUrlIntent({ url: "https://docs.example.uz/a.pdf#page=2", locale: "ru", consent: true }).url, "https://docs.example.uz/a.pdf");
@@ -100,13 +113,24 @@ test("URL import route and RU/UZ UI expose no credential forwarding or fake succ
   ]);
   assert.match(route, /assertSafeWrite/);
   assert.match(route, /requireApiUser/);
+  assert.match(route, /PUBLIC_DOCUMENT_URL_IMPORT_DISABLED/);
+  assert.match(route, /publicDocumentUrlImportDisabledMessage\(operationalLocaleFromRequest\(request\)\)/);
+  assert.ok(route.indexOf("if (!publicDocumentUrlImportEnabled") < route.indexOf("const parsed = await parseJsonRequest"));
   assert.match(route, /workspaceForUser/);
   assert.match(route, /parseJsonRequest\(request, publicDocumentUrlIntentSchema, 4_096\)/);
   assert.match(route, /FILE_SCAN_UNAVAILABLE/);
+  assert.match(ui, /publicUrlImportEnabled \? <form className="review-url-import"/);
+  assert.match(ui, /review-url-import-disabled/);
+  assert.match(ui, /Контролируемая beta-функция временно недоступна/);
+  assert.match(ui, /Nazorat qilinadigan beta-funksiya vaqtincha mavjud emas/);
   assert.match(ui, /Импортировать публичную ссылку/);
   assert.match(ui, /Ommaviy havolani import qilish/);
   assert.match(ui, /type="url"/);
+  assert.match(ui, /uploadDocumentForAnalysis\(file, locale, setUploadProgress, uploadCaseId \|\| null\)/);
+  assert.match(ui, /!publicUrlImportEnabled \|\| !publicUrl\.trim\(\)/);
+  assert.match(await readFile(new URL("../lib/document-analysis/client-upload.ts", import.meta.url), "utf8"), /"x-juro-locale": locale/);
   assert.match(config, /global_fetch_strictly_public/);
+  assert.equal((config.match(/"PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false"/g) ?? []).length, 3);
 });
 
 class MemoryBucket {

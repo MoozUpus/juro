@@ -32,7 +32,11 @@ import {
   unavailableInteractiveVerifiedLegalRetrieval,
 } from "../../../../lib/legal/interactive-verified-retrieval";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
-import { createAiExecutionBudget, type AiExecutionBudget } from "../../../../lib/ai/execution-budget";
+import {
+  AI_INTERACTIVE_FINALIZATION_RESERVE_MS,
+  createAiExecutionBudget,
+  type AiExecutionBudget,
+} from "../../../../lib/ai/execution-budget";
 import { tryRecordAiSloTelemetry } from "../../../../lib/ai/slo-telemetry";
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { sha256Json } from "../../../../lib/ai/run-store";
@@ -626,6 +630,32 @@ export async function POST(request: Request): Promise<Response> {
           "AI javobi tekshiruvdan o‘tmadi. Mehmon javobi ishlatilmadi.",
         ),
       }, 422, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
+    }
+
+    // Do not persist/consume a guest turn once the shared interactive deadline
+    // no longer leaves room for the atomic completion. The same provider
+    // reserve protects registered chat; this explicit boundary keeps the
+    // guest's one allowed answer equally non-chargeable on a late result.
+    if (budget.signal.aborted || budget.remainingMs < AI_INTERACTIVE_FINALIZATION_RESERVE_MS) {
+      await failGuestAiRun({ db, run: reservation.run, errorCode: "PROVIDER_TIMEOUT" });
+      await recordGuestAiSlo({
+        telemetry: telemetry && {
+          ...telemetry,
+          provider: aiResult.provider,
+          model: aiResult.model,
+          fallbackFromProvider: aiResult.fallbackFromProvider,
+        },
+        outcome: guestAiSloFailureOutcome("PROVIDER_TIMEOUT", budget),
+      });
+      return json({
+        code: "PROVIDER_TIMEOUT",
+        correlationId: reservation.run.correlationId,
+        error: copy(
+          locale,
+          "AI не успел безопасно сохранить ответ. Гостевой ответ не использован; попробуйте ещё раз.",
+          "AI javobni xavfsiz saqlashga ulgurmadi. Mehmon javobi ishlatilmadi; qayta urinib ko‘ring.",
+        ),
+      }, 503, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }
 
     const persistenceStage = budget.beginStage("persistence");

@@ -16,6 +16,8 @@ type QueueMetricsBinding = Pick<Queue, "metrics">;
 type QueueDlqHealthEnv = Pick<PlatformJobEnv, "APP_ENV" | "DB"> & {
   DOCUMENT_ANALYSIS_DLQ?: QueueMetricsBinding;
   OCR_PROCESSING_DLQ?: QueueMetricsBinding;
+  DOCUMENT_EXPORT_DLQ?: QueueMetricsBinding;
+  MALWARE_SCAN_DLQ?: QueueMetricsBinding;
 };
 
 type CountRow = { count: number };
@@ -32,6 +34,8 @@ export type QueueDlqHealthReconciliationSummary = {
     | "verification_unavailable";
   documentAnalysisBacklog: number | null;
   ocrBacklog: number | null;
+  documentExportBacklog: number | null;
+  malwareScanBacklog: number | null;
   durableDeadLettered: number | null;
 };
 
@@ -46,6 +50,8 @@ async function countDurableDeadLettered(
 ): Promise<number> {
   const documentQueue = expectedQueueName("document.analyze", env.APP_ENV);
   const ocrQueue = expectedQueueName("ocr.process", env.APP_ENV);
+  const documentExportQueue = expectedQueueName("document.export", env.APP_ENV);
+  const malwareScanQueue = expectedQueueName("malware.scan", env.APP_ENV);
   const row = await env.DB.prepare(
     `SELECT COUNT(*) AS count
      FROM job_runs
@@ -53,8 +59,15 @@ async function countDurableDeadLettered(
        AND (
          (queue_name=? AND job_type IN ('document.analyze','document.index'))
          OR (queue_name=? AND job_type='ocr.process')
+         OR (queue_name=? AND job_type='document.export')
+         OR (queue_name=? AND job_type='malware.scan')
        )`,
-  ).bind(documentQueue, ocrQueue).first<CountRow>();
+  ).bind(
+    documentQueue,
+    ocrQueue,
+    documentExportQueue,
+    malwareScanQueue,
+  ).first<CountRow>();
   return Number(row?.count ?? 0);
 }
 
@@ -110,16 +123,26 @@ function emptySummary(
   state: QueueDlqHealthReconciliationSummary["state"],
   documentAnalysisBacklog: number | null,
   ocrBacklog: number | null,
+  documentExportBacklog: number | null,
+  malwareScanBacklog: number | null,
   durableDeadLettered: number | null,
 ): QueueDlqHealthReconciliationSummary {
-  return { state, documentAnalysisBacklog, ocrBacklog, durableDeadLettered };
+  return {
+    state,
+    documentAnalysisBacklog,
+    ocrBacklog,
+    documentExportBacklog,
+    malwareScanBacklog,
+    durableDeadLettered,
+  };
 }
 
 /**
  * Reconciles queue DLQ health from three independent facts:
  *
- * 1. Cloudflare's current backlog metrics for both implemented document DLQs;
- * 2. the durable `job_runs` ledger has no exhausted document/OCR work; and
+ * 1. Cloudflare's current backlog metrics for all implemented document DLQs;
+ * 2. the durable `job_runs` ledger has no exhausted document/OCR/export/scan
+ *    work; and
  * 3. the most recent DLQ failure has been quiet for one full cron interval.
  *
  * It never mutates a job, requeues work, or clears immutable evidence. If
@@ -133,7 +156,9 @@ export async function reconcileQueueDlqHealth(
   const now = input.now ?? new Date();
   const documentDlq = env.DOCUMENT_ANALYSIS_DLQ;
   const ocrDlq = env.OCR_PROCESSING_DLQ;
-  if (!documentDlq || !ocrDlq) {
+  const documentExportDlq = env.DOCUMENT_EXPORT_DLQ;
+  const malwareScanDlq = env.MALWARE_SCAN_DLQ;
+  if (!documentDlq || !ocrDlq || !documentExportDlq || !malwareScanDlq) {
     await recordDependencyHealthEvidence(env, {
       key: "queue_dlq",
       state: "degraded",
@@ -141,24 +166,38 @@ export async function reconcileQueueDlqHealth(
       evidenceKind: "scheduled_job",
       startedAt: now.getTime(),
     }, now);
-    return emptySummary("verification_unavailable", null, null, null);
+    return emptySummary("verification_unavailable", null, null, null, null, null);
   }
 
   let documentAnalysisBacklog: number | null = null;
   let ocrBacklog: number | null = null;
+  let documentExportBacklog: number | null = null;
+  let malwareScanBacklog: number | null = null;
   let durableDeadLettered: number | null = null;
   let lastFailure: LatestFailureRow | null = null;
   let invalidOrUnmatched = false;
   try {
-    const [documentMetrics, ocrMetrics, durableCount, latestFailureRow, invalidEvidence] = await Promise.all([
+    const [
+      documentMetrics,
+      ocrMetrics,
+      documentExportMetrics,
+      malwareScanMetrics,
+      durableCount,
+      latestFailureRow,
+      invalidEvidence,
+    ] = await Promise.all([
       documentDlq.metrics(),
       ocrDlq.metrics(),
+      documentExportDlq.metrics(),
+      malwareScanDlq.metrics(),
       countDurableDeadLettered(env),
       latestDlqFailure(env),
       hasUnresolvedInvalidDlqEvidence(env),
     ]);
     documentAnalysisBacklog = normalizedBacklogCount(documentMetrics.backlogCount);
     ocrBacklog = normalizedBacklogCount(ocrMetrics.backlogCount);
+    documentExportBacklog = normalizedBacklogCount(documentExportMetrics.backlogCount);
+    malwareScanBacklog = normalizedBacklogCount(malwareScanMetrics.backlogCount);
     durableDeadLettered = durableCount;
     lastFailure = latestFailureRow;
     invalidOrUnmatched = invalidEvidence;
@@ -170,10 +209,22 @@ export async function reconcileQueueDlqHealth(
       evidenceKind: "scheduled_job",
       startedAt: now.getTime(),
     }, now);
-    return emptySummary("verification_unavailable", documentAnalysisBacklog, ocrBacklog, durableDeadLettered);
+    return emptySummary(
+      "verification_unavailable",
+      documentAnalysisBacklog,
+      ocrBacklog,
+      documentExportBacklog,
+      malwareScanBacklog,
+      durableDeadLettered,
+    );
   }
 
-  if (documentAnalysisBacklog === null || ocrBacklog === null) {
+  if (
+    documentAnalysisBacklog === null
+    || ocrBacklog === null
+    || documentExportBacklog === null
+    || malwareScanBacklog === null
+  ) {
     await recordDependencyHealthEvidence(env, {
       key: "queue_dlq",
       state: "degraded",
@@ -181,9 +232,21 @@ export async function reconcileQueueDlqHealth(
       evidenceKind: "scheduled_job",
       startedAt: now.getTime(),
     }, now);
-    return emptySummary("verification_unavailable", documentAnalysisBacklog, ocrBacklog, durableDeadLettered);
+    return emptySummary(
+      "verification_unavailable",
+      documentAnalysisBacklog,
+      ocrBacklog,
+      documentExportBacklog,
+      malwareScanBacklog,
+      durableDeadLettered,
+    );
   }
-  if (documentAnalysisBacklog > 0 || ocrBacklog > 0) {
+  if (
+    documentAnalysisBacklog > 0
+    || ocrBacklog > 0
+    || documentExportBacklog > 0
+    || malwareScanBacklog > 0
+  ) {
     await recordDependencyHealthEvidence(env, {
       key: "queue_dlq",
       state: "degraded",
@@ -191,7 +254,14 @@ export async function reconcileQueueDlqHealth(
       evidenceKind: "scheduled_job",
       startedAt: now.getTime(),
     }, now);
-    return emptySummary("backlog_present", documentAnalysisBacklog, ocrBacklog, durableDeadLettered);
+    return emptySummary(
+      "backlog_present",
+      documentAnalysisBacklog,
+      ocrBacklog,
+      documentExportBacklog,
+      malwareScanBacklog,
+      durableDeadLettered,
+    );
   }
   if ((durableDeadLettered ?? 0) > 0) {
     await recordDependencyHealthEvidence(env, {
@@ -201,15 +271,36 @@ export async function reconcileQueueDlqHealth(
       evidenceKind: "scheduled_job",
       startedAt: now.getTime(),
     }, now);
-    return emptySummary("durable_work_pending", documentAnalysisBacklog, ocrBacklog, durableDeadLettered);
+    return emptySummary(
+      "durable_work_pending",
+      documentAnalysisBacklog,
+      ocrBacklog,
+      documentExportBacklog,
+      malwareScanBacklog,
+      durableDeadLettered,
+    );
   }
   if (invalidOrUnmatched) {
-    return emptySummary("invalid_or_unmatched_pending", documentAnalysisBacklog, ocrBacklog, durableDeadLettered);
+    return emptySummary(
+      "invalid_or_unmatched_pending",
+      documentAnalysisBacklog,
+      ocrBacklog,
+      documentExportBacklog,
+      malwareScanBacklog,
+      durableDeadLettered,
+    );
   }
 
   const lastFailureAt = lastFailure ? Date.parse(lastFailure.checkedAt) : NaN;
   if (Number.isFinite(lastFailureAt) && now.getTime() - lastFailureAt < QUEUE_DLQ_HEALTH_QUIET_WINDOW_MS) {
-    return emptySummary("quiet_window", documentAnalysisBacklog, ocrBacklog, durableDeadLettered);
+    return emptySummary(
+      "quiet_window",
+      documentAnalysisBacklog,
+      ocrBacklog,
+      documentExportBacklog,
+      malwareScanBacklog,
+      durableDeadLettered,
+    );
   }
 
   const recorded = await recordDependencyHealthEvidence(env, {
@@ -223,6 +314,8 @@ export async function reconcileQueueDlqHealth(
     recorded ? "operational_recorded" : "operational_not_recorded",
     documentAnalysisBacklog,
     ocrBacklog,
+    documentExportBacklog,
+    malwareScanBacklog,
     durableDeadLettered,
   );
 }

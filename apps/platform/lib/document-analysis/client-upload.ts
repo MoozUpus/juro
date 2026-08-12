@@ -77,6 +77,7 @@ export async function importDocumentUrlForAnalysis(
         "content-type": "application/json",
         "idempotency-key": `url-import-${crypto.randomUUID()}`,
         "x-juro-csrf": "1",
+        "x-juro-locale": locale,
       },
       body: JSON.stringify({ url: url.trim(), locale, mode: "quick", caseId: caseId || null, consent: true }),
     },

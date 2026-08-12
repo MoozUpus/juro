@@ -2,6 +2,7 @@ import { hasAnthropicConfiguration } from "../document-builder/ai/anthropic";
 import { AiUnavailableError, callOpenAiStructured, hasAiConfiguration, type AiStructuredResult } from "../document-builder/ai/openai";
 import { runtimeEnv } from "../document-builder/storage/runtime";
 import { anthropicModel, runAnthropicLegalChat } from "./anthropic-provider";
+import { legalChatProviderTimeoutMs } from "./legal-chat-timeout";
 import { shouldUseAnthropicFallback } from "./provider-fallback";
 import {
   aiResponseToneInstruction,
@@ -135,9 +136,20 @@ class OpenAiLegalProvider implements LegalAiProvider {
     });
     const model = input.reasoningMode === "deep" ? settings.openaiDeepModel : settings.openaiChatModel;
     const interactive = input.reasoningMode === "fast";
-    const providerBudgetMs = options.providerTimeoutMs ?? (interactive
-      ? Math.max(1, Math.min(25_500, options.budget?.remainingMs ?? 25_500))
-      : Math.max(1, Math.min(120_000, options.budget?.remainingMs ?? 120_000)));
+    const providerBudgetMs = legalChatProviderTimeoutMs({
+      reasoningMode: input.reasoningMode,
+      budget: options.budget,
+      providerTimeoutMs: options.providerTimeoutMs,
+    });
+    if (providerBudgetMs === null) {
+      throw new AiUnavailableError(
+        "AI-запрос не получил достаточно времени для безопасного завершения.",
+        "PROVIDER_TIMEOUT",
+        true,
+        null,
+        "shared_deadline",
+      );
+    }
     const firstContentBudgetMs = interactive
       ? Math.max(1, Math.min(4_500, providerBudgetMs))
       : Math.max(1, Math.min(30_000, providerBudgetMs));

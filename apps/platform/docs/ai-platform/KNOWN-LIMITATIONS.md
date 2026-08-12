@@ -502,8 +502,12 @@ The deployed Worker now exposes both provider secret names and server-side model
   conclusion and has not been exercised through an authenticated staging flow.
   This is not staging evidence, does not provide page coordinates or scanned-PDF page
   counts, and does not bypass the real isolated malware-scanner requirement.
-  Packages above 20 MB compressed input, 20 MB per expanded member, or 50 MB
-  expanded working set still require an external streaming extractor.
+  ZIP packages above 20 MB compressed input are rejected before an upload state
+  is created. A package exceeding a per-member or 50 MB decoded working-set
+  boundary after verification is terminally failed with a safe capacity code;
+  it is not left in a false waiting state and is never sent to AI. A
+  privacy-approved streaming extractor is still required before these packages
+  can be accepted.
 - The browser computes SHA-256 from one in-memory `ArrayBuffer`; this does not buffer the upload in the Worker, but a later client-side incremental hash path may improve low-memory devices.
 - Upload byte progress is surfaced through the secure XHR client on both the
   dashboard and document-review surfaces. Authenticated browser verification of
@@ -536,7 +540,7 @@ The following gates remain open:
 - Authenticated staging RU/UZ click-through remains unverified because the browser-control runtime exits before connecting (`require is not defined in ES module scope`). Access was not bypassed.
 - No production readiness claim is made; production functional deployment and production UI replacement still require separate approvals.
 - real OpenAI RU/UZ no-source lifecycle and Anthropic fallback provider calls are proven in protected staging, including bounded token/latency evidence and D1 run/ledger semantics; an Access-authenticated browser flow, verified-source live answer, and provider cost reconciliation remain unproven;
-- scanned/image OCR and bounded ZIP/multi-file conversion exist as local post-safe paths; deterministic package relationships are now a local reviewable hypothesis, while authenticated staging evidence, scanned-PDF page-count/coordinate evidence, external extraction above 20 MB, and long-document chunk synthesis remain waiting states;
+- scanned/image OCR and bounded ZIP/multi-file conversion exist as local post-safe paths; deterministic package relationships are now a local reviewable hypothesis, while authenticated staging evidence and scanned-PDF page-count/coordinate evidence remain open. External extraction above 20 MB and long-document chunk synthesis are not claimed: their inputs now fail terminally until real handlers are deployed;
 - live indexed-corpus and reranking evidence remain open; the implemented hybrid
   D1/Vectorize retrieval still revalidates every candidate citation server-side;
 - corrections, redline, exports, the 100-package evaluation, DLQ redrive, and full performance/security/browser gates remain incomplete.

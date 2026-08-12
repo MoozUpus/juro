@@ -3,6 +3,13 @@ import { sanitizeFileName } from "../document-builder/storage/file-validation";
 
 export const DOCUMENT_ANALYSIS_MAX_FILE_SIZE = 50 * 1024 * 1024;
 export const DOCUMENT_ANALYSIS_MAX_FILES = 20;
+/**
+ * ZIP packages must stay within the bounded in-Worker extraction path until a
+ * privacy-approved streaming extractor is actually deployed.  The broader
+ * 50 MB upload limit still applies to single documents, which have a real OCR
+ * continuation path when they exceed the inline extraction boundary.
+ */
+export const DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT = 20 * 1024 * 1024;
 
 const allowedMimeTypes = new Map<string, readonly string[]>([
   ["application/pdf", ["pdf"]],
@@ -47,6 +54,7 @@ export class DocumentAnalysisUploadError extends Error {
       | "IDEMPOTENCY_CONFLICT"
       | "UPLOAD_NOT_FOUND"
       | "CASE_UNAVAILABLE"
+      | "DOCUMENT_ANALYSIS_CAPACITY_UNAVAILABLE"
       | "UPLOAD_STATE_CONFLICT",
     message: string,
     public readonly status: number,
@@ -72,6 +80,18 @@ export function parseDocumentAnalysisUploadIntent(value: unknown): DocumentAnaly
       "INVALID_UPLOAD_INTENT",
       "Формат, MIME-тип или расширение файла не поддерживается.",
       400,
+    );
+  }
+  if (
+    parsed.data.mimeType === "application/zip"
+    && parsed.data.sizeBytes > DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT
+  ) {
+    throw new DocumentAnalysisUploadError(
+      "DOCUMENT_ANALYSIS_CAPACITY_UNAVAILABLE",
+      parsed.data.locale === "ru"
+        ? "ZIP-пакеты свыше 20 МБ пока не принимаются: потоковое безопасное извлечение ещё не подключено. Разделите пакет на части до 20 МБ."
+        : "20 MB dan katta ZIP-paketlar hozircha qabul qilinmaydi: oqimli xavfsiz ajratish hali ulanmagan. Paketni 20 MB gacha bo‘lgan qismlarga ajrating.",
+      422,
     );
   }
   return { ...parsed.data, fileName: sanitizeFileName(parsed.data.fileName) };

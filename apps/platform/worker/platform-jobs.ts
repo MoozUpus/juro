@@ -332,8 +332,25 @@ export const DOCUMENT_DLQ_JOB_KINDS = [
 
 export type DocumentDlqJobKind = (typeof DOCUMENT_DLQ_JOB_KINDS)[number];
 
-function isDocumentDlqJobKind(kind: JobKind): kind is DocumentDlqJobKind {
-  return (DOCUMENT_DLQ_JOB_KINDS as readonly JobKind[]).includes(kind);
+/**
+ * These source queues carry tenant-scoped work whose terminal queue outcome
+ * must be recorded durably. The DLQ consumer never marks work successful and
+ * never republishes it: an operator must use the existing append-only redrive
+ * flow after reviewing the preserved failure evidence.
+ */
+export const TERMINALIZABLE_DLQ_JOB_KINDS = [
+  ...DOCUMENT_DLQ_JOB_KINDS,
+  "document.export",
+  "malware.scan",
+] as const;
+
+export type TerminalizableDlqJobKind =
+  (typeof TERMINALIZABLE_DLQ_JOB_KINDS)[number];
+
+function isTerminalizableDlqJobKind(
+  kind: JobKind,
+): kind is TerminalizableDlqJobKind {
+  return (TERMINALIZABLE_DLQ_JOB_KINDS as readonly JobKind[]).includes(kind);
 }
 
 /**
@@ -343,6 +360,13 @@ function isDocumentDlqJobKind(kind: JobKind): kind is DocumentDlqJobKind {
  */
 export function expectedDocumentDlqQueueName(
   kind: DocumentDlqJobKind,
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedTerminalizableDlqQueueName(kind, environment);
+}
+
+export function expectedTerminalizableDlqQueueName(
+  kind: TerminalizableDlqJobKind,
   environment: PlatformJobEnv["APP_ENV"],
 ): string {
   const sourceKind = kind === "document.index" ? "document.analyze" : kind;
@@ -361,15 +385,33 @@ export function expectedOcrProcessingDlqQueueName(
   return expectedDocumentDlqQueueName("ocr.process", environment);
 }
 
-function documentDlqKindsForQueue(
+export function expectedDocumentExportDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedTerminalizableDlqQueueName("document.export", environment);
+}
+
+export function expectedMalwareScanDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedTerminalizableDlqQueueName("malware.scan", environment);
+}
+
+function terminalizableDlqKindsForQueue(
   queueName: string,
   environment: PlatformJobEnv["APP_ENV"],
-): readonly DocumentDlqJobKind[] | null {
+): readonly TerminalizableDlqJobKind[] | null {
   if (queueName === expectedDocumentAnalysisDlqQueueName(environment)) {
     return ["document.analyze", "document.index"];
   }
   if (queueName === expectedOcrProcessingDlqQueueName(environment)) {
     return ["ocr.process"];
+  }
+  if (queueName === expectedDocumentExportDlqQueueName(environment)) {
+    return ["document.export"];
+  }
+  if (queueName === expectedMalwareScanDlqQueueName(environment)) {
+    return ["malware.scan"];
   }
   return null;
 }
@@ -1046,7 +1088,7 @@ async function executeJob(
   throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
 }
 
-type DocumentDlqTerminalization =
+type DlqTerminalization =
   | "terminalized"
   | "already_terminal"
   | "busy"
@@ -1054,18 +1096,19 @@ type DocumentDlqTerminalization =
 
 /**
  * Cloudflare has already exhausted the source queue retries before a message
- * reaches this consumer. Only the durable execution ledger becomes terminal:
- * the analysis, OCR extraction, or document-index record stays retryable so
- * the existing audited operational redrive can safely re-run it. We also
+ * reaches this consumer. Only the durable execution ledger becomes terminal.
+ * Analysis/OCR/index/export records remain in their existing retryable state;
+ * malware-scanned files remain quarantined. The existing audited operational
+ * redrive is the only path that can republish the original identifiers. We
  * preserve the root error_code on job_runs; `dead_lettered` is the truthful
  * retry-exhausted state and must not replace the provider/scanner/D1 cause.
  */
-async function terminalizeDocumentDlqJob(
+async function terminalizeDlqJob(
   env: PlatformJobEnv,
   envelope: JobEnvelope,
   now: string,
-): Promise<DocumentDlqTerminalization> {
-  if (!isDocumentDlqJobKind(envelope.kind)) return "unmatched";
+): Promise<DlqTerminalization> {
+  if (!isTerminalizableDlqJobKind(envelope.kind)) return "unmatched";
 
   const envelopeDigest = await envelopeHash(envelope);
   const sourceQueue = expectedQueueName(envelope.kind, env.APP_ENV);
@@ -1137,7 +1180,7 @@ async function terminalizeDocumentDlqJob(
   return ['running', 'retrying'].includes(job.status) ? "busy" : "unmatched";
 }
 
-async function recordDocumentDlqEvidence(
+async function recordDlqEvidence(
   env: PlatformJobEnv,
   startedAt: number,
   safeErrorCode: "DLQ_BACKLOG" | "DLQ_INVALID_MESSAGE" | "DLQ_UNMATCHED_MESSAGE" = "DLQ_BACKLOG",
@@ -1154,16 +1197,16 @@ async function recordDocumentDlqEvidence(
   });
 }
 
-async function processDocumentDlqMessage(
+async function processDlqMessage(
   queueName: string,
   message: Message<unknown>,
   env: PlatformJobEnv,
-  allowedKinds: readonly DocumentDlqJobKind[],
+  allowedKinds: readonly TerminalizableDlqJobKind[],
 ): Promise<void> {
   const startedAt = Date.now();
   const parsed = jobEnvelopeSchema.safeParse(message.body);
   if (!parsed.success) {
-    await recordDocumentDlqEvidence(env, startedAt, "DLQ_INVALID_MESSAGE");
+    await recordDlqEvidence(env, startedAt, "DLQ_INVALID_MESSAGE");
     logEvent("error", {
       event: "queue.dlq_invalid_message",
       environment: env.APP_ENV,
@@ -1179,9 +1222,9 @@ async function processDocumentDlqMessage(
   }
 
   const envelope = parsed.data;
-  const documentKind = envelope.kind;
-  if (!isDocumentDlqJobKind(documentKind)) {
-    await recordDocumentDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+  const terminalizableKind = envelope.kind;
+  if (!isTerminalizableDlqJobKind(terminalizableKind)) {
+    await recordDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
     logEvent("error", {
       event: "queue.dlq_unexpected_kind",
       environment: env.APP_ENV,
@@ -1195,8 +1238,8 @@ async function processDocumentDlqMessage(
     message.retry({ delaySeconds: retryDelay(message.attempts) });
     return;
   }
-  if (!allowedKinds.includes(documentKind)) {
-    await recordDocumentDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+  if (!allowedKinds.includes(terminalizableKind)) {
+    await recordDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
     logEvent("error", {
       event: "queue.dlq_unexpected_kind",
       environment: env.APP_ENV,
@@ -1211,15 +1254,15 @@ async function processDocumentDlqMessage(
     return;
   }
 
-  let outcome: DocumentDlqTerminalization;
+  let outcome: DlqTerminalization;
   try {
-    outcome = await terminalizeDocumentDlqJob(
+    outcome = await terminalizeDlqJob(
       env,
       envelope,
       new Date().toISOString(),
     );
   } catch {
-    await recordDocumentDlqEvidence(env, startedAt);
+    await recordDlqEvidence(env, startedAt);
     const delaySeconds = retryDelay(message.attempts);
     logEvent("error", {
       event: "queue.dlq_terminalization_retrying",
@@ -1237,7 +1280,7 @@ async function processDocumentDlqMessage(
   }
 
   if (outcome === "busy") {
-    await recordDocumentDlqEvidence(env, startedAt);
+    await recordDlqEvidence(env, startedAt);
     const delaySeconds = retryDelay(message.attempts);
     logEvent("error", {
       event: "queue.dlq_terminalization_busy",
@@ -1255,7 +1298,7 @@ async function processDocumentDlqMessage(
   }
 
   if (outcome === "unmatched") {
-    await recordDocumentDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+    await recordDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
     // A malformed or orphaned DLQ payload must not be silently discarded.
     // Keeping it retryable gives scheduled reconciliation a chance to fence a
     // matching durable run that becomes visible after a transient D1 delay.
@@ -1275,7 +1318,7 @@ async function processDocumentDlqMessage(
     return;
   }
 
-  await recordDocumentDlqEvidence(env, startedAt);
+  await recordDlqEvidence(env, startedAt);
 
   writeMetric(env, {
     queueName,
@@ -1527,10 +1570,10 @@ export async function handleQueue(
     return;
   }
 
-  const dlqKinds = documentDlqKindsForQueue(batch.queue, env.APP_ENV);
+  const dlqKinds = terminalizableDlqKindsForQueue(batch.queue, env.APP_ENV);
   if (dlqKinds) {
     for (const message of batch.messages) {
-      await processDocumentDlqMessage(batch.queue, message, env, dlqKinds);
+      await processDlqMessage(batch.queue, message, env, dlqKinds);
     }
     return;
   }

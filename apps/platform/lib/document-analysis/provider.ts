@@ -17,9 +17,11 @@ import {
   type DocumentAnalysisProviderRequest,
 } from "./input";
 import {
+  documentAnalysisAnthropicWireJsonSchema,
   documentAnalysisJsonSchema,
   enforceDocumentAnalysisSourceBoundary,
   enforceDocumentExcerptBoundary,
+  parseAnthropicDocumentAnalysisWireResult,
   parseDocumentAnalysisResult,
   type DocumentAnalysisResult,
 } from "./schema";
@@ -154,20 +156,21 @@ async function runAnthropicDocumentAnalysis(
   const model = options.runtimeSettings.anthropicDocumentModel;
   await options.beforeProviderCall?.({ provider: "anthropic", model });
   const result = await callAnthropicStructured<DocumentAnalysisResult>({
-    schema: documentAnalysisJsonSchema,
-    parse: parseDocumentAnalysisResult,
+    schema: documentAnalysisAnthropicWireJsonSchema,
+    parse: parseAnthropicDocumentAnalysisWireResult,
     timeoutMs: options.providerTimeoutMs ?? documentAnalysisTimeoutMs(input.mode),
     deadlineAt: options.deadlineAt,
     maxAttempts: documentAnalysisProviderMaxAttempts(options.providerMaxAttempts),
     requestId: input.requestId,
     model,
-    instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode),
+    instructions: [
+      documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode),
+      "Для nullable строк native provider schema использует пустую строку вместо null; для risks[].page используй 0 вместо null. JURO безопасно восстановит эти sentinels в null до валидации. Не используй эти значения для фактически известного содержания.",
+    ].join(" "),
     input: providerInput(input),
-    // Use Anthropic's native JSON-schema response format for the document
-    // contract. Unlike the chat fallback's deliberately shallow tool envelope,
-    // this keeps nested findings as JSON values rather than asking the model to
-    // serialize a second JSON document into a string. The returned value still
-    // passes the same Zod, source and excerpt boundaries below.
+    // Keep native JSON-schema output, but use a provider-only wire schema
+    // without nullable unions. The parser restores sentinels and immediately
+    // applies the canonical Zod contract before any downstream use.
     maxTokens: documentAnalysisMaxOutputTokens(input.mode),
   });
   return constrainResult(result, input);

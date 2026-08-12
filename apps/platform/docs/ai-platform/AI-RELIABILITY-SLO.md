@@ -8,6 +8,15 @@ This document describes the contracts introduced with migrations `0112` and
 checkpoint. It does not claim production deployment, a healthy provider fleet,
 or measured p50/p95 performance.
 
+## Local SLO hardening awaiting rollout
+
+The two-second post-provider finalization reserve and the SSE preliminary
+ordering described below are source changes in the current local branch. They
+have passed local build/type/test gates, but have **not** been deployed to
+staging or production by this change. The checkpoint evidence in the next
+section predates this hardening and cannot certify it until a separate staging
+deployment and fresh representative samples are recorded.
+
 ## Staging checkpoint — 2026-08-12
 
 The following facts are verified for **staging only**. Production was not part
@@ -52,6 +61,12 @@ of this rollout.
   request-scoped **30-second absolute deadline**. Authentication/context,
   verified retrieval, primary provider, eligible fallback, validation and
   persistence all consume that same deadline.
+- A primary provider is capped to the remaining common deadline **minus a
+  two-second finalization reserve**. If that leaves less than one useful
+  provider attempt, JURO does not start it; the reserved run is released rather
+  than risking a late or chargeable response. Explicit fallback/probe windows
+  are already allocated from that same deadline and are never given a second
+  30-second window.
 - A fallback receives only the remaining time after a bounded reserve for
   validation/persistence; it never starts another 30-second window. A result
   that cannot be durably finalized within the deadline is failed and its usage
@@ -60,11 +75,15 @@ of this rollout.
   locally persisted D1 legal evidence. Live Lex/Advice fetches are not on the
   user-answer path. A timeout or unavailable verified corpus produces the
   existing fail-closed clarification boundary, not an unverified legal claim.
-- On the SSE path, the server sends a real, source-bound preliminary event after
-  the bounded retrieval: either a verified excerpt with canonical metadata or
-  an explicit clarification-required state. It is not model text and does not
-  bypass the final Zod, source-boundary, usage or persistence checks. A regular
-  JSON request has no early-result claim.
+- On the registered SSE path, the server sends a real, source-bound preliminary
+  event immediately after bounded retrieval and before awaiting optional
+  encrypted-memory context: either a verified excerpt with canonical metadata
+  or an explicit clarification-required state. It is not model text and does
+  not bypass the final Zod, source-boundary, usage or persistence checks. A
+  regular JSON request has no early-result claim.
+- Provider deltas are progress-only diagnostics. The browser never renders a
+  delta as a legal answer; it renders only the server-owned preliminary object
+  or the final validated, durably persisted response.
 - The complete response remains the only durable, chargeable result and is
   emitted after strict schema validation, verified-source enforcement and the
   final persistence batch.
@@ -74,6 +93,14 @@ of this rollout.
 The operational targets are **first useful SSE result within 5 seconds** and
 **durably completed response within 30 seconds**. They are targets, not a
 performance assertion.
+
+The five-second target applies only where a source-bound result is safe to
+show: registered SSE chat can expose a verified source excerpt or a validated
+clarification after retrieval. It does not claim that an OpenAI/Anthropic token
+or an HTTP header is legal content, and it does not promise an early result for
+the non-streaming guest endpoint. External provider latency and D1 latency can
+still cause a truthful no-charge timeout; the shared deadline prevents those
+attempts from becoming late successful charges.
 
 Migration `0113_ai_slo_telemetry.sql` adds the append-only,
 content-free `ai_slo_telemetry_events` ledger. It records only an opaque

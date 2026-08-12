@@ -55,6 +55,7 @@ export interface BuilderRuntimeEnv {
   MALWARE_SCANNER?: Fetcher;
   MALWARE_SCAN_QUEUE?: Queue;
   MALWARE_SCAN_ENABLED?: string;
+  PUBLIC_DOCUMENT_URL_IMPORT_ENABLED?: string;
 }
 
 export class ServiceUnavailableError extends Error {

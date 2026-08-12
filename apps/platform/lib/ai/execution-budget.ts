@@ -8,6 +8,15 @@
 
 export const DEFAULT_AI_EXECUTION_BUDGET_MS = 30_000;
 export const DEFAULT_AI_FALLBACK_MINIMUM_BUDGET_MS = 4_000;
+/**
+ * Time that an interactive legal-chat provider must leave for strict
+ * validation, the atomic completion batch, and the terminal response.
+ *
+ * This is deliberately part of the one shared request deadline rather than a
+ * second timer. A late model result is less useful than a result we can prove
+ * was validated, saved, and charged correctly.
+ */
+export const AI_INTERACTIVE_FINALIZATION_RESERVE_MS = 2_000;
 
 const STAGE_NAME_PATTERN = /^[a-z][a-z0-9._-]{0,63}$/;
 
@@ -418,11 +427,13 @@ export function hasAiFallbackBudget(
 }
 
 /**
- * Caps a fallback timeout to the shared request deadline and reserves time for
- * the validation/persistence stages that follow it. Null means do not start a
- * fallback, because it cannot receive enough useful time.
+ * Caps a provider attempt to the shared request deadline and reserves time for
+ * the validation/persistence stages that follow it. This is safe for either a
+ * primary call or a fallback: callers decide whether an earlier attempt has
+ * already failed. Null means do not start a provider call, because it cannot
+ * receive enough useful time.
  */
-export function allocateAiFallbackBudget(
+export function allocateAiProviderBudget(
   budget: AiExecutionBudget,
   options: AiFallbackBudgetOptions,
 ): AiFallbackBudget | null {
@@ -441,4 +452,16 @@ export function allocateAiFallbackBudget(
     remainingMs,
     timeoutMs: Math.min(requestedTimeoutMs, usableMs),
   };
+}
+
+/**
+ * Backward-compatible name for the fallback call site. Keep the calculation
+ * centralized so both primary and fallback providers share the same absolute
+ * deadline and finalization reserve.
+ */
+export function allocateAiFallbackBudget(
+  budget: AiExecutionBudget,
+  options: AiFallbackBudgetOptions,
+): AiFallbackBudget | null {
+  return allocateAiProviderBudget(budget, options);
 }

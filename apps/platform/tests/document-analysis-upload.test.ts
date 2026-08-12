@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   documentAnalysisUploadForUser,
+  DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT,
   hashUploadIntent,
   initializeDocumentAnalysisUpload,
   parseDocumentAnalysisUploadIntent,
@@ -27,6 +28,32 @@ test("document analysis upload validates size, MIME/extension and idempotency ke
   assert.throws(() => parseDocumentAnalysisUploadIntent({ ...intent, hidden: true }), /Проверьте/i);
   assert.equal(parseUploadIdempotencyKey("upload-key-123456"), "upload-key-123456");
   assert.throws(() => parseUploadIdempotencyKey("short"), /Idempotency-Key/);
+});
+
+test("ZIP packages beyond the deployed bounded extractor are rejected before upload state exists", () => {
+  assert.throws(
+    () => parseDocumentAnalysisUploadIntent({
+      ...intent,
+      fileName: "contracts.zip",
+      mimeType: "application/zip",
+      sizeBytes: DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT + 1,
+      locale: "ru",
+    }),
+    (error: unknown) => error instanceof Error
+      && error.message.includes("20 МБ")
+      && "code" in error
+      && error.code === "DOCUMENT_ANALYSIS_CAPACITY_UNAVAILABLE",
+  );
+  assert.throws(
+    () => parseDocumentAnalysisUploadIntent({
+      ...intent,
+      fileName: "contracts.zip",
+      mimeType: "application/zip",
+      sizeBytes: DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT + 1,
+      locale: "uz",
+    }),
+    /20 MB dan katta ZIP-paketlar/,
+  );
 });
 
 test("magic-byte validation rejects MIME spoofing", () => {
