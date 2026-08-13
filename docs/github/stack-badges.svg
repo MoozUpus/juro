@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="40" viewBox="0 0 1040 40" role="img" aria-label="TypeScript, React, Next.js, Cloudflare Workers, D1, R2, OpenAI, Node.js and CI">
+  <style>text{font-family:Inter,Manrope,Arial,sans-serif;font-size:13px;font-weight:700;letter-spacing:.2px}</style>
+  <g>
+    <rect width="101" height="32" y="4" rx="16" fill="#2563eb"/><text x="21" y="25" fill="#fff">TypeScript</text>
+    <rect x="112" width="72" height="32" y="4" rx="16" fill="#087ea4"/><text x="132" y="25" fill="#fff">React</text>
+    <rect x="195" width="81" height="32" y="4" rx="16" fill="#111827"/><text x="216" y="25" fill="#fff">Next.js</text>
+    <rect x="287" width="168" height="32" y="4" rx="16" fill="#f48120"/><text x="309" y="25" fill="#111827">Cloudflare Workers</text>
+    <rect x="466" width="55" height="32" y="4" rx="16" fill="#f48120"/><text x="485" y="25" fill="#111827">D1</text>
+    <rect x="532" width="55" height="32" y="4" rx="16" fill="#f48120"/><text x="551" y="25" fill="#111827">R2</text>
+    <rect x="598" width="76" height="32" y="4" rx="16" fill="#10a37f"/><text x="618" y="25" fill="#fff">OpenAI</text>
+    <rect x="685" width="108" height="32" y="4" rx="16" fill="#5b21b6"/><text x="707" y="25" fill="#fff">Node.js 22+</text>
+    <rect x="804" width="61" height="32" y="4" rx="16" fill="#16a34a"/><text x="825" y="25" fill="#fff">CI</text>
+  </g>
+</svg>
