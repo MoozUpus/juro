@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/github/hero.svg" width="100%" alt="JURO — AI-powered LegalTech platform for Uzbekistan">
+  <img src="docs/github/hero.svg" width="100%" alt="JURO — LegalTech-платформа для Узбекистана с AI-поддержкой">
 </div>
 
 <div align="center">
@@ -9,9 +9,8 @@
 <div align="center">
   <a href="https://juro.uz">Сайт</a> ·
   <a href="https://app.juro.uz">Открыть платформу</a> ·
-  <a href="#как-читать-репозиторий">Как читать репозиторий</a> ·
-  <a href="#обзор-продукта">Обзор продукта</a> ·
-  <a href="#продуктовый-контракт">Продуктовый контракт</a> ·
+  <a href="#как-это-работает">Как это работает</a> ·
+  <a href="#продуктовый-опыт">Продуктовый опыт</a> ·
   <a href="#архитектура">Архитектура</a> ·
   <a href="#быстрый-старт">Быстрый старт</a>
 </div>
@@ -19,156 +18,132 @@
 <br>
 
 <div align="center">
-  <img src="docs/github/stack-badges.svg" width="100%" alt="TypeScript, React, Next.js, Cloudflare Workers, D1, R2, OpenAI, Node.js 22 and CI">
+  <img src="docs/github/stack-badges.svg" width="100%" alt="TypeScript, React, Next.js, Cloudflare Workers, Cloudflare D1, Cloudflare R2, OpenAI, Node.js 22 и CI">
 </div>
 
-JURO — LegalTech-пространство для Узбекистана, которое связывает юридические вопросы, работу с документами и следующие действия в единый контекст. Продукт предназначен для людей и команд, которым нужны практическая правовая информация, более структурированные документы и, когда это уместно, путь к помощи живого юриста.
+<div align="center">
 
-Публичный сайт доступен на [juro.uz](https://juro.uz), защищённая продуктовая платформа — на [app.juro.uz](https://app.juro.uz). В репозитории находятся исходный код обоих приложений, конфигурация Cloudflare, документация и проверки качества.
+**Юридическая информация — чтобы переходить к реальным следующим шагам.**
 
-## Как читать репозиторий
+Информация с привязкой к источникам · защищённая работа с документами · дела и планы действий · передача юристу там, где это поддерживает сценарий
 
-| Если вы оцениваете… | Начните здесь | Затем посмотрите |
+</div>
+
+JURO — LegalTech-пространство для Узбекистана. Оно помогает человеку или команде перейти от юридического вопроса либо документа к понятному, прослеживаемому следующему действию — не выдавая результат AI за замену индивидуальной юридической консультации.
+
+Публичная точка входа доступна на [juro.uz](https://juro.uz), защищённая продуктовая платформа — на [app.juro.uz](https://app.juro.uz). Этот репозиторий — продуктовое досье и инженерный журнал для публичного сайта, платформы, административной поверхности, конфигурации Cloudflare и проверок релиза.
+
+## В двух словах о продукте
+
+| Направление | Что есть в репозитории | Граница статуса |
 |---|---|---|
-| Продуктовый опыт | [Обзор продукта](#обзор-продукта) и [операционную модель](#операционная-модель-продукта) | [Текущий статус](#текущий-статус) и [границы доверия](#доверие-приватность-и-юридическая-безопасность) |
-| Подход к legal AI | [Как работает JURO](#как-работает-juro) и [продуктовый контракт](#продуктовый-контракт) | [Product foundations](docs/github/PRODUCT_FOUNDATIONS.md) и модули работы с источниками |
-| Техническую архитектуру | [Архитектура](#архитектура) | Cloudflare-конфигурацию, [развёртывание](#развёртывание) и quality-команды |
-| Безопасный вклад | [Структура репозитория](#структура-репозитория) и [быстрый старт](#быстрый-старт) | [Contributing](#contributing), [security](#security) и PR template |
+| Юридическая информация | Путь source-aware ответа и поверхности citations для публичных правовых страниц, выбранных в рамках конкретного запроса. | WORKING — это не официальный API провайдеров источников и не заявление о полном корпусе. |
+| Документы и работа | Черновики, пути генерации файлов, дела, задачи и планы действий. | WORKING — доступность может зависеть от защищённого аккаунта и состояния развёртывания. |
+| Юридическая проверка | Интерфейсы review и сравнения документов с требованиями к ссылкам. | PARTIAL — требуется новое аутентифицированное end-to-end подтверждение. |
+| Помощь человека | Профили юристов, каталог и lifecycle передачи вопроса. | PARTIAL — это не гарантия представительства или завершённой консультации. |
+| Платформа доставки | Публичный сайт, защищённая платформа и отдельное административное приложение в одном монорепозитории. | LIVE / WORKING / PARTIAL — подробности приведены в матрице ниже. |
 
-## Что такое JURO?
+> **Почему эта подача опирается на доказательства:** JURO не публикует показатели аудитории, точности, выручки, размера корпуса или юридических результатов без воспроизводимого источника в репозитории. Зелёная техническая проверка также не выдаётся за гарантию юридического качества или production-релиза.
 
-Поиск и понимание правовой информации могут быть сложными, а традиционные юридические услуги — дорогими и разрозненными. JURO уменьшает это трение: начать с вопроса или документа, сохранять видимыми источник и контекст, затем перейти к черновику, плану или передаче человеку там, где это поддерживается продуктом.
+## Как это работает
 
-Продукт ориентирован на Узбекистан. В текущем публичном интерфейсе доступны русская и узбекская поверхности; документация репозитория поддерживается также на английском для международной технической аудитории. JURO не представляет AI-результат как индивидуальную юридическую консультацию или замену юриста.
+<img src="docs/github/ai-answer-flow.svg" width="100%" alt="Путь JURO: от вопроса или документа к источникам и необязательной передаче юристу">
 
-## В двух словах
+Реализованный путь юридической информации начинается с вопроса или документа, определяет тип запроса, получает релевантные публичные страницы-источники, собирает ограниченный контекст и показывает структурированный ответ с карточками источников при наличии подтверждений. Публичный слой использует query-scoped получение страниц Lex.uz и Advice.uz; JURO не заявляет официальную интеграцию с API третьих сторон.
 
-| Область | Факт, подтверждённый репозиторием | Чего это **не** означает |
+Ответ полезен только тогда, когда его граница очевидна:
+
+| Что JURO стремится сделать видимым | Подтверждение в репозитории | Чего продукт сознательно не обещает |
 |---|---|---|
-| Контур продукта | В одном направлении платформы связаны юридические вопросы, документы, дела/планы действий и контролируемая передача юристу. | Не каждый workflow обязательно доступен каждому аккаунту или deployment. |
-| Delivery | В монорепозитории есть публичный сайт, защищённая платформа и отдельное административное приложение. | Административные и hand-off поверхности не представлены как полностью завершённые сервисы. |
-| Юридические источники | Source-aware путь получает query-scoped публичные страницы Lex.uz и Advice.uz и сохраняет citation context. | Не заявляется официальный API провайдера или полный корпус законодательства. |
-| Runtime | В репозитории используются TypeScript, React, Next.js, Vite/Vinext и Cloudflare Worker tooling. | Выбор технологии не является заявлением о юридической правильности. |
-| Границы данных | Возможности платформы используют Cloudflare D1, private R2 и server-side AI configuration. | Здесь не заявляются сертификации, compliance-статус или data residency. |
-| Проверки качества | Root scripts и CI покрывают linting, type checks, tests, builds и artifact validation. | Успешная проверка не является гарантией production release или юридического качества. |
+| Источник, связанный с ответом | [`direct-citation-store.ts`](apps/platform/lib/legal/direct-citation-store.ts) сохраняет прямые citations для AI-run. | Одна страница-источник не превращает ответ в персональную юридическую консультацию. |
+| Контролируемый путь получения публичного источника | [`direct-retrieval.ts`](apps/platform/lib/legal/direct-retrieval.ts) содержит логику получения и eligibility цитирования. | Официальный доступ к провайдеру, полное покрытие или безошибочный retrieval. |
+| Границы ссылок при review документа | [`document-analysis/schema.ts`](apps/platform/lib/document-analysis/schema.ts) отклоняет часть legal findings, risks и missing clauses без citations. | Завершённый end-to-end review: поверхность остаётся PARTIAL. |
+| Путь к человеческой проверке | Код профилей и hand-off юристу находится в [`apps/platform`](apps/platform). | Автоматическую консультацию, представительство или результат. |
 
-## Обзор продукта
+Инженерское обоснование и карту кода см. в [Product foundations](docs/github/PRODUCT_FOUNDATIONS.md).
+
+## Продуктовый опыт
 
 | Публичная точка входа | Защищённое рабочее пространство |
 |---|---|
-| <img src="docs/github/screenshots/public-website.webp" alt="Публичный сайт JURO" width="100%"> | <img src="docs/github/screenshots/platform-dashboard.webp" alt="Панель JURO без данных аккаунта" width="100%"> |
-| Начните с ситуации, документа или следующего шага на публичном сайте. | Связывайте вопрос, источник, документ и действие в защищённом пространстве. |
+| <img src="docs/github/screenshots/public-website.webp" alt="Публичный сайт JURO" width="100%"> | <img src="docs/github/screenshots/platform-dashboard.webp" alt="Защищённое рабочее пространство JURO без данных аккаунта" width="100%"> |
+| Начните с юридической ситуации, документа или следующего действия. | Свяжите правовую работу, документы и следующие шаги в одном защищённом пространстве. |
 
-| Начальное состояние AI-чата | Конструктор документов |
+| Путь вопроса с источниками | Конструктор документов |
 |---|---|
-| <img src="docs/github/screenshots/ai-chat.webp" alt="Начальное состояние AI-чата JURO без истории" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="Библиотека и конструктор документов JURO" width="100%"> |
-| Интерфейс просит описать ситуацию и честно показывает доступность источника. | Просматривайте документные сценарии и начинайте структурированный черновик. |
+| <img src="docs/github/screenshots/ai-chat.webp" alt="Путь AI-юридической информации JURO без истории диалога" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="Библиотека и точка входа конструктора документов JURO" width="100%"> |
+| Интерфейс просит описать контекст и явно показывает доступность источников. | Начните структурированный черновик в документном workflow. |
 
-| Проверка и сравнение документов | Узкий публичный preview |
+| Поверхность review и сравнения | Узкий вид публичного продукта |
 |---|---|
-| <img src="docs/github/screenshots/document-analysis.webp" alt="Экран проверки и сравнения документов JURO" width="100%"> | <img src="docs/github/screenshots/mobile-experience.webp" alt="Узкий preview публичного продукта JURO" width="100%"> |
-| UI проверки и сравнения существует; ниже его сквозной статус честно обозначен как PARTIAL. | Узкий presentation-crop живого сайта; замените его проверенным mobile-capture перед использованием как mobile QA evidence. |
+| <img src="docs/github/screenshots/document-analysis.webp" alt="Точка входа review и сравнения документов JURO" width="100%"> | <img src="docs/github/screenshots/mobile-experience.webp" alt="Узкий preview публичного продукта JURO" width="100%"> |
+| Интерфейс существует; его end-to-end статус юридического анализа — PARTIAL. | Узкий презентационный capture публичного продукта, а не доказательство mobile-QA. |
 
-## Что могут делать пользователи
+## От юридического контекста к работе
 
-| Возможность | Пользовательская ценность | Статус |
+<img src="docs/github/operating-model.svg" width="100%" alt="Операционная модель JURO: от правового контекста и источников к защищённой работе и частичной передаче юристу">
+
+JURO строится как связанный workflow, а не как отдельный экран чата. Пользователь может начать с контекста, посмотреть доступные подтверждения в источниках, продолжить работу в защищённой зоне и — где это разрешает текущий сценарий — запросить человеческую помощь.
+
+| Переход | Текущий статус | Открыто обозначенная граница |
 |---|---|---|
-| Задать юридический вопрос | Начать структурированный поток правовой информации с видимыми источниками. | WORKING |
-| Создать документ | Подготовить черновик и сгенерировать поддерживаемые файлы. | WORKING |
-| Проверить или сравнить документ | Проверить документ и сравнить версии; новые сквозные evidence анализа пока неполные. | PARTIAL |
-| Построить план действий | Связать действия, сроки, документы и правовой контекст с делом. | WORKING |
-| Запросить помощь юриста | Использовать контролируемые профили и hand-off там, где он доступен. | PARTIAL |
-| Использовать production-платежи | В репозитории нет заявления о действующем платежном сервисе. | PLANNED |
-
-## Операционная модель продукта
-
-<img src="docs/github/operating-model.svg" width="100%" alt="Операционная модель JURO: от правового контекста к source-aware ответу, защищённой работе и частичной передаче юристу">
-
-JURO организован вокруг связанной последовательности, а не изолированного экрана чата. Пользователь может начать с вопроса или документа, изучить source-aware информацию, продолжить в защищённом рабочем пространстве и, если текущий workflow это поддерживает, запросить помощь человека.
-
-| Переход | Текущий статус | Как это представлено |
-|---|---|---|
-| Публичная legal-intelligence точка входа → защищённая платформа | LIVE | Публичный сайт и вход в платформу развёрнуты на отдельных публичных доменах. |
-| Вопрос → структурированный ответ с работой с источниками | WORKING | Source-aware response и citation surfaces реализованы в platform routes. |
-| Ответ → документ, дело или план действий | WORKING | Document, case и task workflows реализованы в защищённой платформе. |
-| Сложный вопрос → помощь юриста | PARTIAL | Есть код controlled profiles и hand-off lifecycle; это не представляется как гарантия представительства. |
-
-Сплошные пути на схеме обозначают реализованные или рабочие поверхности. Пунктирный путь hand-off намеренно остаётся PARTIAL. Схема — продуктовая модель, а не заявление, что все переходы доступны в каждом окружении или состоянии аккаунта.
-
-## Как работает JURO
-
-<img src="docs/github/ai-answer-flow.svg" width="100%" alt="Поток source-aware юридического ответа JURO">
-
-Реализованный source-aware путь JURO классифицирует запрос, ищет релевантные публичные юридические страницы, собирает ограниченный контекст и при наличии доказательств показывает структурированный ответ с карточками источников. Источниковый слой — query-scoped прямое получение со страниц Lex.uz и Advice.uz, а не заявление о наличии официального API провайдера.
-
-- Источник должен быть виден пользователю; система не должна выдумывать ссылку.
-- Если доступные доказательства не подтверждают вывод, продукт должен сообщить об ограничении.
-- AI-результат — правовая информация и поддержка рабочего процесса, а не индивидуальная юридическая консультация.
-- Передача юристу — частичный продуктовый поток, а не гарантия представительства или завершённой консультации.
-
-## Продуктовый контракт
-
-<img src="docs/github/engineering-commitments.svg" width="100%" alt="Продуктовый контракт JURO: от правового контекста и источника к защищённой работе и частичной передаче человеку">
-
-Сам по себе аккуратный интерфейс юридического AI недостаточен. JURO показывает следующие границы как продуктовые обязательства, которые можно проверить в репозитории, а не как маркетинговые обещания:
-
-| Продуктовое обязательство | Доказательство в реализации | Видимая граница |
-|---|---|---|
-| Сохранять источник рядом с ответом, который его использовал. | [`direct-citation-store.ts`](apps/platform/lib/legal/direct-citation-store.ts) связывает прямые citations с AI-run. | Публичная страница источника не становится автоматически подтверждённым выводом. |
-| Сохранять канонический контекст при получении юридических страниц. | [`direct-retrieval.ts`](apps/platform/lib/legal/direct-retrieval.ts) содержит путь прямого получения источников и eligibility для citation. | Это query-scoped получение публичных страниц, а не заявление об официальном API провайдера. |
-| Требовать ссылки для части результатов проверки документа. | [`document-analysis/schema.ts`](apps/platform/lib/document-analysis/schema.ts) отклоняет legal findings, risks и missing clauses без citations. | Поверхность review остаётся PARTIAL, пока не завершены свежие authenticated end-to-end evidence. |
-| Держать сохранённую юридическую работу за границами платформы. | Защищённые handlers, D1, private R2 и document-storage runtime находятся в [`apps/platform`](apps/platform). | Здесь не заявляется сертификация или compliance-статус. |
-
-Развёрнутый инженерный разбор, доказательства в репозитории и карту для review см. в [product foundations](docs/github/PRODUCT_FOUNDATIONS.md) (английский).
+| Публичная точка legal intelligence → защищённая платформа | LIVE | Публичный сайт и платформа развёрнуты на отдельных доменах. |
+| Вопрос → структурированный source-aware ответ | WORKING | Ответ должен показать основание либо сообщить об ограничении. |
+| Ответ → документ, дело или план действий | WORKING | Workflows реализованы в защищённой платформе; отдельный маршрут может быть недоступен конкретному аккаунту. |
+| Сложный вопрос → передача юристу | PARTIAL | Workflow есть в коде, но не позиционируется как гарантированное представительство. |
 
 ## Экосистема продукта
 
-<img src="docs/github/product-overview.svg" width="100%" alt="Текущая, частичная и планируемая экосистема JURO">
+<img src="docs/github/product-overview.svg" width="100%" alt="Экосистема JURO с working, partial и planned компонентами">
 
-Схема отделяет ядро текущего продукта от частичных потоков и планируемых платежей. Сплошные связи обозначают реализованные или рабочие поверхности репозитория, пунктирные — PARTIAL или PLANNED.
+Схема отделяет текущее ядро от частичных и планируемых поверхностей. Сплошные соединения обозначают реализованные или working пути в репозитории; пунктирные — PARTIAL или PLANNED работу.
 
 ## Архитектура
 
-<img src="docs/github/platform-architecture.svg" width="100%" alt="Архитектура приложений и Cloudflare JURO">
+<img src="docs/github/platform-architecture.svg" width="100%" alt="Архитектура монорепозитория JURO и Cloudflare">
 
-JURO — монорепозиторий с независимо развёртываемыми публичным и защищённым приложениями:
+JURO — монорепозиторий с независимо развёртываемыми публичными и защищёнными приложениями:
 
-- apps/website обеспечивает публичный сайт через React, Next.js, Vite/Vinext и Cloudflare Worker tooling.
-- apps/platform содержит защищённые route handlers, document workflows, authorization boundaries и generated-file flows.
-- apps/admin — отдельная Worker-based административная поверхность со статусом PARTIAL.
-- Cloudflare D1 и private R2 поддерживают сохраняемые данные и файлы платформы; интеграция OpenAI выполняется на сервере.
-- Платформа поддерживает генерацию DOCX, PDF и ZIP. При включении email/OTP настраивается server-side provider settings.
+- `apps/website` обслуживает публичный сайт через React, Next.js, Vite/Vinext и Cloudflare Worker tooling.
+- `apps/platform` содержит защищённые route handlers, document workflows, границы authorization и generated-file flows.
+- `apps/admin` — отдельная Worker-based административная поверхность, которая остаётся PARTIAL.
+- Cloudflare D1 и private R2 поддерживают сохранённые данные платформы и файлы; конфигурация OpenAI остаётся на сервере.
+- Платформа поддерживает генерацию DOCX, PDF и ZIP. При включении email/OTP настраивается через server-side provider settings.
 
 ## Доверие, приватность и юридическая безопасность
 
-<img src="docs/github/trust-layer.svg" width="100%" alt="Принципы доверия, приватности и юридической безопасности JURO">
+<img src="docs/github/trust-layer.svg" width="100%" alt="Границы доверия, приватности и юридической безопасности JURO">
 
-Границы в репозитории определены намеренно: credentials остаются на сервере, доступ к D1/R2 идёт через backend routes, защищённые потоки проверяют ownership или workspace. Здесь не заявляются GDPR, ISO, SOC 2 и другие сертификации. Для ответственного раскрытия уязвимостей см. [SECURITY.md](SECURITY.md).
+В репозитории можно проверить ключевые границы: credentials на сервере, D1/R2 только через backend, защищённые проверки ownership или workspace, отображение источников и ясные ограничения AI-результата. Здесь не заявляются GDPR, ISO, SOC 2, data residency или иные сертификации.
+
+<img src="docs/github/engineering-commitments.svg" width="100%" alt="Инженерные обязательства JURO по источникам, защищённой работе и передаче человеку">
+
+Сообщайте об уязвимостях приватно согласно [SECURITY.md](SECURITY.md). Не добавляйте secrets, персональные данные, пользовательские документы или production logs в issue или pull request.
 
 ## Текущий статус
 
 | Область | Статус | Примечание |
 |---|---|---|
-| Публичный сайт | LIVE | [juro.uz](https://juro.uz) был доступен во время аудита документации. |
-| Вход в защищённую платформу | LIVE | [app.juro.uz](https://app.juro.uz) доступен и обслуживает защищённые маршруты. |
-| AI legal chat | WORKING | Source-aware response и citation surfaces реализованы; более широкая legal evaluation — отдельный release gate. |
+| Публичный сайт | LIVE | [juro.uz](https://juro.uz) открывался во время аудита документации. |
+| Вход в защищённую платформу | LIVE | [app.juro.uz](https://app.juro.uz) доступен и обслуживает защищённые маршруты продукта. |
+| AI-путь юридической информации | WORKING | Реализованы source-aware ответ и citation surfaces; расширенная legal evaluation — отдельный release gate. |
 | Конструктор документов | WORKING | Реализованы persisted workflows, private storage и generated-file paths. |
-| Анализ и сравнение документов | PARTIAL | Поверхности review/compare есть, но свежие authenticated end-to-end evidence анализа не завершены. |
-| Дела и планы действий | WORKING | Реализованы workflows для cases, tasks и action plans. |
-| Маркетплейс юристов и консультации | PARTIAL | Цикл controlled profiles, directory и hand-off не завершён. |
-| Администрирование | PARTIAL | Есть отдельный admin Worker и защищённые administrative flows. |
-| Production-платежи | PLANNED | Demo/payment-foundation code не представлен как действующий платёжный сервис. |
+| Анализ и сравнение документов | PARTIAL | Поверхности review и compare есть, но свежие аутентифицированные end-to-end доказательства не завершены. |
+| Дела и планы действий | WORKING | Реализованы case, task и action-plan workflows. |
+| Каталог юристов и консультации | PARTIAL | Controlled profiles, каталог и lifecycle hand-off ещё не завершены. |
+| Администрирование | PARTIAL | Есть отдельный admin Worker и защищённые административные flows. |
+| Production-платежи | PLANNED | В репозитории не заявлен live payment provider. |
 
-## Структура репозитория
+## Карта репозитория
 
     juro/
     ├── apps/
-    │   ├── website/       # juro.uz
+    │   ├── website/       # публичный сайт juro.uz
     │   ├── platform/      # app.juro.uz и юридические workflows
     │   └── admin/         # отдельный administrative Worker
-    ├── docs/
-    ├── .github/
-    ├── .env.example
+    ├── docs/              # архитектура, миграции и operations
+    ├── .github/           # CI, contribution и issue templates
+    ├── .env.example       # только имена конфигурации, без secrets
     ├── SECURITY.md
     ├── package.json
     └── README.md
@@ -179,45 +154,45 @@ JURO — монорепозиторий с независимо развёрты
 
 - Node.js 22.13 или новее.
 - npm, совместимый с committed lockfiles.
-- Bash и документированные POSIX tools для legacy lifecycle apps/website; apps/platform использует shell-neutral Node launchers.
-- Cloudflare-compatible bindings для persisted platform features.
+- Bash и описанные POSIX-инструменты для legacy lifecycle `apps/website`; `apps/platform` использует shell-neutral Node launchers.
+- Cloudflare-compatible bindings для persisted возможностей платформы.
 
-Клонирование и установка:
+Клонируйте и установите website и platform:
 
     git clone https://github.com/MoozUpus/juro.git
     cd juro
     npm run install:all
 
-Локальный запуск:
+Запустите локально:
 
     npm run dev:website
     npm run dev:platform
     npm run dev:admin
 
-Скопируйте .env.example в локальный ignored environment file. Никогда не коммитьте .env, API keys, access tokens, database exports, user documents или logs.
+Скопируйте `.env.example` в локальный ignored environment file. Никогда не коммитьте `.env`, API keys, access tokens, database exports, пользовательские документы или logs.
 
 <details>
 <summary>Переменные окружения и Cloudflare bindings</summary>
 
-| Имя | Обязательно | Scope | Назначение |
+| Имя | Требуется | Scope | Назначение |
 |---|---:|---|---|
-| OPENAI_API_KEY | Только для live AI | Server | OpenAI Responses API authentication |
-| OPENAI_MODEL | Нет | Server | Optional model override |
-| RESEND_API_KEY | Для email OTP | Server | Email-provider authentication |
-| EMAIL_FROM | Для email OTP | Server | Verified sender address |
-| JURO_SMOKE_BASE_URL | Нет | Test process | Document-builder smoke-test base URL |
-| CLOUDFLARE_REMOTE_BINDINGS | Нет | Local development | Opt in to remote bindings; нужен Wrangler login |
-| DB | Persisted features | Worker binding | Cloudflare D1 |
-| BUCKET | File workflows | Worker binding | Private Cloudflare R2 |
-| ASSETS / IMAGES | Hosting managed | Worker binding | Static assets и image optimization |
+| `OPENAI_API_KEY` | Только для live AI | Server | Аутентификация OpenAI Responses API |
+| `OPENAI_MODEL` | Нет | Server | Необязательная замена модели |
+| `RESEND_API_KEY` | Для email OTP | Server | Аутентификация email-провайдера |
+| `EMAIL_FROM` | Для email OTP | Server | Верифицированный адрес отправителя |
+| `JURO_SMOKE_BASE_URL` | Нет | Test process | Базовый URL smoke-теста document builder |
+| `CLOUDFLARE_REMOTE_BINDINGS` | Нет | Local development | Включение remote bindings; нужен Wrangler login |
+| `DB` | Persisted features | Worker binding | Cloudflare D1 |
+| `BUCKET` | File workflows | Worker binding | Private Cloudflare R2 |
+| `ASSETS` / `IMAGES` | Hosting managed | Worker binding | Статические assets и image optimization |
 
-DB, BUCKET, ASSETS и IMAGES — platform bindings, а не secrets для environment file. AI и email keys — только server-side configuration и не должны становиться public browser variables.
+`DB`, `BUCKET`, `ASSETS` и `IMAGES` — platform bindings, а не secrets для environment file. Ключи AI и email — только server-side configuration, их нельзя раскрывать через public browser variables.
 
 </details>
 
 ## Качество и тестирование
 
-В корне репозитория:
+Из корня репозитория:
 
     npm run lint
     npm run type-check
@@ -225,33 +200,27 @@ DB, BUCKET, ASSETS и IMAGES — platform bindings, а не secrets для envir
     npm run build
     npm run validate:artifact
 
-CI определён в [.github/workflows/ci.yml](.github/workflows/ci.yml) и запускает locked installs, linting, TypeScript checks, tests, artifact validation и platform Cloudflare environment matrix. Для matrix и dry-run платформы:
+CI определён в [.github/workflows/ci.yml](.github/workflows/ci.yml). Он включает locked installs, linting, TypeScript checks, tests, artifact validation и platform Cloudflare environment matrix. Для matrix и dry-run только платформы:
 
     npm --prefix apps/platform run validate:cloudflare:matrix
 
 ## Развёртывание
 
-Развёртывания website и platform намеренно независимы. Для платформы нужны D1 migrations, private R2 bindings, server-side secrets и явные permission checks; оба target должны быть проверены на preview до production approval.
+Website и platform развёртываются независимо. Для platform нужны D1 migrations, private R2 bindings, server-side secrets и явные permission checks; перед production approval оба target должны быть проверены в preview.
 
-См. [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) для release sequence, rollback expectations, DNS safeguards и backup requirements. [docs/MIGRATION.md](docs/MIGRATION.md) сохраняет source-migration и alternative-hosting audit.
+Последовательность релиза, ожидания rollback, DNS safeguards и backup requirements описаны в [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md). [docs/MIGRATION.md](docs/MIGRATION.md) сохраняет аудит source migration и alternative hosting.
 
 ## Roadmap
 
-| Now | Next | Later |
+| Сейчас | Далее | Позже |
 |---|---|---|
-| Поддерживать source-aware ответы, document workflows, permissions и release evidence. | Завершить authenticated verification document analysis и lawyer hand-off. | Рассматривать production payments и broader integrations только после утверждения product, security и operational gates. |
+| Поддерживать source-aware информацию, document workflows, permissions и release evidence. | Завершить аутентифицированную проверку document analysis и lawyer hand-off. | Рассматривать платежи и расширение экосистемы только после подтверждения product, security и operational gates. |
 
-## Безопасность
+## Участие и лицензия
 
-Сообщайте об уязвимостях приватно, как описано в [SECURITY.md](SECURITY.md). Не включайте secrets, personal data, user documents или production logs в issues и pull requests. Если credential раскрыт, его нужно ротировать: удаления из позднего revision недостаточно.
+JURO — product-managed repository. Приветствуются сфокусированные и безопасные contributions; см. [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) и используйте подготовленные issue и pull-request templates. Pull request не разрешает production deployment, DNS change или доступ к production data.
 
-## Участие
-
-JURO — product-managed repository. Приветствуются сфокусированные и безопасные contributions; см. [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) и используйте issue/PR templates. Pull Request не даёт разрешения на production deploy, DNS change или доступ к production data.
-
-## Лицензия
-
-Файл лицензии сейчас отсутствует. Этот репозиторий не предоставляет права на повторное использование; свяжитесь с владельцем до использования кода или assets.
+В репозитории пока нет файла лицензии. Права на повторное использование не предоставлены; свяжитесь с владельцем репозитория до использования кода или presentation assets.
 
 ---
 
