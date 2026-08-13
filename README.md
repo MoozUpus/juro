@@ -9,6 +9,7 @@
 <div align="center">
   <a href="https://juro.uz">Live website</a> ·
   <a href="https://app.juro.uz">Open platform</a> ·
+  <a href="#read-this-repository">Read the dossier</a> ·
   <a href="#product-tour">Product tour</a> ·
   <a href="#product-contract">Product contract</a> ·
   <a href="#architecture">Architecture</a> ·
@@ -25,11 +26,31 @@ JURO is a LegalTech workspace for Uzbekistan that brings legal questions, docume
 
 The public site is available at [juro.uz](https://juro.uz). The protected product platform is available at [app.juro.uz](https://app.juro.uz). This repository contains the source for both applications, their Cloudflare configuration, documentation and quality checks.
 
+## Read this repository
+
+| If you are evaluating… | Start here | Then inspect |
+|---|---|---|
+| The product experience | [Product tour](#product-tour) and [operating model](#product-operating-model) | [Current status](#current-status) and [trust boundaries](#trust-privacy-and-legal-safety) |
+| The legal-AI approach | [How JURO works](#how-juro-works) and the [product contract](#product-contract) | [Product foundations](docs/github/PRODUCT_FOUNDATIONS.md) and source-handling modules |
+| The technical architecture | [Architecture](#architecture) | Cloudflare configuration, [deployment](#deployment) and quality commands |
+| A safe contribution | [Repository structure](#repository-structure) and [quick start](#quick-start) | [Contributing](#contributing), [security](#security) and the PR template |
+
 ## What is JURO?
 
 Finding and understanding legal information can be difficult, while traditional legal services can be fragmented and costly. JURO is designed to reduce that friction: start with a question or document, keep the source and context visible, and continue toward a draft, a plan or a human hand-off when the product supports it.
 
 The product is oriented to Uzbekistan. The public product UI currently offers Russian and Uzbek language surfaces; the repository documentation is also maintained in English for international technical audiences. JURO does not present AI output as individual legal advice or as a substitute for a lawyer.
+
+## At a glance
+
+| Area | Repository-backed fact | What it does **not** imply |
+|---|---|---|
+| Product shape | Legal questions, document work, cases/action plans and a controlled lawyer hand-off surface share one platform direction. | Every workflow is not necessarily available to every account or deployment. |
+| Delivery | The monorepo contains a public website, a protected platform and a separate administrative app. | The administrative or hand-off surfaces are not presented as fully complete services. |
+| Legal sources | The source-aware path retrieves query-scoped public Lex.uz and Advice.uz pages and stores citation context. | No official third-party source API or complete legislative corpus is claimed. |
+| Runtime | TypeScript, React, Next.js, Vite/Vinext and Cloudflare Worker tooling are used across the repository. | A technology choice is not a claim of legal correctness. |
+| Data boundaries | Platform features use Cloudflare D1, private R2 and server-side AI configuration. | No certification, privacy-law compliance status or data-residency claim is made here. |
+| Quality gates | Root scripts and CI cover linting, type checks, tests, builds and artifact validation. | A passing check is not a production-release or legal-quality guarantee. |
 
 ## Product tour
 
@@ -58,6 +79,21 @@ The product is oriented to Uzbekistan. The public product UI currently offers Ru
 | Build an action plan | Keep actions, deadlines, documents and legal context connected to a case. | WORKING |
 | Request lawyer assistance | Use the controlled lawyer-profile and hand-off surface where available. | PARTIAL |
 | Use a production payment service | Not offered as a live payment claim in this repository. | PLANNED |
+
+## Product operating model
+
+<img src="docs/github/operating-model.svg" width="100%" alt="JURO product operating model from legal context to source-aware response, protected work and partial lawyer hand-off">
+
+JURO is organised around a connected sequence rather than an isolated chat screen. A user may begin with a question or document, inspect source-aware information, continue in a protected workspace and, where the current workflow permits, request human assistance.
+
+| Transition | Current status | How it is represented |
+|---|---|---|
+| Public legal-intelligence entry → protected platform | LIVE | The public website and platform entry are deployed to separate public domains. |
+| Question → structured response with source handling | WORKING | The source-aware response and citation surfaces are implemented in platform routes. |
+| Response → document, case or action-plan work | WORKING | Document, case and task workflows are implemented in the protected platform. |
+| Complex matter → lawyer assistance | PARTIAL | Controlled profile and hand-off lifecycle code exists; it is not represented as guaranteed representation. |
+
+Solid paths in the diagram denote implemented or working surfaces. The dashed hand-off path deliberately remains PARTIAL. The diagram is a product model, not a claim that all transitions are available in every environment or account state.
 
 ## How JURO works
 

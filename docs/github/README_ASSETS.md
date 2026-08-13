@@ -7,9 +7,10 @@ All assets in this folder are repository-local and use the JURO palette: navy #0
 | Asset | Purpose | Source / update trigger |
 |---|---|---|
 | hero.svg | README hero banner | Original JURO GitHub artwork. Update when product positioning, URLs or branded interface language changes. |
-| social-preview.png | GitHub social preview | Original JURO GitHub artwork, rendered at 1280 × 640. Upload it in GitHub repository settings after review. |
+| social-preview.png | GitHub social preview | Original JURO GitHub artwork, rendered at 1280 × 640 and installed as the repository Social Preview. Re-upload it in repository settings after a future update. |
 | stack-badges.svg | Self-hosted technology badges | Update only when the verified core stack or CI status changes. |
 | engineering-commitments.svg | Product-engineering contract from legal context to protected work | Update when source handling, workspace access boundaries or the lawyer hand-off status changes. |
+| operating-model.svg | End-to-end product model from public entry to protected work | Update when an implemented, partial or planned transition changes status. This is an original JURO diagram, not a service-level promise. |
 | product-overview.svg | Product ecosystem and status split | Update when a module moves between WORKING, PARTIAL or PLANNED. |
 | ai-answer-flow.svg | Source-aware answer-flow explanation | Update when the retrieval or citation-validation path changes. It intentionally does not claim an official Lex.uz or Advice.uz API. |
 | platform-architecture.svg | Repository and deployment architecture | Update after changes to Workers, D1, R2, server-side AI, auth or external providers. |
