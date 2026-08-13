@@ -9,6 +9,7 @@ All assets in this folder are repository-local and use the JURO palette: navy #0
 | hero.svg | README hero banner | Original JURO GitHub artwork. Update when product positioning, URLs or branded interface language changes. |
 | social-preview.png | GitHub social preview | Original JURO GitHub artwork, rendered at 1280 × 640. Upload it in GitHub repository settings after review. |
 | stack-badges.svg | Self-hosted technology badges | Update only when the verified core stack or CI status changes. |
+| engineering-commitments.svg | Product-engineering contract from legal context to protected work | Update when source handling, workspace access boundaries or the lawyer hand-off status changes. |
 | product-overview.svg | Product ecosystem and status split | Update when a module moves between WORKING, PARTIAL or PLANNED. |
 | ai-answer-flow.svg | Source-aware answer-flow explanation | Update when the retrieval or citation-validation path changes. It intentionally does not claim an official Lex.uz or Advice.uz API. |
 | platform-architecture.svg | Repository and deployment architecture | Update after changes to Workers, D1, R2, server-side AI, auth or external providers. |
@@ -20,6 +21,7 @@ All assets in this folder are repository-local and use the JURO palette: navy #0
 | screenshots/document-builder.webp | Document-library/builder entry | Live browser capture on 2026-08-14; update after builder UI or template registry changes. |
 | screenshots/document-analysis.webp | Document-review entry | Live browser capture on 2026-08-14; update after review/compare UI or its status changes. |
 | screenshots/mobile-experience.webp | Narrow public-product presentation | Derived from the live public first viewport on 2026-08-14. Replace it with a freshly captured, verified 390 px browser viewport before using it as formal mobile QA evidence. |
+| PRODUCT_FOUNDATIONS.md | Evidence-led engineering narrative and review map | Update when a linked implementation boundary, product status or operational document changes. |
 
 ## Safety and capture rules
 
