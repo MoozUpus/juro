@@ -1,5 +1,5 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
-import { requireD1, requireQuarantineR2, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireR2, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import {
   arrayBufferHex,
   documentAnalysisUploadForUser,
@@ -48,8 +48,8 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
       key: "document_analysis_upload",
     });
     const record = await documentAnalysisUploadForUser(db, analysisId, workspace.id, user.id);
-    if (["uploaded", "quarantined"].includes(record.status)) {
-      const existing = await requireQuarantineR2().head(record.r2Key);
+    if (record.status === "uploaded") {
+      const existing = await requireR2().head(record.r2Key);
       if (existing && existing.size === record.sizeBytes && arrayBufferHex(existing.checksums.sha256) === record.sha256) {
         return response({ analysis: publicRecord(record), replay: true });
       }
@@ -72,7 +72,7 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
 
     let stored: R2Object | null;
     try {
-      stored = await requireQuarantineR2().put(record.r2Key, request.body, {
+      stored = await requireR2().put(record.r2Key, request.body, {
         onlyIf: new Headers({ "if-none-match": "*" }),
         sha256: record.sha256,
         httpMetadata: { contentType: record.mimeType, cacheControl: "private, no-store" },
@@ -81,7 +81,7 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
           ownerUserId: user.id,
           analysisId: record.analysisId,
           fileId: record.fileId,
-          lifecycle: "quarantine",
+          lifecycle: "document-analysis-upload",
         },
       });
     } catch {
@@ -91,10 +91,10 @@ export const PUT = withApiErrors(async function PUT(request: Request, context: C
       return response({ code: "UPLOAD_INTEGRITY_FAILED", error: "R2 отклонил файл: проверьте размер и SHA-256." }, 422);
     }
     if (!stored) {
-      stored = await requireQuarantineR2().head(record.r2Key);
+      stored = await requireR2().head(record.r2Key);
     }
     if (!stored || stored.size !== record.sizeBytes || arrayBufferHex(stored.checksums.sha256) !== record.sha256) {
-      await requireQuarantineR2().delete(record.r2Key);
+      await requireR2().delete(record.r2Key);
       await db.prepare(
         "UPDATE document_analyses SET status='upload_failed',error_code='UPLOAD_INTEGRITY_FAILED',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=?",
       ).bind(new Date().toISOString(), analysisId, workspace.id, user.id).run();

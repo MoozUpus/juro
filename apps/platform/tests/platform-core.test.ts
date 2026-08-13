@@ -1078,7 +1078,8 @@ test("monitoring stays explicitly beta and saves interests without implying deli
     readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/MonitoringClient.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(shell, /"Мониторинг · бета", "Monitoring · beta"/);
+  assert.match(shell, /\["monitoring", Scale, "Мониторинг законодательства", "Qonunchilik monitoringi"\]/);
+  assert.match(shell, /key: "help", ru: "Помощь", uz: "Yordam"/);
   assert.match(client, /normalizeMonitoringAudience\(accountType\)/);
   assert.match(client, /normalizeMonitoringAudience\(body\.preference\.audience\)/);
   assert.match(client, /monitoringPreferencesAreInformationalOnly\(\{/);
@@ -1119,10 +1120,13 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shell, /min-height:44px/);
   assert.match(shell, /max-width:800px/);
   assert.match(shell, /prefers-reduced-transparency:reduce/);
-  assert.match(shellComponent, /\["dashboard", Home/);
   assert.match(shellComponent, /\["ai-chat", Bot/);
-  assert.match(shellComponent, /\["documents", Files/);
+  assert.match(shellComponent, /\["document-builder", FilePenLine/);
+  assert.match(shellComponent, /\["document-review", FileCheck2/);
   assert.match(shellComponent, /\["cases", BriefcaseBusiness/);
+  assert.match(shellComponent, /\["documents", Files/);
+  assert.match(shellComponent, /const toolGroups = \[/);
+  assert.match(shellComponent, /"Все инструменты"/);
   assert.match(shellComponent, /href=\{`\$\{base\}\/profile`\}/);
   assert.match(shellComponent, /useSearchParams/);
   assert.match(shellComponent, /const query = searchParams\.toString\(\)/);
@@ -1457,7 +1461,9 @@ test("calendar reads only active-workspace plan deadlines and keeps its date win
   assert.match(route, /t\.workspace_id=c\.workspace_id/);
   assert.match(route, /cache-control": "private, no-store/);
   assert.match(route, /calendarRangeFromSearch/);
-  assert.match(client, /"month", "week", "list", "cases", "overdue"/);
+  assert.match(client, /"month", "week", "day", "list", "cases", "overdue"/);
+  assert.match(client, /previousMonthStart/);
+  assert.match(client, /calendar-more/);
   assert.match(client, /api\/platform\/calendar/);
   assert.match(client, /action-plan\//);
   assert.match(routing, /"calendar"/);

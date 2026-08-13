@@ -43,7 +43,6 @@ type BuilderAnalysisSource = {
 };
 
 const activeAnalysisStatuses = new Set([
-  "quarantined",
   "ready",
   "processing",
   "persisting",
@@ -166,7 +165,7 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId, public
     setNotice("");
     try {
       const body = await importDocumentUrlForAnalysis(publicUrl, locale, uploadCaseId || null);
-      setNotice(body.message || (ru ? "Файл импортирован в приватный карантин." : "Fayl shaxsiy karantinga import qilindi."));
+      setNotice(body.message || (ru ? "Файл защищённо импортирован для анализа." : "Fayl tahlil uchun himoyalangan tarzda import qilindi."));
       setPublicUrl("");
       setConsent(false);
       await load();
@@ -181,7 +180,7 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId, public
   const uploadStatus = !uploadProgress ? "" : uploadProgress.phase === "hashing"
     ? (ru ? "Проверяем целостность файла…" : "Fayl yaxlitligi tekshirilmoqda…")
     : uploadProgress.phase === "finalizing"
-      ? (ru ? "Сохраняем файл в приватный карантин…" : "Fayl shaxsiy karantinga saqlanmoqda…")
+      ? (ru ? "Защищённо сохраняем файл для анализа…" : "Fayl tahlil uchun himoyalangan tarzda saqlanmoqda…")
       : uploadPercent === null
         ? (ru ? "Передаём файл…" : "Fayl yuborilmoqda…")
       : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);
@@ -529,7 +528,6 @@ function packageConfidenceLabel(confidence: "high" | "medium" | "low", ru: boole
 function statusLabel(status: string, ru: boolean, retryExhausted = false) {
   if (status === "completed") return ru ? "Анализ завершён" : "Tahlil yakunlandi";
   if (retryExhausted) return ru ? "Требует повтора" : "Qayta ishga tushirish kerak";
-  if (status === "quarantined") return ru ? "В карантине" : "Karantinda";
   if (status === "uploaded") return ru ? "Проверка файла" : "Fayl tekshirilmoqda";
   if (status === "initiated") return ru ? "Ожидает загрузки" : "Yuklashni kutmoqda";
   if (status === "ready") return ru ? "Готов к анализу" : "Tahlilga tayyor";
@@ -581,7 +579,6 @@ function analysisState(status: string, errorCode: string | null, retryExhausted:
     };
   }
   const states: Record<string, [string, string, string, string]> = {
-    quarantined: ["Анализ не запущен", "Tahlil ishga tushirilmadi", "Файл помещён в карантин и не передан AI. JURO передаст его только после успешного сканирования вредоносного содержимого.", "Fayl karantinga joylandi va AI ga yuborilmadi. JURO uni faqat zararli tarkib muvaffaqiyatli skanerlangandan keyin yuboradi."],
     processing: ["Идёт анализ", "Tahlil ketmoqda", "JURO извлекает структуру документа и проверяет выводы. Можно покинуть страницу и вернуться позже.", "JURO hujjat tuzilishini ajratmoqda va xulosalarni tekshirmoqda. Sahifadan chiqib, keyin qaytish mumkin."],
     persisting: ["Результат сохраняется", "Natija saqlanmoqda", "Анализ завершён у провайдера; JURO атомарно сохраняет нормализованный результат.", "Provayder tahlilni yakunladi; JURO normallashtirilgan natijani atomar saqlamoqda."],
     awaiting_ocr: ["Идёт подготовка OCR", "OCR tayyorlanmoqda", "Текст не извлечён напрямую. Файл поставлен в защищённую очередь распознавания; юридический AI получит только проверенный результат.", "Matn to‘g‘ridan-to‘g‘ri ajratilmadi. Fayl himoyalangan OCR navbatiga qo‘yildi; yuridik AI faqat tekshirilgan natijani oladi."],
@@ -592,7 +589,7 @@ function analysisState(status: string, errorCode: string | null, retryExhausted:
     awaiting_ai_configuration: ["AI пока не подключён", "AI hali ulanmagan", "Безопасно извлечённый документ сохранён, но не отправлен провайдеру: server-side AI secret не настроен.", "Xavfsiz ajratilgan hujjat saqlandi, ammo provayderga yuborilmadi: server-side AI siri sozlanmagan."],
     failed: ["Обработка остановлена", "Qayta ishlash to‘xtadi", "Результат не создан. JURO сохранил диагностический код без содержимого документа; задачу можно безопасно повторить.", "Natija yaratilmadi. JURO hujjat matnisiz diagnostika kodini saqladi; vazifani xavfsiz qayta boshlash mumkin."],
   };
-  const fallback: [string, string, string, string] = ["Проверка ещё не завершена", "Tekshiruv hali tugamadi", "Файл ещё не прошёл обязательные этапы безопасности и не передан AI.", "Fayl majburiy xavfsizlik bosqichlaridan hali o‘tmadi va AI ga yuborilmadi."];
+  const fallback: [string, string, string, string] = ["Подготовка анализа", "Tahlil tayyorlanmoqda", "Файл готовится к анализу. Можно покинуть страницу и вернуться позже.", "Fayl tahlilga tayyorlanmoqda. Sahifadan chiqib, keyinroq qaytishingiz mumkin."];
   const [headingRu, headingUz, messageRu, messageUz] = states[status] ?? fallback;
   return { heading: ru ? headingRu : headingUz, message: ru ? messageRu : messageUz };
 }

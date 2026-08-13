@@ -96,7 +96,7 @@ export async function assertPublicUrlTarget(url: URL, resolver: PublicDocumentRe
   }
 }
 
-export async function fetchPublicDocumentToQuarantine(input: {
+export async function fetchPublicDocumentForAnalysis(input: {
   bucket: R2Bucket;
   workspaceId: string;
   userId: string;
@@ -155,7 +155,7 @@ export async function fetchPublicDocumentToQuarantine(input: {
     });
   } catch {
     await input.bucket.delete(temporaryKey).catch(() => undefined);
-    throw new PublicDocumentUrlError("URL_INTEGRITY_FAILED", "Файл не удалось безопасно сохранить в приватный карантин.", 422);
+    throw new PublicDocumentUrlError("URL_INTEGRITY_FAILED", "Файл не удалось безопасно сохранить в приватное хранилище.", 422);
   }
   const sha256 = stored ? arrayBufferHex(stored.checksums.sha256) : null;
   if (!stored || stored.size !== sizeBytes || !sha256) {

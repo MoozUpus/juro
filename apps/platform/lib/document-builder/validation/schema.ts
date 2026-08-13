@@ -2,6 +2,9 @@ import { z } from "zod";
 
 const looseString = z.string().max(20_000);
 const shortString = z.string().max(500);
+// Empty is allowed only while an optional identity field is intentionally left
+// blank. Any supplied PINFL is always exactly fourteen ASCII digits.
+const pinflSchema = z.string().regex(/^(?:|[0-9]{14})$/, "PINFL must contain exactly 14 digits");
 const partySchema = z.object({
   fullName: shortString,
   birthDate: shortString,
@@ -9,7 +12,7 @@ const partySchema = z.object({
   idDocumentNumber: shortString,
   idIssuedBy: shortString,
   idIssueDate: shortString,
-  pinfl: shortString,
+  pinfl: pinflSchema,
   registeredAddress: looseString,
   phone: shortString,
   email: shortString,
@@ -23,7 +26,7 @@ const witnessSchema = z.object({
   birthDate: shortString,
   idDocumentType: z.enum(["passport", "id_card", ""]),
   idDocumentNumber: shortString,
-  pinfl: shortString,
+  pinfl: pinflSchema,
   registeredAddress: looseString,
   phone: shortString,
 });
@@ -123,7 +126,14 @@ export const configuredAnswersSchema = z.record(
     z.array(configuredScalarSchema).max(200),
     z.array(configuredRowSchema).max(100),
   ]),
-).refine((value) => Object.keys(value).length <= 500, "Слишком много полей в документе.");
+).refine((value) => Object.keys(value).length <= 500, "Слишком много полей в документе.")
+  .refine(
+    (value) => Object.entries(value).every(([key, candidate]) => {
+      if (!/(?:^|\.)pinfl$/i.test(key) || candidate === "") return true;
+      return typeof candidate === "string" && /^[0-9]{14}$/.test(candidate);
+    }),
+    "ПИНФЛ должен содержать ровно 14 цифр.",
+  );
 
 export const configuredDraftSchema = z.object({
   templateCode: z.string().regex(/^\d{7}$/),
@@ -154,7 +164,7 @@ export const contactInputSchema = z.object({
   idDocumentNumber: shortString,
   idIssuedBy: shortString,
   idIssueDate: shortString,
-  pinfl: shortString,
+  pinfl: pinflSchema,
   registeredAddress: looseString,
   phone: shortString,
 });

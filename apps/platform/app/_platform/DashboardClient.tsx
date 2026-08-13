@@ -132,11 +132,16 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
 
   const quickActions = [
     { href: `${base}/ai-chat`, icon: Bot, copy: copy.actions.ask },
-    { href: `${base}/document-review`, icon: ShieldCheck, copy: copy.actions.review },
-    { href: `${base}/document-review?mode=compare`, icon: FileDiff, copy: copy.actions.compare },
     { href: `${base}/document-builder`, icon: FilePenLine, copy: copy.actions.create },
-    { href: `${base}/action-plan`, icon: CalendarClock, copy: copy.actions.plan },
-    { href: `${base}/consultations`, icon: MessageSquareText, copy: copy.actions.lawyer },
+    { href: `${base}/document-review`, icon: ShieldCheck, copy: copy.actions.review },
+    {
+      href: `${base}/cases`,
+      icon: BriefcaseBusiness,
+      copy: {
+        title: ru ? "Мои дела" : "Mening ishlarim",
+        description: ru ? "Сроки, документы и планы действий в одном месте." : "Muddatlar, hujjatlar va harakatlar rejalari bir joyda.",
+      },
+    },
   ];
   const uploadPercent = uploadProgress?.phase === "uploading" && uploadProgress.total > 0
     ? Math.round((uploadProgress.loaded / uploadProgress.total) * 100)
@@ -144,7 +149,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   const uploadStatus = !uploadProgress ? "" : uploadProgress.phase === "hashing"
     ? (ru ? "Проверяем целостность файла…" : "Fayl yaxlitligi tekshirilmoqda…")
     : uploadProgress.phase === "finalizing"
-      ? (ru ? "Сохраняем файл в приватный карантин…" : "Fayl shaxsiy karantinga saqlanmoqda…")
+      ? (ru ? "Защищённо сохраняем файл для анализа…" : "Fayl tahlil uchun himoyalangan tarzda saqlanmoqda…")
       : uploadPercent === null
         ? (ru ? "Передаём файл…" : "Fayl yuborilmoqda…")
         : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);

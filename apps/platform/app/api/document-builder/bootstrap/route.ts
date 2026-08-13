@@ -46,6 +46,8 @@ export async function PATCH(request: Request): Promise<Response> {
       ? body.idDocumentType as IdentityDocumentType
       : null;
     if (body.idDocumentType && !idDocumentType) return badRequest("Выберите паспорт или ID-карту.");
+    const pinfl = optionalText(body.pinfl, 14);
+    if (pinfl && !/^[0-9]{14}$/.test(pinfl)) return badRequest("ПИНФЛ должен содержать ровно 14 цифр.");
     const profile: UserProfile = {
       ...user,
       fullName: optionalText(body.fullName, 300),
@@ -54,7 +56,7 @@ export async function PATCH(request: Request): Promise<Response> {
       idDocumentNumber: optionalText(body.idDocumentNumber, 100),
       idIssuedBy: optionalText(body.idIssuedBy, 500),
       idIssueDate: optionalText(body.idIssueDate, 20),
-      pinfl: optionalText(body.pinfl, 100),
+      pinfl,
       registeredAddress: optionalText(body.registeredAddress, 1_000),
       phone: optionalText(body.phone, 100),
     };

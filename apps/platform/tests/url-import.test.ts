@@ -3,7 +3,7 @@ import test from "node:test";
 import { readFile } from "node:fs/promises";
 import {
   canonicalPublicUrl,
-  fetchPublicDocumentToQuarantine,
+  fetchPublicDocumentForAnalysis,
   isPublicIpAddress,
   parsePublicDocumentUrlIntent,
   PublicDocumentUrlError,
@@ -57,7 +57,7 @@ test("URL fetch is manually redirected, DNS rechecked, bounded and streamed to p
     if (url.endsWith("/start")) return new Response(null, { status: 302, headers: { location: "/contract.pdf" } });
     return new Response(bytes, { status: 200, headers: { "content-type": "application/pdf", "content-length": String(bytes.byteLength) } });
   };
-  const result = await fetchPublicDocumentToQuarantine({
+  const result = await fetchPublicDocumentForAnalysis({
     bucket: bucket.value,
     workspaceId: "workspace-a",
     userId: "user-a",
@@ -80,7 +80,7 @@ test("URL fetch is manually redirected, DNS rechecked, bounded and streamed to p
 test("URL fetch fails closed on DNS rebinding, missing length, compression and unsupported MIME", async () => {
   const bytes = new TextEncoder().encode("%PDF-1.7");
   let lookup = 0;
-  await assert.rejects(fetchPublicDocumentToQuarantine({
+  await assert.rejects(fetchPublicDocumentForAnalysis({
     bucket: new MemoryBucket().value,
     workspaceId: "workspace-a",
     userId: "user-a",
@@ -94,7 +94,7 @@ test("URL fetch fails closed on DNS rebinding, missing length, compression and u
     { "content-type": "application/pdf", "content-length": "12", "content-encoding": "gzip" },
   ];
   for (const headers of headerSets) {
-    await assert.rejects(fetchPublicDocumentToQuarantine({
+    await assert.rejects(fetchPublicDocumentForAnalysis({
       bucket: new MemoryBucket().value,
       workspaceId: "workspace-a",
       userId: "user-a",
@@ -118,7 +118,8 @@ test("URL import route and RU/UZ UI expose no credential forwarding or fake succ
   assert.ok(route.indexOf("if (!publicDocumentUrlImportEnabled") < route.indexOf("const parsed = await parseJsonRequest"));
   assert.match(route, /workspaceForUser/);
   assert.match(route, /parseJsonRequest\(request, publicDocumentUrlIntentSchema, 4_096\)/);
-  assert.match(route, /FILE_SCAN_UNAVAILABLE/);
+  assert.match(route, /ANALYSIS_QUEUED/);
+  assert.doesNotMatch(route, /requireQuarantineR2|quarantined|MALWARE_SCAN|FILE_SCAN_/);
   assert.match(ui, /publicUrlImportEnabled \? <form className="review-url-import"/);
   assert.match(ui, /review-url-import-disabled/);
   assert.match(ui, /Контролируемая beta-функция временно недоступна/);

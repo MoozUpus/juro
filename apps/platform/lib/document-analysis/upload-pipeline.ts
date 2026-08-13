@@ -171,7 +171,7 @@ export async function initializeDocumentAnalysisUpload(input: {
     return { record: await documentAnalysisUploadForUser(input.db, existing.resultRef, input.workspaceId, input.userId), replay: true };
   }
 
-  const r2Key = `quarantine-v2/${input.workspaceId}/${analysisId}/${fileId}`;
+  const r2Key = `analysis-input-v1/${input.workspaceId}/${analysisId}/${fileId}`;
   try {
     await input.db.batch([
       input.db.prepare(

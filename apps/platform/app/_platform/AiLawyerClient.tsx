@@ -875,8 +875,8 @@ function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness
       <CircleAlert aria-hidden="true" />
       <p>{freshness.status === "unavailable"
         ? (ru
-          ? "Официальные источники Lex.uz и Advice.uz ещё не опубликованы полностью в проверенном индексе JURO. Пока JURO не показывает правовой вывод как подтверждённый."
-          : "Lex.uz va Advice.uz rasmiy manbalari JURO tasdiqlangan indeksida hali to‘liq nashr qilinmagan. Shu sabab JURO huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi.")
+          ? "Проверенные официальные источники Lex.uz ещё не опубликованы полностью в индексе JURO. Пока JURO не показывает правовой вывод как подтверждённый."
+          : "Lex.uz rasmiy manbalari JURO tasdiqlangan indeksida hali to‘liq nashr qilinmagan. Shu sabab JURO huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi.")
         : (ru
           ? `Правовая база старше ${freshness.maxAgeDays} дней. Последняя подтверждённая полная синхронизация: ${formatDate(freshness.asOf, true)}.`
           : `Huquqiy baza ${freshness.maxAgeDays} kundan eski. Oxirgi tasdiqlangan to‘liq sinxronlash: ${formatDate(freshness.asOf, false)}.`)}</p>

@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  CASE_SCENARIOS,
+  LEGACY_CASE_SCENARIO_MIGRATIONS,
   caseCreateInputSchema,
+  caseDirectionsForAccount,
   caseScenariosForAccount,
   caseScenarioSteps,
 } from "../lib/platform/case-create";
@@ -12,9 +15,21 @@ test("case creation input is strict, localized and audience-specific", () => {
   const personal = caseScenariosForAccount("individual");
   const entrepreneur = caseScenariosForAccount("entrepreneur");
   const business = caseScenariosForAccount("business");
-  assert.deepEqual(personal.map((item) => item.id), ["unpaid-salary", "debt", "consumer"]);
-  assert.deepEqual(entrepreneur.map((item) => item.id), personal.map((item) => item.id));
-  assert.deepEqual(business.map((item) => item.id), ["debt-recovery", "contract-breach"]);
+  assert.equal(Object.keys(CASE_SCENARIOS).length, 51);
+  assert.equal(caseDirectionsForAccount("individual").length, 9);
+  assert.equal(caseDirectionsForAccount("business").length, 10);
+  assert.equal(personal.length, 45);
+  assert.equal(entrepreneur.length, 51);
+  assert.equal(business.length, 51);
+  assert.equal(caseScenarioSteps("debt-recovery", "ru").length, 4);
+  assert.deepEqual(LEGACY_CASE_SCENARIO_MIGRATIONS, {
+    "unpaid-salary": "unpaid-salary",
+    debt: "debt",
+    consumer: "consumer",
+    "contract-breach": "contract-breach",
+    "debt-recovery": "debt-recovery",
+  });
+  assert.ok(personal.every((item) => item.direction !== "business"));
   assert.equal(caseScenarioSteps("debt", "ru").length, 4);
   assert.equal(caseScenarioSteps("debt", "uz").length, 4);
 
@@ -39,7 +54,7 @@ test("case creation input is strict, localized and audience-specific", () => {
   }).success, false);
   assert.equal(caseCreateInputSchema.safeParse({
     title: "Дело",
-    legalArea: "contract-breach",
+    legalArea: "business-registration",
     locale: "ru",
     accountType: "individual",
   }).success, false);

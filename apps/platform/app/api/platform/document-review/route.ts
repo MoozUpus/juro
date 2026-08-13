@@ -58,6 +58,6 @@ export const POST = withApiErrors(async function POST(request: Request) {
   await requireApiUser();
   return response({
     code: "SECURE_UPLOAD_REQUIRED",
-    error: "Multipart endpoint отключён. Используйте потоковый /api/platform/document-analysis/uploads с SHA-256 и обязательным карантином.",
+    error: "Multipart endpoint отключён. Используйте потоковый /api/platform/document-analysis/uploads с SHA-256 и проверкой целостности.",
   }, 426);
 });

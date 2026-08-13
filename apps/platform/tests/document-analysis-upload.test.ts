@@ -78,7 +78,7 @@ test("upload initialization is tenant-scoped, idempotent, and binds the request 
   };
   const first = await initializeDocumentAnalysisUpload(input);
   assert.equal(first.replay, false);
-  assert.match(first.record.r2Key, /^quarantine-v2\/workspace-a\//);
+  assert.match(first.record.r2Key, /^analysis-input-v1\/workspace-a\//);
   assert.doesNotMatch(first.record.r2Key, /contract/i);
 
   const replay = await initializeDocumentAnalysisUpload(input);

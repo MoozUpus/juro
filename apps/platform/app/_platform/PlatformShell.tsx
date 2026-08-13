@@ -47,33 +47,38 @@ type Props = {
   children: React.ReactNode;
 };
 
-const nav = [
-  ["dashboard", Home, "Главная", "Bosh sahifa"], ["ai-chat", Bot, "AI-юрист", "AI-yurist"],
-  ["cases", BriefcaseBusiness, "Мои дела", "Mening ishlarim"], ["documents", Files, "Документы", "Hujjatlar"],
-  ["calendar", CalendarDays, "Календарь", "Kalendar"],
-  ["lawyers", UsersRound, "Юристы", "Yuristlar"],
-  ["monitoring", Scale, "Мониторинг · бета", "Monitoring · beta"],
-  ["action-plan", CalendarCheck2, "План действий", "Harakatlar rejasi"], ["consultations", ReceiptText, "Консультации", "Maslahatlar"],
-  ["history", History, "История", "Tarix"], ["archive", Archive, "Архив", "Arxiv"],
-  ["billing", CreditCard, "Тариф", "Tarif"],
-  ["team", UsersRound, "Команда", "Jamoa"], ["notifications", Bell, "Уведомления", "Bildirishnomalar"],
+const primaryNav = [
+  ["ai-chat", Bot, "Спросить AI", "AI’dan so‘rash"],
+  ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"],
+  ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"],
+  ["cases", BriefcaseBusiness, "Мои дела", "Mening ishlarim"],
 ] as const;
 
 const documentNav = [
   ["documents", Files, "Мои документы", "Mening hujjatlarim"],
   ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"],
   ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"],
-  ["documents/comparisons", Files, "Сравнить версии", "Versiyalarni solishtirish"],
+  ["document-review?mode=compare", Files, "Сравнить версии", "Versiyalarni solishtirish"],
 ] as const;
 
-const primaryNavSlugs = new Set<string>([
-  "dashboard",
-  "ai-chat",
-  "cases",
-  "documents",
-  "calendar",
-  "lawyers",
-]);
+const caseworkNav = [
+  ["action-plan", CalendarCheck2, "Планы действий", "Harakatlar rejalari"],
+  ["calendar", CalendarDays, "Календарь", "Kalendar"],
+  ["archive", Archive, "Архив", "Arxiv"],
+  ["history", History, "История", "Tarix"],
+] as const;
+
+const helpNav = [
+  ["consultations", ReceiptText, "Консультации", "Maslahatlar"],
+  ["lawyers", UsersRound, "Юристы", "Yuristlar"],
+  ["monitoring", Scale, "Мониторинг законодательства", "Qonunchilik monitoringi"],
+] as const;
+
+const managementNav = [
+  ["team", UsersRound, "Команда", "Jamoa"],
+  ["notifications", Bell, "Уведомления", "Bildirishnomalar"],
+  ["billing", CreditCard, "Тариф", "Tarif"],
+] as const;
 
 export function PlatformShell({ locale, accountType, userName, activeWorkspaceId, workspaces, children }: Props) {
   const pathname = usePathname();
@@ -82,7 +87,6 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   const [open, setOpen] = useState(false);
   const [mobile, setMobile] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [documentsOpen, setDocumentsOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
@@ -92,12 +96,20 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   useSessionRefresh(locale);
   const base = platformBasePath(locale, accountType, activeWorkspaceId);
   const business = accountType === "business";
-  const visibleNav = nav.filter(([slug]) => slug !== "team" || business);
-  const primaryNav = visibleNav.filter(([slug]) => primaryNavSlugs.has(slug));
-  const moreNav = visibleNav.filter(([slug]) => !primaryNavSlugs.has(slug));
+  const toolGroups = [
+    { key: "documents", ru: "Документы", uz: "Hujjatlar", items: documentNav },
+    { key: "casework", ru: "Дела", uz: "Ishlar", items: caseworkNav },
+    { key: "help", ru: "Помощь", uz: "Yordam", items: helpNav },
+    { key: "management", ru: "Управление", uz: "Boshqaruv", items: managementNav.filter(([slug]) => slug !== "team" || business) },
+  ] as const;
   const routeIsActive = (slug: string) => {
-    const href = `${base}/${slug}`;
-    return pathname === href || pathname.startsWith(`${href}/`);
+    const [route, query] = slug.split("?");
+    const href = `${base}/${route}`;
+    const matchesRoute = pathname === href || pathname.startsWith(`${href}/`);
+    if (!matchesRoute) return false;
+    if (!query) return true;
+    const expectedParams = new URLSearchParams(query);
+    return Array.from(expectedParams.entries()).every(([key, value]) => searchParams.get(key) === value);
   };
   const documentRouteIsActive = (slug: string) => {
     if (slug !== "documents") return routeIsActive(slug);
@@ -106,11 +118,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
       pathname.startsWith(`${href}/`) && !pathname.startsWith(`${href}/comparisons`)
     );
   };
-  const documentHasActiveRoute = documentNav.some(([slug]) => documentRouteIsActive(slug))
-    || routeIsActive("document-analysis");
-  const moreHasActiveRoute = moreNav.some(([slug]) => {
-    return routeIsActive(slug);
-  });
+  const moreHasActiveRoute = toolGroups.some((group) => group.items.some(([slug]) => documentRouteIsActive(slug)));
   useEffect(() => {
     setCollapsed(localStorage.getItem("juro-sidebar-collapsed") === "1");
   }, []);
@@ -199,7 +207,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   return <PlatformRouteProvider basePath={base}><div className={`platform-shell ${collapsed ? "is-collapsed" : ""}`}>
     <a className="platform-skip-link" href="#main-content">{locale === "ru" ? "Перейти к содержанию" : "Asosiy mazmunga o‘tish"}</a>
     <aside ref={sidebarRef} id="platform-navigation" className={`platform-sidebar ${open ? "open" : ""}`} aria-label={locale === "ru" ? "Основная навигация" : "Asosiy navigatsiya"} aria-hidden={mobile && !open ? true : undefined} inert={mobile && !open ? true : undefined}>
-      <div className="platform-brand"><Image src="/juro-logo-light.png" alt="JURO" width={236} height={120} priority unoptimized/><button type="button" className="platform-mobile-close" ref={closeButtonRef} onClick={closeMobileMenu} aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}><X/></button></div>
+      <div className="platform-brand"><Link href={`${base}/dashboard`} aria-label="JURO"><Image src="/juro-logo-light.png" alt="JURO" width={236} height={120} priority unoptimized/></Link><button type="button" className="platform-mobile-close" ref={closeButtonRef} onClick={closeMobileMenu} aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"}><X/></button></div>
       <div className={`platform-account ${switchingWorkspace ? "switching" : ""}`}>
         <span>{business ? <BriefcaseBusiness/> : <UserRound/>}</span>
         <div>
@@ -227,42 +235,25 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
         <div className="platform-nav-group">
           {primaryNav.map(([slug, Icon, ru, uz]) => {
             const href=`${base}/${slug}`;
-            const active=slug === "documents" ? documentHasActiveRoute : routeIsActive(slug);
+            const active=routeIsActive(slug);
             const label=locale === "ru" ? ru : uz;
-            if (slug === "documents") {
-              return <details
-                key={slug}
-                className={`platform-nav-documents ${active ? "is-active" : ""}`}
-                open={active || documentsOpen}
-                onToggle={(event) => setDocumentsOpen(active || event.currentTarget.open)}
-              >
-                <summary title={collapsed ? label : undefined}>
-                  <Icon/><span>{label}</span><ChevronDown className="platform-nav-documents-chevron" aria-hidden="true"/>
-                </summary>
-                <div className="platform-nav-documents-content">
-                  {documentNav.map(([documentSlug, DocumentIcon, documentRu, documentUz]) => {
-                    const documentHref = `${base}/${documentSlug}`;
-                    const documentActive = documentRouteIsActive(documentSlug);
-                    const documentLabel = locale === "ru" ? documentRu : documentUz;
-                    return <Link key={documentSlug} className={documentActive ? "active" : ""} aria-current={documentActive ? "page" : undefined} href={documentHref} onClick={()=>setOpen(false)} title={collapsed ? documentLabel : undefined}><DocumentIcon/><span>{documentLabel}</span></Link>;
-                  })}
-                </div>
-              </details>;
-            }
             return <Link key={slug} className={active?"active":""} aria-current={active ? "page" : undefined} href={href} onClick={()=>setOpen(false)} title={collapsed ? label : undefined}><Icon/><span>{label}</span></Link>;
           })}
         </div>
         <details className="platform-nav-more" open={moreOpen} onToggle={(event) => setMoreOpen(event.currentTarget.open)}>
-          <summary title={collapsed ? (locale === "ru" ? "Ещё" : "Yana") : undefined}>
-            <Ellipsis/><span>{locale === "ru" ? "Ещё" : "Yana"}</span><ChevronDown className="platform-nav-more-chevron" aria-hidden="true"/>
+          <summary title={collapsed ? (locale === "ru" ? "Все инструменты" : "Barcha vositalar") : undefined}>
+            <Ellipsis/><span>{locale === "ru" ? "Все инструменты" : "Barcha vositalar"}</span><ChevronDown className="platform-nav-more-chevron" aria-hidden="true"/>
           </summary>
           <div className="platform-nav-more-content">
-            {moreNav.map(([slug, Icon, ru, uz]) => {
-              const href=`${base}/${slug}`;
-              const active=routeIsActive(slug);
-              const label=locale === "ru" ? ru : uz;
-              return <Link key={slug} className={active?"active":""} aria-current={active ? "page" : undefined} href={href} onClick={()=>setOpen(false)} title={collapsed ? label : undefined}><Icon/><span>{label}</span></Link>;
-            })}
+            {toolGroups.map((group) => <section className="platform-nav-tool-group" key={group.key} aria-label={locale === "ru" ? group.ru : group.uz}>
+              <small>{locale === "ru" ? group.ru : group.uz}</small>
+              {group.items.map(([slug, Icon, ru, uz]) => {
+                const href=`${base}/${slug}`;
+                const active=documentRouteIsActive(slug);
+                const label=locale === "ru" ? ru : uz;
+                return <Link key={slug} className={active?"active":""} aria-current={active ? "page" : undefined} href={href} onClick={()=>setOpen(false)} title={collapsed ? label : undefined}><Icon/><span>{label}</span></Link>;
+              })}
+            </section>)}
           </div>
         </details>
       </nav>
@@ -275,13 +266,13 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
     <div className="platform-main"><header className="platform-topbar"><div><small>{locale === "ru" ? "JURO · защищённое пространство" : "JURO · himoyalangan makon"}</small><strong>{userName}</strong></div><div><GlobalSearch locale={locale} accountType={accountType}/><button onClick={switchLanguage} aria-label={locale === "ru" ? "Переключить на узбекский" : "Rus tiliga o‘tish"}><Languages/>{locale.toUpperCase()}</button><Link href={`${base}/profile`} aria-label={locale === "ru" ? "Профиль" : "Profil"}><UserRound/></Link><LogoutButton locale={locale} label={locale === "ru" ? "Выйти" : "Chiqish"}/></div></header><main className="platform-content" id="main-content" tabIndex={-1}>{children}</main>
       <nav className="platform-mobile-nav" aria-label={locale === "ru" ? "Мобильная навигация" : "Mobil navigatsiya"}>
         {[
-          ["dashboard", Home, locale === "ru" ? "Главная" : "Bosh sahifa"],
-          ["ai-chat", Bot, locale === "ru" ? "AI-юрист" : "AI-yurist"],
+          ["ai-chat", Bot, locale === "ru" ? "AI" : "AI"],
+          ["document-builder", FilePenLine, locale === "ru" ? "Создать" : "Yaratish"],
+          ["document-review", FileCheck2, locale === "ru" ? "Проверить" : "Tekshirish"],
           ["cases", BriefcaseBusiness, locale === "ru" ? "Дела" : "Ishlar"],
-          ["documents", Files, locale === "ru" ? "Документы" : "Hujjatlar"],
         ].map(([slug, Icon, label]) => {
           const href = `${base}/${slug as string}`;
-          const active = slug === "documents" ? documentHasActiveRoute : routeIsActive(slug as string);
+          const active = routeIsActive(slug as string);
           const NavIcon = Icon as typeof Home;
           return <Link href={href} key={slug as string} className={active ? "active" : ""} aria-current={active ? "page" : undefined}><NavIcon/><span>{label as string}</span></Link>;
         })}

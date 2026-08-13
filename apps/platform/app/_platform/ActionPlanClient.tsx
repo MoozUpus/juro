@@ -12,7 +12,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { caseScenariosForAccount } from "../../lib/platform/case-create";
+import { caseDirectionsForAccount, caseScenariosForAccount, type CaseDirectionId } from "../../lib/platform/case-create";
 import type {
   DeadlineCalculationInput,
   DeadlineCalculationResult,
@@ -126,11 +126,15 @@ export function ActionPlanClient({
 }) {
   const ru = locale === "ru";
   const base = usePlatformBasePath();
-  const scenarioCatalog = caseScenariosForAccount(accountType);
+  const directions = caseDirectionsForAccount(accountType);
+  const [direction, setDirection] = useState<CaseDirectionId>(directions[0]?.id ?? "employment");
+  const scenarioCatalog = useMemo(() => caseScenariosForAccount(accountType, direction), [accountType, direction]);
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState(scenarioCatalog[0].id);
+  const [selected, setSelected] = useState(() =>
+    caseScenariosForAccount(accountType, directions[0]?.id ?? "employment")[0]?.id ?? "unpaid-salary",
+  );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
@@ -334,6 +338,19 @@ export function ActionPlanClient({
       <section className="plan-main">
         {!initialCaseId && <form className="plan-create" onSubmit={create}>
           <h2>{ru ? "Создать план из сценария" : "Ssenariydan reja yaratish"}</h2>
+          <p className="plan-create-step">{ru ? "1. Направление" : "1. Yo‘nalish"}</p>
+          <div className="scenario-pills scenario-directions">
+            {directions.map((item) => <button
+              type="button"
+              className={direction === item.id ? "active" : ""}
+              onClick={() => {
+                setDirection(item.id);
+                setSelected(caseScenariosForAccount(accountType, item.id)[0]?.id ?? "unpaid-salary");
+              }}
+              key={item.id}
+            >{ru ? item.ru : item.uz}</button>)}
+          </div>
+          <p className="plan-create-step">{ru ? "2. Ситуация" : "2. Vaziyat"}</p>
           <div className="scenario-pills">
             {scenarioCatalog.map((item) => <button
               type="button"

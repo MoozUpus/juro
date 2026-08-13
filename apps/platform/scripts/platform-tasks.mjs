@@ -92,6 +92,7 @@ const installInheritedEnvironmentKeys = new Set([
 
 const coreTestFiles = [
   "tests/document-builder.test.ts",
+  "tests/pinfl-validation.test.ts",
   "tests/document-comparison.test.ts",
   "tests/comparison-export.test.ts",
   "tests/comparison-change-decision.test.ts",

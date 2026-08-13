@@ -13,10 +13,11 @@ test("legacy document review POST cannot buffer a file or invoke an AI provider"
   assert.doesNotMatch(route, /request\.formData\(|arrayBuffer\(|callOpenAiJson|callAnthropic/);
 });
 
-test("secure upload routes enforce streaming, checksum, tenant, and quarantine boundaries", () => {
+test("secure upload routes enforce streaming, checksum, tenant, and direct-analysis boundaries", () => {
   const init = source("app/api/platform/document-analysis/uploads/route.ts");
   const upload = source("app/api/platform/document-analysis/uploads/[analysisId]/route.ts");
   const finalize = source("app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts");
+  const pipeline = source("lib/document-analysis/upload-pipeline.ts");
   for (const route of [init, upload, finalize]) {
     assert.match(route, /requireApiUser/);
     assert.match(route, /workspaceForUser/);
@@ -28,18 +29,16 @@ test("secure upload routes enforce streaming, checksum, tenant, and quarantine b
   assert.match(finalize, /validateUploadMagicBytes/);
   assert.match(finalize, /await verifyArchiveBytes\(/);
   assert.doesNotMatch(finalize, /inspectArchiveBytes\(/);
-  assert.match(finalize, /MALWARE_SCANNER_UNAVAILABLE/);
-  assert.match(finalize, /MALWARE_SCAN_ENABLED/);
-  assert.match(finalize, /MALWARE_SCANNER/);
-  assert.match(finalize, /MALWARE_SCAN_QUEUE/);
-  assert.match(finalize, /FILE_SCAN_QUEUED/);
+  assert.match(finalize, /analysis_safe/);
+  assert.match(finalize, /ANALYSIS_QUEUED/);
   assert.match(finalize, /INSERT OR IGNORE INTO job_outbox/);
-  assert.match(`${upload}\n${finalize}`, /requireQuarantineR2/);
-  assert.doesNotMatch(`${upload}\n${finalize}`, /requireR2\(\)/);
-  assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic|status='safe'|status='ready'/);
+  assert.match(pipeline, /analysis-input-v1/);
+  assert.match(finalize, /requireR2\(\)/);
+  assert.doesNotMatch(`${init}\n${upload}\n${finalize}`, /requireQuarantineR2|quarantined|MALWARE_SCAN|quarantine-bypass/);
+  assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic/);
 });
 
-test("archive finalize verifies local identity, bounded expansion, and CRC before quarantine", () => {
+test("archive finalize verifies local identity, bounded expansion, and CRC before direct analysis", () => {
   const archive = source("lib/document-analysis/archive-inspector.ts");
   assert.match(archive, /LOCAL_SIGNATURE/);
   assert.match(archive, /DATA_DESCRIPTOR_SIGNATURE/);
@@ -68,7 +67,6 @@ test("review surface polls actual background analysis states and makes retry exh
   const reviewRoute = source("app/api/platform/document-review/route.ts");
   assert.match(review, /const analysisPending = analyses\.some/);
   for (const status of [
-    "quarantined",
     "ready",
     "processing",
     "persisting",

@@ -60,7 +60,9 @@
 .platform-nav-documents-content{padding:3px 0 3px 12px}
 .platform-nav-more{margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,.1)}
 .platform-nav-more-content{padding-top:3px}
+.platform-nav-tool-group{display:flex;flex-direction:column;gap:3px;padding:8px 0 4px}.platform-nav-tool-group+ .platform-nav-tool-group{margin-top:4px;border-top:1px solid rgba(255,255,255,.08)}.platform-nav-tool-group small{padding:0 12px;color:#8fa1b2;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase}
 .platform-shell.is-collapsed .platform-nav-documents summary,.platform-shell.is-collapsed .platform-nav-more summary{justify-content:center;padding:0}
+.platform-shell.is-collapsed .platform-nav-tool-group small{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 .platform-shell.is-collapsed .platform-nav-documents summary>span,.platform-shell.is-collapsed .platform-nav-more summary>span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
 .platform-shell.is-collapsed .platform-nav-documents .platform-nav-documents-chevron,.platform-shell.is-collapsed .platform-nav-more .platform-nav-more-chevron{display:none}
 @media(max-width:800px){.platform-shell.is-collapsed .platform-nav-documents summary,.platform-shell.is-collapsed .platform-nav-more summary{justify-content:flex-start;padding:0 12px}.platform-shell.is-collapsed .platform-nav-documents summary>span,.platform-shell.is-collapsed .platform-nav-more summary>span{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal}.platform-shell.is-collapsed .platform-nav-documents .platform-nav-documents-chevron,.platform-shell.is-collapsed .platform-nav-more .platform-nav-more-chevron{display:block}}

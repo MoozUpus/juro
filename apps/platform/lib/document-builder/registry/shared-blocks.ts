@@ -18,7 +18,14 @@ export function naturalPersonBlock(prefix: string, roleRu: string, roleUz: strin
   return [
     { id: `${prefix}.fullName`, type: "full-name", label: t(`Ф.И.О. — ${roleRu}`, `${roleUz} F.I.Sh.`), required: true, reusableBlock: "party-natural-person" },
     { id: `${prefix}.birthDate`, type: "date", label: t("Дата рождения", "Tug‘ilgan sana"), reusableBlock: "party-natural-person" },
-    { id: `${prefix}.pinfl`, type: "pinfl", label: t("ПИНФЛ", "JShShIR"), help: t("Введите вручную. JURO не сверяет ПИНФЛ с государственными базами.", "Qo‘lda kiriting. JURO JShShIRni davlat bazalari bilan solishtirmaydi."), reusableBlock: "pinfl" },
+    {
+      id: `${prefix}.pinfl`,
+      type: "pinfl",
+      label: t("ПИНФЛ", "JShShIR"),
+      help: t("14 цифр без пробелов и букв. JURO не сверяет ПИНФЛ с государственными базами.", "14 ta raqam, bo‘sh joy va harflarsiz. JURO JShShIRni davlat bazalari bilan solishtirmaydi."),
+      validation: { minLength: 14, maxLength: 14, pattern: "^[0-9]{14}$", message: t("Введите ровно 14 цифр.", "Aynan 14 ta raqam kiriting.") },
+      reusableBlock: "pinfl",
+    },
     { id: `${prefix}.passport`, type: "passport", label: t("Паспорт или ID-карта", "Pasport yoki ID-karta"), reusableBlock: "passport-details" },
     { id: `${prefix}.address`, type: "address", label: t("Адрес проживания или регистрации", "Yashash yoki ro‘yxatdan o‘tgan manzil"), required: true, reusableBlock: "party-natural-person" },
     { id: `${prefix}.phone`, type: "phone", label: t("Номер телефона", "Telefon raqami"), reusableBlock: "party-natural-person" },

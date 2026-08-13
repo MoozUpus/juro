@@ -1,6 +1,6 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
 import { parseJsonRequest, type JsonRequestError } from "../../../../../lib/auth/input";
-import { requireD1, requireQuarantineR2, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireR2, runtimeEnv } from "../../../../../lib/document-builder/storage/runtime";
 import { ArchiveInspectionError, verifyArchiveBytes } from "../../../../../lib/document-analysis/archive-inspector";
 import {
   arrayBufferHex,
@@ -12,7 +12,7 @@ import {
   validateUploadMagicBytes,
 } from "../../../../../lib/document-analysis/upload-pipeline";
 import {
-  fetchPublicDocumentToQuarantine,
+  fetchPublicDocumentForAnalysis,
   parsePublicDocumentUrlIntent,
   publicDocumentUrlIntentSchema,
   PublicDocumentUrlError,
@@ -60,7 +60,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (!(error instanceof OperationalFeatureError)) throw error;
     return response({ code: error.code, error: operationalFeatureMessage(parsed.data.locale) }, 503);
   }
-  const bucket = requireQuarantineR2();
+  const bucket = requireR2();
   let temporaryKey: string | null = null;
   let uncommittedFinalKey: string | null = null;
   let recoverableAnalysisId: string | null = null;
@@ -73,7 +73,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       if (!targetCase) return response({ code: "CASE_UNAVAILABLE", error: "Дело недоступно." }, 404);
     }
     const idempotencyKey = parseUploadIdempotencyKey(request.headers.get("idempotency-key"));
-    const remote = await fetchPublicDocumentToQuarantine({
+    const remote = await fetchPublicDocumentForAnalysis({
       bucket,
       workspaceId: workspace.id,
       userId: user.id,
@@ -121,7 +121,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
           ownerUserId: user.id,
           analysisId: initialized.record.analysisId,
           fileId: initialized.record.fileId,
-          lifecycle: "quarantine",
+          lifecycle: "document-analysis-url-import",
           source: "public-url",
         },
       });
@@ -131,41 +131,50 @@ export const POST = withApiErrors(async function POST(request: Request) {
     if (!stored) stored = await bucket.head(initialized.record.r2Key);
     if (!stored || stored.size !== remote.sizeBytes || arrayBufferHex(stored.checksums.sha256) !== remote.sha256) {
       await bucket.delete(initialized.record.r2Key);
-      throw new PublicDocumentUrlError("URL_INTEGRITY_FAILED", "Копия файла в карантине не прошла проверку целостности.", 422);
+      throw new PublicDocumentUrlError("URL_INTEGRITY_FAILED", "Копия файла не прошла проверку целостности.", 422);
     }
     const now = new Date().toISOString();
-    const scanQueued = scannerConfigured();
     const statements: D1PreparedStatement[] = [
       db.prepare(
-        "UPDATE document_files SET kind='analysis_quarantined',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_upload_pending'",
+        "UPDATE document_files SET kind='analysis_safe',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_upload_pending'",
       ).bind(now, initialized.record.fileId, workspace.id, user.id),
       db.prepare(
-        "UPDATE document_analyses SET status='quarantined',error_code=?,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status IN ('initiated','upload_failed')",
-      ).bind(scanQueued ? null : "MALWARE_SCANNER_UNAVAILABLE", now, initialized.record.analysisId, workspace.id, user.id),
+        "UPDATE document_analyses SET status='ready',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status IN ('initiated','upload_failed')",
+      ).bind(now, initialized.record.analysisId, workspace.id, user.id),
+      db.prepare(`INSERT OR IGNORE INTO job_outbox
+        (id,queue_binding,job_type,schema_version,idempotency_key,subject_id,workspace_id,
+         correlation_id,enqueued_at,available_at,status,dispatch_attempts,created_at,updated_at)
+        VALUES (?,'DOCUMENT_ANALYSIS_QUEUE','document.analyze',1,?,?,?, ?,?,?,'pending',0,?,?)`).bind(
+        `analysis-direct:${initialized.record.analysisId}`,
+        `analysis-direct:${initialized.record.analysisId}:${initialized.record.sha256.slice(0, 16)}`,
+        initialized.record.analysisId,
+        workspace.id,
+        `direct-url-import:${initialized.record.analysisId}`,
+        now,
+        now,
+        now,
+        now,
+      ),
       db.prepare(
         `INSERT INTO workspace_audit_events
          (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
-         VALUES (?,?,?,'document_analysis',?,'url_import_quarantined',?,?)`,
+         VALUES (?,?,?,'document_analysis',?,'url_import_direct_analysis_queued',?,?)`,
       ).bind(crypto.randomUUID(), workspace.id, user.id, initialized.record.analysisId, JSON.stringify({
         sourceOrigin: remote.sourceOrigin,
         sourceUrlSha256: remote.sourceUrlSha256,
         sizeBytes: remote.sizeBytes,
         mimeType: remote.mimeType,
         sha256Verified: true,
-        scannerQueued: scanQueued,
       }), now),
     ];
-    if (scanQueued) statements.push(scanOutboxStatement(db, initialized.record, workspace.id, now));
     await db.batch(statements);
     uncommittedFinalKey = null;
     recoverableAnalysisId = null;
     return response({
-      code: scanQueued ? "FILE_SCAN_QUEUED" : "FILE_SCAN_UNAVAILABLE",
-      analysis: publicRecord({ ...initialized.record, status: "quarantined", errorCode: scanQueued ? null : "MALWARE_SCANNER_UNAVAILABLE" }),
+      code: "ANALYSIS_QUEUED",
+      analysis: publicRecord({ ...initialized.record, status: "ready", errorCode: null }),
       replay: initialized.replay,
-      message: scanQueued
-        ? "Публичный файл приватно импортирован и передан на обязательную проверку безопасности."
-        : "Публичный файл приватно импортирован в карантин. Анализ не запущен: scanner недоступен.",
+      message: "Публичный файл проверен на целостность и сразу передан в очередь анализа.",
     }, 202);
   } catch (error) {
     if (temporaryKey) await bucket.delete(temporaryKey).catch(() => undefined);
@@ -203,33 +212,6 @@ async function verifyStoredInput(bucket: R2Bucket, key: string, mimeType: string
     if (!object || !("body" in object)) throw new PublicDocumentUrlError("URL_INTEGRITY_FAILED", "Архив нельзя прочитать.", 422);
     await verifyArchiveBytes(new Uint8Array(await object.arrayBuffer()), mimeType);
   }
-}
-
-function scannerConfigured(): boolean {
-  const environment = runtimeEnv();
-  return environment.MALWARE_SCAN_ENABLED === "true" && Boolean(environment.MALWARE_SCANNER) && Boolean(environment.MALWARE_SCAN_QUEUE);
-}
-
-function scanOutboxStatement(
-  db: D1Database,
-  record: Awaited<ReturnType<typeof initializeDocumentAnalysisUpload>>["record"],
-  workspaceId: string,
-  now: string,
-): D1PreparedStatement {
-  return db.prepare(`INSERT OR IGNORE INTO job_outbox
-    (id,queue_binding,job_type,schema_version,idempotency_key,subject_id,workspace_id,
-     correlation_id,enqueued_at,available_at,status,dispatch_attempts,created_at,updated_at)
-    VALUES (?,'MALWARE_SCAN_QUEUE','malware.scan',1,?,?,?, ?,?,?,'pending',0,?,?)`).bind(
-    `job-malware-${record.analysisId}`,
-    `idem-malware-${record.analysisId}-${record.sha256.slice(0, 16)}`,
-    record.analysisId,
-    workspaceId,
-    `corr-malware-${record.analysisId}`,
-    now,
-    now,
-    now,
-    now,
-  );
 }
 
 async function hashUrlImportIntent(uploadHash: string, sourceUrlSha256: string): Promise<string> {
