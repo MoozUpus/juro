@@ -1,0 +1,164 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="910" viewBox="0 0 1600 910" role="img" aria-labelledby="title desc">
+  <title id="title">JURO operating model</title>
+  <desc id="desc">A JURO product operating model from a legal question or document through source-aware response, protected workspace actions and an optional partial lawyer hand-off.</desc>
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#062844"/>
+      <stop offset="1" stop-color="#031A2D"/>
+    </linearGradient>
+    <linearGradient id="goldPanel" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F6EAD3"/>
+      <stop offset="1" stop-color="#E9D1A4"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#BE974F" stop-opacity=".32"/>
+      <stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="46" height="46" patternUnits="userSpaceOnUse">
+      <path d="M46 0H0V46" fill="none" stroke="#DCE6ED" stroke-opacity=".075"/>
+    </pattern>
+    <filter id="shadow" x="-16%" y="-18%" width="132%" height="146%">
+      <feDropShadow dx="0" dy="18" stdDeviation="19" flood-color="#001322" flood-opacity=".42"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0 0L8 3L0 6Z" fill="#BE974F"/>
+    </marker>
+    <marker id="dashArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0 0L8 3L0 6Z" fill="#90A4AF"/>
+    </marker>
+    <style>
+      .ui { font-family: Inter, Manrope, Arial, sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .kicker { fill: #BE974F; font-size: 13px; font-weight: 800; letter-spacing: 2.2px; }
+      .heading { fill: #FFFFFF; font-size: 44px; font-weight: 700; }
+      .sub { fill: #C9D7DE; font-size: 17px; }
+      .stage { fill: #BE974F; font-size: 11px; font-weight: 800; letter-spacing: 1.4px; }
+      .cardH { fill: #062844; font-size: 20px; font-weight: 800; }
+      .cardP { fill: #557080; font-size: 13px; }
+      .darkH { fill: #FFFFFF; font-size: 20px; font-weight: 800; }
+      .darkP { fill: #C7D7DE; font-size: 13px; }
+      .label { fill: #DCE6ED; font-size: 13px; font-weight: 800; }
+      .note { fill: #AFC2CC; font-size: 12px; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="910" fill="url(#navy)"/>
+  <rect width="1600" height="910" fill="url(#grid)"/>
+  <circle cx="1308" cy="130" r="350" fill="url(#glow)"/>
+  <path d="M0 779C213 724 325 802 594 751C887 695 1118 695 1600 804" fill="none" stroke="#BE974F" stroke-opacity=".22"/>
+
+  <g class="ui">
+    <text x="90" y="86" class="kicker">JURO / FROM LEGAL CONTEXT TO A RESPONSIBLE NEXT STEP</text>
+    <text x="90" y="146" class="heading serif">The product is designed as a connected legal workspace.</text>
+    <text x="90" y="181" class="sub">Question, evidence, document work and escalation should stay legible as one path — without disguising partial work as a finished service.</text>
+  </g>
+
+  <g fill="none" stroke="#BE974F" stroke-width="3" marker-end="url(#arrow)">
+    <path d="M368 420H416"/>
+    <path d="M662 420H710"/>
+    <path d="M956 420H1004"/>
+  </g>
+  <path d="M1250 420H1296" fill="none" stroke="#90A4AF" stroke-width="3" stroke-dasharray="9 8" marker-end="url(#dashArrow)"/>
+
+  <g class="ui" filter="url(#shadow)">
+    <g transform="translate(90 302)">
+      <rect width="278" height="238" rx="22" fill="#F8F6F2"/>
+      <rect width="278" height="7" rx="3.5" fill="#BE974F"/>
+      <text x="28" y="48" class="stage">01 / BRING CONTEXT</text>
+      <text x="28" y="88" class="cardH">Question or document</text>
+      <text x="28" y="121" class="cardP">Start with a legal situation,</text>
+      <text x="28" y="141" class="cardP">a document or a task to solve.</text>
+      <rect x="28" y="166" width="112" height="37" rx="9" fill="#FFFFFF" stroke="#D8E2E6"/>
+      <path d="M43 178H69M43 188H91M43 198H77" stroke="#062844" stroke-width="2" stroke-linecap="round"/>
+      <rect x="158" y="166" width="92" height="37" rx="18.5" fill="#E6EDF0"/>
+      <text x="177" y="190" fill="#062844" font-size="10" font-weight="800">INPUT</text>
+    </g>
+
+    <g transform="translate(416 302)">
+      <rect width="246" height="238" rx="22" fill="#FFFFFF"/>
+      <rect width="246" height="7" rx="3.5" fill="#BE974F"/>
+      <text x="28" y="48" class="stage">02 / FIND EVIDENCE</text>
+      <text x="28" y="88" class="cardH">Source-aware path</text>
+      <text x="28" y="121" class="cardP">Classify the request and</text>
+      <text x="28" y="141" class="cardP">retrieve public legal pages.</text>
+      <rect x="28" y="166" width="190" height="20" rx="10" fill="#E8EEF0"/>
+      <rect x="28" y="195" width="148" height="11" rx="5.5" fill="#BE974F" fill-opacity=".74"/>
+      <text x="28" y="224" fill="#557080" font-size="10" font-weight="700">QUERY-SCOPED SOURCES</text>
+    </g>
+
+    <g transform="translate(710 302)">
+      <rect width="246" height="238" rx="22" fill="#FFFFFF"/>
+      <rect width="246" height="7" rx="3.5" fill="#BE974F"/>
+      <text x="28" y="48" class="stage">03 / EXPLAIN WITH LIMITS</text>
+      <text x="28" y="88" class="cardH">Structured response</text>
+      <text x="28" y="121" class="cardP">Show source cards where</text>
+      <text x="28" y="141" class="cardP">evidence supports the answer.</text>
+      <rect x="28" y="166" width="176" height="29" rx="8" fill="#062844"/>
+      <circle cx="44" cy="180.5" r="4" fill="#BE974F"/>
+      <text x="57" y="184" fill="#FFFFFF" font-size="10" font-weight="800">SOURCE CARD</text>
+      <text x="28" y="223" fill="#9B773B" font-size="10" font-weight="800">STATE UNCERTAINTY</text>
+    </g>
+
+    <g transform="translate(1004 302)">
+      <rect width="246" height="238" rx="22" fill="url(#goldPanel)"/>
+      <rect width="246" height="7" rx="3.5" fill="#062844"/>
+      <text x="28" y="48" fill="#725724" font-size="11" font-weight="800" letter-spacing="1.4">04 / CONTINUE WORK</text>
+      <text x="28" y="88" class="cardH">Document, case, plan</text>
+      <text x="28" y="121" class="cardP">Move to a draft, stored file,</text>
+      <text x="28" y="141" class="cardP">case workspace or next action.</text>
+      <g transform="translate(28 168)">
+        <rect width="48" height="34" rx="8" fill="#FFFFFF" fill-opacity=".7"/>
+        <path d="M15 178H32M15 186H37M15 194H28" stroke="#062844" stroke-width="2" stroke-linecap="round"/>
+        <rect x="60" width="48" height="34" rx="8" fill="#FFFFFF" fill-opacity=".7"/>
+        <circle cx="84" cy="185" r="9" fill="none" stroke="#062844" stroke-width="2"/>
+        <path d="M84 176V185L90 189" stroke="#062844" stroke-width="2" stroke-linecap="round"/>
+        <rect x="120" width="68" height="34" rx="17" fill="#062844"/>
+        <text x="138" y="189" fill="#FFFFFF" font-size="10" font-weight="800">ACT</text>
+      </g>
+    </g>
+
+    <g transform="translate(1296 302)">
+      <rect width="214" height="238" rx="22" fill="#0D2D46" stroke="#BE974F" stroke-width="2" stroke-dasharray="9 8"/>
+      <text x="28" y="48" fill="#BE974F" font-size="11" font-weight="800" letter-spacing="1.4">05 / PARTIAL</text>
+      <text x="28" y="88" class="darkH">Lawyer hand-off</text>
+      <text x="28" y="121" class="darkP">A controlled path for</text>
+      <text x="28" y="141" class="darkP">human assistance when</text>
+      <text x="28" y="161" class="darkP">the workflow supports it.</text>
+      <rect x="28" y="183" width="133" height="27" rx="13.5" fill="#FFFFFF" fill-opacity=".1"/>
+      <text x="43" y="201" fill="#FFFFFF" font-size="10" font-weight="800">NOT A PROMISE</text>
+    </g>
+  </g>
+
+  <g class="ui" transform="translate(90 600)">
+    <rect width="1420" height="118" rx="21" fill="#FFFFFF" fill-opacity=".07" stroke="#FFFFFF" stroke-opacity=".16"/>
+    <text x="30" y="37" fill="#BE974F" font-size="11" font-weight="800" letter-spacing="1.5">IMPLEMENTATION BOUNDARIES</text>
+    <g transform="translate(30 65)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="label">Public entry</text>
+      <text x="29" y="27" class="note">Website guides the user into a protected product flow.</text>
+    </g>
+    <g transform="translate(380 65)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="label">Server-side AI</text>
+      <text x="29" y="27" class="note">Credentials and source handling remain behind backend routes.</text>
+    </g>
+    <g transform="translate(770 65)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="label">Private work</text>
+      <text x="29" y="27" class="note">D1, R2, ownership and workspace boundaries protect stored work.</text>
+    </g>
+    <g transform="translate(1170 65)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="label">Clear limits</text>
+      <text x="29" y="27" class="note">Legal information is not individual legal representation.</text>
+    </g>
+  </g>
+
+  <g class="ui" transform="translate(90 805)">
+    <path d="M0 0H60" stroke="#BE974F" stroke-width="3"/>
+    <text x="76" y="5" fill="#DCE6ED" font-size="13" font-weight="700">Implemented / working path</text>
+    <path d="M347 0H407" stroke="#90A4AF" stroke-width="3" stroke-dasharray="9 8"/>
+    <text x="424" y="5" fill="#DCE6ED" font-size="13" font-weight="700">Partial path</text>
+    <text x="0" y="58" fill="#AFC2CC" font-size="14">Status is evidence-led: LIVE = publicly reachable; WORKING = implemented and checked; PARTIAL = incomplete workflow or evidence; PLANNED = not represented as live.</text>
+  </g>
+</svg>

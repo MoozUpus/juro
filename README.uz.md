@@ -9,6 +9,7 @@
 <div align="center">
   <a href="https://juro.uz">Jonli sayt</a> ·
   <a href="https://app.juro.uz">Platformani ochish</a> ·
+  <a href="#repozitoriyni-qanday-oqish-kerak">Repozitoriyni o‘qish</a> ·
   <a href="#mahsulot-sayohati">Mahsulot sayohati</a> ·
   <a href="#mahsulot-shartnomasi">Mahsulot shartnomasi</a> ·
   <a href="#arxitektura">Arxitektura</a> ·
@@ -25,11 +26,31 @@ JURO — O‘zbekiston uchun LegalTech ish maydoni bo‘lib, yuridik savollarni,
 
 Ommaviy sayt [juro.uz](https://juro.uz) manzilida, himoyalangan mahsulot platformasi esa [app.juro.uz](https://app.juro.uz) manzilida mavjud. Ushbu repozitoriyda ikkala ilovaning manba kodi, Cloudflare konfiguratsiyasi, hujjatlar va sifat tekshiruvlari joylashgan.
 
+## Repozitoriyni qanday o‘qish kerak
+
+| Siz baholayotgan yo‘nalish | Shu yerdan boshlang | Keyin ko‘ring |
+|---|---|---|
+| Mahsulot tajribasi | [Mahsulot sayohati](#mahsulot-sayohati) va [operatsion model](#mahsulotning-operatsion-modeli) | [Joriy holat](#joriy-holat) va [ishonch chegaralari](#ishonch-maxfiylik-va-yuridik-xavfsizlik) |
+| Legal AI yondashuvi | [JURO qanday ishlaydi](#juro-qanday-ishlaydi) va [mahsulot shartnomasi](#mahsulot-shartnomasi) | [Product foundations](docs/github/PRODUCT_FOUNDATIONS.md) va manba bilan ishlash modullari |
+| Texnik arxitektura | [Arxitektura](#arxitektura) | Cloudflare konfiguratsiyasi, [deploy](#deploy) va quality buyruqlari |
+| Xavfsiz hissa | [Repozitoriy tuzilishi](#repozitoriy-tuzilishi) va [tezkor boshlash](#tezkor-boshlash) | [Contributing](#contributing), [security](#security) va PR template |
+
 ## JURO nima?
 
 Huquqiy ma’lumotni topish va tushunish qiyin, an’anaviy yuridik xizmatlar esa qimmat yoki tarqoq bo‘lishi mumkin. JURO bu murakkablikni kamaytirishga mo‘ljallangan: savol yoki hujjatdan boshlash, manba va kontekstni ko‘rinadigan holda saqlash, so‘ng mahsulot qo‘llagan joyda loyiha, reja yoki mutaxassisga topshirishga o‘tish.
 
 Mahsulot O‘zbekistonga yo‘naltirilgan. Joriy ommaviy interfeys rus va o‘zbek tillarini taklif qiladi; repozitoriy hujjatlari xalqaro texnik auditoriya uchun ingliz tilida ham yuritiladi. JURO AI natijasini individual yuridik maslahat yoki yurist o‘rnini bosuvchi vosita sifatida ko‘rsatmaydi.
+
+## Bir qarashda
+
+| Yo‘nalish | Repozitoriy tasdiqlagan fakt | Bu **nimani anglatmaydi** |
+|---|---|---|
+| Mahsulot ko‘lami | Yuridik savollar, hujjatlar, ishlar/harakat rejalari va boshqariladigan yuristga topshirish bitta platforma yo‘nalishida bog‘langan. | Har bir workflow har bir account yoki deployment uchun albatta ochiq degani emas. |
+| Delivery | Monorepozitoriyda ommaviy sayt, himoyalangan platforma va alohida ma’muriy ilova bor. | Ma’muriy yoki hand-off yuzalari to‘liq tayyor xizmat sifatida ko‘rsatilmaydi. |
+| Huquqiy manbalar | Source-aware yo‘l query-scoped Lex.uz va Advice.uz ommaviy sahifalarini oladi hamda citation contextni saqlaydi. | Rasmiy provider API yoki to‘liq qonunchilik korpusi da’vo qilinmaydi. |
+| Runtime | Repozitoriy bo‘ylab TypeScript, React, Next.js, Vite/Vinext va Cloudflare Worker tooling ishlatiladi. | Texnologiya tanlovi yuridik to‘g‘rilik haqidagi da’vo emas. |
+| Ma’lumot chegaralari | Platforma imkoniyatlari Cloudflare D1, private R2 va server-side AI configurationdan foydalanadi. | Bu yerda sertifikat, compliance-status yoki data residency da’vo qilinmaydi. |
+| Sifat tekshiruvlari | Root scripts va CI linting, type checks, tests, builds hamda artifact validationni qamrab oladi. | Yashil check production release yoki yuridik sifat kafolati emas. |
 
 ## Mahsulot sayohati
 
@@ -58,6 +79,21 @@ Mahsulot O‘zbekistonga yo‘naltirilgan. Joriy ommaviy interfeys rus va o‘zb
 | Harakat rejasini tuzish | Harakatlar, muddatlar, hujjatlar va huquqiy kontekstni ishga bog‘lash. | WORKING |
 | Yurist yordamini so‘rash | Mavjud joyda boshqariladigan profil va hand-off oqimidan foydalanish. | PARTIAL |
 | Production to‘lov xizmatidan foydalanish | Repozitoriyda ishlayotgan to‘lov xizmati haqidagi da’vo yo‘q. | PLANNED |
+
+## Mahsulotning operatsion modeli
+
+<img src="docs/github/operating-model.svg" width="100%" alt="JURO operatsion modeli: huquqiy kontekstdan source-aware javob, himoyalangan ish va qisman yuristga topshirishgacha">
+
+JURO alohida chat ekrani emas, bog‘langan ketma-ketlik atrofida tashkil qilingan. Foydalanuvchi savol yoki hujjatdan boshlashi, source-aware ma’lumotni tekshirishi, himoyalangan ish maydonida davom etishi va joriy workflow ruxsat bersa, inson yordamini so‘rashi mumkin.
+
+| O‘tish | Joriy holat | Qanday ko‘rsatilgan |
+|---|---|---|
+| Ommaviy legal-intelligence kirish nuqtasi → himoyalangan platforma | LIVE | Ommaviy sayt va platforma kirishi alohida public domainlarda deploy qilingan. |
+| Savol → manba bilan ishlovchi tartibli javob | WORKING | Source-aware response va citation surfaces platform routesda amalga oshirilgan. |
+| Javob → hujjat, ish yoki harakat rejasi | WORKING | Document, case va task workflows himoyalangan platformada amalga oshirilgan. |
+| Murakkab masala → yurist yordami | PARTIAL | Controlled profiles va hand-off lifecycle kodi bor; bu vakillik kafolati sifatida ko‘rsatilmaydi. |
+
+Sxemadagi uzluksiz yo‘llar amalga oshirilgan yoki ishlayotgan yuzalarni bildiradi. Punktir hand-off yo‘li ataylab PARTIAL bo‘lib qoladi. Bu sxema mahsulot modeli bo‘lib, barcha o‘tishlar har bir muhit yoki account holatida mavjud degan da’vo emas.
 
 ## JURO qanday ishlaydi
 

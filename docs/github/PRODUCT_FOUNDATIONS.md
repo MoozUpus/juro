@@ -15,6 +15,21 @@ JURO is designed to keep a legal workflow connected from the initial question or
 
 <img src="engineering-commitments.svg" width="100%" alt="JURO product engineering contract from question and source evidence to protected work and partial human hand-off">
 
+The [operating model](operating-model.svg) shows how those boundaries fit into the product sequence. Its solid paths are implemented or working surfaces; the lawyer hand-off is intentionally rendered as a partial path. It should be updated whenever that status changes.
+
+## How JURO assigns product status
+
+JURO does not use one blanket “production ready” label. The main README keeps four statuses separate:
+
+| Status | Meaning in this repository | Review expectation |
+|---|---|---|
+| **LIVE** | A public production domain was reachable during the documentation audit. | Confirm the live URL and distinguish reachability from every feature being complete. |
+| **WORKING** | A feature is implemented in the repository and represented by the stated quality checks. | Inspect the linked implementation and run the published checks in the appropriate environment. |
+| **PARTIAL** | A surface or lifecycle exists, but its end-to-end evidence or completion is not yet sufficient. | Do not describe it as a guaranteed service or completed product. |
+| **PLANNED** | A future direction appears in the roadmap only. | Do not market it as present functionality. |
+
+This convention avoids a common LegalTech documentation failure: allowing a screenshot, route or prototype to imply a finished legal, operational or commercial capability.
+
 ## What is enforced in repository surfaces
 
 | Product principle | Repository evidence | Explicit boundary |
