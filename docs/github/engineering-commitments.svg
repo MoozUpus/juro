@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="760" viewBox="0 0 1600 760" role="img" aria-labelledby="title desc">
+  <title id="title">JURO product engineering commitments</title>
+  <desc id="desc">A navy and gold visual explaining JURO's product commitments: start from the legal context, keep sources inspectable, continue work in a protected workspace, and treat lawyer hand-off as a partial path.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#062844"/>
+      <stop offset="1" stop-color="#031b2f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="78%" cy="12%" r="54%">
+      <stop offset="0" stop-color="#BE974F" stop-opacity=".28"/>
+      <stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0V42" fill="none" stroke="#F8F6F2" stroke-opacity=".07"/>
+    </pattern>
+    <filter id="shadow" x="-15%" y="-20%" width="130%" height="150%">
+      <feDropShadow dx="0" dy="15" stdDeviation="18" flood-color="#00121f" flood-opacity=".36"/>
+    </filter>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
+      <path d="M0 0L8 3L0 6Z" fill="#BE974F"/>
+    </marker>
+    <style>
+      .ui { font-family: Inter, Manrope, Arial, sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .eyebrow { fill: #BE974F; font-size: 13px; font-weight: 800; letter-spacing: 2.2px; }
+      .headline { fill: #FFFFFF; font-size: 43px; font-weight: 700; }
+      .sub { fill: #C5D4DD; font-size: 17px; }
+      .number { fill: #BE974F; font-size: 12px; font-weight: 800; letter-spacing: 1.6px; }
+      .card-title { fill: #062844; font-size: 20px; font-weight: 800; }
+      .card-copy { fill: #557080; font-size: 13px; }
+      .rail-label { fill: #DCE6ED; font-size: 13px; font-weight: 700; }
+      .rail-copy { fill: #AFC1CC; font-size: 12px; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="760" fill="url(#bg)"/>
+  <rect width="1600" height="760" fill="url(#grid)"/>
+  <rect width="1600" height="760" fill="url(#glow)"/>
+  <path d="M0 675C256 590 433 718 705 634S1197 541 1600 641" fill="none" stroke="#BE974F" stroke-opacity=".24"/>
+
+  <g class="ui">
+    <text x="90" y="83" class="eyebrow">JURO / PRODUCT ENGINEERING CONTRACT</text>
+    <text x="90" y="143" class="headline serif">A legal workflow needs more than a chat response.</text>
+    <text x="90" y="178" class="sub">The product should preserve context, evidence and a responsible next step — with its limits kept visible.</text>
+  </g>
+
+  <g fill="none" stroke="#BE974F" stroke-width="3" marker-end="url(#arrow)">
+    <path d="M414 372H462"/>
+    <path d="M788 372H836"/>
+    <path d="M1162 372H1210"/>
+  </g>
+
+  <g class="ui" filter="url(#shadow)">
+    <g transform="translate(90 268)">
+      <rect width="324" height="226" rx="21" fill="#F8F6F2"/>
+      <rect width="324" height="7" rx="3.5" fill="#BE974F"/>
+      <text x="30" y="49" class="number">01 / START WITH CONTEXT</text>
+      <text x="30" y="92" class="card-title">Question or document</text>
+      <text x="30" y="126" class="card-copy">A user brings a legal situation,</text>
+      <text x="30" y="146" class="card-copy">a document or a concrete next step.</text>
+      <rect x="30" y="169" width="156" height="31" rx="15.5" fill="#E4ECEF"/>
+      <text x="47" y="189" fill="#062844" font-size="11" font-weight="800">LEGAL CONTEXT</text>
+    </g>
+
+    <g transform="translate(462 268)">
+      <rect width="326" height="226" rx="21" fill="#FFFFFF"/>
+      <rect width="326" height="7" rx="3.5" fill="#BE974F"/>
+      <text x="30" y="49" class="number">02 / MAKE EVIDENCE INSPECTABLE</text>
+      <text x="30" y="92" class="card-title">Source-aware response</text>
+      <text x="30" y="126" class="card-copy">The source path and citation cards</text>
+      <text x="30" y="146" class="card-copy">are a product boundary, not decoration.</text>
+      <rect x="30" y="169" width="188" height="31" rx="15.5" fill="#062844"/>
+      <text x="47" y="189" fill="#FFFFFF" font-size="11" font-weight="800">VERIFY BEFORE CLAIMING</text>
+    </g>
+
+    <g transform="translate(836 268)">
+      <rect width="326" height="226" rx="21" fill="#FFFFFF"/>
+      <rect width="326" height="7" rx="3.5" fill="#BE974F"/>
+      <text x="30" y="49" class="number">03 / CONTINUE THE WORK</text>
+      <text x="30" y="92" class="card-title">Protected workspace</text>
+      <text x="30" y="126" class="card-copy">Connect the answer to a document,</text>
+      <text x="30" y="146" class="card-copy">a case, an action plan or stored files.</text>
+      <rect x="30" y="169" width="174" height="31" rx="15.5" fill="#F2E7D1"/>
+      <text x="47" y="189" fill="#725724" font-size="11" font-weight="800">OWNERSHIP CHECKS</text>
+    </g>
+
+    <g transform="translate(1210 268)">
+      <rect width="300" height="226" rx="21" fill="#0D2D46" stroke="#BE974F" stroke-width="2" stroke-dasharray="9 8"/>
+      <text x="30" y="49" fill="#BE974F" font-size="12" font-weight="800" letter-spacing="1.6">04 / PARTIAL PATH</text>
+      <text x="30" y="92" fill="#FFFFFF" font-size="20" font-weight="800">Human lawyer hand-off</text>
+      <text x="30" y="126" fill="#C5D4DD" font-size="13">Offer a controlled route for</text>
+      <text x="30" y="146" fill="#C5D4DD" font-size="13">complex matters where available.</text>
+      <rect x="30" y="169" width="176" height="31" rx="15.5" fill="#FFFFFF" fill-opacity=".12"/>
+      <text x="47" y="189" fill="#FFFFFF" font-size="11" font-weight="800">NOT A GUARANTEE</text>
+    </g>
+  </g>
+
+  <g class="ui" transform="translate(90 564)">
+    <rect width="1420" height="104" rx="20" fill="#FFFFFF" fill-opacity=".07" stroke="#FFFFFF" stroke-opacity=".16"/>
+    <g transform="translate(30 29)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="rail-label">Server-side credentials</text>
+      <text x="29" y="27" class="rail-copy">No browser-exposed AI keys.</text>
+    </g>
+    <g transform="translate(367 29)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="rail-label">D1 and private R2 boundaries</text>
+      <text x="29" y="27" class="rail-copy">Persisted work stays behind backend routes.</text>
+    </g>
+    <g transform="translate(789 29)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="rail-label">Permission-checked flows</text>
+      <text x="29" y="27" class="rail-copy">Workspace and ownership checks remain explicit.</text>
+    </g>
+    <g transform="translate(1160 29)">
+      <circle cx="9" cy="9" r="9" fill="#BE974F"/>
+      <text x="29" y="6" class="rail-label">Limits stay visible</text>
+      <text x="29" y="27" class="rail-copy">Information support is not legal representation.</text>
+    </g>
+  </g>
+
+  <g class="ui" transform="translate(90 712)">
+    <path d="M0 0H60" stroke="#BE974F" stroke-width="3"/>
+    <text x="76" y="5" fill="#DCE6ED" font-size="13" font-weight="700">Implemented / working boundary</text>
+    <path d="M361 0H421" stroke="#BE974F" stroke-width="3" stroke-dasharray="8 8"/>
+    <text x="438" y="5" fill="#DCE6ED" font-size="13" font-weight="700">Partial workflow</text>
+  </g>
+</svg>

@@ -10,6 +10,7 @@
   <a href="https://juro.uz">Jonli sayt</a> ·
   <a href="https://app.juro.uz">Platformani ochish</a> ·
   <a href="#mahsulot-sayohati">Mahsulot sayohati</a> ·
+  <a href="#mahsulot-shartnomasi">Mahsulot shartnomasi</a> ·
   <a href="#arxitektura">Arxitektura</a> ·
   <a href="#tezkor-boshlash">Tezkor boshlash</a>
 </div>
@@ -68,6 +69,21 @@ JUROning amalga oshirilgan source-aware yo‘li so‘rovni tasniflaydi, tegishli
 - Mavjud dalil xulosani qo‘llab-quvvatlamasa, mahsulot cheklovni aytishi kerak.
 - AI natijasi huquqiy ma’lumot va ish jarayoni yordami, individual yuridik maslahat emas.
 - Yuristga topshirish qisman mahsulot oqimi; u vakillik yoki yakunlangan maslahat kafolati emas.
+
+## Mahsulot shartnomasi
+
+<img src="docs/github/engineering-commitments.svg" width="100%" alt="JURO mahsulot shartnomasi: huquqiy kontekst va manbadan himoyalangan ish hamda qisman insoniy hand-offgacha">
+
+Yuridik AI’ning ozoda interfeysi o‘zi yetarli emas. JURO quyidagi chegaralarni marketing va’dasi sifatida emas, repozitoriyda tekshirish mumkin bo‘lgan mahsulot majburiyatlari sifatida ko‘rsatadi:
+
+| Mahsulot majburiyati | Amalga oshirish dalili | Ochiq saqlanadigan chegara |
+|---|---|---|
+| Manbani undan foydalangan javob bilan bog‘lash. | [`direct-citation-store.ts`](apps/platform/lib/legal/direct-citation-store.ts) to‘g‘ridan-to‘g‘ri citationsni AI-run bilan saqlaydi. | Ommaviy manba sahifasi avtomatik ravishda tasdiqlangan xulosaga aylanmaydi. |
+| Huquqiy manba sahifasini olishda kanonik kontekstni saqlash. | [`direct-retrieval.ts`](apps/platform/lib/legal/direct-retrieval.ts) to‘g‘ridan-to‘g‘ri manba olish va citation eligibility yo‘lini o‘z ichiga oladi. | Bu query-scoped ommaviy sahifa olish; rasmiy provider API haqidagi da’vo emas. |
+| Hujjat tekshiruvining ayrim xulosalari uchun havola talab qilish. | [`document-analysis/schema.ts`](apps/platform/lib/document-analysis/schema.ts) citationssiz legal findings, risks va missing clausesni rad etadi. | Yangi authenticated end-to-end evidence yakunlanmaguncha review yuzasi PARTIAL bo‘lib qoladi. |
+| Saqlangan yuridik ishni platforma chegaralarida tutish. | Himoyalangan handlers, D1, private R2 va document-storage runtime [`apps/platform`](apps/platform) ichida. | Bu yerda sertifikat yoki compliance-status da’vo qilinmaydi. |
+
+Kengroq muhandislik hikoyasi, repozitoriy dalillari va review xaritasi uchun [product foundations](docs/github/PRODUCT_FOUNDATIONS.md) (ingliz tilida) hujjatini o‘qing.
 
 ## Mahsulot ekotizimi
 

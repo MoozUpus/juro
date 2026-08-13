@@ -10,6 +10,7 @@
   <a href="https://juro.uz">Live website</a> ·
   <a href="https://app.juro.uz">Open platform</a> ·
   <a href="#product-tour">Product tour</a> ·
+  <a href="#product-contract">Product contract</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#quick-start">Quick start</a>
 </div>
@@ -68,6 +69,21 @@ JURO's implemented source-aware path classifies the request, retrieves relevant 
 - When the available evidence does not support a conclusion, the product should state that limitation.
 - AI output is legal information and workflow support, not individual legal advice.
 - Lawyer escalation is a partial product workflow, not a guarantee of representation or a completed consultation.
+
+## Product contract
+
+<img src="docs/github/engineering-commitments.svg" width="100%" alt="JURO product contract from legal context and source evidence to protected work and partial human hand-off">
+
+A polished legal AI interface is not enough on its own. JURO presents the following boundaries as product commitments that can be inspected in the repository rather than as marketing promises:
+
+| Product commitment | Implementation evidence | Boundary kept visible |
+|---|---|---|
+| Keep the source attached to the response that used it. | [`direct-citation-store.ts`](apps/platform/lib/legal/direct-citation-store.ts) records direct citations against an AI run. | A public source page is not automatically a verified conclusion. |
+| Preserve canonical context while retrieving legal-source pages. | [`direct-retrieval.ts`](apps/platform/lib/legal/direct-retrieval.ts) contains the direct-source retrieval and citation-eligibility path. | This is query-scoped public-page retrieval, not an official provider API claim. |
+| Require references for certain document-review findings. | [`document-analysis/schema.ts`](apps/platform/lib/document-analysis/schema.ts) rejects legal findings, risks and missing clauses without citations. | The review surface remains PARTIAL until fresh authenticated end-to-end evidence is complete. |
+| Keep saved legal work behind platform boundaries. | Protected handlers, D1, private R2 and document-storage runtime live in [`apps/platform`](apps/platform). | No certification or compliance status is claimed here. |
+
+Read the [product foundations](docs/github/PRODUCT_FOUNDATIONS.md) for the longer engineering narrative, repository evidence and review map.
 
 ## Product ecosystem
 
