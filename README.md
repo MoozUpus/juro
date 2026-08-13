@@ -64,20 +64,21 @@ For the engineering rationale and code map, read [Product foundations](docs/gith
 
 ## Product experience
 
-| Public entry | Protected workspace |
-|---|---|
-| <img src="docs/github/screenshots/public-website.webp" alt="JURO public website" width="100%"> | <img src="docs/github/screenshots/platform-dashboard.webp" alt="JURO protected workspace without account data" width="100%"> |
-| Begin with a legal situation, document or next action. | Keep legal work, documents and next steps in one protected workspace. |
+<img src="docs/github/screenshots/public-website.webp" width="100%" alt="Framed JURO public-website capture">
 
-| Source-aware question flow | Document builder |
-|---|---|
-| <img src="docs/github/screenshots/ai-chat.webp" alt="JURO AI legal information flow without conversation history" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="JURO document library and builder entry" width="100%"> |
-| The product asks for context and makes source availability explicit. | Start a structured draft from a document workflow. |
+**Public entry — LIVE.** Start at [juro.uz](https://juro.uz) with a legal situation, document or next action.
 
-| Review and compare surface | Narrow public-product view |
+| Protected workspace | Document workflow |
 |---|---|
-| <img src="docs/github/screenshots/document-analysis.webp" alt="JURO document review and comparison entry" width="100%"> | <img src="docs/github/screenshots/mobile-experience.webp" alt="Narrow JURO public-product preview" width="100%"> |
-| The interface exists; its end-to-end legal analysis status is PARTIAL. | A narrow presentation capture of the live public product, not mobile-QA evidence. |
+| <img src="docs/github/screenshots/platform-dashboard.webp" alt="Framed JURO protected-workspace capture without account data" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="Framed JURO document-workflow capture" width="100%"> |
+| Connect the legal situation to a protected workspace. | Start a structured draft and continue document work. |
+
+| Legal-information entry | Review and compare surface |
+|---|---|
+| <img src="docs/github/screenshots/ai-chat.webp" alt="Framed JURO legal-information starting state without conversation data" width="100%"> | <img src="docs/github/screenshots/document-analysis.webp" alt="Framed JURO document-review and comparison capture" width="100%"> |
+| Begin with context; source cards appear only where evidence is available. | The review and comparison interface exists; end-to-end legal-analysis status remains PARTIAL. |
+
+> A prior narrow capture has been removed from this public presentation because it did not meet JURO's responsive-QA standard. It will return only after a verified mobile capture is available.
 
 ## From legal context to practical work
 

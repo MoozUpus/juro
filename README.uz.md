@@ -64,20 +64,21 @@ Muhandislik asoslari va kod xaritasini [Product foundations](docs/github/PRODUCT
 
 ## Mahsulot tajribasi
 
-| Ommaviy kirish nuqtasi | Himoyalangan ish maydoni |
-|---|---|
-| <img src="docs/github/screenshots/public-website.webp" alt="JURO ommaviy sayti" width="100%"> | <img src="docs/github/screenshots/platform-dashboard.webp" alt="Account ma’lumotlarisiz JURO himoyalangan ish maydoni" width="100%"> |
-| Yuridik vaziyat, hujjat yoki keyingi harakatdan boshlang. | Huquqiy ish, hujjatlar va keyingi qadamlarni bitta himoyalangan maydonda bog‘lang. |
+<img src="docs/github/screenshots/public-website.webp" width="100%" alt="JURO ommaviy sayti uchun bezatilgan ekran tasviri">
 
-| Manbaga bog‘langan savol oqimi | Hujjat konstruktori |
-|---|---|
-| <img src="docs/github/screenshots/ai-chat.webp" alt="Suhbat tarixisiz JURO AI huquqiy ma’lumot oqimi" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="JURO hujjatlar kutubxonasi va konstruktori kirish nuqtasi" width="100%"> |
-| Interfeys kontekstni so‘raydi va manba mavjudligini aniq bildiradi. | Hujjat workflow’i orqali tartibli draftni boshlang. |
+**Ommaviy kirish nuqtasi — LIVE.** [juro.uz](https://juro.uz) saytida yuridik vaziyat, hujjat yoki keyingi harakatdan boshlang.
 
-| Review va taqqoslash sirti | Ommaviy mahsulotning tor ko‘rinishi |
+| Himoyalangan ish maydoni | Hujjat workflow’i |
 |---|---|
-| <img src="docs/github/screenshots/document-analysis.webp" alt="JURO hujjat review va comparison kirish nuqtasi" width="100%"> | <img src="docs/github/screenshots/mobile-experience.webp" alt="JURO ommaviy mahsulotining tor preview’i" width="100%"> |
-| Interfeys mavjud; uning end-to-end yuridik tahlil holati PARTIAL. | Jonli ommaviy mahsulotning tor presentation capture’i, mobile-QA dalili emas. |
+| <img src="docs/github/screenshots/platform-dashboard.webp" alt="Account ma’lumotlarisiz JURO himoyalangan ish maydoni uchun bezatilgan ekran tasviri" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="JURO hujjat workflow’i uchun bezatilgan ekran tasviri" width="100%"> |
+| Yuridik vaziyatni himoyalangan ish maydoni bilan bog‘lang. | Tartibli draftni boshlang va hujjat ustida ishlashni davom ettiring. |
+
+| Huquqiy ma’lumotga kirish | Review va taqqoslash sirti |
+|---|---|
+| <img src="docs/github/screenshots/ai-chat.webp" alt="Suhbat ma’lumotlarisiz JURO huquqiy ma’lumot boshlang‘ich holati uchun bezatilgan ekran tasviri" width="100%"> | <img src="docs/github/screenshots/document-analysis.webp" alt="JURO hujjat review va comparison uchun bezatilgan ekran tasviri" width="100%"> |
+| Kontekstdan boshlang: manba kartalari faqat dalil mavjud bo‘lganda chiqadi. | Review va taqqoslash interfeysi bor; end-to-end yuridik tahlil holati PARTIAL bo‘lib qoladi. |
+
+> Oldingi tor ekran tasviri ommaviy taqdimotdan olib tashlandi: u JURO responsive-QA standartiga mos kelmadi. U faqat tekshirilgan mobil ekran tasviri paydo bo‘lganda qaytadi.
 
 ## Huquqiy kontekstdan amaliy ishga
 

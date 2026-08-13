@@ -1,105 +1,27 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="860" viewBox="0 0 1600 860" role="img" aria-labelledby="title desc">
-  <title id="title">JURO legal answer flow</title>
-  <desc id="desc">A source-aware legal response flow that shows direct source retrieval, response grounding, citations, limitations and optional lawyer escalation.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="740" viewBox="0 0 1600 740" role="img" aria-labelledby="title desc">
+  <title id="title">JURO source-aware legal information flow</title>
+  <desc id="desc">A clear four-stage flow from user context to source retrieval, grounded response and transparent limitations.</desc>
   <defs>
-    <style>
-      .ui { font-family: Inter, Manrope, Arial, sans-serif; }
-      .serif { font-family: Georgia, "Times New Roman", serif; }
-      .h { fill: #062844; font-size: 42px; font-weight: 700; }
-      .copy { fill: #527080; font-size: 16px; }
-      .step { fill: #062844; font-size: 18px; font-weight: 800; }
-      .detail { fill: #527080; font-size: 13px; }
-      .tag { fill: #9b773b; font-size: 10px; font-weight: 800; letter-spacing: 1.2px; }
-    </style>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0L8 3L0 6Z" fill="#BE974F"/></marker>
-    <marker id="dashArrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0 0L8 3L0 6Z" fill="#82949f"/></marker>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#062844"/><stop offset="1" stop-color="#041e34"/></linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#BE974F"/><stop offset="1" stop-color="#e2c383"/></linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="140%" height="150%"><feDropShadow dx="0" dy="12" stdDeviation="15" flood-color="#000c17" flood-opacity=".35"/></filter>
+    <style>.ui{font-family:Inter,Manrope,Arial,sans-serif}.serif{font-family:Georgia,'Times New Roman',serif}.h{fill:#fff;font-size:46px;font-weight:700}.copy{fill:#b9c9d2;font-size:17px}.tag{fill:#caa866;font-size:10px;font-weight:800;letter-spacing:1.3px}.cardh{font-size:20px;font-weight:800}.body{font-size:14px}.legend{fill:#b9c9d2;font-size:13px}</style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0 0L8 3L0 6Z" fill="#BE974F"/></marker><marker id="dash" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0 0L8 3L0 6Z" fill="#96a9b2"/></marker>
   </defs>
-  <rect width="1600" height="860" fill="#f8f6f2"/>
-  <g class="ui">
-    <text x="100" y="95" class="h serif">A legal answer should show where it came from.</text>
-    <text x="100" y="130" class="copy">The implemented path is source-aware. It should surface uncertainty rather than inventing a citation.</text>
+  <rect width="1600" height="740" fill="url(#bg)"/><path d="M0 120H1600M0 640H1600" stroke="#dce6ed" stroke-opacity=".08"/><path d="M1350 0C1258 170 1375 280 1600 320" fill="none" stroke="#BE974F" stroke-opacity=".16"/>
+  <g class="ui"><text x="100" y="96" class="h serif">A legal answer should make its basis inspectable.</text><text x="100" y="133" class="copy">JURO’s implemented path uses bounded source context, visible citations and explicit limitations.</text></g>
+  <g fill="none" stroke="url(#gold)" stroke-width="3" marker-end="url(#arrow)"><path d="M390 344H455"/><path d="M750 344H815"/><path d="M1110 344H1175"/></g>
+  <g class="ui" filter="url(#shadow)">
+    <g transform="translate(100 248)"><rect width="290" height="190" rx="22" fill="#f8f6f2"/><rect width="290" height="7" rx="3.5" fill="#BE974F"/><text x="28" y="42" class="tag">01 / CONTEXT</text><text x="28" y="84" fill="#062844" class="cardh">Question or document</text><text x="28" y="116" fill="#607987" class="body">A person explains the situation</text><text x="28" y="137" fill="#607987" class="body">or starts with a document.</text><rect x="28" y="154" width="128" height="19" rx="9.5" fill="#e8eef0"/><text x="41" y="167" fill="#607987" font-size="10" font-weight="800">LANGUAGE + INTENT</text></g>
+    <g transform="translate(460 248)"><rect width="290" height="190" rx="22" fill="#f8f6f2"/><rect width="290" height="7" rx="3.5" fill="#BE974F"/><text x="28" y="42" class="tag">02 / RETRIEVE</text><text x="28" y="84" fill="#062844" class="cardh">Source layer</text><text x="28" y="116" fill="#607987" class="body">Query-scoped public pages from</text><text x="28" y="137" fill="#607987" class="body">Lex.uz and Advice.uz.</text><rect x="28" y="154" width="176" height="19" rx="9.5" fill="#f1e5cf"/><text x="41" y="167" fill="#8e6a31" font-size="10" font-weight="800">NO OFFICIAL API CLAIM</text></g>
+    <g transform="translate(820 248)"><rect width="290" height="190" rx="22" fill="#f8f6f2"/><rect width="290" height="7" rx="3.5" fill="#BE974F"/><text x="28" y="42" class="tag">03 / ASSEMBLE</text><text x="28" y="84" fill="#062844" class="cardh">Bounded evidence</text><text x="28" y="116" fill="#607987" class="body">Rank relevant pages, excerpts</text><text x="28" y="137" fill="#607987" class="body">and context for the response.</text><rect x="28" y="154" width="134" height="19" rx="9.5" fill="#e8eef0"/><text x="41" y="167" fill="#607987" font-size="10" font-weight="800">CONTEXT ASSEMBLY</text></g>
+    <g transform="translate(1180 248)"><rect width="290" height="190" rx="22" fill="#f1e5cf"/><rect width="290" height="7" rx="3.5" fill="#BE974F"/><text x="28" y="42" class="tag">04 / RESPOND</text><text x="28" y="84" fill="#062844" class="cardh">Answer with sources</text><text x="28" y="116" fill="#607987" class="body">Show citations and a useful</text><text x="28" y="137" fill="#607987" class="body">next action where supported.</text><rect x="28" y="154" width="122" height="19" rx="9.5" fill="#062844"/><text x="42" y="167" fill="#fff" font-size="10" font-weight="800">SOURCE CARDS</text></g>
   </g>
-  <g fill="none" stroke="#BE974F" stroke-width="3" marker-end="url(#arrow)">
-    <path d="M300 315H380"/>
-    <path d="M610 315H690"/>
-    <path d="M920 315H1000"/>
-    <path d="M1230 315H1310"/>
-    <path d="M460 505H540"/>
-    <path d="M770 505H850"/>
-    <path d="M1080 505H1160"/>
+  <g class="ui" filter="url(#shadow)">
+    <rect x="260" y="505" width="372" height="95" rx="18" fill="#0d314b" stroke="#5b7889"/><text x="286" y="537" class="tag">QUALITY BOUNDARY</text><text x="286" y="570" fill="#fff" font-size="17" font-weight="800">Validate citations before presenting them.</text>
+    <rect x="676" y="505" width="372" height="95" rx="18" fill="#0d314b" stroke="#5b7889"/><text x="702" y="537" class="tag">LIMITATION BOUNDARY</text><text x="702" y="570" fill="#fff" font-size="17" font-weight="800">State uncertainty instead of guessing.</text>
+    <rect x="1092" y="505" width="260" height="95" rx="18" fill="#0d314b" stroke="#8fa3ad" stroke-dasharray="8 8"/><text x="1118" y="537" fill="#b8c8d1" font-size="10" font-weight="800" letter-spacing="1.2">PARTIAL PATH</text><text x="1118" y="570" fill="#fff" font-size="17" font-weight="800">Lawyer hand-off</text>
   </g>
-  <g class="ui">
-    <g transform="translate(70 230)">
-      <rect width="230" height="170" rx="20" fill="#062844"/>
-      <text x="28" y="37" fill="#BE974F" class="tag">01 / INPUT</text>
-      <text x="28" y="78" fill="#fff" font-size="21" font-weight="800">Question or</text>
-      <text x="28" y="104" fill="#fff" font-size="21" font-weight="800">document</text>
-      <text x="28" y="137" fill="#b7c6ce" font-size="13">A user describes a situation</text>
-      <text x="28" y="155" fill="#b7c6ce" font-size="13">or brings a document.</text>
-    </g>
-    <g transform="translate(380 230)">
-      <rect width="230" height="170" rx="20" fill="#fff" stroke="#d5e0e5"/>
-      <text x="28" y="37" class="tag">02 / UNDERSTAND</text>
-      <text x="28" y="78" class="step">Language &amp; intent</text>
-      <text x="28" y="106" class="detail">Classify the request and</text>
-      <text x="28" y="125" class="detail">identify the legal task.</text>
-    </g>
-    <g transform="translate(690 230)">
-      <rect width="230" height="170" rx="20" fill="#fff" stroke="#d5e0e5"/>
-      <text x="28" y="37" class="tag">03 / RETRIEVE</text>
-      <text x="28" y="78" class="step">Source layer</text>
-      <text x="28" y="106" class="detail">Query-scoped public pages</text>
-      <text x="28" y="125" class="detail">from Lex.uz / Advice.uz.</text>
-      <text x="28" y="150" fill="#9b773b" font-size="11" font-weight="700">NO OFFICIAL API CLAIM</text>
-    </g>
-    <g transform="translate(1000 230)">
-      <rect width="230" height="170" rx="20" fill="#fff" stroke="#d5e0e5"/>
-      <text x="28" y="37" class="tag">04 / ASSEMBLE</text>
-      <text x="28" y="78" class="step">Rank &amp; assemble</text>
-      <text x="28" y="106" class="detail">Match canonical sources,</text>
-      <text x="28" y="125" class="detail">excerpts and context.</text>
-    </g>
-    <g transform="translate(1310 230)">
-      <rect width="220" height="170" rx="20" fill="#f2e7d1" stroke="#BE974F"/>
-      <text x="28" y="37" class="tag">05 / RESPOND</text>
-      <text x="28" y="78" class="step">Grounded answer</text>
-      <text x="28" y="106" class="detail">Structure the answer around</text>
-      <text x="28" y="125" class="detail">the evidence that was found.</text>
-    </g>
-    <g transform="translate(340 420)">
-      <rect width="230" height="170" rx="20" fill="#fff" stroke="#d5e0e5"/>
-      <text x="28" y="37" class="tag">06 / CHECK</text>
-      <text x="28" y="78" class="step">Citation validation</text>
-      <text x="28" y="106" class="detail">Avoid presenting an unsupported</text>
-      <text x="28" y="125" class="detail">claim as a verified source.</text>
-    </g>
-    <g transform="translate(650 420)">
-      <rect width="230" height="170" rx="20" fill="#fff" stroke="#d5e0e5"/>
-      <text x="28" y="37" class="tag">07 / SHOW</text>
-      <text x="28" y="78" class="step">Source cards</text>
-      <text x="28" y="106" class="detail">Make the source visible so</text>
-      <text x="28" y="125" class="detail">the user can inspect it.</text>
-    </g>
-    <g transform="translate(960 420)">
-      <rect width="230" height="170" rx="20" fill="#062844"/>
-      <text x="28" y="37" fill="#BE974F" class="tag">08 / LIMIT</text>
-      <text x="28" y="78" fill="#fff" font-size="18" font-weight="800">State uncertainty</text>
-      <text x="28" y="106" fill="#b7c6ce" font-size="13">When evidence is insufficient,</text>
-      <text x="28" y="125" fill="#b7c6ce" font-size="13">say so instead of guessing.</text>
-    </g>
-    <g transform="translate(1270 420)">
-      <rect width="230" height="170" rx="20" fill="#fff" stroke="#d5e0e5" stroke-dasharray="8 8"/>
-      <text x="28" y="37" fill="#82949f" class="tag">PARTIAL PATH</text>
-      <text x="28" y="78" class="step">Lawyer escalation</text>
-      <text x="28" y="106" class="detail">A complex matter can be routed</text>
-      <text x="28" y="125" class="detail">to a human lawyer workflow.</text>
-    </g>
-  </g>
-  <g transform="translate(100 710)" class="ui">
-    <path d="M0 0H62" stroke="#BE974F" stroke-width="3"/>
-    <text x="76" y="5" class="copy">Implemented flow</text>
-    <path d="M270 0H332" stroke="#82949f" stroke-width="3" stroke-dasharray="8 8"/>
-    <text x="346" y="5" class="copy">Partial / planned flow</text>
-    <text x="0" y="50" fill="#062844" font-size="16" font-weight="700">JURO provides legal information and workflow support; it does not replace individual legal advice.</text>
-  </g>
+  <g fill="none"><path d="M1325 438V485" stroke="#8fa3ad" stroke-width="2.5" stroke-dasharray="8 8" marker-end="url(#dash)"/></g>
+  <g class="ui"><path d="M100 678H164" stroke="#BE974F" stroke-width="3"/><text x="179" y="683" class="legend">Implemented source-aware path</text><path d="M470 678H534" stroke="#8fa3ad" stroke-width="3" stroke-dasharray="8 8"/><text x="549" y="683" class="legend">Partial or planned path</text><text x="100" y="716" fill="#fff" font-size="14" font-weight="700">JURO provides legal information and workflow support; it does not replace individual legal advice.</text></g>
 </svg>
