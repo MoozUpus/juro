@@ -1,0 +1,29 @@
+name: Product proposal
+description: Propose a focused JURO product or developer-experience improvement.
+title: "[Proposal]: "
+labels: ["product"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Describe the user or operational problem without unsupported market claims.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed outcome
+      description: Explain the smallest useful change and the affected users or routes.
+    validations:
+      required: true
+  - type: textarea
+    id: safety
+    attributes:
+      label: Legal, privacy and security considerations
+      description: Note implications for legal-source handling, authorization, documents, data or production operations.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches or no-change option were considered?

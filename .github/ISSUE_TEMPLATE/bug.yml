@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a reproducible JURO product or repository defect.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "Do not include secrets, personal data, user documents, access tokens or production logs."
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: "Describe each step and the observed result."
+    validations:
+      required: true
+  - type: input
+    id: area
+    attributes:
+      label: Affected route or component
+      placeholder: "for example, apps/platform document builder"
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe evidence
+      description: Attach redacted screenshots or logs only. State whether synthetic data was used.
+  - type: dropdown
+    id: impact
+    attributes:
+      label: User impact
+      options:
+        - Blocks a user workflow
+        - Degrades a user workflow
+        - No direct user impact

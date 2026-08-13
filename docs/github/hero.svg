@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="640" viewBox="0 0 1600 640" role="img" aria-labelledby="title desc">
+  <title id="title">JURO — Юрист в кармане</title>
+  <desc id="desc">A dark navy JURO banner with official mark, product capabilities and abstract desktop and mobile legal workspace interfaces.</desc>
+  <defs>
+    <linearGradient id="heroGlow" x1="0" x2="1" y1="0" y2="1">
+      <stop offset="0" stop-color="#062844"/>
+      <stop offset="1" stop-color="#031a2d"/>
+    </linearGradient>
+    <radialGradient id="goldGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#BE974F" stop-opacity=".3"/>
+      <stop offset="1" stop-color="#BE974F" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="160%">
+      <feDropShadow dx="0" dy="20" stdDeviation="20" flood-color="#00111f" flood-opacity=".45"/>
+    </filter>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#dce6ed" stroke-opacity=".075"/>
+    </pattern>
+    <style>
+      .ui { font-family: Inter, Manrope, Arial, sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .eyebrow { fill: #BE974F; font-size: 14px; font-weight: 700; letter-spacing: 2.6px; }
+      .small { fill: #bdcbd6; font-size: 15px; }
+      .label { fill: #dce6ed; font-size: 12px; font-weight: 700; letter-spacing: 1.5px; }
+      .micro { fill: #aebfca; font-size: 11px; }
+    </style>
+  </defs>
+  <rect width="1600" height="640" fill="url(#heroGlow)"/>
+  <rect width="1600" height="640" fill="url(#grid)"/>
+  <circle cx="1300" cy="145" r="390" fill="url(#goldGlow)"/>
+  <path d="M1150 0C1300 140 1410 172 1600 176M1060 640C1260 506 1430 495 1600 498" fill="none" stroke="#BE974F" stroke-opacity=".22" stroke-width="1"/>
+  <path d="M105 566C298 540 393 564 560 640" fill="none" stroke="#dce6ed" stroke-opacity=".15" stroke-width="1"/>
+
+  <g class="ui">
+    <image href="juro-mark.png" x="80" y="57" width="55" height="55" preserveAspectRatio="xMidYMid meet"/>
+    <text x="153" y="93" fill="#fff" font-size="31" font-weight="800" letter-spacing="8">JURO</text>
+    <text x="80" y="172" class="eyebrow">AI-POWERED LEGALTECH · UZBEKISTAN</text>
+    <text x="80" y="253" class="serif" fill="#fff" font-size="61" font-weight="700">Юрист в кармане</text>
+    <text x="80" y="300" fill="#dce6ed" font-size="20">Legal questions, documents and a clear path to human help</text>
+    <text x="80" y="330" fill="#aebfca" font-size="16">in one privacy-aware workspace for Uzbekistan.</text>
+
+    <g transform="translate(80 380)">
+      <rect width="150" height="39" rx="19.5" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".18"/>
+      <circle cx="21" cy="19.5" r="5" fill="#BE974F"/>
+      <text x="36" y="24" class="label">AI &amp; SOURCES</text>
+    </g>
+    <g transform="translate(243 380)">
+      <rect width="135" height="39" rx="19.5" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".18"/>
+      <circle cx="21" cy="19.5" r="5" fill="#BE974F"/>
+      <text x="36" y="24" class="label">DOCUMENTS</text>
+    </g>
+    <g transform="translate(391 380)">
+      <rect width="175" height="39" rx="19.5" fill="#ffffff" fill-opacity=".08" stroke="#ffffff" stroke-opacity=".18"/>
+      <circle cx="21" cy="19.5" r="5" fill="#BE974F"/>
+      <text x="36" y="24" class="label">CASE WORKSPACE</text>
+    </g>
+    <g transform="translate(80 558)">
+      <text class="label" x="0" y="0">RU · UZ · EN</text>
+      <circle cx="140" cy="-5" r="3" fill="#BE974F"/>
+      <text class="small" x="155" y="0">juro.uz</text>
+      <circle cx="253" cy="-5" r="3" fill="#BE974F"/>
+      <text class="small" x="268" y="0">app.juro.uz</text>
+    </g>
+  </g>
+
+  <g filter="url(#softShadow)" class="ui">
+    <rect x="910" y="82" width="495" height="465" rx="22" fill="#f8f6f2"/>
+    <rect x="910" y="82" width="495" height="55" rx="22" fill="#112f48"/>
+    <rect x="910" y="115" width="495" height="22" fill="#112f48"/>
+    <circle cx="942" cy="109" r="5" fill="#BE974F"/>
+    <circle cx="960" cy="109" r="5" fill="#f8f6f2" fill-opacity=".7"/>
+    <circle cx="978" cy="109" r="5" fill="#f8f6f2" fill-opacity=".35"/>
+    <text x="1010" y="114" class="label">JURO / CASE WORKSPACE</text>
+    <text x="944" y="177" fill="#062844" font-size="25" font-weight="800">From question to a clear next step</text>
+    <text x="944" y="204" fill="#557080" font-size="14">A connected legal context, not a disconnected chat.</text>
+    <rect x="944" y="237" width="426" height="88" rx="13" fill="#fff" stroke="#dbe2e5"/>
+    <rect x="962" y="255" width="78" height="20" rx="10" fill="#062844"/>
+    <text x="978" y="269" fill="#fff" font-size="10" font-weight="700" letter-spacing="1">SOURCE</text>
+    <text x="1056" y="271" fill="#062844" font-size="14" font-weight="700">Evidence-aware legal response</text>
+    <text x="962" y="302" fill="#567081" font-size="13">Show the source, context and a practical next action.</text>
+    <g transform="translate(944 350)">
+      <rect width="126" height="130" rx="14" fill="#062844"/>
+      <text x="18" y="29" fill="#BE974F" font-size="11" font-weight="700" letter-spacing="1.2">01 / ASK</text>
+      <text x="18" y="61" fill="#fff" font-size="16" font-weight="700">Question</text>
+      <text x="18" y="87" class="micro">Facts and</text>
+      <text x="18" y="103" class="micro">context</text>
+    </g>
+    <g transform="translate(1084 350)">
+      <rect width="126" height="130" rx="14" fill="#e8eef0"/>
+      <text x="18" y="29" fill="#9b773b" font-size="11" font-weight="700" letter-spacing="1.2">02 / CHECK</text>
+      <text x="18" y="61" fill="#062844" font-size="16" font-weight="700">Sources</text>
+      <text x="18" y="87" fill="#567081" font-size="12">Visible</text>
+      <text x="18" y="103" fill="#567081" font-size="12">citations</text>
+    </g>
+    <g transform="translate(1224 350)">
+      <rect width="146" height="130" rx="14" fill="#f2e7d1"/>
+      <text x="18" y="29" fill="#9b773b" font-size="11" font-weight="700" letter-spacing="1.2">03 / ACT</text>
+      <text x="18" y="61" fill="#062844" font-size="16" font-weight="700">Document</text>
+      <text x="18" y="87" fill="#567081" font-size="12">Plan or</text>
+      <text x="18" y="103" fill="#567081" font-size="12">hand-off</text>
+    </g>
+
+    <rect x="1332" y="395" width="162" height="210" rx="24" fill="#0d2c45" stroke="#BE974F" stroke-width="2"/>
+    <rect x="1347" y="419" width="132" height="25" rx="7" fill="#ffffff" fill-opacity=".12"/>
+    <text x="1360" y="436" fill="#fff" font-size="10" font-weight="700">JURO · MOBILE</text>
+    <text x="1349" y="476" fill="#BE974F" font-size="11" font-weight="700">NEXT STEP</text>
+    <text x="1349" y="506" fill="#fff" font-size="16" font-weight="700">Check your</text>
+    <text x="1349" y="527" fill="#fff" font-size="16" font-weight="700">document</text>
+    <rect x="1349" y="551" width="110" height="20" rx="10" fill="#BE974F"/>
+  </g>
+</svg>

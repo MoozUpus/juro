@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" role="img" aria-labelledby="title desc">
+  <title id="title">JURO trust and safety layer</title>
+  <desc id="desc">Six concrete trust principles: source visibility, server-side credentials, protected data access, private document handling, permission checks and clear limitations.</desc>
+  <defs>
+    <style>
+      .ui { font-family: Inter, Manrope, Arial, sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .h { fill: #fff; font-size: 45px; font-weight: 700; }
+      .sub { fill: #c4d3da; font-size: 17px; }
+      .title { fill: #062844; font-size: 19px; font-weight: 800; }
+      .copy { fill: #527080; font-size: 14px; }
+      .tag { fill: #9b773b; font-size: 10px; font-weight: 800; letter-spacing: 1.3px; }
+    </style>
+  </defs>
+  <rect width="1600" height="820" fill="#062844"/>
+  <path d="M0 92H1600M0 730H1600" stroke="#fff" stroke-opacity=".1"/>
+  <g class="ui">
+    <text x="100" y="104" class="h serif">Trust is designed into the workflow, not added as a claim.</text>
+    <text x="100" y="142" class="sub">These are implementation and product-boundary statements, not claims of certification or legal advice.</text>
+  </g>
+  <g class="ui">
+    <g transform="translate(100 220)">
+      <rect width="400" height="190" rx="20" fill="#f8f6f2"/>
+      <text x="30" y="35" class="tag">EVIDENCE</text>
+      <text x="30" y="75" class="title">Source-grounded answers</text>
+      <text x="30" y="105" class="copy">The response flow can surface citations and</text>
+      <text x="30" y="126" class="copy">must not invent a source when evidence is absent.</text>
+      <circle cx="350" cy="145" r="24" fill="#f2e7d1"/><path d="M340 145L348 153L365 135" fill="none" stroke="#9b773b" stroke-width="4"/>
+    </g>
+    <g transform="translate(600 220)">
+      <rect width="400" height="190" rx="20" fill="#f8f6f2"/>
+      <text x="30" y="35" class="tag">CREDENTIALS</text>
+      <text x="30" y="75" class="title">Server-side AI credentials</text>
+      <text x="30" y="105" class="copy">AI provider keys are configured as server-side</text>
+      <text x="30" y="126" class="copy">secrets rather than exposed to the browser.</text>
+      <rect x="329" y="120" width="42" height="42" rx="9" fill="#f2e7d1"/><path d="M342 140V133A8 8 0 0 1 358 133V140M338 140H362V157H338Z" fill="none" stroke="#9b773b" stroke-width="3"/>
+    </g>
+    <g transform="translate(1100 220)">
+      <rect width="400" height="190" rx="20" fill="#f8f6f2"/>
+      <text x="30" y="35" class="tag">DATA ACCESS</text>
+      <text x="30" y="75" class="title">Protected D1 and R2 access</text>
+      <text x="30" y="105" class="copy">Private storage and database access are mediated</text>
+      <text x="30" y="126" class="copy">by backend routes and permission checks.</text>
+      <path d="M337 155L351 124L365 155Z" fill="none" stroke="#9b773b" stroke-width="3"/><circle cx="351" cy="144" r="4" fill="#9b773b"/>
+    </g>
+    <g transform="translate(100 470)">
+      <rect width="400" height="190" rx="20" fill="#f8f6f2"/>
+      <text x="30" y="35" class="tag">DOCUMENTS</text>
+      <text x="30" y="75" class="title">Private document handling</text>
+      <text x="30" y="105" class="copy">Generated files and attachments use private object</text>
+      <text x="30" y="126" class="copy">storage rather than permanent public bucket URLs.</text>
+      <path d="M340 121H363L377 135V165H340Z M363 121V137H377" fill="none" stroke="#9b773b" stroke-width="3"/>
+    </g>
+    <g transform="translate(600 470)">
+      <rect width="400" height="190" rx="20" fill="#f8f6f2"/>
+      <text x="30" y="35" class="tag">AUTHORIZATION</text>
+      <text x="30" y="75" class="title">Permission-checked workflows</text>
+      <text x="30" y="105" class="copy">Protected platform routes enforce ownership and</text>
+      <text x="30" y="126" class="copy">workspace boundaries on the server.</text>
+      <circle cx="350" cy="136" r="18" fill="none" stroke="#9b773b" stroke-width="3"/><path d="M330 166C336 149 364 149 370 166" fill="none" stroke="#9b773b" stroke-width="3"/>
+    </g>
+    <g transform="translate(1100 470)">
+      <rect width="400" height="190" rx="20" fill="#f2e7d1" stroke="#BE974F"/>
+      <text x="30" y="35" class="tag">LIMITATIONS</text>
+      <text x="30" y="75" class="title">A clear path to human help</text>
+      <text x="30" y="105" class="copy">AI output is legal information, not individual legal</text>
+      <text x="30" y="126" class="copy">advice. Lawyer hand-off remains a partial workflow.</text>
+      <path d="M337 152H365M351 121V152M341 131L351 121L361 131" fill="none" stroke="#9b773b" stroke-width="3"/>
+    </g>
+  </g>
+  <text x="100" y="760" class="ui" fill="#c4d3da" font-size="15">Report a vulnerability through SECURITY.md. Do not include secrets, user documents or private logs in GitHub issues.</text>
+</svg>

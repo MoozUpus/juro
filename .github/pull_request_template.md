@@ -6,6 +6,11 @@ Describe what changed and why.
 
 Describe affected JURO users, routes and workflows.
 
+## Screenshots
+
+- [ ] Not needed
+- [ ] Attached with synthetic or redacted data only
+
 ## Data and configuration
 
 - [ ] No database migration
@@ -14,6 +19,10 @@ Describe affected JURO users, routes and workflows.
 - [ ] No secret included
 
 Explain any unchecked item.
+
+## Security impact
+
+Describe any effect on authentication, authorization, document access, source handling or secret exposure. State "none identified" when applicable.
 
 ## Validation
 

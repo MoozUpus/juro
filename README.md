@@ -1,223 +1,206 @@
-# JURO — «Юрист в кармане»
+<div align="center">
+  <img src="docs/github/hero.svg" width="100%" alt="JURO — AI-powered LegalTech platform for Uzbekistan">
+</div>
 
-JURO is a LegalTech product for Uzbekistan that combines a public website, a user platform, an AI-assisted legal workflow, document analysis and generation, and escalation to a human lawyer.
+<div align="center">
+  <a href="README.md">English</a> · <a href="README.ru.md">Русский</a> · <a href="README.uz.md">O‘zbekcha</a>
+</div>
 
-This repository is a monorepo containing the current source snapshots behind:
+<div align="center">
+  <a href="https://juro.uz">Live website</a> ·
+  <a href="https://app.juro.uz">Open platform</a> ·
+  <a href="#product-tour">Product tour</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#quick-start">Quick start</a>
+</div>
 
-- `https://juro.uz` — public website;
-- `https://app.juro.uz` — user platform;
-- `https://app.juro.uz/:locale/:accountType/document-builder` — canonical document-builder module (for example `/ru/individual/document-builder`).
+<br>
 
-The source code is complete enough to build both deployed applications. Runtime data, hosted database contents, private object-storage files, DNS configuration, TLS certificates and secret values are intentionally not stored in Git.
+<div align="center">
+  <img src="docs/github/stack-badges.svg" width="100%" alt="TypeScript, React, Next.js, Cloudflare Workers, D1, R2, OpenAI, Node.js 22 and CI">
+</div>
 
-## Repository layout
+JURO is a LegalTech workspace for Uzbekistan that brings legal questions, document work and next actions into one connected flow. It is built for people and teams who need practical legal information, more structured document workflows and, where appropriate, a route to human legal help.
 
-```text
-juro-platform/
-├── apps/
-│   ├── website/        # juro.uz
-│   └── platform/       # app.juro.uz and the canonical document builder
-├── docs/
-│   └── MIGRATION.md
-├── .github/
-│   └── workflows/ci.yml
-├── .env.example
-├── .gitignore
-├── SECURITY.md
-├── package.json
-└── README.md
-```
+The public site is available at [juro.uz](https://juro.uz). The protected product platform is available at [app.juro.uz](https://app.juro.uz). This repository contains the source for both applications, their Cloudflare configuration, documentation and quality checks.
 
-The two applications retain their original package manifests, lockfiles, build scripts and hosting manifests. They can be developed and deployed independently.
+## What is JURO?
 
-## Technology stack
+Finding and understanding legal information can be difficult, while traditional legal services can be fragmented and costly. JURO is designed to reduce that friction: start with a question or document, keep the source and context visible, and continue toward a draft, a plan or a human hand-off when the product supports it.
 
-| Area | Current implementation |
+The product is oriented to Uzbekistan. The public product UI currently offers Russian and Uzbek language surfaces; the repository documentation is also maintained in English for international technical audiences. JURO does not present AI output as individual legal advice or as a substitute for a lawyer.
+
+## Product tour
+
+| Public legal-intelligence entry | Protected workspace |
 |---|---|
-| Language | TypeScript |
-| UI | React 19, Next.js App Router |
-| Build/runtime adapter | Vite 8, Vinext, Cloudflare Workers |
-| Styling and UI | CSS, Tailwind toolchain, Framer Motion, Lucide React |
-| Backend | Next.js route handlers compiled for Cloudflare Worker runtime |
-| Database | Cloudflare D1 (SQLite) with Drizzle ORM and SQL migrations |
-| File storage | Private Cloudflare R2 bucket |
-| Authentication | Sites/ChatGPT identity headers plus server-side hashed OTP sessions for protected routes |
-| AI | Server-side OpenAI Responses API integration for the document builder |
-| Document generation | DOCX, PDF and ZIP generation in the platform application |
-| Package manager | npm with committed `package-lock.json` files |
+| <img src="docs/github/screenshots/public-website.webp" alt="JURO public website" width="100%"> | <img src="docs/github/screenshots/platform-dashboard.webp" alt="JURO platform dashboard without account data" width="100%"> |
+| Start with a situation, document or next step on the live public website. | Connect a question, source, document and action in the protected workspace. |
 
-## System requirements
+| AI legal-chat starting state | Document builder |
+|---|---|
+| <img src="docs/github/screenshots/ai-chat.webp" alt="JURO AI legal-chat starting state without conversation history" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="JURO document library and builder entry" width="100%"> |
+| The product prompts for a legal situation and makes source availability explicit. | Browse document workflows and begin a structured draft. |
 
-- Node.js `>=22.13.0`;
-- npm compatible with the committed lockfiles;
-- Windows, Linux, or macOS for `apps/platform`; its bounded lifecycle uses shell-neutral Node launchers. `apps/website` still retains the legacy Bash lifecycle and therefore needs Bash plus its documented POSIX tools;
-- Cloudflare-compatible D1 and R2 bindings for persistent document-builder functions;
-- an OpenAI API key only if live AI review is required.
+| Document review and comparison | Narrow public-product preview |
+|---|---|
+| <img src="docs/github/screenshots/document-analysis.webp" alt="JURO document review and comparison entry" width="100%"> | <img src="docs/github/screenshots/mobile-experience.webp" alt="Narrow JURO public-product preview" width="100%"> |
+| Review and comparison UI is present, with its end-to-end analysis status shown below as PARTIAL. | A narrow presentation crop of the live public product; replace with a verified mobile capture before using it as mobile QA evidence. |
 
-## Installation
+## What users can do
 
-Install both applications from the repository root:
+| Capability | User value | Status |
+|---|---|---|
+| Ask a legal question | Start a structured legal-information workflow with visible source handling. | WORKING |
+| Create a document | Build a draft through document workflows and generate supported files. | WORKING |
+| Analyze or compare a document | Review a document and compare versions; fresh end-to-end analysis evidence remains incomplete. | PARTIAL |
+| Build an action plan | Keep actions, deadlines, documents and legal context connected to a case. | WORKING |
+| Request lawyer assistance | Use the controlled lawyer-profile and hand-off surface where available. | PARTIAL |
+| Use a production payment service | Not offered as a live payment claim in this repository. | PLANNED |
 
-```bash
-npm run install:all
-```
+## How JURO works
 
-Or install one application:
+<img src="docs/github/ai-answer-flow.svg" width="100%" alt="JURO source-aware legal answer flow">
 
-```bash
-npm --prefix apps/website ci
-npm --prefix apps/platform run install:ci
-```
+JURO's implemented source-aware path classifies the request, retrieves relevant public legal-source pages, assembles bounded context and presents a structured answer with source cards when evidence is available. The source layer is query-scoped direct retrieval from public Lex.uz and Advice.uz pages; it is not represented as an official provider API.
 
-## Local development
+- The system should make the source visible and should not invent a citation.
+- When the available evidence does not support a conclusion, the product should state that limitation.
+- AI output is legal information and workflow support, not individual legal advice.
+- Lawyer escalation is a partial product workflow, not a guarantee of representation or a completed consultation.
 
-Public website:
+## Product ecosystem
 
-```bash
-npm run dev:website
-```
+<img src="docs/github/product-overview.svg" width="100%" alt="JURO current, partial and planned product ecosystem">
 
-User platform:
+The diagram separates the current product core from partial workflows and planned payments. Solid paths indicate implemented or working repository surfaces; dashed paths indicate partial or planned work.
 
-```bash
-npm run dev:platform
-```
+## Architecture
 
-Admin console Worker:
+<img src="docs/github/platform-architecture.svg" width="100%" alt="JURO application and Cloudflare architecture">
 
-```bash
-npm run dev:admin
-```
+JURO is a monorepo with independently deployable public and protected applications:
 
-Copy `.env.example` to a local ignored environment file and supply only the values required for the feature being tested. Never commit `.env`, API keys, access tokens, database exports or user data.
+- apps/website powers the public website through React, Next.js, Vite/Vinext and Cloudflare Worker tooling.
+- apps/platform provides protected route handlers, document workflows, authorization boundaries and generated-file flows.
+- apps/admin is a separate Worker-based administrative surface and is represented as PARTIAL.
+- Cloudflare D1 and private R2 back persisted platform data and files; OpenAI integration is server-side.
+- The platform supports DOCX, PDF and ZIP generation. OTP/email integration is configured through server-side provider settings when enabled.
 
-Local D1 and R2 resources are simulated by the existing Vite/Cloudflare configuration. Production bindings are supplied by the hosting platform.
+## Trust, privacy and legal safety
 
-## Environment and bindings
+<img src="docs/github/trust-layer.svg" width="100%" alt="JURO trust, privacy and legal-safety principles">
+
+Repository boundaries are deliberate: credentials are server-side, D1/R2 access is mediated by backend routes, and protected flows enforce ownership or workspace checks. No GDPR, ISO, SOC 2 or other certification is claimed here. For responsible disclosure, see [SECURITY.md](SECURITY.md).
+
+## Current status
+
+| Area | Status | Notes |
+|---|---|---|
+| Public website | LIVE | [juro.uz](https://juro.uz) was reachable during this documentation audit. |
+| Protected platform entry | LIVE | [app.juro.uz](https://app.juro.uz) is reachable and serves protected product routes. |
+| AI legal chat | WORKING | Source-aware response and citation surfaces are implemented; broader legal evaluation remains a separate release gate. |
+| Document builder | WORKING | Persisted document workflows, private storage and generated-file paths are implemented. |
+| Document analysis and comparison | PARTIAL | Review and compare surfaces exist; fresh authenticated end-to-end analysis evidence is not complete. |
+| Cases and action plans | WORKING | Case, task and action-plan workflows are implemented. |
+| Lawyer marketplace and consultations | PARTIAL | Controlled profile, directory and hand-off lifecycle work remains incomplete. |
+| Administration | PARTIAL | Separate admin Worker and protected administrative flows exist. |
+| Production payments | PLANNED | Demo/payment-foundation code is not represented as a live payment service. |
+
+## Repository structure
+
+    juro/
+    ├── apps/
+    │   ├── website/       # juro.uz public website
+    │   ├── platform/      # app.juro.uz and legal workflows
+    │   └── admin/         # separate administrative Worker
+    ├── docs/              # architecture, migration and operational documentation
+    ├── .github/           # CI, contribution and issue templates
+    ├── .env.example       # server-side configuration names only
+    ├── SECURITY.md
+    ├── package.json
+    └── README.md
+
+## Quick start
+
+### Requirements
+
+- Node.js 22.13 or later.
+- npm compatible with the committed lockfiles.
+- Bash and documented POSIX tools for the legacy apps/website lifecycle; apps/platform uses shell-neutral Node launchers.
+- Cloudflare-compatible bindings for persisted platform features.
+
+Clone and install both applications:
+
+    git clone https://github.com/MoozUpus/juro.git
+    cd juro
+    npm run install:all
+
+Run an application locally:
+
+    npm run dev:website
+    npm run dev:platform
+    npm run dev:admin
+
+Copy .env.example to a local ignored environment file. Never commit .env files, API keys, access tokens, database exports, user documents or logs.
+
+<details>
+<summary>Environment variables and Cloudflare bindings</summary>
 
 | Name | Required | Scope | Purpose |
 |---|---:|---|---|
-| `OPENAI_API_KEY` | For live AI only | Server | OpenAI Responses API authentication |
-| `OPENAI_MODEL` | No | Server | Model override; defaults to `gpt-5.6-sol` |
-| `RESEND_API_KEY` | For email OTP | Server | Resend API authentication; never exposed to the client |
-| `EMAIL_FROM` | For email OTP | Server | Verified JURO sender address |
-| `JURO_SMOKE_BASE_URL` | No | Test process | Base URL for the document-builder smoke test |
-| `CLOUDFLARE_REMOTE_BINDINGS` | No | Local development | Set to `true` to opt into remote Cloudflare bindings; requires Wrangler login |
-| `DB` | Yes for persisted builder features | Worker binding | Cloudflare D1 database |
-| `BUCKET` | Yes for generated/uploaded files | Worker binding | Private Cloudflare R2 bucket |
-| `ASSETS` / `IMAGES` | Hosting-managed | Worker bindings | Static assets and image optimization |
+| OPENAI_API_KEY | For live AI only | Server | OpenAI Responses API authentication |
+| OPENAI_MODEL | No | Server | Optional model override |
+| RESEND_API_KEY | For email OTP | Server | Email-provider authentication |
+| EMAIL_FROM | For email OTP | Server | Verified sender address |
+| JURO_SMOKE_BASE_URL | No | Test process | Document-builder smoke-test base URL |
+| CLOUDFLARE_REMOTE_BINDINGS | No | Local development | Opt in to remote bindings; requires Wrangler login |
+| DB | Persisted features | Worker binding | Cloudflare D1 |
+| BUCKET | File workflows | Worker binding | Private Cloudflare R2 |
+| ASSETS / IMAGES | Hosting managed | Worker binding | Static assets and image optimization |
 
-`DB`, `BUCKET`, `ASSETS` and `IMAGES` are platform bindings, not secrets placed in `.env`.
+DB, BUCKET, ASSETS and IMAGES are platform bindings, not secrets to place in an environment file. AI and email keys are server-only configuration and must not be exposed through public browser variables.
 
-## Quality checks
+</details>
+
+## Quality and testing
 
 From the repository root:
 
-```bash
-npm run lint
-npm run type-check
-npm test
-npm run build
-npm run validate:artifact
-```
+    npm run lint
+    npm run type-check
+    npm test
+    npm run build
+    npm run validate:artifact
 
-The application-level test scripts also validate the deployable Worker artifact. The platform test suite checks rendered routes, identity and tenant boundaries, document workflows, migrations, and the disabled-by-default Cloudflare async contract. Run `npm --prefix apps/platform run validate:cloudflare:matrix` for development/staging/production builds, artifact validation, and Wrangler dry-runs without deployment.
+CI is defined in [.github/workflows/ci.yml](.github/workflows/ci.yml). The workflow runs locked installs, linting, TypeScript checks, tests, artifact validation and the platform Cloudflare environment matrix. For a platform-only environment matrix and dry-run coverage, run:
 
-## Routes
-
-### Public website (`apps/website`)
-
-| Route | Status |
-|---|---|
-| `/` | Public JURO landing page |
-| `/landing-test` | Permanent redirect to `/` |
-| `/lending-test` | Permanent redirect to `/` for the historical misspelling |
-| `/{ru|uz}/{terms|privacy-policy|personal-data-processing|cookies|ai-rules}` | Public legal pages |
-
-### User platform (`apps/platform`)
-
-| Route | Status |
-|---|---|
-| `/` | Session-aware entry route |
-| `/login`, `/register` | Public authentication routes |
-| `/main` | Session-aware canonical dashboard router |
-| `/{locale}/{accountType}/main` | Canonical dashboard |
-| `/{locale}/{accountType}/document-builder` | Canonical document library and builder |
-| `/{locale}/{accountType}/documents` | User documents |
-| `/{locale}/{accountType}/action-plan` | Cases and action plans |
-| `/{locale}/{accountType}/consultations` | Internal consultation calendar |
-| `/document-builder-test/*` | Backward-compatible permanent redirects only |
-
-The primary modules are directly addressable routes. Locale and account type are preserved in canonical URLs, and protected data is checked server-side.
-
-## Database and file storage
-
-`apps/platform/db/schema.ts` defines the document-builder D1 schema. Migrations are committed in `apps/platform/drizzle/`.
-
-Generated documents, attachments and signed PDFs are stored as private R2 objects. The application returns files through permission-checked backend endpoints; it does not require permanent public bucket URLs.
-
-The public website keeps optional D1 scaffolding in the source, but its hosting manifest currently sets D1/R2 to `null` and its application schema is intentionally empty.
+    npm --prefix apps/platform run validate:cloudflare:matrix
 
 ## Deployment
 
-### Lowest-risk path: preserve the current runtime
+Website and platform deployments are intentionally independent. The platform requires its D1 migrations, private R2 bindings, server-side secrets and explicit permission checks; both targets should be preview-tested before any production approval.
 
-Deploy `apps/website` and `apps/platform` as two independent Cloudflare Worker/Vinext applications:
+Read [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for the release sequence, rollback expectations, DNS safeguards and backup requirements. [docs/MIGRATION.md](docs/MIGRATION.md) retains the source-migration and alternative-hosting audit.
 
-1. provision the hosting-managed asset and image bindings;
-2. provision D1 and apply `apps/platform/drizzle/*.sql`;
-3. provision a private R2 bucket and bind it as `BUCKET`;
-4. add `OPENAI_API_KEY` as a server-side secret if live AI review is enabled;
-5. deploy first to preview hostnames;
-6. test all critical routes, files and permissions;
-7. switch DNS only after acceptance.
+## Roadmap
 
-### Portable hosting path
-
-A conventional Node.js host can run the frontend applications, but the current backend is Cloudflare-specific. Moving to PostgreSQL and S3-compatible storage requires a planned adapter migration:
-
-- convert Drizzle schema imports from `sqlite-core` to `pg-core`;
-- create and test PostgreSQL migrations;
-- replace `cloudflare:workers` D1/R2 access with database and object-storage adapters;
-- replace Sites identity headers with the chosen OIDC/session provider;
-- preserve server-side ownership and collaborator checks;
-- migrate existing D1 records and R2 objects before DNS cutover.
-
-Do not point `juro.uz` or `app.juro.uz` to a new host until preview acceptance, data migration verification, rollback preparation and backups are complete.
-
-## DNS, SSL and operations
-
-- Keep `juro.uz` and `app.juro.uz` as separate deployment targets.
-- Use a temporary preview hostname for migration testing.
-- Configure managed TLS and HTTP-to-HTTPS redirects before cutover.
-- Lower DNS TTL before a planned migration, then restore it after stability is confirmed.
-- Back up the database and object storage before schema migration or DNS cutover.
-- Run migrations as an explicit deployment step with rollback/restore procedures.
-- Collect structured server logs without document text, PINFL, tokens or API keys.
-- Add error monitoring, uptime checks for both domains, API health checks and alerts for failed document generation.
-
-See [docs/MIGRATION.md](docs/MIGRATION.md) for the source audit and migration checklist.
+| Now | Next | Later |
+|---|---|---|
+| Maintain source-aware answers, document workflows, permissions and release evidence. | Complete authenticated document-analysis and lawyer hand-off verification. | Consider production payments and broader ecosystem integrations only after their product, security and operational gates are approved. |
 
 ## Security
 
-- Secret files and private keys are ignored.
-- AI credentials remain server-side.
-- D1/R2 access is mediated by the backend.
-- Public-share tokens are high-entropy and stored as hashes where implemented.
-- Private routes set no-store/noindex protections.
-- Do not commit production database dumps, R2 exports, user documents or logs.
-- Rotate any credential immediately if it is ever committed.
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Do not include secrets, personal data, user documents or production logs in an issue or pull request. Rotate exposed credentials; removing a secret from a later revision is not sufficient.
 
-Security reports should follow [SECURITY.md](SECURITY.md).
+## Contributing
 
-## Branches and Pull Requests
+JURO is a product-managed repository. Focused, safe contributions are welcome; see [.github/CONTRIBUTING.md](.github/CONTRIBUTING.md) and use the supplied issue and pull-request templates. A pull request does not authorize a production deploy, DNS change or access to production data.
 
-- Protect `main`; deploy only reviewed, passing commits.
-- Create feature branches as `feature/<short-name>`, fixes as `fix/<short-name>` and operational work as `chore/<short-name>`.
-- Keep each Pull Request focused and describe user impact, migrations, environment changes and rollback steps.
-- Require CI, code review and security review for auth, permissions, database, storage and public-link changes.
-- Never merge secrets or production user data.
+## License
 
-## Current product boundaries
+No license file is currently included in this repository. Reuse rights have not been granted here; contact the repository owner before reusing code or assets.
 
-The repository contains production-capable document-builder backend code, but several screens in the broader platform remain interactive prototypes. In particular, the main registration/login flow, general AI chat, voice/avatar, operator queue, payments and much of the dashboard use browser-local state or demonstration data. They require separate backend integrations before being represented as live services.
+---
+
+Presentation asset provenance and update rules: [docs/github/README_ASSETS.md](docs/github/README_ASSETS.md).
