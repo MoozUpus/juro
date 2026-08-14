@@ -745,7 +745,15 @@ class OfficialDirectProvider implements LegalSourceProvider {
       plan: this.plan,
       question: this.query,
     });
-    const quality = sourceQuality({ snapshot, canonicalUrl: fetched.canonicalUrl, locale: fetched.locale, spans });
+    // Direct-answer source cards predate the `uz-Cyrl` value. Preserve the
+    // exact UZC page in the packet while using Uzbek query quality rules; the
+    // full corpus stores `uz-Cyrl` explicitly instead of translating it.
+    const quality = sourceQuality({
+      snapshot,
+      canonicalUrl: fetched.canonicalUrl,
+      locale: fetched.locale === "uzc" ? "uz" : fetched.locale,
+      spans,
+    });
     if (!quality.passed) throw new Error("LEGAL_SOURCE_QUALITY_REJECTED");
     const source: LegalSourceContext = {
       id: sourceId,

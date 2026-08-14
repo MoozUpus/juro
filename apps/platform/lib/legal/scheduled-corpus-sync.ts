@@ -112,7 +112,12 @@ export async function startScheduledCorpusSync(
               locale: candidate.locale,
               canonicalId: candidate.canonicalId,
             }));
-          discovered = discovery;
+          // The legacy manual-review pipeline has a two-language D1 enum.
+          // Uzbek Cyrillic discovery belongs to the isolated full-corpus path
+          // until that older table is retired, rather than silently mapping it.
+          discovered = discovery.filter((candidate): candidate is DiscoveryCandidate =>
+            candidate.locale === "ru" || candidate.locale === "uz",
+          );
         } catch (error) {
           discoveryError = error instanceof LegalSourceDiscoveryError
             ? error.code

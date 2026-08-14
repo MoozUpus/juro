@@ -14,6 +14,8 @@ export type LegalDocumentAlias =
   | "family_code"
   | "administrative_code";
 
+export type LegalQueryLanguage = "ru" | "uz-Latn" | "uz-Cyrl" | "en" | "mixed";
+
 const APOSTROPHES = /[’‘ʼ`´ʻ]/gu;
 const CYRILLIC_UZBEK = new Map<string, string>([
   ["а", "a"], ["б", "b"], ["в", "v"], ["г", "g"], ["д", "d"], ["е", "e"],
@@ -34,8 +36,32 @@ const DOCUMENT_ALIASES: ReadonlyArray<readonly [LegalDocumentAlias, RegExp]> = [
   ["administrative_code", /(?:административн\p{L}*\s+кодекс|ma.muriy\s+javobgarlik|\bмжк\b|\bmjk\b)/iu],
 ];
 
-const ARTICLE_PREFIX = /(?:стать(?:я|и|ю|е)|ст\.?|модда(?:си|нинг)?|modda(?:si|ning)?|article)\s*[№#]?\s*(\d+(?:[.-]\d+)?)/giu;
-const ARTICLE_SUFFIX = /(\d+(?:[.-]\d+)?)\s*(?:-?\s*)?(?:модда(?:си|нинг)?|modda(?:si|ning)?)/giu;
+const SUPERSCRIPT_DIGITS = new Map([
+  ["⁰", "0"], ["¹", "1"], ["²", "2"], ["³", "3"], ["⁴", "4"],
+  ["⁵", "5"], ["⁶", "6"], ["⁷", "7"], ["⁸", "8"], ["⁹", "9"],
+]);
+const ARTICLE_NUMBER = "\\d+(?:(?:[.-]\\d+)|(?:[⁰¹²³⁴⁵⁶⁷⁸⁹]+)|(?:\\s+prim(?:a|b|v)?))?";
+const ARTICLE_PREFIX = new RegExp(
+  "(?:стать(?:я|и|ю|е)|ст\\.?|модда(?:си|нинг)?|modda(?:si|ning)?|article)\\s*[№#]?\\s*(" + ARTICLE_NUMBER + ")",
+  "giu",
+);
+const ARTICLE_SUFFIX = new RegExp(
+  "(" + ARTICLE_NUMBER + ")\\s*(?:-?\\s*)?(?:модда(?:си|нинг)?|modda(?:si|ning)?)",
+  "giu",
+);
+
+const LEGAL_ABBREVIATIONS: Readonly<Record<string, readonly string[]>> = {
+  "гк": ["гражданский кодекс", "fuqarolik kodeksi"],
+  "тк": ["трудовой кодекс", "mehnat kodeksi"],
+  "ук": ["уголовный кодекс", "jinoyat kodeksi"],
+  "нк": ["налоговый кодекс", "soliq kodeksi"],
+  "ск": ["семейный кодекс", "oila kodeksi"],
+  "мжк": ["кодекс об административной ответственности", "ma'muriy javobgarlik kodeksi"],
+  "фк": ["fuqarolik kodeksi", "гражданский кодекс"],
+  "мк": ["mehnat kodeksi", "трудовой кодекс"],
+  "жк": ["jinoyat kodeksi", "уголовный кодекс"],
+  "скк": ["soliq kodeksi", "налоговый кодекс"],
+};
 
 function normalized(value: string): string {
   return value.normalize("NFKC").replace(APOSTROPHES, "ʻ").replace(/[‐‑–—]/gu, "-");
@@ -60,8 +86,60 @@ export function transliterateUzbek(value: string): string {
   );
 }
 
+/** Query-only Russian cleanup. It intentionally never changes stored quotations. */
+export function normalizeRussianLegal(value: string): string {
+  return normalized(value)
+    .replace(/\bст\s*\.?\s*/giu, "статья ")
+    .replace(/\bг\.?\s*к\.?\b/giu, "гк")
+    .replace(/\bт\.?\s*к\.?\b/giu, "тк")
+    .replace(/\bу\.?\s*к\.?\b/giu, "ук")
+    .replace(/\bн\.?\s*к\.?\b/giu, "нк")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+export function normalizeArticleNumber(value: string): string {
+  const superscriptsExpanded = value.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/gu, (digits) =>
+    "-" + [...digits].map((digit) => SUPERSCRIPT_DIGITS.get(digit) ?? digit).join(""),
+  );
+  const compact = normalized(superscriptsExpanded)
+    .replace(/\s+prim(?:a|b|v)?/giu, (match) => "-" + match.trim().toLocaleLowerCase())
+    .replace(/[.‐‑–—]/gu, "-")
+    .replace(/\s+/gu, "")
+    .replace(/-+/gu, "-");
+  return /^\d+(?:-[\p{L}\d]+)?$/iu.test(compact) ? compact : "";
+}
+
+/** Returns deterministic query expansions without replacing the user's input. */
+export function expandLegalAbbreviations(value: string): string[] {
+  const expansions = new Set<string>();
+  for (const normalizedValue of [
+    normalizeRussianLegal(value).toLocaleLowerCase("ru"),
+    transliterateUzbek(value).toLocaleLowerCase("uz"),
+  ]) {
+    for (const word of normalizedValue.match(/[\p{L}]+/gu) ?? []) {
+      for (const expansion of LEGAL_ABBREVIATIONS[word] ?? []) expansions.add(expansion);
+    }
+  }
+  return [...expansions];
+}
+
+export function detectLegalQueryLanguage(value: string): LegalQueryLanguage {
+  const letters = value.match(/\p{L}/gu) ?? [];
+  if (letters.length === 0) return "mixed";
+  const cyrillic = letters.filter((letter) => /\p{Script=Cyrillic}/u.test(letter)).length;
+  const latin = letters.length - cyrillic;
+  const uzCyrillicMarker = /[ўқғҳ]/iu.test(value);
+  const russianMarker = /[ыэъё]/iu.test(value);
+  if (cyrillic > 0 && latin > 0) return "mixed";
+  if (cyrillic > 0) return uzCyrillicMarker && !russianMarker ? "uz-Cyrl" : "ru";
+  const englishMarkers = /\b(?:the|and|law|article|code|uzbekistan)\b/iu.test(value);
+  const uzbekMarkers = /\b(?:oʻzbekiston|ozbekiston|modda|kodeksi|qanday|uchun)\b/iu.test(value);
+  return englishMarkers && !uzbekMarkers ? "en" : "uz-Latn";
+}
+
 export function normalizeLegalReference(value: string, locale: "ru" | "uz" = "uz"): string {
-  const normalizedValue = locale === "uz" ? transliterateUzbek(value) : normalized(value);
+  const normalizedValue = locale === "uz" ? transliterateUzbek(value) : normalizeRussianLegal(value);
   return normalizedValue
     .replace(/\b(?:ст\.?|статья)\s*№?\s*(\d+)/giu, "статья $1")
     .replace(/\b(\d+)\s*-\s*(?:модда|modda)/giu, "$1-modda")
@@ -72,16 +150,23 @@ export function normalizeLegalReference(value: string, locale: "ru" | "uz" = "uz
 /** All explicit references are returned in first-mention order and never invented. */
 export function detectArticleNumbers(value: string): string[] {
   const found: string[] = [];
+  const superscriptsExpanded = value.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]+/gu, (digits) =>
+    "-" + [...digits].map((digit) => SUPERSCRIPT_DIGITS.get(digit) ?? digit).join(""),
+  );
   for (const normalizedValue of [
-    normalizeLegalReference(value, "ru"),
-    normalizeLegalReference(value, "uz"),
+    normalizeLegalReference(superscriptsExpanded, "ru"),
+    normalizeLegalReference(superscriptsExpanded, "uz"),
   ]) {
+    const matches: Array<{ index: number; number: string }> = [];
     for (const pattern of [ARTICLE_PREFIX, ARTICLE_SUFFIX]) {
       pattern.lastIndex = 0;
       for (const match of normalizedValue.matchAll(pattern)) {
-        const number = match[1];
-        if (number && !found.includes(number)) found.push(number);
+        const number = match[1] ? normalizeArticleNumber(match[1]) : "";
+        if (number) matches.push({ index: match.index ?? Number.MAX_SAFE_INTEGER, number });
       }
+    }
+    for (const match of matches.sort((left, right) => left.index - right.index)) {
+      if (!found.includes(match.number)) found.push(match.number);
     }
   }
   return found;

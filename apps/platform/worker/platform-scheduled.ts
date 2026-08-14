@@ -6,6 +6,10 @@ import {
   runLexMetadataMonitor,
 } from "../lib/legal/metadata-monitor";
 import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-health";
+import {
+  runNextLegalCorpusIngestionJob,
+  type LegalCorpusIngestionEnv,
+} from "../lib/legal-corpus/ingestion";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
@@ -481,12 +485,16 @@ export async function handleScheduled(
   }
 
   if (controller.cron === LEX_METADATA_DISCOVERY_CRON) {
-    if ((env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED !== "true") {
+    const metadataEnabled = (env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED === "true";
+    if (!metadataEnabled) {
       logScheduled("info", {
         event: "scheduled.lex_metadata_monitor_disabled",
         environment: env.APP_ENV,
         cron: controller.cron,
       });
+      // Keep the whole daily legal-source path inert when its existing
+      // monitor gate is disabled. This avoids a corpus job whose consumer
+      // would be fail-closed and preserves the established scheduler contract.
       controller.noRetry();
       return;
     }
@@ -502,6 +510,23 @@ export async function handleScheduled(
       processed: summary.processed,
       changed: summary.changed,
       errors: summary.errors,
+    });
+    // One durable job per daily slot preserves Lex.uz crawl-delay backpressure.
+    // It is independently feature-gated and may remain disabled while the
+    // legacy metadata monitor continues to report source freshness.
+    const corpus = await runNextLegalCorpusIngestionJob(
+      env as LegalCorpusIngestionEnv,
+      {
+        wait: (delayMs) => scheduler.wait(delayMs),
+      },
+    );
+    logScheduled("info", {
+      event: "scheduled.legal_corpus_job_finished",
+      environment: env.APP_ENV,
+      cron: controller.cron,
+      claimed: corpus.claimed,
+      status: corpus.status,
+      errorCode: corpus.safeErrorCode,
     });
     return;
   }

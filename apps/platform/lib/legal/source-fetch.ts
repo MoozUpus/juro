@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const localeSchema = z.enum(["ru", "uz"]);
+// Lex.uz exposes separate Uzbek Cyrillic URLs under `/uzc`.  Keep the
+// concrete source locale instead of silently folding that official text into
+// Uzbek Latin; callers map it to the BCP-47 `uz-Cyrl` corpus language.
+const localeSchema = z.enum(["ru", "uz", "uzc"]);
 
 export type LegalSourceKind = "lex" | "advice";
 export type LegalSourceLocale = z.infer<typeof localeSchema>;
@@ -120,7 +123,7 @@ function parseSourcePath(url: URL, sourceKind: LegalSourceKind): {
   adviceRoute?: "document" | "documents";
 } | null {
   if (sourceKind === "lex") {
-    const match = /^\/(ru|uz)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
+    const match = /^\/(ru|uz|uzc)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
     if (!match) return null;
     const locale = localeSchema.safeParse(match[1]);
     if (!locale.success || !match[2]) return null;
