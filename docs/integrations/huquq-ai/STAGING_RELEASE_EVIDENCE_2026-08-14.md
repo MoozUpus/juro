@@ -149,14 +149,14 @@ with the same two successful job matrices.
 | Human legal review | COMPLETE | A fresh-MFA `legal_reviewer` recorded the immutable `confirmed_correct` attestation for the verified `314/314` canonical-run scope. The scope digest and event-hash chain were recomputed read-only. |
 | Legal-evaluation evidence export | COMPLETE | Remote staging D1 returns `314/314` unique immutable review records. The compact evidence envelope independently passes corpus, prompt-hash, count, duplicate/missing, chain, and export-digest verification. |
 | Corpus ingestion | ENABLED IN STAGING | Lex-only staging ingestion is enabled behind the existing fresh-MFA manual endpoint. Advice.uz and the staff source API remain disabled; no corpus is committed to Git and no source is published without the review lifecycle. |
-| Controlled production rollout | NOT APPROVED | Production preflight/dry-run passed against the isolated `juro` artifact, but no production upload, migration, R2 write, queue write, DNS change, or traffic change was performed. The individual-record evidence-export gate remains open. |
+| Controlled production rollout | COMPLETE — Worker only | Production Worker `juro` version `d6bd7e5f-29c4-440a-a20e-14d2ea100ced` was uploaded after a successful production dry-run and final CI. No D1 migration, corpus ingestion, R2 write, queue write, DNS change, or container rollout was performed. See `PRODUCTION_ROLLOUT_EVIDENCE_2026-08-14.md`. |
 
 ## Production-preparation constraint
 
-The individual-record evidence gate is now closed. Production is still not
-deployed: its migration ledger correctly shows `0121`, `0122`, and `0123` as
-pending. `0122` and `0123` are staging-only reviewer-evidence schema and must
-not be applied to the production database merely to advance the shared ledger.
-The next implementation step is to separate the production-safe hash-constraint
-repair from staging-only migration delivery, validate that split, and only then
-perform the separately authorised production deployment.
+The individual-record evidence gate is now closed. The production Worker rollout
+completed without applying database migrations. Its migration ledger still shows
+`0121`, `0122`, and `0123` as pending. `0122` and `0123` are staging-only
+reviewer-evidence schema and must not be applied to the production database
+merely to advance the shared ledger. A future production database release must
+separate the production-safe hash-constraint repair from staging-only migration
+delivery and validate that split before any D1 mutation.
