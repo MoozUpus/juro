@@ -114,11 +114,18 @@ exactly `314/314`; each scenario's completed attempt and prompt/response hashes
 match; and the reviewer again has an active legal-review assignment, TOTP
 device, and fresh MFA session. Updates and deletes are rejected by D1 triggers.
 
-At `2026-08-14T16:51Z`, a remote read-only count returned `0/314`. This means
-the real legal determination remains recorded, but its technical
-per-scenario serialization has not yet been requested from a new fresh-MFA
-session. The protected UI labels that operation as a technical materialization,
-not a new legal decision.
+At `2026-08-14T17:06Z`, a fresh-MFA reviewer materialized the records. A
+remote read-only D1 query then returned `314` records, `314` distinct scenario
+IDs, and one linked attestation, with creation timestamps from
+`2026-08-14T17:06:36.099Z` through `2026-08-14T17:06:36.412Z`.
+
+The exported compact evidence envelope was verified independently with the
+repository verifier: it contains exactly 314 records, matches the checked-in
+corpus and every scenario prompt hash, has no duplicate or missing scenario,
+and has a valid event-hash chain and export digest
+`216e96db32b8d234188c59b695a15c086bacdd12376d66a0683dbd59e83406a5`.
+It contains no raw prompt or response text. The protected UI correctly treated
+this as technical materialization, not a second legal decision.
 
 ## CI evidence
 
@@ -128,6 +135,10 @@ completed successfully for `e81173f`. Both `apps/platform` and `apps/website`
 jobs passed their applicable install, lint, type-check, test, artifact,
 Cloudflare-matrix, and dependency-audit steps.
 
+The current documentation commit was also verified by GitHub Actions run
+[`31821623717`](https://github.com/MoozUpus/juro/actions/runs/31821623717),
+with the same two successful job matrices.
+
 ## Release-gate state
 
 | Gate | Status | Evidence / reason |
@@ -136,27 +147,16 @@ Cloudflare-matrix, and dependency-audit steps.
 | Real 314-scenario staging execution | COMPLETE | `staging-20260814-canonical` has `314/314` unique completed records. Historical failed attempts are retained as provider-reliability evidence. |
 | Isolated D1 export/restore integrity | COMPLETE | Fresh staging export restored locally; `quick_check=ok`, zero foreign-key violations, and topology/migration counts matched the remote D1 metadata. |
 | Human legal review | COMPLETE | A fresh-MFA `legal_reviewer` recorded the immutable `confirmed_correct` attestation for the verified `314/314` canonical-run scope. The scope digest and event-hash chain were recomputed read-only. |
-| Legal-evaluation evidence export | AWAITING 314 RECORDS | The staging-only immutable-review ledger and verifier are deployed and tested, but its remote count is `0/314`. The whole-run attestation deliberately does not synthesize individual decisions. |
+| Legal-evaluation evidence export | COMPLETE | Remote staging D1 returns `314/314` unique immutable review records. The compact evidence envelope independently passes corpus, prompt-hash, count, duplicate/missing, chain, and export-digest verification. |
 | Corpus ingestion | ENABLED IN STAGING | Lex-only staging ingestion is enabled behind the existing fresh-MFA manual endpoint. Advice.uz and the staff source API remain disabled; no corpus is committed to Git and no source is published without the review lifecycle. |
 | Controlled production rollout | NOT APPROVED | Production preflight/dry-run passed against the isolated `juro` artifact, but no production upload, migration, R2 write, queue write, DNS change, or traffic change was performed. The individual-record evidence-export gate remains open. |
 
-## Remaining controlled action
+## Production-preparation constraint
 
-The remaining evidence action is deliberately bound to a named account and a
-physical second factor. It cannot be truthfully completed by source code, a
-Cloudflare OAuth deployment token, or an AI agent without that account's fresh
-Access and TOTP session:
-
-1. The authenticated reviewer opens
-   `/ru/admin/ai-quality/evaluation` in a normal browser after a new MFA check,
-   selects the technical-materialization confirmation, and chooses
-   **Create individual records**. The same page can then export the compact
-   evidence envelope. The strict verifier checks every scenario hash and the
-   immutable event chain; neither raw prompts nor raw AI responses are exported.
-   The whole-run attestation above remains immutable and is not expanded into
-   fabricated per-scenario decisions.
-
-The completed whole-run review does not authorize production rollout. The
-individual-record evidence gate and a separate production approval remain
-required without weakening Access, MFA, provider secrets, or the legal-review
-audit trail.
+The individual-record evidence gate is now closed. Production is still not
+deployed: its migration ledger correctly shows `0121`, `0122`, and `0123` as
+pending. `0122` and `0123` are staging-only reviewer-evidence schema and must
+not be applied to the production database merely to advance the shared ledger.
+The next implementation step is to separate the production-safe hash-constraint
+repair from staging-only migration delivery, validate that split, and only then
+perform the separately authorised production deployment.
