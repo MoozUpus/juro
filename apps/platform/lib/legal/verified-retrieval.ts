@@ -3,6 +3,8 @@ import { legalSourceLifecycleEvidenceSchema } from "./source-lifecycle";
 import { legalSourcePublicationEvidenceSchema } from "./source-publication";
 import { legalSourceApplicabilityEvidenceSchema } from "./source-review";
 import { filterTrustedVerifiedLegalSources } from "./source-trust";
+import { rankSparseBm25, reciprocalRankFusion } from "./hybrid-ranking";
+import { normalizeLegalSearchQuery } from "./legal-language";
 import {
   semanticLegalChunkRanks,
   type LegalSemanticSearchEnv,
@@ -199,7 +201,7 @@ export function legalSearchKeywords(
   limit = MAX_RETRIEVAL_LEXICAL_KEYWORDS,
 ): string[] {
   return [...new Set(
-    value
+    normalizeLegalSearchQuery(value, locale)
       .slice(0, 80_000)
       .toLocaleLowerCase(locale === "ru" ? "ru" : "uz")
       // Act, article, and clause identifiers can be short numbers. Keep them
@@ -719,6 +721,42 @@ export async function retrieveVerifiedLegalSources(
       return leftRank - rightRank;
     });
   }
+  // Sparse BM25 gives exact title/article and lexical evidence an independent
+  // rank. Dense Vectorize results remain source ids only, then RRF merges both
+  // bounded lists before validation reloads the full source evidence.
+  const candidateId = (row: VerifiedLegalSourceEvidenceRow) => `${row.versionId}:${row.chunkId}`;
+  const sparseRanking = rankSparseBm25(query, rows.results.map((row) => ({
+    id: candidateId(row),
+    value: row,
+    title: `${row.actTitle} ${row.heading ?? ""}`,
+    body: row.bodyText,
+    identifiers: [
+      row.actIdentifier,
+      row.canonicalRef,
+      row.article,
+      row.heading,
+    ].filter(Boolean).join(" "),
+  })));
+  const denseRanking = rows.results
+    .filter((row) => row.vectorId && semantic.vectorRanks.has(row.vectorId))
+    .sort((left, right) =>
+      semantic.vectorRanks.get(left.vectorId!)! - semantic.vectorRanks.get(right.vectorId!)!
+    )
+    .map((row, index) => ({
+      id: candidateId(row),
+      value: row,
+      // The score is intentionally rank-derived: Vectorize scores are not
+      // comparable with BM25 scores.
+      score: 1 / (index + 1),
+    }));
+  const fusedRanks = reciprocalRankFusion([sparseRanking, denseRanking], {
+    limit: rows.results.length,
+  });
+  const fusedPosition = new Map(fusedRanks.map((candidate, index) => [candidate.id, index]));
+  rows.results.sort((left, right) => (
+    (fusedPosition.get(candidateId(left)) ?? Number.MAX_SAFE_INTEGER)
+      - (fusedPosition.get(candidateId(right)) ?? Number.MAX_SAFE_INTEGER)
+  ));
 
   const maxResults = Math.max(1, Math.min(12, limit));
   const attempted = new Set<string>();
