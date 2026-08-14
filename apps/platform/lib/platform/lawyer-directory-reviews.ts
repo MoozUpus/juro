@@ -16,6 +16,9 @@ export type PublicLawyerDirectoryRow = {
   education?: string | null;
   consultationFormatsJson?: unknown;
   profilePhotoUrl?: string | null;
+  juroApprovalStatus?: string;
+  topLawyerStatus?: string;
+  topLawyerCriteria?: string | null;
 };
 
 export type ApprovedReviewAggregateRow = {
@@ -79,7 +82,9 @@ export function projectPublicLawyerDirectory(
       || lawyer.region !== undefined
       || lawyer.education !== undefined
       || lawyer.consultationFormatsJson !== undefined
-      || lawyer.profilePhotoUrl !== undefined;
+      || lawyer.profilePhotoUrl !== undefined
+      || lawyer.juroApprovalStatus !== undefined
+      || lawyer.topLawyerStatus !== undefined;
     return {
       id: lawyer.id,
       displayName: lawyer.displayName,
@@ -105,6 +110,9 @@ export function projectPublicLawyerDirectory(
         education: lawyer.education ?? null,
         consultationFormats: stringList(lawyer.consultationFormatsJson),
         profilePhotoUrl: lawyer.profilePhotoUrl ?? null,
+        juroApproved: lawyer.juroApprovalStatus === "approved",
+        topLawyer: lawyer.topLawyerStatus === "featured",
+        topLawyerCriteria: lawyer.topLawyerStatus === "featured" ? lawyer.topLawyerCriteria ?? null : null,
       } : {}),
       rating: mayPublishReviews && aggregate ? {
         reviewCount: aggregate.reviewCount,

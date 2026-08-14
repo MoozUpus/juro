@@ -335,67 +335,19 @@ test("Lex PDF-backed pages use the official embedded representation without auto
   }
 });
 
-test("Advice normalization persists only the exact document container as untrusted evidence", async () => {
+test("Advice normalization cannot be reached through an obsolete enable flag", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
   const env = envFixture(d1, bucket, "true");
   try {
-    const acquired = await acquire(
+    await assert.rejects(() => acquire(
       env,
       "https://advice.uz/oz/documents/624",
       "normalize_advice_624",
       adviceDocument("Mehnat shartnomasini bekor qilish"),
-    );
-    const result = await executeLegalSourceNormalization(
-      env,
-      acquired.versionId,
-      { now: () => new Date("2026-07-31T01:01:00.000Z") },
-    );
-
-    assert.match(result.parsedObjectKey, /^legal-sources\/parsed\/advice\/uz\//);
-    const parsedObject = bucket.objects.get(result.parsedObjectKey);
-    assert.ok(parsedObject);
-    const snapshot = normalizedLegalSourceSnapshotSchema.parse(
-      JSON.parse(new TextDecoder().decode(parsedObject.bytes)),
-    );
-    assert.equal(snapshot.source.sourceKind, "advice");
-    assert.equal(snapshot.source.locale, "uz");
-    assert.equal(snapshot.source.canonicalId, "624");
-    assert.equal(snapshot.source.canonicalUrl, "https://advice.uz/oz/documents/624");
-    assert.equal(snapshot.primarySelector, "advice-document");
-    assert.equal(snapshot.documentTitle, "Mehnat shartnomasini bekor qilish");
-    assert.equal(snapshot.plainText.includes("Boshqa xizmatlar"), false);
-    const scenario = sqlite.prepare(`
-      SELECT scenario.canonical_id,scenario.locale,scenario.status,version.title,
-        version.summary_text AS summaryText,version.status AS versionStatus
-      FROM advice_scenarios AS scenario
-      INNER JOIN scenario_versions AS version ON version.scenario_id=scenario.id
-      WHERE version.legal_source_version_id=?
-    `).get(acquired.versionId) as Record<string, string>;
-    assert.deepEqual({ ...scenario }, {
-      canonical_id: "624",
-      locale: "uz",
-      status: "pending_review",
-      title: "Mehnat shartnomasini bekor qilish",
-      summaryText: snapshot.plainText,
-      versionStatus: "pending_review",
-    });
-
-    assert.deepEqual(
-      { ...sqlite.prepare(`
-        SELECT
-          (SELECT COUNT(*) FROM legal_source_sections) AS sections,
-          (SELECT COUNT(*) FROM legal_source_chunks) AS chunks,
-          (SELECT COUNT(*) FROM legal_sources WHERE verification_state='verified') AS verified_sources,
-          (SELECT COUNT(*) FROM legal_source_versions WHERE status='verified') AS verified_versions
-      `).get() as Record<string, number> },
-      {
-        sections: 0,
-        chunks: 0,
-        verified_sources: 0,
-        verified_versions: 0,
-      },
-    );
+    ), /LEGAL_SOURCE_POLICY_DISABLED/u);
+    assert.equal(bucket.objects.size, 0);
+    assert.equal((sqlite.prepare("SELECT COUNT(*) AS count FROM legal_source_versions").get() as { count: number }).count, 0);
   } finally {
     sqlite.close();
   }
@@ -585,8 +537,8 @@ test("the legal.parse queue handler normalizes a persisted source version", asyn
       ...acquisitionEnv,
       ASYNC_RUNTIME_ENABLED: "true",
       CRON_ENABLED: "false",
-      // This contract covers the explicitly enabled legacy migration path.
-      LEGAL_ADVICE_INGESTION_ENABLED: "true",
+      // User-facing legal processing is Lex-only.
+      LEGAL_LEX_INGESTION_ENABLED: "true",
       JOB_SCHEMA_VERSION: "1",
       PLATFORM_ANALYTICS: { writeDataPoint() {} },
     } as unknown as PlatformJobEnv;

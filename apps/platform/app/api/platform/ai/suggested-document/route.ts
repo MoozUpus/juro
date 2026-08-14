@@ -20,6 +20,7 @@ function localizedError(locale: "ru" | "uz", code: string): string {
   if (code === "AI_SUGGESTED_DOCUMENT_NOT_FOUND") return ru ? "Сохранённая рекомендация AI не найдена." : "Saqlangan AI tavsiyasi topilmadi.";
   if (code === "AI_SUGGESTED_DOCUMENT_UNAVAILABLE") return ru ? "Подходящий опубликованный шаблон пока недоступен." : "Mos e’lon qilingan shablon hozircha mavjud emas.";
   if (code === "AI_SUGGESTED_DOCUMENT_CONFLICT") return ru ? "Этот запрос уже использован с другими данными. Обновите предпросмотр." : "Bu so‘rov boshqa ma’lumotlar bilan ishlatilgan. Ko‘rib chiqishni yangilang.";
+  if (code === "AI_SUGGESTED_DOCUMENT_SENSITIVE_CONSENT_REQUIRED") return ru ? "Подтвердите сохранение выбранных конфиденциальных реквизитов." : "Tanlangan maxfiy rekvizitlarni saqlashni tasdiqlang.";
   return ru ? "Рекомендацию документа не удалось проверить." : "Hujjat tavsiyasini tekshirib bo‘lmadi.";
 }
 
@@ -52,6 +53,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       assistantMessageId: parsed.data.assistantMessageId,
       locale: parsed.data.locale,
       fields: parsed.data.fields,
+      sensitiveDataConsent: parsed.data.sensitiveDataConsent,
       idempotencyKey: idempotency.data,
     });
     return response(result, result.replayed ? 200 : 201);

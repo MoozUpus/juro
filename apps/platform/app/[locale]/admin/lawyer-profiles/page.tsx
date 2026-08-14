@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { LawyerProfileModerationInbox } from "../../../_staff/LawyerProfileModerationInbox";
+import { LawyerTrustDesignationPanel } from "../../../_staff/LawyerTrustDesignationPanel";
 import "../../../_staff/legal-source-reviews.css";
 import { requirePlatformStaffAccess } from "../../../../lib/auth/staff-access";
 import { localSessionForRequest } from "../../../../lib/auth/mfa-http";
@@ -22,5 +23,5 @@ export default async function LawyerProfilesPage({ params }: { params: Promise<{
   try {
     const incoming = await headers(); const request = new Request("https://app.juro.local/staff-access", { headers: new Headers(incoming) }); const now = new Date(); const session = await localSessionForRequest(request, { now }); await requirePlatformStaffAccess(db, session, "lawyer.profiles.moderate", { now, freshMfaWithinMs: 15 * 60 * 1_000 }); reviewerName = session.fullName || session.email;
   } catch { notFound(); }
-  return <LawyerProfileModerationInbox locale={locale} reviewerName={reviewerName} />;
+  return <><LawyerProfileModerationInbox locale={locale} reviewerName={reviewerName} /><div className="staff-console"><main className="staff-main"><LawyerTrustDesignationPanel locale={locale} /></main></div></>;
 }

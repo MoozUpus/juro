@@ -32,11 +32,11 @@ const verifiedEvidence = {
   contentSha256: CONTENT_SHA256,
 };
 
-test("only exact official Lex and Advice HTTPS hosts are trusted", () => {
+test("only exact official Lex HTTPS hosts are trusted", () => {
   assert.equal(trustedLegalSourceKind("https://lex.uz/docs/123"), "lex");
   assert.equal(trustedLegalSourceKind("https://www.lex.uz/acts/123"), "lex");
-  assert.equal(trustedLegalSourceKind("https://advice.uz/ru/document/1"), "advice");
-  assert.equal(trustedLegalSourceKind("https://www.advice.uz/uz/document/1"), "advice");
+  assert.equal(trustedLegalSourceKind("https://advice.uz/ru/document/1"), null);
+  assert.equal(trustedLegalSourceKind("https://www.advice.uz/uz/document/1"), null);
   assert.equal(trustedLegalSourceKind("http://lex.uz/docs/123"), null);
   assert.equal(trustedLegalSourceKind("https://lex.uz.example.com/docs/123"), null);
   assert.equal(trustedLegalSourceKind("https://example.com/?next=https://lex.uz"), null);
@@ -84,7 +84,7 @@ test("trusted-source filtering preserves only allowlisted verified records", () 
     { id: "legacy", officialUrl: "https://lex.uz/docs/legacy", sourceType: "lex", status: "verified" },
     { id: "draft", officialUrl: "https://lex.uz/docs/2", sourceType: "lex", status: "pending" },
   ]);
-  assert.deepEqual(sources.map(({ id }) => id), ["lex", "advice"]);
+  assert.deepEqual(sources.map(({ id }) => id), ["lex"]);
 });
 
 const NOW = new Date("2026-07-31T12:00:00.000Z");
@@ -297,18 +297,19 @@ test("legal keywords are bounded and locale-aware", () => {
   assert.deepEqual(legalSearchPatterns("205", "uz"), ["205"]);
 });
 
-test("only complete Lex and Advice corpus runs establish database freshness", () => {
+test("a complete Lex corpus run establishes database freshness", () => {
   const onlyLex = legalDatabaseFreshnessFromCorpusRuns([
     { sourceKind: "lex", finishedAt: "2026-07-31T10:00:00.000Z" },
   ], NOW);
-  assert.equal(onlyLex.status, "unavailable");
+  assert.equal(onlyLex.status, "fresh");
+  assert.equal(onlyLex.asOf, "2026-07-31T10:00:00.000Z");
 
   const fresh = legalDatabaseFreshnessFromCorpusRuns([
     { sourceKind: "lex", finishedAt: "2026-07-31T10:00:00.000Z" },
     { sourceKind: "advice", finishedAt: "2026-07-31T09:00:00.000Z" },
   ], NOW);
   assert.equal(fresh.status, "fresh");
-  assert.equal(fresh.asOf, "2026-07-31T09:00:00.000Z");
+  assert.equal(fresh.asOf, "2026-07-31T10:00:00.000Z");
 
   const stale = legalDatabaseFreshnessFromAsOf(
     "2026-07-20T09:00:00.000Z",

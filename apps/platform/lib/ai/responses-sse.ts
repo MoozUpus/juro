@@ -49,6 +49,11 @@ export type ResponsesSseOptions = {
    * headers so callers can measure actual provider output timing.
    */
   onFirstDelta?: (timing: ResponsesSseFirstDeltaTiming) => void | Promise<void>;
+  /**
+   * Server-internal observer for the accumulated structured output. Callers
+   * must validate any extracted value before exposing it outside the Worker.
+   */
+  onOutputTextBuffer?: (text: string) => void | Promise<void>;
 };
 
 export async function readResponsesSse(
@@ -104,6 +109,12 @@ export async function readResponsesSse(
         }
       }
       outputText += event.delta;
+      try {
+        await options.onOutputTextBuffer?.(outputText);
+      } catch {
+        // An optional early-output observer must never invalidate or interrupt
+        // the authoritative final structured response.
+      }
       if (outputText.length - lastReported >= 128) {
         lastReported = outputText.length;
         await onProgress({ stage: "provider_delta", receivedCharacters: outputText.length });

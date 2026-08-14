@@ -76,6 +76,14 @@ type FetchOptions = {
   maxBytes?: number;
   maxRedirects?: number;
   wait?: (delayMs: number) => Promise<void>;
+  /**
+   * A user-initiated live lookup has a short response budget.  It still reads
+   * robots rules and rejects a disallowed path, but it must not turn a
+   * per-crawler crawl-delay into a 20+ second interactive legal answer.  The
+   * scheduled ingestion path retains the conservative default and supplies a
+   * host-paced wait function.
+   */
+  crawlDelayMode?: "wait" | "proceed";
 };
 
 type RobotsRule = {
@@ -499,7 +507,10 @@ export async function fetchLegalSource(
   options: FetchOptions,
 ): Promise<FetchedLegalSource> {
   const reference = classifyLegalSourceUrl(value);
-  if (reference.sourceKind === "advice" && !options.adviceEnabled) {
+  // Product policy is fail-closed: Advice.uz is retained only as a legacy
+  // metadata discriminator for old rows. No runtime path may read it, even if
+  // an obsolete environment flag is accidentally enabled.
+  if (reference.sourceKind === "advice") {
     throw new LegalSourceFetchError("LEGAL_SOURCE_POLICY_DISABLED", false);
   }
 
@@ -557,11 +568,8 @@ export async function fetchLegalSource(
   if (robots.crawlDelay > MAX_ROBOTS_CRAWL_DELAY_SECONDS) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_RATE_POLICY", false);
   }
-  const requestedDelaySeconds = Math.max(
-    robots.crawlDelay,
-    reference.sourceKind === "advice" ? 1 : 0,
-  );
-  if (requestedDelaySeconds > 0) {
+  const requestedDelaySeconds = robots.crawlDelay;
+  if (requestedDelaySeconds > 0 && options.crawlDelayMode !== "proceed") {
     if (!options.wait) {
       throw new LegalSourceFetchError(
         "LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED",

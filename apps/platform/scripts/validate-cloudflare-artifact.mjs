@@ -321,6 +321,12 @@ assert.deepEqual(
           max_retries: 3,
           max_concurrency: 1,
           retry_delay: 30,
+        }, {
+          queue: `${requestedEnvironment}-legal-evaluation`,
+          max_batch_size: 1,
+          max_batch_timeout: 1,
+          max_retries: 0,
+          max_concurrency: 4,
         }] : []),
       ];
     })()

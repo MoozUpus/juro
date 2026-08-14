@@ -30,15 +30,15 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
-export async function getAuthPrincipal(): Promise<AuthPrincipal | null> {
-  const sessionUser = await getSessionUser();
+export async function getAuthPrincipal(request?: Request): Promise<AuthPrincipal | null> {
+  const sessionUser = await getSessionUser(request);
   if (sessionUser) return sessionUser;
 
   const allowPlatformHeaders = process.env.NODE_ENV !== "production"
     || runtimeEnv().ALLOW_PLATFORM_AUTH_HEADERS === "true";
   if (!allowPlatformHeaders) return null;
 
-  const requestHeaders = await headers();
+  const requestHeaders = request?.headers ?? await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!email) return null;
 
@@ -73,8 +73,8 @@ export async function getAuthPrincipal(): Promise<AuthPrincipal | null> {
   };
 }
 
-export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
-  const principal = await getAuthPrincipal();
+export async function getChatGPTUser(request?: Request): Promise<ChatGPTUser | null> {
+  const principal = await getAuthPrincipal(request);
   if (!principal) return null;
   return {
     displayName: principal.displayName,

@@ -1,4 +1,6 @@
-const SOURCE_KINDS = ["lex", "advice"] as const;
+// Scheduled legal monitoring is a Lex.uz-only user-facing service. Advice.uz
+// may inform internal editorial work but must never affect monitoring health.
+const SOURCE_KINDS = ["lex"] as const;
 const STALE_AFTER_HOURS = 7 * 24;
 
 type SourceKind = (typeof SOURCE_KINDS)[number];

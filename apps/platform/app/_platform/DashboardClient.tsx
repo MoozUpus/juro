@@ -305,10 +305,13 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
 
       <section className="dashboard-continuation">
         <div className="dashboard-section-heading">
-          <h2>{copy.continueTitle}</h2>
-          <button onClick={() => { setLoading(true); void load(); }} aria-label={copy.refresh}>
-            <RotateCcw className={loading ? "spin" : ""} />
-          </button>
+          <div className="dashboard-section-title-row">
+            <h2>{copy.continueTitle}</h2>
+            <button type="button" onClick={() => { setLoading(true); void load(); }} disabled={loading} aria-label={copy.refresh}>
+              <RotateCcw className={loading ? "spin" : ""} />
+              <span>{copy.refresh}</span>
+            </button>
+          </div>
         </div>
         {loading && !data ? (
           <div className="dashboard-command-loading" role="status"><LoaderCircle className="spin" /><span>{ru ? "Загружаем рабочий контекст" : "Ish konteksti yuklanmoqda"}</span></div>

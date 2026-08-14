@@ -1,16 +1,18 @@
 # JURO AI safety
 
-Updated: 2026-07-31
+Updated: 2026-08-13
 
-Scope: implemented integration-branch controls. This file does not claim live OpenAI or Anthropic execution in staging: both secret names are present, but no authenticated synthetic provider run has been verified.
+Scope: current local release candidate. This file does not claim the 2026-08-13
+changes are live in staging until the separate deployment and authenticated QA
+gates are recorded.
 
 ## Implemented boundaries
 
 - Provider calls are server-only; provider keys are never client configuration.
 - Legal chat and document analysis accept only strict Zod-normalized output.
-- Legal source text enters a prompt only after exact official-host trust,
-  current publication/lifecycle activation, content-hash, effective-date, and
-  complete reading-row replay validation.
+- Legal source text enters a prompt only after a request-scoped direct live
+  Lex.uz fetch passes exact canonical-host/path, SSRF, redirect, robots,
+  content-type, parser, locale, structure, noise and SHA-256 gates.
 - Legal-chat and document-analysis citations must use an allowed retrieved ID,
   be unique, and form a complete reference from every legal claim to a source
   exposed in the response. Confirmed findings/deadlines and legal-compliance
@@ -18,8 +20,9 @@ Scope: implemented integration-branch controls. This file does not claim live Op
 - Provider-authored citation titles, excerpts, URLs, dates, and verification
   metadata are discarded and rebuilt from the server-retrieved source before
   persistence. Any mismatch or incomplete citation is `INVALID_AI_OUTPUT`.
-- Full database freshness requires successful corpus runs for both Lex and
-  Advice. Page-level acquisition never establishes freshness.
+- Advice.uz, local legal-corpus reads, Vectorize and embeddings are excluded
+  from interactive legal answers. Foundational act identifiers are discovery
+  metadata only and the exact Lex.uz page must still be re-fetched live.
 - `unavailable` sources cannot produce confirmed legal findings or citations.
   Chat becomes a non-chargeable clarification state; document analysis retains
   only structural findings and marks legal compliance unverified.
@@ -44,13 +47,14 @@ Scope: implemented integration-branch controls. This file does not claim live Op
 
 ## Open release gates
 
-- Staging has no complete dual-source corpus run and therefore remains
-  `unavailable` by design.
-- Live OpenAI/Anthropic execution and fallback are not proven. The staging secret names are present, but an authenticated synthetic provider/ledger test has not run.
-- Claim-to-fragment semantic entailment is not yet independently verified.
-- Hybrid Vectorize retrieval, citation semantic validation, 250+50 legal
-  scenarios, 100 document packages, 30 comparisons, and human legal review
-  thresholds remain incomplete.
+- The 314-scenario bilingual corpus, deterministic metrics and fail-closed
+  regression gate are implemented, but a passing real staging run still
+  requires all persisted outputs and named human legal reviews.
+- Claim-to-span enforcement validates exact server-fetched span IDs, hashes,
+  numeric tokens and material term overlap. Human review remains necessary for
+  legal correctness and nuanced entailment.
+- Current p50/p95 latency and cost must be measured after staging deployment;
+  local live-Lex timings are diagnostics, not fleet percentiles.
 - A real private ClamAV scanner is deployed only in staging. Its tested EICAR
   path is fail-closed: an infected upload remains unavailable and cannot reach
   an AI provider. Production does not yet have this binding or a scanner-safe

@@ -1970,7 +1970,7 @@ test("advice sync request is blocked when advice ingestion policy is off", async
     sqlite.close();
   }
 });
-test("enabled advice sync route queues canonical Uzbek Latin document URLs", async () => {
+test("obsolete Advice enable flag cannot queue a staff sync", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
   const env = {
@@ -1994,29 +1994,12 @@ test("enabled advice sync route queues canonical Uzbek Latin document URLs", asy
         now: () => REVIEW_AT,
       },
     );
-    assert.equal(response.status, 200);
-    const body = await response.json() as {
-      ok: boolean;
-      request: {
-        requestId: string;
-        sourceKind: string;
-        locale: string;
-        canonicalUrl: string;
-        status: string;
-      };
-    };
-    assert.equal(body.ok, true);
-    assert.deepEqual(body.request, {
-      requestId: body.request.requestId,
-      sourceKind: "advice",
-      locale: "uz",
-      canonicalUrl: "https://advice.uz/oz/documents/624",
-      status: "queued",
-    });
+    assert.equal(response.status, 409);
+    const body = await response.json() as { code: string };
+    assert.equal(body.code, "LEGAL_SOURCE_POLICY_DISABLED");
     assert.equal(
-      (sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox WHERE subject_id = ?")
-        .get(body.request.requestId) as { count: number }).count,
-      1,
+      (sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count,
+      0,
     );
   } finally {
     sqlite.close();

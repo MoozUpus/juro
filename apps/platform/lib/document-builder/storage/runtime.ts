@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 export interface BuilderRuntimeEnv {
   APP_ENV?: "development" | "staging" | "production";
   ASSETS?: Fetcher;
+  WORKER_VERSION?: WorkerVersionMetadata;
   DB?: D1Database;
   BUCKET?: R2Bucket;
   QUARANTINE_BUCKET?: R2Bucket;
@@ -11,6 +12,8 @@ export interface BuilderRuntimeEnv {
   ADVICE_UZ_INDEX?: VectorizeIndex;
   USER_DOCUMENTS_INDEX?: VectorizeIndex;
   EMBEDDING_MODEL?: string;
+  LEGAL_LEX_INGESTION_ENABLED?: string;
+  LEGAL_LEX_RSS_DISCOVERY_ENABLED?: string;
   LEGAL_ADVICE_INGESTION_ENABLED?: string;
   LEGAL_DIRECT_RETRIEVAL_ENABLED?: string;
   LEGAL_SOURCE_STAFF_API_ENABLED?: string;
@@ -34,6 +37,8 @@ export interface BuilderRuntimeEnv {
   TURNSTILE_SECRET_KEY?: string;
   TURNSTILE_SITE_KEY?: string;
   GUEST_AI_ENABLED?: string;
+  STAGING_LEGAL_EVALUATION_ENABLED?: string;
+  STAGING_LEGAL_EVALUATION_TOKEN?: string;
   APP_URL?: string;
   PUBLIC_SITE_URL?: string;
   ADMIN_CONSOLE_ORIGIN?: string;

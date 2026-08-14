@@ -12,6 +12,7 @@ import {
 import { sha256 } from "../lib/auth/crypto";
 import { LawyerReviewModerationServiceError, moderateLawyerReview } from "../lib/platform/lawyer-review-moderation-service";
 import { moderateLawyerProfile } from "../lib/platform/lawyer-profile-moderation-service";
+import { designateLawyerProfile, LawyerProfileDesignationError } from "../lib/platform/lawyer-profile-designation-service";
 import { transitionLawyerProfileLifecycle } from "../lib/platform/lawyer-profile-lifecycle-service";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -108,6 +109,38 @@ function seedPendingLawyerProfile(sqlite: ReturnType<typeof seed>["sqlite"]) {
       'Tashkent','Tashkent','JURO Law School','[\"chat\"]','lawyer-profiles/test/photo.webp',?,?)`,
   ).run(USER_ID, now, now);
 }
+
+test("JURO approval and Top Lawyer are independent, auditable designations", async () => {
+  const { sqlite, d1 } = seed();
+  try {
+    seedPendingLawyerProfile(sqlite);
+    await moderateLawyerProfile(d1, {
+      profileId: "pending-lawyer-profile", moderatorUserId: USER_ID, decision: "approved", reason: "Profile completeness confirmed.", now: NOW,
+    });
+    const juro = await designateLawyerProfile({
+      db: d1, profileId: "pending-lawyer-profile", moderatorUserId: USER_ID,
+      designation: "juro_approval", decision: "approved", reason: "Independent JURO quality review completed.", now: NOW.toISOString(),
+    });
+    assert.deepEqual(juro, { juroApprovalStatus: "approved", topLawyerStatus: "not_featured" });
+    const top = await designateLawyerProfile({
+      db: d1, profileId: "pending-lawyer-profile", moderatorUserId: USER_ID,
+      designation: "top_lawyer", decision: "approved", reason: "Published quality signals were reviewed.",
+      criteria: "Published moderated reviews, profile quality and reliable availability were reviewed.", now: NOW.toISOString(),
+    });
+    assert.deepEqual(top, { juroApprovalStatus: "approved", topLawyerStatus: "featured" });
+    const profile = sqlite.prepare("SELECT juro_approval_status AS juroApprovalStatus,top_lawyer_status AS topLawyerStatus,top_lawyer_criteria AS criteria FROM lawyer_profiles WHERE id='pending-lawyer-profile'").get() as { juroApprovalStatus: string; topLawyerStatus: string; criteria: string };
+    assert.equal(profile.juroApprovalStatus, "approved");
+    assert.equal(profile.topLawyerStatus, "featured");
+    assert.match(profile.criteria, /Published moderated reviews/);
+    assert.equal((sqlite.prepare("SELECT count(*) AS count FROM lawyer_profile_trust_designations").get() as { count: number }).count, 2);
+    await assert.rejects(
+      designateLawyerProfile({ db: d1, profileId: "pending-lawyer-profile", moderatorUserId: USER_ID, designation: "juro_approval", decision: "approved", reason: "Duplicate." }),
+      (error: unknown) => error instanceof LawyerProfileDesignationError && error.code === "DESIGNATION_STATE_CONFLICT",
+    );
+  } finally {
+    sqlite.close();
+  }
+});
 
 test("admin-domain ticket persists only a hash and creates an append-only audit event", async () => {
   const { sqlite, d1 } = seed();
@@ -365,8 +398,10 @@ test("restricted lawyer lifecycle is append-only, blocks work, and restores only
 });
 
 test("admin handoff route requires same-origin write protection and current MFA", async () => {
-  const [route, migration, internal, adminWorker, reviewService, platformWorker, platformConfig, adminConfig] = await Promise.all([
+  const [route, launchPage, accessPage, migration, internal, adminWorker, reviewService, platformWorker, platformConfig, adminConfig] = await Promise.all([
     readFile(new URL("../app/api/platform/admin/handoff/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/[locale]/admin/console/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_staff/AdminConsoleAccess.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0109_admin_domain_handoff_sessions.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/auth/admin-internal-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../../admin/src/worker.ts", import.meta.url), "utf8"),
@@ -380,6 +415,13 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(route, /freshMfaWithinMs: 15 \* 60 \* 1_000/u);
   assert.match(route, /ADMIN_CONSOLE_ORIGIN/u);
   assert.match(route, /referrer-policy.*no-referrer/u);
+  assert.match(launchPage, /freshMfaWithinMs: 15 \* 60 \* 1_000/u);
+  assert.match(launchPage, /AdminConsoleAccess/u);
+  assert.match(launchPage, /runtime\.APP_ENV === "production"/u);
+  assert.doesNotMatch(launchPage, /catch\s*\{\s*notFound\(\)/u);
+  assert.match(accessPage, /15 минут/u);
+  assert.match(accessPage, /auth\/login\?returnTo=/u);
+  assert.match(accessPage, /environment === "production" \? "JURO · ADMIN" : "JURO · STAGING ADMIN"/u);
   assert.match(migration, /admin_handoff_tickets/u);
   assert.match(migration, /admin_domain_sessions/u);
   assert.match(migration, /admin_domain_audit_events_no_(?:update|delete)/u);

@@ -151,6 +151,22 @@ test("AI document confirmation rejects fields not offered by the server without 
   } finally { sqlite.close(); }
 });
 
+test("AI document confirmation requires a separate consent for selected sensitive values", async () => {
+  const { sqlite, d1 } = seed(PREFILL_TEMPLATE.code);
+  try {
+    const preview = await previewAiSuggestedDocument({ db: d1, workspaceId: WORKSPACE_ID, user: USER, assistantMessageId: ASSISTANT_MESSAGE_ID, locale: "ru" });
+    const sensitive = preview.candidates.find((candidate) => candidate.sensitive);
+    if (!sensitive) throw new Error("Expected a sensitive prefill candidate");
+    const input = { db: d1, workspaceId: WORKSPACE_ID, user: USER, assistantMessageId: ASSISTANT_MESSAGE_ID, locale: "ru" as const, fields: [{ fieldId: sensitive.fieldId, value: sensitive.value }], idempotencyKey: "ai-document-sensitive-consent-0001" };
+    await assert.rejects(
+      () => createAiSuggestedDocumentDraft(input),
+      (error: unknown) => error instanceof AiSuggestedDocumentError && error.code === "AI_SUGGESTED_DOCUMENT_SENSITIVE_CONSENT_REQUIRED",
+    );
+    const created = await createAiSuggestedDocumentDraft({ ...input, sensitiveDataConsent: true });
+    assert.equal(created.replayed, false);
+  } finally { sqlite.close(); }
+});
+
 test("AI document handoff rejects foreign workspaces and unavailable model template codes", async () => {
   const foreign = seed();
   try {

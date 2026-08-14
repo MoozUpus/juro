@@ -383,7 +383,7 @@ test("auth locale links retain the canonical locale URL and query string", async
 
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
   const source = await readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
-  assert.ok(source.indexOf("const sessionUser = await getSessionUser()") < source.indexOf("const requestHeaders = await headers()"));
+  assert.ok(source.indexOf("const sessionUser = await getSessionUser(request)") < source.indexOf("const requestHeaders = request?.headers ?? await headers()"));
   assert.match(source, /ALLOW_PLATFORM_AUTH_HEADERS/);
   assert.match(source, /NODE_ENV !== "production"/);
   assert.match(source, /authSource: "platform_header"/);
@@ -978,7 +978,7 @@ test("AI conversations and facts remain owner-scoped inside a tenant", async () 
   ]);
   assert.match(conversationRoute, /owner_user_id=\?/);
   assert.match(conversationRoute, /c\.owner_user_id=\?/);
-  assert.match(conversationRoute, /verifiedRetrievalErrorCodes: retrieval\.errors\.map/);
+  assert.match(conversationRoute, /liveLexRetrievalErrorCodes: retrieval\.errors\.map/);
   assert.match(factRoute, /conversations WHERE workspace_id=\? AND owner_user_id=\?/);
   assert.doesNotMatch(conversationRoute, /WHERE workspace_id=\?\s+ORDER BY updated_at/s);
 });
@@ -1058,22 +1058,18 @@ test("billing exposes only the gated Payment foundation and never treats credent
   assert.doesNotMatch(client + createRoute, /providerPaymentId.*success|status:\s*["']paid["']/i);
 });
 
-test("legislation monitoring never auto-publishes or invents feed entries", async () => {
+test("legislation monitoring exposes only fresh official Lex metadata and does not use a local review corpus", async () => {
   const source = await readFile(new URL("../app/api/platform/monitoring/route.ts", import.meta.url), "utf8");
-  assert.match(source, /u\.status='published_verified'/);
-  assert.match(source, /u\.verified_at IS NOT NULL/);
-  assert.match(source, /s\.status='verified'/);
-  assert.match(source, /s\.verification_state='verified'/);
-  assert.match(source, /s\.content_sha256 IS NOT NULL/);
-  assert.match(source, /automaticPublication: false/);
-  assert.match(source, /isTrustedVerifiedLegalSource/);
-  assert.match(source, /isFreshTrustedMonitoringSource/);
-  assert.match(source, /controlledBeta: true/);
-  assert.match(source, /summarizeMonitoringFreshness/);
-  assert.match(source, /trustedSourceStatusRows\.length/);
+  assert.match(source, /legal_monitoring_metadata/);
+  assert.match(source, /legal_monitoring_change_events/);
+  assert.match(source, /http_status BETWEEN 200 AND 299/);
+  assert.match(source, /summarizeLexMetadataMonitoringFreshness/);
+  assert.match(source, /automaticPublication: true/);
+  assert.match(source, /controlledBeta: false/);
+  assert.doesNotMatch(source, /published_verified|verification_state|content_sha256|pending_review/);
 });
 
-test("monitoring stays explicitly beta and saves interests without implying delivery", async () => {
+test("monitoring keeps delivery disabled until a fresh Lex metadata run is available", async () => {
   const [shell, client] = await Promise.all([
     readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/MonitoringClient.tsx", import.meta.url), "utf8"),

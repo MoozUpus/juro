@@ -89,10 +89,6 @@ export type LegalSourceAcquisitionResult = {
   changed: boolean;
 };
 
-function adviceEnabled(value: string): boolean {
-  return value === "true";
-}
-
 async function sha256Text(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -176,9 +172,7 @@ export async function createLegalSourceFetchRequest(
   const parsed = createRequestSchema.parse(input);
   const environment = environmentSchema.parse(env.APP_ENV);
   const reference = classifyLegalSourceUrl(parsed.url);
-  if (reference.sourceKind === "advice" && !adviceEnabled(
-    env.LEGAL_ADVICE_INGESTION_ENABLED,
-  )) {
+  if (reference.sourceKind === "advice") {
     throw new LegalSourceAcquisitionError(
       "LEGAL_SOURCE_POLICY_DISABLED",
       false,
@@ -839,7 +833,7 @@ export async function executeLegalSourceFetchRequest(
       }
     });
     const fetched = await fetchLegalSource(request.requested_url, {
-      adviceEnabled: adviceEnabled(env.LEGAL_ADVICE_INGESTION_ENABLED),
+      adviceEnabled: false,
       fetchImpl: dependencies.fetchImpl,
       now: dependencies.now,
       wait: reserve,

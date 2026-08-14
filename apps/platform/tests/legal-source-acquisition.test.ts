@@ -260,62 +260,18 @@ test("Crawl-delay uses a fenced D1 window instead of sleeping in the Worker", as
   }
 });
 
-test("enabled Advice acquisition persists an unverified Uzbek Latin snapshot request", async () => {
+test("obsolete Advice enable flag cannot queue or persist a snapshot", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
   const env = envFixture(d1, bucket, "true");
   try {
-    const request = await createLegalSourceFetchRequest(env, {
+    await assert.rejects(() => createLegalSourceFetchRequest(env, {
       url: "https://www.advice.uz/oz/documents/624/",
       idempotencyKey: "advice_enabled_624",
-    });
-    const waits: number[] = [];
-    const result = await executeLegalSourceFetchRequest(env, request.id, {
-      fetchImpl: sourceFetch([robots(), sourceHtml()]),
-      wait: async (delayMs) => { waits.push(delayMs); },
-      now: () => new Date("2026-07-31T01:00:00.000Z"),
-    });
-
-    assert.deepEqual(waits, [1_000]);
-    assert.match(result.rawObjectKey, /^legal-sources\/raw\/advice\/uz\//);
-    assert.equal(bucket.objects.has(result.rawObjectKey), true);
-    assert.deepEqual(
-      { ...sqlite.prepare(`
-        SELECT canonical_id, official_url, act_title, locale, source_type,
-               status, verification_state, verified_at
-        FROM legal_sources WHERE id = ?
-      `).get(result.sourceId) as Record<string, unknown> },
-      {
-        canonical_id: "624",
-        official_url: "https://advice.uz/oz/documents/624",
-        act_title: "Advice.uz — scenario 624",
-        locale: "uz",
-        source_type: "advice",
-        status: "pending_review",
-        verification_state: "fetched",
-        verified_at: null,
-      },
-    );
-    assert.deepEqual(
-      sqlite.prepare(`
-        SELECT job_type FROM job_outbox WHERE subject_id IN (?, ?)
-        ORDER BY job_type
-      `).all(request.id, result.versionId).map((row) =>
-        (row as { job_type: string }).job_type
-      ),
-      ["legal.parse", "legal.sync"],
-    );
-    assert.deepEqual(
-      { ...sqlite.prepare(`
-        SELECT status, confidence, reason_code
-        FROM legal_review_queue WHERE version_id = ?
-      `).get(result.versionId) as Record<string, unknown> },
-      {
-        status: "pending",
-        confidence: "low",
-        reason_code: "new_source_version",
-      },
-    );
+    }), (error: unknown) => error instanceof LegalSourceAcquisitionError
+      && error.code === "LEGAL_SOURCE_POLICY_DISABLED");
+    assert.equal(bucket.putCalls, 0);
+    assert.equal((sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 0);
   } finally {
     sqlite.close();
   }
@@ -527,8 +483,8 @@ test("the legal.sync queue handler executes the persisted request contract", asy
       ...acquisitionEnv,
       ASYNC_RUNTIME_ENABLED: "true",
       CRON_ENABLED: "false",
-      // This contract covers the explicitly enabled legacy migration path.
-      LEGAL_ADVICE_INGESTION_ENABLED: "true",
+      // User-facing legal processing is Lex-only.
+      LEGAL_LEX_INGESTION_ENABLED: "true",
       JOB_SCHEMA_VERSION: "1",
       PLATFORM_ANALYTICS: { writeDataPoint() {} },
     } as unknown as PlatformJobEnv;

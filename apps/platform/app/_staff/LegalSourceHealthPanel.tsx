@@ -8,7 +8,7 @@ type Health = {
   state: "fresh" | "degraded" | "stale" | "unknown";
   checkedAt: string | null;
   sources: Array<{
-    sourceKind: "lex" | "advice";
+    sourceKind: "lex";
     status: "healthy" | "unavailable";
     checkedAt: string;
     latencyMs: number;
@@ -95,7 +95,7 @@ export function LegalSourceHealthPanel({ locale }: { locale: Locale }) {
         <div><b>{stateLabel}</b><small>{l.last}: {date(health?.checkedAt ?? null)}</small></div>
       </div>
       {(health?.sources ?? []).map((source) => <div key={source.sourceKind}>
-        <span>{source.sourceKind === "lex" ? "lex.uz" : "advice.uz"}</span>
+        <span>lex.uz</span>
         <b>{source.status}</b>
         <small>{date(source.checkedAt)} · {l.latency}: {source.latencyMs} ms{source.errorCode ? ` · ${source.errorCode}` : ""}</small>
       </div>)}

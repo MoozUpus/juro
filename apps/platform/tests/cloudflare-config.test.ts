@@ -143,12 +143,20 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       "false",
     );
     assert.equal(
+      config.vars.LEGAL_LEX_INGESTION_ENABLED,
+      "false",
+    );
+    assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
       "true",
     );
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
-      "false",
+      "true",
+    );
+    assert.equal(
+      config.vars.LEGAL_LEX_METADATA_MONITOR_ENABLED,
+      "true",
     );
     assert.equal(
       config.vars.LEGAL_SOURCE_STAFF_API_ENABLED,
@@ -385,6 +393,12 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
               max_retries: 3,
               max_concurrency: 1,
               retry_delay: 30,
+            }, {
+              queue: "staging-legal-evaluation",
+              max_batch_size: 1,
+              max_batch_timeout: 1,
+              max_retries: 0,
+              max_concurrency: 4,
             }]
             : []),
         ]
@@ -531,7 +545,7 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
   assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
   assert.equal(source.env.production.queues.consumers.length, 12);
-  assert.equal(source.env.staging.queues.consumers.length, 13);
+  assert.equal(source.env.staging.queues.consumers.length, 14);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
     [
@@ -548,6 +562,7 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
       "staging-malware-scan",
       "staging-malware-scan-dlq",
       "staging-queue-health",
+      "staging-legal-evaluation",
     ],
   );
   assert.deepEqual(

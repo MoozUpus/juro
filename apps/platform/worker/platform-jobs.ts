@@ -286,12 +286,12 @@ export type PlatformJobEnv = Omit<
   Env,
   | "ASYNC_RUNTIME_ENABLED"
   | "CRON_ENABLED"
-  | "LEGAL_ADVICE_INGESTION_ENABLED"
+  | "LEGAL_LEX_INGESTION_ENABLED"
   | PlatformQueueBinding
 > & QueueBindingEnv & {
   ASYNC_RUNTIME_ENABLED: string;
   CRON_ENABLED: string;
-  LEGAL_ADVICE_INGESTION_ENABLED: string;
+  LEGAL_LEX_INGESTION_ENABLED: string;
   LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED?: string;
   LEGAL_LEX_RSS_DISCOVERY_ENABLED?: string;
   ACCOUNT_DELETION_PURGE_ENABLED: string;
@@ -305,6 +305,7 @@ export type PlatformJobEnv = Omit<
   STAGING_SYNTHETIC_PROBES_ENABLED?: string;
   STAGING_QUEUE_HEALTH_PROBE_ENABLED?: string;
   STAGING_QUEUE_HEALTH_PROBE_QUEUE?: Queue<unknown>;
+  STAGING_LEGAL_EVALUATION_ENABLED?: string;
   STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED?: string;
   MALWARE_SCANNER?: Fetcher;
   MALWARE_SCAN_ENABLED?: string;
@@ -907,10 +908,9 @@ async function executeJob(
   }
   if (envelope.kind === "legal.sync") {
     const startedAt = Date.now();
-    // Direct Lex/Advice retrieval is the active legal-source path. Legacy
-    // corpus jobs must be terminal when ingestion is disabled, including a
-    // message that was already present in a queue before the mode changed.
-    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+    // Corpus processing is Lex-only. A queued job from before a disabled
+    // deployment must be terminal rather than becoming false health evidence.
+    if (env.LEGAL_LEX_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {
@@ -942,7 +942,7 @@ async function executeJob(
   }
   if (envelope.kind === "legal.parse") {
     const startedAt = Date.now();
-    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+    if (env.LEGAL_LEX_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {
@@ -974,7 +974,7 @@ async function executeJob(
   }
   if (envelope.kind === "legal.index") {
     const startedAt = Date.now();
-    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+    if (env.LEGAL_LEX_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {

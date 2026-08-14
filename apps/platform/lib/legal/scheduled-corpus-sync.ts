@@ -1,16 +1,18 @@
 import { createLegalSourceFetchRequest, type LegalSourceAcquisitionEnv } from "./source-acquisition";
 import {
-  discoverAdviceSitemapDocuments,
   discoverLexRssDocuments,
   LegalSourceDiscoveryError,
 } from "./source-discovery";
 
 export const LEGAL_CORPUS_SYNC_CRON = "0 19 * * *";
 const MAX_SOURCES_PER_KIND = 100;
-const MAX_DISCOVERED_ADVICE_SOURCES = 20;
 const STALE_FETCH_RECOVERY_MS = 15 * 60 * 1_000;
 const STALE_FETCH_RECOVERY_BATCH_SIZE = 1;
 const LEX_PDF_NORMALIZATION_RECOVERY_BATCH_SIZE = 1;
+// A single daily run must never retain the partial unique lock indefinitely.
+// Pending queue deliveries remain idempotent, but an abandoned run is terminal
+// evidence and the next scheduled or staff-triggered Lex run can proceed.
+const STALE_CORPUS_RUN_MS = 6 * 60 * 60 * 1_000;
 
 type SourceKind = "lex" | "advice";
 type Candidate = { officialUrl: string; locale: "ru" | "uz"; canonicalId: string };
@@ -42,41 +44,45 @@ async function sha256Text(value: string): Promise<string> {
 
 export async function startScheduledCorpusSync(
   env: LegalSourceAcquisitionEnv & {
+    LEGAL_LEX_INGESTION_ENABLED?: string;
     LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED?: string;
     LEGAL_LEX_RSS_DISCOVERY_ENABLED?: string;
   },
   options: {
     now?: Date;
-    discoverAdvice?: () => Promise<DiscoveryCandidate[]>;
     discoverLex?: () => Promise<DiscoveryCandidate[]>;
     discoveryWait?: (delayMs: number) => Promise<void>;
+    runType?: "scheduled_corpus" | "manual_corpus";
+    runId?: string;
   } = {},
 ): Promise<ScheduledCorpusSyncSummary> {
-  // The queue consumer rejects all legacy corpus jobs while ingestion is
-  // disabled. Do not create source-run or outbox records that it can only
-  // reject later; no result is health evidence while the feature is dormant.
-  if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+  // Monitoring is intentionally Lex-only. Advice.uz may remain internal
+  // editorial research, but it must never drive a user-facing legal feed.
+  // Do not create source-run or outbox records while the Lex consumer is
+  // disabled: a dormant run is not health evidence.
+  if (env.LEGAL_LEX_INGESTION_ENABLED !== "true") {
     return { started: 0, busy: 0, empty: 0 };
   }
   const now = options.now ?? new Date();
   const timestamp = now.toISOString();
+  const runType = options.runType ?? "scheduled_corpus";
   let started = 0;
   let busy = 0;
   let empty = 0;
-  for (const kind of ["lex", "advice"] as const) {
-    const runId = sourceRunId(kind, now);
-    const lockKey = `${env.APP_ENV}:${kind}:scheduled_corpus`;
+  for (const kind of ["lex"] as const) {
+    const runId = options.runId ?? sourceRunId(kind, now);
+    const lockKey = `${env.APP_ENV}:${kind}:${runType}`;
     const created = await env.DB.prepare(`
       INSERT INTO source_sync_runs (
         id,environment,source_kind,run_type,status,lock_key,
         discovered_count,fetched_count,changed_count,verified_count,error_count,
         started_at,finished_at,error_summary,created_at,updated_at
-      ) VALUES (?,?,?,'scheduled_corpus',?,?,?,0,0,0,0,?,NULL,NULL,?,?)
+      ) VALUES (?,?,?,?,?,?,0,0,0,0,0,?,NULL,NULL,?,?)
       ON CONFLICT DO NOTHING
     `).bind(
-      runId, env.APP_ENV, kind,
+      runId, env.APP_ENV, kind, runType,
       "running",
-      lockKey, 0, timestamp, timestamp, timestamp,
+      lockKey, timestamp, timestamp, timestamp,
     ).run();
     if (Number(created.meta.changes ?? 0) !== 1) {
       busy += 1;
@@ -93,32 +99,19 @@ export async function startScheduledCorpusSync(
       `).bind(kind, MAX_SOURCES_PER_KIND).all<Candidate>();
       let discoveryError: string | null = null;
       let discovered: DiscoveryCandidate[] = [];
-      const discoveryEnabled = kind === "lex"
-        ? env.LEGAL_LEX_RSS_DISCOVERY_ENABLED === "true"
-        : env.LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED === "true";
+      const discoveryEnabled = env.LEGAL_LEX_RSS_DISCOVERY_ENABLED === "true";
       if (discoveryEnabled) {
         try {
-          const discovery = kind === "lex"
-            ? options.discoverLex
-              ? await options.discoverLex()
-              : (await discoverLexRssDocuments({
-                maxDocuments: 40,
-                wait: options.discoveryWait,
-              })).candidates.map((candidate) => ({
-                officialUrl: candidate.canonicalUrl,
-                locale: candidate.locale,
-                canonicalId: candidate.canonicalId,
-              }))
-            : options.discoverAdvice
-              ? await options.discoverAdvice()
-              : (await discoverAdviceSitemapDocuments({
-                maxDocuments: MAX_DISCOVERED_ADVICE_SOURCES,
-                wait: options.discoveryWait,
-              })).candidates.map((candidate) => ({
-                officialUrl: candidate.canonicalUrl,
-                locale: candidate.locale,
-                canonicalId: candidate.canonicalId,
-              }));
+          const discovery = options.discoverLex
+            ? await options.discoverLex()
+            : (await discoverLexRssDocuments({
+              maxDocuments: 40,
+              wait: options.discoveryWait,
+            })).candidates.map((candidate) => ({
+              officialUrl: candidate.canonicalUrl,
+              locale: candidate.locale,
+              canonicalId: candidate.canonicalId,
+            }));
           discovered = discovery;
         } catch (error) {
           discoveryError = error instanceof LegalSourceDiscoveryError
@@ -165,16 +158,34 @@ export async function startScheduledCorpusSync(
 
 export async function reconcileScheduledCorpusSyncRuns(
   env: Pick<LegalSourceAcquisitionEnv, "APP_ENV" | "DB">,
-  options: { now?: Date } = {},
+  options: { now?: Date; staleAfterMs?: number } = {},
 ): Promise<number> {
-  const now = (options.now ?? new Date()).toISOString();
+  const currentTime = options.now ?? new Date();
+  const now = currentTime.toISOString();
+  const staleAfterMs = Math.max(60_000, Math.trunc(
+    options.staleAfterMs ?? STALE_CORPUS_RUN_MS,
+  ));
+  const staleBefore = new Date(currentTime.getTime() - staleAfterMs).toISOString();
+  const expired = await env.DB.prepare(`
+    UPDATE source_sync_runs
+    SET status='failed',
+        error_count=CASE WHEN error_count < 1 THEN 1 ELSE error_count END,
+        finished_at=?,
+        error_summary='LEGAL_SOURCE_CORPUS_STALE',
+        updated_at=?
+    WHERE environment=?
+      AND source_kind='lex'
+      AND run_type IN ('scheduled_corpus','manual_corpus')
+      AND status='running'
+      AND started_at<=?
+  `).bind(now, now, env.APP_ENV, staleBefore).run();
   const runs = await env.DB.prepare(`
     SELECT id,source_kind AS sourceKind,discovered_count AS discoveredCount
     FROM source_sync_runs
-    WHERE environment=? AND run_type='scheduled_corpus' AND status='running'
+    WHERE environment=? AND run_type IN ('scheduled_corpus','manual_corpus') AND status='running'
     ORDER BY started_at ASC LIMIT 8
   `).bind(env.APP_ENV).all<{ id: string; sourceKind: SourceKind; discoveredCount: number }>();
-  let completed = 0;
+  let completed = Number(expired.meta.changes ?? 0);
   for (const run of runs.results) {
     const status = await env.DB.prepare(`
       SELECT
@@ -286,7 +297,7 @@ export async function recoverStaleScheduledCorpusFetchRequests(
       AND request.status='retrying'
       AND request.updated_at<=?
       AND run.environment=?
-      AND run.run_type='scheduled_corpus'
+      AND run.run_type IN ('scheduled_corpus','manual_corpus')
       AND run.status='running'
       AND job.status='retrying'
       AND job.next_attempt_at IS NOT NULL

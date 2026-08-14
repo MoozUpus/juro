@@ -1,5 +1,6 @@
 import { access, cp, mkdir, rename, rm } from "node:fs/promises";
 import { resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
 import type { Plugin } from "vite";
 
 async function exists(path: string): Promise<boolean> {
@@ -11,6 +12,28 @@ async function exists(path: string): Promise<boolean> {
       return false;
     }
     throw error;
+  }
+}
+
+async function replaceArtifactDirectory(stagingDirectory: string, outputDirectory: string): Promise<void> {
+  const maxAttempts = 6;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    await rm(outputDirectory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+
+    try {
+      await rename(stagingDirectory, outputDirectory);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const retryable = code === "EBUSY" || code === "ENOTEMPTY" || code === "EPERM";
+
+      if (!retryable || attempt === maxAttempts) {
+        throw error;
+      }
+
+      await delay(attempt * 125);
+    }
   }
 }
 
@@ -46,8 +69,7 @@ export function sites(): Plugin {
           recursive: true,
         });
       }
-      await rm(outputDirectory, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
-      await rename(stagingDirectory, outputDirectory);
+      await replaceArtifactDirectory(stagingDirectory, outputDirectory);
     },
   };
 }

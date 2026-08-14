@@ -5,7 +5,6 @@ export type LegalSemanticSearchEnv = {
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
   LEX_UZ_INDEX?: VectorizeIndex;
-  ADVICE_UZ_INDEX?: VectorizeIndex;
 };
 
 export type LegalSemanticSearchResult = {
@@ -26,13 +25,12 @@ const embeddingPayloadSchema = z.object({
 
 function configured(env: LegalSemanticSearchEnv): env is Required<Pick<
   LegalSemanticSearchEnv,
-  "APP_ENV" | "OPENAI_API_KEY" | "LEX_UZ_INDEX" | "ADVICE_UZ_INDEX"
+  "APP_ENV" | "OPENAI_API_KEY" | "LEX_UZ_INDEX"
 >> & LegalSemanticSearchEnv {
   return Boolean(
     env.APP_ENV
     && env.OPENAI_API_KEY
-    && env.LEX_UZ_INDEX
-    && env.ADVICE_UZ_INDEX,
+    && env.LEX_UZ_INDEX,
   );
 }
 
@@ -78,18 +76,11 @@ export async function semanticLegalChunkRanks(
   if (!embedding) return { status: "failed", vectorRanks: new Map() };
   try {
     const filter = { environment: env.APP_ENV, language: locale };
-    const results = await Promise.all([
-      env.LEX_UZ_INDEX.query(embedding, {
-        topK: MAX_VECTOR_RESULTS_PER_INDEX,
-        returnMetadata: "indexed",
-        filter,
-      }),
-      env.ADVICE_UZ_INDEX.query(embedding, {
-        topK: MAX_VECTOR_RESULTS_PER_INDEX,
-        returnMetadata: "indexed",
-        filter,
-      }),
-    ]);
+    const results = [await env.LEX_UZ_INDEX.query(embedding, {
+      topK: MAX_VECTOR_RESULTS_PER_INDEX,
+      returnMetadata: "indexed",
+      filter,
+    })];
     const ranks = new Map<string, number>();
     let rank = 0;
     for (const result of results) {

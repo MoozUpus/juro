@@ -24,7 +24,7 @@ export const GET = withApiErrors(async function GET() {
       f.id AS fileId,f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,
       (SELECT json_group_array(json_object('id',r.id,'level',r.level,'title',r.title,'description',r.description,'excerpt',r.excerpt,'confidencePercent',r.confidence_percent,'riskType',r.risk_type,'clause',r.clause,'page',r.page,'recommendation',r.recommendation,'proposedWording',r.proposed_wording,'legalBasisSourceIds',json(r.legal_basis_source_ids_json)))
        FROM document_risks r WHERE r.analysis_id=a.id) AS risksJson,
-      (SELECT json_group_array(json_object('id',e.id,'status',e.status,'format',e.format,'variant',e.variant,'sourceVersionId',e.sourceVersionId,'fileName',e.fileName,'sizeBytes',e.sizeBytes,'errorCode',e.errorCode,'completedAt',e.completedAt,'createdAt',e.createdAt))
+       (SELECT json_group_array(json_object('id',e.id,'status',e.status,'format',e.format,'variant',e.variant,'sourceVersionId',e.sourceVersionId,'fileName',e.fileName,'sizeBytes',e.sizeBytes,'errorCode',e.errorCode,'completedAt',e.completedAt,'createdAt',e.createdAt))
        FROM (
          SELECT id,status,format,'analysis_report' AS variant,NULL AS sourceVersionId,file_name AS fileName,
            size_bytes AS sizeBytes,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
@@ -33,7 +33,9 @@ export const GET = withApiErrors(async function GET() {
          SELECT id,status,format,variant,source_version_id AS sourceVersionId,file_name AS fileName,
            size_bytes AS sizeBytes,error_code AS errorCode,completed_at AS completedAt,created_at AS createdAt
          FROM analysis_report_exports WHERE analysis_id=a.id AND workspace_id=a.workspace_id AND owner_user_id=a.owner_user_id
-       ) e) AS exportsJson
+        ) e) AS exportsJson,
+       (SELECT json_group_array(json_object('id',v.id,'documentVersionId',v.document_version_id,'lawyerUserId',v.lawyer_user_id,'status',v.status,'comment',v.comment,'verifiedAt',v.verified_at,'invalidatedAt',v.invalidated_at))
+          FROM document_analysis_lawyer_verifications v WHERE v.analysis_id=a.id) AS lawyerVerificationsJson
      FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id
      WHERE a.workspace_id=? AND a.owner_user_id=? ORDER BY a.created_at DESC LIMIT 50`,
     ).bind(workspace.id, user.id),
@@ -46,8 +48,8 @@ export const GET = withApiErrors(async function GET() {
   return response({
     analyses: analysisRows.results.map(row => {
       const item = row as Record<string, unknown>;
-      const { summaryJson, risksJson, exportsJson, retryExhausted, ...publicItem } = item;
-      return { ...publicItem, retryExhausted: Number(retryExhausted) === 1, summary: parseJson(String(summaryJson || "{}"), null), risks: parseJson(String(risksJson || "[]"), []), exports: parseJson(String(exportsJson || "[]"), []) };
+       const { summaryJson, risksJson, exportsJson, lawyerVerificationsJson, retryExhausted, ...publicItem } = item;
+       return { ...publicItem, retryExhausted: Number(retryExhausted) === 1, summary: parseJson(String(summaryJson || "{}"), null), risks: parseJson(String(risksJson || "[]"), []), exports: parseJson(String(exportsJson || "[]"), []), lawyerVerifications: parseJson(String(lawyerVerificationsJson || "[]"), []) };
     }),
     cases: caseRows.results,
   });

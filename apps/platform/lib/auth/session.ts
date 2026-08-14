@@ -29,9 +29,9 @@ export type SessionUser = {
   mfaVerifiedAt: string | null;
 };
 
-export async function getSessionUser(): Promise<SessionUser | null> {
+export async function getSessionUser(request?: Request): Promise<SessionUser | null> {
   try {
-    const requestHeaders = await headers();
+    const requestHeaders = request?.headers ?? await headers();
     const session = await localSessionFromCookie(
       requireD1(),
       requestHeaders.get("cookie"),

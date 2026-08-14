@@ -28,9 +28,9 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
-  retrieveInteractiveVerifiedLegalSources,
-  unavailableInteractiveVerifiedLegalRetrieval,
-} from "../../../../lib/legal/interactive-verified-retrieval";
+  retrieveLiveLexSources,
+} from "../../../../lib/legal/live-lex-retrieval";
+import { directSourceCards } from "../../../../lib/legal/direct-retrieval";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
   AI_INTERACTIVE_FINALIZATION_RESERVE_MS,
@@ -149,7 +149,7 @@ async function recordGuestAiSlo(input: {
     const telemetry = input.telemetry;
     const snapshot = telemetry.budget.snapshot();
     const stage = (name: string) => snapshot.stages.find((timing) => timing.stage === name);
-    const retrieval = stage("verified_retrieval");
+    const retrieval = stage("live_lex_retrieval");
     const provider = stage("provider_execution");
     const validation = stage("validation");
     const persistence = stage("persistence");
@@ -427,9 +427,9 @@ export async function POST(request: Request): Promise<Response> {
       question: parsed.data.question,
       locale,
     });
-    // Guest chat follows the same trust and latency boundary as authenticated
-    // chat: only locally verified D1 material may enter a legal prompt. No
-    // live Lex/Advice fetch is allowed on this interactive request path.
+    // Guest chat follows the same Lex-only, query-scoped boundary as the
+    // authenticated product route. No D1 corpus, Vectorize or editorial queue
+    // may enter this legal prompt.
     const configuredProvider = provider.name === "anthropic" ? "anthropic" : "openai";
     const configuredModel = providerStatus.model;
     budget = createAiExecutionBudget({ callerSignal: request.signal });
@@ -447,20 +447,19 @@ export async function POST(request: Request): Promise<Response> {
       fallbackFromProvider: null,
     };
     let retrieval;
-    const retrievalStage = budget.beginStage("verified_retrieval", { timeoutMs: 2_250 });
+    const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 2_900 });
     try {
-      retrieval = await retrieveInteractiveVerifiedLegalSources({
-        db,
+      retrieval = await retrieveLiveLexSources({
         query: effectiveQuestion,
         locale,
-        applicableAt: applicableAt ?? undefined,
         signal: retrievalStage.signal,
-        limit: 1,
+        limit: 2,
+        budgetMs: 2_750,
       });
       retrievalStage.complete();
     } catch {
       retrievalStage.fail();
-      retrieval = unavailableInteractiveVerifiedLegalRetrieval("VERIFIED_RETRIEVAL_TIMEOUT");
+      retrieval = await retrieveLiveLexSources({ query: "", locale, limit: 1, budgetMs: 1 });
     }
     const requestHash = await sha256Json({
       question: effectiveQuestion,
@@ -571,21 +570,11 @@ export async function POST(request: Request): Promise<Response> {
         ),
       );
       const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
-      // Verified source cards come from the server-validated corpus, not
+      // Lex cards come from a technically validated live fetch, not
       // from a model claim. This preserves the empty-claim safety boundary.
       const returnedSources = bounded.sources.length > 0
         ? bounded.sources
-        : retrieval.sources.map((source) => ({
-          sourceId: source.id,
-          actTitle: source.actTitle,
-          actIdentifier: source.actIdentifier,
-          article: source.article ?? null,
-          excerpt: source.excerpt ?? null,
-          originalUrl: source.officialUrl,
-          status: source.applicabilityStatus ?? "current" as const,
-          effectiveDate: source.effectiveDate ?? null,
-          verifiedAt: source.verifiedAt,
-        }));
+        : directSourceCards(retrieval.sources);
       result = enforceLegalDatabaseFreshness({
         ...bounded,
         sources: returnedSources.map((reference) => {
@@ -681,7 +670,7 @@ export async function POST(request: Request): Promise<Response> {
           citations: result.sources,
           guestRunId: reservation.run.id,
           now: new Date().toISOString(),
-          sourceAccessMode: "approved_package",
+          sourceAccessMode: "direct",
         }),
       });
       persistenceStage.complete();

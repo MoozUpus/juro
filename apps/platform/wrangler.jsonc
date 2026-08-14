@@ -21,10 +21,12 @@
     "PAYMENT_SANDBOX_ENABLED": "true",
     "PAYMENT_PRODUCTION_APPROVED": "false",
     "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
+    "LEGAL_LEX_INGESTION_ENABLED": "false",
+    "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
     "LEGAL_ADVICE_INGESTION_ENABLED": "false",
     "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
     "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-    "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
+    "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
     "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
     "LAWYER_PROFILE_DIRECTORY_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
@@ -150,6 +152,9 @@
       "assets": {
         "binding": "ASSETS"
       },
+      "version_metadata": {
+        "binding": "WORKER_VERSION"
+      },
       "triggers": {
         "crons": ["*/5 * * * *", "0 19 * * *"]
       },
@@ -163,16 +168,19 @@
         "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "true",
+        "STAGING_LEGAL_EVALUATION_ENABLED": "true",
         "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "true",
         "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "true",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
+        "LEGAL_LEX_INGESTION_ENABLED": "false",
+        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
+        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "legacy",
@@ -407,6 +415,13 @@
             "max_retries": 3,
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "staging-legal-evaluation",
+            "max_batch_size": 1,
+            "max_batch_timeout": 1,
+            "max_retries": 0,
+            "max_concurrency": 4
           }
         ]
       },
@@ -474,16 +489,19 @@
         "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+        "STAGING_LEGAL_EVALUATION_ENABLED": "false",
         "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "false",
         "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "false",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
+        "LEGAL_LEX_INGESTION_ENABLED": "false",
+        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
+        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "legacy",

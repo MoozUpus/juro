@@ -77,7 +77,7 @@ export function aiRuntimeModelAllowlist(env: BuilderRuntimeEnv = runtimeEnv()): 
     env.OPENAI_DEEP_MODEL,
     env.OPENAI_FALLBACK_MODEL,
     env.OPENAI_MODEL,
-  ], "gpt-5.6-sol");
+  ], "gpt-5.6-terra");
   const anthropic = uniqueModels([
     env.ANTHROPIC_DOCUMENT_MODEL,
     env.ANTHROPIC_FALLBACK_MODEL,

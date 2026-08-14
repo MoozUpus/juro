@@ -70,10 +70,26 @@ test("legal evaluation corpus covers unique bilingual, account-type, and behavio
     for (const area of LEGAL_EVALUATION_AREAS) {
       assert.ok(entries.some((scenario) => scenario.area === area));
     }
-    for (const tag of ["historical", "deadline", "critical_deadline", "urgent", "advice_missing", "advice_lex_conflict", "unofficial_source"]) {
+    for (const tag of [
+      "historical",
+      "deadline",
+      "critical_deadline",
+      "urgent",
+      "no_source",
+      "false_article",
+      "prompt_injection",
+      "duplicate_retry",
+    ]) {
       assert.ok(entries.some((scenario) => scenario.tags.includes(tag)), `${locale}:${tag}`);
     }
   }
+  const followUps = legalEvaluationCorpus.filter((scenario) => scenario.tags.includes("follow_up"));
+  assert.equal(followUps.length, 2);
+  assert.ok(followUps.every((scenario) => scenario.expectedAnswerMode === "answer"));
+  assert.ok(followUps.every((scenario) => (scenario.conversationHistory?.length ?? 0) > 6));
+  assert.ok(legalEvaluationCorpus.filter((scenario) => scenario.locale === "uz")
+    .flatMap((scenario) => scenario.expectedCanonicalLexUrls)
+    .every((url) => url.includes("/uz/docs/")));
 });
 
 test("legal review packet materializes deterministically and detects tampering", async () => {
@@ -151,7 +167,7 @@ test("evaluation validator enforces live source type, language, expected behavio
   const wrongType = [...reviewedResults];
   wrongType[0] = {
     ...wrongType[0]!,
-    citations: [{ ...wrongType[0]!.citations[0]!, sourceType: "advice" }],
+    citations: [{ ...wrongType[0]!.citations[0]!, sourceType: "advice" as never }],
   };
   assert.ok(validateLegalEvaluationResults(wrongType, legalEvaluationCorpus, unitLiveEvidence).failures.includes(
     `CITATION_SOURCE_EVIDENCE_INVALID:${wrongType[0]!.scenarioId}:unit-source`,
@@ -169,20 +185,20 @@ test("evaluation validator enforces live source type, language, expected behavio
   ));
 });
 
-test("internal evaluation citations require separate staging evidence", () => {
+test("internal evaluation citations remain forbidden even with separate evidence", () => {
   const scenario = legalEvaluationCorpus[0]!;
   const internalUrl = "internal://materials/reviewer-approved-001";
   const result: LegalEvaluationResult = {
     ...reviewedResult(scenario),
     citations: [{
       sourceId: "internal-source-001",
-      sourceType: "internal",
+      sourceType: "internal" as never,
       url: internalUrl,
       exists: true,
       httpStatus: null,
       checkedAt: "2026-08-04T00:00:00.000Z",
       sourceHash: "c".repeat(64),
-      verificationMethod: "staging_db",
+      verificationMethod: "staging_db" as never,
     }],
   };
   const unproven = validateLegalEvaluationResults([result], [scenario]);
@@ -195,7 +211,10 @@ test("internal evaluation citations require separate staging evidence", () => {
     [scenario],
     new Map([[internalUrl, true]]),
   );
-  assert.equal(proven.passed, true);
+  assert.equal(proven.passed, false);
+  assert.ok(proven.failures.includes(
+    `CITATION_SOURCE_EVIDENCE_INVALID:${scenario.id}:internal-source-001`,
+  ));
 });
 
 test("live citation verifier is HTTPS allowlisted and refuses off-host redirects", async () => {

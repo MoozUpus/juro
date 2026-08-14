@@ -28,7 +28,7 @@ type ReviewItem = {
   decidedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  sourceKind: "lex" | "advice";
+  sourceKind: "lex";
   language: Locale;
   officialUrl: string;
   title: string;
@@ -56,7 +56,7 @@ type ClaimedReview = {
   source: {
     sourceId: string;
     versionId: string;
-    sourceKind: "lex" | "advice";
+    sourceKind: "lex";
     locale: Locale;
     canonicalId: string;
     canonicalUrl: string;
@@ -72,7 +72,7 @@ type ListResponse = { ok: true; items: ReviewItem[]; nextCursor: string | null }
 const labels = {
   ru: {
     title: "Проверка юридических источников",
-    subtitle: "Только сохранённые снимки lex.uz и advice.uz. Публикация требует подтверждённого решения.",
+    subtitle: "Только сохранённые снимки Lex.uz. Публикация требует подтверждённого решения.",
     protected: "Защищённый контур · свежая 2FA",
     status: "Состояние", scope: "Назначение", source: "Источник", language: "Язык",
     pending: "Ожидают", inReview: "На проверке", approved: "Одобрены", rejected: "Отклонены", closed: "Закрыты",
@@ -98,9 +98,9 @@ const labels = {
     withdrawalConfirm: "Подтвердить отзыв",
     withdrawalDone: "Публикация отозвана и исключена из текущих источников.",
     syncTitle: "Добавить официальный источник",
-    syncHint: "Только точный URL документа lex.uz или сценария advice.uz. Снимок попадёт в очередь и не будет опубликован автоматически.",
+    syncHint: "Только точный URL документа Lex.uz. Снимок попадёт в очередь и не будет опубликован автоматически.",
     syncUrl: "URL официального документа",
-    syncPlaceholder: "https://advice.uz/ru/documents/1744",
+    syncPlaceholder: "https://lex.uz/ru/docs/111189",
     syncSubmit: "Поставить в очередь",
     syncQueued: "Запрос поставлен в очередь. После загрузки снимок появится на ручной проверке.",
     selectPage: "Выбрать доступные на странице", selected: "Выбрано", bulkApprove: "Одобрить выбранные",
@@ -111,7 +111,7 @@ const labels = {
   },
   uz: {
     title: "Huquqiy manbalarni tekshirish",
-    subtitle: "Faqat lex.uz va advice.uz saqlangan nusxalari. Nashr tasdiqlangan qarorni talab qiladi.",
+    subtitle: "Faqat Lex.uz saqlangan nusxalari. Nashr tasdiqlangan qarorni talab qiladi.",
     protected: "Himoyalangan kontur · yangi 2FA",
     status: "Holat", scope: "Tayinlash", source: "Manba", language: "Til",
     pending: "Kutilmoqda", inReview: "Tekshiruvda", approved: "Tasdiqlangan", rejected: "Rad etilgan", closed: "Yopilgan",
@@ -137,9 +137,9 @@ const labels = {
     withdrawalConfirm: "Qaytarib olishni tasdiqlash",
     withdrawalDone: "Nashr qaytarib olindi va joriy manbalardan chiqarildi.",
     syncTitle: "Rasmiy manbani qo‘shish",
-    syncHint: "Faqat lex.uz hujjati yoki advice.uz ssenariysining aniq URL manzili. Nusxa navbatga tushadi va avtomatik nashr qilinmaydi.",
+    syncHint: "Faqat Lex.uz hujjatining aniq URL manzili. Nusxa navbatga tushadi va avtomatik nashr qilinmaydi.",
     syncUrl: "Rasmiy hujjat URL manzili",
-    syncPlaceholder: "https://advice.uz/oz/documents/624",
+    syncPlaceholder: "https://lex.uz/uz/docs/111189",
     syncSubmit: "Navbatga qo‘yish",
     syncQueued: "So‘rov navbatga qo‘yildi. Yuklangach, nusxa qo‘lda tekshirish uchun paydo bo‘ladi.",
     selectPage: "Sahifadagi mavjudlarini tanlash", selected: "Tanlandi", bulkApprove: "Tanlanganlarni tasdiqlash",
@@ -481,7 +481,7 @@ export function LegalSourceReviewInbox({ locale, reviewerName }: { locale: Local
         <section className="staff-filters" aria-label={locale === "ru" ? "Фильтры очереди" : "Navbat filtrlari"}>
           <label>{l.status}<select value={status} onChange={(event) => setStatus(event.target.value as ReviewStatus)}><option value="pending">{l.pending}</option><option value="in_review">{l.inReview}</option><option value="approved">{l.approved}</option><option value="rejected">{l.rejected}</option><option value="closed">{l.closed}</option></select></label>
           <label>{l.scope}<select value={scope} onChange={(event) => setScope(event.target.value)}><option value="workable">{l.workable}</option><option value="mine">{l.mine}</option><option value="unassigned">{l.unassigned}</option><option value="all">{l.all}</option></select></label>
-          <label>{l.source}<select value={sourceKind} onChange={(event) => setSourceKind(event.target.value)}><option value="all">{l.allSources}</option><option value="lex">lex.uz</option><option value="advice">advice.uz</option></select></label>
+          <label>{l.source}<select value={sourceKind} onChange={(event) => setSourceKind(event.target.value)}><option value="all">{l.allSources}</option><option value="lex">lex.uz</option></select></label>
           <label>{l.language}<select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">{l.allLanguages}</option><option value="ru">Русский</option><option value="uz">O‘zbekcha</option></select></label>
         </section>
         <div className="staff-count">{items.length} {l.count}</div>

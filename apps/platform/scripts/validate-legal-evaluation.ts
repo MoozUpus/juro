@@ -19,7 +19,7 @@ import {
 async function verifyCitationUrls(results: readonly LegalEvaluationResult[]): Promise<Map<string, boolean>> {
   const urls = [...new Set(results.flatMap((result) =>
     Array.isArray(result.citations)
-      ? result.citations.filter((citation) => citation.sourceType !== "internal").map((citation) => citation.url)
+      ? result.citations.map((citation) => citation.url)
       : [],
   ))];
   const verified = new Map<string, boolean>();

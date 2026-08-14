@@ -813,6 +813,41 @@
       "when": 1786549193716,
       "tag": "0115_document_analysis_capacity_terminalization",
       "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1786636800000,
+      "tag": "0116_lawyer_trust_designations",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1786723200000,
+      "tag": "0117_lex_metadata_monitoring",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1786726800000,
+      "tag": "0118_document_analysis_lawyer_verification",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1786730400000,
+      "tag": "0119_ai_provider_operational_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1786734000000,
+      "tag": "0120_staging_legal_evaluation_agent_evidence",
+      "breakpoints": true
     }
   ]
 }

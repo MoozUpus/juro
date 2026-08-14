@@ -1,5 +1,5 @@
 const environmentValues = new Set(["development", "staging", "production"]);
-const approvedHosts = new Set(["lex.uz", "advice.uz"]);
+const approvedHosts = new Set(["lex.uz"]);
 
 function crawlWindowName(environment: string, host: string): string {
   return `legal-source-crawl:${environment}:${host}`;

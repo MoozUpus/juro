@@ -5,8 +5,8 @@ import {
 } from "./legal-chat-schema";
 
 /**
- * Server-owned first useful content for a request that has no usable verified
- * legal source. It is deliberately a clarification, not a legal conclusion:
+ * Server-owned first useful content for a request that has no usable official
+ * Lex.uz source. It is deliberately a clarification, not a legal conclusion:
  * there are no findings, citations, risks, deadlines, or generated documents.
  *
  * The object is parsed through the same strict response schema and source
@@ -24,11 +24,11 @@ export function createUnavailableVerifiedSourceClarification(input: {
   const response = parseLegalChatResponse({
     responseKind: "clarification_required",
     summary: ru
-      ? "Для правового вывода нужны детали ситуации и проверенный официальный источник."
-      : "Huquqiy xulosa uchun vaziyat tafsilotlari va tekshirilgan rasmiy manba kerak.",
+      ? "Для правового вывода нужны детали ситуации и доступный официальный источник Lex.uz."
+      : "Huquqiy xulosa uchun vaziyat tafsilotlari va mavjud Lex.uz rasmiy manbasi kerak.",
     answer: ru
-      ? "JURO пока не делает правовой вывод: в доступной проверенной базе не найден подходящий фрагмент. Укажите действие или документ, дату события и вашу цель — этот предварительный этап не списывает лимит ответа."
-      : "JURO hozircha huquqiy xulosa bermaydi: mavjud tekshirilgan bazada mos parcha topilmadi. Harakat yoki hujjatni, voqea sanasini va maqsadingizni yozing — bu dastlabki bosqich javob limitidan yechilmaydi.",
+      ? "JURO пока не делает правовой вывод: Lex.uz не отдал подходящий официальный фрагмент для этого запроса. Укажите действие или документ, дату события и вашу цель либо повторите попытку позже — этот предварительный этап не списывает лимит ответа."
+      : "JURO hozircha huquqiy xulosa bermaydi: Lex.uz ushbu so‘rov uchun mos rasmiy parchani bermadi. Harakat yoki hujjatni, voqea sanasini va maqsadingizni yozing yoki keyinroq qayta urinib ko‘ring — bu dastlabki bosqich javob limitidan yechilmaydi.",
     language: input.locale,
     jurisdiction: "UZ",
     answerMode: input.answerMode,

@@ -240,11 +240,12 @@ test("scheduled recovery enqueues one distinct PDF fallback parse for a rejected
 test("scheduled corpus keeps a two-source run open until the aggregate reconciliation", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
-  const env: LegalSourceAcquisitionEnv = {
+  const env: LegalSourceAcquisitionEnv & { LEGAL_LEX_INGESTION_ENABLED: string } = {
     APP_ENV: "development",
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
-    LEGAL_ADVICE_INGESTION_ENABLED: "true",
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_LEX_INGESTION_ENABLED: "true",
   };
   const now = new Date("2026-08-01T19:00:00.000Z");
   try {
@@ -267,13 +268,7 @@ test("scheduled corpus keeps a two-source run open until the aggregate reconcili
     }
 
     const started = await startScheduledCorpusSync(env, { now });
-    assert.deepEqual(started, { started: 1, busy: 0, empty: 1 });
-    const emptyAdviceRun = sqlite.prepare(`
-      SELECT status,error_summary FROM source_sync_runs
-      WHERE id='lscorpus_advice_20260801'
-    `).get() as { status: string; error_summary: string };
-    assert.equal(emptyAdviceRun.status, "failed");
-    assert.equal(emptyAdviceRun.error_summary, "LEGAL_SOURCE_CORPUS_EMPTY");
+    assert.deepEqual(started, { started: 1, busy: 0, empty: 0 });
     const requestRows = sqlite.prepare(`
       SELECT request.id
       FROM legal_source_fetch_requests AS request
@@ -324,30 +319,31 @@ test("scheduled corpus keeps a two-source run open until the aggregate reconcili
   }
 });
 
-test("scheduled Advice sitemap candidates enter the normal review-only acquisition pipeline", async () => {
+test("scheduled Lex candidates enter the review-only acquisition pipeline", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
-  const env: LegalSourceAcquisitionEnv & { LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED: string } = {
+  const env: LegalSourceAcquisitionEnv & { LEGAL_LEX_INGESTION_ENABLED: string; LEGAL_LEX_RSS_DISCOVERY_ENABLED: string } = {
     APP_ENV: "development",
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
-    LEGAL_ADVICE_INGESTION_ENABLED: "true",
-    LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED: "true",
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_LEX_INGESTION_ENABLED: "true",
+    LEGAL_LEX_RSS_DISCOVERY_ENABLED: "true",
   };
   const now = new Date("2026-08-02T19:00:00.000Z");
   try {
     const started = await startScheduledCorpusSync(env, {
       now,
-      discoverAdvice: async () => [{
-        officialUrl: "https://advice.uz/ru/documents/1744",
+      discoverLex: async () => [{
+        officialUrl: "https://lex.uz/ru/docs/1744",
         locale: "ru",
         canonicalId: "1744",
       }],
     });
-    assert.deepEqual(started, { started: 1, busy: 0, empty: 1 });
+    assert.deepEqual(started, { started: 1, busy: 0, empty: 0 });
     const request = sqlite.prepare(`
       SELECT id FROM legal_source_fetch_requests
-      WHERE source_kind='advice' AND canonical_id='1744'
+      WHERE source_kind='lex' AND canonical_id='1744'
     `).get() as { id: string };
     await executeLegalSourceFetchRequest(env, request.id, {
       now: () => now,
@@ -364,7 +360,7 @@ test("scheduled Advice sitemap candidates enter the normal review-only acquisiti
     assert.equal(await reconcileScheduledCorpusSyncRuns(env, { now }), 1);
     const run = sqlite.prepare(`
       SELECT status,fetched_count,changed_count,verified_count,error_count FROM source_sync_runs
-      WHERE id='lscorpus_advice_20260802'
+      WHERE id='lscorpus_lex_20260802'
     `).get() as { status: string; fetched_count: number; changed_count: number; verified_count: number; error_count: number };
     assert.equal(run.status, "partial");
     assert.equal(run.fetched_count, 1);
@@ -383,11 +379,12 @@ test("scheduled Advice sitemap candidates enter the normal review-only acquisiti
 test("scheduled corpus is successful only when fetched content matches the activated verified version", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
-  const env: LegalSourceAcquisitionEnv = {
+  const env: LegalSourceAcquisitionEnv & { LEGAL_LEX_INGESTION_ENABLED: string } = {
     APP_ENV: "development",
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
-    LEGAL_ADVICE_INGESTION_ENABLED: "true",
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_LEX_INGESTION_ENABLED: "true",
   };
   const now = new Date("2026-08-03T19:00:00.000Z");
   const html = documentHtml("-201");
@@ -400,7 +397,7 @@ test("scheduled corpus is successful only when fetched content matches the activ
     assert.deepEqual(await startScheduledCorpusSync(env, { now }), {
       started: 1,
       busy: 0,
-      empty: 1,
+      empty: 0,
     });
     const request = sqlite.prepare(`
       SELECT id FROM legal_source_fetch_requests
@@ -439,11 +436,12 @@ test("scheduled corpus is successful only when fetched content matches the activ
 test("scheduled Lex RSS candidates enter the normal immutable review-only acquisition pipeline", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
-  const env: LegalSourceAcquisitionEnv & { LEGAL_LEX_RSS_DISCOVERY_ENABLED: string } = {
+  const env: LegalSourceAcquisitionEnv & { LEGAL_LEX_INGESTION_ENABLED: string; LEGAL_LEX_RSS_DISCOVERY_ENABLED: string } = {
     APP_ENV: "development",
     DB: d1,
     BUCKET: bucket as unknown as R2Bucket,
-    LEGAL_ADVICE_INGESTION_ENABLED: "true",
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_LEX_INGESTION_ENABLED: "true",
     LEGAL_LEX_RSS_DISCOVERY_ENABLED: "true",
   };
   const now = new Date("2026-08-05T19:00:00.000Z");
@@ -461,10 +459,10 @@ test("scheduled Lex RSS candidates enter the normal immutable review-only acquis
       now,
       discoverLex,
     });
-    assert.deepEqual(started, { started: 1, busy: 0, empty: 1 });
+    assert.deepEqual(started, { started: 1, busy: 0, empty: 0 });
     assert.equal(discoveryCalls, 1);
     const duplicate = await startScheduledCorpusSync(env, { now, discoverLex });
-    assert.deepEqual(duplicate, { started: 0, busy: 2, empty: 0 });
+    assert.deepEqual(duplicate, { started: 0, busy: 1, empty: 0 });
     assert.equal(discoveryCalls, 1, "daily run lock must be claimed before remote discovery");
     const request = sqlite.prepare(`
       SELECT id FROM legal_source_fetch_requests
@@ -502,6 +500,63 @@ test("scheduled Lex RSS candidates enter the normal immutable review-only acquis
     assert.equal(review.status, "pending");
     assert.equal(review.verification_state, "fetched");
     assert.equal(review.version_status, "pending_review");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a stale Lex corpus run is terminalized so the next run can acquire its lock", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new FakeR2Bucket();
+  const env: LegalSourceAcquisitionEnv & { LEGAL_LEX_INGESTION_ENABLED: string; LEGAL_LEX_RSS_DISCOVERY_ENABLED: string } = {
+    APP_ENV: "development",
+    DB: d1,
+    BUCKET: bucket as unknown as R2Bucket,
+    LEGAL_ADVICE_INGESTION_ENABLED: "false",
+    LEGAL_LEX_INGESTION_ENABLED: "true",
+    LEGAL_LEX_RSS_DISCOVERY_ENABLED: "true",
+  };
+  const startedAt = "2026-08-06T19:00:00.000Z";
+  const now = new Date("2026-08-07T02:00:00.000Z");
+  try {
+    sqlite.prepare(`
+      INSERT INTO source_sync_runs (
+        id,environment,source_kind,run_type,status,lock_key,
+        discovered_count,fetched_count,changed_count,verified_count,error_count,
+        started_at,finished_at,error_summary,created_at,updated_at
+      ) VALUES (?,?, 'lex','scheduled_corpus','running',?,1,0,0,0,0,?,NULL,NULL,?,?)
+    `).run(
+      "lscorpus_lex_stale_fixture",
+      "development",
+      "development:lex:scheduled_corpus",
+      startedAt,
+      startedAt,
+      startedAt,
+    );
+
+    assert.equal(await reconcileScheduledCorpusSyncRuns(env, {
+      now,
+      staleAfterMs: 60 * 60 * 1_000,
+    }), 1);
+    assert.deepEqual({ ...sqlite.prepare(`
+      SELECT status,error_count,error_summary,finished_at FROM source_sync_runs
+      WHERE id='lscorpus_lex_stale_fixture'
+    `).get() as Record<string, unknown> }, {
+      status: "failed",
+      error_count: 1,
+      error_summary: "LEGAL_SOURCE_CORPUS_STALE",
+      finished_at: now.toISOString(),
+    });
+
+    const restarted = await startScheduledCorpusSync(env, {
+      now,
+      discoverLex: async () => [{
+        officialUrl: "https://lex.uz/ru/docs/714",
+        locale: "ru",
+        canonicalId: "714",
+      }],
+    });
+    assert.deepEqual(restarted, { started: 1, busy: 0, empty: 0 });
   } finally {
     sqlite.close();
   }

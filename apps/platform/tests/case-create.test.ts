@@ -15,12 +15,12 @@ test("case creation input is strict, localized and audience-specific", () => {
   const personal = caseScenariosForAccount("individual");
   const entrepreneur = caseScenariosForAccount("entrepreneur");
   const business = caseScenariosForAccount("business");
-  assert.equal(Object.keys(CASE_SCENARIOS).length, 51);
-  assert.equal(caseDirectionsForAccount("individual").length, 9);
-  assert.equal(caseDirectionsForAccount("business").length, 10);
-  assert.equal(personal.length, 45);
-  assert.equal(entrepreneur.length, 51);
-  assert.equal(business.length, 51);
+  assert.equal(Object.keys(CASE_SCENARIOS).length, 52);
+  assert.equal(caseDirectionsForAccount("individual").length, 11);
+  assert.equal(caseDirectionsForAccount("business").length, 11);
+  assert.equal(personal.length, 52);
+  assert.equal(entrepreneur.length, 52);
+  assert.equal(business.length, 52);
   assert.equal(caseScenarioSteps("debt-recovery", "ru").length, 4);
   assert.deepEqual(LEGACY_CASE_SCENARIO_MIGRATIONS, {
     "unpaid-salary": "unpaid-salary",
@@ -29,9 +29,16 @@ test("case creation input is strict, localized and audience-specific", () => {
     "contract-breach": "contract-breach",
     "debt-recovery": "debt-recovery",
   });
-  assert.ok(personal.every((item) => item.direction !== "business"));
+  assert.ok(personal.some((item) => item.direction === "business"));
+  assert.ok(personal.some((item) => item.direction === "other"));
   assert.equal(caseScenarioSteps("debt", "ru").length, 4);
   assert.equal(caseScenarioSteps("debt", "uz").length, 4);
+  for (const direction of caseDirectionsForAccount("individual")) {
+    assert.ok(
+      direction.id === "other" || caseScenariosForAccount("individual", direction.id).length >= 5,
+      `${direction.id} must expose at least five scenarios`,
+    );
+  }
 
   assert.equal(caseCreateInputSchema.safeParse({
     title: " Возврат долга ",
@@ -57,7 +64,7 @@ test("case creation input is strict, localized and audience-specific", () => {
     legalArea: "business-registration",
     locale: "ru",
     accountType: "individual",
-  }).success, false);
+  }).success, true);
   assert.equal(caseCreateInputSchema.safeParse({
     title: "Дело",
     legalArea: "debt",

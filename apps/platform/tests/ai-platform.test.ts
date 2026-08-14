@@ -18,6 +18,7 @@ import {
   reserveAiRun,
 } from "../lib/ai/run-store";
 import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
+import { completeStreamingJsonArrayObjects } from "../lib/ai/streaming-json";
 
 const validLegalResponse = {
   responseKind: "clarification_required" as const,
@@ -172,6 +173,47 @@ test("OpenAI Responses SSE parser handles split structured-output frames and rep
   assert.deepEqual(JSON.parse(text || "{}"), validLegalResponse);
   assert.ok(progress.length >= 1);
   assert.equal(progress.at(-1), serialized.length);
+});
+
+test("streaming JSON extracts only complete confirmed findings from an incomplete response", () => {
+  const first = {
+    title: "Государственная регистрация",
+    explanation: "Общество подлежит регистрации, включая символы } и \\\"кавычки\\\".",
+    sourceIds: ["direct:lex:1"],
+  };
+  const second = {
+    title: "Документы",
+    explanation: "Подготовьте предусмотренные нормой сведения.",
+    sourceIds: ["direct:lex:2"],
+  };
+  const prefix = `{"confirmedFindings":[${JSON.stringify(first)},`;
+  assert.deepEqual(completeStreamingJsonArrayObjects(prefix, "confirmedFindings"), [first]);
+  assert.deepEqual(
+    completeStreamingJsonArrayObjects(`${prefix}${JSON.stringify(second)}],"answer":"`, "confirmedFindings"),
+    [first, second],
+  );
+  assert.deepEqual(
+    completeStreamingJsonArrayObjects('{"confirmedFindings":[{"title":"unfinished', "confirmedFindings"),
+    [],
+  );
+});
+
+test("OpenAI Responses SSE exposes accumulated output only to the server-internal observer", async () => {
+  const stream = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: '{"confirmed' })}\n\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: 'Findings":[]}' })}\n\n`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: { id: "resp-buffer", model: "gpt-5.6-terra", status: "completed", output: [] },
+    })}\n\n`,
+  ].join("");
+  const buffers: string[] = [];
+  await readResponsesSse(
+    chunkedResponse(new TextEncoder().encode(stream), [17, 41]),
+    () => undefined,
+    { onOutputTextBuffer: (text) => { buffers.push(text); } },
+  );
+  assert.deepEqual(buffers, ['{"confirmed', '{"confirmedFindings":[]}']);
 });
 
 test("server-owned unavailable-source preliminary is strict, source-bound, and contains no legal conclusion", () => {

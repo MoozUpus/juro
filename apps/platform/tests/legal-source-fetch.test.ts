@@ -151,35 +151,13 @@ test("Advice acquisition is disabled before any network request", async () => {
   assert.equal(synthetic.calls.length, 0);
 });
 
-test("bounded Advice fetch uses current routes and a respectful minimum delay", async () => {
-  const synthetic = sequenceFetch([robots(), html()]);
-  const waits: number[] = [];
-  const result = await fetchLegalSource(
+test("obsolete Advice enable flag cannot re-enable network access", async () => {
+  const synthetic = sequenceFetch([]);
+  await rejectsCode(() => fetchLegalSource(
     "https://www.advice.uz/oz/documents/624/",
-    {
-      adviceEnabled: true,
-      fetchImpl: synthetic.fetchImpl,
-      wait: async (delayMs) => {
-        assert.equal(synthetic.calls.length, 1);
-        waits.push(delayMs);
-      },
-      now: () => new Date("2026-07-31T00:00:00.000Z"),
-    },
-  );
-
-  assert.equal(result.sourceKind, "advice");
-  assert.equal(result.locale, "uz");
-  assert.equal(result.canonicalId, "624");
-  assert.equal(result.canonicalUrl, "https://advice.uz/oz/documents/624");
-  assert.equal(result.fetchedAt, "2026-07-31T00:00:00.000Z");
-  assert.deepEqual(waits, [1_000]);
-  assert.deepEqual(
-    synthetic.calls.map((call) => call.url),
-    [
-      "https://advice.uz/robots.txt",
-      "https://advice.uz/oz/documents/624",
-    ],
-  );
+    { adviceEnabled: true, fetchImpl: synthetic.fetchImpl },
+  ), "LEGAL_SOURCE_POLICY_DISABLED");
+  assert.equal(synthetic.calls.length, 0);
 });
 
 test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", async () => {
