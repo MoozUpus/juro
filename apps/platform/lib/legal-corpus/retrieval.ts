@@ -131,11 +131,11 @@ export async function retrieveLegalCorpus(input: {
       document.id AS documentId,document.title AS documentTitle,
       document.document_type AS documentType,
       provision.article_number AS articleNumber,provision.article_title AS articleTitle,
-      provision.exact_quote_source AS exactQuote,
+      chunk.content_text AS exactQuote,
       provision.source_url AS sourceUrl,provision.language AS language,
       provision.status AS status,provision.valid_from AS validFrom,provision.valid_to AS validTo,
       version.version_date AS versionDate,version.fetched_at AS fetchedAt,
-      provision.content_sha256 AS contentHash,
+      chunk.content_sha256 AS contentHash,
       document.provider AS provider,
       document.scope AS scope,document.tenant_id AS tenantId,
       document.owner_user_id AS ownerUserId,document.matter_id AS matterId

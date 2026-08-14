@@ -104,13 +104,13 @@ test("queued corpus jobs claim once and do not leak text into the queue", async 
   try {
     const env = envFor(d1, bucket);
     const queued = await enqueueOfficialLexCorpusDocument(env, {
-      sourceUrl: "https://lex.uz/uzc/docs/67890",
+      sourceUrl: "https://lex.uz/docs/67890",
       now,
       correlationId: "test-correlation",
     });
     assert.equal(queued.created, true);
     const duplicate = await enqueueOfficialLexCorpusDocument(env, {
-      sourceUrl: "https://lex.uz/uzc/docs/67890",
+      sourceUrl: "https://lex.uz/docs/67890",
       now,
       correlationId: "test-correlation-2",
     });
@@ -127,11 +127,43 @@ test("queued corpus jobs claim once and do not leak text into the queue", async 
     });
     const job = sqlite.prepare("SELECT status,source_url AS sourceUrl FROM legal_corpus_ingestion_jobs").get() as { status: string; sourceUrl: string };
     assert.equal(job.status, "completed");
-    assert.equal(job.sourceUrl, "https://lex.uz/uzc/docs/67890");
+    assert.equal(job.sourceUrl, "https://lex.uz/docs/67890");
     assert.equal(
       (sqlite.prepare("SELECT language FROM legal_corpus_variants").get() as { language: string }).language,
       "uz-Cyrl",
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("ingestion links official RU UZ Cyrillic UZ Latin and EN variants into one family", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const paragraph = "Правило официального документа применяется в установленных законом случаях. ".repeat(6);
+    const html = `<!doctype html><main id="divCont">
+      <div class="docContentHeader__item-link active" title="На русском">Рус</div>
+      <div class="docContentHeader__item-link" onclick="openUrl('/ru/docs/8385445')" title="In english">Eng</div>
+      <div class="docContentHeader__item-link" onclick="openUrl('/ru/docs/8383786')" title="Ўзбекча">Ўзб</div>
+      <div class="docContentHeader__item-link" onclick="openUrl('/ru/docs/-8383786')" title="O'zbekcha">O’zb</div>
+      <div class="lx_elem ACT_TITLE">Закон о проверке языков</div>
+      <div class="lx_elem ARTICLE">Статья 1. Общее правило</div>
+      <div class="lx_elem">${paragraph}</div>
+    </main>`;
+    const result = await ingestOfficialLexDocument(envFor(d1, bucket), {
+      sourceUrl: "https://lex.uz/ru/docs/8385395",
+      now,
+      fetchImpl: fetchFor(html),
+    });
+    assert.equal(result.documentId, "lexuz-family:8383786");
+    const aliases = sqlite.prepare("SELECT source_url AS sourceUrl,language FROM legal_corpus_source_aliases ORDER BY language")
+      .all() as Array<{ sourceUrl: string; language: string }>;
+    assert.equal(aliases.length, 4);
+    assert.ok(aliases.some((alias) => alias.sourceUrl === "https://lex.uz/docs/8383786" && alias.language === "uz-Cyrl"));
+    assert.ok(aliases.some((alias) => alias.sourceUrl === "https://lex.uz/en/docs/8385445" && alias.language === "en"));
+    const jobs = sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_ingestion_jobs").get() as { count: number };
+    assert.equal(Number(jobs.count), 3);
   } finally {
     sqlite.close();
   }

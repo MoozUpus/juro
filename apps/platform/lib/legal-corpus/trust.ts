@@ -46,7 +46,7 @@ function isOfficialLexUrl(value: string): boolean {
       && !url.password
       && !url.port
       && (url.hostname === "lex.uz" || url.hostname === "www.lex.uz")
-      && /^\/(?:ru|uz|uzc)\/docs\/-?\d+/u.test(url.pathname);
+      && /^(?:\/(?:ru|uz|uzc|en))?\/docs\/-?\d+/u.test(url.pathname);
   } catch {
     return false;
   }

@@ -876,6 +876,13 @@
       "when": 1786810800000,
       "tag": "0124_full_legal_corpus",
       "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1786814400000,
+      "tag": "0125_lex_catalog_discovery",
+      "breakpoints": true
     }
   ]
 }

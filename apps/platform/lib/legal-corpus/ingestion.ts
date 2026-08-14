@@ -7,7 +7,12 @@ import {
   normalizeLegalSourceHtml,
 } from "../legal/source-parser";
 import { chunkLegalProvision, parseLegalProvisions } from "./provision-parser";
-import { parseLexDocumentUrl } from "./lex-discovery";
+import {
+  discoverLexLanguageVariants,
+  lexLanguageFamilyId,
+  parseLexDocumentUrl,
+  type LexDiscoveredDocument,
+} from "./lex-discovery";
 import {
   LEGAL_CORPUS_FEATURE_FLAGS,
   autoTrustLexSource,
@@ -24,6 +29,9 @@ const WRITE_BATCH_SIZE = 90;
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export type LegalCorpusIngestionEnv = Pick<Env, "APP_ENV" | "BUCKET" | "DB">
+  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
+
+export type LegalCorpusQueueEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 type ExistingVariant = {
@@ -75,10 +83,10 @@ function dateOnly(value: string): string {
   return value.slice(0, 10);
 }
 
-function languageToLegacyLocale(language: LegalCorpusLanguage): "ru" | "uz" | "uzc" {
+function languageToLegacyLocale(language: LegalCorpusLanguage): "ru" | "uz" | "uzc" | "en" {
   if (language === "uz-Cyrl") return "uzc";
   if (language === "uz-Latn") return "uz";
-  return "ru";
+  return language;
 }
 
 async function sha256(value: string | Uint8Array): Promise<string> {
@@ -150,6 +158,48 @@ async function existingVariant(
   `).bind(documentId, language).first<ExistingVariant>();
 }
 
+async function linkedDocumentId(
+  db: D1Database,
+  variants: readonly LexDiscoveredDocument[],
+): Promise<string | null> {
+  const linked = new Set<string>();
+  for (const variant of variants) {
+    const row = await db.prepare(`SELECT document_id AS documentId
+      FROM legal_corpus_source_aliases WHERE source_url=? LIMIT 1
+    `).bind(variant.sourceUrl).first<{ documentId: string }>();
+    if (row?.documentId) linked.add(row.documentId);
+  }
+  if (linked.size > 1) throw new TypeError("LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT");
+  return [...linked][0] ?? null;
+}
+
+async function persistLanguageAliasesAndQueue(input: {
+  env: LegalCorpusIngestionEnv;
+  documentId: string;
+  variants: readonly LexDiscoveredDocument[];
+  currentSourceUrl: string;
+  now: Date;
+}): Promise<void> {
+  const timestamp = input.now.toISOString();
+  await input.env.DB.batch(input.variants.map((variant) => input.env.DB.prepare(`INSERT INTO legal_corpus_source_aliases
+    (source_url,document_id,provider_source_id,language,created_at)
+    VALUES (?,?,?,?,?)
+    ON CONFLICT(source_url) DO UPDATE SET document_id=excluded.document_id
+  `).bind(
+    variant.sourceUrl, input.documentId, variant.canonicalDocumentId,
+    variant.language, timestamp,
+  )));
+  if (!featureEnabled(input.env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) return;
+  for (const variant of input.variants) {
+    if (variant.sourceUrl === input.currentSourceUrl) continue;
+    await enqueueOfficialLexCorpusDocument(input.env, {
+      sourceUrl: variant.sourceUrl,
+      now: input.now,
+      correlationId: `language-family:${input.documentId}`,
+    });
+  }
+}
+
 async function currentProvisions(
   db: D1Database,
   versionId: string | null,
@@ -215,8 +265,12 @@ export async function ingestOfficialLexDocument(
   });
   const sourceUrl = fetched.canonicalUrl;
   const sourceHash = fetched.contentSha256;
+  const rawHtml = new TextDecoder("utf-8", { fatal: true }).decode(fetched.bytes);
+  const languageVariants = discoverLexLanguageVariants(rawHtml, parsed);
+  const documentId = await linkedDocumentId(env.DB, languageVariants)
+    ?? lexLanguageFamilyId(languageVariants);
   const normalized = normalizeLegalSourceHtml({
-    html: new TextDecoder("utf-8", { fatal: true }).decode(fetched.bytes),
+    html: rawHtml,
     reference: {
       sourceKind: "lex",
       locale: languageToLegacyLocale(parsed.language),
@@ -236,13 +290,17 @@ export async function ingestOfficialLexDocument(
   }
 
   const now = nowIso(input.now);
-  const current = await existingVariant(env.DB, parsed.canonicalDocumentId, parsed.language);
+  const current = await existingVariant(env.DB, documentId, parsed.language);
   if (current?.currentHash === sourceHash) {
     await env.DB.batch([
       env.DB.prepare(`UPDATE legal_corpus_variants
         SET source_url=?,last_verified_at=?,updated_at=? WHERE id=?`).bind(sourceUrl, now, now, current.variantId),
       env.DB.prepare(`UPDATE legal_corpus_documents SET updated_at=? WHERE id=?`).bind(now, current.documentId),
     ]);
+    await persistLanguageAliasesAndQueue({
+      env, documentId: current.documentId, variants: languageVariants,
+      currentSourceUrl: sourceUrl, now: input.now ?? new Date(),
+    });
     return {
       status: "unchanged", documentId: current.documentId, variantId: current.variantId,
       versionId: current.currentVersionId, provisionCount: 0, chunkCount: 0, sourceUrl,
@@ -253,13 +311,13 @@ export async function ingestOfficialLexDocument(
   const diff = diffCorpusProvisions(previous, provisions);
   if (diff.suspiciousShrink) {
     await recordFailure({
-      db: env.DB, documentId: parsed.canonicalDocumentId, sourceUrl,
+      db: env.DB, documentId, sourceUrl,
       language: parsed.language, now, errorCode: "LEGAL_CORPUS_SUSPICIOUS_CHANGE",
       retryable: false, retryCount: 0, retryState: "terminal",
     });
     return {
-      status: "halted_suspicious_change", documentId: parsed.canonicalDocumentId,
-      variantId: current?.variantId ?? `${parsed.canonicalDocumentId}:${parsed.language}`,
+      status: "halted_suspicious_change", documentId,
+      variantId: current?.variantId ?? `${documentId}:${parsed.language}`,
       versionId: null, provisionCount: 0, chunkCount: 0, sourceUrl,
     };
   }
@@ -277,7 +335,6 @@ export async function ingestOfficialLexDocument(
     customMetadata: { sourceSha256: sourceHash, sourceUrl },
   });
 
-  const documentId = parsed.canonicalDocumentId;
   const variantId = current?.variantId ?? `${documentId}:${parsed.language}`;
   const versionNumber = (current?.currentVersionNumber ?? 0) + 1;
   const versionId = `${variantId}:v${versionNumber}:${sourceHash.slice(0, 12)}`;
@@ -291,7 +348,7 @@ export async function ingestOfficialLexDocument(
     env.DB.prepare(`INSERT INTO legal_corpus_documents
       (id,provider,jurisdiction,source_class,scope,tenant_id,owner_user_id,matter_id,visibility,canonical_url,title,short_title,document_type,document_number,adopting_authority,adoption_date,publication_date,availability_status,trusted,verification_status,approval_required,created_at,updated_at)
       VALUES (?,?,?,?,? ,NULL,NULL,NULL,?,?,?,?,?,NULL,NULL,NULL,NULL,'ready',1,'official_source',0,?,?)
-      ON CONFLICT(id) DO UPDATE SET canonical_url=excluded.canonical_url,updated_at=excluded.updated_at
+      ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at
     `).bind(
       documentId, "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", "global",
       sourceUrl, normalized.documentTitle, normalized.documentTitle.slice(0, 240),
@@ -360,6 +417,11 @@ export async function ingestOfficialLexDocument(
     SET current_version_id=?,source_url=?,last_verified_at=?,updated_at=? WHERE id=?
   `).bind(versionId, sourceUrl, now, now, variantId).run();
 
+  await persistLanguageAliasesAndQueue({
+    env, documentId, variants: languageVariants,
+    currentSourceUrl: sourceUrl, now: input.now ?? new Date(),
+  });
+
   return {
     status: "indexed", documentId, variantId, versionId,
     provisionCount: provisions.length, chunkCount: chunks.length, sourceUrl,
@@ -367,7 +429,7 @@ export async function ingestOfficialLexDocument(
 }
 
 export async function enqueueOfficialLexCorpusDocument(
-  env: LegalCorpusIngestionEnv,
+  env: LegalCorpusQueueEnv,
   input: { sourceUrl: string; now?: Date; correlationId?: string },
 ): Promise<{ created: boolean; jobId: string; canonicalDocumentId: string }> {
   const parsed = parseLexDocumentUrl(input.sourceUrl);

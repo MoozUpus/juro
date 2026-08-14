@@ -11,6 +11,10 @@ import {
   seedLexCorpusJobsFromMetadata,
   type LegalCorpusIngestionEnv,
 } from "../lib/legal-corpus/ingestion";
+import {
+  runNextLexCatalogDiscoveryPage,
+  seedLexCatalogDiscoveryCheckpoints,
+} from "../lib/legal-corpus/lex-catalog-discovery";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
@@ -515,6 +519,7 @@ export async function handleScheduled(
     const seeded = await seedLexCorpusJobsFromMetadata(
       env as LegalCorpusIngestionEnv,
     );
+    const catalogSeeded = await seedLexCatalogDiscoveryCheckpoints(env);
     // The five-minute outbox cron owns processing. Keeping this daily slot to
     // discovery/seeding only avoids two concurrent Lex fetches at 19:00.
     logScheduled("info", {
@@ -523,6 +528,8 @@ export async function handleScheduled(
       cron: controller.cron,
       seeded: seeded.queued,
       considered: seeded.considered,
+      catalogCheckpointsCreated: catalogSeeded.created,
+      catalogCheckpointsConsidered: catalogSeeded.considered,
     });
     return;
   }
@@ -566,6 +573,11 @@ export async function handleScheduled(
       };
     const legalCorpusAutoIngestEnabled = (env as Record<string, unknown>).LEGAL_CORPUS_ENABLED === "true"
       && (env as Record<string, unknown>).LEGAL_CORPUS_AUTO_INGEST_ENABLED === "true";
+    const legalCatalogPage = legalCorpusAutoIngestEnabled
+      ? await runNextLexCatalogDiscoveryPage(env, {
+        wait: (delayMs) => scheduler.wait(delayMs),
+      })
+      : null;
     const legalCorpusJob = legalCorpusAutoIngestEnabled
       ? await runNextLegalCorpusIngestionJob(env as LegalCorpusIngestionEnv, {
         wait: (delayMs) => scheduler.wait(delayMs),
@@ -670,6 +682,9 @@ export async function handleScheduled(
       legalCorpusJobStatus: legalCorpusJob?.status ?? "disabled",
       legalCorpusJobClaimed: legalCorpusJob?.claimed ?? false,
       legalCorpusJobError: legalCorpusJob?.safeErrorCode ?? null,
+      legalCatalogStatus: legalCatalogPage?.status ?? "disabled",
+      legalCatalogClaimed: legalCatalogPage?.claimed ?? false,
+      legalCatalogError: legalCatalogPage?.safeErrorCode ?? null,
       lexMetadataRetryStatus: lexMetadataRetry?.status ?? "not_due",
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,

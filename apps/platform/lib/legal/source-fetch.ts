@@ -3,7 +3,7 @@ import { z } from "zod";
 // Lex.uz exposes separate Uzbek Cyrillic URLs under `/uzc`.  Keep the
 // concrete source locale instead of silently folding that official text into
 // Uzbek Latin; callers map it to the BCP-47 `uz-Cyrl` corpus language.
-const localeSchema = z.enum(["ru", "uz", "uzc"]);
+const localeSchema = z.enum(["ru", "uz", "uzc", "en"]);
 
 export type LegalSourceKind = "lex" | "advice";
 export type LegalSourceLocale = z.infer<typeof localeSchema>;
@@ -123,11 +123,12 @@ function parseSourcePath(url: URL, sourceKind: LegalSourceKind): {
   adviceRoute?: "document" | "documents";
 } | null {
   if (sourceKind === "lex") {
-    const match = /^\/(ru|uz|uzc)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
-    if (!match) return null;
-    const locale = localeSchema.safeParse(match[1]);
-    if (!locale.success || !match[2]) return null;
-    return { locale: locale.data, canonicalId: match[2] };
+    const localized = /^\/(ru|uz|uzc|en)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
+    const cyrillic = /^\/docs\/(-?\d+)\/?$/.exec(url.pathname);
+    const locale = localeSchema.safeParse(localized?.[1] ?? (cyrillic ? "uzc" : null));
+    const canonicalId = localized?.[2] ?? cyrillic?.[1];
+    if (!locale.success || !canonicalId) return null;
+    return { locale: locale.data, canonicalId };
   }
 
   const match = /^\/(ru|oz)\/(document|documents)\/(\d+)\/?$/.exec(
@@ -187,7 +188,9 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
 
   const canonicalHost = sourceKind === "lex" ? "lex.uz" : "advice.uz";
   const canonicalPath = sourceKind === "lex"
-    ? `/${path.locale}/docs/${path.canonicalId}`
+    ? path.locale === "uzc"
+      ? `/docs/${path.canonicalId.replace(/^-/, "")}`
+      : `/${path.locale}/docs/${path.canonicalId}`
     : `/${path.locale === "ru" ? "ru" : "oz"}/${path.adviceRoute ?? "documents"}/${path.canonicalId}`;
   return {
     sourceKind,

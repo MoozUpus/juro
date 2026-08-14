@@ -18,7 +18,7 @@ test("SSE keeps source verification content-free and reserves preliminary output
   assert.ok(memory > sourceVerified);
   assert.ok(groundedPreliminary > memory);
   assert.match(route, /AI_INTERACTIVE_FINALIZATION_RESERVE_MS/);
-  assert.match(route, /retrieveLiveLexSources/);
+  assert.match(route, /retrieveCorpusAwareLegalSources/);
   assert.match(route, /retrieval\.sourceValidationStatus !== "validated"/);
   assert.match(route, /freshness\.status !== "fresh"/);
   assert.match(route, /let preliminaryAtMs: number \| null = null/);

@@ -27,9 +27,9 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
-  retrieveLiveLexSources,
-  type LiveLexRetrievalResult,
-} from "../../../../lib/legal/live-lex-retrieval";
+  retrieveCorpusAwareLegalSources,
+  type LegalChatSourceRetrieval,
+} from "../../../../lib/legal-corpus/chat-retrieval";
 import { discoverOfficialLexUrls } from "../../../../lib/legal/openai-lex-discovery";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
@@ -406,14 +406,17 @@ async function executePostWithinBudget(
       return { memoryEncryption: null, memories: [] as UserMemory[] };
     }
   })();
-  const liveLexRetrieval = (async (): Promise<LiveLexRetrievalResult> => {
+  const liveLexRetrieval = (async (): Promise<LegalChatSourceRetrieval> => {
     try {
-      const result = await retrieveLiveLexSources({
+      const result = await retrieveCorpusAwareLegalSources({
+        env: { ...runtimeEnv(), DB: db },
         query: retrievalQuestion,
         locale,
         signal: retrievalStage.signal,
         limit: 3,
         budgetMs: 2_750,
+        scope: { tenantId: workspace.id, userId: user.id, matterId: body?.caseId ?? null },
+        correlationId: idempotencyKey,
         discoverOfficialUrls: async (query, discoveryLocale, discoverySignal) => {
           const usage = await usageSummary(db, workspace.id, user.id, entitlements.aiAnswerCyclesMonthly);
           if (usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
@@ -464,7 +467,8 @@ async function executePostWithinBudget(
     } catch (error) {
       retrievalStage.fail();
       if (signal.aborted) throw error;
-      return await retrieveLiveLexSources({
+      return await retrieveCorpusAwareLegalSources({
+        env: { ...runtimeEnv(), DB: db },
         query: "",
         locale,
         limit: 1,
@@ -752,7 +756,7 @@ async function executePostWithinBudget(
           article: source.article ?? null,
           excerpt: null,
           originalUrl: source.officialUrl,
-          status: "current" as const,
+          status: source.applicabilityStatus ?? "current" as const,
           effectiveDate: source.effectiveDate ?? null,
           verifiedAt: source.verifiedAt,
         };
@@ -930,7 +934,7 @@ async function executePostWithinBudget(
       conversationId,
       messageId: assistantMessageId,
       now,
-      sourceAccessMode: "direct",
+      sourceAccessMode: retrieval.sourceAccessMode,
     }),
     ...(voiceRecording ? [linkVoiceRecordingStatement({
       db,

@@ -27,9 +27,7 @@ import {
 import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
-import {
-  retrieveLiveLexSources,
-} from "../../../../lib/legal/live-lex-retrieval";
+import { retrieveCorpusAwareLegalSources } from "../../../../lib/legal-corpus/chat-retrieval";
 import { directSourceCards } from "../../../../lib/legal/direct-retrieval";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
@@ -427,9 +425,9 @@ export async function POST(request: Request): Promise<Response> {
       question: parsed.data.question,
       locale,
     });
-    // Guest chat follows the same Lex-only, query-scoped boundary as the
-    // authenticated product route. No D1 corpus, Vectorize or editorial queue
-    // may enter this legal prompt.
+    // Guest chat follows the same official Lex-only boundary as the
+    // authenticated route. The feature-gated immutable corpus is preferred;
+    // otherwise the existing request-scoped live validator remains exact.
     const configuredProvider = provider.name === "anthropic" ? "anthropic" : "openai";
     const configuredModel = providerStatus.model;
     budget = createAiExecutionBudget({ callerSignal: request.signal });
@@ -449,17 +447,21 @@ export async function POST(request: Request): Promise<Response> {
     let retrieval;
     const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 2_900 });
     try {
-      retrieval = await retrieveLiveLexSources({
+      retrieval = await retrieveCorpusAwareLegalSources({
+        env: { ...runtimeEnv(), DB: db },
         query: effectiveQuestion,
         locale,
         signal: retrievalStage.signal,
         limit: 2,
         budgetMs: 2_750,
+        correlationId: idempotencyKey,
       });
       retrievalStage.complete();
     } catch {
       retrievalStage.fail();
-      retrieval = await retrieveLiveLexSources({ query: "", locale, limit: 1, budgetMs: 1 });
+      retrieval = await retrieveCorpusAwareLegalSources({
+        env: { ...runtimeEnv(), DB: db }, query: "", locale, limit: 1, budgetMs: 1,
+      });
     }
     const requestHash = await sha256Json({
       question: effectiveQuestion,
@@ -586,7 +588,7 @@ export async function POST(request: Request): Promise<Response> {
             article: source.article ?? null,
             excerpt: source.excerpt ?? null,
             originalUrl: source.officialUrl,
-            status: "current" as const,
+            status: source.applicabilityStatus ?? "current" as const,
             effectiveDate: source.effectiveDate ?? null,
             verifiedAt: source.verifiedAt,
           };
@@ -670,7 +672,7 @@ export async function POST(request: Request): Promise<Response> {
           citations: result.sources,
           guestRunId: reservation.run.id,
           now: new Date().toISOString(),
-          sourceAccessMode: "direct",
+          sourceAccessMode: retrieval.sourceAccessMode,
         }),
       });
       persistenceStage.complete();
