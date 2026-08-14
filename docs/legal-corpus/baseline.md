@@ -32,12 +32,14 @@ The read-only remote D1 probe on `juro-staging` returned the following values:
 | Source sync runs | 23 |
 | Source sync errors | 314 |
 
-Consequently, current JURO has no validated indexed legal corpus and must not
-claim source coverage, recall, or corpus-size parity. The full-corpus tables
-are introduced in migration `0124_full_legal_corpus.sql`; that migration has
-not been applied to staging or production as part of this baseline. Migration
-`0125_lex_catalog_discovery.sql` adds the source-alias and resumable catalog
-checkpoint ledgers and likewise remains unapplied remotely.
+Consequently, this baseline had no validated indexed legal corpus and must not
+be used to claim source coverage, recall, or corpus-size parity. On 2026-08-15,
+migrations `0124_full_legal_corpus.sql`,
+`0125_lex_catalog_discovery.sql`, and the export-safety correction
+`0126_exportable_legal_corpus_sparse_index.sql` were applied to **staging
+only** after pre-migration backup/restore verification. All new staging corpus
+registries remain empty and all corpus feature flags remain disabled.
+Production has not received these migrations.
 
 ## Verified public catalog shape
 
@@ -60,9 +62,11 @@ language.
   but did not invoke the legacy corpus-sync module.
 - Legacy ingestion supports only Russian and Uzbek Latin records, requires a
   manual publication lifecycle, and has no indexed sections/chunks.
-- Current search has no immutable multilingual source registry, versioned
-  article-level corpus, RRF fusion, exact quote-store, or current-version FTS
-  boundary.
+- The baseline search had no immutable multilingual source registry,
+  versioned article-level corpus, RRF fusion, exact quote-store, or
+  current-version sparse boundary. This branch implements those foundations
+  with an exportable inverted index; coverage is still unproven until the
+  controlled ingestion and evaluation gates pass.
 - Existing direct Lex retrieval remains the production fallback. It does not
   create permanent corpus records and therefore remains the source of truth
   until the separate corpus rollout gate is passed.

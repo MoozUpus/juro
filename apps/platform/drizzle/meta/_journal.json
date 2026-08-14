@@ -883,6 +883,13 @@
       "when": 1786814400000,
       "tag": "0125_lex_catalog_discovery",
       "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1786818000000,
+      "tag": "0126_exportable_legal_corpus_sparse_index",
+      "breakpoints": true
     }
   ]
 }

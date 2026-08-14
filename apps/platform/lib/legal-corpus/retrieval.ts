@@ -52,13 +52,25 @@ type SparseRow = LegalCorpusRetrievalItem & {
   matterId: string | null;
 };
 
-function toFtsQuery(query: string): string | null {
+type SparseCandidateRow = SparseRow & {
+  sparseTermsJson: string;
+  matchedTermsJson: string;
+  matchedTermCount: number;
+};
+
+type SparseMatchedTerm = {
+  term: string;
+  termFrequency: number;
+  titleFrequency: number;
+  articleFrequency: number;
+};
+
+function toSparseQueryTerms(query: string): string[] {
   const tokens = query
     .normalize("NFKC")
     .toLocaleLowerCase("und")
-    .match(/[\p{L}\p{N}][\p{L}\p{N}._-]{1,80}/gu) ?? [];
-  const unique = [...new Set(tokens)].slice(0, 24);
-  return unique.length > 0 ? unique.map((token) => `"${token.replaceAll('"', "")}"`).join(" OR ") : null;
+    .match(/[\p{L}\p{N}][\p{L}\p{N}._-]{0,80}/gu) ?? [];
+  return [...new Set(tokens)].slice(0, 24);
 }
 
 function queryVariants(query: string): string[] {
@@ -112,9 +124,9 @@ export function reciprocalRankFusion(
 }
 
 /**
- * Sparse BM25 retrieval over immutable current corpus chunks. A dense provider
- * is optional: when it is unavailable, RRF remains deterministic and the
- * grounded answer flow receives only the proven sparse evidence.
+ * Sparse BM25 retrieval over an exportable inverted index of immutable corpus
+ * chunks. A dense provider is optional: when it is unavailable, RRF remains
+ * deterministic and the grounded answer flow receives only proven evidence.
  */
 export async function retrieveLegalCorpus(input: {
   db: D1Database;
@@ -131,10 +143,72 @@ export async function retrieveLegalCorpus(input: {
   }
   const limit = Math.max(1, Math.min(input.limit ?? 8, 30));
   const variants = queryVariants(input.query);
-  const fts = toFtsQuery(variants.join(" "));
-  if (!fts) return [];
+  const terms = toSparseQueryTerms(variants.join(" "));
+  if (terms.length === 0) return [];
+  const termPlaceholders = terms.map(() => "?").join(",");
+  const tenantId = scope.tenantId ?? null;
+  const userId = scope.userId ?? null;
+  const matterId = scope.matterId ?? null;
+  const candidateLimit = Math.min(360, limit * 12);
+
+  const termStats = await input.db.prepare(`
+    SELECT term,COUNT(*) AS documentFrequency,
+      (SELECT COUNT(*) FROM legal_corpus_chunks) AS corpusCount
+    FROM legal_corpus_sparse_terms
+    WHERE term IN (${termPlaceholders})
+    GROUP BY term
+  `).bind(...terms).all<{
+    term: string;
+    documentFrequency: number;
+    corpusCount: number;
+  }>();
+  const documentFrequency = new Map(termStats.results.map((row) => [
+    row.term,
+    Number(row.documentFrequency),
+  ]));
+  const corpusCount = Math.max(1, Number(termStats.results[0]?.corpusCount ?? 1));
+
   const rows = await input.db.prepare(`
-    SELECT search.chunk_id AS chunkId,
+    WITH candidate_chunks AS (
+      SELECT sparse.chunk_id AS chunkId,
+        SUM(sparse.term_frequency + sparse.title_frequency * 4 + sparse.article_frequency * 8) AS rawScore,
+        COUNT(*) AS matchedTermCount,
+        json_group_array(json_object(
+          'term',sparse.term,
+          'termFrequency',sparse.term_frequency,
+          'titleFrequency',sparse.title_frequency,
+          'articleFrequency',sparse.article_frequency
+        )) AS matchedTermsJson
+      FROM legal_corpus_sparse_terms AS sparse
+      INNER JOIN legal_corpus_chunks AS candidate_chunk ON candidate_chunk.id=sparse.chunk_id
+      INNER JOIN legal_corpus_provisions AS candidate_provision ON candidate_provision.id=candidate_chunk.provision_id
+      INNER JOIN legal_corpus_versions AS candidate_version ON candidate_version.id=candidate_provision.version_id
+      INNER JOIN legal_corpus_variants AS candidate_variant ON candidate_variant.id=candidate_provision.variant_id
+      INNER JOIN legal_corpus_documents AS candidate_document ON candidate_document.id=candidate_provision.document_id
+      WHERE sparse.term IN (${termPlaceholders})
+        AND candidate_document.availability_status='ready'
+        AND (?=0 OR candidate_document.provider='lex_uz')
+        AND (
+          (? IS NULL AND candidate_variant.current_version_id=candidate_version.id
+            AND (?=1 OR candidate_provision.status='active'))
+          OR
+          (? IS NOT NULL AND candidate_version.valid_from IS NOT NULL
+            AND candidate_version.valid_from<=?
+            AND (candidate_version.valid_to IS NULL OR candidate_version.valid_to>?))
+        )
+        AND (
+          candidate_document.scope='global'
+          OR (candidate_document.scope='tenant' AND ? IS NOT NULL AND candidate_document.tenant_id=?)
+          OR (candidate_document.scope='user' AND ? IS NOT NULL
+            AND candidate_document.owner_user_id=?
+            AND (candidate_document.tenant_id IS NULL OR candidate_document.tenant_id=?)
+            AND (candidate_document.matter_id IS NULL OR candidate_document.matter_id=?))
+        )
+      GROUP BY sparse.chunk_id
+      ORDER BY rawScore DESC,matchedTermCount DESC,sparse.chunk_id ASC
+      LIMIT ?
+    )
+    SELECT candidate.chunkId AS chunkId,
       document.id AS documentId,document.title AS documentTitle,
       document.document_type AS documentType,
       provision.article_number AS articleNumber,provision.article_title AS articleTitle,
@@ -145,33 +219,68 @@ export async function retrieveLegalCorpus(input: {
       chunk.content_sha256 AS contentHash,
       document.provider AS provider,
       document.scope AS scope,document.tenant_id AS tenantId,
-      document.owner_user_id AS ownerUserId,document.matter_id AS matterId
-    FROM legal_corpus_search AS search
-    INNER JOIN legal_corpus_chunks AS chunk ON chunk.id=search.chunk_id
+      document.owner_user_id AS ownerUserId,document.matter_id AS matterId,
+      chunk.sparse_terms_json AS sparseTermsJson,
+      candidate.matchedTermsJson AS matchedTermsJson,
+      candidate.matchedTermCount AS matchedTermCount
+    FROM candidate_chunks AS candidate
+    INNER JOIN legal_corpus_chunks AS chunk ON chunk.id=candidate.chunkId
     INNER JOIN legal_corpus_provisions AS provision ON provision.id=chunk.provision_id
     INNER JOIN legal_corpus_versions AS version ON version.id=provision.version_id
     INNER JOIN legal_corpus_variants AS variant ON variant.id=provision.variant_id
     INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
-    WHERE legal_corpus_search MATCH ?
-      AND document.availability_status='ready'
-      AND (?=0 OR document.provider='lex_uz')
-      AND (
-        (? IS NULL AND variant.current_version_id=version.id AND (?=1 OR provision.status='active'))
-        OR
-        (? IS NOT NULL AND version.valid_from IS NOT NULL AND version.valid_from<=?
-          AND (version.valid_to IS NULL OR version.valid_to>?))
-      )
-    ORDER BY bm25(legal_corpus_search, 10.0, 5.0) ASC, provision.sequence ASC
-    LIMIT ?
+    ORDER BY candidate.rawScore DESC,candidate.matchedTermCount DESC,provision.sequence ASC
   `).bind(
-    fts, input.officialOnly ? 1 : 0,
+    ...terms,
+    input.officialOnly ? 1 : 0,
     asOfDate, scope.includeHistorical ? 1 : 0,
     asOfDate, asOfDate, asOfDate,
-    limit * 3,
-  ).all<SparseRow>();
-  const sparse = rows.results.filter((row) => scopeAllows(row, scope))
-    .slice(0, limit * 2)
-    .map((row, index) => ({
+    tenantId, tenantId,
+    userId, userId, tenantId, matterId,
+    candidateLimit,
+  ).all<SparseCandidateRow>();
+
+  const candidates = rows.results.filter((row) => scopeAllows(row, scope));
+  const lengths = candidates.map((row) => {
+    try {
+      const entries = JSON.parse(row.sparseTermsJson) as SparseMatchedTerm[];
+      return Math.max(1, entries.reduce((total, entry) => total
+        + Number(entry.termFrequency ?? 0)
+        + Number(entry.titleFrequency ?? 0)
+        + Number(entry.articleFrequency ?? 0), 0));
+    } catch {
+      return 1;
+    }
+  });
+  const averageLength = lengths.length > 0
+    ? lengths.reduce((total, length) => total + length, 0) / lengths.length
+    : 1;
+  const k1 = 1.2;
+  const b = 0.75;
+  const scored = candidates.map((row, index) => {
+    let matched: SparseMatchedTerm[] = [];
+    try {
+      matched = JSON.parse(row.matchedTermsJson) as SparseMatchedTerm[];
+    } catch {
+      matched = [];
+    }
+    const documentLength = lengths[index] ?? 1;
+    const score = matched.reduce((total, entry) => {
+      const frequency = Number(entry.termFrequency ?? 0)
+        + Number(entry.titleFrequency ?? 0) * 4
+        + Number(entry.articleFrequency ?? 0) * 8;
+      const df = Math.max(1, documentFrequency.get(entry.term) ?? 1);
+      const idf = Math.log(1 + (corpusCount - df + 0.5) / (df + 0.5));
+      const denominator = frequency + k1 * (1 - b + b * (documentLength / averageLength));
+      return total + idf * ((frequency * (k1 + 1)) / Math.max(denominator, 0.0001));
+    }, 0);
+    return { row, score };
+  }).sort((left, right) => right.score - left.score
+    || right.row.matchedTermCount - left.row.matchedTermCount
+    || left.row.chunkId.localeCompare(right.row.chunkId));
+
+  const sparse = scored.slice(0, limit * 2)
+    .map(({ row }, index) => ({
       chunkId: row.chunkId,
       documentId: row.documentId,
       documentTitle: row.documentTitle,

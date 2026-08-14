@@ -51,6 +51,15 @@ test("RRF is stable with duplicate, sparse-only and dense-only ranks", () => {
 test("sparse retrieval returns only the current, scope-authorized version", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
+    const sparseTable = sqlite.prepare(
+      "SELECT type FROM sqlite_master WHERE name='legal_corpus_sparse_terms'",
+    ).get() as { type: string } | undefined;
+    const virtualSearch = sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM sqlite_master WHERE sql LIKE 'CREATE VIRTUAL TABLE legal_corpus_search%'",
+    ).get() as { count: number };
+    assert.equal(sparseTable?.type, "table");
+    assert.equal(virtualSearch.count, 0);
+
     const html = `<!doctype html><main id="divCont">
       <div>Дата вступления в силу</div><div>01.01.2020</div>
       <div class="lx_elem ACT_TITLE">Закон о проверке</div>
@@ -74,6 +83,9 @@ test("sparse retrieval returns only the current, scope-authorized version", asyn
     assert.equal(results.length, 1);
     assert.equal(results[0]?.articleNumber, "25");
     assert.equal(results[0]?.documentTitle, "Закон о проверке");
+    assert.ok((sqlite.prepare(
+      "SELECT COUNT(*) AS count FROM legal_corpus_sparse_terms",
+    ).get() as { count: number }).count > 0);
     assert.equal(assessLegalCorpusCoverage({ query: "статья 25", sources: results }), "good_coverage");
   } finally {
     sqlite.close();

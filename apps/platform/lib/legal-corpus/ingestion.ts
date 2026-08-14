@@ -113,19 +113,47 @@ function objectStem(documentId: string, language: LegalCorpusLanguage, hash: str
   return `legal-corpus/lex-uz/${documentId.replaceAll(":", "/")}/${language}/${hash}`;
 }
 
-function sparseTerms(input: { text: string; articleNumber: string | null; title: string | null }): string {
-  const weighted = [
-    input.articleNumber ? `${input.articleNumber} `.repeat(8) : "",
-    input.title ? `${input.title} `.repeat(4) : "",
-    input.text,
-  ].join(" ").toLocaleLowerCase("und").normalize("NFKC");
+type SparseTermEntry = {
+  term: string;
+  termFrequency: number;
+  titleFrequency: number;
+  articleFrequency: number;
+};
+
+function countSparseTerms(value: string): Map<string, number> {
   const counts = new Map<string, number>();
-  for (const token of weighted.match(/[\p{L}\p{N}][\p{L}\p{N}._-]{1,80}/gu) ?? []) {
+  const normalized = value.toLocaleLowerCase("und").normalize("NFKC");
+  for (const token of normalized.match(/[\p{L}\p{N}][\p{L}\p{N}._-]{0,80}/gu) ?? []) {
     counts.set(token, (counts.get(token) ?? 0) + 1);
   }
-  return JSON.stringify([...counts.entries()]
-    .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
-    .slice(0, 512));
+  return counts;
+}
+
+function sparseTermEntries(input: {
+  text: string;
+  articleNumber: string | null;
+  title: string | null;
+}): SparseTermEntry[] {
+  const body = countSparseTerms(input.text);
+  const title = countSparseTerms(input.title ?? "");
+  const article = countSparseTerms(input.articleNumber ?? "");
+  return [...new Set([...body.keys(), ...title.keys(), ...article.keys()])]
+    .map((term) => ({
+      term,
+      termFrequency: body.get(term) ?? 0,
+      titleFrequency: title.get(term) ?? 0,
+      articleFrequency: article.get(term) ?? 0,
+    }))
+    .sort((left, right) => {
+      const leftWeight = left.termFrequency + left.titleFrequency * 4 + left.articleFrequency * 8;
+      const rightWeight = right.termFrequency + right.titleFrequency * 4 + right.articleFrequency * 8;
+      return rightWeight - leftWeight || left.term.localeCompare(right.term);
+    })
+    .slice(0, 512);
+}
+
+function sparseTermsJson(entries: readonly SparseTermEntry[]): string {
+  return JSON.stringify(entries);
 }
 
 function safeErrorCode(error: unknown): string {
@@ -471,6 +499,11 @@ export async function ingestOfficialLexDocument(
   }
   for (const chunk of chunks) {
     const provisionId = `${versionId}:p${chunk.provision.sequence}`;
+    const sparseEntries = sparseTermEntries({
+      text: chunk.text,
+      articleNumber: chunk.provision.articleNumber,
+      title: chunk.provision.title,
+    });
     provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_chunks
       (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,dense_vector_id,sparse_terms_json,indexed_at,created_at)
       VALUES (?,?,?,?,?,?,?,NULL,?,?,?)
@@ -478,20 +511,30 @@ export async function ingestOfficialLexDocument(
     `).bind(
       `${provisionId}:c${chunk.chunkIndex}`, provisionId, versionId, chunk.chunkIndex,
       chunk.totalChunks, chunk.text, await sha256(chunk.text),
-      sparseTerms({ text: chunk.text, articleNumber: chunk.provision.articleNumber, title: chunk.provision.title }),
+      sparseTermsJson(sparseEntries),
       now, now,
     ));
-    // FTS5 has no unique constraint. Delete-then-insert makes a replay after
-    // a transient D1 batch failure idempotent without mutating legal content.
+    // The exportable inverted index is rebuildable from immutable chunks.
+    // Delete-then-insert keeps a retry idempotent without mutating legal text.
     provisionStatements.push(env.DB.prepare(
-      "DELETE FROM legal_corpus_search WHERE chunk_id=?",
+      "DELETE FROM legal_corpus_sparse_terms WHERE chunk_id=?",
     ).bind(`${provisionId}:c${chunk.chunkIndex}`));
-    provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_search
-      (chunk_id,version_id,document_id,language,article_number,title,content)
-      VALUES (?,?,?,?,?,?,?)
+    provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_sparse_terms
+      (term,chunk_id,document_id,version_id,language,term_frequency,title_frequency,article_frequency)
+      SELECT
+        CAST(json_extract(value,'$.term') AS TEXT),?,?,?,?,
+        CAST(json_extract(value,'$.termFrequency') AS INTEGER),
+        CAST(json_extract(value,'$.titleFrequency') AS INTEGER),
+        CAST(json_extract(value,'$.articleFrequency') AS INTEGER)
+      FROM json_each(?)
+      WHERE 1=1
+      ON CONFLICT(term,chunk_id) DO UPDATE SET
+        term_frequency=excluded.term_frequency,
+        title_frequency=excluded.title_frequency,
+        article_frequency=excluded.article_frequency
     `).bind(
-      `${provisionId}:c${chunk.chunkIndex}`, versionId, documentId, currentDocument.language,
-      chunk.provision.articleNumber, chunk.provision.title ?? "", chunk.text,
+      `${provisionId}:c${chunk.chunkIndex}`, documentId, versionId, currentDocument.language,
+      sparseTermsJson(sparseEntries),
     ));
   }
   await runBatches(env.DB, provisionStatements);
