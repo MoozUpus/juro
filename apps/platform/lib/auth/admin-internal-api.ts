@@ -37,6 +37,7 @@ const lifecycleSchema = z.object({
 
 type AdminInternalEnv = {
   DB?: D1Database;
+  BUCKET?: R2Bucket;
   APP_ENV?: string;
   ADMIN_INTERNAL_TOKEN?: string;
   // Production's isolated admin Worker uses a separately provisioned token.
@@ -276,11 +277,17 @@ async function legalCorpusAction(request: Request, env: AdminInternalEnv): Promi
   }
   const payload = legalCorpusAdminActionSchema.safeParse(await parseJson(request));
   if (!payload.success) return noStore({ code: "LEGAL_CORPUS_ADMIN_INVALID" }, 400);
+  const ownerMaterialMutation = payload.data.action === "publish_owner_material"
+    || payload.data.action === "withdraw_owner_material";
+  if (ownerMaterialMutation && !authenticated.principal.roles.includes("lawyer_moderator")) {
+    return noStore({ code: "ACCESS_DENIED" }, 403);
+  }
   const now = new Date();
   const assignment = await authenticated.db.prepare(`SELECT id FROM platform_staff_assignments
-    WHERE user_id=? AND role='administrator' AND revoked_at IS NULL AND granted_at<=? AND expires_at>?
+    WHERE user_id=? AND role=? AND revoked_at IS NULL AND granted_at<=? AND expires_at>?
     ORDER BY granted_at DESC,id LIMIT 1`).bind(
       authenticated.principal.userId,
+      ownerMaterialMutation ? "legal_reviewer" : "administrator",
       now.toISOString(),
       now.toISOString(),
     ).first<{ id: string }>();
@@ -302,6 +309,7 @@ async function legalCorpusAction(request: Request, env: AdminInternalEnv): Promi
       principal: authenticated.principal,
       action: `legal_corpus_${result.action}`,
       entityType: "legal_corpus",
+      entityId: result.targetId ?? null,
       metadata: { affected: result.affected },
       now,
     });

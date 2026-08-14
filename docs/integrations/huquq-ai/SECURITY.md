@@ -14,3 +14,18 @@
   credentials in URLs, follows no redirects, uses bounded responses/timeouts and
   returns only IDs. `QDRANT_API_KEY` is a secret and is never checked into Wrangler
   vars. D1 reauthorization is mandatory before a vector candidate becomes evidence.
+- Owner material publication is fail-closed behind
+  `LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST=false`. Enabling the flag alone is not
+  sufficient: the request must come from the isolated admin host, pass CSRF,
+  carry both admin and legal-reviewer assignments, fresh MFA, ownership,
+  malware-safe file state, verified OCR bytes and two explicit confirmations.
+- Deterministic pre-publication checks reject common e-mail, phone, PINFL and
+  passport patterns plus known prompt-injection imperatives before corpus R2
+  or D1 writes. Failure records expose only a bounded error code, never text.
+- `legal_corpus_owner_publications` is append-only and contains hashes and
+  actor evidence, not legal text. Cross-owner publication and stale MFA are
+  regression-tested. Owner material is excluded from the official Lex provider.
+- Withdrawal is a separate immutable event and remains available with ingestion
+  disabled. It removes the material from sparse and dense rehydration through
+  the D1 availability predicate without deleting audit evidence or blocking
+  retention/deletion of the original private analysis.

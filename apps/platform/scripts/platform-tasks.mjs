@@ -144,6 +144,7 @@ const coreTestFiles = [
   "tests/legal-corpus-citation-validation.test.ts",
   "tests/legal-corpus-catalog-discovery.test.ts",
   "tests/legal-corpus-admin-operations.test.ts",
+  "tests/legal-corpus-owner-materials.test.ts",
   "tests/legal-source-trust.test.ts",
   "tests/legal-corpus-worker-boundary.test.ts",
   "tests/legal-corpus-retrieval.test.ts",

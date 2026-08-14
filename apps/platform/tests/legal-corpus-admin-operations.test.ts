@@ -159,4 +159,35 @@ test("isolated admin domain owns the corpus surface and rechecks CSRF plus super
   assert.match(internal, /adminRoleAllows\(authenticated\.principal\.roles, "legal\.corpus\.manage"\)/u);
   assert.match(internal, /sourceMfaVerifiedAt/u);
   assert.match(internal, /legalCorpusAdminActionSchema\.safeParse/u);
+  assert.match(internal, /payload\.data\.action === "publish_owner_material"/u);
+  assert.match(internal, /payload\.data\.action === "withdraw_owner_material"/u);
+  assert.match(internal, /roles\.includes\("lawyer_moderator"\)/u);
+  assert.match(internal, /ownerMaterialMutation \? "legal_reviewer" : "administrator"/u);
+  assert.match(worker, /Опубликовать материал владельца/u);
+});
+
+test("owner publication has an independent deny-by-default flag and explicit human confirmations", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const action = {
+      action: "publish_owner_material" as const,
+      analysisId: "analysis-owner",
+      workspaceId: "workspace-owner",
+      title: "Owner legal material",
+      language: "ru" as const,
+      rightsConfirmed: true as const,
+      legalReviewConfirmed: true as const,
+      reason: "Publish only after the separate owner-material gate is approved.",
+    };
+    await assert.rejects(
+      performLegalCorpusAdminAction({
+        env: { DB: d1, APP_ENV: "staging", LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" },
+        staff,
+        value: action,
+        now,
+      }),
+      (error: unknown) => error instanceof LegalCorpusAdminError && error.code === "LEGAL_CORPUS_ADMIN_DISABLED",
+    );
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_owner_publications").get() as { count: number }).count), 0);
+  } finally { sqlite.close(); }
 });

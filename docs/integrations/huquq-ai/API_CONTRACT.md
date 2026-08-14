@@ -22,3 +22,30 @@ D1 before returning this contract.
 `AdviceUzProvider`, `InternalJuroMaterialsProvider` and `CourtPracticeProvider`
 are interface names only until a source is legally available, verified and enabled. A
 browser never receives the retrieval-service key.
+
+## Owner material promotion
+
+`POST /api/internal/admin/legal-corpus` accepts `publish_owner_material` only
+through the isolated admin service binding. Its body is strictly validated:
+
+```ts
+{
+  action: "publish_owner_material";
+  analysisId: string;
+  workspaceId: string;
+  title: string;
+  language: "ru" | "uz-Latn" | "uz-Cyrl" | "en";
+  rightsConfirmed: true;
+  legalReviewConfirmed: true;
+  reason: string;
+}
+```
+
+The authenticated actor must be both `super_admin` and `legal_reviewer`, own
+the analysis and have fresh MFA. The endpoint returns only bounded IDs/counts;
+it never returns source text, the OCR derivative, R2 keys or credentials.
+
+`withdraw_owner_material` accepts only the published corpus `documentId` and a
+10–500 character reason. It remains available when ingestion flags are off,
+requires the original publishing reviewer plus fresh MFA, appends an immutable
+withdrawal event, and projects the document to `availability_status=disabled`.

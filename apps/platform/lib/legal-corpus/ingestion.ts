@@ -27,6 +27,7 @@ import {
 import { diffCorpusProvisions, type CorpusProvisionSnapshot } from "./versioning";
 import { LegalCorpusEmbeddingError } from "./embeddings";
 import { QdrantCorpusError } from "./qdrant";
+import { buildSparseTermEntries, sparseTermsJson } from "./sparse-index";
 
 const MAX_PROVISIONS_PER_VERSION = 8_000;
 const MAX_CHUNKS_PER_VERSION = 16_000;
@@ -113,49 +114,6 @@ async function sha256(value: string | Uint8Array): Promise<string> {
 
 function objectStem(documentId: string, language: LegalCorpusLanguage, hash: string): string {
   return `legal-corpus/lex-uz/${documentId.replaceAll(":", "/")}/${language}/${hash}`;
-}
-
-type SparseTermEntry = {
-  term: string;
-  termFrequency: number;
-  titleFrequency: number;
-  articleFrequency: number;
-};
-
-function countSparseTerms(value: string): Map<string, number> {
-  const counts = new Map<string, number>();
-  const normalized = value.toLocaleLowerCase("und").normalize("NFKC");
-  for (const token of normalized.match(/[\p{L}\p{N}][\p{L}\p{N}._-]{0,80}/gu) ?? []) {
-    counts.set(token, (counts.get(token) ?? 0) + 1);
-  }
-  return counts;
-}
-
-function sparseTermEntries(input: {
-  text: string;
-  articleNumber: string | null;
-  title: string | null;
-}): SparseTermEntry[] {
-  const body = countSparseTerms(input.text);
-  const title = countSparseTerms(input.title ?? "");
-  const article = countSparseTerms(input.articleNumber ?? "");
-  return [...new Set([...body.keys(), ...title.keys(), ...article.keys()])]
-    .map((term) => ({
-      term,
-      termFrequency: body.get(term) ?? 0,
-      titleFrequency: title.get(term) ?? 0,
-      articleFrequency: article.get(term) ?? 0,
-    }))
-    .sort((left, right) => {
-      const leftWeight = left.termFrequency + left.titleFrequency * 4 + left.articleFrequency * 8;
-      const rightWeight = right.termFrequency + right.titleFrequency * 4 + right.articleFrequency * 8;
-      return rightWeight - leftWeight || left.term.localeCompare(right.term);
-    })
-    .slice(0, 512);
-}
-
-function sparseTermsJson(entries: readonly SparseTermEntry[]): string {
-  return JSON.stringify(entries);
 }
 
 function safeErrorCode(error: unknown): string {
@@ -507,7 +465,7 @@ export async function ingestOfficialLexDocument(
   }
   for (const chunk of chunks) {
     const provisionId = `${versionId}:p${chunk.provision.sequence}`;
-    const sparseEntries = sparseTermEntries({
+    const sparseEntries = buildSparseTermEntries({
       text: chunk.text,
       articleNumber: chunk.provision.articleNumber,
       title: chunk.provision.title,

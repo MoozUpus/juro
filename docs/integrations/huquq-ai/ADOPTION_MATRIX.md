@@ -59,6 +59,7 @@ The following source-system dispositions are final for this integration:
 | 31 | Eval questions/runner | `eval/*` | regression discipline | JURO evaluation corpus | ADAPT | answers not copied | false ground truth | `LEGAL_REVIEW_REQUIRED` |
 | 32 | Pytest/API tests | `tests/*` | legal regression patterns | TypeScript node tests | REIMPLEMENT | MIT concepts | shallow parity | Legal/security tests |
 | 33 | README/legal docs | `README.md`, `docs/legal/*` | documentation | JURO integration docs | REIMPLEMENT | MIT concepts | unsupported claims | This documentation |
+| 34 | Global owner materials | attachment/corpus patterns | trusted internal knowledge | completed JURO analysis → immutable R2/D1 corpus promotion | REIMPLEMENT | MIT concepts | rights, cross-tenant leak, non-official text used as law | dual confirmation, owner check, malware/OCR SHA, fresh MFA, immutable audit, official-only exclusion tests |
 
 No Huquq AI runtime file is copied verbatim into JURO. The only literal upstream text
 stored here is the MIT licence notice at `third_party/licenses/huquq-ai-MIT.txt`.

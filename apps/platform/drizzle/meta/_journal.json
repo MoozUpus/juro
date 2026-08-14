@@ -897,6 +897,13 @@
       "when": 1786821600000,
       "tag": "0127_legal_corpus_admin_control",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1786908000000,
+      "tag": "0128_owner_corpus_publications",
+      "breakpoints": true
     }
   ]
 }

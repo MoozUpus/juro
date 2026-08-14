@@ -108,7 +108,7 @@ export async function syncLegalCorpusVersionToQdrant(
     INNER JOIN legal_corpus_versions AS version ON version.id=chunk.version_id
     INNER JOIN legal_corpus_variants AS variant ON variant.id=version.variant_id
     INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
-    WHERE chunk.version_id=? AND document.provider='lex_uz'
+    WHERE chunk.version_id=? AND document.provider IN ('lex_uz','juro_owner')
       AND document.scope='global' AND document.availability_status='ready'
     ORDER BY chunk.id ASC
     LIMIT 16000

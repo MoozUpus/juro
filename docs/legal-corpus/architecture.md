@@ -100,6 +100,28 @@ tenant predicates as BM25. Provider calls are blocked by JURO's existing cost
 circuit before network access and recorded in the system usage ledger. JURO
 does not create, delete or expose a Qdrant deployment automatically.
 
+Owner materials enter through an explicit promotion path, not a second upload
+surface. The actor must own an already completed document analysis whose file
+is `analysis_safe` and whose OCR derivative passes the existing R2 byte-count
+and SHA-256 checks. The same actor must hold active administrator and
+`legal_reviewer` assignments with MFA no older than 15 minutes, and must check
+separate rights-to-publish and human-legal-review confirmations. The normalized
+text is copied to an immutable private R2 key, then article-first chunks and an
+exportable sparse index are written before the current-version pointer changes.
+`legal_corpus_owner_publications` stores no document text: it is append-only
+evidence linking hashes, roles, MFA, reason and the resulting version.
+An owner can issue a separate immutable withdrawal through the same dual-role,
+fresh-MFA boundary even while ingestion flags are off. The withdrawal changes
+only the mutable availability projection to `disabled`; retrieval excludes it
+immediately, while hashes and prior versions remain for audit. Publication
+evidence uses opaque identifiers without foreign keys to private analysis rows,
+so normal document/account retention is not blocked.
+
+Owner materials never become official Lex evidence. `LexUzIndexedProvider`
+continues to request `officialOnly`; therefore owner text cannot supply a legal
+citation or freshness claim. A separate non-official materials consumer may
+use it only after its own product and evaluation gate.
+
 `/legal-corpus` lives on the isolated admin Worker rather than the ordinary
 platform UI. It reads through the private `PLATFORM_ADMIN_API` service binding.
 Only `super_admin` can view or operate it; the 15-minute host-only session is
@@ -111,5 +133,5 @@ queue. A catalog row is marked complete only when every expected document is
 indexed or has an explicit `technically_unavailable` result.
 
 Production's D1 `migrations_pattern` includes `0121` and production-safe
-`0124–0129` while structurally excluding staging-only evidence migrations
+`0124–0128` while structurally excluding staging-only evidence migrations
 `0122–0123`. Staging retains the complete migration ledger.

@@ -12,5 +12,12 @@
   indexer and D1 rehydration path are tested but remain disabled in all environments;
   activation still needs a reproducible benchmark, a private compatible collection,
   server-side secrets and controlled staging evidence.
+- The owner-material promotion path is implemented and regression-tested but
+  remains disabled in every environment. No owner document has been promoted.
+  Its first staging use still requires a real completed analysis, the actor's
+  explicit rights/legal-review confirmations, fresh MFA and post-action audit.
+- Owner materials are intentionally excluded from official Lex citations and
+  do not affect legal-answer freshness. A non-official materials UX/provider
+  remains a separate evaluated product decision.
 - `status.juro.uz` now resolves and is attached to the production Worker. Its
   status-host fence still needs to be preserved in every future routing change.

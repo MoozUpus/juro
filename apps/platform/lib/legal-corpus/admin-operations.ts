@@ -14,8 +14,13 @@ import {
   type LegalCorpusFeatureFlag,
   type LegalCorpusLanguage,
 } from "./trust";
+import {
+  OwnerMaterialPromotionError,
+  promoteCompletedAnalysisToOwnerCorpus,
+  withdrawOwnerMaterial,
+} from "./owner-materials";
 
-type AdminEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
+type AdminEnv = Pick<Env, "DB"> & Partial<Pick<Env, "BUCKET">> & { APP_ENV?: Env["APP_ENV"] }
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 export const legalCorpusAdminActionSchema = z.discriminatedUnion("action", [
@@ -31,6 +36,21 @@ export const legalCorpusAdminActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("retry_ingestion"),
     jobId: z.string().min(1).max(180).regex(/^[A-Za-z0-9:_-]+$/u),
+    reason: z.string().trim().min(10).max(500),
+  }).strict(),
+  z.object({
+    action: z.literal("publish_owner_material"),
+    analysisId: z.string().min(1).max(180).regex(/^[A-Za-z0-9:_-]+$/u),
+    workspaceId: z.string().min(1).max(180).regex(/^[A-Za-z0-9:_-]+$/u),
+    title: z.string().trim().min(2).max(300),
+    language: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]),
+    rightsConfirmed: z.literal(true),
+    legalReviewConfirmed: z.literal(true),
+    reason: z.string().trim().min(10).max(500),
+  }).strict(),
+  z.object({
+    action: z.literal("withdraw_owner_material"),
+    documentId: z.string().min(1).max(180).regex(/^[A-Za-z0-9:_-]+$/u),
     reason: z.string().trim().min(10).max(500),
   }).strict(),
 ]);
@@ -207,6 +227,22 @@ async function recentAdminEvents(
   return result.results;
 }
 
+async function recentOwnerPublicationEvents(
+  db: D1Database,
+  environment: OperationalEnvironment,
+): Promise<LegalCorpusAdminEvent[]> {
+  const result = await db.prepare(`SELECT * FROM (
+      SELECT id,'owner_material_published' AS action,'owner_material' AS targetType,
+        document_id AS targetId,reason,actor_user_id AS actorUserId,created_at AS createdAt
+      FROM legal_corpus_owner_publications WHERE environment=?
+      UNION ALL
+      SELECT id,'owner_material_withdrawn' AS action,'owner_material' AS targetType,
+        document_id AS targetId,reason,actor_user_id AS actorUserId,created_at AS createdAt
+      FROM legal_corpus_owner_withdrawals WHERE environment=?
+    ) ORDER BY createdAt DESC,id DESC LIMIT 50`).bind(environment, environment).all<LegalCorpusAdminEvent>();
+  return result.results;
+}
+
 export async function verifyLegalCorpusAdminHistory(
   db: D1Database,
   environment: OperationalEnvironment,
@@ -316,6 +352,7 @@ export async function readLegalCorpusAdminDashboard(input: {
       FROM legal_corpus_failures WHERE source_url IS NULL OR source_url LIKE 'https://lex.uz/%'
       ORDER BY attempted_at DESC,id LIMIT 100`).all<FailureRow>();
   const events = await recentAdminEvents(input.env.DB, environment);
+  const ownerEvents = await recentOwnerPublicationEvents(input.env.DB, environment);
   const lexHealth = await readDirectLegalSourceHealth(input.env.DB, environment, now);
   const integrity = await verifyLegalCorpusAdminHistory(input.env.DB, environment);
   return {
@@ -342,7 +379,9 @@ export async function readLegalCorpusAdminDashboard(input: {
       retryable: row.retryable === 1,
       canRetry: Boolean(row.jobId && row.retryable === 1 && ["pending", "retrying", "terminal"].includes(row.retryState)),
     })),
-    events: events.map(publicAdminEvent),
+    events: [...events.map(publicAdminEvent), ...ownerEvents]
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt) || left.id.localeCompare(right.id))
+      .slice(-50),
     integrity,
   };
 }
@@ -398,8 +437,12 @@ async function eventStatement(input: {
     );
 }
 
-function requireEnabled(env: AdminEnv): void {
-  if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
+function requireEnabled(env: AdminEnv, action: LegalCorpusAdminAction["action"]): void {
+  if (action === "withdraw_owner_material") return;
+  const actionFlag = action === "publish_owner_material"
+    ? "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST"
+    : "LEGAL_CORPUS_AUTO_INGEST_ENABLED";
+  if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, actionFlag)) {
     throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_DISABLED");
   }
 }
@@ -409,13 +452,43 @@ export async function performLegalCorpusAdminAction(input: {
   staff: Pick<PlatformStaffAccess, "userId" | "sessionId" | "assignmentIds" | "mfaVerifiedAt">;
   value: LegalCorpusAdminAction;
   now?: Date;
-}): Promise<{ action: LegalCorpusAdminAction["action"]; affected: number }> {
-  requireEnabled(input.env);
+}): Promise<{ action: LegalCorpusAdminAction["action"]; affected: number; targetId?: string }> {
+  requireEnabled(input.env, input.value.action);
   const integrity = await verifyLegalCorpusAdminHistory(input.env.DB, operationalEnvironment(input.env.APP_ENV));
   if (!integrity.valid) throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_INTEGRITY_FAILED");
   const environment = operationalEnvironment(input.env.APP_ENV);
   const now = (input.now ?? new Date()).toISOString();
   try {
+    if (input.value.action === "withdraw_owner_material") {
+      const result = await withdrawOwnerMaterial({
+        env: { DB: input.env.DB, APP_ENV: input.env.APP_ENV ?? "development" },
+        staff: input.staff,
+        documentId: input.value.documentId,
+        reason: input.value.reason,
+        now: new Date(now),
+      });
+      return { action: input.value.action, affected: 1, targetId: result.documentId };
+    }
+    if (input.value.action === "publish_owner_material") {
+      if (!input.env.BUCKET) throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_INVALID");
+      const result = await promoteCompletedAnalysisToOwnerCorpus({
+        env: { DB: input.env.DB, BUCKET: input.env.BUCKET, APP_ENV: input.env.APP_ENV ?? "development" },
+        staff: input.staff,
+        analysisId: input.value.analysisId,
+        workspaceId: input.value.workspaceId,
+        title: input.value.title,
+        language: input.value.language,
+        rightsConfirmed: input.value.rightsConfirmed,
+        legalReviewConfirmed: input.value.legalReviewConfirmed,
+        reason: input.value.reason,
+        now: new Date(now),
+      });
+      return {
+        action: input.value.action,
+        affected: result.status === "published" ? 1 : 0,
+        targetId: result.documentId,
+      };
+    }
     if (input.value.action === "seed_discovery") {
       const statements: D1PreparedStatement[] = [];
       for (const category of LEX_CORPUS_CATEGORIES) {
@@ -477,6 +550,18 @@ export async function performLegalCorpusAdminAction(input: {
     return { action: input.value.action, affected: 1 };
   } catch (error) {
     if (error instanceof LegalCorpusAdminError) throw error;
+    if (error instanceof OwnerMaterialPromotionError) {
+      if (error.code === "OWNER_MATERIAL_NOT_FOUND") {
+        throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_NOT_FOUND");
+      }
+      if (error.code === "OWNER_MATERIAL_NOT_OWNED" || error.code === "OWNER_MATERIAL_NOT_READY"
+        || error.code === "OWNER_MATERIAL_EXTRACTION_INVALID" || error.code === "OWNER_MATERIAL_CAPACITY_REJECTED"
+        || error.code === "OWNER_MATERIAL_SENSITIVE_DATA_REJECTED"
+        || error.code === "OWNER_MATERIAL_PROMPT_INJECTION_REJECTED") {
+        throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_INVALID");
+      }
+      throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_CONFLICT");
+    }
     throw new LegalCorpusAdminError("LEGAL_CORPUS_ADMIN_CONFLICT");
   }
 }
