@@ -25,7 +25,7 @@ not target the `juro` production Worker and does not apply a D1 migration.
   frame denial, and `X-Robots-Tag: noindex, nofollow, noarchive`.
 - A remote read-only D1 query returned `reachable = 1` from the staging DB
   (`bb716a96-b2fb-4823-90d6-6c228fed181a`) in EEUR; no rows were written.
-- The remote D1 migration ledger contains 121 applied migrations. Wrangler also
+- The remote D1 migration ledger contains 122 applied migrations. Wrangler also
   reports no pending staging migrations.
 - The deployed staging configuration has `LEGAL_LEX_INGESTION_ENABLED=true`,
   retains `LEGAL_ADVICE_INGESTION_ENABLED=false` and
@@ -62,6 +62,23 @@ and `121` migration-ledger rows; the export SHA-256 was
 `692262e0c6b0c2bef6c0c5baf49c1d5417b2abe2f34caf81eca5a88960ba2c7f`.
 The D1 control-plane report at the time showed 232 tables and a 24.5 MB staging
 database. The temporary export and local restore are pending local cleanup.
+
+## AI-quality audit repair
+
+The first protected queue request exposed a D1 schema defect rather than an
+MFA, role, or reviewer-access failure: D1 rejected the expanded fixed-width
+`GLOB` hash check with `LIKE or GLOB pattern too complex`. Migration
+`0121_fix_ai_quality_hash_constraints.sql` was applied to staging after
+confirming that both immutable audit tables contained zero rows. It replaces
+that expression with an equivalent 64-character uppercase-hex constraint and
+retains the chain, stale-review, and MFA/TOTP triggers. The staging Worker was
+then redeployed as `9fbf9f23-d67d-4e25-a8db-e41c0c6211c0`.
+
+The authenticated browser automation surface subsequently returned
+`ERR_BLOCKED_BY_CLIENT`, so final visual confirmation must be made in a normal
+browser session. This is a local browser-extension block; it is not evidence
+of a JURO authorization failure. The remote migration ledger and resulting
+table definition were verified read-only.
 
 ## Release-gate state
 
