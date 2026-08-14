@@ -8,7 +8,7 @@
 | Implementation branch | `feature/full-legal-corpus` |
 | Huquq AI audit commit | `1bce500c69b8213373d8ce0b40d56be7d83f6aec` |
 | Huquq AI licence | MIT; code patterns only, no corpus data copied |
-| Lex.uz crawl policy observed | `User-agent: *`, `Crawl-delay: 20` |
+| Lex.uz crawl policy used by the bounded fetcher | `User-agent: *`, `Crawl-delay: 20`; revalidated before acquisition |
 
 ## Reference corpus threshold
 
@@ -35,7 +35,24 @@ The read-only remote D1 probe on `juro-staging` returned the following values:
 Consequently, current JURO has no validated indexed legal corpus and must not
 claim source coverage, recall, or corpus-size parity. The full-corpus tables
 are introduced in migration `0124_full_legal_corpus.sql`; that migration has
-not been applied to staging or production as part of this baseline.
+not been applied to staging or production as part of this baseline. Migration
+`0125_lex_catalog_discovery.sql` adds the source-alias and resumable catalog
+checkpoint ledgers and likewise remains unapplied remotely.
+
+## Verified public catalog shape
+
+The 2026-08-15 read-only browser audit found 11 public catalog classes and four
+language modes, producing 44 independent discovery checkpoints. Numbered
+pagination is an ASP.NET POST-back and keeps the visible search URL unchanged.
+Document routes are `/ru/docs/:id`, `/uz/docs/-:id`, `/docs/:id` (Uzbek
+Cyrillic), and `/en/docs/:id`. Different language variants can use different
+provider IDs, so the branch links them through a canonical family rather than
+assuming ID equality.
+
+These observations prove the discovery contract only. No full crawl was run,
+and the corpus counts remain zero until a controlled staging ingestion report
+shows discovered, fetched, parsed, indexed and failed counts by category and
+language.
 
 ## Baseline gaps addressed on this branch
 
