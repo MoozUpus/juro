@@ -12,7 +12,7 @@ corpus to Git.
 | Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; one robots-aware GET/POST page per scheduler lease |
 | Lex metadata monitor | Discover bounded official RSS metadata | Existing robots-aware monitor, no source text stored |
 | Corpus job ledger | Idempotent queued/fetch/retry state | D1; identifiers and official URLs only |
-| Ingestion | Fetch one official Lex variant, validate HTML, parse articles | One job per outbox tick, robots/crawl delay respected |
+| Ingestion | Fetch one official Lex variant, validate HTML, parse articles | One job per dedicated corpus tick, robots/crawl delay respected |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25-style sparse terms, optional dense provider, RRF | Current-version and tenant/user scope filters |
@@ -78,10 +78,15 @@ document is queued idempotently for permanent ingestion when auto-ingest is
 enabled. Shadow mode consults the index but preserves the existing visible
 answer path.
 
-The daily metadata cron seeds the 44 checkpoints only when the corpus flags
-are enabled. The five-minute scheduler holds a distributed D1 lease and runs
-at most one catalog page and one document ingestion job sequentially. This
-keeps the official source crawl bounded and prevents parallel mass crawling.
+The route-free `juro-legal-corpus-*` Worker owns corpus scheduling. Its
+`5 19 * * *` UTC seed slot runs five minutes after the existing bounded Lex
+metadata monitor, and its five-minute processing slot holds the single
+`legal-corpus-worker` D1 lease before running at most one catalog page and one
+document ingestion job sequentially. The ordinary platform Worker neither
+imports nor invokes discovery or ingestion. Both corpus flags are `false` in
+development, staging and production configuration, so deploying the isolated
+runtime alone cannot begin a crawl. This keeps official-source acquisition
+bounded and prevents parallel mass crawling.
 
 `/legal-corpus` lives on the isolated admin Worker rather than the ordinary
 platform UI. It reads through the private `PLATFORM_ADMIN_API` service binding.

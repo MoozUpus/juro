@@ -72,6 +72,10 @@ language.
 - Existing direct Lex retrieval remains the production fallback. It does not
   create permanent corpus records and therefore remains the source of truth
   until the separate corpus rollout gate is passed.
+- Heavy corpus discovery and ingestion have been removed from the ordinary
+  application scheduler. A route-free dedicated Worker now owns the bounded
+  seed/process crons, a shared D1 lease and an idempotent scheduled-run ledger;
+  its development, staging and production flags all default to `false`.
 
 ## Data rights and operational boundary
 

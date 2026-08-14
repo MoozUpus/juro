@@ -13,6 +13,8 @@
     "build:production": "node scripts/platform-tasks.mjs build --environment production",
     "deploy:staging": "node scripts/deploy-staging.mjs",
     "deploy:production": "node scripts/deploy-production.mjs",
+    "deploy:legal-corpus:staging": "wrangler deploy --config wrangler.legal-corpus.jsonc --env staging",
+    "validate:legal-corpus:artifact": "wrangler deploy --dry-run --config wrangler.legal-corpus.jsonc --env staging --outdir dist/legal-corpus-worker",
     "start": "node scripts/platform-tasks.mjs start",
     "test": "node scripts/platform-tasks.mjs test",
     "test:rendered": "node scripts/platform-tasks.mjs test-rendered",
