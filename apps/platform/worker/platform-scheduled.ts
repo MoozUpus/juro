@@ -8,6 +8,7 @@ import {
 import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-health";
 import {
   runNextLegalCorpusIngestionJob,
+  seedLexCorpusJobsFromMetadata,
   type LegalCorpusIngestionEnv,
 } from "../lib/legal-corpus/ingestion";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
@@ -511,22 +512,17 @@ export async function handleScheduled(
       changed: summary.changed,
       errors: summary.errors,
     });
-    // One durable job per daily slot preserves Lex.uz crawl-delay backpressure.
-    // It is independently feature-gated and may remain disabled while the
-    // legacy metadata monitor continues to report source freshness.
-    const corpus = await runNextLegalCorpusIngestionJob(
+    const seeded = await seedLexCorpusJobsFromMetadata(
       env as LegalCorpusIngestionEnv,
-      {
-        wait: (delayMs) => scheduler.wait(delayMs),
-      },
     );
+    // The five-minute outbox cron owns processing. Keeping this daily slot to
+    // discovery/seeding only avoids two concurrent Lex fetches at 19:00.
     logScheduled("info", {
-      event: "scheduled.legal_corpus_job_finished",
+      event: "scheduled.legal_corpus_seed_finished",
       environment: env.APP_ENV,
       cron: controller.cron,
-      claimed: corpus.claimed,
-      status: corpus.status,
-      errorCode: corpus.safeErrorCode,
+      seeded: seeded.queued,
+      considered: seeded.considered,
     });
     return;
   }
@@ -568,6 +564,13 @@ export async function handleScheduled(
         ageMinutes: null,
         sources: [],
       };
+    const legalCorpusAutoIngestEnabled = (env as Record<string, unknown>).LEGAL_CORPUS_ENABLED === "true"
+      && (env as Record<string, unknown>).LEGAL_CORPUS_AUTO_INGEST_ENABLED === "true";
+    const legalCorpusJob = legalCorpusAutoIngestEnabled
+      ? await runNextLegalCorpusIngestionJob(env as LegalCorpusIngestionEnv, {
+        wait: (delayMs) => scheduler.wait(delayMs),
+      })
+      : null;
     if (lexMetadataMonitorEnabled) {
       failureCode = "LEX_METADATA_MONITOR_RETRY_FAILED";
       lexMetadataRetry = await lexMetadataRetryDue(env, new Date(now))
@@ -664,6 +667,9 @@ export async function handleScheduled(
       lexMetadataStaleRuns,
       lexSourceHealthState: lexSourceHealth.state,
       lexSourceHealthError: lexSourceHealth.alertCode,
+      legalCorpusJobStatus: legalCorpusJob?.status ?? "disabled",
+      legalCorpusJobClaimed: legalCorpusJob?.claimed ?? false,
+      legalCorpusJobError: legalCorpusJob?.safeErrorCode ?? null,
       lexMetadataRetryStatus: lexMetadataRetry?.status ?? "not_due",
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,

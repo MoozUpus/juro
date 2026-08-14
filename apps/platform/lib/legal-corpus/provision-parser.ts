@@ -29,8 +29,11 @@ function heading(line: string): { number: string; title: string | null } | null 
  */
 export function parseLegalProvisions(
   text: string,
-  _language: LegalCorpusLanguage,
+  language: LegalCorpusLanguage,
 ): ParsedLegalProvision[] {
+  // Kept in the contract for language-specific heading rules as Lex formats
+  // evolve; current patterns safely cover the four supported languages.
+  void language;
   const lines = text.replace(/\r\n?/gu, "\n").split("\n");
   const starts: Array<{ line: number; number: string; title: string | null }> = [];
   for (const [line, value] of lines.entries()) {

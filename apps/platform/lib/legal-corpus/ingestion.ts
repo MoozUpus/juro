@@ -390,6 +390,37 @@ export async function enqueueOfficialLexCorpusDocument(
   };
 }
 
+/**
+ * Converts the already robots-aware Lex metadata feed into durable corpus
+ * jobs. It never discovers arbitrary URLs and is inert until both corpus
+ * switches are enabled. A later category crawler can use the same queue.
+ */
+export async function seedLexCorpusJobsFromMetadata(
+  env: LegalCorpusIngestionEnv,
+  input: { now?: Date; limit?: number } = {},
+): Promise<{ considered: number; queued: number }> {
+  if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
+    return { considered: 0, queued: 0 };
+  }
+  const limit = Math.max(1, Math.min(input.limit ?? 100, 250));
+  const candidates = await env.DB.prepare(`
+    SELECT canonical_url AS sourceUrl
+    FROM legal_monitoring_metadata
+    WHERE canonical_url LIKE 'https://lex.uz/%'
+    ORDER BY last_checked_at DESC
+    LIMIT ?
+  `).bind(limit).all<{ sourceUrl: string }>();
+  let queued = 0;
+  for (const candidate of candidates.results) {
+    const result = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: candidate.sourceUrl,
+      now: input.now,
+    });
+    if (result.created) queued += 1;
+  }
+  return { considered: candidates.results.length, queued };
+}
+
 /** Runs one job per invocation: Lex.uz crawl delay and the D1 job claim form
  * the distributed backpressure mechanism. */
 export async function runNextLegalCorpusIngestionJob(

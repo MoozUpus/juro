@@ -32,6 +32,7 @@ export type LegalCorpusRetrievalItem = {
   versionDate: string | null;
   fetchedAt: string;
   contentHash: string;
+  provider?: string;
   sparseRank?: number;
   denseRank?: number;
   fusionScore?: number;
@@ -118,6 +119,7 @@ export async function retrieveLegalCorpus(input: {
   scope?: LegalCorpusSearchScope;
   limit?: number;
   denseSearch?: (query: string, limit: number) => Promise<DenseCorpusCandidate[]>;
+  officialOnly?: boolean;
 }): Promise<LegalCorpusRetrievalItem[]> {
   const scope = input.scope ?? {};
   const limit = Math.max(1, Math.min(input.limit ?? 8, 30));
@@ -134,6 +136,7 @@ export async function retrieveLegalCorpus(input: {
       provision.status AS status,provision.valid_from AS validFrom,provision.valid_to AS validTo,
       version.version_date AS versionDate,version.fetched_at AS fetchedAt,
       provision.content_sha256 AS contentHash,
+      document.provider AS provider,
       document.scope AS scope,document.tenant_id AS tenantId,
       document.owner_user_id AS ownerUserId,document.matter_id AS matterId
     FROM legal_corpus_search AS search
@@ -145,10 +148,11 @@ export async function retrieveLegalCorpus(input: {
     WHERE legal_corpus_search MATCH ?
       AND variant.current_version_id=version.id
       AND document.availability_status='ready'
+      AND (?=0 OR document.provider='lex_uz')
       AND (?=1 OR provision.status='active')
     ORDER BY bm25(legal_corpus_search, 10.0, 5.0) ASC, provision.sequence ASC
     LIMIT ?
-  `).bind(fts, scope.includeHistorical ? 1 : 0, limit * 3).all<SparseRow>();
+  `).bind(fts, input.officialOnly ? 1 : 0, scope.includeHistorical ? 1 : 0, limit * 3).all<SparseRow>();
   const sparse = rows.results.filter((row) => scopeAllows(row, scope))
     .slice(0, limit * 2)
     .map((row, index) => ({
@@ -167,6 +171,7 @@ export async function retrieveLegalCorpus(input: {
       versionDate: row.versionDate,
       fetchedAt: row.fetchedAt,
       contentHash: row.contentHash,
+      provider: row.provider,
       sparseRank: index + 1,
     }));
   let dense: DenseCorpusCandidate[] = [];
