@@ -4,6 +4,26 @@ Audit target: `toxirerkinov70-commits/huquq-ai@1bce500c69b8213373d8ce0b40d56be7d
 Every reviewed component has an explicit decision. `REJECT` means the capability is
 deliberately not adopted, not that it was unreviewed.
 
+## Architecture-disposition confirmation
+
+The integration commit `80f4d739bbf6468c0df2dc625c41228d961e4531` changes
+**173** JURO files; the frequently cited count of 152 does not match the Git
+tree. Those files are JURO-native implementation, test, migration, operations,
+and documentation files—not a copied Huquq AI application. They remain on the
+feature branch pending the release gates below.
+
+The following source-system dispositions are final for this integration:
+
+| Upstream area | Decision | JURO boundary |
+| --- | --- | --- |
+| FastAPI and Docker runtime | REJECT | Cloudflare Workers, D1, R2, Queues, and existing Next.js/TypeScript routes remain authoritative. A separate service would require an approved benchmark and operations design. |
+| SQLite authentication and sessions | REJECT | Existing JURO authentication, MFA, tenant checks, and D1 ownership controls remain authoritative. |
+| Gemini provider | REJECT | Provider abstraction remains OpenAI primary with Anthropic fallback; no Gemini credential or adapter is added. |
+| Demo billing/plans | REJECT | JURO billing workflows are unchanged; no demo payment code or pricing model is carried over. |
+| Local Lex corpus/raw HTML | REJECT | No legislation corpus, raw HTML, or evaluation answer is committed. Staging ingestion is separately feature-gated and source-policy controlled. |
+| Qdrant deployment | REJECT | JURO uses its existing D1/Vectorize-compatible path. Qdrant needs a reproducible quality benchmark and separate infrastructure approval. |
+| Huquq AI name, logo, CSS identity, screenshots | REJECT | JURO name, navigation, design system, and only JURO-owned presentation assets are retained. |
+
 | # | Huquq AI component | Source path | Purpose | JURO equivalent / target | Decision | License | Risk | Test / control |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | FastAPI app and middleware | `backend/app/main.py`, `middleware.py` | HTTP runtime, CORS, limits | Next.js + Cloudflare Worker | REJECT | MIT | Replacing auth/runtime | Existing Worker boundary tests |

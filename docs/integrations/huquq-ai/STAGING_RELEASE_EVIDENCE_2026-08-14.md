@@ -9,14 +9,18 @@ legal judgment.
 ## Deployed revision
 
 - Branch: `feature/huquq-ai-staging-evidence`
-- Application commit: `33b5dc7e08f88ae6fcc7286f9e3a5fdde039268e`
+- Application commit: `e81173f0952f21589f15aeae602cc1520a29cfa0`
 - Worker: `juro-platform-staging`
-- Worker version: `350c9cf1-cb3f-45a3-a290-37e9677abd84` at 100% traffic
-- Deployment time: `2026-08-14T16:11:55.407815Z`
+- Worker version: `2596a35b-67b7-4b83-b2a4-4a7929edc7b0` at 100% traffic
+- Deployment time: `2026-08-14T16:52:04.682372Z`
 
 The deployment used `npm run deploy:staging`; it builds the flattened staging
 artifact and deploys only that Worker with `--containers-rollout none`. It does
 not target the `juro` production Worker and does not apply a D1 migration.
+
+The reviewer-evidence page and both of its server APIs are additionally guarded
+by `APP_ENV === "staging"`. They return `404` in any other environment, so this
+staging-only release control is not exposed by a production deployment.
 
 ## Verified staging boundary
 
@@ -98,6 +102,32 @@ The immutable event hash was also recomputed and matched:
 Its previous hash is the all-zero genesis value. This is a real reviewer
 decision recorded by the protected flow; it is not an AI-generated approval.
 
+## Per-scenario evidence materialization
+
+Migration `0123_legal_evaluation_human_review_records.sql` adds a separate,
+append-only ledger for the release contract's 314 individual review records.
+It does **not** write `ai_feedback` and therefore cannot fabricate user
+feedback. A record can only be created in one D1 batch when all of the
+following are true: the linked immutable whole-run attestation is
+`confirmed_correct`; its reviewer identity matches; the canonical scope is
+exactly `314/314`; each scenario's completed attempt and prompt/response hashes
+match; and the reviewer again has an active legal-review assignment, TOTP
+device, and fresh MFA session. Updates and deletes are rejected by D1 triggers.
+
+At `2026-08-14T16:51Z`, a remote read-only count returned `0/314`. This means
+the real legal determination remains recorded, but its technical
+per-scenario serialization has not yet been requested from a new fresh-MFA
+session. The protected UI labels that operation as a technical materialization,
+not a new legal decision.
+
+## CI evidence
+
+GitHub Actions run
+[`31820688835`](https://github.com/MoozUpus/juro/actions/runs/31820688835)
+completed successfully for `e81173f`. Both `apps/platform` and `apps/website`
+jobs passed their applicable install, lint, type-check, test, artifact,
+Cloudflare-matrix, and dependency-audit steps.
+
 ## Release-gate state
 
 | Gate | Status | Evidence / reason |
@@ -106,7 +136,7 @@ decision recorded by the protected flow; it is not an AI-generated approval.
 | Real 314-scenario staging execution | COMPLETE | `staging-20260814-canonical` has `314/314` unique completed records. Historical failed attempts are retained as provider-reliability evidence. |
 | Isolated D1 export/restore integrity | COMPLETE | Fresh staging export restored locally; `quick_check=ok`, zero foreign-key violations, and topology/migration counts matched the remote D1 metadata. |
 | Human legal review | COMPLETE | A fresh-MFA `legal_reviewer` recorded the immutable `confirmed_correct` attestation for the verified `314/314` canonical-run scope. The scope digest and event-hash chain were recomputed read-only. |
-| Legal-evaluation evidence export | NOT RUN | The existing export validator requires 314 individual persisted feedback/review records. A whole-run attestation deliberately does not synthesize those records, so this separate evidence gate is not claimed as complete. |
+| Legal-evaluation evidence export | AWAITING 314 RECORDS | The staging-only immutable-review ledger and verifier are deployed and tested, but its remote count is `0/314`. The whole-run attestation deliberately does not synthesize individual decisions. |
 | Corpus ingestion | ENABLED IN STAGING | Lex-only staging ingestion is enabled behind the existing fresh-MFA manual endpoint. Advice.uz and the staff source API remain disabled; no corpus is committed to Git and no source is published without the review lifecycle. |
 | Controlled production rollout | NOT APPROVED | Production preflight/dry-run passed against the isolated `juro` artifact, but no production upload, migration, R2 write, queue write, DNS change, or traffic change was performed. The individual-record evidence-export gate remains open. |
 
@@ -117,11 +147,14 @@ physical second factor. It cannot be truthfully completed by source code, a
 Cloudflare OAuth deployment token, or an AI agent without that account's fresh
 Access and TOTP session:
 
-1. The authenticated reviewer creates the 314 individual persisted
-   feedback/review records required by the existing export contract, then exports
-   that evidence. The strict CLI validator can then verify the envelope and its
-   digest. The whole-run attestation above remains immutable and is not expanded
-   into fabricated per-scenario decisions.
+1. The authenticated reviewer opens
+   `/ru/admin/ai-quality/evaluation` in a normal browser after a new MFA check,
+   selects the technical-materialization confirmation, and chooses
+   **Create individual records**. The same page can then export the compact
+   evidence envelope. The strict verifier checks every scenario hash and the
+   immutable event chain; neither raw prompts nor raw AI responses are exported.
+   The whole-run attestation above remains immutable and is not expanded into
+   fabricated per-scenario decisions.
 
 The completed whole-run review does not authorize production rollout. The
 individual-record evidence gate and a separate production approval remain
