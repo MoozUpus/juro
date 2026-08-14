@@ -99,6 +99,11 @@ function staff(role: PlatformStaffRole = "legal_reviewer"): PlatformStaffAccess 
 test("0087 keeps the queue metadata-only and separately audits full-content view", async () => {
   const { sqlite, d1 } = seed();
   try {
+    const eventTable = sqlite.prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='ai_quality_review_events'",
+    ).get() as { sql: string };
+    assert.doesNotMatch(eventTable.sql, /replace\(hex\(zeroblob\(32\)\)/);
+    assert.match(eventTable.sql, /NOT GLOB '\*\[\^A-F0-9\]\*'/);
     const queue = await executeAiQualityReview({
       db: d1, staff: staff(), now: new Date(NOW),
       request: { action: "query", filters: { reviewStatus: "pending", limit: 100 } },

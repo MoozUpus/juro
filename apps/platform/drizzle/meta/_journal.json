@@ -848,6 +848,13 @@
       "when": 1786734000000,
       "tag": "0120_staging_legal_evaluation_agent_evidence",
       "breakpoints": true
+    },
+    {
+      "idx": 121,
+      "version": "7",
+      "when": 1786720004666,
+      "tag": "0121_fix_ai_quality_hash_constraints",
+      "breakpoints": true
     }
   ]
 }
