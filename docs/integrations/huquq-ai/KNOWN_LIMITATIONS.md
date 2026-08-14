@@ -9,9 +9,10 @@
 - Advice.uz and court-practice retrieval remain unavailable unless separately verified;
   they must not be presented as official APIs.
 - Qdrant is not deployed or configured. The checked-in REST adapter, dense+sparse
-  indexer and D1 rehydration path are tested but remain disabled in all environments;
+  indexer and D1 rehydration path are tested, but dense retrieval remains disabled;
   activation still needs a reproducible benchmark, a private compatible collection,
-  server-side secrets and controlled staging evidence.
+  server-side secrets and controlled staging evidence. Bounded sparse corpus
+  acquisition is enabled only in staging; production corpus flags remain disabled.
 - The owner-material promotion path is implemented and regression-tested but
   remains disabled in every environment. No owner document has been promoted.
   Its first staging use still requires a real completed analysis, the actor's

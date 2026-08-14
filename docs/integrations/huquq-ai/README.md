@@ -11,8 +11,9 @@ version/scope rehydration → bounded ranking → coverage and exact-span
 validation → OpenAI primary/retry or Anthropic fallback → citation-filtered answer.
 
 Read [the matrix](ADOPTION_MATRIX.md) before changing the retrieval path. Rollout stays
-feature-gated; the Qdrant adapter and corpus ingestion remain disabled and production
-activation remains outside this integration.
+feature-gated. Bounded official-source acquisition and sparse shadow retrieval are
+enabled only in staging; Qdrant dense retrieval and every production corpus flag
+remain disabled pending the reproducible release gate.
 
 The 2026-08-15 infrastructure deployment, D1 restore evidence, Worker versions
 and authenticated browser smoke are recorded in

@@ -71,9 +71,13 @@ and quotation.
 
 ## Controlled activation
 
-All corpus flags are server-side and default to `false` in every environment.
-The direct request-scoped Lex flow continues to serve users until the staging
-evidence gate specifically enables and verifies indexed retrieval. When
+All corpus flags are server-side and default to `false`. Production keeps every
+corpus flag disabled. After explicit approval, verified D1 backup/restore and
+the fail-closed release verifier were in place, staging alone enabled bounded
+official-source acquisition, multilingual parsing, historical discovery and
+shadow retrieval. Dense Qdrant retrieval remains disabled. The direct
+request-scoped Lex flow continues to serve visible answers until the staging
+evidence gate verifies indexed retrieval. When
 enabled, chat searches indexed trusted chunks first and uses the validated
 direct Lex path only for weak, stale or absent coverage. A validated live
 document is queued idempotently for permanent ingestion when auto-ingest is
@@ -85,10 +89,11 @@ The route-free `juro-legal-corpus-*` Worker owns corpus scheduling. Its
 metadata monitor, and its five-minute processing slot holds the single
 `legal-corpus-worker` D1 lease before running at most one catalog page and one
 document ingestion job sequentially. The ordinary platform Worker neither
-imports nor invokes discovery or ingestion. Both corpus flags are `false` in
-development, staging and production configuration, so deploying the isolated
-runtime alone cannot begin a crawl. This keeps official-source acquisition
-bounded and prevents parallel mass crawling.
+imports nor invokes discovery or ingestion. Development and production keep
+both acquisition flags `false`. Staging sets them only on the isolated Worker
+and matching admin boundary; the shared lease, one-page/one-document limit and
+20-second robots delay keep acquisition bounded and prevent parallel mass
+crawling.
 
 `LEGAL_CORPUS_DENSE_ENABLED` is an additional independent deny-by-default
 switch. When enabled, the dedicated Worker checks that the configured Qdrant

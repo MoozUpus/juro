@@ -46,8 +46,10 @@ After the branch CI and staging browser smoke passed, production-safe migrations
 `0124–0128` were applied to production. Staging-only evidence migrations
 `0122–0123` remained excluded. Both environments have verified pre/post
 isolated restores and private-R2 readback evidence. All new corpus registries
-remain empty and all corpus feature flags remain disabled; no crawl or corpus
-traffic cutover was started.
+were empty and all corpus feature flags were disabled at the foundation release;
+no crawl or corpus traffic cutover was started by that release. The following
+approved phase enables bounded acquisition in staging only. Production remains
+disabled and direct Lex remains its visible answer path.
 
 ## Verified public catalog shape
 
@@ -80,8 +82,9 @@ language.
   until the separate corpus rollout gate is passed.
 - Heavy corpus discovery and ingestion have been removed from the ordinary
   application scheduler. A route-free dedicated Worker now owns the bounded
-  seed/process crons, a shared D1 lease and an idempotent scheduled-run ledger;
-  its development, staging and production flags all default to `false`.
+  seed/process crons, a shared D1 lease and an idempotent scheduled-run ledger.
+  Development and production remain `false`; staging alone enables bounded
+  acquisition and shadow mode after the release verifier and backup gates.
 
 ## Data rights and operational boundary
 
