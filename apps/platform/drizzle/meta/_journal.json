@@ -862,6 +862,13 @@
       "when": 1786721000000,
       "tag": "0122_legal_evaluation_human_attestations",
       "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1786807200000,
+      "tag": "0123_legal_evaluation_human_review_records",
+      "breakpoints": true
     }
   ]
 }

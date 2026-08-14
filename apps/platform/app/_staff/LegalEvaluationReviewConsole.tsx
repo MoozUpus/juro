@@ -8,6 +8,7 @@ type Summary = {
   corpusVersion: string;
   scenarioCount: number;
   scopeDigest: string;
+  materializedCount: number;
   existing: null | { eventHash: string; createdAt: string; disposition: string };
 };
 
@@ -25,6 +26,7 @@ async function request<T>(body: unknown): Promise<T> {
 export function LegalEvaluationReviewConsole({ locale, reviewerName }: { locale: "ru" | "uz"; reviewerName: string }) {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [materializationConfirmed, setMaterializationConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [receipt, setReceipt] = useState<string | null>(null);
@@ -35,7 +37,10 @@ export function LegalEvaluationReviewConsole({ locale, reviewerName }: { locale:
     catch (value) { setError(value instanceof Error ? value.message : "REQUEST_FAILED"); }
     finally { setBusy(false); }
   }, []);
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    const timer = window.setTimeout(load, 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
   const attest = async () => {
     if (!summary || !confirmed) return;
     setBusy(true); setError("");
@@ -45,13 +50,40 @@ export function LegalEvaluationReviewConsole({ locale, reviewerName }: { locale:
     } catch (value) { setError(value instanceof Error ? value.message : "REQUEST_FAILED"); }
     finally { setBusy(false); }
   };
+  const materialize = async () => {
+    if (!summary || !materializationConfirmed) return;
+    setBusy(true); setError("");
+    try {
+      const result = await request<{ eventHash: string; materializedCount: number; replay: boolean }>({ action: "materialize", evaluationRunId: runId, expectedScopeDigest: summary.scopeDigest, confirmation: "I_CONFIRM_MATERIALIZE_PERSONAL_REVIEWS" });
+      setReceipt(`${result.materializedCount} records · ${result.eventHash}`); await load();
+    } catch (value) { setError(value instanceof Error ? value.message : "REQUEST_FAILED"); }
+    finally { setBusy(false); }
+  };
+  const exportEvidence = async () => {
+    if (!summary || summary.materializedCount !== summary.scenarioCount) return;
+    setBusy(true); setError("");
+    try {
+      const response = await fetch("/api/platform/admin/ai-quality/evaluation-human-evidence", {
+        method: "POST", cache: "no-store",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ evaluationRunId: runId }),
+      });
+      const payload = await response.json() as { evidence?: { exportDigest: string }; code?: string };
+      if (!response.ok || !payload.evidence) throw new Error(payload.code || `HTTP ${response.status}`);
+      const blob = new Blob([JSON.stringify(payload.evidence, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
+      anchor.href = url; anchor.download = `${runId}-human-review-evidence.json`; anchor.click(); URL.revokeObjectURL(url);
+      setReceipt(payload.evidence.exportDigest);
+    } catch (value) { setError(value instanceof Error ? value.message : "REQUEST_FAILED"); }
+    finally { setBusy(false); }
+  };
   const ru = locale === "ru";
   return <div className="staff-console ai-quality-console">
     <header className="staff-topbar"><div className="staff-brand"><ShieldCheck aria-hidden="true"/><span><b>JURO</b><small>LEGAL EVALUATION REVIEW</small></span></div><div className="staff-session"><span>{ru ? "Защищённый контур · свежая 2FA" : "Himoyalangan kontur · yangi 2FA"}</span><b>{reviewerName}</b></div></header>
     <main id="staff-main" className="staff-main"><section className="staff-heading"><div><span>JURO · LEGAL QUALITY</span><h1>{ru ? "Подтверждение юридической проверки" : "Yuridik tekshiruvni tasdiqlash"}</h1><p>{ru ? "Фиксирует ваше личное решение по неизменяемому составу staging evaluation. Это не AI-оценка и не подтверждение от имени другого лица." : "Staging evaluation bo‘yicha shaxsiy qaroringizni o‘zgarmas tarkib bilan qayd etadi."}</p></div><button type="button" onClick={() => void load()} disabled={busy}>{busy ? <LoaderCircle aria-hidden="true"/> : <ShieldCheck aria-hidden="true"/>}{ru ? "Обновить" : "Yangilash"}</button></section>
       {error && <p className="staff-error" role="alert">{error}</p>}
       {summary && <section className="staff-filters"><dl className="ai-quality-facts"><div><dt>Run</dt><dd>{summary.evaluationRunId}</dd></div><div><dt>{ru ? "Сценариев" : "Ssenariylar"}</dt><dd>{summary.scenarioCount}</dd></div><div><dt>Corpus</dt><dd>{summary.corpusVersion}</dd></div></dl>
-        {summary.existing ? <p className="staff-verified"><ShieldCheck aria-hidden="true"/>{ru ? "Ваше решение уже сохранено в неизменяемом журнале." : "Qaroringiz o‘zgarmas jurnalga saqlangan."}</p> : <><label className="staff-checkbox"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)}/>{ru ? `Я лично проверил(а) все ${summary.scenarioCount} завершённых сценария и подтверждаю корректность.` : `${summary.scenarioCount} ta yakunlangan ssenariyni shaxsan tekshirdim va to‘g‘riligini tasdiqlayman.`}</label><button className="staff-approve" type="button" disabled={!confirmed || busy} onClick={() => void attest()}><Check aria-hidden="true"/>{ru ? "Зафиксировать моё решение" : "Qarorimni qayd etish"}</button></>}
+        {summary.existing ? <><p className="staff-verified"><ShieldCheck aria-hidden="true"/>{ru ? "Ваше решение уже сохранено в неизменяемом журнале." : "Qaroringiz o‘zgarmas jurnalga saqlangan."}</p>{summary.materializedCount === summary.scenarioCount ? <><p className="staff-verified"><ShieldCheck aria-hidden="true"/>{ru ? `${summary.materializedCount} индивидуальных записей review готовы для evidence export.` : `${summary.materializedCount} ta individual review yozuvi evidence export uchun tayyor.`}</p><button className="staff-approve" type="button" disabled={busy} onClick={() => void exportEvidence()}><Check aria-hidden="true"/>{ru ? "Экспортировать evidence" : "Evidence faylini eksport qilish"}</button></> : <><label className="staff-checkbox"><input type="checkbox" checked={materializationConfirmed} onChange={(event) => setMaterializationConfirmed(event.target.checked)}/>{ru ? `Я подтверждаю материализацию ${summary.scenarioCount} индивидуальных технических записей из моего сохранённого решения; новые юридические выводы не создаются.` : `Saqlangan qarorimdan ${summary.scenarioCount} ta individual texnik yozuv materializatsiyasini tasdiqlayman; yangi yuridik xulosa yaratilmaydi.`}</label><button className="staff-approve" type="button" disabled={!materializationConfirmed || busy} onClick={() => void materialize()}><Check aria-hidden="true"/>{ru ? "Создать индивидуальные записи" : "Individual yozuvlarni yaratish"}</button></>}</> : <><label className="staff-checkbox"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)}/>{ru ? `Я лично проверил(а) все ${summary.scenarioCount} завершённых сценария и подтверждаю корректность.` : `${summary.scenarioCount} ta yakunlangan ssenariyni shaxsan tekshirdim va to‘g‘riligini tasdiqlayman.`}</label><button className="staff-approve" type="button" disabled={!confirmed || busy} onClick={() => void attest()}><Check aria-hidden="true"/>{ru ? "Зафиксировать моё решение" : "Qarorimni qayd etish"}</button></>}
       </section>}
       {receipt && <p className="staff-verified"><ShieldCheck aria-hidden="true"/>{ru ? `Решение сохранено. Hash: ${receipt}` : `Qaror saqlandi. Hash: ${receipt}`}</p>}
     </main>

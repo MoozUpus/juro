@@ -16,12 +16,18 @@ export const legalEvaluationHumanReviewRequestSchema = z.discriminatedUnion("act
     disposition: z.literal("confirmed_correct"),
     confirmation: z.literal("I_CONFIRM_PERSONAL_LEGAL_REVIEW"),
   }).strict(),
+  z.object({
+    action: z.literal("materialize"), evaluationRunId: evaluationRunIdSchema,
+    expectedScopeDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    confirmation: z.literal("I_CONFIRM_MATERIALIZE_PERSONAL_REVIEWS"),
+  }).strict(),
 ]);
 
 export type LegalEvaluationHumanReviewRequest = z.infer<typeof legalEvaluationHumanReviewRequestSchema>;
 
-type ScopeRow = { scenarioId: string; aiRunId: string; promptSha256: string; responseSha256: string; completedAt: string };
+type ScopeRow = { attemptId: string; scenarioId: string; aiRunId: string; promptSha256: string; responseSha256: string; completedAt: string };
 type StoredAttestation = { id: string; eventHash: string; createdAt: string; reviewerUserId: string; disposition: "confirmed_correct" | "needs_follow_up" };
+type StoredReviewRecord = { eventHash: string };
 
 export class LegalEvaluationHumanReviewError extends Error {
   constructor(readonly code: "LEGAL_EVALUATION_HUMAN_REVIEW_INVALID" | "LEGAL_EVALUATION_HUMAN_REVIEW_INCOMPLETE" | "LEGAL_EVALUATION_HUMAN_REVIEW_INTEGRITY_FAILED") {
@@ -31,7 +37,7 @@ export class LegalEvaluationHumanReviewError extends Error {
 
 async function scope(db: D1Database, evaluationRunId: string): Promise<{ scopeDigest: string; rows: ScopeRow[] }> {
   const result = await db.prepare(
-    `SELECT attempt.scenario_id AS scenarioId,attempt.ai_run_id AS aiRunId,
+    `SELECT attempt.id AS attemptId,attempt.scenario_id AS scenarioId,attempt.ai_run_id AS aiRunId,
       attempt.prompt_sha256 AS promptSha256,attempt.response_sha256 AS responseSha256,
       attempt.completed_at AS completedAt
      FROM staging_legal_evaluation_attempts attempt
@@ -47,7 +53,15 @@ async function scope(db: D1Database, evaluationRunId: string): Promise<{ scopeDi
   if (rows.length !== legalEvaluationCorpus.length || new Set(rows.map((row) => row.scenarioId)).size !== rows.length || rows.some((row) => !expectedIds.has(row.scenarioId) || !row.aiRunId || !row.responseSha256 || !row.completedAt)) {
     throw new LegalEvaluationHumanReviewError("LEGAL_EVALUATION_HUMAN_REVIEW_INCOMPLETE");
   }
-  return { scopeDigest: (await sha256Json({ evaluationRunId, corpusVersion: LEGAL_EVALUATION_CORPUS_VERSION, rows })).toUpperCase(), rows };
+  // Keep the original attestation scope stable. `attemptId` is only needed for
+  // the per-scenario materialization and is deliberately excluded from the
+  // already-recorded human-attestation digest.
+  const digestRows = rows.map((row) => ({
+    scenarioId: row.scenarioId, aiRunId: row.aiRunId,
+    promptSha256: row.promptSha256, responseSha256: row.responseSha256,
+    completedAt: row.completedAt,
+  }));
+  return { scopeDigest: (await sha256Json({ evaluationRunId, corpusVersion: LEGAL_EVALUATION_CORPUS_VERSION, rows: digestRows })).toUpperCase(), rows };
 }
 
 async function existing(db: D1Database, evaluationRunId: string, scopeDigest: string, reviewerUserId: string) {
@@ -58,6 +72,59 @@ async function existing(db: D1Database, evaluationRunId: string, scopeDigest: st
   ).bind(evaluationRunId, scopeDigest, reviewerUserId).first<StoredAttestation>();
 }
 
+async function materializedRecords(db: D1Database, evaluationRunId: string, reviewerUserId: string) {
+  const result = await db.prepare(
+    `SELECT event_hash AS eventHash FROM legal_evaluation_human_review_records
+     WHERE evaluation_run_id=? AND reviewer_user_id=? ORDER BY created_at,id`,
+  ).bind(evaluationRunId, reviewerUserId).all<StoredReviewRecord>();
+  return result.results;
+}
+
+async function materialize(input: {
+  db: D1Database; staff: PlatformStaffAccess; evaluationRunId: string;
+  attestation: StoredAttestation; rows: ScopeRow[]; now: Date;
+}) {
+  if (input.attestation.disposition !== "confirmed_correct") {
+    throw new LegalEvaluationHumanReviewError("LEGAL_EVALUATION_HUMAN_REVIEW_INTEGRITY_FAILED");
+  }
+  const prior = await materializedRecords(input.db, input.evaluationRunId, input.staff.userId);
+  if (prior.length === input.rows.length) {
+    return { action: "materialize" as const, materializedCount: prior.length, eventHash: prior.at(-1)!.eventHash.toLowerCase(), replay: true };
+  }
+  if (prior.length !== 0) throw new LegalEvaluationHumanReviewError("LEGAL_EVALUATION_HUMAN_REVIEW_INTEGRITY_FAILED");
+  const createdBase = input.now.getTime();
+  let previousHash = ZERO_HASH;
+  const statements: D1PreparedStatement[] = [];
+  for (const [index, row] of input.rows.entries()) {
+    const createdAt = new Date(createdBase + index).toISOString();
+    const event = {
+      id: crypto.randomUUID(), attestationId: input.attestation.id,
+      evaluationRunId: input.evaluationRunId, corpusVersion: LEGAL_EVALUATION_CORPUS_VERSION,
+      scenarioId: row.scenarioId, attemptId: row.attemptId, aiRunId: row.aiRunId,
+      promptSha256: row.promptSha256.toUpperCase(), responseSha256: row.responseSha256.toUpperCase(),
+      classification: "correct" as const, reviewerUserId: input.staff.userId,
+      reviewerSessionId: input.staff.sessionId, reviewerAssignmentId: input.staff.assignmentIds[0]!,
+      reviewerMfaVerifiedAt: input.staff.mfaVerifiedAt!, materializationReason: "attestation_scope_materialization" as const,
+      previousHash, createdAt,
+    };
+    const eventHash = (await sha256Json(event)).toUpperCase();
+    statements.push(input.db.prepare(
+      `INSERT INTO legal_evaluation_human_review_records
+       (id,attestation_id,evaluation_run_id,corpus_version,scenario_id,attempt_id,ai_run_id,prompt_sha256,response_sha256,classification,reviewer_user_id,reviewer_session_id,reviewer_assignment_id,reviewer_mfa_verified_at,materialization_reason,previous_hash,event_hash,created_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).bind(event.id,event.attestationId,event.evaluationRunId,event.corpusVersion,event.scenarioId,event.attemptId,event.aiRunId,event.promptSha256,event.responseSha256,event.classification,event.reviewerUserId,event.reviewerSessionId,event.reviewerAssignmentId,event.reviewerMfaVerifiedAt,event.materializationReason,event.previousHash,eventHash,event.createdAt));
+    previousHash = eventHash;
+  }
+  try { await input.db.batch(statements); }
+  catch (error) {
+    if (String(error).includes("CHAIN_CONFLICT") || String(error).includes("scope_uidx")) {
+      throw new LegalEvaluationHumanReviewError("LEGAL_EVALUATION_HUMAN_REVIEW_INTEGRITY_FAILED");
+    }
+    throw error;
+  }
+  return { action: "materialize" as const, materializedCount: input.rows.length, eventHash: previousHash.toLowerCase(), replay: false };
+}
+
 export async function executeLegalEvaluationHumanReview(input: { db: D1Database; staff: PlatformStaffAccess; request: LegalEvaluationHumanReviewRequest; now?: Date }) {
   if (input.staff.capability !== "ai.quality.review" || !input.staff.assignmentIds[0] || !input.staff.mfaVerifiedAt) throw new LegalEvaluationHumanReviewError("LEGAL_EVALUATION_HUMAN_REVIEW_INTEGRITY_FAILED");
   const now = input.now ?? new Date();
@@ -65,9 +132,16 @@ export async function executeLegalEvaluationHumanReview(input: { db: D1Database;
   const current = await scope(input.db, input.request.evaluationRunId);
   const prior = await existing(input.db, input.request.evaluationRunId, current.scopeDigest, input.staff.userId);
   if (input.request.action === "summary") {
-    return { action: "summary" as const, evaluationRunId: input.request.evaluationRunId, corpusVersion: LEGAL_EVALUATION_CORPUS_VERSION, scenarioCount: current.rows.length, scopeDigest: current.scopeDigest.toLowerCase(), existing: prior ? { id: prior.id, eventHash: prior.eventHash.toLowerCase(), createdAt: prior.createdAt, disposition: prior.disposition } : null };
+    const records = await materializedRecords(input.db, input.request.evaluationRunId, input.staff.userId);
+    return { action: "summary" as const, evaluationRunId: input.request.evaluationRunId, corpusVersion: LEGAL_EVALUATION_CORPUS_VERSION, scenarioCount: current.rows.length, scopeDigest: current.scopeDigest.toLowerCase(), materializedCount: records.length, existing: prior ? { id: prior.id, eventHash: prior.eventHash.toLowerCase(), createdAt: prior.createdAt, disposition: prior.disposition } : null };
   }
   if (input.request.expectedScopeDigest.toUpperCase() !== current.scopeDigest) throw new LegalEvaluationHumanReviewError("LEGAL_EVALUATION_HUMAN_REVIEW_INTEGRITY_FAILED");
+  if (input.request.action === "materialize") {
+    if (!prior || input.request.expectedScopeDigest.toUpperCase() !== current.scopeDigest) {
+      throw new LegalEvaluationHumanReviewError("LEGAL_EVALUATION_HUMAN_REVIEW_INTEGRITY_FAILED");
+    }
+    return materialize({ db: input.db, staff: input.staff, evaluationRunId: input.request.evaluationRunId, attestation: prior, rows: current.rows, now });
+  }
   if (prior) return { action: "attest" as const, id: prior.id, eventHash: prior.eventHash.toLowerCase(), createdAt: prior.createdAt, replay: true };
   const head = await input.db.prepare(
     `SELECT event_hash AS eventHash FROM legal_evaluation_human_attestations WHERE reviewer_user_id=? ORDER BY created_at DESC,id DESC LIMIT 1`,

@@ -11,14 +11,20 @@ import { isLocale } from "../../../../../lib/platform/routing";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { robots: { index: false, follow: false, nocache: true } };
 
-export default async function LegalEvaluationReviewPage({ params }: { params: Promise<{ locale: string }> }) {
-  const { locale } = await params;
+async function reviewerSession(locale: "ru" | "uz") {
   const runtime = runtimeEnv();
   if (!isLocale(locale) || !runtime.DB) notFound();
   try {
     const incoming = await headers(); const now = new Date();
     const session = await localSessionForRequest(new Request("https://app.juro.local/staff-access", { headers: new Headers(incoming) }), { now });
     await requirePlatformStaffAccess(runtime.DB, session, "ai.quality.review", { now, freshMfaWithinMs: 15 * 60 * 1_000 });
-    return <LegalEvaluationReviewConsole locale={locale} reviewerName={session.fullName || session.email}/>;
+    return session;
   } catch { notFound(); }
+}
+
+export default async function LegalEvaluationReviewPage({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params;
+  const pageLocale = isLocale(locale) ? locale : notFound();
+  const session = await reviewerSession(pageLocale);
+  return <LegalEvaluationReviewConsole locale={pageLocale} reviewerName={session.fullName || session.email}/>;
 }
