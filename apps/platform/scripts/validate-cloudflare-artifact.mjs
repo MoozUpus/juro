@@ -162,10 +162,12 @@ const expectedD1Database = replacesSitesPrimaryBindings
   : selected.d1_databases[0];
 const {
   migrations_dir: artifactMigrationsDirectory,
+  migrations_pattern: artifactMigrationsPattern,
   ...artifactD1Database
 } = artifact.d1_databases[0];
 const {
   migrations_dir: expectedMigrationsDirectory,
+  migrations_pattern: expectedMigrationsPattern,
   ...expectedD1DatabaseBinding
 } = expectedD1Database;
 assert.deepEqual(
@@ -176,6 +178,15 @@ assert.equal(
   resolve(dirname(artifactConfigPath), artifactMigrationsDirectory),
   resolve(dirname(sourceConfigPath), expectedMigrationsDirectory),
   "artifact D1 migrations_dir must resolve to the configured migration directory",
+);
+assert.equal(
+  artifactMigrationsPattern
+    ? resolve(dirname(artifactConfigPath), artifactMigrationsPattern)
+    : artifactMigrationsPattern,
+  expectedMigrationsPattern
+    ? resolve(dirname(sourceConfigPath), expectedMigrationsPattern)
+    : expectedMigrationsPattern,
+  "artifact D1 migrations_pattern must resolve to the configured migration pattern",
 );
 
 assert.equal(artifact.r2_buckets?.length, 3);
@@ -445,7 +456,12 @@ if (requestedEnvironment === "production") {
       zone_name: "juro.uz",
       custom_domain: true,
     },
-  ], "production must keep app.juro.uz and admin.juro.uz attached directly to Worker juro");
+    {
+      pattern: "status.juro.uz",
+      zone_name: "juro.uz",
+      custom_domain: true,
+    },
+  ], "production must keep app.juro.uz, admin.juro.uz, and status.juro.uz attached directly to Worker juro");
   assert.equal(artifact.workers_dev, false, "production artifact must disable workers.dev exposure");
   assert.equal(artifact.preview_urls, false, "production artifact must disable version preview URLs");
   assert.deepEqual(

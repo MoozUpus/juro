@@ -144,7 +144,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LEGAL_LEX_INGESTION_ENABLED,
-      environment === "staging" ? "true" : "false",
+      environment === "development" ? "false" : "true",
     );
     assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
@@ -186,6 +186,12 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       ["DB"],
     );
     assert.equal(config.d1_databases[0]?.migrations_dir, "./drizzle");
+    assert.equal(
+      config.d1_databases[0]?.migrations_pattern,
+      environment === "production"
+        ? "./drizzle/0121_fix_ai_quality_hash_constraints.sql"
+        : undefined,
+    );
     assert.deepEqual(
       config.r2_buckets,
       [
@@ -463,6 +469,11 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
   assert.equal(source.env.staging.workers_dev, false);
   assert.equal(source.env.staging.preview_urls, false);
   assert.deepEqual(source.env.staging.routes, []);
+  assert.deepEqual(source.env.production.routes, [
+    { pattern: "app.juro.uz", zone_name: "juro.uz", custom_domain: true },
+    { pattern: "admin.juro.uz", zone_name: "juro.uz", custom_domain: true },
+    { pattern: "status.juro.uz", zone_name: "juro.uz", custom_domain: true },
+  ]);
   assert.equal(
     Object.hasOwn(source.env.staging.vars, "ALLOW_PLATFORM_AUTH_HEADERS"),
     false,

@@ -470,6 +470,11 @@
           "pattern": "admin.juro.uz",
           "zone_name": "juro.uz",
           "custom_domain": true
+        },
+        {
+          "pattern": "status.juro.uz",
+          "zone_name": "juro.uz",
+          "custom_domain": true
         }
       ],
       "assets": {
@@ -496,7 +501,7 @@
         "PAYMENT_SANDBOX_ENABLED": "false",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
-        "LEGAL_LEX_INGESTION_ENABLED": "false",
+        "LEGAL_LEX_INGESTION_ENABLED": "true",
         "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
@@ -523,7 +528,8 @@
           "binding": "DB",
           "database_name": "juro-production",
           "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
-          "migrations_dir": "./drizzle"
+          "migrations_dir": "./drizzle",
+          "migrations_pattern": "./drizzle/0121_fix_ai_quality_hash_constraints.sql"
         }
       ],
       "migrations": [
