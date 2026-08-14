@@ -77,10 +77,11 @@ test("human evaluation evidence validates all 314 immutable per-scenario records
 });
 
 test("materialization is fresh-MFA guarded, immutable, and distinct from user feedback", async () => {
-  const [migration, service, route] = await Promise.all([
+  const [migration, service, route, reviewRoute] = await Promise.all([
     readFile(new URL("../drizzle/0123_legal_evaluation_human_review_records.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/ai/legal-evaluation-human-review.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/api/platform/admin/ai-quality/evaluation-human-evidence/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/platform/admin/ai-quality/evaluation-review/route.ts", import.meta.url), "utf8"),
   ]);
   assert.match(migration, /legal_evaluation_human_review_records/u);
   assert.match(migration, /LEGAL_EVALUATION_HUMAN_RECORD_ACCESS_DENIED/u);
@@ -91,5 +92,7 @@ test("materialization is fresh-MFA guarded, immutable, and distinct from user fe
   assert.match(service, /input\.db\.batch\(statements\)/u);
   assert.match(route, /assertSafeWrite\(request\)/u);
   assert.match(route, /freshMfaWithinMs: 15 \* 60 \* 1_000/u);
+  assert.match(route, /APP_ENV !== "staging"/u);
+  assert.match(reviewRoute, /APP_ENV !== "staging"/u);
   assert.doesNotMatch(route, /export async function GET/u);
 });

@@ -13,7 +13,7 @@ export const metadata: Metadata = { robots: { index: false, follow: false, nocac
 
 async function reviewerSession(locale: "ru" | "uz") {
   const runtime = runtimeEnv();
-  if (!isLocale(locale) || !runtime.DB) notFound();
+  if (!isLocale(locale) || runtime.APP_ENV !== "staging" || !runtime.DB) notFound();
   try {
     const incoming = await headers(); const now = new Date();
     const session = await localSessionForRequest(new Request("https://app.juro.local/staff-access", { headers: new Headers(incoming) }), { now });

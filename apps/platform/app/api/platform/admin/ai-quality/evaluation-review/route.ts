@@ -1,12 +1,13 @@
 import { parseJsonRequest } from "../../../../../../lib/auth/input";
 import { assertSafeWrite } from "../../../../../../lib/auth/safe-write";
 import { requirePlatformStaffRequest, withPlatformStaffErrors } from "../../../../../../lib/auth/staff-http";
-import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import { executeLegalEvaluationHumanReview, legalEvaluationHumanReviewRequestSchema, LegalEvaluationHumanReviewError } from "../../../../../../lib/ai/legal-evaluation-human-review";
 
 const headers = { "cache-control": "private, no-store", pragma: "no-cache" };
 
 async function post(request: Request): Promise<Response> {
+  if (runtimeEnv().APP_ENV !== "staging") return new Response(null, { status: 404, headers });
   assertSafeWrite(request);
   const staff = await requirePlatformStaffRequest(request, "ai.quality.review", { freshMfaWithinMs: 15 * 60 * 1_000 });
   const parsed = await parseJsonRequest(request, legalEvaluationHumanReviewRequestSchema, 12_000);
