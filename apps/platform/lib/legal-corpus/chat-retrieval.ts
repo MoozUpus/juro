@@ -243,6 +243,13 @@ export async function retrieveCorpusAwareLegalSources(input: {
   const useIndexed = hasUsableIndexedCoverage
     && (indexedPacket.freshness.status === "fresh" || !liveEnabled);
 
+  // The existing direct Lex fallback resolves the current page. It must not
+  // be presented as point-in-time evidence when an explicit historical date
+  // was requested. Until a matching ONDATE packet is indexed, fail closed.
+  if (input.scope?.asOfDate) {
+    return indexedPacket;
+  }
+
   if (featureEnabled(input.env, "LEGAL_CORPUS_SHADOW_MODE")) {
     const live = await liveSearch(liveInput);
     await queueValidatedLiveSources(input.env, live, input.correlationId);

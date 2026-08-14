@@ -98,6 +98,7 @@ test("indexed corpus is preferred and emits a verified exact-span packet", async
       fetchImpl: async (input) => String(input).endsWith("robots.txt")
         ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
         : new Response(`<!doctype html><main id="divCont">
+          <div>Дата вступления в силу</div><div>01.01.2020</div>
           <div class="lx_elem ACT_TITLE">Закон об обращениях</div>
           <div class="lx_elem ARTICLE">Статья 7. Право на обращение</div>
           <div class="lx_elem">${paragraph}</div>
@@ -114,6 +115,29 @@ test("indexed corpus is preferred and emits a verified exact-span packet", async
     assert.equal(result.sourceValidationStatus, "validated");
     assert.equal(result.sources[0]?.verificationState, "verified");
     assert.equal(result.sources[0]?.spans?.[0]?.textSha256, result.sources[0]?.contentSha256);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("historical chat retrieval never substitutes a current live page", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  let liveCalls = 0;
+  try {
+    const result = await retrieveCorpusAwareLegalSources({
+      env: {
+        DB: d1,
+        LEGAL_CORPUS_ENABLED: "true",
+        LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: "true",
+      },
+      query: "статья 9 на дату",
+      locale: "ru",
+      scope: { asOfDate: "2020-01-01" },
+      liveSearch: async () => { liveCalls += 1; return liveResult(); },
+    });
+    assert.equal(liveCalls, 0);
+    assert.equal(result.sources.length, 0);
+    assert.equal(result.sourceAccessMode, "approved_package");
   } finally {
     sqlite.close();
   }

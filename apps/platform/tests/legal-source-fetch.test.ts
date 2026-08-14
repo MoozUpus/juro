@@ -108,6 +108,17 @@ test("legal source URL classifier accepts only exact HTTPS document routes", () 
     },
   );
   assert.deepEqual(
+    classifyLegalSourceUrl("https://lex.uz/ru/docs/145261?ONDATE=10.01.2018%2004"),
+    {
+      sourceKind: "lex",
+      locale: "ru",
+      canonicalId: "145261",
+      canonicalUrl: "https://lex.uz/ru/docs/145261?ONDATE=10.01.2018%2004",
+      host: "lex.uz",
+      revisionDate: "2018-01-10",
+    },
+  );
+  assert.deepEqual(
     classifyLegalSourceUrl("https://advice.uz/oz/documents/21/"),
     {
       sourceKind: "advice",
@@ -142,6 +153,8 @@ test("legal source URL classifier accepts only exact HTTPS document routes", () 
     "http://lex.uz/ru/docs/-42",
     "https://lex.uz/",
     "https://lex.uz/ru/docs/-42?download=1",
+    "https://lex.uz/ru/docs/-42?ONDATE=31.02.2024",
+    "https://lex.uz/ru/docs/-42?ONDATE2=18.05.2022&action=compare",
     "https://lex.uz.evil.example/ru/docs/-42",
     "https://user:password@lex.uz/ru/docs/-42",
     "https://advice.uz/ru/page/how-it-works",
@@ -178,6 +191,20 @@ test("obsolete Advice enable flag cannot re-enable network access", async () => 
     { adviceEnabled: true, fetchImpl: synthetic.fetchImpl },
   ), "LEGAL_SOURCE_POLICY_DISABLED");
   assert.equal(synthetic.calls.length, 0);
+});
+
+test("bounded Lex fetch accepts only an exact official ONDATE revision", async () => {
+  const synthetic = sequenceFetch([robots(), html()]);
+  const result = await fetchLegalSource(
+    "https://lex.uz/ru/docs/145261?ONDATE=18.05.2022",
+    { adviceEnabled: false, fetchImpl: synthetic.fetchImpl },
+  );
+  assert.equal(result.revisionDate, "2022-05-18");
+  assert.equal(result.canonicalUrl, "https://lex.uz/ru/docs/145261?ONDATE=18.05.2022");
+  assert.deepEqual(synthetic.calls.map((call) => call.url), [
+    "https://lex.uz/robots.txt",
+    "https://lex.uz/ru/docs/145261?ONDATE=18.05.2022",
+  ]);
 });
 
 test("bounded Lex fetch verifies robots, preserves evidence, and hashes bytes", async () => {

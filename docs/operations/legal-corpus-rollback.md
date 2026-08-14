@@ -18,3 +18,6 @@ private-scope isolation before any gradual re-enable.
 
 Do not roll back by deleting migrations from a production ledger, removing
 historical legal text, changing DNS, or publishing an unverified snapshot.
+
+The production Wrangler migration glob intentionally excludes staging-only
+`0122–0123`; do not widen it to `./drizzle/*.sql` during a corpus release.

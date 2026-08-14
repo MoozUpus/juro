@@ -14,6 +14,9 @@ export type LegalCorpusSearchScope = {
   userId?: string | null;
   matterId?: string | null;
   includeHistorical?: boolean;
+  /** Uzbekistan legal calendar date. When present, retrieval selects the
+   * immutable version whose half-open validity interval covers this date. */
+  asOfDate?: string | null;
 };
 
 export type LegalCorpusRetrievalItem = {
@@ -122,6 +125,10 @@ export async function retrieveLegalCorpus(input: {
   officialOnly?: boolean;
 }): Promise<LegalCorpusRetrievalItem[]> {
   const scope = input.scope ?? {};
+  const asOfDate = scope.asOfDate ?? null;
+  if (asOfDate !== null && !/^\d{4}-\d{2}-\d{2}$/u.test(asOfDate)) {
+    throw new TypeError("LEGAL_CORPUS_AS_OF_DATE_REJECTED");
+  }
   const limit = Math.max(1, Math.min(input.limit ?? 8, 30));
   const variants = queryVariants(input.query);
   const fts = toFtsQuery(variants.join(" "));
@@ -146,13 +153,22 @@ export async function retrieveLegalCorpus(input: {
     INNER JOIN legal_corpus_variants AS variant ON variant.id=provision.variant_id
     INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
     WHERE legal_corpus_search MATCH ?
-      AND variant.current_version_id=version.id
       AND document.availability_status='ready'
       AND (?=0 OR document.provider='lex_uz')
-      AND (?=1 OR provision.status='active')
+      AND (
+        (? IS NULL AND variant.current_version_id=version.id AND (?=1 OR provision.status='active'))
+        OR
+        (? IS NOT NULL AND version.valid_from IS NOT NULL AND version.valid_from<=?
+          AND (version.valid_to IS NULL OR version.valid_to>?))
+      )
     ORDER BY bm25(legal_corpus_search, 10.0, 5.0) ASC, provision.sequence ASC
     LIMIT ?
-  `).bind(fts, input.officialOnly ? 1 : 0, scope.includeHistorical ? 1 : 0, limit * 3).all<SparseRow>();
+  `).bind(
+    fts, input.officialOnly ? 1 : 0,
+    asOfDate, scope.includeHistorical ? 1 : 0,
+    asOfDate, asOfDate, asOfDate,
+    limit * 3,
+  ).all<SparseRow>();
   const sparse = rows.results.filter((row) => scopeAllows(row, scope))
     .slice(0, limit * 2)
     .map((row, index) => ({

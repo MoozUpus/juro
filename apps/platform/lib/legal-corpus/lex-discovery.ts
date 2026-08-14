@@ -6,6 +6,16 @@ export type LexDiscoveredDocument = {
   sourceUrl: string;
 };
 
+export type LexDiscoveredRevision = LexDiscoveredDocument & {
+  revisionDate: string;
+};
+
+export type LexDocumentEffectivity = {
+  status: "active" | "repealed" | "unknown";
+  validFrom: string | null;
+  validTo: string | null;
+};
+
 export const LEX_CORPUS_CATEGORIES = [
   { key: "laws", searchKind: "nat", query: "sort_id=3975&form_id=3968" },
   { key: "oliy_majlis", searchKind: "oliy", query: "" },
@@ -72,7 +82,7 @@ function documentUrlFor(language: LegalCorpusLanguage, id: string): string {
 
 export function parseLexDocumentUrl(value: string, baseUrl = LEX_ORIGIN): LexDiscoveredDocument | null {
   const url = officialLexUrl(value, baseUrl);
-  if (!url) return null;
+  if (!url || url.search) return null;
   const match = DOCUMENT_PATH.exec(url.pathname);
   if (!match?.groups?.id) return null;
   const canonicalDocumentId = "lexuz:" + match.groups.id.replace(/^-/, "");
@@ -82,6 +92,113 @@ export function parseLexDocumentUrl(value: string, baseUrl = LEX_ORIGIN): LexDis
     canonicalDocumentId,
     language,
     sourceUrl: documentUrlFor(language, match.groups.id),
+  };
+}
+
+function lexDateToIso(value: string): string | null {
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s\d{2})?$/u.exec(value.trim());
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const result = `${year}-${month}-${day}`;
+  const candidate = new Date(`${result}T00:00:00Z`);
+  return Number.isFinite(candidate.getTime())
+    && candidate.toISOString().slice(0, 10) === result ? result : null;
+}
+
+function revisionQuery(url: URL): { raw: string; iso: string } | null {
+  if (url.hash || !url.search) return null;
+  const entries = [...url.searchParams.entries()];
+  if (entries.length !== 1 || entries[0]?.[0] !== "ONDATE") return null;
+  const raw = entries[0][1];
+  const iso = lexDateToIso(raw);
+  return iso ? { raw, iso } : null;
+}
+
+export function parseLexRevisionUrl(
+  value: string,
+  baseUrl = LEX_ORIGIN,
+): LexDiscoveredRevision | null {
+  const url = officialLexUrl(value, baseUrl);
+  if (!url) return null;
+  const revision = revisionQuery(url);
+  if (!revision) return null;
+  const document = parseLexDocumentUrl(`${url.origin}${url.pathname}`);
+  if (!document) return null;
+  return {
+    ...document,
+    sourceUrl: `${document.sourceUrl}?ONDATE=${encodeURIComponent(revision.raw)}`,
+    revisionDate: revision.iso,
+  };
+}
+
+function visibleText(value: string): string {
+  return value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/giu, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/giu, " ")
+    .replace(/<[^>]+>/gu, " ")
+    .replaceAll("&nbsp;", " ")
+    .replaceAll("&#160;", " ")
+    .replaceAll("&amp;", "&")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function dateAfter(text: string, labels: readonly string[]): string | null {
+  for (const label of labels) {
+    const match = new RegExp(`${label}\\s*(\\d{2}\\.\\d{2}\\.\\d{4})`, "iu").exec(text);
+    const parsed = match?.[1] ? lexDateToIso(match[1]) : null;
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
+/** Extracts document-level effectivity only from visible official page text.
+ * It deliberately does not infer a legal date from fetch time. */
+export function parseLexDocumentEffectivity(html: string): LexDocumentEffectivity {
+  const text = visibleText(html);
+  const validFrom = dateAfter(text, [
+    "Дата вступления в силу", "Кучга кириш санаси", "Kuchga kirish sanasi", "Effective date",
+  ]);
+  const validTo = dateAfter(text, [
+    "Акт утратил силу", "Дата прекращения действия", "Амал қилишни тўхтатиш санаси",
+    "Amal qilishni tugatish sanasi", "Repealed on", "Expiry date",
+  ]);
+  const repealed = /Акт\s+утратил\s+силу|ўз\s+кучини\s+йўқот|o['‘’]?z\s+kuchini\s+yo['‘’]?qot|repealed/iu.test(text);
+  const notYetEffective = /Акт\s+еще\s+не\s+вступил\s+в\s+силу|ҳали\s+кучга\s+кирмаган|hali\s+kuchga\s+kirmagan|not\s+yet\s+in\s+force/iu.test(text);
+  return {
+    status: repealed ? "repealed" : notYetEffective || !validFrom ? "unknown" : "active",
+    validFrom,
+    validTo,
+  };
+}
+
+/** Reads only Lex's own revision controls and rebuilds every URL through the
+ * strict ONDATE parser. Compare links and arbitrary script URLs are ignored. */
+export function discoverLexRevisionHistory(
+  html: string,
+  current: LexDiscoveredDocument,
+): { currentRevisionDate: string | null; revisions: LexDiscoveredRevision[] } {
+  let currentRevisionDate: string | null = null;
+  for (const match of html.matchAll(/<[^>]*\blx_date_selected\b[^>]*>([\s\S]*?)<\/[^>]+>/giu)) {
+    currentRevisionDate = lexDateToIso(visibleText(match[1] ?? ""));
+    if (currentRevisionDate) break;
+  }
+
+  const revisions = new Map<string, LexDiscoveredRevision>();
+  for (const tag of html.matchAll(/<[^>]*\blx_date_link\b[^>]*>/giu)) {
+    const onclick = htmlAttribute(tag[0], "onclick");
+    const route = onclick ? /lxOpenUrl\(\s*['"]([^'"]+)['"]\s*\)/iu.exec(onclick)?.[1] : null;
+    if (!route || route.includes("ONDATE2=") || route.includes("action=compare")) continue;
+    const revision = parseLexRevisionUrl(route, current.sourceUrl);
+    if (!revision
+      || revision.canonicalDocumentId !== current.canonicalDocumentId
+      || revision.language !== current.language) continue;
+    revisions.set(revision.revisionDate, revision);
+  }
+  return {
+    currentRevisionDate,
+    revisions: [...revisions.values()].sort((left, right) =>
+      right.revisionDate.localeCompare(left.revisionDate)),
   };
 }
 

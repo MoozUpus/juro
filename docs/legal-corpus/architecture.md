@@ -26,6 +26,14 @@ retrieval. Version, provision and source artifacts are append-only. A new
 version is fully written before that pointer changes. Therefore a partial D1
 retry remains invisible to users; it can safely resume with the same IDs.
 
+Lex revision controls are parsed only as exact same-document `ONDATE` links.
+Historical jobs are queued newest-to-oldest, allowing every immutable older
+version to receive a half-open `[valid_from, valid_to)` interval from the
+already stored next revision. Fetch time is never used as a legal effective
+date. An explicit point-in-time chat request searches only the matching stored
+interval; if none exists, JURO fails closed instead of substituting the current
+live page.
+
 ## Trust and tenant isolation
 
 - Official Lex URLs must be HTTPS `lex.uz`/`www.lex.uz` document routes.
@@ -73,3 +81,7 @@ The daily metadata cron seeds the 44 checkpoints only when the corpus flags
 are enabled. The five-minute scheduler holds a distributed D1 lease and runs
 at most one catalog page and one document ingestion job sequentially. This
 keeps the official source crawl bounded and prevents parallel mass crawling.
+
+Production's D1 `migrations_pattern` includes `0121` and production-safe
+`0124–0129` while structurally excluding staging-only evidence migrations
+`0122–0123`. Staging retains the complete migration ledger.

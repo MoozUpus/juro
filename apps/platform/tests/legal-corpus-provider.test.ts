@@ -27,6 +27,7 @@ test("indexed Lex provider returns the uniform source contract and stays preferr
       fetchImpl: async (input) => String(input).endsWith("robots.txt")
         ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
         : new Response(`<!doctype html><main id="divCont">
+            <div>Дата вступления в силу</div><div>01.01.2020</div>
             <div class="lx_elem ACT_TITLE">Закон об обращениях</div>
             <div class="lx_elem ARTICLE">Статья 7. Право на обращение</div>
             <div class="lx_elem">${paragraph}</div>

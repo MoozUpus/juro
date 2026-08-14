@@ -455,6 +455,7 @@ export async function POST(request: Request): Promise<Response> {
         limit: 2,
         budgetMs: 2_750,
         correlationId: idempotencyKey,
+        scope: { asOfDate: applicableAt ? parsed.data.legalContextDate ?? null : null },
       });
       retrievalStage.complete();
     } catch {

@@ -45,6 +45,7 @@ export type LegalSourceReference = {
   canonicalId: string;
   canonicalUrl: string;
   host: string;
+  revisionDate?: string;
 };
 
 export type FetchedLegalSource = LegalSourceReference & {
@@ -155,6 +156,20 @@ function hasAllowedAdviceCardQuery(url: URL): boolean {
     && entries[0][1].length <= 240;
 }
 
+function allowedLexRevisionQuery(url: URL): { raw: string; iso: string } | null {
+  if (!url.search) return null;
+  const entries = [...url.searchParams.entries()];
+  if (entries.length !== 1 || entries[0]?.[0] !== "ONDATE") return null;
+  const raw = entries[0][1];
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s\d{2})?$/u.exec(raw);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const iso = `${year}-${month}-${day}`;
+  const candidate = new Date(`${iso}T00:00:00Z`);
+  if (!Number.isFinite(candidate.getTime()) || candidate.toISOString().slice(0, 10) !== iso) return null;
+  return { raw, iso };
+}
+
 export function classifyLegalSourceUrl(value: string): LegalSourceReference {
   let url: URL;
   try {
@@ -173,7 +188,10 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
     // Advice search result cards currently retain a harmless `keyword` query.
     // It is stripped before any source fetch. Lex document URLs do not permit
     // a query string at all.
-    (url.search !== "" && (sourceKind !== "advice" || !hasAllowedAdviceCardQuery(url)))
+    (url.search !== ""
+      && (sourceKind === "lex"
+        ? !allowedLexRevisionQuery(url)
+        : sourceKind !== "advice" || !hasAllowedAdviceCardQuery(url)))
   ) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
   }
@@ -192,12 +210,14 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
       ? `/docs/${path.canonicalId.replace(/^-/, "")}`
       : `/${path.locale}/docs/${path.canonicalId}`
     : `/${path.locale === "ru" ? "ru" : "oz"}/${path.adviceRoute ?? "documents"}/${path.canonicalId}`;
+  const revision = sourceKind === "lex" ? allowedLexRevisionQuery(url) : null;
   return {
     sourceKind,
     locale: path.locale,
     canonicalId: path.canonicalId,
-    canonicalUrl: `https://${canonicalHost}${canonicalPath}`,
+    canonicalUrl: `https://${canonicalHost}${canonicalPath}${revision ? `?ONDATE=${encodeURIComponent(revision.raw)}` : ""}`,
     host: canonicalHost,
+    ...(revision ? { revisionDate: revision.iso } : {}),
   };
 }
 
@@ -599,7 +619,6 @@ export async function fetchLegalSource(
           || candidate.port !== ""
           || candidate.username !== ""
           || candidate.password !== ""
-          || candidate.search !== ""
           || candidate.hash !== ""
         ) return false;
         try {

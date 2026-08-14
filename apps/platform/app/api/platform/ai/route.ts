@@ -415,7 +415,12 @@ async function executePostWithinBudget(
         signal: retrievalStage.signal,
         limit: 3,
         budgetMs: 2_750,
-        scope: { tenantId: workspace.id, userId: user.id, matterId: body?.caseId ?? null },
+        scope: {
+          tenantId: workspace.id,
+          userId: user.id,
+          matterId: body?.caseId ?? null,
+          asOfDate: applicableAt ? body?.legalContextDate ?? null : null,
+        },
         correlationId: idempotencyKey,
         discoverOfficialUrls: async (query, discoveryLocale, discoverySignal) => {
           const usage = await usageSummary(db, workspace.id, user.id, entitlements.aiAnswerCyclesMonthly);

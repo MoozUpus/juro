@@ -201,7 +201,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
-        ? "./drizzle/0121_fix_ai_quality_hash_constraints.sql"
+        ? "./drizzle/012[145-9]_*.sql"
         : undefined,
     );
     assert.deepEqual(
