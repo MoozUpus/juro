@@ -7,11 +7,11 @@ controls. It does not claim production readiness or legal correctness.
 
 ## Deployed revision
 
-- Branch: `feature/huquq-ai-integration`
-- Application commit: `b9376fee1999f56bcff88f6aab4eeb696547a61f`
+- Branch: `feature/huquq-ai-staging-evidence`
+- Application commit: `86e1e93fb82dbc586154f6b380d73ef7027c4133`
 - Worker: `juro-platform-staging`
-- Worker version: `a8952a5e-bd78-4e85-9af8-08c2999d8496` at 100% traffic
-- Deployment time: `2026-08-14T10:39:23.462946Z`
+- Worker version: `f3e99cc6-613e-491e-bae6-bb116e2c5337` at 100% traffic
+- Deployment time: `2026-08-14T12:50Z`
 
 The deployment used `npm run deploy:staging`; it builds the flattened staging
 artifact and deploys only that Worker with `--containers-rollout none`. It does
@@ -27,13 +27,14 @@ not target the `juro` production Worker and does not apply a D1 migration.
   (`bb716a96-b2fb-4823-90d6-6c228fed181a`) in EEUR; no rows were written.
 - The remote D1 migration ledger contains 121 applied migrations. Wrangler also
   reports no pending staging migrations.
-- The deployed configuration retained `LEGAL_LEX_INGESTION_ENABLED=false`,
+- The deployed staging configuration has `LEGAL_LEX_INGESTION_ENABLED=true`,
+  retains `LEGAL_ADVICE_INGESTION_ENABLED=false` and
   `LEGAL_SOURCE_STAFF_API_ENABLED=false`, and
   `STAGING_LEGAL_EVALUATION_ENABLED=true`.
 
-`PRAGMA quick_check` was attempted as a read-only verification but Cloudflare D1
-returned `SQLITE_NOMEM` before producing a result. This is recorded as a failed
-integrity probe, not as a data-corruption finding and not as a passing check.
+`PRAGMA quick_check` was attempted remotely but Cloudflare D1 returned
+`SQLITE_NOMEM` before producing a result. This remote-control-plane limitation
+is recorded separately from the successful isolated restore verification below.
 
 ## Cost control and evaluation evidence
 
@@ -54,11 +55,13 @@ integrity probe, not as a data-corruption finding and not as a passing check.
 
 Remote `PRAGMA quick_check(1)` remains unavailable: Cloudflare D1 returned
 `SQLITE_NOMEM`, and other remote PRAGMA probes returned `SQLITE_AUTH`. A fresh
-temporary full export was created for an isolated restore, but the restore did
-not finish within the safe execution window; it was not treated as integrity
-evidence and the temporary directory was removed. The D1 control-plane report
-shows `232` tables and a `24,559,616`-byte staging database. A successful
-isolated export/restore verification remains a required release-gate artifact.
+full SQL export was restored into an isolated local SQLite database. It passed
+`PRAGMA quick_check` with `ok` and `PRAGMA foreign_key_check` with zero
+violations. The restore preserved `232` tables, `517` indexes, `313` triggers,
+and `121` migration-ledger rows; the export SHA-256 was
+`692262e0c6b0c2bef6c0c5baf49c1d5417b2abe2f34caf81eca5a88960ba2c7f`.
+The D1 control-plane report at the time showed 232 tables and a 24.5 MB staging
+database. The temporary export and local restore are pending local cleanup.
 
 ## Release-gate state
 
@@ -66,10 +69,11 @@ isolated export/restore verification remains a required release-gate artifact.
 | --- | --- | --- |
 | Enforceable provider-evaluation monetary cap | ACTIVE | Effective daily policies cap each provider at `$15/day`; OpenAI and Anthropic pricing records were added from official provider pricing. Staging circuit policy is `12` failures per `15` minutes. |
 | Real 314-scenario staging execution | COMPLETE | `staging-20260814-canonical` has `314/314` unique completed records. Historical failed attempts are retained as provider-reliability evidence. |
+| Isolated D1 export/restore integrity | COMPLETE | Fresh staging export restored locally; `quick_check=ok`, zero foreign-key violations, and topology/migration counts matched the remote D1 metadata. |
 | Human legal review | NOT RUN | The evidence endpoint accepts only records tied to a completed run and a fresh-MFA `legal_reviewer` immutable `correct` review. An AI/Codex annotation is explicitly not human legal approval. |
 | Legal-evaluation evidence export | NOT RUN | It depends on all 314 persisted reviewed runs and the same fresh-MFA legal-reviewer session. |
-| Corpus ingestion | DISABLED | No Lex.uz/Advice.uz corpus was fetched or committed. The ingestion and staff-API flags remain false. |
-| Controlled production rollout | NOT APPROVED | No command targeted `juro`, production D1, production R2, production queues, or production DNS. A fresh isolated D1 restore and human legal evidence are still absent. |
+| Corpus ingestion | ENABLED IN STAGING | Lex-only staging ingestion is enabled behind the existing fresh-MFA manual endpoint. Advice.uz and the staff source API remain disabled; no corpus is committed to Git and no source is published without the review lifecycle. |
+| Controlled production rollout | NOT APPROVED | Production preflight/dry-run passed against the isolated `juro` artifact, but no production upload, migration, R2 write, queue write, DNS change, or traffic change was performed. Human legal evidence remains absent. |
 
 ## What the user must authenticate as
 
@@ -80,7 +84,9 @@ TOTP session:
 
 1. A `legal_reviewer` reviews the actual outputs and resolves the immutable
    AI-quality events. The reviewer determines legal correctness; this record does
-   not purport to make that determination.
+   not purport to make that determination. The reviewer may then run the enabled
+   Lex-only staging ingestion endpoint; its fresh-MFA guard cannot be bypassed
+   with a service token.
 2. The authenticated reviewer exports the persisted evidence, after which the
    strict CLI validator can verify the envelope and its digest.
 
