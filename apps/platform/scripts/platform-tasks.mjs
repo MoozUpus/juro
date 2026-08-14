@@ -1102,11 +1102,13 @@ async function main() {
       await build(environment);
       return;
     }
-    case "artifact":
-      await validateArtifact(
-        selectedEnvironment(parseEnvironmentArgs("artifact", args)),
-      );
+    case "artifact": {
+      // Build the requested environment before validating so a stale artifact
+      // from another preflight cannot be mistaken for this one.
+      const environment = selectedEnvironment(parseEnvironmentArgs("artifact", args));
+      await build(environment);
       return;
+    }
     case "performance-budget":
       await runArtifactPerformanceBudget(args);
       return;

@@ -144,7 +144,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LEGAL_LEX_INGESTION_ENABLED,
-      "false",
+      environment === "staging" ? "true" : "false",
     );
     assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
