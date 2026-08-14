@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
+  documentAnalysisProviderUsageEventId,
   documentAnalysisDiagnosticDetail,
   type DocumentAnalysisProcessorDependencies,
   DocumentAnalysisProcessingError,
@@ -10,6 +11,7 @@ import {
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 import { ComparisonProcessingError } from "../lib/document-comparison/types";
 import { PackageExtractionError } from "../lib/document-analysis/package-extractor";
+import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "../lib/document-analysis/limits";
 import type { DocumentAnalysisResult } from "../lib/document-analysis/schema";
 
 const result: DocumentAnalysisResult = {
@@ -82,6 +84,152 @@ test("provider diagnostics expose only an allow-listed HTTP category", () => {
     documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_TIMEOUT", true)),
     "PROVIDER_TIMEOUT",
   );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false)),
+    "INVALID_AI_OUTPUT",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_output_max_tokens")),
+    "INVALID_AI_OUTPUT_MAX_TOKENS",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_tool_result_missing")),
+    "INVALID_AI_OUTPUT_TOOL_RESULT_MISSING",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_envelope_json_invalid")),
+    "INVALID_AI_OUTPUT_ENVELOPE_JSON_INVALID",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "anthropic_envelope_schema_invalid")),
+    "INVALID_AI_OUTPUT_ENVELOPE_SCHEMA_INVALID",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "document_source_boundary")),
+    "INVALID_AI_OUTPUT_SOURCE_BOUNDARY",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "INVALID_AI_OUTPUT", false, null, "document_excerpt_boundary")),
+    "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("provider payload must never persist", "INVALID_AI_OUTPUT", false, null, "untrusted-provider-detail")),
+    "INVALID_AI_OUTPUT",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_UNAVAILABLE", false, 400)),
+    "PROVIDER_HTTP_400",
+  );
+});
+
+test("controlled staging document probes keep append-only provider usage opaque and unique per seeded run", async () => {
+  const base = {
+    analysisId: "staging-document-analysis-v1-analysis",
+    consentVersion: "synthetic-probe",
+  };
+  const first = await documentAnalysisProviderUsageEventId({
+    row: { ...base, createdAt: "2026-08-12T10:00:00.000Z" },
+    environment: "staging",
+    provider: "anthropic",
+  });
+  const firstRepeat = await documentAnalysisProviderUsageEventId({
+    row: { ...base, createdAt: "2026-08-12T10:00:00.000Z" },
+    environment: "staging",
+    provider: "anthropic",
+  });
+  const laterRun = await documentAnalysisProviderUsageEventId({
+    row: { ...base, createdAt: "2026-08-12T10:05:00.000Z" },
+    environment: "staging",
+    provider: "anthropic",
+  });
+
+  assert.match(first, /^provider_usage_document_probe_[a-f0-9]{48}$/);
+  assert.equal(firstRepeat, first);
+  assert.notEqual(laterRun, first);
+  assert.equal(first.includes(base.analysisId), false);
+  assert.equal(first.includes("2026-08-12"), false);
+});
+
+test("ordinary document analysis preserves its existing deterministic provider usage event ID", async () => {
+  assert.equal(
+    await documentAnalysisProviderUsageEventId({
+      row: {
+        analysisId: "analysis-a",
+        consentVersion: "2026-07-30",
+        createdAt: "2026-07-30T00:00:00.000Z",
+      },
+      environment: "staging",
+      provider: "openai",
+    }),
+    "provider_usage_document_analysis-a_openai",
+  );
+});
+
+test("document analysis carries a safe provider diagnostic into its worker boundary", async () => {
+  const fixture = await databaseFixture("ready", "analysis_safe");
+  const bytes = new TextEncoder().encode("Сторона А. срок определяется дополнительно");
+  const sha256 = await sha256Hex(bytes);
+  fixture.sqlite.prepare("UPDATE document_files SET size_bytes=?,sha256=? WHERE id='file-a'")
+    .run(bytes.byteLength, sha256);
+  // The provider boundary is the subject of this test. Seed the immutable
+  // extracted-text version that would normally be written just before it.
+  fixture.sqlite.prepare(`INSERT INTO analysis_document_versions
+    (id,analysis_id,workspace_id,owner_user_id,version,parent_version_id,source_kind,r2_key,object_write_id,
+     file_name,mime_type,size_bytes,sha256,idempotency_key,selection_sha256,revision_ids_json,created_by_user_id,created_at)
+    VALUES ('analysis-source-analysis-a','analysis-a','workspace-a','user-a',1,NULL,'extracted',
+      'analysis-versions/workspace-a/analysis-a/1.md',NULL,'contract.normalized-v1.md',
+      'text/markdown; charset=utf-8',?,?,NULL,NULL,'[]',NULL,'2026-07-30T00:00:00.000Z')`)
+    .run(bytes.byteLength, sha256);
+
+  await assert.rejects(
+    executeDocumentAnalysisJob({
+      DB: fixture.db,
+      BUCKET: {
+        async get() {
+          return {
+            async arrayBuffer() {
+              return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+            },
+          };
+        },
+      } as unknown as R2Bucket,
+    }, "analysis-a", "workspace-a", {
+      extract: async () => ({
+        fileName: "contract.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: bytes.byteLength,
+        pageCount: 1,
+        detectedLanguage: "ru",
+        textQuality: "good",
+        warningCode: null,
+        text: new TextDecoder().decode(bytes),
+        sections: [],
+        packageContext: null,
+      }),
+      retrieve: async () => ({
+        sources: [],
+        evidence: [],
+        freshness: { status: "unavailable", asOf: "unavailable", ageDays: null, maxAgeDays: 7 },
+        legalDatabaseAsOf: "unavailable",
+        retrievalMode: "lexical",
+        semanticStatus: "unavailable",
+        applicableAt: "2026-07-30T10:00:00.000Z",
+      }),
+      analyze: async () => {
+        throw new AiUnavailableError("provider body is intentionally withheld", "PROVIDER_TIMEOUT", true);
+      },
+    }),
+    (error: unknown) => error instanceof DocumentAnalysisProcessingError
+      && error.code === "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
+      && error.diagnosticStage === "provider"
+      && error.diagnosticDetail === "PROVIDER_TIMEOUT",
+  );
+
+  const analysis = fixture.sqlite.prepare("SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis-a'")
+    .get() as { status: string; errorCode: string };
+  assert.equal(analysis.status, "retrying");
+  assert.equal(analysis.errorCode, "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE");
+  fixture.sqlite.close();
 });
 
 test("safe retrying document analysis persists normalized result, usage, audit and is idempotent", async () => {
@@ -233,7 +381,7 @@ test("a ZIP member requiring OCR schedules the tenant-scoped package OCR queue",
   fixture.sqlite.close();
 });
 
-test("an expanded ZIP beyond the inline memory budget waits for external extraction", async () => {
+test("an expanded ZIP beyond the inline memory budget fails terminally without provider or queue work", async () => {
   const fixture = await databaseFixture("ready", "analysis_safe");
   const bytes = new TextEncoder().encode("synthetic-verified-zip-bytes");
   const sha256 = await sha256Hex(bytes);
@@ -259,9 +407,85 @@ test("an expanded ZIP beyond the inline memory budget waits for external extract
 
   const analysis = fixture.sqlite.prepare("SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis-a'")
     .get() as { status: string; errorCode: string };
-  assert.equal(analysis.status, "awaiting_external_extraction");
+  assert.equal(analysis.status, "failed");
   assert.equal(analysis.errorCode, "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
   assert.equal((fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 0);
+  fixture.sqlite.close();
+});
+
+test("extracted text beyond the single-request boundary is analysed in bounded chunks", async () => {
+  const fixture = await databaseFixture("ready", "analysis_safe");
+  const bytes = new TextEncoder().encode("synthetic-verified-pdf-bytes");
+  const sha256 = await sha256Hex(bytes);
+  fixture.sqlite.prepare("UPDATE document_files SET mime_type='application/pdf',file_name='contract.pdf',size_bytes=?,sha256=? WHERE id='file-a'")
+    .run(bytes.byteLength, sha256);
+  let aiCalls = 0;
+  const stored = new Map<string, { bytes: Uint8Array; sha256: string }>();
+  const longText = `${"x".repeat(DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT + 1)} срок определяется дополнительно`;
+
+  const completed = await executeDocumentAnalysisJob({
+    DB: fixture.db,
+    BUCKET: {
+      async get(key: string) {
+        const version = stored.get(key);
+        if (version) return {
+          ...r2Metadata(key, version),
+          async arrayBuffer() { return version.bytes.buffer.slice(version.bytes.byteOffset, version.bytes.byteOffset + version.bytes.byteLength); },
+        };
+        return { async arrayBuffer() { return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength); } };
+      },
+      async head(key: string) {
+        const version = stored.get(key);
+        return version ? r2Metadata(key, version) : null;
+      },
+      async put(key: string, value: unknown, options?: { sha256?: string }) {
+        assert.ok(value instanceof Uint8Array);
+        const version = { bytes: value.slice(), sha256: await sha256Hex(value) };
+        assert.equal(options?.sha256, version.sha256);
+        stored.set(key, version);
+        return r2Metadata(key, version);
+      },
+    } as unknown as R2Bucket,
+  }, "analysis-a", "workspace-a", {
+      extract: async () => ({
+        fileName: "contract.pdf",
+        mimeType: "application/pdf",
+        sizeBytes: bytes.byteLength,
+        pageCount: 1,
+        detectedLanguage: "ru",
+        textQuality: "good",
+        warningCode: null,
+        text: longText,
+        sections: [],
+        packageContext: null,
+      }),
+      retrieve: async () => ({
+        sources: [],
+        freshness: { status: "unavailable" as const, asOf: "unavailable", ageDays: null, maxAgeDays: 7 },
+        legalDatabaseAsOf: "unavailable",
+      }),
+      analyze: async () => {
+        aiCalls += 1;
+        return {
+          data: result,
+          provider: "anthropic" as const,
+          model: "claude-sonnet-4-6",
+          providerResponseId: `synthetic-long-${aiCalls}`,
+          attempts: 1,
+          latencyMs: 12,
+          usage: { inputTokens: 100, outputTokens: 50, cachedInputTokens: 0 },
+          fallbackFromProvider: null,
+        };
+      },
+  });
+
+  const analysis = fixture.sqlite.prepare("SELECT status,error_code AS errorCode FROM document_analyses WHERE id='analysis-a'")
+    .get() as { status: string; errorCode: string };
+  assert.equal(completed.status, "completed");
+  assert.equal(analysis.status, "completed");
+  assert.equal(analysis.errorCode, null);
+  assert.equal(aiCalls, 3);
+  assert.equal((fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 1);
   fixture.sqlite.close();
 });
 

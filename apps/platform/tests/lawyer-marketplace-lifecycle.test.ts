@@ -133,3 +133,24 @@ test("a completed profile under review is visible but cannot receive a request",
   assert.match(privatePhotoRoute, /lawyer_profile_status/);
   assert.match(privateProfileRoute, /lawyer_profile_status/);
 });
+
+test("JURO approval and Top Lawyer remain separate public designations", () => {
+  const designationRoute = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/designation/route.ts", import.meta.url), "utf8");
+  const designationService = readFileSync(new URL("../lib/platform/lawyer-profile-designation-service.ts", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../drizzle/0116_lawyer_trust_designations.sql", import.meta.url), "utf8");
+  const directory = readFileSync(new URL("../app/_platform/LawyerDirectoryClient.tsx", import.meta.url), "utf8");
+  const profile = readFileSync(new URL("../app/_platform/LawyerProfileClient.tsx", import.meta.url), "utf8");
+  const staffPanel = readFileSync(new URL("../app/_staff/LawyerTrustDesignationPanel.tsx", import.meta.url), "utf8");
+  assert.match(designationRoute, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(designationRoute, /lawyer\.profiles\.moderate/);
+  assert.match(designationService, /marketplace_status='public_approved'/);
+  assert.match(designationService, /workspace_audit_events/);
+  assert.match(migration, /lawyer_profile_trust_designations/);
+  assert.match(migration, /append-only/);
+  assert.match(directory, /Одобрен JURO/);
+  assert.match(directory, /Top Lawyer/);
+  assert.match(profile, /Фото:/);
+  assert.match(profile, /Критерии Top Lawyer/);
+  assert.match(staffPanel, /\/designation/);
+  assert.match(staffPanel, /Публичные критерии Top Lawyer/);
+});

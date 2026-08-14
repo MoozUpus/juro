@@ -66,6 +66,7 @@ import {
   prepareStagingDeletionProbe,
   StagingDeletionProbeError,
 } from "./staging-account-deletion-probe";
+import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 
 export const JOB_KINDS = [
   "document.analyze",
@@ -285,12 +286,12 @@ export type PlatformJobEnv = Omit<
   Env,
   | "ASYNC_RUNTIME_ENABLED"
   | "CRON_ENABLED"
-  | "LEGAL_ADVICE_INGESTION_ENABLED"
+  | "LEGAL_LEX_INGESTION_ENABLED"
   | PlatformQueueBinding
 > & QueueBindingEnv & {
   ASYNC_RUNTIME_ENABLED: string;
   CRON_ENABLED: string;
-  LEGAL_ADVICE_INGESTION_ENABLED: string;
+  LEGAL_LEX_INGESTION_ENABLED: string;
   LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED?: string;
   LEGAL_LEX_RSS_DISCOVERY_ENABLED?: string;
   ACCOUNT_DELETION_PURGE_ENABLED: string;
@@ -302,6 +303,9 @@ export type PlatformJobEnv = Omit<
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
   STAGING_SYNTHETIC_PROBES_ENABLED?: string;
+  STAGING_QUEUE_HEALTH_PROBE_ENABLED?: string;
+  STAGING_QUEUE_HEALTH_PROBE_QUEUE?: Queue<unknown>;
+  STAGING_LEGAL_EVALUATION_ENABLED?: string;
   STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED?: string;
   MALWARE_SCANNER?: Fetcher;
   MALWARE_SCAN_ENABLED?: string;
@@ -316,6 +320,103 @@ export function expectedQueueName(
     throw new TypeError("Unsupported job kind.");
   }
   return `${environment}-${stem}`;
+}
+
+/**
+ * `document.analyze` and `document.index` deliberately share one source
+ * queue. Their DLQ delivery must therefore be routed before the normal source
+ * consumer; metrics bindings, when present, do not publish job payloads.
+ */
+export const DOCUMENT_DLQ_JOB_KINDS = [
+  "document.analyze",
+  "document.index",
+  "ocr.process",
+] as const;
+
+export type DocumentDlqJobKind = (typeof DOCUMENT_DLQ_JOB_KINDS)[number];
+
+/**
+ * These source queues carry tenant-scoped work whose terminal queue outcome
+ * must be recorded durably. The DLQ consumer never marks work successful and
+ * never republishes it: an operator must use the existing append-only redrive
+ * flow after reviewing the preserved failure evidence.
+ */
+export const TERMINALIZABLE_DLQ_JOB_KINDS = [
+  ...DOCUMENT_DLQ_JOB_KINDS,
+  "document.export",
+  "malware.scan",
+] as const;
+
+export type TerminalizableDlqJobKind =
+  (typeof TERMINALIZABLE_DLQ_JOB_KINDS)[number];
+
+function isTerminalizableDlqJobKind(
+  kind: JobKind,
+): kind is TerminalizableDlqJobKind {
+  return (TERMINALIZABLE_DLQ_JOB_KINDS as readonly JobKind[]).includes(kind);
+}
+
+/**
+ * `document.analyze` and `document.index` deliberately share one source
+ * queue. OCR has its own source/DLQ pair because an OCR retry must never
+ * consume document-analysis capacity.
+ */
+export function expectedDocumentDlqQueueName(
+  kind: DocumentDlqJobKind,
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedTerminalizableDlqQueueName(kind, environment);
+}
+
+export function expectedTerminalizableDlqQueueName(
+  kind: TerminalizableDlqJobKind,
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  const sourceKind = kind === "document.index" ? "document.analyze" : kind;
+  return `${expectedQueueName(sourceKind, environment)}-dlq`;
+}
+
+export function expectedDocumentAnalysisDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedDocumentDlqQueueName("document.analyze", environment);
+}
+
+export function expectedOcrProcessingDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedDocumentDlqQueueName("ocr.process", environment);
+}
+
+export function expectedDocumentExportDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedTerminalizableDlqQueueName("document.export", environment);
+}
+
+export function expectedMalwareScanDlqQueueName(
+  environment: PlatformJobEnv["APP_ENV"],
+): string {
+  return expectedTerminalizableDlqQueueName("malware.scan", environment);
+}
+
+function terminalizableDlqKindsForQueue(
+  queueName: string,
+  environment: PlatformJobEnv["APP_ENV"],
+): readonly TerminalizableDlqJobKind[] | null {
+  if (queueName === expectedDocumentAnalysisDlqQueueName(environment)) {
+    return ["document.analyze", "document.index"];
+  }
+  if (queueName === expectedOcrProcessingDlqQueueName(environment)) {
+    return ["ocr.process"];
+  }
+  if (queueName === expectedDocumentExportDlqQueueName(environment)) {
+    return ["document.export"];
+  }
+  if (queueName === expectedMalwareScanDlqQueueName(environment)) {
+    return ["malware.scan"];
+  }
+  return null;
 }
 
 function operationalError(error: unknown): OperationalError {
@@ -617,17 +718,40 @@ async function executeJob(
     throw new SafeJobError("JOB_QUEUE_MISMATCH", false);
   }
   if (envelope.kind === "document.analyze") {
+    const startedAt = Date.now();
     try {
-      await executeDocumentAnalysisJob(
+      const result = await executeDocumentAnalysisJob(
         env,
         envelope.subjectId,
         envelope.workspaceId!,
       );
+      if (result.status === "completed") {
+        await recordDependencyHealthEvidence(env, {
+          key: "document_analysis",
+          state: "operational",
+          evidenceKind: "integration_event",
+          startedAt,
+          minimumOperationalIntervalMs: 30 * 60_000,
+        });
+      }
       return;
     } catch (error) {
       if (error instanceof DocumentAnalysisProcessingError) {
         if (error.code === "DOCUMENT_ANALYSIS_OCR_REQUIRED") {
           return;
+        }
+        if (
+          error.code === "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE"
+          || error.code === "DOCUMENT_ANALYSIS_INVALID_OUTPUT"
+          || error.code === "DOCUMENT_ANALYSIS_PERSISTENCE_FAILED"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "document_analysis",
+            state: "degraded",
+            safeErrorCode: "ANALYSIS_JOB_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
         }
         throw new SafeJobError(error.code, error.retryable);
       }
@@ -707,6 +831,7 @@ async function executeJob(
     }
   }
   if (envelope.kind === "email.send") {
+    const startedAt = Date.now();
     const operationalAlert = await env.DB.prepare(
       `SELECT 1 AS found FROM operational_alert_jobs WHERE id=?
        UNION ALL
@@ -714,39 +839,99 @@ async function executeJob(
        LIMIT 1`,
     ).bind(envelope.subjectId, envelope.subjectId).first<{ found: number }>();
     try {
+      let delivery: { providerMessageId: string | null; alreadySent: boolean };
       if (isTaskReminderEmailJobId(envelope.subjectId)) {
-        await executeTaskReminderEmail(env, envelope.subjectId);
+        delivery = await executeTaskReminderEmail(env, envelope.subjectId);
       } else if (operationalAlert?.found) {
-        await executeOperationalAlertEmail(env, envelope.subjectId);
+        delivery = await executeOperationalAlertEmail(env, envelope.subjectId);
       } else {
-        await executeSecurityEmailJob(env, envelope.subjectId);
+        delivery = await executeSecurityEmailJob(env, envelope.subjectId);
+      }
+      if (delivery.providerMessageId && !delivery.alreadySent) {
+        await recordDependencyHealthEvidence(env, {
+          key: "resend",
+          state: "operational",
+          evidenceKind: "integration_event",
+          startedAt,
+          minimumOperationalIntervalMs: 30 * 60_000,
+        });
       }
       return;
     } catch (error) {
       if (error instanceof OperationalAlertEmailError) {
+        if (
+          error.code === "OPERATIONAL_ALERT_PROVIDER_REJECTED"
+          || error.code === "OPERATIONAL_ALERT_PROVIDER_UNAVAILABLE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "resend",
+            state: "degraded",
+            safeErrorCode: "EMAIL_DELIVERY_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       if (error instanceof SecurityEmailError) {
+        if (
+          error.code === "EMAIL_PROVIDER_REJECTED"
+          || error.code === "EMAIL_PROVIDER_UNAVAILABLE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "resend",
+            state: "degraded",
+            safeErrorCode: "EMAIL_DELIVERY_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       if (error instanceof TaskReminderEmailError) {
+        if (
+          error.code === "EMAIL_PROVIDER_REJECTED"
+          || error.code === "EMAIL_PROVIDER_UNAVAILABLE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "resend",
+            state: "degraded",
+            safeErrorCode: "EMAIL_DELIVERY_FAILED",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;
     }
   }
   if (envelope.kind === "legal.sync") {
-    // Direct Lex/Advice retrieval is the active legal-source path. Legacy
-    // corpus jobs must be terminal when ingestion is disabled, including a
-    // message that was already present in a queue before the mode changed.
-    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+    const startedAt = Date.now();
+    // Corpus processing is Lex-only. A queued job from before a disabled
+    // deployment must be terminal rather than becoming false health evidence.
+    if (env.LEGAL_LEX_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {
       await executeLegalSourceFetchRequest(env, envelope.subjectId);
+      await recordDependencyHealthEvidence(env, {
+        key: "legal_source_sync",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt,
+        minimumOperationalIntervalMs: 26 * 60 * 60_000,
+      });
       return;
     } catch (error) {
       if (error instanceof LegalSourceAcquisitionError) {
+        await recordDependencyHealthEvidence(env, {
+          key: "legal_source_sync",
+          state: "degraded",
+          safeErrorCode: "LEGAL_SYNC_FAILED",
+          evidenceKind: "integration_event",
+          startedAt,
+        });
         throw new SafeJobError(
           "LEGAL_SOURCE_SYNC_FAILED",
           error.retryable,
@@ -756,14 +941,29 @@ async function executeJob(
     }
   }
   if (envelope.kind === "legal.parse") {
-    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+    const startedAt = Date.now();
+    if (env.LEGAL_LEX_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {
       await executeLegalSourceNormalization(env, envelope.subjectId);
+      await recordDependencyHealthEvidence(env, {
+        key: "legal_source_sync",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt,
+        minimumOperationalIntervalMs: 26 * 60 * 60_000,
+      });
       return;
     } catch (error) {
       if (error instanceof LegalSourceNormalizationError) {
+        await recordDependencyHealthEvidence(env, {
+          key: "legal_source_sync",
+          state: "degraded",
+          safeErrorCode: "LEGAL_SYNC_FAILED",
+          evidenceKind: "integration_event",
+          startedAt,
+        });
         throw new SafeJobError(
           "LEGAL_SOURCE_PARSE_FAILED",
           error.retryable,
@@ -773,14 +973,29 @@ async function executeJob(
     }
   }
   if (envelope.kind === "legal.index") {
-    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
+    const startedAt = Date.now();
+    if (env.LEGAL_LEX_INGESTION_ENABLED !== "true") {
       throw new SafeJobError("LEGAL_CORPUS_DORMANT", false);
     }
     try {
       await executeLegalSourceIndexing(env, envelope.subjectId);
+      await recordDependencyHealthEvidence(env, {
+        key: "legal_source_sync",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt,
+        minimumOperationalIntervalMs: 26 * 60 * 60_000,
+      });
       return;
     } catch (error) {
       if (error instanceof LegalSourceIndexingError) {
+        await recordDependencyHealthEvidence(env, {
+          key: "legal_source_sync",
+          state: "degraded",
+          safeErrorCode: "LEGAL_SYNC_FAILED",
+          evidenceKind: "integration_event",
+          startedAt,
+        });
         throw new SafeJobError("LEGAL_SOURCE_INDEX_FAILED", error.retryable);
       }
       throw error;
@@ -819,21 +1034,314 @@ async function executeJob(
     }
   }
   if (envelope.kind === "malware.scan" && env.MALWARE_SCAN_ENABLED === "true") {
+    const startedAt = Date.now();
     try {
-      await executeMalwareScanJob(
+      const result = await executeMalwareScanJob(
         env,
         envelope.subjectId,
         envelope.workspaceId!,
       );
+      if (result.status === "safe" || result.status === "infected") {
+        await Promise.all([
+          recordDependencyHealthEvidence(env, {
+            key: "malware_scanner",
+            state: "operational",
+            evidenceKind: "integration_event",
+            startedAt,
+            minimumOperationalIntervalMs: 15 * 60_000,
+          }),
+          recordDependencyHealthEvidence(env, {
+            key: "private_r2",
+            state: "operational",
+            evidenceKind: "integration_event",
+            startedAt,
+            minimumOperationalIntervalMs: 10 * 60_000,
+          }),
+        ]);
+      } else if (result.status === "already_safe") {
+        await recordDependencyHealthEvidence(env, {
+          key: "private_r2",
+          state: "operational",
+          evidenceKind: "integration_event",
+          startedAt,
+          minimumOperationalIntervalMs: 10 * 60_000,
+        });
+      }
       return;
     } catch (error) {
       if (error instanceof MalwareScanError) {
+        if (
+          error.code === "MALWARE_SCANNER_UNAVAILABLE"
+          || error.code === "MALWARE_SCANNER_INVALID_RESPONSE"
+        ) {
+          await recordDependencyHealthEvidence(env, {
+            key: "malware_scanner",
+            state: "degraded",
+            safeErrorCode: "SCANNER_UNAVAILABLE",
+            evidenceKind: "integration_event",
+            startedAt,
+          });
+        }
         throw new SafeJobError(error.code, error.retryable);
       }
       throw error;
     }
   }
   throw new SafeJobError("JOB_HANDLER_NOT_ENABLED", false);
+}
+
+type DlqTerminalization =
+  | "terminalized"
+  | "already_terminal"
+  | "busy"
+  | "unmatched";
+
+/**
+ * Cloudflare has already exhausted the source queue retries before a message
+ * reaches this consumer. Only the durable execution ledger becomes terminal.
+ * Analysis/OCR/index/export records remain in their existing retryable state;
+ * malware-scanned files remain quarantined. The existing audited operational
+ * redrive is the only path that can republish the original identifiers. We
+ * preserve the root error_code on job_runs; `dead_lettered` is the truthful
+ * retry-exhausted state and must not replace the provider/scanner/D1 cause.
+ */
+async function terminalizeDlqJob(
+  env: PlatformJobEnv,
+  envelope: JobEnvelope,
+  now: string,
+): Promise<DlqTerminalization> {
+  if (!isTerminalizableDlqJobKind(envelope.kind)) return "unmatched";
+
+  const envelopeDigest = await envelopeHash(envelope);
+  const sourceQueue = expectedQueueName(envelope.kind, env.APP_ENV);
+  const exactBindings = [
+    envelope.jobId,
+    envelope.idempotencyKey,
+    envelope.kind,
+    envelope.subjectId,
+    envelope.workspaceId!,
+    envelope.correlationId,
+    envelopeDigest,
+    sourceQueue,
+  ];
+
+  const result = await env.DB.prepare(`
+    UPDATE job_runs
+    SET status='dead_lettered',
+        lease_owner=NULL,
+        lease_expires_at=NULL,
+        next_attempt_at=NULL,
+        error_code=COALESCE(error_code,'JOB_TRANSIENT_FAILURE'),
+        finished_at=?,
+        updated_at=?
+    WHERE id=?
+      AND idempotency_key=?
+      AND job_type=?
+      AND subject_id=?
+      AND workspace_id=?
+      AND correlation_id=?
+      AND envelope_hash=?
+      AND queue_name=?
+      AND status IN ('running','retrying')
+      AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+  `).bind(
+    now,
+    now,
+    ...exactBindings,
+    now,
+  ).run();
+  if (Number(result.meta.changes ?? 0) === 1) return "terminalized";
+
+  const job = await env.DB.prepare(`
+    SELECT status,lease_expires_at AS leaseExpiresAt
+    FROM job_runs
+    WHERE id=?
+      AND idempotency_key=?
+      AND job_type=?
+      AND subject_id=?
+      AND workspace_id=?
+      AND correlation_id=?
+      AND envelope_hash=?
+      AND queue_name=?
+    LIMIT 1
+  `).bind(...exactBindings).first<{
+    status: string;
+    leaseExpiresAt: string | null;
+  }>();
+  if (!job) return "unmatched";
+  if (["completed", "rejected", "dead_lettered"].includes(job.status)) {
+    return "already_terminal";
+  }
+  if (
+    job.leaseExpiresAt
+    && Number.isFinite(Date.parse(job.leaseExpiresAt))
+    && Date.parse(job.leaseExpiresAt) > Date.parse(now)
+  ) {
+    return "busy";
+  }
+  return ['running', 'retrying'].includes(job.status) ? "busy" : "unmatched";
+}
+
+async function recordDlqEvidence(
+  env: PlatformJobEnv,
+  startedAt: number,
+  safeErrorCode: "DLQ_BACKLOG" | "DLQ_INVALID_MESSAGE" | "DLQ_UNMATCHED_MESSAGE" = "DLQ_BACKLOG",
+): Promise<void> {
+  // A DLQ delivery is direct, content-free evidence that the source consumer
+  // exhausted its configured retries. This is intentionally not inferred from
+  // configuration or a source-queue metric.
+  await recordDependencyHealthEvidence(env, {
+    key: "queue_dlq",
+    state: "degraded",
+    safeErrorCode,
+    evidenceKind: "integration_event",
+    startedAt,
+  });
+}
+
+async function processDlqMessage(
+  queueName: string,
+  message: Message<unknown>,
+  env: PlatformJobEnv,
+  allowedKinds: readonly TerminalizableDlqJobKind[],
+): Promise<void> {
+  const startedAt = Date.now();
+  const parsed = jobEnvelopeSchema.safeParse(message.body);
+  if (!parsed.success) {
+    await recordDlqEvidence(env, startedAt, "DLQ_INVALID_MESSAGE");
+    logEvent("error", {
+      event: "queue.dlq_invalid_message",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      errorCode: "JOB_VALIDATION_FAILED",
+    });
+    // Do not blind-ack an opaque DLQ record. This consumer has bounded
+    // retries, while scheduled reconciliation can still terminalize a known
+    // durable job after its source delivery has demonstrably gone stale.
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+
+  const envelope = parsed.data;
+  const terminalizableKind = envelope.kind;
+  if (!isTerminalizableDlqJobKind(terminalizableKind)) {
+    await recordDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+    logEvent("error", {
+      event: "queue.dlq_unexpected_kind",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_QUEUE_MISMATCH",
+    });
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+  if (!allowedKinds.includes(terminalizableKind)) {
+    await recordDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+    logEvent("error", {
+      event: "queue.dlq_unexpected_kind",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_QUEUE_MISMATCH",
+    });
+    message.retry({ delaySeconds: retryDelay(message.attempts) });
+    return;
+  }
+
+  let outcome: DlqTerminalization;
+  try {
+    outcome = await terminalizeDlqJob(
+      env,
+      envelope,
+      new Date().toISOString(),
+    );
+  } catch {
+    await recordDlqEvidence(env, startedAt);
+    const delaySeconds = retryDelay(message.attempts);
+    logEvent("error", {
+      event: "queue.dlq_terminalization_retrying",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_TRANSIENT_FAILURE",
+      attempt: message.attempts,
+    });
+    message.retry({ delaySeconds });
+    return;
+  }
+
+  if (outcome === "busy") {
+    await recordDlqEvidence(env, startedAt);
+    const delaySeconds = retryDelay(message.attempts);
+    logEvent("error", {
+      event: "queue.dlq_terminalization_busy",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_LEASE_LOST",
+      attempt: message.attempts,
+    });
+    message.retry({ delaySeconds });
+    return;
+  }
+
+  if (outcome === "unmatched") {
+    await recordDlqEvidence(env, startedAt, "DLQ_UNMATCHED_MESSAGE");
+    // A malformed or orphaned DLQ payload must not be silently discarded.
+    // Keeping it retryable gives scheduled reconciliation a chance to fence a
+    // matching durable run that becomes visible after a transient D1 delay.
+    const delaySeconds = retryDelay(message.attempts);
+    logEvent("error", {
+      event: "queue.dlq_terminalization_unmatched",
+      environment: env.APP_ENV,
+      queue: queueName,
+      messageId: message.id,
+      correlationId: envelope.correlationId,
+      jobId: envelope.jobId,
+      jobKind: envelope.kind,
+      errorCode: "JOB_IDEMPOTENCY_CONFLICT",
+      attempt: message.attempts,
+    });
+    message.retry({ delaySeconds });
+    return;
+  }
+
+  await recordDlqEvidence(env, startedAt);
+
+  writeMetric(env, {
+    queueName,
+    kind: envelope.kind,
+    status: outcome,
+    durationMs: Date.now() - startedAt,
+    correlationId: envelope.correlationId,
+  });
+  logEvent(outcome === "terminalized" ? "error" : "info", {
+    event: outcome === "terminalized"
+      ? "queue.dlq_terminalized"
+      : "queue.dlq_already_terminal",
+    environment: env.APP_ENV,
+    queue: queueName,
+    messageId: message.id,
+    correlationId: envelope.correlationId,
+    jobId: envelope.jobId,
+    jobKind: envelope.kind,
+    status: outcome,
+  });
+  message.ack();
 }
 
 async function processMessage(
@@ -912,6 +1420,26 @@ async function processMessage(
       claim.leaseOwner,
       new Date().toISOString(),
     );
+    // Reaching a consumer and completing durable job bookkeeping is actual
+    // evidence for the queue path and D1; it is not an inference from config.
+    // Operational observations are throttled inside the helper so the
+    // append-only health ledger cannot grow with every routine message.
+    await Promise.all([
+      recordDependencyHealthEvidence(env, {
+        key: "queues",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt: started,
+        minimumOperationalIntervalMs: 15 * 60_000,
+      }),
+      recordDependencyHealthEvidence(env, {
+        key: "d1",
+        state: "operational",
+        evidenceKind: "integration_event",
+        startedAt: started,
+        minimumOperationalIntervalMs: 5 * 60_000,
+      }),
+    ]);
     writeMetric(env, {
       queueName,
       kind: envelope.kind,
@@ -1041,6 +1569,14 @@ export async function handleQueue(
       errorCode: "JOB_SCHEMA_VERSION_MISMATCH",
     });
     batch.retryAll({ delaySeconds: 300 });
+    return;
+  }
+
+  const dlqKinds = terminalizableDlqKindsForQueue(batch.queue, env.APP_ENV);
+  if (dlqKinds) {
+    for (const message of batch.messages) {
+      await processDlqMessage(batch.queue, message, env, dlqKinds);
+    }
     return;
   }
 

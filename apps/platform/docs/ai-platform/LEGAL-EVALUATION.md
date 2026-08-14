@@ -1,6 +1,6 @@
 # JURO legal evaluation
 
-Updated: 2026-08-06
+Updated: 2026-08-13
 
 ## Reproducible corpus harness
 
@@ -9,8 +9,9 @@ for release evaluation: 132 base Russian scenarios, 132 Uzbek-Latin base
 scenarios, and 50 additional intentionally ambiguous scenarios (25 per
 language). Each priority legal area and each individual/entrepreneur/lawyer
 account context is represented in both languages. The prompts now encode the
-actual historical, deadline, urgent, Advice-missing, Advice/Lex-conflict,
-unofficial-source, incomplete-facts, foreign-element and evidence-quality
+actual historical, deadline, urgent, live-Lex-unavailable, false-article,
+unofficial-source, prompt-injection, provider-failure, incomplete-facts,
+foreign-element and evidence-quality
 situations instead of relying on tags attached to repeated generic text.
 
 These records intentionally contain no invented legal answer, act, article, link,
@@ -20,20 +21,18 @@ and a SHA-256 manifest; it still creates no answer or score.
 
 ### Latest integrity materialization
 
-On 2026-08-06, the harness materialized corpus version `2026-08-05.1` into
+On 2026-08-13, the harness materialized corpus version `2026-08-13.1` into
 an ignored local evidence directory and re-verified every artifact with zero
 failures: 314 scenarios (157 Russian, 157 Uzbek-Latin), 50 ambiguous scenarios
-and 12 legal areas. The packet manifest SHA-256 was
-`e702e7f86730f34d56bf2a9d062edc249c9081403b54f2568f117408fb9039ca`;
-the scenario payload SHA-256 was
-`57a0b8aea337e13d1cdfb194e5aef0ce96c2142b55c587fc15e50f7b2413b6d6`.
+and 12 legal areas. The scenario payload SHA-256 was
+`e10b824adc439c5a1a414c830610c605fd3556c3ed1ab9d91ae58cf50c089239`.
 This verifies only deterministic packet composition. It is not a claim that a
 provider response, live citation, or legal review has passed.
 `npm run evaluate:legal:validate -- --packet <packet-directory> --results
 <reviewed-results.json> --evidence <staging-persisted-evidence.json>` accepts
 only a strict staging envelope bound to the
 packet corpus version and SHA-256, with one schema-valid result per
-scenario. Public citations must use the exact canonical Lex or Advice document
+scenario. Public citations must use the exact canonical Lex.uz document
 path without credentials, query, fragment or alternate port. Live checking
 permits only bounded redirects that retain the same source kind, locale and
 canonical document ID, and requires a 2xx HTML/XHTML response. Host shape alone
@@ -91,27 +90,28 @@ from a separate client field. Those values are resolved from D1 and the
 MFA-authorized immutable review event.
 ## Current automated evidence
 
-The current integration branch tests exact Lex/Advice host and type trust,
-verified-status insufficiency, corpus freshness, publication/lifecycle evidence
-replay, section and chunk SHA-256 integrity, future-effective and expired
-versions, and RU/UZ stale/unavailable response downgrades. The real publication
-integration test applies the complete migration set to SQLite, publishes
-reviewed synthetic evidence, records qualifying Lex and Advice corpus runs, and
-retrieves one verified source through the production SQL path. Tampering causes
-zero trusted results.
+The current branch tests direct Lex.uz URL/redirect trust, request-scoped HTML
+parsing, semantic article spans and SHA-256 hashes, UI-noise removal, official
+base-act reranking, false-article rejection, same-packet provider retry/fallback,
+strict terminal validation and RU/UZ stale/unavailable downgrades. Advice.uz,
+local legal-corpus retrieval, vectors and embeddings are fail-closed on the
+interactive path. Foundational act identifiers are metadata-only search hints:
+the exact Lex.uz document is still fetched and validated live for every request.
 
 These tests prove deterministic trust-boundary behavior. They do not prove the
-legal correctness or coverage of a real corpus.
+legal correctness of real provider output or substitute for named legal review.
 
 ## Release-matrix harness
 
-- 125 Russian and 125 Uzbek-Latin legal scenarios;
+- 157 Russian and 157 Uzbek-Latin legal scenarios;
 - 50 intentionally ambiguous scenarios;
 - all priority legal areas, historical versions, deadlines, urgent situations,
-  missing Advice scenarios, Advice/Lex conflicts, and unofficial-source attacks;
-- zero fabricated links, 100% existing cited links and source-type
-  classification, at least 98% critical-deadline detection, and at least 95%
-  reviewer-scored RU/UZ quality;
+  unavailable Lex.uz, false articles, prompt injection, provider failures and
+  unofficial-source attacks;
+- zero fabricated links, 100% canonical live Lex.uz citations, recall@1/@3,
+  citation precision, unsupported-claim rate, false-refusal rate, UI-noise rate,
+  p50/p95 first-useful-token and completion latency, cost, RU/UZ parity, at
+  least 98% critical-deadline detection and at least 95% reviewer-scored quality;
 - a tracked human-reviewed subset with reviewer identity, source version,
   applicable date, expected answer, result, and remediation.
 

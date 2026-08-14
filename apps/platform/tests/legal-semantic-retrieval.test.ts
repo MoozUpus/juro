@@ -6,13 +6,13 @@ function embedding(): number[] {
   return Array.from({ length: 1536 }, () => 0.01);
 }
 
-test("semantic legal retrieval stays disabled without every server-side binding", async () => {
+test("semantic legal retrieval stays disabled without its required Lex binding", async () => {
   const result = await semanticLegalChunkRanks(undefined, "проверить трудовой договор", "ru");
   assert.equal(result.status, "unavailable");
   assert.equal(result.vectorRanks.size, 0);
 });
 
-test("semantic legal retrieval queries isolated indexes and returns deterministic ids only", async () => {
+test("semantic legal retrieval queries only Lex and returns deterministic ids", async () => {
   const originalFetch = globalThis.fetch;
   const observedFilters: unknown[] = [];
   globalThis.fetch = async (input, init) => {
@@ -34,12 +34,10 @@ test("semantic legal retrieval queries isolated indexes and returns deterministi
       APP_ENV: "staging",
       OPENAI_API_KEY: "synthetic-key",
       LEX_UZ_INDEX: index(["vec_lex_chunk", "bad id"]),
-      ADVICE_UZ_INDEX: index(["vec_advice_chunk", "vec_lex_chunk"]),
     }, "проверить трудовой договор", "ru");
     assert.equal(result.status, "used");
-    assert.deepEqual([...result.vectorRanks.keys()], ["vec_lex_chunk", "vec_advice_chunk"]);
+    assert.deepEqual([...result.vectorRanks.keys()], ["vec_lex_chunk"]);
     assert.deepEqual(observedFilters, [
-      { environment: "staging", language: "ru" },
       { environment: "staging", language: "ru" },
     ]);
   } finally {
@@ -56,7 +54,6 @@ test("embedding or Vectorize failure cannot manufacture a semantic result", asyn
       APP_ENV: "staging",
       OPENAI_API_KEY: "synthetic-key",
       LEX_UZ_INDEX: emptyIndex,
-      ADVICE_UZ_INDEX: emptyIndex,
     }, "проверить трудовой договор", "ru");
     assert.equal(result.status, "failed");
     assert.equal(result.vectorRanks.size, 0);

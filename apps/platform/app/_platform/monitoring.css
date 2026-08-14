@@ -15,3 +15,11 @@
   .monitoring-workspace>header h1{font-size:28px;line-height:1.08}
   .monitoring-workspace>header p{font-size:13px}
 }
+
+/* The monitoring feed is a controlled beta. The state label must stay
+   readable without relying on the shield colour alone. */
+.monitoring-status-copy strong{display:block}
+.monitoring-status-copy small{display:block;margin-bottom:4px;color:#806228;font-size:11px;font-weight:850;letter-spacing:.04em;text-transform:uppercase}
+.monitoring-preference-note,.monitoring-field-hint{margin:0;color:#5d5140;font-size:13px;line-height:1.5}
+.monitoring-preference-note{padding:12px 13px;border-left:3px solid #be974f;border-radius:0 10px 10px 0;background:#fffaf0}
+.monitoring-field-hint{margin:-3px 0 10px;color:#6b6255}

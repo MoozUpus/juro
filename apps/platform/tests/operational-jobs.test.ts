@@ -132,6 +132,79 @@ test("0085 refuses permanent failures, active leases, cross-environment ids and 
   } finally { sqlite.close(); }
 });
 
+test("0114 permits audited redrive for a retryable terminal document-export claim race", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seedUser(sqlite);
+    const jobId = "document-export-not-ready";
+    const outboxId = `${jobId}:outbox`;
+    const idempotencyKey = `${jobId}:idempotency`;
+    sqlite.prepare(`
+      INSERT INTO job_outbox (
+        id,queue_binding,job_type,schema_version,idempotency_key,subject_id,
+        workspace_id,correlation_id,enqueued_at,available_at,status,
+        dispatch_attempts,lease_owner,lease_expires_at,next_attempt_at,
+        dispatched_at,error_code,created_at,updated_at
+      ) VALUES (?,'DOCUMENT_EXPORT_QUEUE','document.export',1,?,'export:claim-race',NULL,?,
+        ?,?,'dispatched',3,NULL,NULL,NULL,?,NULL,?,?)
+    `).run(
+      outboxId,
+      idempotencyKey,
+      `${jobId}:correlation`,
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+    );
+    sqlite.prepare(`
+      INSERT INTO job_runs (
+        id,queue_name,message_id,job_type,schema_version,idempotency_key,
+        subject_id,workspace_id,correlation_id,envelope_hash,status,attempt,
+        lease_owner,lease_expires_at,next_attempt_at,error_code,started_at,
+        finished_at,created_at,updated_at
+      ) VALUES (?,'staging-document-export',?,'document.export',1,?,'export:claim-race',NULL,?,
+        ?, 'dead_lettered',3,NULL,NULL,NULL,?, ?,?,?,?)
+    `).run(
+      jobId,
+      `${jobId}:message`,
+      idempotencyKey,
+      `${jobId}:correlation`,
+      "B".repeat(64),
+      "DOCUMENT_EXPORT_NOT_READY",
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+      now.toISOString(),
+    );
+
+    assert.equal(canRedriveOperationalJob({
+      status: "dead_lettered",
+      errorCode: "DOCUMENT_EXPORT_NOT_READY",
+      outboxStatus: "dispatched",
+      leaseExpiresAt: null,
+      now,
+    }), true);
+    const event = await requestOperationalJobRedrive({
+      db: d1,
+      environment: "staging",
+      actorUserId: "jobs-admin",
+      now,
+      value: { jobId, reason: "The document-export claim race has cleared and needs a safe replay." },
+    });
+    assert.equal(event.previousErrorCode, "DOCUMENT_EXPORT_NOT_READY");
+    assert.deepEqual(
+      { ...sqlite.prepare("SELECT status,error_code,next_attempt_at FROM job_runs WHERE id=?").get(jobId) },
+      { status: "retrying", error_code: "DOCUMENT_EXPORT_NOT_READY", next_attempt_at: now.toISOString() },
+    );
+    assert.deepEqual(
+      { ...sqlite.prepare("SELECT status,error_code,available_at FROM job_outbox WHERE id=?").get(outboxId) },
+      { status: "pending", error_code: null, available_at: now.toISOString() },
+    );
+    assert.deepEqual(await verifyOperationalJobRedriveHistory(d1, "staging", jobId), { valid: true, checked: 1 });
+  } finally { sqlite.close(); }
+});
+
 test("0085 fails closed when redrive history is corrupted", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {

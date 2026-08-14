@@ -12,11 +12,12 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { caseScenariosForAccount } from "../../lib/platform/case-create";
+import { caseDirectionsForAccount, caseScenariosForAccount, type CaseDirectionId } from "../../lib/platform/case-create";
 import type {
   DeadlineCalculationInput,
   DeadlineCalculationResult,
 } from "../../lib/platform/deadline-calculator";
+import { formatPlatformDate, formatPlatformDateTime, formatPlatformDayMonth } from "../../lib/platform/date-time";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
@@ -125,11 +126,15 @@ export function ActionPlanClient({
 }) {
   const ru = locale === "ru";
   const base = usePlatformBasePath();
-  const scenarioCatalog = caseScenariosForAccount(accountType);
+  const directions = caseDirectionsForAccount(accountType);
+  const [direction, setDirection] = useState<CaseDirectionId>(directions[0]?.id ?? "employment");
+  const scenarioCatalog = useMemo(() => caseScenariosForAccount(accountType, direction), [accountType, direction]);
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [selected, setSelected] = useState(scenarioCatalog[0].id);
+  const [selected, setSelected] = useState(() =>
+    caseScenariosForAccount(accountType, directions[0]?.id ?? "employment")[0]?.id ?? "unpaid-salary",
+  );
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
@@ -333,6 +338,19 @@ export function ActionPlanClient({
       <section className="plan-main">
         {!initialCaseId && <form className="plan-create" onSubmit={create}>
           <h2>{ru ? "Создать план из сценария" : "Ssenariydan reja yaratish"}</h2>
+          <p className="plan-create-step">{ru ? "1. Направление" : "1. Yo‘nalish"}</p>
+          <div className="scenario-pills scenario-directions">
+            {directions.map((item) => <button
+              type="button"
+              className={direction === item.id ? "active" : ""}
+              onClick={() => {
+                setDirection(item.id);
+                setSelected(caseScenariosForAccount(accountType, item.id)[0]?.id ?? "unpaid-salary");
+              }}
+              key={item.id}
+            >{ru ? item.ru : item.uz}</button>)}
+          </div>
+          <p className="plan-create-step">{ru ? "2. Ситуация" : "2. Vaziyat"}</p>
           <div className="scenario-pills">
             {scenarioCatalog.map((item) => <button
               type="button"
@@ -404,7 +422,7 @@ export function ActionPlanClient({
                         {versionsByCase[item.id].map((entry) => <li key={entry.id}>
                           <button type="button" aria-pressed={selectedHistoryVersionByCase[item.id] === entry.id} onClick={() => setSelectedHistoryVersionByCase((all) => ({ ...all, [item.id]: entry.id }))}>
                             <strong>{ru ? "Версия " + entry.version : entry.version + "-versiya"}</strong>
-                            <span>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(entry.createdAt))}</span>
+                            <span>{formatPlatformDateTime(entry.createdAt, ru ? "ru" : "uz")}</span>
                             <small>{entry.snapshot ? entry.snapshot.progressPercent + "% · " + entry.snapshot.steps.filter((step) => step.status === "completed").length + "/" + entry.snapshot.steps.length : (ru ? "Снимок недоступен" : "Snapshot mavjud emas")}</small>
                           </button>
                         </li>)}
@@ -464,7 +482,7 @@ export function ActionPlanClient({
                         <span>{step.status === "completed" ? <Check /> : step.ordinal}</span>
                         <div>
                           <strong>{step.title}</strong>
-                          {step.dueAt && <small>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(step.dueAt))}</small>}
+                          {step.dueAt && <small>{formatPlatformDate(step.dueAt, ru ? "ru" : "uz")}</small>}
                         </div>
                         <label className="plan-step-date">
                           <span>{ru ? "Срок" : "Muddat"}</span>
@@ -578,10 +596,10 @@ export function ActionPlanClient({
       </section>
       <aside className="plan-calendar">
         <h2>{ru ? "Ближайшие сроки" : "Yaqin muddatlar"}</h2>
-        <div className="today"><CalendarDays /><div><small>{ru ? "Сегодня" : "Bugun"}</small><strong>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "long", timeZone: "Asia/Tashkent" }).format(new Date())}</strong></div></div>
+        <div className="today"><CalendarDays /><div><small>{ru ? "Сегодня" : "Bugun"}</small><strong>{formatPlatformDate(new Date(), ru ? "ru" : "uz", { dateStyle: "long" })}</strong></div></div>
         {deadlines.length
           ? deadlines.slice(0, 8).map((item) => <div className="deadline" key={`${item.date}-${item.title}`}>
-            <time dateTime={item.date}>{new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { day: "2-digit", month: "short", timeZone: "Asia/Tashkent" }).format(new Date(item.date))}</time>
+            <time dateTime={item.date}>{formatPlatformDayMonth(item.date, ru ? "ru" : "uz")}</time>
             <div><strong>{item.title}</strong><small>{item.caseTitle}</small></div>
           </div>)
           : <p>{ru ? "Сроки появятся после назначения дат конкретным шагам." : "Aniq qadamlar uchun sana belgilangandan keyin muddatlar ko‘rinadi."}</p>}

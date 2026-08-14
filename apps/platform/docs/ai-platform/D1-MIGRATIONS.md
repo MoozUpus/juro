@@ -1,5 +1,24 @@
 # JURO D1 migrations
 
+## Migrations 0112–0113 — interactive reliability evidence (staging applied)
+
+`0112_dependency_health_checks.sql` additively creates immutable,
+environment-scoped dependency-health evidence. `0113_ai_slo_telemetry.sql`
+additively creates immutable, content-free AI latency/SLO evidence. Both were
+applied, in that order, to `juro-staging` on 2026-08-12 after a private backup
+and isolated restore rehearsal. The pre/post exports are in private
+`juro-staging-backups` under
+`d1/releases/20260812T122912Z/{pre,post}-0112-0113.sql`; read-back SHA-256
+verification and the isolated post-change restore succeeded with
+`quick_check=ok` and zero foreign-key violations. The remote D1
+`foreign_key_check` returned no rows. Remote `quick_check` itself returned
+`SQLITE_NOMEM`, so it is an unpassed managed-endpoint check rather than a
+success assertion. The current matching staging Worker version is
+`f79f560a-bc9d-449f-aa7c-a421e2af2d9e` (superseding
+`d11cd7cd-022c-4501-84ed-ed73befa3959`); production is unchanged. Do not
+down-migrate or delete these append-only records as a routine rollback. See
+[AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).
+
 > Current checkpoint — 2026-08-05: protected `juro-staging` is through
 > `0091_verified_corpus_freshness.sql` with 92 ledger rows. A fresh pre-change
 > full/schema/data export round-tripped through private `juro-staging-backups`

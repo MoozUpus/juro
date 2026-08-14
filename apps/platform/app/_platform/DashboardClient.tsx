@@ -132,11 +132,16 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
 
   const quickActions = [
     { href: `${base}/ai-chat`, icon: Bot, copy: copy.actions.ask },
-    { href: `${base}/document-review`, icon: ShieldCheck, copy: copy.actions.review },
-    { href: `${base}/document-review?mode=compare`, icon: FileDiff, copy: copy.actions.compare },
     { href: `${base}/document-builder`, icon: FilePenLine, copy: copy.actions.create },
-    { href: `${base}/action-plan`, icon: CalendarClock, copy: copy.actions.plan },
-    { href: `${base}/consultations`, icon: MessageSquareText, copy: copy.actions.lawyer },
+    { href: `${base}/document-review`, icon: ShieldCheck, copy: copy.actions.review },
+    {
+      href: `${base}/cases`,
+      icon: BriefcaseBusiness,
+      copy: {
+        title: ru ? "Мои дела" : "Mening ishlarim",
+        description: ru ? "Сроки, документы и планы действий в одном месте." : "Muddatlar, hujjatlar va harakatlar rejalari bir joyda.",
+      },
+    },
   ];
   const uploadPercent = uploadProgress?.phase === "uploading" && uploadProgress.total > 0
     ? Math.round((uploadProgress.loaded / uploadProgress.total) * 100)
@@ -144,7 +149,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
   const uploadStatus = !uploadProgress ? "" : uploadProgress.phase === "hashing"
     ? (ru ? "Проверяем целостность файла…" : "Fayl yaxlitligi tekshirilmoqda…")
     : uploadProgress.phase === "finalizing"
-      ? (ru ? "Сохраняем файл в приватный карантин…" : "Fayl shaxsiy karantinga saqlanmoqda…")
+      ? (ru ? "Защищённо сохраняем файл для анализа…" : "Fayl tahlil uchun himoyalangan tarzda saqlanmoqda…")
       : uploadPercent === null
         ? (ru ? "Передаём файл…" : "Fayl yuborilmoqda…")
         : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);
@@ -300,10 +305,13 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
 
       <section className="dashboard-continuation">
         <div className="dashboard-section-heading">
-          <h2>{copy.continueTitle}</h2>
-          <button onClick={() => { setLoading(true); void load(); }} aria-label={copy.refresh}>
-            <RotateCcw className={loading ? "spin" : ""} />
-          </button>
+          <div className="dashboard-section-title-row">
+            <h2>{copy.continueTitle}</h2>
+            <button type="button" onClick={() => { setLoading(true); void load(); }} disabled={loading} aria-label={copy.refresh}>
+              <RotateCcw className={loading ? "spin" : ""} />
+              <span>{copy.refresh}</span>
+            </button>
+          </div>
         </div>
         {loading && !data ? (
           <div className="dashboard-command-loading" role="status"><LoaderCircle className="spin" /><span>{ru ? "Загружаем рабочий контекст" : "Ish konteksti yuklanmoqda"}</span></div>
@@ -348,23 +356,13 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
 }
 
 function GoldenRoute({ locale, label, steps }: { locale: PlatformLocale; label: string; steps: readonly string[] }) {
-  const [motionState, setMotionState] = useState<"pending" | "animate" | "static">("pending");
-  useEffect(() => {
-    const key = "juro-golden-route-seen";
-    if (sessionStorage.getItem(key)) {
-      setMotionState("static");
-      return;
-    }
-    sessionStorage.setItem(key, "1");
-    setMotionState("animate");
-  }, []);
   return (
     <div className="golden-route" aria-label={label}>
       <div className="golden-route-heading">
         <span>JURO</span>
         <p>{locale === "ru" ? "От проблемы к обоснованному действию" : "Muammodan asoslangan harakatgacha"}</p>
       </div>
-      <div className={`golden-route-track ${motionState}`}>
+      <div className="golden-route-track">
         <svg viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true">
           <path className="golden-route-base" d="M42 40 H558" />
           <path className="golden-route-progress" d="M42 40 H558" pathLength="1" />

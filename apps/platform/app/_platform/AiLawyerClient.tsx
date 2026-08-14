@@ -2,13 +2,13 @@
 
 /* eslint-disable react-hooks/set-state-in-effect -- authenticated remote data is hydrated after the first browser render */
 
-import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, Plus, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, Trash2, UserRoundX, X } from "lucide-react";
-import Image from "next/image";
+import { AudioLines, BookmarkPlus, BookOpenCheck, Bot, CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, FilePlus2, FileQuestion, History, Keyboard, ListPlus, LoaderCircle, Mic, Pencil, Plus, RotateCcw, Send, ShieldAlert, Square, ThumbsUp, Trash2, X } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, KeyboardEvent, useCallback, useEffect, useRef, useState } from "react";
 import { AiRestartableRequestError, AiRetryableRequestError, createAiRetryRequest, isRestartableAiTerminal, isUserCancelledAiRequest, shouldOfferAiRetry, shouldUseFreshAiRetry, type AiRetryRequest } from "../../lib/ai/client-retry";
 import { confirmVoiceTranscript } from "../../lib/ai/client-voice";
 import { resolveVoiceModeState, type VoiceModeState, type VoiceRecorderPhase, type VoiceSpeechPhase } from "../../lib/ai/voice-ui";
+import { formatPlatformDate, formatPlatformLongDate, formatPlatformMonth } from "../../lib/platform/date-time";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { uzbekistanCalendarDate } from "../../lib/legal/applicability-date";
 import { usePlatformBasePath } from "./PlatformRouteContext";
@@ -21,7 +21,27 @@ type SourceFreshness = { status: "fresh" | "stale" | "unavailable"; asOf: string
 type Conversation = { id: string; title: string; locale: string; status: string; updatedAt: string; lastAnswer: string | null; facts: Fact[] };
 type CaseOption = { id: string; title: string; status: string; updatedAt: string };
 type Fact = { id: string; statement: string; status: string };
-type Source = { sourceId: string; actTitle: string; actIdentifier: string | null; article: string | null; excerpt: string | null; originalUrl: string; status: string; effectiveDate: string | null; verifiedAt: string };
+type Source = { sourceId: string; actTitle: string; actIdentifier: string | null; article: string | null; originalUrl: string; status: string; effectiveDate: string | null; verifiedAt: string };
+type AiPreliminary = {
+  kind: "grounded_answer";
+  message: string;
+  claim: {
+    text: string;
+    type: "legal_basis" | "action" | "deadline" | "risk" | "fact";
+    sourceId: string | null;
+    sourceSpanId: string | null;
+    confidence: number;
+  };
+  source: {
+    sourceId: string;
+    title: string;
+    article: string | null;
+    paragraph: string | null;
+    canonicalUrl: string;
+    accessedAt: string;
+    contentSha256: string;
+  };
+};
 type LegalResult = {
   responseKind: "answer" | "clarification_required";
   summary: string;
@@ -92,7 +112,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [error, setError] = useState("");
   const [streamStatus, setStreamStatus] = useState("");
   const [optimisticQuestion, setOptimisticQuestion] = useState("");
-  const [streamedAnswer, setStreamedAnswer] = useState("");
+  const [preliminary, setPreliminary] = useState<AiPreliminary | null>(null);
   const streamAbortRef = useRef<AbortController | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const pendingAiRequestRef = useRef<AiRetryRequest<AiRequestPayload> | null>(null);
@@ -100,10 +120,13 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   const [savingPlan, setSavingPlan] = useState(false);
   const [targetCaseId, setTargetCaseId] = useState("");
   const [planConfirmationOpen, setPlanConfirmationOpen] = useState(false);
+  const [planEditorOpen, setPlanEditorOpen] = useState(false);
+  const [dismissedPlanMessageId, setDismissedPlanMessageId] = useState("");
   const planConfirmationRef = useRef<HTMLDivElement | null>(null);
   const [openingSuggestedDocument, setOpeningSuggestedDocument] = useState(false);
   const [documentPrefill, setDocumentPrefill] = useState<DocumentPrefillPreview | null>(null);
   const [documentPrefillMessageId, setDocumentPrefillMessageId] = useState("");
+  const [sensitivePrefillConsent, setSensitivePrefillConsent] = useState(false);
   const [creatingSuggestedDocument, setCreatingSuggestedDocument] = useState(false);
   const documentHandoffKeyRef = useRef("");
   const [feedback, setFeedback] = useState<AiFeedback[]>([]);
@@ -158,10 +181,15 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
   }, [planConfirmationOpen]);
 
   useEffect(() => {
+    setPlanConfirmationOpen(false);
+    setPlanEditorOpen(false);
+  }, [answer?.messageId]);
+
+  useEffect(() => {
     const transcript = transcriptRef.current;
     if (!transcript) return;
-    transcript.scrollTo({ top: transcript.scrollHeight, behavior: streamedAnswer ? "auto" : "smooth" });
-  }, [answer?.messageId, optimisticQuestion, streamedAnswer]);
+    transcript.scrollTo({ top: transcript.scrollHeight, behavior: preliminary ? "auto" : "smooth" });
+  }, [answer?.messageId, optimisticQuestion, preliminary]);
 
   useEffect(() => {
     if (!answer?.messageId) { setFeedback([]); setFeedbackStatus(""); return; }
@@ -202,7 +230,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       if (resultBody.usage) setUsage(resultBody.usage);
       setQuestion("");
       setOptimisticQuestion("");
-      setStreamedAnswer("");
+      setPreliminary(null);
       setVoiceRecordingId("");
       setEditSourceMessageId("");
       pendingAiRequestRef.current = null;
@@ -240,12 +268,12 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     streamAbortRef.current = controller;
     const visibleQuestion = pending.payload.question?.trim() || answer?.question?.trim() || "";
     setOptimisticQuestion(visibleQuestion);
-    setStreamedAnswer("");
+    setPreliminary(null);
     if (operation !== "regenerate") setQuestion("");
     setSending(true);
     setError("");
     setCanRetry(false);
-    setStreamStatus(ru ? "JURO принимает запрос…" : "JURO so‘rovni qabul qilmoqda…");
+    setStreamStatus(ru ? "Понимаю вопрос" : "Savolni tushunyapman");
     try {
       if (pending.payload.voiceRecordingId && pending.payload.question) {
         setStreamStatus(ru ? "Подтверждаем распознанный текст…" : "Tanilgan matn tasdiqlanmoqda…");
@@ -268,13 +296,19 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       let terminal;
       try {
         terminal = await readAiEventStream(response, (progress) => {
-          if (progress.stage === "provider_started") {
-            setStreamStatus(ru ? "AI формирует структурированный ответ…" : "AI tuzilgan javobni tayyorlamoqda…");
+          if (progress.stage === "accepted") {
+            setStreamStatus(ru ? "Понимаю вопрос" : "Savolni tushunyapman");
+          } else if (progress.stage === "lex_search_started") {
+            setStreamStatus(ru ? "Ищу действующие нормы в Lex.uz" : "Lex.uz’dan amaldagi normalarni izlayapman");
+          } else if (progress.stage === "source_verified") {
+            setStreamStatus(ru ? "Проверяю официальный источник" : "Rasmiy manbani tekshiryapman");
+          } else if (progress.stage === "provider_started") {
+            setStreamStatus(ru ? "Готовлю практический ответ…" : "Amaliy javobni tayyorlayapman…");
           } else if (progress.stage === "provider_delta") {
             setStreamStatus(ru ? "JURO проверяет структуру и источники…" : "JURO tuzilma va manbalarni tekshirmoqda…");
-          } else if (progress.stage === "answer_delta") {
-            setStreamedAnswer(progress.content || "");
-            setStreamStatus(ru ? "JURO формирует ответ…" : "JURO javobni tayyorlamoqda…");
+          } else if (progress.stage === "preliminary" && progress.preliminary) {
+            setPreliminary(progress.preliminary);
+            setStreamStatus(progress.preliminary.message);
           } else if (progress.stage === "fallback") {
             setStreamStatus(ru ? "Основной провайдер недоступен — включён резервный…" : "Asosiy provayder ishlamayapti — zaxira yoqildi…");
           }
@@ -293,7 +327,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       if (terminal.status === 202) throw new AiRetryableRequestError(ru ? "Запрос уже обрабатывается. Повторите проверку через несколько секунд." : "So‘rov qayta ishlanmoqda. Bir necha soniyadan so‘ng qayta tekshiring.");
       setAnswer(body);
       setOptimisticQuestion("");
-      setStreamedAnswer("");
+      setPreliminary(null);
       if (body.usage) setUsage(body.usage);
       setQuestion("");
       setVoiceRecordingId("");
@@ -304,6 +338,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       if (body.branchId) nextParams.set("branchId", body.branchId);
       router.replace(aiLocation(nextParams), { scroll: false });
     } catch (value) {
+      // A preliminary finding is useful only while the authoritative run is
+      // still able to finish. Never leave it looking like a completed answer
+      // after cancellation, provider failure, or persistence uncertainty.
+      setPreliminary(null);
       const cancelled = isUserCancelledAiRequest(value);
       if (cancelled && pending.payload.question) setQuestion(pending.payload.question);
       if (!cancelled && (value instanceof AiRetryableRequestError || value instanceof TypeError)) {
@@ -424,6 +462,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       documentHandoffKeyRef.current = `ai-document-${crypto.randomUUID()}`;
       setDocumentPrefill(body as DocumentPrefillPreview);
       setDocumentPrefillMessageId(answer.messageId);
+      setSensitivePrefillConsent(false);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
     } finally {
@@ -433,6 +472,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
 
   async function confirmSuggestedDocument() {
     if (!documentPrefillMessageId || !documentPrefill || creatingSuggestedDocument) return;
+    if (documentPrefill.candidates.some((candidate) => candidate.sensitive) && !sensitivePrefillConsent) {
+      setError(ru ? "Подтвердите сохранение выбранных конфиденциальных реквизитов." : "Tanlangan maxfiy rekvizitlarni saqlashni tasdiqlang.");
+      return;
+    }
     setCreatingSuggestedDocument(true);
     setError("");
     if (!documentHandoffKeyRef.current) documentHandoffKeyRef.current = `ai-document-${crypto.randomUUID()}`;
@@ -449,6 +492,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
           assistantMessageId: documentPrefillMessageId,
           locale,
           fields: documentPrefill.candidates.map(({ fieldId, value }) => ({ fieldId, value })),
+          sensitiveDataConsent: sensitivePrefillConsent,
         }),
       });
       const body = await response.json() as { documentId?: string; error?: string };
@@ -495,7 +539,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""}`}>
       <aside className="ai-conversations">
         <header><Bot /><div><small>JURO</small><strong>{ru ? "Диалоги" : "Suhbatlar"}</strong></div></header>
-        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setStreamedAnswer(""); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{ru ? "Новый вопрос" : "Yangi savol"}</button>
+        <button className="ai-new" onClick={() => { pendingAiRequestRef.current = null; setCanRetry(false); setAnswer(null); setQuestion(""); setOptimisticQuestion(""); setPreliminary(null); setVoiceRecordingId(""); setEditSourceMessageId(""); window.location.assign(aiLocation()); }}><Plus />{ru ? "Новый вопрос" : "Yangi savol"}</button>
         <nav className="ai-conversation-list" aria-label={ru ? "История диалогов" : "Suhbatlar tarixi"}>
           {conversationDeleteError && <p className="ai-conversation-delete-error" role="alert">{conversationDeleteError}</p>}
           {conversations.length ? conversations.map((item) => <div className="ai-conversation-item" key={item.id}>
@@ -506,7 +550,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
         </nav>
       </aside>
       <section className="ai-dialog" aria-labelledby="ai-lawyer-heading">
-        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button><button type="button" disabled title={ru ? "Нужен утверждённый 3D-ассет Журобека" : "Tasdiqlangan Jurobek 3D asseti kerak"}><UserRoundX />{ru ? "С аватаром · скоро" : "Avatar bilan · tez orada"}</button></nav></header>
+        <header><span><Bot /></span><div><h1 id="ai-lawyer-heading">{ru ? "AI-юрист JURO" : "JURO AI-yuristi"}</h1><p>{status?.configured ? (ru ? `Узбекистан · ${usage?.used ?? 0} из ${usage?.limit ?? 20} ответов` : `O‘zbekiston · ${usage?.used ?? 0}/${usage?.limit ?? 20} javob`) : (ru ? "Провайдер не подключён" : "Provayder ulanmagan")}</p></div><nav className="ai-composer-mode" aria-label={ru ? "Способ общения" : "Muloqot usuli"}><button type="button" aria-pressed={!voiceMode} onClick={() => setComposerMode("text")}><Keyboard />{ru ? "Текст" : "Matn"}</button><button type="button" aria-pressed={voiceMode} onClick={() => setComposerMode("voice")}><Mic />{ru ? "Голос" : "Ovoz"}</button></nav></header>
         {voiceMode && <VoiceModeStage
           locale={locale}
           configured={Boolean(status?.configured)}
@@ -527,28 +571,25 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               <HumanMessage question={answer.question || answer.turns?.at(-1)?.question || ""} ru={ru} />
               <LegalAnswer result={answer.result} freshness={answer.sourceFreshness} ru={ru} />
             </div>
-            <div className="ai-answer-actions">
-              {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && <div className="ai-plan-destination">
-                <label htmlFor="ai-plan-case">{ru ? "Куда добавить план" : "Rejani qayerga qo‘shish"}</label>
-                <AiSelect id="ai-plan-case" value={targetCaseId} disabled={savingPlan} onChange={setTargetCaseId} options={[{ value: "", label: ru ? "Новое дело" : "Yangi ish" }, ...cases.map((item) => ({ value: item.id, label: item.title }))]} />
-                {!planConfirmationOpen ? <button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => setPlanConfirmationOpen(true)}><ListPlus />{savingPlan ? (ru ? "Сохраняем план…" : "Reja saqlanmoqda…") : targetCaseId ? (ru ? "Добавить в выбранное дело" : "Tanlangan ishga qo‘shish") : (ru ? "Создать дело с планом" : "Reja bilan ish yaratish")}</button> : <div className="ai-plan-confirmation" ref={planConfirmationRef} tabIndex={-1} role="group" aria-label={ru ? "Подтверждение сохранения плана" : "Rejani saqlashni tasdiqlash"}>
-                  <p>{targetCaseId
-                    ? (ru
-                      ? `Добавить задачи по показанному плану в дело «${cases.find((item) => item.id === targetCaseId)?.title ?? "Выбранное дело"}»? Исходный AI-ответ и текущая версия плана сохранятся.`
-                      : `Ko‘rsatilgan reja vazifalari “${cases.find((item) => item.id === targetCaseId)?.title ?? "Tanlangan ish"}” ishiga qo‘shilsinmi? Asl AI javobi va joriy reja versiyasi saqlanadi.`)
-                    : (ru
-                      ? "Создать новое дело и задачи по показанному плану? Исходный AI-ответ сохранится без изменений."
-                      : "Ko‘rsatilgan reja bo‘yicha yangi ish va vazifalar yaratilsinmi? Asl AI javobi o‘zgarmaydi.")}</p>
-                  <div><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanConfirmationOpen(false)}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={savingPlan} aria-busy={savingPlan} onClick={() => void savePlanToCase()}>{savingPlan ? <LoaderCircle className="spin" /> : <ListPlus />}{savingPlan ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : (ru ? "Подтвердить и сохранить" : "Tasdiqlash va saqlash")}</button></div>
-                </div>}
+            {answer.result.responseKind === "answer" && answer.result.actionPlan.length > 0 && dismissedPlanMessageId !== answer.messageId && <section className="ai-plan-card" aria-labelledby="ai-plan-card-title">
+              <header><small>{ru ? "После ответа AI" : "AI javobidan so‘ng"}</small><h2 id="ai-plan-card-title">{ru ? "Создать план действий" : "Harakatlar rejasini yaratish"}</h2><p>{answer.result.summary}</p></header>
+              <ol>{answer.result.actionPlan.slice(0, 6).map((step, index) => <li key={`${step.title}-${index}`}><strong>{step.title}</strong><span>{step.description}</span></li>)}</ol>
+              {planEditorOpen && <div className="ai-plan-destination"><label htmlFor="ai-plan-case">{ru ? "Куда добавить план" : "Rejani qayerga qo‘shish"}</label><AiSelect id="ai-plan-case" value={targetCaseId} disabled={savingPlan} onChange={setTargetCaseId} options={[{ value: "", label: ru ? "Новое дело" : "Yangi ish" }, ...cases.map((item) => ({ value: item.id, label: item.title }))]} /></div>}
+              {!planConfirmationOpen ? <footer><button type="button" disabled={!answer.messageId || sending || savingPlan} onClick={() => setPlanConfirmationOpen(true)}><ListPlus />{targetCaseId ? (ru ? "Создать в выбранном деле" : "Tanlangan ishda yaratish") : (ru ? "Создать план" : "Reja yaratish")}</button><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanEditorOpen((current) => !current)}>{ru ? "Изменить" : "O‘zgartirish"}</button><button type="button" className="quiet" disabled={savingPlan} onClick={() => setDismissedPlanMessageId(answer.messageId || "")}>{ru ? "Не предлагать" : "Taklif qilmaslik"}</button></footer> : <div className="ai-plan-confirmation" ref={planConfirmationRef} tabIndex={-1} role="group" aria-label={ru ? "Подтверждение сохранения плана" : "Rejani saqlashni tasdiqlash"}>
+                <p>{targetCaseId
+                  ? (ru ? `Добавить задачи в дело «${cases.find((item) => item.id === targetCaseId)?.title ?? "Выбранное дело"}»?` : `Vazifalar “${cases.find((item) => item.id === targetCaseId)?.title ?? "Tanlangan ish"}” ishiga qo‘shilsinmi?`)
+                  : (ru ? "Создать новое дело и задачи по этому плану?" : "Bu reja bo‘yicha yangi ish va vazifalar yaratiladimi?")}</p>
+                <div><button type="button" className="secondary" disabled={savingPlan} onClick={() => setPlanConfirmationOpen(false)}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={savingPlan} aria-busy={savingPlan} onClick={() => void savePlanToCase()}>{savingPlan ? <LoaderCircle className="spin" /> : <ListPlus />}{savingPlan ? (ru ? "Сохраняем…" : "Saqlanmoqda…") : (ru ? "Подтвердить и сохранить" : "Tasdiqlash va saqlash")}</button></div>
               </div>}
+            </section>}
+            <div className="ai-answer-actions">
               {answer.result.responseKind === "answer" && answer.result.suggestedDocument && <button type="button" disabled={!answer.messageId || sending || openingSuggestedDocument} onClick={() => void openSuggestedDocument()}><FilePlus2 />{openingSuggestedDocument ? (ru ? "Проверяем шаблон…" : "Shablon tekshirilmoqda…") : (ru ? "Открыть шаблон JURO" : "JURO shablonini ochish")}</button>}
               <button type="button" disabled={!answer.requestMessageId || sending} onClick={() => { if (answer.requestMessageId) { setVoiceRecordingId(""); setQuestion(answer.question || ""); setEditSourceMessageId(answer.requestMessageId); } }}><Pencil />{ru ? "Редактировать вопрос" : "Savolni tahrirlash"}</button>
               <button type="button" disabled={!answer.messageId || sending || !status?.configured} onClick={() => { if (answer.messageId) void submit(undefined, { operation: "regenerate", sourceMessageId: answer.messageId }); }}><RotateCcw />{ru ? "Повторить ответ" : "Javobni qayta yaratish"}</button>
               {answer.messageId && answer.result.responseKind === "answer" && <AssistantSpeechControls locale={locale} assistantMessageId={answer.messageId} disabled={sending} onPhaseChange={setVoiceSpeechPhase} />}
             </div>
             {documentPrefill && documentPrefillMessageId === answer.messageId && <section className="ai-document-prefill" aria-labelledby="ai-document-prefill-title" aria-busy={creatingSuggestedDocument}>
-              <header><div><small>{ru ? "Проверка перед созданием" : "Yaratishdan oldin tekshirish"}</small><h2 id="ai-document-prefill-title">{documentPrefill.title}</h2><p>{documentPrefill.reason}</p></div><button type="button" aria-label={ru ? "Закрыть проверку заполнения" : "To‘ldirish tekshiruvini yopish"} disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); documentHandoffKeyRef.current = ""; }}><X /></button></header>
+              <header><div><small>{ru ? "Проверка перед созданием" : "Yaratishdan oldin tekshirish"}</small><h2 id="ai-document-prefill-title">{documentPrefill.title}</h2><p>{documentPrefill.reason}</p></div><button type="button" aria-label={ru ? "Закрыть проверку заполнения" : "To‘ldirish tekshiruvini yopish"} disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); setSensitivePrefillConsent(false); documentHandoffKeyRef.current = ""; }}><X /></button></header>
               <p className="ai-document-prefill-note">{ru
                 ? "JURO предлагает только данные из вашего профиля, workspace и сохранённого AI-ответа. Проверьте роль каждой стороны: можно исправить или удалить любое поле. Данные не помещаются в URL."
                 : "JURO faqat profilingiz, workspace va saqlangan AI javobidagi ma’lumotlarni taklif qiladi. Har bir taraf rolini tekshiring: istalgan maydonni tuzatish yoki olib tashlash mumkin. Ma’lumotlar URLga joylanmaydi."}</p>
@@ -556,7 +597,8 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
                 <label><span>{candidate.label}<em>{candidate.source === "profile" ? (ru ? "Профиль" : "Profil") : candidate.source === "workspace" ? "Workspace" : (ru ? "AI-ответ" : "AI javobi")}{candidate.sensitive ? ` · ${ru ? "проверьте конфиденциальные данные" : "maxfiy ma’lumotlarni tekshiring"}` : ""}</em></span>{candidate.value.length > 160 ? <textarea rows={4} value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} /> : <input value={candidate.value} disabled={creatingSuggestedDocument} onChange={(event) => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.map((item) => item.fieldId === candidate.fieldId ? { ...item, value: event.target.value } : item) } : current)} />}</label>
                 <button type="button" disabled={creatingSuggestedDocument} onClick={() => setDocumentPrefill((current) => current ? { ...current, candidates: current.candidates.filter((item) => item.fieldId !== candidate.fieldId) } : current)}>{ru ? "Удалить" : "Olib tashlash"}</button>
               </div>)}</div> : <p role="status">{ru ? "Безопасных данных для автозаполнения не найдено. Можно создать пустой черновик и заполнить его вручную." : "Xavfsiz avtomatik to‘ldirish ma’lumotlari topilmadi. Bo‘sh qoralama yaratib, uni qo‘lda to‘ldirish mumkin."}</p>}
-              <footer><button type="button" className="secondary" disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); documentHandoffKeyRef.current = ""; }}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={creatingSuggestedDocument} aria-busy={creatingSuggestedDocument} onClick={() => void confirmSuggestedDocument()}>{creatingSuggestedDocument ? <LoaderCircle className="spin" /> : <FilePlus2 />}{creatingSuggestedDocument ? (ru ? "Создаём черновик…" : "Qoralama yaratilmoqda…") : (ru ? "Подтвердить и создать черновик" : "Tasdiqlash va qoralama yaratish")}</button><span className="sr-only" role="status" aria-live="polite">{creatingSuggestedDocument ? (ru ? "JURO создаёт черновик документа" : "JURO hujjat qoralamasini yaratmoqda") : ""}</span></footer>
+              {documentPrefill.candidates.some((candidate) => candidate.sensitive) && <label className="ai-document-sensitive-consent"><input type="checkbox" checked={sensitivePrefillConsent} disabled={creatingSuggestedDocument} onChange={(event) => setSensitivePrefillConsent(event.target.checked)} /><span>{ru ? "Я подтверждаю сохранение только выбранных конфиденциальных реквизитов в этом черновике." : "Faqat tanlangan maxfiy rekvizitlarni ushbu qoralamada saqlashni tasdiqlayman."}</span></label>}
+              <footer><button type="button" className="secondary" disabled={creatingSuggestedDocument} onClick={() => { setDocumentPrefill(null); setDocumentPrefillMessageId(""); setSensitivePrefillConsent(false); documentHandoffKeyRef.current = ""; }}>{ru ? "Отмена" : "Bekor qilish"}</button><button type="button" disabled={creatingSuggestedDocument || (documentPrefill.candidates.some((candidate) => candidate.sensitive) && !sensitivePrefillConsent)} aria-busy={creatingSuggestedDocument} onClick={() => void confirmSuggestedDocument()}>{creatingSuggestedDocument ? <LoaderCircle className="spin" /> : <FilePlus2 />}{creatingSuggestedDocument ? (ru ? "Создаём черновик…" : "Qoralama yaratilmoqda…") : (ru ? "Подтвердить и создать черновик" : "Tasdiqlash va qoralama yaratish")}</button><span className="sr-only" role="status" aria-live="polite">{creatingSuggestedDocument ? (ru ? "JURO создаёт черновик документа" : "JURO hujjat qoralamasini yaratmoqda") : ""}</span></footer>
             </section>}
             {answer.messageId && <section className="ai-feedback" aria-labelledby="ai-feedback-heading">
               <div><h2 id="ai-feedback-heading">{ru ? "Оцените этот ответ" : "Bu javobni baholang"}</h2><p>{ru ? "Отзыв привязан к этому сохранённому ответу и помогает проверить качество источников." : "Fikr-mulohaza shu saqlangan javobga bog‘lanadi va manbalar sifatini tekshirishga yordam beradi."}</p></div>
@@ -578,7 +620,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
               <div>{answer.branches.map((branch) => <a aria-current={branch.branchId === answer.branchId ? "page" : undefined} key={branch.branchId} href={aiLocation(new URLSearchParams({ conversationId: answer.conversationId, branchId: branch.branchId }))}>{branch.versionNumber === 1 ? (ru ? "Исходный ответ" : "Asl javob") : `${ru ? "Версия" : "Versiya"} ${branch.versionNumber}`}</a>)}</div>
             </nav>}
             </>}
-            {optimisticQuestion && <PendingConversationTurn question={optimisticQuestion} content={streamedAnswer} status={streamStatus} failed={Boolean(error) && !sending} ru={ru} />}
+            {optimisticQuestion && <PendingConversationTurn question={optimisticQuestion} preliminary={preliminary} status={streamStatus} failed={Boolean(error) && !sending} ru={ru} />}
           </>}
         </div>
         <form className="ai-composer" onSubmit={submit}>
@@ -607,7 +649,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       <aside className="ai-context">
         <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
         <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence"><h2>{answer?.result.sourceAccessMode === "direct" ? (ru ? "Официальные страницы по запросу" : "So‘rov bo‘yicha rasmiy sahifalar") : (ru ? "Источники" : "Manbalar")}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <article className="ai-source-card" key={`${source.sourceId}:${source.article || "source"}`}><a href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.status === "historical" ? (ru ? "Историческая редакция" : "Tarixiy tahrir") : (source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba"))}</small>{source.excerpt && <span>{source.excerpt}</span>}<em>{answer.result.sourceAccessMode === "direct" ? (ru ? `Получено напрямую ${formatDate(answer.result.sourcesRetrievedAt || source.verifiedAt, ru)}` : `${formatDate(answer.result.sourcesRetrievedAt || source.verifiedAt, ru)} bevosita olindi`) : (ru ? `Проверено ${formatDate(source.verifiedAt, ru)}` : `${formatDate(source.verifiedAt, ru)} tekshirildi`)}</em></a>{answer.result.sourceAccessMode !== "direct" && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}</article> : null) : <p>{ru ? "Подтверждённый фрагмент пока не найден; статья и цитата не выдумываются." : "Tasdiqlangan parcha topilmadi; modda va iqtibos o‘ylab topilmaydi."}</p>}</section>
+        <section className="ai-evidence"><h2>{ru ? "Основания в Lex.uz" : "Lex.uz asoslari"}</h2>{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <article className="ai-source-card" key={`${source.sourceId}:${source.article || "source"}`}><a href={source.originalUrl} target="_blank" rel="noreferrer"><strong>{source.actTitle}</strong><small>{source.status === "historical" ? (ru ? "Историческая редакция" : "Tarixiy tahrir") : (source.article || source.actIdentifier || (ru ? "Официальный источник" : "Rasmiy manba"))}</small><em>{ru ? `Открыто ${formatDate(answer.result.sourcesRetrievedAt || source.verifiedAt, ru)}` : `${formatDate(answer.result.sourcesRetrievedAt || source.verifiedAt, ru)} ochildi`}</em></a>{answer.result.sourceAccessMode !== "direct" && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}</article> : null) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );
@@ -617,7 +659,7 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
   const [open, setOpen] = useState(false);
   const [visibleMonth, setVisibleMonth] = useState((value || max).slice(0, 7));
   const pickerRef = useRef<HTMLDivElement | null>(null);
-  const locale = ru ? "ru-RU" : "uz-UZ";
+  const locale = ru ? "ru" : "uz";
   const monthStart = `${visibleMonth}-01`;
   const firstWeekday = (new Date(`${monthStart}T12:00:00.000Z`).getUTCDay() + 6) % 7;
   const nextMonth = shiftCalendarMonth(visibleMonth, 1);
@@ -640,10 +682,8 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
     };
   }, [open]);
 
-  const displayValue = value
-    ? new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T12:00:00.000Z`))
-    : (ru ? "Выберите дату" : "Sanani tanlang");
-  const monthLabel = new Intl.DateTimeFormat(locale, { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(`${monthStart}T12:00:00.000Z`));
+  const displayValue = value ? formatPlatformLongDate(value, locale) : (ru ? "Выберите дату" : "Sanani tanlang");
+  const monthLabel = formatPlatformMonth(monthStart, locale);
 
   return <div className="ai-date-field">
     <span id="ai-legal-date-label">{ru ? "Дата события — если важна редакция закона" : "Voqea sanasi — qonun tahriri muhim bo‘lsa"}</span>
@@ -666,7 +706,7 @@ function AiDatePicker({ ru, value, max, onChange }: { ru: boolean; value: string
           {Array.from({ length: daysInMonth }, (_, index) => {
             const day = `${visibleMonth}-${String(index + 1).padStart(2, "0")}`;
             const disabled = day > max;
-            const fullLabel = new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }).format(new Date(`${day}T12:00:00.000Z`));
+            const fullLabel = formatPlatformDate(day, locale, { dateStyle: "long" });
             return <button type="button" key={day} disabled={disabled} aria-label={fullLabel} aria-current={day === max ? "date" : undefined} aria-pressed={day === value} className={day === value ? "is-selected" : undefined} onClick={() => { onChange(day); setOpen(false); }}>{index + 1}</button>;
           })}
         </div>
@@ -699,13 +739,13 @@ function ConversationTurnPair({ turn, ru }: { turn: ConversationTurn; ru: boolea
 
 function PendingConversationTurn({
   question,
-  content,
+  preliminary,
   status,
   failed,
   ru,
 }: {
   question: string;
-  content: string;
+  preliminary: AiPreliminary | null;
   status: string;
   failed: boolean;
   ru: boolean;
@@ -713,9 +753,21 @@ function PendingConversationTurn({
   return <section className="ai-conversation-turn ai-conversation-turn-pending">
     <HumanMessage question={question} ru={ru} />
     <article className={`ai-assistant-draft ${failed ? "is-failed" : ""}`}>
-      <small>JURO · {failed ? (ru ? "ответ не завершён" : "javob yakunlanmadi") : (ru ? "отвечает" : "javob bermoqda")}</small>
-      {content
-        ? <p>{content}<span className="ai-stream-caret" aria-hidden="true" /></p>
+      <small>JURO · {failed
+        ? (ru ? "ответ не завершён" : "javob yakunlanmadi")
+        : preliminary
+          ? (ru ? "проверенный вывод · завершаю ответ" : "tekshirilgan xulosa · javob yakunlanmoqda")
+          : (ru ? "отвечает" : "javob bermoqda")}</small>
+      {preliminary
+        ? <div className="ai-preliminary" role="status">
+          <strong>{preliminary.message}</strong>
+          <p className="ai-preliminary-source">
+            <span>{preliminary.source.title}{preliminary.source.article ? ` · ${preliminary.source.article}` : ""}</span>
+            {safeOfficialUrl(preliminary.source.canonicalUrl)
+              ? <a href={preliminary.source.canonicalUrl} target="_blank" rel="noreferrer">Lex.uz</a>
+              : null}
+          </p>
+        </div>
         : <div className="ai-thinking"><LoaderCircle className={failed ? undefined : "spin"} /><span>{failed ? (ru ? "Не удалось завершить ответ. Можно безопасно повторить запрос." : "Javobni yakunlab bo‘lmadi. So‘rovni xavfsiz takrorlash mumkin.") : status || (ru ? "Проверяю факты и источники…" : "Faktlar va manbalarni tekshiryapman…")}</span></div>}
     </article>
   </section>;
@@ -793,16 +845,6 @@ function VoiceModeStage(props: {
     error: ["Голосовой этап не завершён — можно повторить или перейти к тексту", "Ovoz bosqichi yakunlanmadi — qayta urinib ko‘ring yoki matnga o‘ting"],
   };
   return <section className="ai-voice-stage" data-state={state} aria-labelledby="ai-voice-stage-title">
-    <div className="ai-voice-stage-portrait">
-      <Image
-        src="/jurobek-avatar.webp"
-        alt={ru ? "Журобек, статичный цифровой помощник JURO" : "Jurobek, JUROning statik raqamli yordamchisi"}
-        width={1024}
-        height={1792}
-        sizes="(max-width: 760px) 92px, 116px"
-        priority={false}
-      />
-    </div>
     <div className="ai-voice-stage-copy">
       <span><AudioLines aria-hidden="true" />{ru ? "Голосовой режим" : "Ovozli rejim"}</span>
       <h2 id="ai-voice-stage-title">{labels[state][ru ? 0 : 1]}</h2>
@@ -810,19 +852,19 @@ function VoiceModeStage(props: {
         ? "Микрофон включается только по вашему нажатию. Перед отправкой вы увидите и сможете исправить расшифровку."
         : "Mikrofon faqat siz bosganda yoqiladi. Yuborishdan oldin matnni ko‘rib, tahrirlashingiz mumkin."}</p>
       <small>{ru
-        ? "Изображение Журобека статично: утверждённый 3D-rig ещё не предоставлен. Это AI, а не живой юрист."
-        : "Jurobek tasviri statik: tasdiqlangan 3D rig hali taqdim etilmagan. Bu AI, tirik yurist emas."}</small>
+        ? "Это AI-инструмент JURO, а не живой юрист."
+        : "Bu JURO AI vositasi, tirik yurist emas."}</small>
     </div>
     <output role={state === "error" ? "alert" : "status"} aria-live="polite">{state}</output>
   </section>;
 }
 
 type AiStreamStatus = {
-  stage?: "accepted" | "provider_started" | "provider_delta" | "answer_delta" | "fallback";
+  stage?: "accepted" | "lex_search_started" | "source_verified" | "provider_started" | "provider_delta" | "preliminary" | "fallback";
   provider?: string;
   model?: string;
   receivedCharacters?: number;
-  content?: string;
+  preliminary?: AiPreliminary;
 };
 
 async function readAiEventStream(
@@ -875,8 +917,8 @@ function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness
       <CircleAlert aria-hidden="true" />
       <p>{freshness.status === "unavailable"
         ? (ru
-          ? "Официальные источники Lex.uz и Advice.uz ещё не опубликованы полностью в проверенном индексе JURO. Пока JURO не показывает правовой вывод как подтверждённый."
-          : "Lex.uz va Advice.uz rasmiy manbalari JURO tasdiqlangan indeksida hali to‘liq nashr qilinmagan. Shu sabab JURO huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi.")
+          ? "Проверенные официальные источники Lex.uz ещё не опубликованы полностью в индексе JURO. Пока JURO не показывает правовой вывод как подтверждённый."
+          : "Lex.uz rasmiy manbalari JURO tasdiqlangan indeksida hali to‘liq nashr qilinmagan. Shu sabab JURO huquqiy xulosani tasdiqlangan deb ko‘rsatmaydi.")
         : (ru
           ? `Правовая база старше ${freshness.maxAgeDays} дней. Последняя подтверждённая полная синхронизация: ${formatDate(freshness.asOf, true)}.`
           : `Huquqiy baza ${freshness.maxAgeDays} kundan eski. Oxirgi tasdiqlangan to‘liq sinxronlash: ${formatDate(freshness.asOf, false)}.`)}</p>
@@ -896,11 +938,20 @@ function LegalAnswer({ result, freshness, ru }: { result: LegalResult; freshness
 }
 
 function formatDate(value: string, ru: boolean) {
-  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeZone: "Asia/Tashkent" }).format(new Date(value));
+  return formatPlatformDate(value, ru ? "ru" : "uz");
 }
 
 function safeOfficialUrl(value: string) {
-  try { return new URL(value).protocol === "https:"; } catch { return false; }
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:"
+      && url.port === ""
+      && url.username === ""
+      && url.password === ""
+      && (url.hostname === "lex.uz" || url.hostname === "www.lex.uz");
+  } catch {
+    return false;
+  }
 }
 
 function abortableDelay(milliseconds: number, signal: AbortSignal) {

@@ -15,14 +15,18 @@
     "ACCOUNT_DELETION_PURGE_ENABLED": "false",
     "GUEST_AI_ENABLED": "true",
     "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+    "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "false",
+    "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
     "PAYMENT_FOUNDATION_ENABLED": "true",
     "PAYMENT_SANDBOX_ENABLED": "true",
     "PAYMENT_PRODUCTION_APPROVED": "false",
     "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
+    "LEGAL_LEX_INGESTION_ENABLED": "false",
+    "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
     "LEGAL_ADVICE_INGESTION_ENABLED": "false",
     "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
     "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-    "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
+    "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
     "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
     "LAWYER_PROFILE_DIRECTORY_ENABLED": "false",
     "IDENTITY_PROTECTION_MODE": "legacy",
@@ -63,8 +67,16 @@
         "queue": "development-document-analysis"
       },
       {
+        "binding": "DOCUMENT_ANALYSIS_DLQ",
+        "queue": "development-document-analysis-dlq"
+      },
+      {
         "binding": "OCR_PROCESSING_QUEUE",
         "queue": "development-ocr-processing"
+      },
+      {
+        "binding": "OCR_PROCESSING_DLQ",
+        "queue": "development-ocr-processing-dlq"
       },
       {
         "binding": "DOCUMENT_EXPORT_QUEUE",
@@ -140,6 +152,9 @@
       "assets": {
         "binding": "ASSETS"
       },
+      "version_metadata": {
+        "binding": "WORKER_VERSION"
+      },
       "triggers": {
         "crons": ["*/5 * * * *", "0 19 * * *"]
       },
@@ -150,17 +165,22 @@
         "ACCOUNT_DELETION_PURGE_ENABLED": "true",
         "MALWARE_SCAN_ENABLED": "true",
         "MALWARE_SCANNER_PROBE_ENABLED": "false",
-      "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
+        "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
-        "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+        "STAGING_SYNTHETIC_PROBES_ENABLED": "true",
+        "STAGING_LEGAL_EVALUATION_ENABLED": "true",
+        "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "true",
+        "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "true",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
+        "LEGAL_LEX_INGESTION_ENABLED": "true",
+        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
+        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "legacy",
@@ -235,12 +255,24 @@
             "queue": "staging-document-analysis"
           },
           {
+            "binding": "DOCUMENT_ANALYSIS_DLQ",
+            "queue": "staging-document-analysis-dlq"
+          },
+          {
             "binding": "OCR_PROCESSING_QUEUE",
             "queue": "staging-ocr-processing"
           },
           {
+            "binding": "OCR_PROCESSING_DLQ",
+            "queue": "staging-ocr-processing-dlq"
+          },
+          {
             "binding": "DOCUMENT_EXPORT_QUEUE",
             "queue": "staging-document-export"
+          },
+          {
+            "binding": "DOCUMENT_EXPORT_DLQ",
+            "queue": "staging-document-export-dlq"
           },
           {
             "binding": "EMAIL_NOTIFICATIONS_QUEUE",
@@ -261,6 +293,14 @@
           {
             "binding": "MALWARE_SCAN_QUEUE",
             "queue": "staging-malware-scan"
+          },
+          {
+            "binding": "MALWARE_SCAN_DLQ",
+            "queue": "staging-malware-scan-dlq"
+          },
+          {
+            "binding": "STAGING_QUEUE_HEALTH_PROBE_QUEUE",
+            "queue": "staging-queue-health"
           }
         ],
         "consumers": [
@@ -274,6 +314,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "staging-document-analysis-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "staging-ocr-processing",
             "max_batch_size": 1,
             "max_batch_timeout": 5,
@@ -283,6 +331,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "staging-ocr-processing-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "staging-document-export",
             "max_batch_size": 1,
             "max_batch_timeout": 5,
@@ -290,6 +346,14 @@
             "dead_letter_queue": "staging-document-export-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "staging-document-export-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
           },
           {
             "queue": "staging-legal-sources-sync",
@@ -335,6 +399,29 @@
             "dead_letter_queue": "staging-malware-scan-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "staging-malware-scan-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
+            "queue": "staging-queue-health",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "max_concurrency": 1,
+            "retry_delay": 30
+          },
+          {
+            "queue": "staging-legal-evaluation",
+            "max_batch_size": 1,
+            "max_batch_timeout": 1,
+            "max_retries": 0,
+            "max_concurrency": 4
           }
         ]
       },
@@ -402,14 +489,19 @@
         "STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED": "false",
         "GUEST_AI_ENABLED": "true",
         "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
+        "STAGING_LEGAL_EVALUATION_ENABLED": "false",
+        "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "false",
+        "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "false",
         "PAYMENT_PRODUCTION_APPROVED": "false",
         "PAYMENT_PRODUCTION_DEMO_ENABLED": "true",
+        "LEGAL_LEX_INGESTION_ENABLED": "false",
+        "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
-        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "false",
+        "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
         "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
         "IDENTITY_PROTECTION_MODE": "legacy",
@@ -488,12 +580,24 @@
             "queue": "production-document-analysis"
           },
           {
+            "binding": "DOCUMENT_ANALYSIS_DLQ",
+            "queue": "production-document-analysis-dlq"
+          },
+          {
             "binding": "OCR_PROCESSING_QUEUE",
             "queue": "production-ocr-processing"
           },
           {
+            "binding": "OCR_PROCESSING_DLQ",
+            "queue": "production-ocr-processing-dlq"
+          },
+          {
             "binding": "DOCUMENT_EXPORT_QUEUE",
             "queue": "production-document-export"
+          },
+          {
+            "binding": "DOCUMENT_EXPORT_DLQ",
+            "queue": "production-document-export-dlq"
           },
           {
             "binding": "EMAIL_NOTIFICATIONS_QUEUE",
@@ -514,6 +618,10 @@
           {
             "binding": "MALWARE_SCAN_QUEUE",
             "queue": "production-malware-scan"
+          },
+          {
+            "binding": "MALWARE_SCAN_DLQ",
+            "queue": "production-malware-scan-dlq"
           }
         ],
         "consumers": [
@@ -527,6 +635,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "production-document-analysis-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "production-ocr-processing",
             "max_batch_size": 1,
             "max_batch_timeout": 5,
@@ -536,6 +652,14 @@
             "retry_delay": 30
           },
           {
+            "queue": "production-ocr-processing-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
+          },
+          {
             "queue": "production-document-export",
             "max_batch_size": 1,
             "max_batch_timeout": 5,
@@ -543,6 +667,14 @@
             "dead_letter_queue": "production-document-export-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "production-document-export-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
           },
           {
             "queue": "production-legal-sources-sync",
@@ -588,6 +720,14 @@
             "dead_letter_queue": "production-malware-scan-dlq",
             "max_concurrency": 1,
             "retry_delay": 30
+          },
+          {
+            "queue": "production-malware-scan-dlq",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 10,
+            "max_concurrency": 1,
+            "retry_delay": 60
           }
         ]
       },

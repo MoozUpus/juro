@@ -1,5 +1,21 @@
 # OpenAI integration
 
+## Interactive reliability staging checkpoint — 2026-08-12
+
+The deployed staging artifact applies one 30-second absolute execution budget to
+interactive legal chat. Bounded D1-only verified retrieval, OpenAI, an eligible
+Anthropic fallback, validation and persistence share that deadline; fallback
+does not receive a second full window. SSE can send a source-bound preliminary
+excerpt or clarification state after retrieval, while the final answer remains
+strictly validated and durably persisted before it is chargeable. Content-free
+SLO telemetry records target evaluation only. The current staging Worker is
+`f79f560a-bc9d-449f-aa7c-a421e2af2d9e`; its latest OpenAI telemetry record is
+inside both targets (`3063 ms` first useful server event, `4510 ms` end to
+end). An earlier live record (`148 ms` first useful, `7455 ms` end to end) is
+retained as history. The sample count remains below the configured minimum of
+20 and must not be presented as p50/p95 compliance. Production is unchanged. See
+[AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).
+
 ## Runtime checkpoint — 2026-08-04
 
 Read-only staging metadata confirms the v26 OpenAI probe remains successful and

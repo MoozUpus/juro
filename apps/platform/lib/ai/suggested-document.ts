@@ -33,6 +33,7 @@ export const aiSuggestedDocumentRequestSchema = z.discriminatedUnion("action", [
     assistantMessageId: z.string().uuid(),
     locale: z.enum(["ru", "uz"]),
     fields: aiSuggestedDocumentSelectionSchema,
+    sensitiveDataConsent: z.boolean().default(false),
   }).strict(),
 ]);
 
@@ -41,7 +42,7 @@ export const aiSuggestedDocumentIdempotencyKeySchema = z.string().min(8).max(180
 
 export class AiSuggestedDocumentError extends Error {
   constructor(
-    readonly code: "AI_SUGGESTED_DOCUMENT_NOT_FOUND" | "AI_SUGGESTED_DOCUMENT_INVALID" | "AI_SUGGESTED_DOCUMENT_UNAVAILABLE" | "AI_SUGGESTED_DOCUMENT_CONFLICT",
+    readonly code: "AI_SUGGESTED_DOCUMENT_NOT_FOUND" | "AI_SUGGESTED_DOCUMENT_INVALID" | "AI_SUGGESTED_DOCUMENT_UNAVAILABLE" | "AI_SUGGESTED_DOCUMENT_CONFLICT" | "AI_SUGGESTED_DOCUMENT_SENSITIVE_CONSENT_REQUIRED",
   ) {
     super(code);
     this.name = "AiSuggestedDocumentError";
@@ -252,6 +253,7 @@ export async function createAiSuggestedDocumentDraft(input: {
   assistantMessageId: string;
   locale: "ru" | "uz";
   fields: Array<{ fieldId: string; value: string }>;
+  sensitiveDataConsent?: boolean;
   idempotencyKey: string;
 }): Promise<{ documentId: string; replayed: boolean }> {
   const preview = await previewAiSuggestedDocument(input);
@@ -262,6 +264,9 @@ export async function createAiSuggestedDocumentDraft(input: {
     .sort((left, right) => left.fieldId.localeCompare(right.fieldId));
   if (selected.some((item) => !allowed.has(item.fieldId))) {
     throw new AiSuggestedDocumentError("AI_SUGGESTED_DOCUMENT_INVALID");
+  }
+  if (selected.some((item) => allowed.get(item.fieldId)?.sensitive) && !input.sensitiveDataConsent) {
+    throw new AiSuggestedDocumentError("AI_SUGGESTED_DOCUMENT_SENSITIVE_CONSENT_REQUIRED");
   }
   const definition = getDocumentByCode(preview.templateCode);
   if (!definition || definition.status !== "published") throw new AiSuggestedDocumentError("AI_SUGGESTED_DOCUMENT_UNAVAILABLE");

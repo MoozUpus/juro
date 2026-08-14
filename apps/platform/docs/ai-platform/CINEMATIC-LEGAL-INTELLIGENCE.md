@@ -1,7 +1,7 @@
 # Cinematic Legal Intelligence
 
-Updated: 2026-07-28
-Status: approved design contract; not yet implemented as the staging application shell; production unchanged.
+Updated: 2026-08-12
+Status: design reference only. The former staging prototype was retired; production remains unchanged.
 
 ## Product expression
 
@@ -17,7 +17,7 @@ The visual system supports this sequence through persistent case/workspace conte
 
 ### Cinematic shell
 
-Applicable to navigation, dashboard introduction, AI entry, onboarding, selected empty states, voice/avatar entry, and transitions between major modes.
+Applicable to navigation, dashboard introduction, AI entry, onboarding, selected empty states, and transitions between major modes.
 
 Allowed: deep navy, restrained gold light, subtle texture, modest depth, selected translucency, short directional movement, contextual panel expansion.
 
@@ -37,7 +37,7 @@ Brand anchors remain approximately navy `#062844`, gold `#BE974F`, and warm back
 
 ## Motion contract
 
-Allowed vocabulary: controlled fade, short directional slide, content reveal, panel expansion, source-panel transition, state morph, avatar-state transition, restrained light shift, and focus transition between AI and document.
+Allowed vocabulary: controlled fade, short directional slide, content reveal, panel expansion, source-panel transition, state morph, restrained light shift, and focus transition between AI and document.
 
 Frequent keyboard/document/table actions receive no animation or only immediate feedback. Standard UI transitions are 150–250 ms; exit is usually faster than enter. Hover behavior is gated by `(hover: hover) and (pointer: fine)`. Motion uses `transform` and `opacity`, never `transition: all`, and is fully interruptible where user control requires it.
 
@@ -45,9 +45,9 @@ Reduced motion removes tracking, parallax, springs, large translations, and avat
 
 ## Jurobek contract
 
-Jurobek is allowed only in onboarding, dashboard AI entry, voice/avatar mode, approved empty states, controlled contextual help, and completion of important AI processes. It must not occupy document analysis, redline, builder, or long reading surfaces.
+The current product uses Jurobek only as the static onboarding brand image. It must not occupy dashboard AI entry, voice/avatar mode, document analysis, redline, builder, or long reading surfaces while avatar work is out of scope.
 
-The approved rigged source is currently absent. `JUROBEK-3D.md` defines the verified static fallback and disabled 3D state. No generic avatar or raster-derived rig is permitted.
+The approved rigged source is currently absent. No generic avatar or raster-derived rig is permitted. `JUROBEK-3D.md` records the asset boundary for a separately approved future scope.
 
 ## Evidence hierarchy
 
@@ -65,4 +65,4 @@ Numeric scores never replace severity, evidence, uncertainty, or explanation.
 
 ## Release boundary
 
-This document is a design contract, not an implementation claim. The new system must first run on the isolated staging prototype with real staging components/data, RU/UZ, responsive/accessibility/performance evidence, 3D-off and WebGL-fallback paths, and rollback to the previous UI. Production replacement requires a separate owner approval from functional production deployment.
+This document is a design contract, not an implementation claim. Any future significant visual direction must first run on a new isolated staging prototype with real staging components/data, RU/UZ, responsive/accessibility/performance evidence and rollback to the previous UI. Production replacement requires a separate owner approval from functional production deployment.

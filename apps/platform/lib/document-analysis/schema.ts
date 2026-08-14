@@ -90,8 +90,102 @@ export const documentAnalysisJsonSchema = z.toJSONSchema(documentAnalysisResultS
   unrepresentable: "throw",
 }) as Record<string, unknown>;
 
+/**
+ * Anthropic native structured output compiles the JSON Schema into a grammar.
+ * The canonical document contract has a number of `string | null` and
+ * `number | null` unions. They are semantically useful to JURO, but make the
+ * provider grammar unnecessarily complex. The provider-only wire contract
+ * encodes an absent nullable string as "" and an absent nullable page as 0,
+ * then restores those sentinels before the canonical Zod boundary below.
+ *
+ * This is deliberately not a product/data-model change: the canonical result
+ * seen by the rest of the pipeline still contains `null`, and every output
+ * still passes `documentAnalysisResultSchema` plus source/excerpt checks.
+ */
+export const documentAnalysisAnthropicWireJsonSchema = replaceNullableUnionsWithSentinels(
+  documentAnalysisJsonSchema,
+) as Record<string, unknown>;
+
 export function parseDocumentAnalysisResult(value: unknown): DocumentAnalysisResult {
   return documentAnalysisResultSchema.parse(value);
+}
+
+export function parseAnthropicDocumentAnalysisWireResult(value: unknown): DocumentAnalysisResult {
+  return documentAnalysisResultSchema.parse(decodeAnthropicDocumentAnalysisWireResult(value));
+}
+
+function replaceNullableUnionsWithSentinels(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(replaceNullableUnionsWithSentinels);
+  if (!value || typeof value !== "object") return value;
+
+  const record = value as Record<string, unknown>;
+  const union = record.anyOf;
+  if (Array.isArray(union) && union.length === 2) {
+    const concrete = union.find((member) => isSentinelCompatibleSchema(member));
+    const nullable = union.find((member) => isNullSchema(member));
+    if (concrete && nullable) {
+      const rest = { ...record };
+      delete rest.anyOf;
+      return replaceNullableUnionsWithSentinels({ ...rest, ...(concrete as Record<string, unknown>) });
+    }
+  }
+
+  return Object.fromEntries(
+    Object.entries(record).map(([key, nested]) => [key, replaceNullableUnionsWithSentinels(nested)]),
+  );
+}
+
+function isNullSchema(value: unknown): boolean {
+  return Boolean(value && typeof value === "object" && (value as Record<string, unknown>).type === "null");
+}
+
+function isSentinelCompatibleSchema(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const type = (value as Record<string, unknown>).type;
+  return type === "string" || type === "number" || type === "integer";
+}
+
+function decodeAnthropicDocumentAnalysisWireResult(value: unknown): unknown {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return value;
+  const result = structuredClone(value) as Record<string, unknown>;
+
+  restoreNullableString(result, "userSide");
+  forEachRecord(result.obligations, (obligation) => {
+    restoreNullableString(obligation, "clause");
+    restoreNullableString(obligation, "deadline");
+  });
+  forEachRecord(result.deadlines, (deadline) => {
+    restoreNullableString(deadline, "clause");
+    restoreNullableString(deadline, "consequence");
+  });
+  forEachRecord(result.risks, (risk) => {
+    restoreNullableString(risk, "clause");
+    restoreNullableNumber(risk, "page");
+    restoreNullableString(risk, "exactExcerpt");
+    restoreNullableString(risk, "proposedWording");
+  });
+  forEachRecord(result.missingClauses, (clause) => restoreNullableString(clause, "proposedWording"));
+  forEachRecord(result.sources, (source) => {
+    restoreNullableString(source, "actIdentifier");
+    restoreNullableString(source, "article");
+    restoreNullableString(source, "excerpt");
+  });
+  return result;
+}
+
+function forEachRecord(value: unknown, callback: (record: Record<string, unknown>) => void): void {
+  if (!Array.isArray(value)) return;
+  for (const item of value) {
+    if (item && typeof item === "object" && !Array.isArray(item)) callback(item as Record<string, unknown>);
+  }
+}
+
+function restoreNullableString(record: Record<string, unknown>, key: string): void {
+  if (record[key] === "") record[key] = null;
+}
+
+function restoreNullableNumber(record: Record<string, unknown>, key: string): void {
+  if (record[key] === 0) record[key] = null;
 }
 
 export function enforceDocumentAnalysisFreshness(

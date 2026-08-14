@@ -96,7 +96,7 @@ export function rankSparseBm25<T>(
     .filter((item) => item.score > 0)
     .sort((left, right) => right.score - left.score || left.order - right.order)
     .slice(0, options.limit ?? documents.length)
-    .map(({ order: _order, ...item }) => item);
+    .map(({ id, value, score }) => ({ id, value, score }));
 }
 
 /**

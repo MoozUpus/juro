@@ -7,6 +7,7 @@ import {
   legalChatJsonSchema,
   legalChatResponseSchema,
 } from "../lib/ai/legal-chat-schema";
+import { createUnavailableVerifiedSourceClarification } from "../lib/ai/fast-clarification";
 import {
   AiRunConflictError,
   beginAiRunFinalization,
@@ -17,6 +18,7 @@ import {
   reserveAiRun,
 } from "../lib/ai/run-store";
 import { readResponsesSse, ResponsesSseError } from "../lib/ai/responses-sse";
+import { completeStreamingJsonArrayObjects } from "../lib/ai/streaming-json";
 
 const validLegalResponse = {
   responseKind: "clarification_required" as const,
@@ -171,6 +173,108 @@ test("OpenAI Responses SSE parser handles split structured-output frames and rep
   assert.deepEqual(JSON.parse(text || "{}"), validLegalResponse);
   assert.ok(progress.length >= 1);
   assert.equal(progress.at(-1), serialized.length);
+});
+
+test("streaming JSON extracts only complete confirmed findings from an incomplete response", () => {
+  const first = {
+    title: "Государственная регистрация",
+    explanation: "Общество подлежит регистрации, включая символы } и \\\"кавычки\\\".",
+    sourceIds: ["direct:lex:1"],
+  };
+  const second = {
+    title: "Документы",
+    explanation: "Подготовьте предусмотренные нормой сведения.",
+    sourceIds: ["direct:lex:2"],
+  };
+  const prefix = `{"confirmedFindings":[${JSON.stringify(first)},`;
+  assert.deepEqual(completeStreamingJsonArrayObjects(prefix, "confirmedFindings"), [first]);
+  assert.deepEqual(
+    completeStreamingJsonArrayObjects(`${prefix}${JSON.stringify(second)}],"answer":"`, "confirmedFindings"),
+    [first, second],
+  );
+  assert.deepEqual(
+    completeStreamingJsonArrayObjects('{"confirmedFindings":[{"title":"unfinished', "confirmedFindings"),
+    [],
+  );
+});
+
+test("OpenAI Responses SSE exposes accumulated output only to the server-internal observer", async () => {
+  const stream = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: '{"confirmed' })}\n\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: 'Findings":[]}' })}\n\n`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: { id: "resp-buffer", model: "gpt-5.6-terra", status: "completed", output: [] },
+    })}\n\n`,
+  ].join("");
+  const buffers: string[] = [];
+  await readResponsesSse(
+    chunkedResponse(new TextEncoder().encode(stream), [17, 41]),
+    () => undefined,
+    { onOutputTextBuffer: (text) => { buffers.push(text); } },
+  );
+  assert.deepEqual(buffers, ['{"confirmed', '{"confirmedFindings":[]}']);
+});
+
+test("server-owned unavailable-source preliminary is strict, source-bound, and contains no legal conclusion", () => {
+  for (const locale of ["ru", "uz"] as const) {
+    const result = createUnavailableVerifiedSourceClarification({
+      locale,
+      answerMode: "short",
+      reasoningMode: "fast",
+      legalDatabaseAsOf: "unavailable",
+    });
+    assert.equal(legalChatResponseSchema.safeParse(result).success, true);
+    assert.deepEqual(enforceLegalChatSourceBoundary(result, new Set()), result);
+    assert.equal(result.responseKind, "clarification_required");
+    assert.equal(result.language, locale);
+    assert.equal(result.jurisdiction, "UZ");
+    assert.deepEqual(result.confirmedFindings, []);
+    assert.deepEqual(result.risks, []);
+    assert.deepEqual(result.sources, []);
+    assert.deepEqual(result.deadlines, []);
+    assert.ok(result.clarificationQuestions.length > 0);
+    assert.match(result.answer, locale === "ru" ? /не делает правовой вывод/ : /huquqiy xulosa bermaydi/i);
+  }
+});
+
+test("OpenAI Responses SSE parser records the first actual non-empty provider delta once", async () => {
+  const stream = [
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "" })}\n\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "{" })}\n\n`,
+    `event: response.output_text.delta\ndata: ${JSON.stringify({ type: "response.output_text.delta", delta: "}" })}\n\n`,
+    `event: response.completed\ndata: ${JSON.stringify({
+      type: "response.completed",
+      response: {
+        id: "resp-first-delta",
+        model: "gpt-5.6-sol",
+        status: "completed",
+        output: [],
+      },
+    })}\n\n`,
+  ].join("");
+  let clock = 1_000;
+  const firstDeltas: Array<{ elapsedMs: number; receivedCharacters: number }> = [];
+  await readResponsesSse(
+    chunkedResponse(new TextEncoder().encode(stream), [13, 37, 89]),
+    () => undefined,
+    {
+      startedAt: 975,
+      now: () => {
+        clock += 10;
+        return clock;
+      },
+      onFirstDelta: (timing) => {
+        firstDeltas.push(timing);
+      },
+    },
+  );
+  assert.deepEqual(firstDeltas, [{
+    startedAt: 975,
+    firstDeltaAt: 1_010,
+    elapsedMs: 35,
+    receivedCharacters: 1,
+  }]);
 });
 
 test("OpenAI Responses SSE parser fails closed on malformed provider events", async () => {
@@ -372,6 +476,48 @@ test("a genuinely stale AI reservation releases its cycle and requires a fresh i
   assert.equal(ledger.status, "released");
   assert.equal(idempotency.status, "failed");
 
+});
+
+test("timed-out AI run releases reserved usage before a retry can be offered", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "timed-out-request", 1));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  await failAiRun({
+    db: d1,
+    runId: reserved.runId,
+    ledgerId: reserved.ledgerId,
+    workspaceId: "workspace-1",
+    userId: "user-1",
+    idempotencyKey: "timed-out-request",
+    errorCode: "PROVIDER_TIMEOUT",
+  });
+
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?")
+    .get(reserved.ledgerId) as { status: string };
+  const run = sqlite.prepare("SELECT status,error_code AS errorCode FROM ai_runs WHERE id=?")
+    .get(reserved.runId) as { status: string; errorCode: string };
+  assert.equal(run.status, "failed");
+  assert.equal(run.errorCode, "PROVIDER_TIMEOUT");
+  assert.equal(ledger.status, "released");
+});
+
+test("interactive stale AI reservations recover inside the bounded retry window", async () => {
+  const { sqlite, d1 } = aiDatabase();
+  const reserved = await reserveAiRun(reservationInput(d1, "interactive-stale-window", 1));
+  assert.equal(reserved.kind, "reserved");
+  if (reserved.kind !== "reserved") return;
+
+  sqlite.prepare("UPDATE idempotency_keys SET updated_at=? WHERE key=?")
+    .run(new Date(Date.now() - 91_000).toISOString(), "legal-chat:workspace-1:user-1:interactive-stale-window");
+  sqlite.prepare("UPDATE ai_runs SET updated_at=? WHERE id=?")
+    .run(new Date(Date.now() - 91_000).toISOString(), reserved.runId);
+
+  const retry = await reserveAiRun(reservationInput(d1, "interactive-stale-window", 1));
+  assert.equal(retry.kind, "expired");
+  const ledger = sqlite.prepare("SELECT status FROM ai_usage_ledger WHERE id=?").get(reserved.ledgerId) as { status: string };
+  assert.equal(ledger.status, "released");
 });
 
 test("a finalizing AI run cannot be expired by an old idempotency timestamp", async () => {

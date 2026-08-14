@@ -16,11 +16,20 @@ const copy = {
     noActive: "Активных инцидентов не зарегистрировано.",
     noRecent: "Завершённых инцидентов пока нет.",
     components: "Компоненты",
+    dependencyDetails: "Технические проверки",
+    checked: "Проверено",
+    age: "Возраст проверки",
+    notChecked: "Проверка ещё не выполнялась",
+    latency: "Задержка",
+    error: "Последний безопасный код ошибки",
+    source: "Источник проверки",
     updates: "Обновления",
     lastUpdate: "Последнее обновление реестра",
     generated: "Сводка сформирована",
     switchLanguage: "O‘zbekcha",
     operational: "Работает штатно",
+    unknown: "Проверка ожидается",
+    stale: "Проверка устарела",
     degraded: "Сниженная производительность",
     partial_outage: "Частичная недоступность",
     outage: "Недоступно",
@@ -40,11 +49,20 @@ const copy = {
     noActive: "Faol hodisalar ro‘yxatga olinmagan.",
     noRecent: "Yakunlangan hodisalar hozircha yo‘q.",
     components: "Komponentlar",
+    dependencyDetails: "Texnik tekshiruvlar",
+    checked: "Tekshirildi",
+    age: "Tekshiruv yoshi",
+    notChecked: "Tekshiruv hali bajarilmagan",
+    latency: "Kechikish",
+    error: "Oxirgi xavfsiz xato kodi",
+    source: "Tekshiruv manbasi",
     updates: "Yangilanishlar",
     lastUpdate: "Reyestrning so‘nggi yangilanishi",
     generated: "Xulosa tuzildi",
     switchLanguage: "Русский",
     operational: "Odatdagi tartibda ishlamoqda",
+    unknown: "Tekshiruv kutilmoqda",
+    stale: "Tekshiruv eskirgan",
     degraded: "Ishlash sifati pasaygan",
     partial_outage: "Qisman ishlamayapti",
     outage: "Ishlamayapti",
@@ -63,6 +81,13 @@ function date(value: string, locale: StatusLocale): string {
     timeStyle: "short",
     timeZone: "Asia/Tashkent",
   }).format(new Date(value));
+}
+
+function duration(value: number, locale: StatusLocale): string {
+  if (value < 1_000) return `${value} ms`;
+  return `${new Intl.NumberFormat(locale === "uz" ? "uz-Latn-UZ" : "ru-RU", {
+    maximumFractionDigits: 1,
+  }).format(value / 1_000)} s`;
 }
 
 function StateMark({ state }: { state: PublicComponentState }) {
@@ -108,11 +133,25 @@ export function PublicStatusPage({
         <div className="public-status-component-list">
           {snapshot.components.map((component) => (
             <article key={component.key} className="public-status-component">
-              <span>{component.label}</span>
-              <b className={`status-${component.status}`}>
-                <StateMark state={component.status} />
-                {statusLabel(component.status)}
-              </b>
+              <div className="public-status-component-summary">
+                <span>{component.label}</span>
+                <b className={`status-${component.status}`}><StateMark state={component.status} />{statusLabel(component.status)}</b>
+              </div>
+              <details className="public-status-dependencies">
+                <summary>{t.dependencyDetails}</summary>
+                <ul>{component.dependencies.map((dependency) => (
+                  <li key={dependency.key}>
+                    <div><span>{dependency.label}</span><b className={`status-${dependency.status}`}>{statusLabel(dependency.status)}</b></div>
+                    <p>
+                      {dependency.checkedAt ? <><span>{t.checked}: </span><time dateTime={dependency.checkedAt}>{date(dependency.checkedAt, locale)}</time></> : t.notChecked}
+                      {dependency.checkAgeMs !== null ? <><br /><span>{t.age}: </span>{duration(dependency.checkAgeMs, locale)}</> : null}
+                      {dependency.latencyMs !== null ? <><br /><span>{t.latency}: </span>{duration(dependency.latencyMs, locale)}</> : null}
+                      {dependency.safeErrorCode ? <><br /><span>{t.error}: </span><code>{dependency.safeErrorCode}</code></> : null}
+                      {dependency.evidenceKind ? <><br /><span>{t.source}: </span><code>{dependency.evidenceKind}</code></> : null}
+                    </p>
+                  </li>
+                ))}</ul>
+              </details>
             </article>
           ))}
         </div>

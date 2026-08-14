@@ -10,13 +10,11 @@ import {
   type AnalysisPackageContext,
   type ExtractedDocument,
 } from "../document-comparison/types";
-import type { LegalSemanticSearchEnv } from "../legal/semantic-retrieval";
 import {
   legalDatabaseFreshnessFromAsOf,
-  retrieveVerifiedLegalSources,
   type LegalDatabaseFreshness,
-  type VerifiedLegalRetrieval,
 } from "../legal/verified-retrieval";
+import { retrieveLiveLexSourcesForDocument } from "../legal/live-lex-retrieval";
 import {
   documentAnalysisResultSchema,
   enforceDocumentAnalysisFreshness,
@@ -29,7 +27,7 @@ import {
   OcrProcessingError,
   scheduleOcrProcessing,
 } from "./ocr-processor";
-import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
+import { chunkDocumentForAnalysis } from "./chunking";
 import {
   extractAnalysisDocument,
   isAnalysisPackageContext,
@@ -48,7 +46,7 @@ import type { BuilderRuntimeEnv } from "../document-builder/storage/runtime";
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
 
-export type DocumentAnalysisProcessorEnv = LegalSemanticSearchEnv & BuilderRuntimeEnv & {
+export type DocumentAnalysisProcessorEnv = BuilderRuntimeEnv & {
   DB: D1Database;
   BUCKET: R2Bucket;
 };
@@ -57,6 +55,8 @@ type AnalysisRow = {
   analysisId: string;
   workspaceId: string;
   ownerUserId: string;
+  consentVersion: string;
+  createdAt: string;
   status: string;
   summaryJson: string | null;
   fileId: string;
@@ -67,6 +67,11 @@ type AnalysisRow = {
   sizeBytes: number;
   sha256: string | null;
 };
+
+// This marker is written only by the explicitly enabled, non-user staging
+// lifecycle probe. It lets its append-only provider-cost evidence use a
+// per-seeded-analysis identity without changing any user analysis event ID.
+const stagingSyntheticProbeConsentVersion = "synthetic-probe";
 
 type PersistedAnalysis = {
   sourceFreshness: LegalDatabaseFreshness;
@@ -140,6 +145,7 @@ export type DocumentAnalysisDiagnosticDetail =
   | "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX"
   | "LEGAL_RETRIEVAL_SQLITE_ERROR"
   | "LEGAL_RETRIEVAL_FAILED"
+  | "PROVIDER_HTTP_400"
   | "PROVIDER_HTTP_401"
   | "PROVIDER_HTTP_403"
   | "PROVIDER_HTTP_404"
@@ -149,13 +155,36 @@ export type DocumentAnalysisDiagnosticDetail =
   | "PROVIDER_HTTP_5XX"
   | "PROVIDER_TIMEOUT"
   | "PROVIDER_CIRCUIT_OPEN"
+  | "INVALID_AI_OUTPUT"
+  | "INVALID_AI_OUTPUT_MAX_TOKENS"
+  | "INVALID_AI_OUTPUT_TOOL_RESULT_MISSING"
+  | "INVALID_AI_OUTPUT_ENVELOPE_JSON_INVALID"
+  | "INVALID_AI_OUTPUT_ENVELOPE_SCHEMA_INVALID"
+  | "INVALID_AI_OUTPUT_SOURCE_BOUNDARY"
+  | "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY"
+  | "INVALID_AI_OUTPUT_SCHEMA_INVALID"
   | "PROVIDER_UNAVAILABLE";
 
 export function documentAnalysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
   if (error instanceof AiUnavailableError) {
+    if (error.code === "INVALID_AI_OUTPUT") {
+      // providerErrorType can originate at a provider boundary. Persist only
+      // fixed, content-free categories here; never propagate model output,
+      // parser errors, provider body text, or a dynamic upstream type.
+      switch (error.providerErrorType) {
+        case "anthropic_output_max_tokens": return "INVALID_AI_OUTPUT_MAX_TOKENS";
+        case "anthropic_tool_result_missing": return "INVALID_AI_OUTPUT_TOOL_RESULT_MISSING";
+        case "anthropic_envelope_json_invalid": return "INVALID_AI_OUTPUT_ENVELOPE_JSON_INVALID";
+        case "anthropic_envelope_schema_invalid": return "INVALID_AI_OUTPUT_ENVELOPE_SCHEMA_INVALID";
+        case "document_source_boundary": return "INVALID_AI_OUTPUT_SOURCE_BOUNDARY";
+        case "document_excerpt_boundary": return "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY";
+        default: return "INVALID_AI_OUTPUT";
+      }
+    }
     if (error.code === "PROVIDER_TIMEOUT") return "PROVIDER_TIMEOUT";
     if (error.code === "PROVIDER_CIRCUIT_OPEN") return "PROVIDER_CIRCUIT_OPEN";
     switch (error.providerStatus) {
+      case 400: return "PROVIDER_HTTP_400";
       case 401: return "PROVIDER_HTTP_401";
       case 403: return "PROVIDER_HTTP_403";
       case 404: return "PROVIDER_HTTP_404";
@@ -221,8 +250,11 @@ export type DocumentAnalysisProcessorDependencies = {
     query: string,
     locale: "ru" | "uz",
     limit?: number,
-    options?: { semantic?: LegalSemanticSearchEnv },
-  ) => Promise<VerifiedLegalRetrieval>;
+  ) => Promise<{
+    sources: import("../ai/provider").LegalSourceContext[];
+    freshness: LegalDatabaseFreshness;
+    legalDatabaseAsOf: string;
+  }>;
   analyze: (input: {
     fileName: string;
     mimeType: string;
@@ -233,7 +265,7 @@ export type DocumentAnalysisProcessorDependencies = {
     locale: "ru" | "uz";
     mode: "quick" | "full" | "expert";
     userSide: string | null;
-    sources: VerifiedLegalRetrieval["sources"];
+    sources: import("../ai/provider").LegalSourceContext[];
     legalDatabaseAsOf: string;
     requestId: string;
     beforeProviderCall?: (input: {
@@ -243,6 +275,59 @@ export type DocumentAnalysisProcessorDependencies = {
     runtimeSettings?: AiRuntimeSettings;
   }) => Promise<AiStructuredResult<DocumentAnalysisResult>>;
 };
+
+async function opaqueProbeUsageEventId(input: {
+  analysisId: string;
+  createdAt: string;
+  provider: "openai" | "anthropic";
+}): Promise<string> {
+  // The provider usage ledger is visible to privileged operational tooling.
+  // Hash all lifecycle dimensions so neither a raw analysis ID nor a timestamp
+  // is carried into the append-only event identifier.
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode([
+      "staging-document-analysis-probe-usage-v1",
+      input.analysisId,
+      input.createdAt,
+      input.provider,
+    ].join("\n")),
+  );
+  const hex = Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return `provider_usage_document_probe_${hex.slice(0, 48)}`;
+}
+
+/**
+ * Keeps the user document-analysis ledger identity stable. A controlled
+ * staging probe reseeds a fixed analysis ID on each run, so it instead hashes
+ * that run's immutable creation timestamp into a content-free event ID. This
+ * preserves append-only evidence across probe runs without exposing any raw
+ * document, tenant, analysis, or provider request identifier.
+ */
+export async function documentAnalysisProviderUsageEventId(input: {
+  row: {
+    analysisId: string;
+    consentVersion: string;
+    createdAt: string;
+  };
+  environment: "development" | "staging" | "production";
+  provider: "openai" | "anthropic";
+}): Promise<string> {
+  if (
+    input.environment === "staging"
+    && input.row.consentVersion === stagingSyntheticProbeConsentVersion
+  ) {
+    return opaqueProbeUsageEventId({
+      analysisId: input.row.analysisId,
+      createdAt: input.row.createdAt,
+      provider: input.provider,
+    });
+  }
+  return `provider_usage_document_${input.row.analysisId}_${input.provider}`;
+}
 
 function withSequentialAnalysisSession(
   env: DocumentAnalysisProcessorEnv,
@@ -262,7 +347,7 @@ function withSequentialAnalysisSession(
 
 const defaultDependencies: DocumentAnalysisProcessorDependencies = {
   extract: extractAnalysisDocument,
-  retrieve: retrieveVerifiedLegalSources,
+  retrieve: retrieveLiveLexSourcesForDocument,
   analyze: async (input) => {
     const { runDocumentAnalysis } = await import("./provider");
     return runDocumentAnalysis(input, {
@@ -336,7 +421,10 @@ async function analyzeObject(
     if (!extracted) {
       if (row.sizeBytes > DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT) {
         if (row.mimeType === "application/zip") {
-          await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+          // There is no deployed streaming ZIP extractor.  Do not leave a
+          // file in a waiting state that no consumer can complete, and do not
+          // send it to OCR or an AI provider as a fallback.
+          await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
           throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
         }
         await scheduleOcrProcessing(env.DB, {
@@ -368,7 +456,10 @@ async function analyzeObject(
         });
       } catch (error) {
         if (error instanceof PackageExtractionError) {
-          await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+          // PackageExtractionError only represents the bounded inline
+          // capacity boundary.  A background handler does not exist yet, so
+          // terminalize truthfully instead of implying asynchronous progress.
+          await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
           throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
         }
         if (
@@ -392,11 +483,6 @@ async function analyzeObject(
         throw error;
       }
     }
-    if (extracted.text.length > DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT) {
-      await setAnalysisState(env.DB, row, "awaiting_chunked_analysis", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
-      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
-    }
-
     diagnosticStage = "version";
     await storeInitialAnalysisDocumentVersion(env, {
       analysisId: row.analysisId,
@@ -408,7 +494,10 @@ async function analyzeObject(
 
     diagnosticStage = "retrieval";
     const request = parseRequestMetadata(row.summaryJson);
-    const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8, { semantic: env });
+    // The full document never becomes a Lex query. A bounded structural
+    // sample gives live retrieval the document's subject without handing it a
+    // local corpus or building any document-to-law embedding index.
+    const retrieval = await deps.retrieve(env.DB, extracted.text.slice(0, 12_000), request.locale, 5);
     diagnosticStage = "runtime";
     const providerEnvironment = parseProviderEnvironment(env.APP_ENV);
     const runtimeSettings = await resolveAiRuntimeSettings({ db: env.DB, env });
@@ -420,40 +509,48 @@ async function analyzeObject(
     let ai: AiStructuredResult<DocumentAnalysisResult>;
     try {
       diagnosticStage = "provider";
-      ai = await deps.analyze({
-        fileName: row.fileName,
-        mimeType: row.mimeType,
-        extractedText: extracted.text,
-        detectedLanguage: extracted.detectedLanguage,
-        extractionWarnings: extracted.warningCode ? [extracted.warningCode] : [],
-        packageContext: extracted.packageContext ?? null,
-        locale: request.locale,
-        mode: request.mode,
-        userSide: null,
-        sources: retrieval.sources,
-        legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
-        requestId: `document-analysis-${row.analysisId}`,
-        runtimeSettings,
-        beforeProviderCall: async (call) => {
-          try {
-            await assertProviderCallAllowed({
-              db: env.DB,
-              environment: providerEnvironment,
-              provider: call.provider,
-            });
-          } catch (error) {
-            if (error instanceof ProviderCostControlError && error.code === "PROVIDER_CIRCUIT_OPEN") {
-              throw new AiUnavailableError(
-                "AI-провайдер остановлен системой контроля расходов.",
-                "PROVIDER_CIRCUIT_OPEN",
-                false,
-              );
+      const chunks = chunkDocumentForAnalysis(extracted.text);
+      const chunkResults: AiStructuredResult<DocumentAnalysisResult>[] = [];
+      for (const chunk of chunks) {
+        chunkResults.push(await deps.analyze({
+          fileName: row.fileName,
+          mimeType: row.mimeType,
+          extractedText: chunk.text,
+          detectedLanguage: extracted.detectedLanguage,
+          extractionWarnings: [
+            ...(extracted.warningCode ? [extracted.warningCode] : []),
+            ...(chunks.length > 1 ? [`DOCUMENT_CHUNK_${chunk.index}_OF_${chunk.total}`] : []),
+          ],
+          packageContext: extracted.packageContext ?? null,
+          locale: request.locale,
+          mode: request.mode,
+          userSide: null,
+          sources: retrieval.sources,
+          legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
+          requestId: `document-analysis-${row.analysisId}-chunk-${chunk.index}`,
+          runtimeSettings,
+          beforeProviderCall: async (call) => {
+            try {
+              await assertProviderCallAllowed({
+                db: env.DB,
+                environment: providerEnvironment,
+                provider: call.provider,
+              });
+            } catch (error) {
+              if (error instanceof ProviderCostControlError && error.code === "PROVIDER_CIRCUIT_OPEN") {
+                throw new AiUnavailableError(
+                  "AI-провайдер остановлен системой контроля расходов.",
+                  "PROVIDER_CIRCUIT_OPEN",
+                  false,
+                );
+              }
+              throw error;
             }
-            throw error;
-          }
-          providerCalls.push({ ...call, startedAt: new Date().toISOString() });
-        },
-      });
+            providerCalls.push({ ...call, startedAt: new Date().toISOString() });
+          },
+        }));
+      }
+      ai = mergeChunkAnalysisResults(chunkResults);
     } catch (error) {
       const completedAt = new Date().toISOString();
       const errorCode = isAiProviderError(error) ? error.code : "PROVIDER_UNAVAILABLE";
@@ -475,7 +572,11 @@ async function analyzeObject(
             errorCode,
             startedAt: call.startedAt,
             completedAt,
-            eventId: `provider_usage_document_${row.analysisId}_${call.provider}`,
+            eventId: await documentAnalysisProviderUsageEventId({
+              row,
+              environment: providerEnvironment,
+              provider: call.provider,
+            }),
           });
         }
       } catch {
@@ -502,7 +603,11 @@ async function analyzeObject(
           errorCode: "FALLBACK_USED",
           startedAt: call.startedAt,
           completedAt,
-          eventId: `provider_usage_document_${row.analysisId}_${call.provider}`,
+          eventId: await documentAnalysisProviderUsageEventId({
+            row,
+            environment: providerEnvironment,
+            provider: call.provider,
+          }),
         });
       }
       const successfulCall = [...providerCalls].reverse().find((call) => call.provider === ai.provider)!;
@@ -522,20 +627,45 @@ async function analyzeObject(
         status: "succeeded",
         startedAt: successfulCall.startedAt,
         completedAt,
-        eventId: `provider_usage_document_${row.analysisId}_${ai.provider}`,
+        eventId: await documentAnalysisProviderUsageEventId({
+          row,
+          environment: providerEnvironment,
+          provider: ai.provider,
+        }),
       });
     }
     const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
     let boundedResult: DocumentAnalysisResult;
+    diagnosticStage = "validation";
+    let schemaValidatedResult: DocumentAnalysisResult;
     try {
-      diagnosticStage = "validation";
-      const validatedResult = enforceDocumentExcerptBoundary(
-        enforceDocumentAnalysisSourceBoundary(
-          documentAnalysisResultSchema.parse(ai.data),
-          new Set(retrieval.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
-        ),
-        extracted.text,
+      schemaValidatedResult = documentAnalysisResultSchema.parse(ai.data);
+    } catch {
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT");
+      throw new DocumentAnalysisProcessingError(
+        "DOCUMENT_ANALYSIS_INVALID_OUTPUT",
+        false,
+        "validation",
+        "INVALID_AI_OUTPUT_SCHEMA_INVALID",
       );
+    }
+    let sourceBoundResult: DocumentAnalysisResult;
+    try {
+      sourceBoundResult = enforceDocumentAnalysisSourceBoundary(
+        schemaValidatedResult,
+        new Set(retrieval.sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
+      );
+    } catch {
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT");
+      throw new DocumentAnalysisProcessingError(
+        "DOCUMENT_ANALYSIS_INVALID_OUTPUT",
+        false,
+        "validation",
+        "INVALID_AI_OUTPUT_SOURCE_BOUNDARY",
+      );
+    }
+    try {
+      const validatedResult = enforceDocumentExcerptBoundary(sourceBoundResult, extracted.text);
       boundedResult = {
         ...validatedResult,
         sources: validatedResult.sources.map((reference) => {
@@ -553,7 +683,12 @@ async function analyzeObject(
       };
     } catch {
       await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT");
-      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_INVALID_OUTPUT", false);
+      throw new DocumentAnalysisProcessingError(
+        "DOCUMENT_ANALYSIS_INVALID_OUTPUT",
+        false,
+        "validation",
+        "INVALID_AI_OUTPUT_EXCERPT_BOUNDARY",
+      );
     }
     return {
       result: enforceDocumentAnalysisFreshness(boundedResult, retrieval.freshness),
@@ -585,7 +720,7 @@ async function analyzeObject(
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_EXTRACTION_FAILED", error.retryable);
     }
     if (error instanceof PackageExtractionError) {
-      await setAnalysisState(env.DB, row, "awaiting_external_extraction", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
+      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
       throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
     }
     if (error instanceof AnalysisRevisionError) {
@@ -613,7 +748,16 @@ async function analyzeObject(
         ? "awaiting_ai_configuration"
         : error.retryable ? "retrying" : "failed";
       await setAnalysisState(env.DB, row, status, code);
-      throw new DocumentAnalysisProcessingError(code, error.retryable, "provider");
+      // Preserve only the already allow-listed provider diagnostic category.
+      // The outer worker/probe can then distinguish a bounded timeout from an
+      // HTTP/auth/circuit failure without retaining provider bodies, document
+      // text, credentials, or low-level error messages.
+      throw new DocumentAnalysisProcessingError(
+        code,
+        error.retryable,
+        "provider",
+        documentAnalysisDiagnosticDetail(error),
+      );
     }
     await setAnalysisState(env.DB, row, "retrying", "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE");
     throw new DocumentAnalysisProcessingError(
@@ -781,6 +925,64 @@ async function persistNormalizedAnalysis(
   ]);
 }
 
+function uniqueBy<T>(items: readonly T[], key: (item: T) => string, limit: number): T[] {
+  const seen = new Set<string>();
+  const output: T[] = [];
+  for (const item of items) {
+    const signature = key(item);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    output.push(item);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+/**
+ * A long document is analysed fragment-by-fragment; this deterministic merge
+ * retains only schema-bounded findings and never invents a cross-fragment
+ * legal conclusion. Each source and excerpt still goes through the canonical
+ * source/excerpt validation below against the original document text.
+ */
+function mergeChunkAnalysisResults(
+  results: readonly AiStructuredResult<DocumentAnalysisResult>[],
+): AiStructuredResult<DocumentAnalysisResult> {
+  const first = results[0];
+  const last = results.at(-1);
+  if (!first || !last) throw new Error("DOCUMENT_ANALYSIS_CHUNKS_EMPTY");
+  const data = results.map((result) => result.data);
+  const allVerified = data.every((result) => result.legalComplianceStatus === "verified");
+  const anyOfficialSource = data.some((result) => result.sources.length > 0);
+  const summaries = data.map((result) => result.summary.trim()).filter(Boolean);
+  return {
+    ...last,
+    attempts: results.reduce((total, result) => total + result.attempts, 0),
+    latencyMs: results.reduce((total, result) => total + result.latencyMs, 0),
+    usage: {
+      inputTokens: results.reduce((total, result) => total + result.usage.inputTokens, 0),
+      outputTokens: results.reduce((total, result) => total + result.usage.outputTokens, 0),
+      cachedInputTokens: results.reduce((total, result) => total + result.usage.cachedInputTokens, 0),
+    },
+    data: {
+      ...first.data,
+      summary: summaries.join("\n\n").slice(0, 4_000) || first.data.summary,
+      legalComplianceStatus: allVerified ? "verified" : anyOfficialSource ? "partial" : "unverified",
+      parties: uniqueBy(data.flatMap((result) => result.parties), (item) => `${item.name}|${item.role}|${item.isUserSide}`, 30),
+      amounts: uniqueBy(data.flatMap((result) => result.amounts), (item) => item, 50),
+      dates: uniqueBy(data.flatMap((result) => result.dates), (item) => item, 50),
+      obligations: uniqueBy(data.flatMap((result) => result.obligations), (item) => `${item.party}|${item.obligation}|${item.clause ?? ""}|${item.deadline ?? ""}`, 100),
+      deadlines: uniqueBy(data.flatMap((result) => result.deadlines), (item) => `${item.title}|${item.value}|${item.clause ?? ""}`, 50),
+      risks: uniqueBy(data.flatMap((result) => result.risks), (item) => `${item.riskType}|${item.title}|${item.exactExcerpt ?? ""}`, 100),
+      missingClauses: uniqueBy(data.flatMap((result) => result.missingClauses), (item) => `${item.title}|${item.reason}`, 50),
+      contradictions: uniqueBy(data.flatMap((result) => result.contradictions), (item) => item, 50),
+      questions: uniqueBy(data.flatMap((result) => result.questions), (item) => item, 30),
+      recommendations: uniqueBy(data.flatMap((result) => result.recommendations), (item) => item, 50),
+      sources: uniqueBy(data.flatMap((result) => result.sources), (item) => item.sourceId, 12),
+      extractionWarnings: uniqueBy(data.flatMap((result) => result.extractionWarnings), (item) => item, 20),
+    },
+  };
+}
+
 function assertSafeReadyState(row: AnalysisRow): void {
   if (!(["ready", "processing", "retrying"] as string[]).includes(row.status) || row.fileKind !== "analysis_safe") {
     throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_FILE_UNSAFE", false);
@@ -794,6 +996,7 @@ async function loadAnalysis(
 ): Promise<AnalysisRow | null> {
   return db.prepare(
     `SELECT a.id AS analysisId,a.workspace_id AS workspaceId,a.owner_user_id AS ownerUserId,
+      a.consent_version AS consentVersion,a.created_at AS createdAt,
       a.status,a.summary_json AS summaryJson,f.id AS fileId,f.kind AS fileKind,f.r2_key AS r2Key,
       f.file_name AS fileName,f.mime_type AS mimeType,f.size_bytes AS sizeBytes,f.sha256
      FROM document_analyses a JOIN document_files f ON f.id=a.uploaded_file_id

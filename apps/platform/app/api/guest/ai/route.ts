@@ -28,11 +28,16 @@ import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
-  directSourceCards,
-  retrieveDirectLegalSources,
-  unavailableDirectLegalRetrieval,
-} from "../../../../lib/legal/direct-retrieval";
-import { directCitationStatements } from "../../../../lib/legal/direct-citation-store";
+  retrieveLiveLexSources,
+} from "../../../../lib/legal/live-lex-retrieval";
+import { directSourceCards } from "../../../../lib/legal/direct-retrieval";
+import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
+import {
+  AI_INTERACTIVE_FINALIZATION_RESERVE_MS,
+  createAiExecutionBudget,
+  type AiExecutionBudget,
+} from "../../../../lib/ai/execution-budget";
+import { tryRecordAiSloTelemetry } from "../../../../lib/ai/slo-telemetry";
 import { parseLegalApplicabilityDate } from "../../../../lib/legal/applicability-date";
 import { sha256Json } from "../../../../lib/ai/run-store";
 import {
@@ -81,6 +86,108 @@ function json(
 
 function copy(locale: "ru" | "uz", ru: string, uz: string): string {
   return locale === "ru" ? ru : uz;
+}
+
+type GuestAiSloContext = {
+  db: D1Database;
+  budget: AiExecutionBudget;
+  correlationId: string | null;
+  answerMode: "short";
+  reasoningMode: "fast";
+  provider: "openai" | "anthropic";
+  model: string;
+  contextLatencyMs: number | null;
+  providerFirstDeltaAtMs: number | null;
+  providerStartedAtMs: number | null;
+  fallbackFromProvider: "openai" | "anthropic" | null;
+};
+
+type GuestAiSloOutcome = {
+  outcome: "completed" | "failed" | "timed_out" | "cancelled";
+  safeErrorCode:
+    | "AI_SLO_TIMEOUT"
+    | "AI_SLO_PROVIDER_UNAVAILABLE"
+    | "AI_SLO_ABORTED"
+    | "AI_SLO_VALIDATION_FAILED"
+    | "AI_SLO_PERSISTENCE_FAILED"
+    | "AI_SLO_INTERNAL_ERROR"
+    | null;
+};
+
+function guestAiSloFailureOutcome(code: string, budget: AiExecutionBudget): GuestAiSloOutcome {
+  if (code === "AI_CANCELLED" || budget.abortReason === "caller") {
+    return { outcome: "cancelled", safeErrorCode: "AI_SLO_ABORTED" };
+  }
+  if (code === "PROVIDER_TIMEOUT" || budget.abortReason === "overall_timeout") {
+    return { outcome: "timed_out", safeErrorCode: "AI_SLO_TIMEOUT" };
+  }
+  if (code === "INVALID_AI_OUTPUT") {
+    return { outcome: "failed", safeErrorCode: "AI_SLO_VALIDATION_FAILED" };
+  }
+  if (code === "PERSISTENCE_FAILED") {
+    return { outcome: "failed", safeErrorCode: "AI_SLO_PERSISTENCE_FAILED" };
+  }
+  return { outcome: "failed", safeErrorCode: "AI_SLO_PROVIDER_UNAVAILABLE" };
+}
+
+function guestAiSloFallback(
+  provider: "openai" | "anthropic",
+  fallbackFromProvider: "openai" | "anthropic" | null,
+) {
+  if (provider === "anthropic" && fallbackFromProvider === "openai") return "openai_to_anthropic" as const;
+  if (provider === "openai" && fallbackFromProvider === "anthropic") return "anthropic_to_openai" as const;
+  return "none" as const;
+}
+
+async function recordGuestAiSlo(input: {
+  telemetry: GuestAiSloContext | null;
+  outcome: GuestAiSloOutcome;
+}): Promise<void> {
+  const correlationId = input.telemetry?.correlationId;
+  if (!input.telemetry || !correlationId) return;
+  try {
+    const telemetry = input.telemetry;
+    const snapshot = telemetry.budget.snapshot();
+    const stage = (name: string) => snapshot.stages.find((timing) => timing.stage === name);
+    const retrieval = stage("live_lex_retrieval");
+    const provider = stage("provider_execution");
+    const validation = stage("validation");
+    const persistence = stage("persistence");
+    const completed = input.outcome.outcome === "completed";
+    const firstUsefulLatencyMs = completed
+      ? Math.min(persistence?.endedAtMs ?? snapshot.elapsedMs, snapshot.elapsedMs)
+      : null;
+    await tryRecordAiSloTelemetry({
+      db: telemetry.db,
+      value: {
+        correlationId,
+        environment: operationalEnvironment(runtimeEnv().APP_ENV),
+        requestKind: "legal_chat",
+        authKind: "guest",
+        answerMode: telemetry.answerMode,
+        reasoningMode: telemetry.reasoningMode,
+        provider: telemetry.provider,
+        model: telemetry.model,
+        outcome: input.outcome.outcome,
+        fallback: guestAiSloFallback(telemetry.provider, telemetry.fallbackFromProvider),
+        authLatencyMs: null,
+        contextLatencyMs: telemetry.contextLatencyMs,
+        retrievalLatencyMs: retrieval?.elapsedMs ?? null,
+        // Guest requests do not stream provider deltas, so this remains null
+        // rather than deriving a fake TTFT from response headers.
+        providerTtftMs: null,
+        providerTotalMs: provider?.elapsedMs ?? null,
+        validationLatencyMs: validation?.elapsedMs ?? null,
+        persistenceLatencyMs: persistence?.elapsedMs ?? null,
+        endToEndMs: snapshot.elapsedMs,
+        firstUsefulStage: completed ? "persistence" : "none",
+        firstUsefulLatencyMs,
+        safeErrorCode: input.outcome.safeErrorCode,
+      },
+    });
+  } catch {
+    // A telemetry write is never allowed to alter a guest session or answer.
+  }
 }
 
 function publicError(
@@ -265,6 +372,8 @@ export async function GET(request: Request): Promise<Response> {
 
 export async function POST(request: Request): Promise<Response> {
   let locale: "ru" | "uz" = "ru";
+  let budget: ReturnType<typeof createAiExecutionBudget> | null = null;
+  let telemetry: GuestAiSloContext | null = null;
   try {
     assertSafeWrite(request);
     const parsed = requestSchema.safeParse(await request.json().catch(() => null));
@@ -318,9 +427,40 @@ export async function POST(request: Request): Promise<Response> {
       question: parsed.data.question,
       locale,
     });
-    const retrieval = runtimeEnv().LEGAL_DIRECT_RETRIEVAL_ENABLED === "true"
-      ? await retrieveDirectLegalSources(effectiveQuestion, locale, { limit: 1, signal: request.signal })
-      : unavailableDirectLegalRetrieval();
+    // Guest chat follows the same Lex-only, query-scoped boundary as the
+    // authenticated product route. No D1 corpus, Vectorize or editorial queue
+    // may enter this legal prompt.
+    const configuredProvider = provider.name === "anthropic" ? "anthropic" : "openai";
+    const configuredModel = providerStatus.model;
+    budget = createAiExecutionBudget({ callerSignal: request.signal });
+    telemetry = {
+      db,
+      budget,
+      correlationId: null,
+      answerMode: "short",
+      reasoningMode: "fast",
+      provider: configuredProvider,
+      model: configuredModel,
+      contextLatencyMs: null,
+      providerFirstDeltaAtMs: null,
+      providerStartedAtMs: null,
+      fallbackFromProvider: null,
+    };
+    let retrieval;
+    const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 2_900 });
+    try {
+      retrieval = await retrieveLiveLexSources({
+        query: effectiveQuestion,
+        locale,
+        signal: retrievalStage.signal,
+        limit: 2,
+        budgetMs: 2_750,
+      });
+      retrievalStage.complete();
+    } catch {
+      retrievalStage.fail();
+      retrieval = await retrieveLiveLexSources({ query: "", locale, limit: 1, budgetMs: 1 });
+    }
     const requestHash = await sha256Json({
       question: effectiveQuestion,
       locale,
@@ -358,6 +498,7 @@ export async function POST(request: Request): Promise<Response> {
       keyring,
       question: effectiveQuestion,
     });
+    if (telemetry) telemetry.correlationId = reservation.run.correlationId;
     if (reservation.kind === "completed") {
       const result = await completedResult(keyring, reservation.run);
       return json({
@@ -377,6 +518,7 @@ export async function POST(request: Request): Promise<Response> {
     if (reservation.kind === "failed") throw new GuestAiError("GUEST_RUN_FAILED");
 
     let aiResult;
+    const providerStage = budget.beginStage("provider_execution");
     try {
       aiResult = await provider.runLegalChat({
         question: effectiveQuestion,
@@ -392,12 +534,18 @@ export async function POST(request: Request): Promise<Response> {
           sessionId: sessionContext.session.id,
         }),
         runtimeSettings,
-      }, { signal: request.signal });
+      }, { signal: budget.signal, budget });
+      providerStage.complete();
     } catch (error) {
+      providerStage.fail();
       const code = error instanceof AiUnavailableError
         ? error.code
         : "PROVIDER_UNAVAILABLE";
       await failGuestAiRun({ db, run: reservation.run, errorCode: code });
+      await recordGuestAiSlo({
+        telemetry,
+        outcome: guestAiSloFailureOutcome(code, budget),
+      });
       return json({
         code,
         correlationId: reservation.run.correlationId,
@@ -411,6 +559,7 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     let result;
+    const validationStage = budget.beginStage("validation");
     try {
       const bounded = enforceLegalChatSourceBoundary(
         parseLegalChatResponse(aiResult.data),
@@ -421,7 +570,7 @@ export async function POST(request: Request): Promise<Response> {
         ),
       );
       const sourceById = new Map(retrieval.sources.map((source) => [source.id, source]));
-      // Direct source cards come from the server-validated page metadata, not
+      // Lex cards come from a technically validated live fetch, not
       // from a model claim. This preserves the empty-claim safety boundary.
       const returnedSources = bounded.sources.length > 0
         ? bounded.sources
@@ -450,11 +599,17 @@ export async function POST(request: Request): Promise<Response> {
         answerMode: "short",
         reasoningMode: "fast",
       });
+      validationStage.complete();
     } catch {
+      validationStage.fail();
       await failGuestAiRun({
         db,
         run: reservation.run,
         errorCode: "INVALID_AI_OUTPUT",
+      });
+      await recordGuestAiSlo({
+        telemetry: telemetry && { ...telemetry, provider: aiResult.provider, model: aiResult.model, fallbackFromProvider: aiResult.fallbackFromProvider },
+        outcome: guestAiSloFailureOutcome("INVALID_AI_OUTPUT", budget),
       });
       return json({
         code: "INVALID_AI_OUTPUT",
@@ -466,28 +621,71 @@ export async function POST(request: Request): Promise<Response> {
       }, 422, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
     }
 
-    await completeGuestAiRun({
-      db,
-      keyring,
-      run: reservation.run,
-      resultJson: JSON.stringify(result),
-      responseKind: result.responseKind,
-      provider: aiResult.provider,
-      model: aiResult.model,
-      providerResponseId: aiResult.providerResponseId,
-      fallbackFromProvider: aiResult.fallbackFromProvider,
-      inputTokens: aiResult.usage.inputTokens,
-      outputTokens: aiResult.usage.outputTokens,
-      cachedInputTokens: aiResult.usage.cachedInputTokens,
-      attempts: aiResult.attempts,
-      latencyMs: aiResult.latencyMs,
-      additionalStatements: directCitationStatements({
+    // Do not persist/consume a guest turn once the shared interactive deadline
+    // no longer leaves room for the atomic completion. The same provider
+    // reserve protects registered chat; this explicit boundary keeps the
+    // guest's one allowed answer equally non-chargeable on a late result.
+    if (budget.signal.aborted || budget.remainingMs < AI_INTERACTIVE_FINALIZATION_RESERVE_MS) {
+      await failGuestAiRun({ db, run: reservation.run, errorCode: "PROVIDER_TIMEOUT" });
+      await recordGuestAiSlo({
+        telemetry: telemetry && {
+          ...telemetry,
+          provider: aiResult.provider,
+          model: aiResult.model,
+          fallbackFromProvider: aiResult.fallbackFromProvider,
+        },
+        outcome: guestAiSloFailureOutcome("PROVIDER_TIMEOUT", budget),
+      });
+      return json({
+        code: "PROVIDER_TIMEOUT",
+        correlationId: reservation.run.correlationId,
+        error: copy(
+          locale,
+          "AI не успел безопасно сохранить ответ. Гостевой ответ не использован; попробуйте ещё раз.",
+          "AI javobni xavfsiz saqlashga ulgurmadi. Mehmon javobi ishlatilmadi; qayta urinib ko‘ring.",
+        ),
+      }, 503, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
+    }
+
+    const persistenceStage = budget.beginStage("persistence");
+    try {
+      await completeGuestAiRun({
         db,
-        sources: retrieval.sources,
-        citations: result.sources,
-        guestRunId: reservation.run.id,
-        now: new Date().toISOString(),
-      }),
+        keyring,
+        run: reservation.run,
+        resultJson: JSON.stringify(result),
+        responseKind: result.responseKind,
+        provider: aiResult.provider,
+        model: aiResult.model,
+        providerResponseId: aiResult.providerResponseId,
+        fallbackFromProvider: aiResult.fallbackFromProvider,
+        inputTokens: aiResult.usage.inputTokens,
+        outputTokens: aiResult.usage.outputTokens,
+        cachedInputTokens: aiResult.usage.cachedInputTokens,
+        attempts: aiResult.attempts,
+        latencyMs: aiResult.latencyMs,
+        additionalStatements: legalCitationStatements({
+          db,
+          sources: retrieval.sources,
+          citations: result.sources,
+          guestRunId: reservation.run.id,
+          now: new Date().toISOString(),
+          sourceAccessMode: "direct",
+        }),
+      });
+      persistenceStage.complete();
+    } catch (error) {
+      persistenceStage.fail();
+      await failGuestAiRun({ db, run: reservation.run, errorCode: "PERSISTENCE_FAILED" });
+      await recordGuestAiSlo({
+        telemetry: telemetry && { ...telemetry, provider: aiResult.provider, model: aiResult.model, fallbackFromProvider: aiResult.fallbackFromProvider },
+        outcome: guestAiSloFailureOutcome("PERSISTENCE_FAILED", budget),
+      });
+      throw error;
+    }
+    await recordGuestAiSlo({
+      telemetry: telemetry && { ...telemetry, provider: aiResult.provider, model: aiResult.model, fallbackFromProvider: aiResult.fallbackFromProvider },
+      outcome: { outcome: "completed", safeErrorCode: null },
     });
     return json({
       runId: reservation.run.id,
@@ -508,5 +706,7 @@ export async function POST(request: Request): Promise<Response> {
     }, 201, sessionContext.setCookie ? { "set-cookie": sessionContext.setCookie } : undefined);
   } catch (error) {
     return publicError(error, locale, request.url);
+  } finally {
+    budget?.dispose();
   }
 }

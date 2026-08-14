@@ -1,0 +1,19 @@
+{
+  "measurement": "emitted raw bytes in a built client/Worker artifact; this is a regression guardrail, not a browser-performance measurement",
+  "baseline": {
+    "clientCss": 510814,
+    "initialJs": 299846,
+    "largestRouteJsIncrement": 212853,
+    "clientFonts": 465616,
+    "clientImages": 577980,
+    "workerEntry": 5726119
+  },
+  "limits": {
+    "clientCss": 563200,
+    "initialJs": 327680,
+    "largestRouteJsIncrement": 245760,
+    "clientFonts": 524288,
+    "clientImages": 655360,
+    "workerEntry": 6291456
+  }
+}

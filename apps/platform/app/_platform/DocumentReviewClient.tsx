@@ -21,7 +21,7 @@ type Summary = {
   extraction?: { packageContext?: AnalysisPackageContext | null };
 };
 type Analysis = {
-  id: string; status: string; errorCode?: string | null; createdAt?: string; updatedAt?: string;
+  id: string; status: string; errorCode?: string | null; retryExhausted?: boolean; createdAt?: string; updatedAt?: string;
   fileId: string; fileName: string; mimeType: string; sizeBytes: number; caseId?: string | null; summary?: Summary | null; risks?: Risk[]; exports?: AnalysisExport[];
 };
 type AnalysisCaseOption = { id: string; title: string; status: string; updatedAt: string };
@@ -42,7 +42,20 @@ type BuilderAnalysisSource = {
   currentRevision: number;
 };
 
-export function DocumentReviewClient({ locale, accountType }: { locale: PlatformLocale; accountType: AccountType }) {
+const activeAnalysisStatuses = new Set([
+  "ready",
+  "processing",
+  "persisting",
+  "awaiting_ocr",
+  "ocr_processing",
+  "retrying",
+]);
+
+function hasRetryExhausted(analysis: Pick<Analysis, "retryExhausted">): boolean {
+  return analysis.retryExhausted === true;
+}
+
+export function DocumentReviewClient({ locale, accountType, publicUrlImportEnabled }: { locale: PlatformLocale; accountType: AccountType; publicUrlImportEnabled: boolean }) {
   const searchParams = useSearchParams();
   const pathname = usePathname();
   const router = useRouter();
@@ -76,14 +89,14 @@ export function DocumentReviewClient({ locale, accountType }: { locale: Platform
       </div>
       <div id="review-mode-panel" role="tabpanel" aria-labelledby={`review-mode-${mode}`}>
         {mode === "review"
-          ? <SingleDocumentReview locale={locale} initialCaseId={searchParams.get("caseId")} initialAnalysisId={searchParams.get("analysisId")} />
+          ? <SingleDocumentReview locale={locale} initialCaseId={searchParams.get("caseId")} initialAnalysisId={searchParams.get("analysisId")} publicUrlImportEnabled={publicUrlImportEnabled} />
           : <DocumentComparisonClient locale={locale} accountType={accountType} />}
       </div>
     </section>
   );
 }
 
-function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId }: { locale: PlatformLocale; initialCaseId: string | null; initialAnalysisId: string | null }) {
+function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId, publicUrlImportEnabled }: { locale: PlatformLocale; initialCaseId: string | null; initialAnalysisId: string | null; publicUrlImportEnabled: boolean }) {
   const ru = locale === "ru";
   const inputRef = useRef<HTMLInputElement>(null);
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
@@ -115,11 +128,14 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId }: { lo
   }, [initialAnalysisId, initialCaseId, ru]);
   useEffect(() => { void load(); }, [load]);
   const exportPending = analyses.some(item => item.exports?.some(record => ["queued", "processing", "retrying"].includes(record.status)));
+  const analysisPending = analyses.some((item) =>
+    !hasRetryExhausted(item) && activeAnalysisStatuses.has(item.status)
+  );
   useEffect(() => {
-    if (!exportPending) return;
+    if (!exportPending && !analysisPending) return;
     const timer = window.setInterval(() => { void load(); }, 5_000);
     return () => window.clearInterval(timer);
-  }, [exportPending, load]);
+  }, [analysisPending, exportPending, load]);
 
   async function upload(event: FormEvent) {
     event.preventDefault();
@@ -142,14 +158,14 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId }: { lo
 
   async function importUrl(event: FormEvent) {
     event.preventDefault();
-    if (!publicUrl.trim() || !consent) return;
+    if (!publicUrlImportEnabled || !publicUrl.trim() || !consent) return;
     setUploading(true);
     setUploadProgress(null);
     setError("");
     setNotice("");
     try {
       const body = await importDocumentUrlForAnalysis(publicUrl, locale, uploadCaseId || null);
-      setNotice(body.message || (ru ? "Файл импортирован в приватный карантин." : "Fayl shaxsiy karantinga import qilindi."));
+      setNotice(body.message || (ru ? "Файл защищённо импортирован для анализа." : "Fayl tahlil uchun himoyalangan tarzda import qilindi."));
       setPublicUrl("");
       setConsent(false);
       await load();
@@ -164,21 +180,41 @@ function SingleDocumentReview({ locale, initialCaseId, initialAnalysisId }: { lo
   const uploadStatus = !uploadProgress ? "" : uploadProgress.phase === "hashing"
     ? (ru ? "Проверяем целостность файла…" : "Fayl yaxlitligi tekshirilmoqda…")
     : uploadProgress.phase === "finalizing"
-      ? (ru ? "Сохраняем файл в приватный карантин…" : "Fayl shaxsiy karantinga saqlanmoqda…")
+      ? (ru ? "Защищённо сохраняем файл для анализа…" : "Fayl tahlil uchun himoyalangan tarzda saqlanmoqda…")
       : uploadPercent === null
         ? (ru ? "Передаём файл…" : "Fayl yuborilmoqda…")
-        : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);
+      : (ru ? `Передаём файл: ${uploadPercent}%` : `Fayl yuborilmoqda: ${uploadPercent}%`);
+  const consentCopy = ru
+    ? (publicUrlImportEnabled
+      ? "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла или публичной ссылки. Понимаю, что результат нужно проверить."
+      : "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла. Понимаю, что результат нужно проверить.")
+    : (publicUrlImportEnabled
+      ? "Tanlangan fayl yoki ommaviy havolani maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman."
+      : "Tanlangan faylni maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman.");
 
   return <>
     {error && <p className="review-message error" role="alert"><CircleAlert />{error}</p>}
     {notice && <p className="review-message success" role="status"><ShieldCheck />{notice}</p>}
-    <form className="review-upload" onSubmit={upload}><div className="review-drop"><Upload /><div><strong>{file?.name || (ru ? "PDF, DOCX, JPG, PNG или ZIP" : "PDF, DOCX, JPG, PNG yoki ZIP")}</strong><span>{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : (ru ? "До 50 МБ · потоковая загрузка с SHA-256" : "50 MB gacha · SHA-256 bilan oqimli yuklash")}</span></div><input ref={inputRef} type="file" accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip" onChange={event => setFile(event.target.files?.[0] ?? null)} /></div><label className="review-upload-case"><span>{ru ? "Добавить анализ в дело" : "Tahlilni ishga qo‘shish"}</span><select value={uploadCaseId} onChange={event => setUploadCaseId(event.target.value)} disabled={uploading}><option value="">{ru ? "Без дела" : "Ishsiz"}</option>{cases.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>{uploadProgress && <div className="review-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div>}<p className="review-upload-status" aria-live="polite">{uploadStatus}</p><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /><span>{ru ? "Согласен(на) на приватное сохранение и автоматизированный анализ выбранного файла или публичной ссылки. Понимаю, что результат нужно проверить." : "Tanlangan fayl yoki ommaviy havolani maxfiy saqlash va avtomatlashtirilgan tahlilga roziman. Natijani tekshirish kerakligini tushunaman."}</span></label><button disabled={!file || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Загрузить и проверить" : "Yuklash va tekshirish"}</button></form>
-    <form className="review-url-import" onSubmit={importUrl}>
+    <form className="review-upload" onSubmit={upload}>
+      <label className="review-drop" htmlFor="document-review-file">
+        <Upload />
+        <div>
+          <strong>{file?.name || (ru ? "PDF, DOCX, JPG, PNG или ZIP" : "PDF, DOCX, JPG, PNG yoki ZIP")}</strong>
+          <span id="document-review-file-hint">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : (ru ? "До 50 МБ · потоковая загрузка с SHA-256" : "50 MB gacha · SHA-256 bilan oqimli yuklash")}</span>
+        </div>
+        <input id="document-review-file" ref={inputRef} type="file" aria-label={ru ? "Выберите файл для анализа" : "Tahlil uchun faylni tanlang"} aria-describedby="document-review-file-hint" accept=".pdf,.docx,.jpg,.jpeg,.png,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg,image/png,application/zip" disabled={uploading} onChange={event => setFile(event.target.files?.[0] ?? null)} />
+      </label>
+      <label className="review-upload-case"><span>{ru ? "Добавить анализ в дело" : "Tahlilni ishga qo‘shish"}</span><select value={uploadCaseId} onChange={event => setUploadCaseId(event.target.value)} disabled={uploading}><option value="">{ru ? "Без дела" : "Ishsiz"}</option>{cases.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>{uploadProgress && <div className="review-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div>}<p className="review-upload-status" aria-live="polite">{uploadStatus}</p><label><input type="checkbox" checked={consent} onChange={event => setConsent(event.target.checked)} /><span>{consentCopy}</span></label><button disabled={!file || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <FileCheck2 />}{ru ? "Загрузить и проверить" : "Yuklash va tekshirish"}</button>
+    </form>
+    {publicUrlImportEnabled ? <form className="review-url-import" onSubmit={importUrl}>
       <div><Link2 /><label htmlFor="review-public-url"><strong>{ru ? "Импортировать публичную ссылку" : "Ommaviy havolani import qilish"}</strong><span>{ru ? "Только HTTPS · без паролей и закрытых кабинетов · PDF, DOCX, JPG, PNG или ZIP" : "Faqat HTTPS · parol va yopiq kabinetlarsiz · PDF, DOCX, JPG, PNG yoki ZIP"}</span></label></div>
       <input id="review-public-url" type="url" inputMode="url" autoComplete="url" maxLength={2048} placeholder="https://example.uz/document.pdf" value={publicUrl} onChange={event => setPublicUrl(event.target.value)} disabled={uploading} />
       <button type="submit" disabled={!publicUrl.trim() || !consent || uploading}>{uploading ? <LoaderCircle className="spin" /> : <Link2 />}{ru ? "Импортировать" : "Import qilish"}</button>
-    </form>
-    {loading ? <div className="review-loading"><LoaderCircle className="spin" /></div> : <div className="review-layout"><aside><h2>{ru ? "Последние файлы" : "So‘nggi fayllar"}</h2>{analyses.length ? analyses.map(item => <button className={selected?.id === item.id ? "active" : ""} key={item.id} onClick={() => setSelected(item)}><FileCheck2 /><span><strong>{item.fileName}</strong><small>{statusLabel(item.status, ru)}</small></span></button>) : <p>{ru ? "Загруженных файлов пока нет." : "Hozircha yuklangan fayllar yo‘q."}</p>}</aside><main>{selected ? <AnalysisView analysis={selected} cases={cases} ru={ru} onChanged={load} /> : <div className="review-empty"><FileCheck2 /><h2>{ru ? "Выберите файл для анализа" : "Tahlil uchun faylni tanlang"}</h2></div>}</main></div>}
+    </form> : <aside className="review-url-import-disabled" aria-label={ru ? "Импорт по публичной ссылке временно недоступен" : "Ommaviy havola orqali import vaqtincha mavjud emas"}>
+      <Link2 aria-hidden="true" />
+      <div><strong>{ru ? "Импорт по публичной ссылке" : "Ommaviy havola orqali import"}</strong><span>{ru ? "Контролируемая beta-функция временно недоступна. Загрузите файл с устройства." : "Nazorat qilinadigan beta-funksiya vaqtincha mavjud emas. Faylni qurilmadan yuklang."}</span></div>
+    </aside>}
+    {loading ? <div className="review-loading"><LoaderCircle className="spin" /></div> : <div className="review-layout"><aside><h2>{ru ? "Последние файлы" : "So‘nggi fayllar"}</h2>{analyses.length ? analyses.map(item => <button className={selected?.id === item.id ? "active" : ""} key={item.id} onClick={() => setSelected(item)}><FileCheck2 /><span><strong>{item.fileName}</strong><small>{statusLabel(item.status, ru, hasRetryExhausted(item))}</small></span></button>) : <p>{ru ? "Загруженных файлов пока нет." : "Hozircha yuklangan fayllar yo‘q."}</p>}</aside><main>{selected ? <AnalysisView analysis={selected} cases={cases} ru={ru} onChanged={load} /> : <div className="review-empty"><FileCheck2 /><h2>{ru ? "Выберите файл для анализа" : "Tahlil uchun faylni tanlang"}</h2></div>}</main></div>}
   </>;
 }
 
@@ -186,7 +222,8 @@ function AnalysisView({ analysis, cases, ru, onChanged }: { analysis: Analysis; 
   const summary = analysis.summary;
   const [exportAttemptKeys, setExportAttemptKeys] = useState<Record<string, string>>({});
   const canOpen = analysis.status === "completed";
-  const state = analysisState(analysis.status, analysis.errorCode ?? null, ru);
+  const retryExhausted = hasRetryExhausted(analysis);
+  const state = analysisState(analysis.status, analysis.errorCode ?? null, retryExhausted, ru);
   const [exportingFormat, setExportingFormat] = useState<AnalysisExportFormat | null>(null);
   const [deletingExportId, setDeletingExportId] = useState<string | null>(null);
   const [exportError, setExportError] = useState("");
@@ -253,7 +290,7 @@ function AnalysisView({ analysis, cases, ru, onChanged }: { analysis: Analysis; 
     finally { setCaseBusy(false); }
   }
   return <article className="review-result">
-    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && formats.map(format => { const record = exportsByFormat.get(format); const pending = ["queued", "processing", "retrying"].includes(record?.status ?? ""); const failed = record?.status === "failed"; const busy = exportingFormat === format || pending; return <span className="review-export-action" key={format}>{record?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}/file`}><Download />{format.toUpperCase()}</a> : <button type="button" disabled={busy || deletingExportId !== null} aria-busy={busy} onClick={() => void requestExport(format)}>{busy ? <LoaderCircle className="spin" /> : failed ? <RefreshCw /> : <Download />}{busy ? (ru ? `${format.toUpperCase()} готовится` : `${format.toUpperCase()} tayyorlanmoqda`) : failed ? (ru ? `Повторить ${format.toUpperCase()}` : `${format.toUpperCase()}ni takrorlash`) : (ru ? `Экспорт ${format.toUpperCase()}` : `${format.toUpperCase()} eksport`)}</button>}{record && ["completed", "failed"].includes(record.status) && <button type="button" aria-label={ru ? `Удалить ${format.toUpperCase()}` : `${format.toUpperCase()}ni o‘chirish`} disabled={deletingExportId !== null || exportingFormat !== null} aria-busy={deletingExportId === record.id} onClick={() => void removeExport(record)}>{deletingExportId === record.id ? <LoaderCircle className="spin" /> : <Trash2 />}</button>}</span>; })}</div></div>
+    <div className="review-result-head"><div><small>{statusLabel(analysis.status, ru, retryExhausted)}</small><h2>{analysis.fileName}</h2><span>{(analysis.sizeBytes / 1024 / 1024).toFixed(2)} MB · {analysis.mimeType}</span></div><div className="review-result-actions" aria-live="polite">{canOpen && <a href={`/api/platform/document-review/files/${encodeURIComponent(analysis.fileId)}`} target="_blank" rel="noreferrer"><Eye />{ru ? "Открыть файл" : "Faylni ochish"}</a>}{canOpen && formats.map(format => { const record = exportsByFormat.get(format); const pending = ["queued", "processing", "retrying"].includes(record?.status ?? ""); const failed = record?.status === "failed"; const busy = exportingFormat === format || pending; return <span className="review-export-action" key={format}>{record?.status === "completed" ? <a href={`/api/platform/document-analysis/exports/${encodeURIComponent(record.id)}/file`}><Download />{format.toUpperCase()}</a> : <button type="button" disabled={busy || deletingExportId !== null} aria-busy={busy} onClick={() => void requestExport(format)}>{busy ? <LoaderCircle className="spin" /> : failed ? <RefreshCw /> : <Download />}{busy ? (ru ? `${format.toUpperCase()} готовится` : `${format.toUpperCase()} tayyorlanmoqda`) : failed ? (ru ? `Повторить ${format.toUpperCase()}` : `${format.toUpperCase()}ni takrorlash`) : (ru ? `Экспорт ${format.toUpperCase()}` : `${format.toUpperCase()} eksport`)}</button>}{record && ["completed", "failed"].includes(record.status) && <button type="button" aria-label={ru ? `Удалить ${format.toUpperCase()}` : `${format.toUpperCase()}ni o‘chirish`} disabled={deletingExportId !== null || exportingFormat !== null} aria-busy={deletingExportId === record.id} onClick={() => void removeExport(record)}>{deletingExportId === record.id ? <LoaderCircle className="spin" /> : <Trash2 />}</button>}</span>; })}</div></div>
     <div className="review-case-link"><label><span>{ru ? "Дело" : "Ish"}</span><select value={caseId} onChange={event => { setCaseId(event.target.value); setCaseMessage(""); }} disabled={caseBusy}><option value="">{ru ? "Без дела" : "Ishsiz"}</option>{cases.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label><button type="button" disabled={caseBusy || caseId === (analysis.caseId ?? "")} aria-busy={caseBusy} onClick={() => void saveCaseLink()}>{caseBusy ? <LoaderCircle className="spin" /> : <FileText />}{ru ? "Сохранить привязку" : "Bog‘lanishni saqlash"}</button><span role="status" aria-live="polite">{caseMessage}</span></div>
     {exportError && <p className="review-message error" role="alert"><CircleAlert />{exportError}</p>}
     {exportNotice && <p className="review-message success" role="status"><ShieldCheck />{exportNotice}</p>}
@@ -488,15 +525,17 @@ function packageConfidenceLabel(confidence: "high" | "medium" | "low", ru: boole
   return labels[confidence][ru ? 0 : 1];
 }
 
-function statusLabel(status: string, ru: boolean) {
+function statusLabel(status: string, ru: boolean, retryExhausted = false) {
   if (status === "completed") return ru ? "Анализ завершён" : "Tahlil yakunlandi";
-  if (status === "quarantined") return ru ? "В карантине" : "Karantinda";
+  if (retryExhausted) return ru ? "Требует повтора" : "Qayta ishga tushirish kerak";
   if (status === "uploaded") return ru ? "Проверка файла" : "Fayl tekshirilmoqda";
   if (status === "initiated") return ru ? "Ожидает загрузки" : "Yuklashni kutmoqda";
   if (status === "ready") return ru ? "Готов к анализу" : "Tahlilga tayyor";
   if (status === "processing") return ru ? "Анализируется" : "Tahlil qilinmoqda";
   if (status === "persisting") return ru ? "Сохраняет результат" : "Natija saqlanmoqda";
   if (status === "awaiting_ocr") return ru ? "Ожидает OCR" : "OCR kutilmoqda";
+  if (status === "ocr_processing") return ru ? "Распознаёт текст" : "Matn tanilmoqda";
+  if (status === "retrying") return ru ? "Повторяет анализ" : "Tahlil qayta urinmoqda";
   if (status === "awaiting_external_extraction") return ru ? "Ожидает безопасного извлечения" : "Xavfsiz ajratish kutilmoqda";
   if (status === "awaiting_chunked_analysis") return ru ? "Ожидает пакетного анализа" : "Bo‘lib tahlil qilish kutilmoqda";
   if (status === "awaiting_ai_configuration") return ru ? "Ожидает подключения AI" : "AI ulanishini kutmoqda";
@@ -504,7 +543,15 @@ function statusLabel(status: string, ru: boolean) {
   return ru ? "Файл сохранён" : "Fayl saqlandi";
 }
 
-function analysisState(status: string, errorCode: string | null, ru: boolean) {
+function analysisState(status: string, errorCode: string | null, retryExhausted: boolean, ru: boolean) {
+  if (retryExhausted) {
+    return {
+      heading: ru ? "Автоматические попытки остановлены" : "Avtomatik urinishlar to‘xtatildi",
+      message: ru
+        ? "Результат не создан после ограниченных повторов. Файл сохранён; сотрудник JURO может безопасно повторить задачу."
+        : "Cheklangan qayta urinishlardan keyin natija yaratilmagan. Fayl saqlangan; JURO xodimi vazifani xavfsiz qayta ishga tushirishi mumkin.",
+    };
+  }
   const pdfFailures: Record<string, [string, string, string, string]> = {
     OCR_PAGE_LIMIT_EXCEEDED: ["Слишком много страниц", "Sahifalar soni limitdan oshdi", "Документ или пакет содержит более 500 известных страниц. Файл не передан AI; разделите его на части.", "Hujjat yoki paketda 500 dan ortiq aniqlangan sahifa bor. Fayl AI ga yuborilmadi; uni qismlarga ajrating."],
     OCR_PDF_PASSWORD_PROTECTED: ["PDF защищён паролем", "PDF parol bilan himoyalangan", "Снимите пароль с копии документа и загрузите её повторно. JURO не пытался обойти защиту.", "Hujjat nusxasidan parolni olib tashlang va qayta yuklang. JURO himoyani chetlab o‘tishga urinmadi."],
@@ -515,6 +562,14 @@ function analysisState(status: string, errorCode: string | null, ru: boolean) {
   if (pdfFailure) {
     return { heading: ru ? pdfFailure[0] : pdfFailure[1], message: ru ? pdfFailure[2] : pdfFailure[3] };
   }
+  if (errorCode === "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED") {
+    return {
+      heading: ru ? "Документ превышает доступный лимит" : "Hujjat mavjud limitdan katta",
+      message: ru
+        ? "JURO не отправил файл в AI: для него ещё не подключён безопасный потоковый или пакетный обработчик. Разделите материал на меньшие части и загрузите их отдельно."
+        : "JURO faylni AI ga yubormadi: buning uchun xavfsiz oqimli yoki bo‘lib qayta ishlovchi hali ulanmagan. Materialni kichik qismlarga ajrating va ularni alohida yuklang.",
+    };
+  }
   if (errorCode === "DOCUMENT_ANALYSIS_PACKAGE_OCR_REQUIRED") {
     return {
       heading: ru ? "В пакете найден скан" : "Paketda skan topildi",
@@ -524,16 +579,17 @@ function analysisState(status: string, errorCode: string | null, ru: boolean) {
     };
   }
   const states: Record<string, [string, string, string, string]> = {
-    quarantined: ["Анализ не запущен", "Tahlil ishga tushirilmadi", "Файл помещён в карантин и не передан AI. JURO передаст его только после успешного сканирования вредоносного содержимого.", "Fayl karantinga joylandi va AI ga yuborilmadi. JURO uni faqat zararli tarkib muvaffaqiyatli skanerlangandan keyin yuboradi."],
     processing: ["Идёт анализ", "Tahlil ketmoqda", "JURO извлекает структуру документа и проверяет выводы. Можно покинуть страницу и вернуться позже.", "JURO hujjat tuzilishini ajratmoqda va xulosalarni tekshirmoqda. Sahifadan chiqib, keyin qaytish mumkin."],
     persisting: ["Результат сохраняется", "Natija saqlanmoqda", "Анализ завершён у провайдера; JURO атомарно сохраняет нормализованный результат.", "Provayder tahlilni yakunladi; JURO normallashtirilgan natijani atomar saqlamoqda."],
     awaiting_ocr: ["Идёт подготовка OCR", "OCR tayyorlanmoqda", "Текст не извлечён напрямую. Файл поставлен в защищённую очередь распознавания; юридический AI получит только проверенный результат.", "Matn to‘g‘ridan-to‘g‘ri ajratilmadi. Fayl himoyalangan OCR navbatiga qo‘yildi; yuridik AI faqat tekshirilgan natijani oladi."],
+    ocr_processing: ["Распознаём текст", "Matn tanilmoqda", "JURO распознаёт страницы документа в защищённом процессе. Юридический AI получит только проверенный текст.", "JURO hujjat sahifalarini himoyalangan jarayonda tanimoqda. Yuridik AI faqat tekshirilgan matnni oladi."],
+    retrying: ["Повторяем анализ", "Tahlil qayta urinmoqda", "Временная ошибка не создала результат. JURO выполняет ограниченный безопасный повтор в фоне; можно вернуться позже.", "Vaqtinchalik xato natija yaratmadi. JURO fonda cheklangan xavfsiz qayta urinishni bajarmoqda; keyinroq qaytishingiz mumkin."],
     awaiting_external_extraction: ["Нужен безопасный обработчик", "Xavfsiz qayta ishlovchi kerak", "Файл превышает лимит встроенного извлечения и не отправлен AI. Требуется потоковый обработчик.", "Fayl ichki ajratish limitidan katta va AI ga yuborilmadi. Oqimli qayta ishlovchi kerak."],
     awaiting_chunked_analysis: ["Нужен пакетный анализ", "Bo‘lib tahlil qilish kerak", "Извлечённый текст превышает безопасный контекст одного запроса. JURO ожидает разбивку с итоговой проверкой.", "Ajratilgan matn bitta so‘rov uchun xavfsiz kontekstdan katta. JURO bo‘lib tahlil qilishni kutmoqda."],
     awaiting_ai_configuration: ["AI пока не подключён", "AI hali ulanmagan", "Безопасно извлечённый документ сохранён, но не отправлен провайдеру: server-side AI secret не настроен.", "Xavfsiz ajratilgan hujjat saqlandi, ammo provayderga yuborilmadi: server-side AI siri sozlanmagan."],
     failed: ["Обработка остановлена", "Qayta ishlash to‘xtadi", "Результат не создан. JURO сохранил диагностический код без содержимого документа; задачу можно безопасно повторить.", "Natija yaratilmadi. JURO hujjat matnisiz diagnostika kodini saqladi; vazifani xavfsiz qayta boshlash mumkin."],
   };
-  const fallback: [string, string, string, string] = ["Проверка ещё не завершена", "Tekshiruv hali tugamadi", "Файл ещё не прошёл обязательные этапы безопасности и не передан AI.", "Fayl majburiy xavfsizlik bosqichlaridan hali o‘tmadi va AI ga yuborilmadi."];
+  const fallback: [string, string, string, string] = ["Подготовка анализа", "Tahlil tayyorlanmoqda", "Файл готовится к анализу. Можно покинуть страницу и вернуться позже.", "Fayl tahlilga tayyorlanmoqda. Sahifadan chiqib, keyinroq qaytishingiz mumkin."];
   const [headingRu, headingUz, messageRu, messageUz] = states[status] ?? fallback;
   return { heading: ru ? headingRu : headingUz, message: ru ? messageRu : messageUz };
 }

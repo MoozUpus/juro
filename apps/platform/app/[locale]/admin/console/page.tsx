@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 
 import { AdminConsoleLaunch } from "../../../_staff/AdminConsoleLaunch";
+import { AdminConsoleAccess } from "../../../_staff/AdminConsoleAccess";
 import { localSessionForRequest } from "../../../../lib/auth/mfa-http";
 import { requirePlatformStaffAccess } from "../../../../lib/auth/staff-access";
 import { runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
@@ -25,7 +26,10 @@ export default async function AdminConsolePage({ params }: { params: Promise<{ l
       freshMfaWithinMs: 15 * 60 * 1_000,
     });
   } catch {
-    notFound();
+    return <AdminConsoleAccess
+      locale={locale}
+      environment={runtime.APP_ENV === "production" ? "production" : "staging"}
+    />;
   }
   return <AdminConsoleLaunch
     locale={locale}

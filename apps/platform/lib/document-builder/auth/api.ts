@@ -11,13 +11,13 @@ export {
   assertSafeWrite,
 } from "../../auth/safe-write";
 
-export async function optionalApiUser(): Promise<UserProfile | null> {
-  const user = await getChatGPTUser();
+export async function optionalApiUser(request?: Request): Promise<UserProfile | null> {
+  const user = await getChatGPTUser(request);
   return user ? getOrCreateUserProfile(user) : null;
 }
 
-export async function requireApiUser(): Promise<UserProfile> {
-  const profile = await optionalApiUser();
+export async function requireApiUser(request?: Request): Promise<UserProfile> {
+  const profile = await optionalApiUser(request);
   if (!profile) throw new ApiAuthError();
   return profile;
 }

@@ -67,13 +67,13 @@ const reviewStatusSchema = z.enum([
   "closed",
 ]);
 const reviewConfidenceSchema = z.enum(["high", "medium", "low"]);
-const reviewSourceKindSchema = z.enum(["lex", "advice"]);
+const reviewSourceKindSchema = z.literal("lex");
 const reviewLocaleSchema = z.enum(["ru", "uz"]);
 export const legalSourceReviewListInputSchema = z.object({
   status: reviewStatusSchema.default("pending"),
   scope: z.enum(["workable", "mine", "unassigned", "all"])
     .default("workable"),
-  sourceKind: z.enum(["all", "lex", "advice"]).default("all"),
+  sourceKind: z.enum(["all", "lex"]).default("all"),
   language: z.enum(["all", "ru", "uz"]).default("all"),
   limit: z.coerce.number().int().min(1).max(50).default(25),
   cursor: z.string().min(1).max(512).optional(),
@@ -100,7 +100,7 @@ export const legalSourceDecisionEvidenceSchema = z.object({
   reviewId: identifierSchema,
   sourceId: identifierSchema,
   versionId: identifierSchema,
-  sourceKind: z.enum(["lex", "advice"]),
+  sourceKind: z.literal("lex"),
   locale: z.enum(["ru", "uz"]),
   canonicalId: z.string().min(1).max(256),
   canonicalUrl: z.string().url().max(2_048),
@@ -200,7 +200,7 @@ export type LegalSourceReviewListItem = {
   decidedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  sourceKind: "lex" | "advice";
+  sourceKind: "lex";
   language: "ru" | "uz";
   officialUrl: string;
   title: string;
@@ -258,7 +258,7 @@ export async function listLegalSourceReviews(
   const access = await reviewerAccess(env.DB, session, now);
   const input = legalSourceReviewListInputSchema.parse(inputValue);
   const cursor = decodeReviewCursor(input.cursor);
-  const clauses = ["review.status = ?"];
+  const clauses = ["review.status = ?", "source.source_type = 'lex'"];
   const bindings: Array<string | number> = [input.status];
 
   if (input.scope === "workable") {

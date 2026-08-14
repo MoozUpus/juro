@@ -2,7 +2,10 @@ import {
   enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../lib/ai/legal-chat-schema";
+import { createUnavailableVerifiedSourceClarification } from "../lib/ai/fast-clarification";
 import { aiProviderStatus, legalAiProvider } from "../lib/ai/provider";
+import { retrieveInteractiveVerifiedLegalSources } from "../lib/legal/interactive-verified-retrieval";
+import { listUserMemories, memoryKeyring, UserMemoryError } from "../lib/ai/user-memory";
 import {
   beginAiRunFinalization,
   completeAiRunStatements,
@@ -10,13 +13,19 @@ import {
   reserveAiRun,
   sha256Json,
 } from "../lib/ai/run-store";
+import {
+  createAiExecutionBudget,
+  type AiExecutionBudget,
+} from "../lib/ai/execution-budget";
 import { isoNow } from "../lib/document-builder/storage/db";
 import type { PlatformJobEnv } from "./platform-jobs";
 
-const PROBE_VERSION = "v26";
-const LOCALES = ["ru", "uz"] as const;
+const PROBE_VERSION = "v27";
+export const STAGING_AI_CHAT_PROBE_EXECUTION_BUDGET_MS = 30_000;
+const STAGING_AI_CHAT_PROBE_PROVIDER_TIMEOUT_MS = 25_500;
+const STAGING_AI_CHAT_PROBE_POST_PROVIDER_RESERVE_MS = 2_000;
 
-type ProbeLocale = (typeof LOCALES)[number];
+export type ProbeLocale = "ru" | "uz";
 
 type SyntheticIds = {
   userId: string;
@@ -40,6 +49,22 @@ type ScenarioEvidence = {
   cachedInputTokens: number;
   latencyMs: number;
   attempts: number;
+  providerTtftMs: number | null;
+  firstUsefulStage: "preliminary";
+  firstUsefulLatencyMs: number;
+  validationLatencyMs: number;
+  persistenceLatencyMs: number;
+};
+
+export type StagingAiChatLifecycleProbeOptions = {
+  /** Opaque UUID shared with the rolling provider-probe execution. */
+  executionId?: string;
+  /** Deterministically selects RU or UZ from the opaque execution ID when omitted. */
+  locale?: ProbeLocale;
+  /** One absolute deadline shared with the sibling Anthropic probe. */
+  budget?: AiExecutionBudget;
+  /** Content-free callbacks used only for SLO telemetry. */
+  onProviderPrepared?: (input: { model: string }) => void | Promise<void>;
 };
 
 export class StagingAiChatLifecycleProbeError extends Error {
@@ -59,8 +84,25 @@ export function stagingAiChatLifecycleProbeEnabled(
     && (env as Record<string, unknown>).STAGING_SYNTHETIC_PROBES_ENABLED === "true";
 }
 
-export function stagingAiChatSyntheticIds(locale: ProbeLocale): SyntheticIds {
-  const prefix = `staging-ai-chat-${PROBE_VERSION}-${locale}`;
+function normalizedExecutionId(value: string): string {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
+    throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_EXECUTION_ID_INVALID");
+  }
+  return value.toLowerCase();
+}
+
+/** Deterministically rotates locale coverage without persisting a user-like counter. */
+export function stagingAiChatProbeLocaleForExecution(executionId: string): ProbeLocale {
+  const normalized = normalizedExecutionId(executionId).replaceAll("-", "");
+  const lastNibble = Number.parseInt(normalized.at(-1) ?? "0", 16);
+  return lastNibble % 2 === 0 ? "ru" : "uz";
+}
+
+export function stagingAiChatSyntheticIds(
+  locale: ProbeLocale,
+  executionId = "legacy",
+): SyntheticIds {
+  const prefix = `staging-ai-chat-${PROBE_VERSION}-${locale}-${executionId}`;
   const userId = `${prefix}-user`;
   const workspaceId = `${prefix}-workspace`;
   const idempotencyKey = `${prefix}-request`;
@@ -81,6 +123,7 @@ export function stagingAiChatSyntheticIds(locale: ProbeLocale): SyntheticIds {
 
 async function cleanupSyntheticScenario(db: D1Database, ids: SyntheticIds): Promise<void> {
   await db.batch([
+    db.prepare("DELETE FROM confirmed_facts WHERE conversation_id=?").bind(ids.conversationId),
     db.prepare("DELETE FROM ai_usage_ledger WHERE workspace_id=? AND user_id=?").bind(ids.workspaceId, ids.userId),
     db.prepare("DELETE FROM ai_runs WHERE workspace_id=? AND user_id=?").bind(ids.workspaceId, ids.userId),
     db.prepare("DELETE FROM idempotency_keys WHERE key=? AND scope=?").bind(
@@ -112,12 +155,14 @@ async function assertSyntheticScenarioRemoved(db: D1Database, ids: SyntheticIds)
       (SELECT count(*) FROM user_profiles WHERE id=?) +
       (SELECT count(*) FROM workspaces WHERE id=?) +
       (SELECT count(*) FROM conversations WHERE id=?) +
+      (SELECT count(*) FROM confirmed_facts WHERE conversation_id=?) +
       (SELECT count(*) FROM ai_runs WHERE workspace_id=? AND user_id=?) +
       (SELECT count(*) FROM ai_usage_ledger WHERE workspace_id=? AND user_id=?) +
       (SELECT count(*) FROM idempotency_keys WHERE key=?) AS remaining
   `).bind(
     ids.userId,
     ids.workspaceId,
+    ids.conversationId,
     ids.conversationId,
     ids.workspaceId,
     ids.userId,
@@ -165,16 +210,39 @@ async function prepareSyntheticScenario(
   ]);
 }
 
-function question(locale: ProbeLocale): string {
-  return locale === "ru"
-    ? "Синтетическая staging-проверка: данных недостаточно, задайте один уточняющий вопрос о дате события."
-    : "Sintetik staging tekshiruvi: ma’lumot yetarli emas, voqea sanasi haqida bitta aniqlashtiruvchi savol bering.";
+function noSourceProbeMarker(executionId: string): string {
+  return `juro_staging_no_source_${executionId.replaceAll("-", "")}`;
 }
 
-async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<ScenarioEvidence> {
-  const ids = stagingAiChatSyntheticIds(locale);
+function question(locale: ProbeLocale, opaqueNoSourceMarker: string): string {
+  return locale === "ru"
+    ? `Синтетическая staging-проверка ${opaqueNoSourceMarker}: данных недостаточно, задайте один уточняющий вопрос о дате события.`
+    : `Sintetik staging tekshiruvi ${opaqueNoSourceMarker}: ma’lumot yetarli emas, voqea sanasi haqida bitta aniqlashtiruvchi savol bering.`;
+}
+
+type RunScenarioOptions = Required<Pick<StagingAiChatLifecycleProbeOptions, "executionId" | "budget">> & {
+  signal: AbortSignal;
+  onProviderPrepared?: StagingAiChatLifecycleProbeOptions["onProviderPrepared"];
+};
+
+function interactiveProviderTimeoutMs(budget: AiExecutionBudget): number {
+  const remaining = budget.remainingMs - STAGING_AI_CHAT_PROBE_POST_PROVIDER_RESERVE_MS;
+  if (budget.signal.aborted || remaining < 1) {
+    throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_BUDGET_EXHAUSTED");
+  }
+  return Math.min(STAGING_AI_CHAT_PROBE_PROVIDER_TIMEOUT_MS, remaining);
+}
+
+async function runScenario(
+  env: PlatformJobEnv,
+  locale: ProbeLocale,
+  options: RunScenarioOptions,
+): Promise<ScenarioEvidence> {
+  const ids = stagingAiChatSyntheticIds(locale, options.executionId);
+  const scenarioStartedAt = Date.now();
   const now = isoNow();
   let scenarioError: unknown;
+  let providerTtftMs: number | null = null;
   try {
     await prepareSyntheticScenario(env.DB, ids, locale, now);
     const providerStatus = aiProviderStatus();
@@ -183,8 +251,76 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
       throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_OPENAI_NOT_CONFIGURED");
     }
 
-    const prompt = question(locale);
-    const legalDatabaseAsOf = "unavailable";
+    const opaqueNoSourceMarker = noSourceProbeMarker(options.executionId);
+    const prompt = question(locale, opaqueNoSourceMarker);
+    // Match the interactive route's independent preflight reads. An empty
+    // synthetic memory set is still read through the normal encrypted path;
+    // an unavailable keyring degrades exactly as it does for a user request.
+    const memoryStage = options.budget.beginStage("probe.memory_context", { timeoutMs: 1_250 });
+    const retrievalStage = options.budget.beginStage("probe.verified_retrieval", { timeoutMs: 2_250 });
+    const memoryContext = (async () => {
+      try {
+        const keyring = memoryKeyring(env.IDENTITY_KEYRING);
+        const memories = await listUserMemories({
+          db: env.DB,
+          keyring,
+          userId: ids.userId,
+          workspaceId: ids.workspaceId,
+        });
+        memoryStage.complete();
+        return memories.slice(0, 20);
+      } catch (error) {
+        memoryStage.fail();
+        if (!(error instanceof UserMemoryError)) throw error;
+        return [];
+      }
+    })();
+    const sourceRetrieval = (async () => {
+      try {
+        const result = await retrieveInteractiveVerifiedLegalSources({
+          db: env.DB,
+          query: opaqueNoSourceMarker,
+          locale,
+          signal: retrievalStage.signal,
+          limit: 2,
+        });
+        retrievalStage.complete();
+        return result;
+      } catch (error) {
+        retrievalStage.fail();
+        throw error;
+      }
+    })();
+    const [memories, retrieval] = await Promise.all([memoryContext, sourceRetrieval]);
+    // This is intentionally a no-source lifecycle: the opaque marker makes a
+    // source match unexpected. Fail closed rather than silently measuring a
+    // generic clarification for a request which actually had source context.
+    if (retrieval.sources.length !== 0 || retrieval.sourceValidationStatus !== "unavailable") {
+      throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_PROBE_SOURCE_EXPECTED_EMPTY");
+    }
+    const legalDatabaseAsOf = retrieval.legalDatabaseAsOf;
+    // The production route emits the same server-owned clarification after a
+    // bounded verified-source lookup finds no usable official excerpt. It is
+    // strict-schema parsed and source-bound here too, so the probe measures a
+    // genuine first useful message rather than a provider delta or terminal
+    // completion timestamp. The real OpenAI call still follows and proves the
+    // full lifecycle independently. This remains a `staging_synthetic_probe`;
+    // only authenticated/guest `legal_chat` telemetry can establish the user
+    // SLO, because this fixture intentionally has no browser auth overhead.
+    const preliminary = createUnavailableVerifiedSourceClarification({
+      locale,
+      answerMode: "short",
+      reasoningMode: "fast",
+      legalDatabaseAsOf,
+    });
+    if (
+      preliminary.responseKind !== "clarification_required"
+      || preliminary.sources.length !== 0
+      || preliminary.confirmedFindings.length !== 0
+    ) {
+      throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_PRELIMINARY_BOUNDARY_FAILED");
+    }
+    const firstUsefulLatencyMs = Math.max(0, Date.now() - scenarioStartedAt);
     const requestHash = await sha256Json({
       prompt,
       locale,
@@ -229,6 +365,29 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
         legalDatabaseAsOf,
         requestId: reservation.correlationId,
         safetyIdentifier: await sha256Json({ scope: "staging-ai-chat-probe", userId: ids.userId }),
+        memories: memories.map((memory) => ({
+          category: memory.category,
+          statement: memory.statement,
+          scope: memory.scope,
+        })),
+      }, {
+        budget: options.budget,
+        signal: options.signal,
+        providerTimeoutMs: interactiveProviderTimeoutMs(options.budget),
+        onProgress: () => undefined,
+        onFirstProviderContent: ({ provider: progressProvider, elapsedMs }) => {
+          // This observer fires only for OpenAI's first real stream delta. It
+          // never includes the delta itself and is not a validated answer.
+          if (progressProvider === "openai" && providerTtftMs === null) {
+            providerTtftMs = elapsedMs;
+          }
+        },
+        beforeProviderCall: async ({ provider: preparedProvider, model }) => {
+          if (preparedProvider !== "openai") {
+            throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_PRIMARY_PROVIDER_FAILED");
+          }
+          await options.onProviderPrepared?.({ model });
+        },
       });
     } catch (error) {
       await failAiRun({
@@ -245,6 +404,7 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
     if (aiResult.provider !== "openai" || aiResult.fallbackFromProvider !== null) {
       throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_PRIMARY_PROVIDER_FAILED");
     }
+    const validationStartedAt = Date.now();
     const result = enforceLegalChatSourceBoundary(parseLegalChatResponse(aiResult.data), new Set());
     if (
       result.responseKind !== "clarification_required"
@@ -254,6 +414,9 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
     ) {
       throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_RESPONSE_BOUNDARY_FAILED");
     }
+    // A provider delta is deliberately not considered useful: only this
+    // validated, source-boundary-checked result qualifies for the probe SLO.
+    const validationLatencyMs = Math.max(0, Date.now() - validationStartedAt);
     if (!await beginAiRunFinalization({
       db: env.DB,
       runId: reservation.runId,
@@ -268,6 +431,7 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
       id: `${ids.conversationId}-fact-${index}`,
       statement: assumption.statement,
     }));
+    const persistenceStartedAt = Date.now();
     await env.DB.batch([
       env.DB.prepare(`
         INSERT INTO conversations (
@@ -349,6 +513,7 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
         chargeable: false,
       }),
     ]);
+    const persistenceLatencyMs = Math.max(0, Date.now() - persistenceStartedAt);
 
     const evidence = await env.DB.prepare(`
       SELECT r.status AS runStatus,r.provider,r.model,r.error_code AS errorCode,
@@ -399,6 +564,11 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
       cachedInputTokens: aiResult.usage.cachedInputTokens,
       latencyMs: aiResult.latencyMs,
       attempts: aiResult.attempts,
+      providerTtftMs,
+      firstUsefulStage: "preliminary",
+      firstUsefulLatencyMs,
+      validationLatencyMs,
+      persistenceLatencyMs,
     };
   } catch (error) {
     scenarioError = error;
@@ -421,34 +591,64 @@ async function runScenario(env: PlatformJobEnv, locale: ProbeLocale): Promise<Sc
 }
 
 /**
- * Runs two fixed no-source legal-chat lifecycles against real staging
- * providers and D1, then removes every synthetic tenant/content row. The only
- * persistent evidence is the bounded technical row managed by the provider
- * probe table. This function has no HTTP entry point and is impossible outside
- * explicitly enabled staging.
+ * Runs one no-source legal-chat lifecycle against the real staging OpenAI
+ * provider and D1, then removes every synthetic tenant/content row. Locale is
+ * rotated deterministically from the opaque execution ID, so repeated probes
+ * cover RU and UZ without retaining a user-like counter. This function has no
+ * HTTP entry point and is impossible outside explicitly enabled staging.
  */
-export async function runStagingAiChatLifecycleProbe(env: PlatformJobEnv) {
+export async function runStagingAiChatLifecycleProbe(
+  env: PlatformJobEnv,
+  options: StagingAiChatLifecycleProbeOptions = {},
+) {
   if (!stagingAiChatLifecycleProbeEnabled(env)) {
     throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_PROBE_DISABLED");
   }
-  const scenarios: ScenarioEvidence[] = [];
-  for (const locale of LOCALES) scenarios.push(await runScenario(env, locale));
-  const model = scenarios[0]?.model;
-  if (!model || scenarios.some((scenario) => scenario.model !== model)) {
-    throw new StagingAiChatLifecycleProbeError("STAGING_AI_CHAT_MODEL_MISMATCH");
+  const ownsBudget = !options.budget;
+  const budget = options.budget ?? createAiExecutionBudget({
+    totalBudgetMs: STAGING_AI_CHAT_PROBE_EXECUTION_BUDGET_MS,
+  });
+  const executionId = normalizedExecutionId(options.executionId ?? crypto.randomUUID());
+  const locale = options.locale ?? stagingAiChatProbeLocaleForExecution(executionId);
+  const stage = budget.beginStage("probe.openai.lifecycle", {
+    // Reserve a final sliver of the shared 30 second execution for durable
+    // probe/SLO bookkeeping after provider output is validated.
+    timeoutMs: Math.max(1, Math.min(27_000, budget.remainingMs)),
+  });
+  try {
+    const scenario = await runScenario(env, locale, {
+      executionId,
+      budget,
+      signal: stage.signal,
+      onProviderPrepared: options.onProviderPrepared,
+    });
+    stage.complete();
+    return {
+      data: { locales: [locale], lifecycle: "verified" as const },
+      provider: "openai" as const,
+      model: scenario.model,
+      // Provider response IDs are not needed for rolling health/SLO evidence.
+      providerResponseId: null,
+      attempts: scenario.attempts,
+      latencyMs: scenario.latencyMs,
+      usage: {
+        inputTokens: scenario.inputTokens,
+        outputTokens: scenario.outputTokens,
+        cachedInputTokens: scenario.cachedInputTokens,
+      },
+      timing: {
+        providerTtftMs: scenario.providerTtftMs,
+        firstUsefulStage: scenario.firstUsefulStage,
+        firstUsefulLatencyMs: scenario.firstUsefulLatencyMs,
+        validationLatencyMs: scenario.validationLatencyMs,
+        persistenceLatencyMs: scenario.persistenceLatencyMs,
+      },
+      fallbackFromProvider: null,
+    };
+  } catch (error) {
+    stage.fail();
+    throw error;
+  } finally {
+    if (ownsBudget) budget.dispose();
   }
-  return {
-    data: { locales: [...LOCALES], lifecycle: "verified" as const },
-    provider: "openai" as const,
-    model,
-    providerResponseId: null,
-    attempts: scenarios.reduce((total, scenario) => total + scenario.attempts, 0),
-    latencyMs: scenarios.reduce((total, scenario) => total + scenario.latencyMs, 0),
-    usage: {
-      inputTokens: scenarios.reduce((total, scenario) => total + scenario.inputTokens, 0),
-      outputTokens: scenarios.reduce((total, scenario) => total + scenario.outputTokens, 0),
-      cachedInputTokens: scenarios.reduce((total, scenario) => total + scenario.cachedInputTokens, 0),
-    },
-    fallbackFromProvider: null,
-  };
 }

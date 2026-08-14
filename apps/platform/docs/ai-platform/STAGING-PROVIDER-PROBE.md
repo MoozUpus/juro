@@ -1,28 +1,61 @@
 # Staging provider connectivity probe
 
-This controlled Phase 9 diagnostic is intentionally narrow. It performs one
-real structured-output request to each configured provider only when both
-conditions are true:
+Status: **deployed to staging on 2026-08-12; health/SLO certification remains
+open.**
+
+The rolling probe is enabled only in staging Worker version
+`f79f560a-bc9d-449f-aa7c-a421e2af2d9e` (which supersedes
+`d11cd7cd-022c-4501-84ed-ed73befa3959`); production was not changed. The
+latest OpenAI result recorded a `3063 ms` first useful server event and
+`4510 ms` end to end. The post-deploy Anthropic result completed with a
+`6301 ms` provider stage and `6448 ms` end to end, and its dependency-health
+evidence is operational. Earlier Anthropic `PROVIDER_TIMEOUT` results at about
+five seconds remain historical evidence but are superseded for the current
+health projection. The configured minimum sample count of 20 has not been
+reached, so none of these individual observations is p50/p95 evidence.
+
+The rolling diagnostic runs only when both conditions are true:
 
 - `APP_ENV=staging`;
 - `STAGING_SYNTHETIC_PROBES_ENABLED=true`.
 
-The feature flag is checked before the dynamic provider import. The probe has
-no HTTP route, has no user trigger, does not touch production, and is inert in
-development and production.
+It is checked before dynamic provider import, has no HTTP endpoint, does not
+accept a user trigger, and is inert in development and production. The
+five-minute scheduler creates a new opaque execution ID, rotates RU/UZ coverage
+and runs the OpenAI lifecycle probe alongside the configured Anthropic probe
+under one shared 30-second deadline. The lifecycle path cleans up every
+synthetic tenant/content row after completion.
 
-Each release of a probe has an immutable logical key. Initial provider evidence
-used `staging-provider-connectivity-v1`; after the owner rotated the staging
-Anthropic credential, Anthropic-only verification uses
-`staging-anthropic-connectivity-v4`. The unique D1 index means a completed or
-failed attempt under either key is never automatically retried. The fixed input
-contains no legal question, document, account identifier, or other user
-content. D1 retains only provider/model, provider response identifier, token
-totals, latency, terminal state, and a safe error code; it retains neither
-request nor response text.
+Only technical metadata is retained: provider/model, terminal state, safe error
+code, bounded timing/usage and append-only SLO evidence. It never stores a
+prompt, answer, document, URL, account identifier, provider body or secret.
+If technical SLO persistence fails, the provider probe is downgraded to failed
+instead of producing a green result. Rolling v27 technical rows are bounded by
+their documented retention; the append-only SLO ledger is not pruned by that
+cleanup.
 
-Migration `0048_staging_provider_probe.sql` is additive. Routine rollback is
-application-first: deploy the prior Worker or restore
-`STAGING_SYNTHETIC_PROBES_ENABLED=false`; the diagnostic table then remains
-unused. A D1 Time Travel bookmark and checksum-verified private-R2 export are
-required before applying the migration.
+`MALWARE_SCANNER_PROBE_ENABLED` and
+`STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED` are independent staging-only feature
+  flags. Both remain disabled by default after each bounded staging evidence
+  window; production also keeps both literal values at `false`. They run
+only after the regular outbox work,
+use a deterministic non-user tenant and private R2 objects, and remove the
+synthetic document/object projections when the check ends. The scanner probe
+uses EICAR only; the document probe uses a synthetic DOCX and the normal
+scanner → analysis handlers. A failed scanner or analysis remains fail-closed
+and records degraded evidence rather than a false operational state.
+
+The document probe makes at most one bounded live provider attempt for each
+explicit `staging-document-analysis-vN-YYYYMMDD` UTC execution key. A durable
+`scheduled_runs` claim is created before any scanner, R2 or provider side
+effect, so repeated five-minute cron invocations cannot create repeated
+synthetic analyses. A failed or interrupted claim remains blocked rather than
+being retried automatically; a same-window retry requires a deliberate probe
+version change or an operator reset after inspecting the terminal record and
+synthetic-resource cleanup. It is therefore a staging validation control, not
+a production health claim. Roll back either control by setting the
+corresponding staging flag to `false` or restoring the prior staging Worker;
+production remains inert even if a flag value were misconfigured because the
+runtime additionally requires `APP_ENV=staging`. Leave additive D1 evidence
+intact. A private backup and isolated restore are required before any new
+migrations are applied. See [AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).

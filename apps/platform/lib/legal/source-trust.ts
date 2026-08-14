@@ -1,11 +1,9 @@
-const TRUSTED_LEGAL_SOURCE_HOSTS: Readonly<Record<string, "lex" | "advice">> = {
+const TRUSTED_LEGAL_SOURCE_HOSTS: Readonly<Record<string, "lex">> = {
   "lex.uz": "lex",
   "www.lex.uz": "lex",
-  "advice.uz": "advice",
-  "www.advice.uz": "advice",
 };
 
-export type TrustedLegalSourceKind = "lex" | "advice";
+export type TrustedLegalSourceKind = "lex";
 
 export type LegalSourceIdentity = {
   officialUrl: string;
@@ -57,4 +55,16 @@ export function filterTrustedVerifiedLegalSources<
   Source extends LegalSourceIdentity,
 >(sources: readonly Source[]): Source[] {
   return sources.filter(isTrustedVerifiedLegalSource);
+}
+
+/** User-facing legal monitoring is restricted to official Lex.uz records. */
+export function isVerifiedLexSource(source: LegalSourceIdentity): boolean {
+  return isTrustedVerifiedLegalSource(source)
+    && trustedLegalSourceKind(source.officialUrl) === "lex";
+}
+
+export function filterVerifiedLexSources<Source extends LegalSourceIdentity>(
+  sources: readonly Source[],
+): Source[] {
+  return sources.filter(isVerifiedLexSource);
 }

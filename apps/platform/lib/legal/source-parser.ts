@@ -1,4 +1,11 @@
 import { parse, type DefaultTreeAdapterTypes } from "parse5";
+
+/**
+ * Article-level structural extraction adapts a concept from
+ * toxirerkinov70-commits/huquq-ai@1bce500c69b8213373d8ce0b40d56be7d83f6aec.
+ * MIT License, Copyright (c) 2026 Toxir Erkinov. JURO parses live Lex HTML
+ * only in request memory and never writes HTML, Markdown or article chunks.
+ */
 import { z } from "zod";
 import type {
   LegalSourceKind,
@@ -34,6 +41,13 @@ const normalizedBlockSchema = z.object({
     "preformatted",
   ]),
   headingLevel: z.number().int().min(1).max(6).optional(),
+  semanticRole: z.enum([
+    "revision",
+    "section",
+    "chapter",
+    "article",
+    "paragraph",
+  ]).optional(),
   text: z.string().min(1).max(100_000),
 }).strict();
 
@@ -55,12 +69,13 @@ export const normalizedLegalSourceSnapshotSchema = z.object({
     "main",
     "article",
     "role-main",
+    "lex-document",
     "advice-document",
     "lex-pdf",
   ]),
   documentTitle: z.string().min(1).max(2_000),
-  blocks: z.array(normalizedBlockSchema).min(1).max(5_000),
-  plainText: z.string().min(200).max(1_000_000),
+  blocks: z.array(normalizedBlockSchema).min(1).max(8_000),
+  plainText: z.string().min(200).max(3_000_000),
 }).strict();
 
 export type NormalizedLegalSourceSnapshot = z.infer<
@@ -90,9 +105,20 @@ const SKIPPED_TAGS = new Set([
   "template",
 ]);
 const NESTED_LIST_TAGS = new Set(["ol", "ul"]);
+const LEX_UI_NOISE_PATTERNS = [
+  /Предложения по документу/giu,
+  /Прослушать аудио/giu,
+  /Получить ссылку(?:\s+(?:на|из)\s+элемент(?:а)?\s+документа)?/giu,
+  /Hujjatga taklif yuborish/giu,
+  /Audioni tinglash/giu,
+  /Hujjat elementidan havola olish/giu,
+] as const;
+const LEX_UI_CLASS_PATTERN = /(?:^|[-_])(?:audio|button|comment|control|footer|menu|navigation|proposal|share|toolbar)(?:$|[-_])/iu;
 const MAX_NODES = 50_000;
-const MAX_BLOCKS = 5_000;
-const MAX_PLAIN_TEXT = 1_000_000;
+// The current Tax Code contains about 6.8k semantic Lex elements. Keep a hard
+// ceiling while allowing that official document to be queried live.
+const MAX_BLOCKS = 8_000;
+const MAX_PLAIN_TEXT = 3_000_000;
 
 function isElement(node: Node): node is Element {
   return "tagName" in node;
@@ -123,6 +149,13 @@ function isHidden(element: Element): boolean {
     .test(style);
 }
 
+function isUiElement(element: Element): boolean {
+  if (SKIPPED_TAGS.has(element.tagName) || isHidden(element)) return true;
+  if (attribute(element, "role")?.toLowerCase() === "button") return true;
+  if (attribute(element, "aria-label") && element.tagName !== "main") return true;
+  return [...classTokens(element)].some((token) => LEX_UI_CLASS_PATTERN.test(token));
+}
+
 function normalizeText(value: string): string {
   return value
     .replaceAll("\u00a0", " ")
@@ -133,6 +166,21 @@ function normalizeText(value: string): string {
     .trim();
 }
 
+export function removeLegalSourceUiNoise(value: string): string {
+  return normalizeText(LEX_UI_NOISE_PATTERNS.reduce(
+    (result, pattern) => result.replace(pattern, "\n"),
+    `\n${value}\n`,
+  ));
+}
+
+export function containsLegalSourceUiNoise(value: string): boolean {
+  const normalized = normalizeText(value);
+  return LEX_UI_NOISE_PATTERNS.some((pattern) => {
+    pattern.lastIndex = 0;
+    return pattern.test(normalized);
+  });
+}
+
 function collectText(
   node: Node,
   options: { excludeNestedLists?: boolean } = {},
@@ -140,7 +188,7 @@ function collectText(
   if (isTextNode(node)) return node.value;
   if (!isElement(node) && !("childNodes" in node)) return "";
   if (isElement(node)) {
-    if (SKIPPED_TAGS.has(node.tagName) || isHidden(node)) return "";
+    if (isUiElement(node)) return "";
     if (options.excludeNestedLists && NESTED_LIST_TAGS.has(node.tagName)) {
       return "";
     }
@@ -167,14 +215,45 @@ function walkElements(
   }
 }
 
+function findFirstElement(
+  root: ParentNode,
+  predicate: (element: Element) => boolean,
+  counter: { value: number } = { value: 0 },
+): Element | null {
+  for (const child of root.childNodes) {
+    counter.value += 1;
+    if (counter.value > MAX_NODES) {
+      throw new LegalSourceParserError("LEGAL_SOURCE_PARSE_TOO_COMPLEX");
+    }
+    if (!isElement(child)) continue;
+    if (predicate(child)) return child;
+    if (!SKIPPED_TAGS.has(child.tagName) && !isHidden(child)) {
+      const nested = findFirstElement(child, predicate, counter);
+      if (nested) return nested;
+    }
+  }
+  return null;
+}
+
 function candidates(
   document: DefaultTreeAdapterTypes.Document,
   sourceKind: LegalSourceKind,
 ): {
-  selector: "main" | "article" | "role-main" | "advice-document";
+  selector: "main" | "article" | "role-main" | "lex-document" | "advice-document";
   elements: Element[];
 } {
+  if (sourceKind === "lex") {
+    // Current Lex pages expose their official body as #divCont/#divBody.
+    // Stop at that root instead of walking a multi-megabyte code to the end
+    // merely to discover the primary container.
+    const lexDocument = findFirstElement(document, (element) => {
+      const id = attribute(element, "id");
+      return id === "divCont" || id === "divBody";
+    });
+    if (lexDocument) return { selector: "lex-document", elements: [lexDocument] };
+  }
   const adviceDocuments: Element[] = [];
+  const lexDocuments: Element[] = [];
   const mains: Element[] = [];
   const articles: Element[] = [];
   const roleMains: Element[] = [];
@@ -182,6 +261,8 @@ function candidates(
     if (classTokens(element).has("page-document-content")) {
       adviceDocuments.push(element);
     }
+    const id = attribute(element, "id");
+    if (id === "divCont" || id === "divBody") lexDocuments.push(element);
     if (element.tagName === "main") mains.push(element);
     if (element.tagName === "article") articles.push(element);
     if (attribute(element, "role")?.toLowerCase() === "main") {
@@ -191,6 +272,7 @@ function candidates(
   if (sourceKind === "advice") {
     return { selector: "advice-document", elements: adviceDocuments };
   }
+  if (lexDocuments.length > 0) return { selector: "lex-document", elements: lexDocuments };
   if (mains.length > 0) return { selector: "main", elements: mains };
   if (articles.length > 0) return { selector: "article", elements: articles };
   return { selector: "role-main", elements: roleMains };
@@ -214,9 +296,11 @@ function pushBlock(
   kind: MutableBlock["kind"],
   text: string,
   headingLevel?: number,
+  semanticRole?: MutableBlock["semanticRole"],
 ): void {
-  const normalized = normalizeText(text);
+  const normalized = removeLegalSourceUiNoise(text);
   if (!normalized) return;
+  if (blocks.at(-1)?.text === normalized) return;
   if (normalized.length > 100_000 || blocks.length >= MAX_BLOCKS) {
     throw new LegalSourceParserError("LEGAL_SOURCE_PARSE_TOO_COMPLEX");
   }
@@ -224,8 +308,19 @@ function pushBlock(
     index: blocks.length,
     kind,
     ...(headingLevel ? { headingLevel } : {}),
+    ...(semanticRole ? { semanticRole } : {}),
     text: normalized,
   });
+}
+
+function lexSemanticRole(classes: ReadonlySet<string>, text: string): MutableBlock["semanticRole"] | undefined {
+  const names = [...classes].join(" ");
+  if (/(?:ARTICLE|MODDA)/iu.test(names) || /^(?:(?:статья|модда|modda|article)\s+\d+|\d+\s*(?:-\s*)?modda\b)/iu.test(text)) return "article";
+  if (/(?:CHAPTER|BOB)/iu.test(names) || /^(?:глава|боб|chapter)\s+[\dIVXLCDM]+/iu.test(text)) return "chapter";
+  if (/(?:SECTION|BO.LIM)/iu.test(names) || /^(?:раздел|бўлим|bo.lim|section)\s+[\dIVXLCDM]+/iu.test(text)) return "section";
+  if (/(?:REVISION|EDITION|TAHRIR|DATE)/iu.test(names) || /^(?:редакция|tahrir|sana)\b/iu.test(text)) return "revision";
+  if (/(?:PARAGRAPH|BAND|POINT)/iu.test(names) || /^(?:пункт|band)\s+\d+/iu.test(text)) return "paragraph";
+  return undefined;
 }
 
 function collectBlocks(
@@ -235,12 +330,13 @@ function collectBlocks(
   const blocks: MutableBlock[] = [];
   let usesLexBlockAdapter = false;
   if (sourceKind === "lex") {
-    walkElements(root, (element) => {
-      if (classTokens(element).has("lx_elem")) usesLexBlockAdapter = true;
-    }, { value: 0 });
+    usesLexBlockAdapter = Boolean(findFirstElement(
+      root,
+      (element) => classTokens(element).has("lx_elem"),
+    ));
   }
   const visit = (element: Element): void => {
-    if (SKIPPED_TAGS.has(element.tagName) || isHidden(element)) return;
+    if (isUiElement(element)) return;
     const classes = classTokens(element);
     if (usesLexBlockAdapter && !classes.has("lx_elem")) {
       for (const child of element.childNodes) {
@@ -249,17 +345,29 @@ function collectBlocks(
       return;
     }
     if (sourceKind === "lex" && classes.has("lx_elem")) {
+      const text = collectText(element);
+      const semanticRole = lexSemanticRole(classes, text);
+      const isHeading = classes.has("ACT_TITLE") || semanticRole === "section"
+        || semanticRole === "chapter" || semanticRole === "article";
       pushBlock(
         blocks,
-        classes.has("ACT_TITLE") ? "heading" : "paragraph",
-        collectText(element),
-        classes.has("ACT_TITLE") ? 1 : undefined,
+        isHeading ? "heading" : "paragraph",
+        text,
+        classes.has("ACT_TITLE") ? 1 : semanticRole === "section" ? 2 : semanticRole === "chapter" ? 3 : semanticRole === "article" ? 4 : undefined,
+        semanticRole,
       );
       return;
     }
     const heading = /^h([1-6])$/.exec(element.tagName);
     if (heading) {
-      pushBlock(blocks, "heading", collectText(element), Number(heading[1]));
+      const text = collectText(element);
+      pushBlock(
+        blocks,
+        "heading",
+        text,
+        Number(heading[1]),
+        sourceKind === "lex" ? lexSemanticRole(classes, text) : undefined,
+      );
       return;
     }
     if (element.tagName === "p") {
@@ -312,13 +420,13 @@ function documentTitle(
   sourceKind: LegalSourceKind,
 ): string {
   if (sourceKind === "lex") {
-    let officialTitle = "";
-    walkElements(primary, (element) => {
+    const titleElement = findFirstElement(primary, (element) => {
       const classes = classTokens(element);
-      if (!officialTitle && classes.has("lx_elem") && classes.has("ACT_TITLE")) {
-        officialTitle = normalizeText(collectText(element));
-      }
-    }, { value: 0 });
+      return classes.has("lx_elem") && classes.has("ACT_TITLE");
+    });
+    const officialTitle = titleElement
+      ? removeLegalSourceUiNoise(collectText(titleElement))
+      : "";
     if (officialTitle) return officialTitle.slice(0, 2_000);
   }
   const heading = blocks.find((block) => block.kind === "heading")?.text;
@@ -332,7 +440,7 @@ function documentTitle(
   if (!title) {
     throw new LegalSourceParserError("LEGAL_SOURCE_CONTENT_INSUFFICIENT");
   }
-  return title.slice(0, 2_000);
+  return removeLegalSourceUiNoise(title).slice(0, 2_000);
 }
 
 export function normalizeLegalSourceHtml(input: {

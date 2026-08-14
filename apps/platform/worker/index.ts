@@ -10,6 +10,14 @@ import {
   MalwareScannerContainer,
 } from "./malware-scanner-container";
 import { handleScheduled } from "./platform-scheduled";
+import {
+  handleStagingQueueHealthProbeBatch,
+  isStagingQueueHealthProbeQueue,
+} from "./staging-queue-health-probe";
+import {
+  handleStagingLegalEvaluationQueueBatch,
+  isStagingLegalEvaluationQueue,
+} from "./staging-legal-evaluation-queue";
 import { handleInternalAdminRequest } from "../lib/auth/admin-internal-api";
 
 export { MalwareScannerContainer };
@@ -180,6 +188,14 @@ const worker = {
     batch: MessageBatch<unknown>,
     env: FrameworkEnv,
   ): Promise<void> {
+    if (isStagingQueueHealthProbeQueue(batch.queue, env)) {
+      await handleStagingQueueHealthProbeBatch(batch, env);
+      return;
+    }
+    if (isStagingLegalEvaluationQueue(batch.queue, env)) {
+      await handleStagingLegalEvaluationQueueBatch(batch, env);
+      return;
+    }
     await handleQueue(batch, env);
   },
   async scheduled(

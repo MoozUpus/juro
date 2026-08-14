@@ -1,6 +1,6 @@
 import { requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
-import { filterTrustedVerifiedLegalSources } from "../../../../lib/legal/source-trust";
+import { filterVerifiedLexSources } from "../../../../lib/legal/source-trust";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 import { searchUserDocuments } from "../../../../lib/document-analysis/user-document-vectors";
 
@@ -141,7 +141,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
       ...withType("lawyer", lawyers.results),
       ...withType(
         "source",
-        filterTrustedVerifiedLegalSources(
+        filterVerifiedLexSources(
           sources.results.map((item) => ({
             ...(item as Record<string, unknown>),
             officialUrl: String(

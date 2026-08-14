@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 test("protects the application root without demo-only metadata", async () => {
@@ -80,7 +81,7 @@ const runtime = {
 };
 const context = { waitUntil() {}, passThroughOnException() {} };
 
-test("cinematic prototype entry fails closed in the production artifact", async () => {
+test("retired cinematic prototype path is absent from the production artifact", async () => {
   const worker = await createWorker();
   const assets = { fetch: async () => new Response("Not found", { status: 404 }) };
 
@@ -93,6 +94,11 @@ test("cinematic prototype entry fails closed in the production artifact", async 
     context,
   );
   assert.equal(production.status, 404);
+
+  const artifact = await readFile(new URL("../dist/server/index.js", import.meta.url), "utf8");
+  assert.doesNotMatch(artifact, /CinematicPrototypeSurface/);
+  assert.doesNotMatch(artifact, /cinematic-prototype/);
+  assert.doesNotMatch(artifact, /prototypes\/platform\/cinematic/);
 });
 
 test("routes /document-builder to the canonical account space", async () => {

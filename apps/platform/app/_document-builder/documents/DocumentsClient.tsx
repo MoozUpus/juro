@@ -19,7 +19,15 @@ type StandaloneShare = { id: string; url: string; code: string | null; status: "
 type CaseOption = { id: string; title: string };
 type ListedDocument = DocumentRecord & { accessRole: "owner" | "collaborator" };
 
-export function DocumentsClient({ user, signInPath }: { user: ChatGPTUser; signInPath: string }) {
+export function DocumentsClient({
+  user,
+  signInPath,
+  embedded = false,
+}: {
+  user: ChatGPTUser;
+  signInPath: string;
+  embedded?: boolean;
+}) {
   const paths = builderNavigationPaths(usePathname());
   const copy = workspaceCopy(paths.locale).documents;
   const dateLocale = paths.locale === "uz" ? "uz-UZ" : "ru-RU";
@@ -118,7 +126,7 @@ export function DocumentsClient({ user, signInPath }: { user: ChatGPTUser; signI
     }
   };
 
-  return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath}/><div className="dbt-documents-page">
+  return <div className="dbt-root"><BuilderHeader user={user} signInPath={signInPath} variant={embedded ? "embedded" : "standalone"}/><div className="dbt-documents-page">
     <header className="dbt-page-title"><div><span><Files size={22}/></span><div><h1>{copy.title}</h1><p>{total} {total === 1 ? copy.countOne : copy.countMany}</p></div></div><Link href={paths.library}><FilePlus2 size={18}/>{copy.create}</Link></header>
     {toast && <div className="dbt-toast" role="status">{toast}</div>}
     {error && <div className="dbt-global-error" role="alert"><span>{error}</span><button type="button" onClick={() => setError("")}>×</button></div>}

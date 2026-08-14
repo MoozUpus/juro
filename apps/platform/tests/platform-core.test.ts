@@ -21,7 +21,6 @@ import { actionPlanStepPatchSchema } from "../lib/platform/action-plan";
 import { taskStatusForPlanStep, taskStatusIsTerminal } from "../lib/platform/task-status";
 import { builderNavigationPaths } from "../lib/platform/builder-paths";
 import { documentBuilderMetadataCopy, localizedDocumentStatus, workspaceCopy } from "../lib/platform/builder-workspace-copy";
-import { isCinematicPrototypeEnvironment } from "../lib/platform/cinematic-prototype";
 import { isLawyerProfileDirectoryPreviewEnabled } from "../lib/platform/lawyer-profile-preview";
 import { notificationPreferencesSchema, optionalEmailPreferenceKeys } from "../lib/platform/notification-preferences";
 
@@ -95,36 +94,6 @@ test("lawyer-profile approval is staff-capability and revision gated", async () 
   assert.match(page, /lawyer\.profiles\.moderate/);
   assert.match(migration, /lawyer_profile_moderation_revision_uidx/); assert.match(migration, /lawyer_profiles_status_requires_moderation/); assert.match(migration, /append-only/);
 });
-
-test("cinematic prototype is fail-closed outside staging", async () => {
-  assert.equal(isCinematicPrototypeEnvironment("staging"), true);
-  for (const environment of [undefined, "development", "production", "preview"]) {
-    assert.equal(isCinematicPrototypeEnvironment(environment), false);
-  }
-  const [personalRoute, businessRoute, entryRoute, surface, styles] = await Promise.all([
-    readFile(new URL("../app/[locale]/[accountType]/prototypes/platform/cinematic/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/[locale]/business/[workspaceId]/prototypes/platform/cinematic/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/prototypes/platform/cinematic/page.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/_platform/CinematicPrototypeSurface.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/_platform/cinematic-prototype.css", import.meta.url), "utf8"),
-  ]);
-  for (const route of [personalRoute, businessRoute, entryRoute]) {
-    assert.match(route, /isCinematicPrototypeEnvironment\(runtimeEnv\(\)\.APP_ENV\)/);
-    assert.match(route, /notFound\(\)/);
-    assert.match(route, /index: false, follow: false, nocache: true/);
-  }
-  for (const route of [personalRoute, businessRoute]) assert.match(route, /requireChatGPTUser\(returnTo\)/);
-  assert.match(surface, /DashboardClient/);
-  assert.match(surface, /jurobek-avatar\.webp/);
-  assert.match(surface, /MicOff/);
-  assert.doesNotMatch(surface, /Canvas|useFrame|onPointerMove|requestAnimationFrame/);
-  assert.match(styles, /prefers-reduced-motion:reduce/);
-  assert.match(styles, /prefers-reduced-transparency:reduce/);
-  assert.match(styles, /prefers-contrast:more/);
-  assert.match(styles, /forced-colors:active/);
-  assert.doesNotMatch(styles, /transition:\s*all|animation:[^;}]*infinite|width:100vw/i);
-});
-
 
 test("builder navigation preserves canonical locale and account context", () => {
   const caseId = "11111111-1111-4111-8111-111111111111";
@@ -414,7 +383,7 @@ test("auth locale links retain the canonical locale URL and query string", async
 
 test("production identity prefers OTP sessions and gates trusted edge headers", async () => {
   const source = await readFile(new URL("../app/chatgpt-auth.ts", import.meta.url), "utf8");
-  assert.ok(source.indexOf("const sessionUser = await getSessionUser()") < source.indexOf("const requestHeaders = await headers()"));
+  assert.ok(source.indexOf("const sessionUser = await getSessionUser(request)") < source.indexOf("const requestHeaders = request?.headers ?? await headers()"));
   assert.match(source, /ALLOW_PLATFORM_AUTH_HEADERS/);
   assert.match(source, /NODE_ENV !== "production"/);
   assert.match(source, /authSource: "platform_header"/);
@@ -1009,7 +978,7 @@ test("AI conversations and facts remain owner-scoped inside a tenant", async () 
   ]);
   assert.match(conversationRoute, /owner_user_id=\?/);
   assert.match(conversationRoute, /c\.owner_user_id=\?/);
-  assert.match(conversationRoute, /directSourceErrorCodes: retrieval\.errors\.map/);
+  assert.match(conversationRoute, /liveLexRetrievalErrorCodes: retrieval\.errors\.map/);
   assert.match(factRoute, /conversations WHERE workspace_id=\? AND owner_user_id=\?/);
   assert.doesNotMatch(conversationRoute, /WHERE workspace_id=\?\s+ORDER BY updated_at/s);
 });
@@ -1089,19 +1058,34 @@ test("billing exposes only the gated Payment foundation and never treats credent
   assert.doesNotMatch(client + createRoute, /providerPaymentId.*success|status:\s*["']paid["']/i);
 });
 
-test("legislation monitoring never auto-publishes or invents feed entries", async () => {
+test("legislation monitoring exposes only fresh official Lex metadata and does not use a local review corpus", async () => {
   const source = await readFile(new URL("../app/api/platform/monitoring/route.ts", import.meta.url), "utf8");
-  assert.match(source, /u\.status='published_verified'/);
-  assert.match(source, /u\.verified_at IS NOT NULL/);
-  assert.match(source, /s\.status='verified'/);
-  assert.match(source, /s\.verification_state='verified'/);
-  assert.match(source, /s\.content_sha256 IS NOT NULL/);
-  assert.match(source, /automaticPublication: false/);
-  assert.match(source, /isTrustedVerifiedLegalSource/);
-  assert.match(source, /trustedSourceStatusRows\.length/);
+  assert.match(source, /legal_monitoring_metadata/);
+  assert.match(source, /legal_monitoring_change_events/);
+  assert.match(source, /http_status BETWEEN 200 AND 299/);
+  assert.match(source, /summarizeLexMetadataMonitoringFreshness/);
+  assert.match(source, /automaticPublication: true/);
+  assert.match(source, /controlledBeta: false/);
+  assert.doesNotMatch(source, /published_verified|verification_state|content_sha256|pending_review/);
 });
 
-test("JURO motion tokens are bounded and reduced motion resolves to a static route", async () => {
+test("monitoring keeps delivery disabled until a fresh Lex metadata run is available", async () => {
+  const [shell, client] = await Promise.all([
+    readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/MonitoringClient.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(shell, /\["monitoring", Scale, "Мониторинг законодательства", "Qonunchilik monitoringi"\]/);
+  assert.match(shell, /key: "help", ru: "Помощь", uz: "Yordam"/);
+  assert.match(client, /normalizeMonitoringAudience\(accountType\)/);
+  assert.match(client, /normalizeMonitoringAudience\(body\.preference\.audience\)/);
+  assert.match(client, /monitoringPreferencesAreInformationalOnly\(\{/);
+  assert.match(client, /controlledBeta: status\.controlledBeta/);
+  assert.match(client, /t\.preferenceOnlyNotice/);
+  assert.match(client, /disabled=\{preferenceOnly \|\| !status\.emailConfigured\}/);
+  assert.match(client, /preferenceOnly \? t\.savePreferences : t\.save/);
+});
+
+test("JURO motion tokens are bounded and the dashboard route is static", async () => {
   const [globals, dashboard] = await Promise.all([
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/dashboard.css", import.meta.url), "utf8"),
@@ -1110,8 +1094,9 @@ test("JURO motion tokens are bounded and reduced motion resolves to a static rou
   assert.ok(globals.includes("cubic-bezier(.16,1,.3,1)"));
   assert.ok(globals.includes("cubic-bezier(.2,.8,.2,1)"));
   assert.match(globals, /prefers-reduced-motion:\s*reduce/);
-  assert.match(dashboard, /stroke-dashoffset/);
   assert.match(dashboard, /golden-route/);
+  assert.doesNotMatch(dashboard, /stroke-dashoffset/);
+  assert.doesNotMatch(dashboard, /golden-route[^}]*animation/);
   assert.doesNotMatch(dashboard, /infinite|parallax|perspective/);
 });
 
@@ -1131,10 +1116,13 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shell, /min-height:44px/);
   assert.match(shell, /max-width:800px/);
   assert.match(shell, /prefers-reduced-transparency:reduce/);
-  assert.match(shellComponent, /\["dashboard", Home/);
   assert.match(shellComponent, /\["ai-chat", Bot/);
-  assert.match(shellComponent, /\["documents", Files/);
+  assert.match(shellComponent, /\["document-builder", FilePenLine/);
+  assert.match(shellComponent, /\["document-review", FileCheck2/);
   assert.match(shellComponent, /\["cases", BriefcaseBusiness/);
+  assert.match(shellComponent, /\["documents", Files/);
+  assert.match(shellComponent, /const toolGroups = \[/);
+  assert.match(shellComponent, /"Все инструменты"/);
   assert.match(shellComponent, /href=\{`\$\{base\}\/profile`\}/);
   assert.match(shellComponent, /useSearchParams/);
   assert.match(shellComponent, /const query = searchParams\.toString\(\)/);
@@ -1145,6 +1133,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shellComponent, /window\.requestAnimationFrame\(\(\) => openButtonRef\.current\?\.focus\(\)\)/);
   assert.match(shell, /platform-brand button\{width:44px;height:44px/);
   assert.match(shell, /platform-sidebar nav a\{min-height:44px\}/);
+  assert.match(shell, /platform-account select\{width:100%;min-height:44px/);
   const aiClient = await readFile(new URL("../app/_platform/AiLawyerClient.tsx", import.meta.url), "utf8");
   assert.match(aiClient, /href=\{aiLocation\(new URLSearchParams\(\{ conversationId: item\.id \}\)\)\}/);
   assert.match(aiClient, /router\.replace\(aiLocation\(nextParams\), \{ scroll: false \}\)/);
@@ -1468,7 +1457,9 @@ test("calendar reads only active-workspace plan deadlines and keeps its date win
   assert.match(route, /t\.workspace_id=c\.workspace_id/);
   assert.match(route, /cache-control": "private, no-store/);
   assert.match(route, /calendarRangeFromSearch/);
-  assert.match(client, /"month", "week", "list", "cases", "overdue"/);
+  assert.match(client, /"month", "week", "day", "list", "cases", "overdue"/);
+  assert.match(client, /previousMonthStart/);
+  assert.match(client, /calendar-more/);
   assert.match(client, /api\/platform\/calendar/);
   assert.match(client, /action-plan\//);
   assert.match(routing, /"calendar"/);

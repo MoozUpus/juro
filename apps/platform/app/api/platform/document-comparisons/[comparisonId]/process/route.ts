@@ -6,7 +6,7 @@ import { requireD1 } from "../../../../../../lib/document-builder/storage/runtim
 import { compareDocuments, summarizeChanges } from "../../../../../../lib/document-comparison/diff";
 import { extractDocument } from "../../../../../../lib/document-comparison/extract";
 import { enrichComparisonChanges, type ComparisonLegalSource } from "../../../../../../lib/document-comparison/legal-analysis";
-import { filterTrustedVerifiedLegalSources } from "../../../../../../lib/legal/source-trust";
+import { filterVerifiedLexSources } from "../../../../../../lib/legal/source-trust";
 import {
   comparisonForUser,
   loadExtractedDocument,
@@ -145,7 +145,7 @@ export const POST = withApiErrors(async function POST(
         const enriched = await enrichComparisonChanges({
           changes: result.changes,
           locale,
-          sources: filterTrustedVerifiedLegalSources(
+          sources: filterVerifiedLexSources(
             sourceRows.results as unknown as ComparisonLegalSource[],
           ),
         });

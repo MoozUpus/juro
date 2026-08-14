@@ -2670,8 +2670,9 @@ the actual MediaRecorder, upload/transcription request, AI stream and audio
 element. The microphone never starts automatically. The transcript remains
 editable and must match the encrypted recording transcript before the AI route
 links it to the persisted user message. The verified static Jurobek poster is
-not an avatar implementation; voice-with-avatar remains disabled until an
-owner-approved rig is supplied and audited. No migration or dependency is
+not an avatar implementation. It is now limited to onboarding brand identity;
+plain voice does not render it. Voice-with-avatar remains out of scope unless
+an owner-approved rig is supplied and audited. No migration or dependency is
 introduced beyond already-applied additive migration 0066. Production remains
 unchanged.
 
@@ -2775,11 +2776,29 @@ combined derivative preserves deterministic file boundaries and is stored under
 the existing tenant-scoped immutable extraction contract.
 
 This local slice is limited to packages no larger than 20 MB compressed input,
-20 MB per expanded member, 50 MB total expanded working set, and 20 files. Larger
-packages remain `awaiting_external_extraction`. Workers AI conversion does not
-prove a 500-page aggregate for scanned PDFs because the API response has no page
-count, so that release gate remains open. No migration, dependency, remote
-resource, staging deployment, or production change is introduced.
+20 MB per expanded member, 50 MB total expanded working set, and 20 files.
+Workers AI conversion does not prove a 500-page aggregate for scanned PDFs
+because the API response has no page count, so that release gate remains open.
+
+## D-164 — Undeployed document capacity handlers must fail terminally, not wait indefinitely
+
+Status: accepted and locally verified; staging migration pending
+Date: 2026-08-12
+
+No privacy-approved streaming ZIP extractor or tenant-scoped long-document
+chunk-synthesis worker is deployed. Therefore a ZIP above 20 MB is rejected
+before a private upload state exists. A capacity boundary discovered only after
+safe extraction, or extracted text above the 160,000-character single-request
+limit, becomes a terminal `DOCUMENT_ANALYSIS_CAPACITY_REQUIRED` failure. The
+original private object and existing audit history stay intact; no opaque ZIP or
+oversized text is sent to OCR or a language-model provider.
+
+Migration 0115 converts the two legacy false-progress states
+(`awaiting_external_extraction` and `awaiting_chunked_analysis`) to the same
+terminal error and adds a content-free audit event. It deliberately does not
+delete a source object, enqueue/redrive work, or fabricate a completion. A
+future streaming extractor/chunk worker needs its own privacy, tenant-isolation,
+quota, retry, and end-to-end evidence before these limits can be relaxed.
 
 ## D-133 — Analysis corrections create normalized immutable artifacts
 

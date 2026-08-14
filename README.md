@@ -64,11 +64,24 @@ For the engineering rationale and code map, read [Product foundations](docs/gith
 
 ## Product experience
 
-<img src="docs/github/product-experience.svg" width="100%" alt="Original JURO product illustration showing legal information, document work and partial review surfaces">
+| Public entry | Protected workspace |
+|---|---|
+| <img src="docs/github/screenshots/public-website.webp" alt="JURO public website" width="100%"> | <img src="docs/github/screenshots/platform-dashboard.webp" alt="JURO protected workspace without account data" width="100%"> |
+| Begin with a legal situation, document or next action. | Keep legal work, documents and next steps in one protected workspace. |
 
-This is a product illustration, not a live-interface claim. The public entry is [juro.uz](https://juro.uz); protected workflows are available through [app.juro.uz](https://app.juro.uz). Its status labels follow the repository matrix: legal information and document work are WORKING, while document review and human hand-off remain PARTIAL.
+| Source-aware question flow | Document builder |
+|---|---|
+| <img src="docs/github/screenshots/ai-chat.webp" alt="JURO AI legal information flow without conversation history" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="JURO document library and builder entry" width="100%"> |
+| The product asks for context and makes source availability explicit. | Start a structured draft from a document workflow. |
+
+| Review and compare surface | Narrow public-product view |
+|---|---|
+| <img src="docs/github/screenshots/document-analysis.webp" alt="JURO document review and comparison entry" width="100%"> | <img src="docs/github/screenshots/mobile-experience.webp" alt="Narrow JURO public-product preview" width="100%"> |
+| The interface exists; its end-to-end legal analysis status is PARTIAL. | A narrow presentation capture of the live public product, not mobile-QA evidence. |
 
 ## From legal context to practical work
+
+<img src="docs/github/operating-model.svg" width="100%" alt="JURO operating model from legal context and sources to protected work and partial lawyer hand-off">
 
 JURO is shaped as a connected workflow, not an isolated chat screen. A person can begin with context, follow the available source evidence, continue in a protected work area and—where the current surface permits—request human assistance.
 
@@ -102,6 +115,8 @@ JURO is a monorepo with independently deployable public and protected applicatio
 <img src="docs/github/trust-layer.svg" width="100%" alt="JURO trust, privacy and legal-safety boundaries">
 
 The repository makes several operating boundaries inspectable: server-side credentials, backend-mediated D1/R2 access, protected ownership or workspace checks, source display and clear limitations around AI output. No GDPR, ISO, SOC 2, data-residency or other certification claim is made here.
+
+<img src="docs/github/engineering-commitments.svg" width="100%" alt="JURO engineering commitments for sources, protected work and human hand-off">
 
 Report a vulnerability privately through [SECURITY.md](SECURITY.md). Do not put secrets, personal data, user documents or production logs in an issue or pull request.
 

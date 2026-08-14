@@ -21,6 +21,9 @@
   .ai-context{height:100%;min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
 }
 
+/* The conversation canvas is intentionally distinct from the unchanged list
+   of dialogs: calmer warm neutral, no decorative surface treatment. */
+.ai-dialog{background:#f2f0ea}
 @media(min-width:981px) and (max-width:1100px){
   .ai-workspace{grid-template-rows:minmax(0,1fr) minmax(9rem,28%)}
   .ai-conversations,.ai-dialog{grid-row:1}

@@ -1,10 +1,11 @@
 import { parseJsonRequest } from "../../../../../../lib/auth/input";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
 import { isoNow } from "../../../../../../lib/document-builder/storage/db";
-import { requireD1 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import { workspaceEntitlements } from "../../../../../../lib/billing/entitlements";
 import { lawyerAccessGrantSchema, localizedHandoffError } from "../../../../../../lib/platform/lawyer-request";
 import { workspaceForUser } from "../../../../../../lib/platform/workspace";
+import { recordLawyerAccessGrantCompletionEvidence } from "../../../../../../worker/dependency-health-evidence";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, { status, headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
@@ -13,6 +14,7 @@ function response(body: unknown, status = 200) {
 type Context = { params: Promise<{ requestId: string }> };
 
 export const POST = withApiErrors(async function POST(request: Request, context: Context) {
+  const startedAt = Date.now();
   assertSafeWrite(request);
   const user = await requireApiUser();
   const workspace = await workspaceForUser(user);
@@ -54,6 +56,10 @@ export const POST = withApiErrors(async function POST(request: Request, context:
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_access_grant',?,'lawyer_case_access_granted',?,?)",
     ).bind(crypto.randomUUID(), workspace.id, user.id, grantId, JSON.stringify({ requestId: handoff.id, caseId: handoff.caseId, lawyerUserId: handoff.lawyerUserId, phoneContact: true, reciprocalPhoneDisclosure: true }), now),
   ]);
+  await recordLawyerAccessGrantCompletionEvidence({
+    APP_ENV: runtimeEnv().APP_ENV ?? "development",
+    DB: db,
+  }, startedAt);
   return response({ ok: true, grantId, status: "access_granted" }, 201);
 });
 

@@ -13,10 +13,11 @@ test("legacy document review POST cannot buffer a file or invoke an AI provider"
   assert.doesNotMatch(route, /request\.formData\(|arrayBuffer\(|callOpenAiJson|callAnthropic/);
 });
 
-test("secure upload routes enforce streaming, checksum, tenant, and quarantine boundaries", () => {
+test("secure upload routes enforce streaming, checksum, tenant, and direct-analysis boundaries", () => {
   const init = source("app/api/platform/document-analysis/uploads/route.ts");
   const upload = source("app/api/platform/document-analysis/uploads/[analysisId]/route.ts");
   const finalize = source("app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts");
+  const pipeline = source("lib/document-analysis/upload-pipeline.ts");
   for (const route of [init, upload, finalize]) {
     assert.match(route, /requireApiUser/);
     assert.match(route, /workspaceForUser/);
@@ -28,18 +29,16 @@ test("secure upload routes enforce streaming, checksum, tenant, and quarantine b
   assert.match(finalize, /validateUploadMagicBytes/);
   assert.match(finalize, /await verifyArchiveBytes\(/);
   assert.doesNotMatch(finalize, /inspectArchiveBytes\(/);
-  assert.match(finalize, /MALWARE_SCANNER_UNAVAILABLE/);
-  assert.match(finalize, /MALWARE_SCAN_ENABLED/);
-  assert.match(finalize, /MALWARE_SCANNER/);
-  assert.match(finalize, /MALWARE_SCAN_QUEUE/);
-  assert.match(finalize, /FILE_SCAN_QUEUED/);
+  assert.match(finalize, /analysis_safe/);
+  assert.match(finalize, /ANALYSIS_QUEUED/);
   assert.match(finalize, /INSERT OR IGNORE INTO job_outbox/);
-  assert.match(`${upload}\n${finalize}`, /requireQuarantineR2/);
-  assert.doesNotMatch(`${upload}\n${finalize}`, /requireR2\(\)/);
-  assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic|status='safe'|status='ready'/);
+  assert.match(pipeline, /analysis-input-v1/);
+  assert.match(finalize, /requireR2\(\)/);
+  assert.doesNotMatch(`${init}\n${upload}\n${finalize}`, /requireQuarantineR2|quarantined|MALWARE_SCAN|quarantine-bypass/);
+  assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic/);
 });
 
-test("archive finalize verifies local identity, bounded expansion, and CRC before quarantine", () => {
+test("archive finalize verifies local identity, bounded expansion, and CRC before direct analysis", () => {
   const archive = source("lib/document-analysis/archive-inspector.ts");
   assert.match(archive, /LOCAL_SIGNATURE/);
   assert.match(archive, /DATA_DESCRIPTOR_SIGNATURE/);
@@ -61,6 +60,29 @@ test("dashboard and review surfaces use the secure upload client", () => {
   assert.match(uploadClient, /request\.upload\.addEventListener\("progress"/);
   assert.match(uploadClient, /x-juro-file-sha256/);
   assert.doesNotMatch(`${dashboard}\n${review}`, /new FormData\(\)/);
+});
+
+test("review surface polls actual background analysis states and makes retry exhaustion explicit", () => {
+  const review = source("app/_platform/DocumentReviewClient.tsx");
+  const reviewRoute = source("app/api/platform/document-review/route.ts");
+  assert.match(review, /const analysisPending = analyses\.some/);
+  for (const status of [
+    "ready",
+    "processing",
+    "persisting",
+    "awaiting_ocr",
+    "ocr_processing",
+    "retrying",
+  ]) {
+    assert.match(review, new RegExp(`"${status}"`));
+  }
+  assert.match(reviewRoute, /job\.job_type IN \('document\.analyze','ocr\.process'\)/);
+  assert.match(reviewRoute, /job\.workspace_id=a\.workspace_id/);
+  assert.match(reviewRoute, /job\.status='dead_lettered'/);
+  assert.match(reviewRoute, /retryExhausted: Number\(retryExhausted\) === 1/);
+  assert.match(review, /Автоматические попытки остановлены/);
+  assert.match(review, /Qayta ishga tushirish kerak/);
+  assert.match(review, /window\.setInterval\(\(\) => \{ void load\(\); \}, 5_000\)/);
 });
 
 test("analysis revision routes preserve auth, tenant, idempotency, and object-integrity boundaries", () => {
@@ -119,8 +141,11 @@ test("scanner promotion requires strict evidence and never trusts document instr
 
 test("AI and document processors revalidate provider citations before persistence", () => {
   const aiRoute = source("app/api/platform/ai/route.ts");
+  const gateway = source("lib/ai/legal-ai-gateway.ts");
   const processor = source("lib/document-analysis/processor.ts");
-  assert.match(aiRoute, /enforceLegalChatSourceBoundary\(/);
+  assert.match(aiRoute, /gateway\.generateGroundedAnswer\(/);
+  assert.match(gateway, /validateLegalGatewayAnswer\(/);
+  assert.match(gateway, /sourceSpanId/);
   assert.match(aiRoute, /errorCode: "INVALID_AI_OUTPUT"/);
   assert.match(aiRoute, /return response\(\{[\s\S]*code: "INVALID_AI_OUTPUT"[\s\S]*\}, 422\)/);
   assert.match(aiRoute, /originalUrl: source\.officialUrl/);

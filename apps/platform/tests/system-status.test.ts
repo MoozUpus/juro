@@ -9,6 +9,10 @@ import {
   readStatusIncidentAdminDashboard,
   SystemStatusError,
 } from "../lib/operations/system-status";
+import {
+  dependencyHealthKeys,
+  recordDependencyHealth,
+} from "../lib/operations/dependency-health";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const now = new Date("2026-08-05T09:00:00.000Z");
@@ -18,14 +22,32 @@ function seedUser(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
     .run(now.toISOString(), now.toISOString());
 }
 
+async function seedOperationalDependencies(db: D1Database, checkedAt = now): Promise<void> {
+  await Promise.all(dependencyHealthKeys.map((key) => recordDependencyHealth({
+    db,
+    now: checkedAt,
+    value: {
+      environment: "development",
+      key,
+      state: "operational",
+      latencyMs: 12,
+      evidenceKind: "probe",
+    },
+  })));
+}
+
 test("0083 publishes only bilingual public-safe incident state and resolves it immutably", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     seedUser(sqlite);
-    const initial = await readPublicStatus({ db: d1, locale: "uz", now });
+    await seedOperationalDependencies(d1);
+    const initial = await readPublicStatus({ db: d1, locale: "uz", environment: "development", now });
     assert.equal(initial.overallStatus, "operational");
     assert.equal(initial.components.length, 8);
     assert.equal(initial.activeIncidents.length, 0);
+    const platformDependencies = initial.components.find((component) => component.key === "platform")?.dependencies;
+    assert.deepEqual(platformDependencies?.map((dependency) => dependency.key), ["d1", "queues", "queue_dlq"]);
+    assert.ok(platformDependencies?.every((dependency) => dependency.status === "operational" && dependency.latencyMs === 12));
 
     const created = await createStatusIncident({
       db: d1,
@@ -47,8 +69,8 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
     });
     assert.match(created.publicReference, /^INC-[A-F0-9]{12}$/);
 
-    const ru = await readPublicStatus({ db: d1, locale: "ru", now });
-    const uz = await readPublicStatus({ db: d1, locale: "uz", now });
+    const ru = await readPublicStatus({ db: d1, locale: "ru", environment: "development", now });
+    const uz = await readPublicStatus({ db: d1, locale: "uz", environment: "development", now });
     assert.equal(ru.overallStatus, "partial_outage");
     assert.equal(ru.components.find((component) => component.key === "ai")?.status, "partial_outage");
     assert.equal(ru.components.find((component) => component.key === "platform")?.status, "operational");
@@ -79,6 +101,7 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
         messageUz: "Kechikish kamaydi, jamoa tiklanishni kuzatmoqda.",
       },
     });
+    await seedOperationalDependencies(d1, new Date("2026-08-05T09:15:00.000Z"));
     await appendStatusIncidentUpdate({
       db: d1,
       actorUserId: "status-admin",
@@ -90,7 +113,7 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
         messageUz: "Javob vaqti odatdagi darajaga qaytdi.",
       },
     });
-    const resolved = await readPublicStatus({ db: d1, locale: "ru", now: new Date("2026-08-05T09:16:00.000Z") });
+    const resolved = await readPublicStatus({ db: d1, locale: "ru", environment: "development", now: new Date("2026-08-05T09:16:00.000Z") });
     assert.equal(resolved.overallStatus, "operational");
     assert.equal(resolved.activeIncidents.length, 0);
     assert.equal(resolved.recentIncidents[0].state, "resolved");
@@ -112,6 +135,38 @@ test("0083 publishes only bilingual public-safe incident state and resolves it i
     assert.throws(() => sqlite.prepare("UPDATE system_status_updates SET message_ru='tampered text' WHERE incident_id=?").run(created.id), /SYSTEM_STATUS_UPDATE_IMMUTABLE/);
     assert.throws(() => sqlite.prepare("DELETE FROM system_status_incidents WHERE id=?").run(created.id), /SYSTEM_STATUS_INCIDENT_DELETE_FORBIDDEN/);
     assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally { sqlite.close(); }
+});
+
+test("0112 never publishes operational status without dependency evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const snapshot = await readPublicStatus({ db: d1, locale: "ru", environment: "development", now });
+    assert.equal(snapshot.overallStatus, "unknown");
+    assert.equal(snapshot.components.length, 8);
+    assert.ok(snapshot.components.every((component) => component.status === "unknown"));
+    assert.ok(snapshot.components.every((component) => component.lastCheckedAt === null));
+    assert.ok(snapshot.components.every((component) => component.dependencies.every((dependency) => dependency.status === "unknown" && dependency.checkedAt === null)));
+  } finally { sqlite.close(); }
+});
+
+test("0112 publishes unknown rather than stale when a mandatory dependency has no evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    await recordDependencyHealth({
+      db: d1,
+      now: new Date("2026-08-05T08:49:00.000Z"),
+      value: {
+        environment: "development",
+        key: "d1",
+        state: "operational",
+        latencyMs: 8,
+        evidenceKind: "probe",
+      },
+    });
+    const snapshot = await readPublicStatus({ db: d1, locale: "ru", environment: "development", now });
+    assert.equal(snapshot.overallStatus, "unknown");
+    assert.ok(snapshot.components.every((component) => component.status === "unknown"));
   } finally { sqlite.close(); }
 });
 
@@ -171,5 +226,7 @@ test("status routes use a fresh-MFA operations boundary and a narrow public host
   assert.doesNotMatch(ui + publicUi, /dangerouslySetInnerHTML|transition:\s*all|window\.confirm/);
   assert.match(ui, /aria-live="polite"/);
   assert.match(publicUi, /role="status"/);
+  assert.match(publicUi, /public-status-dependencies/);
+  assert.match(publicUi, /dependency\.safeErrorCode/);
   assert.match(publicUi, /className="public-status-shell" lang=\{locale\}/);
 });

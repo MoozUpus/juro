@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { CircleAlert, LoaderCircle, Scale, ShieldCheck, Star, UserRoundCheck } from "lucide-react";
+import { CircleAlert, Crown, LoaderCircle, Scale, ShieldCheck, Star, UserRound, UserRoundCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { platformBasePath, type AccountType, type PlatformLocale } from "../../lib/platform/routing";
 
@@ -25,6 +25,9 @@ type Lawyer = {
   education: string | null;
   consultationFormats: string[];
   profilePhotoUrl: string | null;
+  juroApproved: boolean;
+  topLawyer: boolean;
+  topLawyerCriteria: string | null;
   rating: { reviewCount: number; overallAverage: number | null };
 };
 
@@ -76,12 +79,18 @@ export function LawyerDirectoryClient({ locale, accountType, workspaceId }: { lo
 
   function card(lawyer: Lawyer) {
     const underReview = !lawyer.canReceiveRequests;
-    return <article key={lawyer.id} className="lawyer-directory-card">
-      <div className="lawyer-directory-card-head"><div className="lawyer-directory-identity">{lawyer.profilePhotoUrl && <Image src={lawyer.profilePhotoUrl} alt="" width={48} height={48} unoptimized />}<div><h2>{lawyer.displayName}</h2><p>{lawyer.firmName || (ru ? "Независимый специалист" : "Mustaqil mutaxassis")}</p></div></div>{lawyer.advocateStatus === "verified" && <span className="lawyer-verified"><ShieldCheck aria-hidden="true" />{ru ? "Проверено JURO" : "JURO tasdiqlagan"}</span>}</div>
+    return <article key={lawyer.id} className={`lawyer-directory-card${lawyer.juroApproved ? " is-juro-approved" : ""}${lawyer.topLawyer ? " is-top-lawyer" : ""}`}>
+      <div className="lawyer-directory-card-head"><div className="lawyer-directory-identity">{lawyer.profilePhotoUrl ? <Image src={lawyer.profilePhotoUrl} alt={`Фото: ${lawyer.displayName}`} width={48} height={48} unoptimized /> : <span className="lawyer-avatar-fallback" aria-label={ru ? "Фото не добавлено" : "Rasm qo‘shilmagan"}><UserRound aria-hidden="true" /></span>}<div><h2>{lawyer.displayName}</h2><p>{lawyer.firmName || (ru ? "Независимый специалист" : "Mustaqil mutaxassis")}</p></div></div></div>
+      <div className="lawyer-trust-badges">
+        {lawyer.juroApproved && <span className="lawyer-juro-approved"><ShieldCheck aria-hidden="true" />{ru ? "Одобрен JURO" : "JURO tomonidan ma’qullangan"}</span>}
+        {lawyer.topLawyer && <span className="lawyer-top"><Crown aria-hidden="true" />{ru ? "Top Lawyer" : "Top yurist"}</span>}
+        {lawyer.advocateStatus === "verified" && <span className="lawyer-verified"><ShieldCheck aria-hidden="true" />{ru ? "Статус адвоката подтверждён" : "Advokat maqomi tasdiqlangan"}</span>}
+      </div>
       {underReview && <p className="lawyer-pending-review" role="status">{ru ? "Профиль на проверке JURO · запись пока недоступна" : "Profil JURO tekshiruvida · hozircha so‘rov yuborib bo‘lmaydi"}</p>}
       <p className="lawyer-directory-specialties">{lawyer.specialties.join(" · ") || (ru ? "Специализация уточняется" : "Mutaxassislik aniqlashtirilmoqda")}</p>
       <dl><div><dt>{ru ? "Языки" : "Tillar"}</dt><dd>{lawyer.languages.join(", ") || "—"}</dd></div>{lawyer.city && <div><dt>{ru ? "Город" : "Shahar"}</dt><dd>{[lawyer.city, lawyer.region].filter(Boolean).join(", ")}</dd></div>}<div><dt>{ru ? "Доступность" : "Mavjudlik"}</dt><dd>{availability[lawyer.availabilityStatus][ru ? 0 : 1]}</dd></div>{lawyer.experienceYears !== null && <div><dt>{ru ? "Опыт" : "Tajriba"}</dt><dd>{ru ? `${lawyer.experienceYears} лет` : `${lawyer.experienceYears} yil`}</dd></div>}{lawyer.priceDescription && <div><dt>{ru ? "Цена" : "Narx"}</dt><dd>{lawyer.priceDescription}</dd></div>}</dl>
       <p className="lawyer-rating"><Star aria-hidden="true" />{lawyer.rating.reviewCount && lawyer.rating.overallAverage !== null ? `${lawyer.rating.overallAverage.toFixed(1)}/5 · ${lawyer.rating.reviewCount}` : (ru ? "Нет одобренных отзывов" : "Tasdiqlangan fikrlar yo‘q")}</p>
+      {lawyer.topLawyer && lawyer.topLawyerCriteria && <p className="lawyer-top-criteria">{lawyer.topLawyerCriteria}</p>}
       <div className="lawyer-directory-actions"><Link href={`${base}/lawyers/${encodeURIComponent(lawyer.id)}`}>{ru ? "Профиль" : "Profil"}</Link>{underReview ? <span aria-disabled="true">{ru ? "Запись после проверки" : "Tekshiruvdan keyin"}</span> : <Link className="primary" href={`${base}/consultations?lawyer=${encodeURIComponent(lawyer.id)}`}>{ru ? "Выбрать для заявки" : "So‘rov uchun tanlash"}</Link>}</div>
     </article>;
   }

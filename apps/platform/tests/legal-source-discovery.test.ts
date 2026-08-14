@@ -18,59 +18,17 @@ function sequence(responses: Response[]): typeof fetch {
   }) as typeof fetch;
 }
 
-test("Advice sitemap discovery accepts only bounded canonical document URLs", async () => {
-  const result = await discoverAdviceSitemapDocuments({
-    maxDocuments: 2,
-    now: () => new Date("2026-08-01T19:00:00.000Z"),
-    fetchImpl: sequence([
-      response("User-agent: *\nSitemap: https://advice.uz/sitemap.xml\n", "text/plain; charset=utf-8"),
-      response("<sitemapindex><sitemap><loc>https://advice.uz/documents_uz.xml</loc></sitemap></sitemapindex>", "application/xml"),
-      response([
-        "<urlset>",
-        "<url><loc>https://advice.uz/oz/documents/21</loc></url>",
-        "<url><loc>https://www.advice.uz/ru/documents/22</loc></url>",
-        "<url><loc>https://advice.uz/ru/questions/9</loc></url>",
-        "<url><loc>https://evil.example/ru/documents/23</loc></url>",
-        "</urlset>",
-      ].join(""), "application/xml; charset=utf-8"),
-    ]),
-  });
-
-  assert.deepEqual(result.candidates.map((candidate) => candidate.canonicalUrl), [
-    "https://advice.uz/oz/documents/21",
-    "https://advice.uz/ru/documents/22",
-  ]);
-  assert.equal(result.robotsUrl, "https://advice.uz/robots.txt");
-  assert.deepEqual(result.sitemapUrls, [
-    "https://advice.uz/sitemap.xml",
-    "https://advice.uz/documents_uz.xml",
-  ]);
-  assert.equal(result.fetchedAt, "2026-08-01T19:00:00.000Z");
-});
-
-test("Advice sitemap discovery fails closed on untrusted sitemap and oversized content", async () => {
+test("Advice sitemap discovery is permanently disabled before network access", async () => {
+  let calls = 0;
   await assert.rejects(
     () => discoverAdviceSitemapDocuments({
-      fetchImpl: sequence([
-        response("Sitemap: https://evil.example/sitemap.xml\n", "text/plain"),
-      ]),
+      fetchImpl: (async () => { calls += 1; throw new Error("network must not run"); }) as typeof fetch,
     }),
     (error: unknown) => error instanceof LegalSourceDiscoveryError
-      && error.code === "LEGAL_SOURCE_DISCOVERY_UNAVAILABLE",
+      && error.code === "LEGAL_SOURCE_DISCOVERY_UNAVAILABLE"
+      && !error.retryable,
   );
-
-  await assert.rejects(
-    () => discoverAdviceSitemapDocuments({
-      fetchImpl: sequence([
-        response("Sitemap: https://advice.uz/sitemap.xml\n", "text/plain"),
-        new Response("x", {
-          headers: { "content-type": "application/xml", "content-length": "999999" },
-        }),
-      ]),
-    }),
-    (error: unknown) => error instanceof LegalSourceDiscoveryError
-      && error.code === "LEGAL_SOURCE_DISCOVERY_TOO_LARGE",
-  );
+  assert.equal(calls, 0);
 });
 
 test("Lex RSS discovery respects robots crawl delay and returns balanced canonical RU/UZ documents", async () => {
@@ -79,8 +37,8 @@ test("Lex RSS discovery respects robots crawl delay and returns balanced canonic
     response([
       "<?xml version=\"1.0\"?><rss><channel>",
       "<link>/</link>",
-      "<item><link>/ru/docs/8372154</link></item>",
-      "<item><link>https://www.lex.uz/ru/docs/-8374622</link></item>",
+      "<item><title>Первый официальный акт</title><pubDate>Tue, 05 Aug 2026 10:00:00 GMT</pubDate><link>/ru/docs/8372154</link></item>",
+      "<item><title>Второй официальный акт</title><link>https://www.lex.uz/ru/docs/-8374622</link></item>",
       "<item><link>/uz/docs/8371302</link></item>",
       "<item><link>https://evil.example/ru/docs/8370000</link></item>",
       "</channel></rss>",
@@ -115,6 +73,14 @@ test("Lex RSS discovery respects robots crawl delay and returns balanced canonic
     "https://lex.uz/uz/docs/8374968",
   ]);
   assert.deepEqual(result.rssUrls, ["https://lex.uz/ru/rss", "https://lex.uz/uz/rss"]);
+  assert.deepEqual(result.entries.slice(0, 2).map((entry) => ({
+    url: entry.reference.canonicalUrl,
+    title: entry.title,
+    publishedAt: entry.publishedAt,
+  })), [
+    { url: "https://lex.uz/ru/docs/8372154", title: "Первый официальный акт", publishedAt: "2026-08-05T10:00:00.000Z" },
+    { url: "https://lex.uz/ru/docs/-8374622", title: "Второй официальный акт", publishedAt: null },
+  ]);
   assert.equal(result.robotsUrl, "https://lex.uz/robots.txt");
   assert.equal(result.crawlDelaySeconds, 20);
   assert.equal(result.fetchedAt, "2026-08-05T19:00:00.000Z");

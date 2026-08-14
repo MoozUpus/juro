@@ -31,6 +31,11 @@ export function nextMonthStart(value: string): string {
   return fromUtcDate(new Date(Date.UTC(year, month, 1)));
 }
 
+export function previousMonthStart(value: string): string {
+  const [year, month] = monthStart(value).split("-").map(Number);
+  return fromUtcDate(new Date(Date.UTC(year, month - 2, 1)));
+}
+
 function isValidIsoDate(value: string): boolean {
   if (!ISO_DATE.test(value)) return false;
   const parsed = new Date(`${value}T00:00:00.000Z`);

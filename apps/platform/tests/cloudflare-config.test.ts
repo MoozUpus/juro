@@ -31,7 +31,7 @@ type EnvironmentConfig = {
       queue: string;
       max_batch_size: number;
       max_retries: number;
-      dead_letter_queue: string;
+      dead_letter_queue?: string;
     }>;
   };
   vectorize: NamedBinding[];
@@ -62,6 +62,26 @@ const queueContract = [
   ["LEGAL_SOURCES_SYNC_QUEUE", "legal-sources-sync"],
   ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
   ["NOTIFICATIONS_QUEUE", "notifications"],
+] as const;
+
+// These bindings are deliberately metrics-only readers for DLQs that have a
+// durable terminalizer. They are not job producer contracts.
+const documentDlqMetricsContract = [
+  ["DOCUMENT_ANALYSIS_DLQ", "document-analysis-dlq"],
+  ["OCR_PROCESSING_DLQ", "ocr-processing-dlq"],
+] as const;
+
+const isolatedDlqMetricsContract = [
+  ...documentDlqMetricsContract,
+  ["DOCUMENT_EXPORT_DLQ", "document-export-dlq"],
+  ["MALWARE_SCAN_DLQ", "malware-scan-dlq"],
+] as const;
+
+// This deliberately stays outside the platform job/outbox binding contract:
+// it is a staging-only, content-free round-trip health probe.
+const stagingQueueHealthProbeContract = [
+  "STAGING_QUEUE_HEALTH_PROBE_QUEUE",
+  "queue-health",
 ] as const;
 
 const vectorContract = [
@@ -106,11 +126,25 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED,
-      environment === "staging" || environment === "production" ? "false" : undefined,
+      environment === "staging"
+        ? (config.vars.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED === "true" ? "true" : "false")
+        : environment === "production" ? "false" : undefined,
+    );
+    assert.equal(
+      config.vars.STAGING_QUEUE_HEALTH_PROBE_ENABLED,
+      environment === "staging" ? "true" : "false",
+    );
+    assert.equal(
+      config.vars.MALWARE_SCANNER_PROBE_ENABLED,
+        environment === "staging" || environment === "production" ? "false" : undefined,
     );
     assert.equal(
       config.vars.LEGAL_ADVICE_INGESTION_ENABLED,
       "false",
+    );
+    assert.equal(
+      config.vars.LEGAL_LEX_INGESTION_ENABLED,
+      environment === "staging" ? "true" : "false",
     );
     assert.equal(
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
@@ -118,7 +152,11 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
-      "false",
+      "true",
+    );
+    assert.equal(
+      config.vars.LEGAL_LEX_METADATA_MONITOR_ENABLED,
+      "true",
     );
     assert.equal(
       config.vars.LEGAL_SOURCE_STAFF_API_ENABLED,
@@ -171,20 +209,56 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     const environmentQueueContract = hasAsyncConsumers
       ? [...queueContract, ["MALWARE_SCAN_QUEUE", "malware-scan"] as const]
       : queueContract;
+    const environmentDlqMetricsContract = hasAsyncConsumers
+      ? isolatedDlqMetricsContract
+      : documentDlqMetricsContract;
+    const environmentProducerContract = hasAsyncConsumers
+      ? [
+        environmentQueueContract[0]!,
+        environmentDlqMetricsContract[0]!,
+        environmentQueueContract[1]!,
+        environmentDlqMetricsContract[1]!,
+        environmentQueueContract[2]!,
+        environmentDlqMetricsContract[2]!,
+        ...environmentQueueContract.slice(3, -1),
+        environmentQueueContract.at(-1)!,
+        environmentDlqMetricsContract[3]!,
+      ]
+      : [
+        environmentQueueContract[0]!,
+        environmentDlqMetricsContract[0]!,
+        environmentQueueContract[1]!,
+        environmentDlqMetricsContract[1]!,
+        ...environmentQueueContract.slice(2),
+      ];
+    const expectedProducerContract = environment === "staging"
+      ? [...environmentProducerContract, stagingQueueHealthProbeContract]
+      : environmentProducerContract;
     assert.deepEqual(
       config.queues.producers,
-      environmentQueueContract.map(([binding, name]) => ({
+      expectedProducerContract.map(([binding, name]) => ({
         binding,
         queue: `${environment}-${name}`,
       })),
     );
     assert.deepEqual(
-      config.queues.producers.map(({ binding }) => binding),
+      config.queues.producers
+        .map(({ binding }) => binding)
+        .filter((binding) => !binding.endsWith("_DLQ")),
       environment === "staging" || environment === "production"
-        ? [...ATTACHED_PLATFORM_QUEUE_BINDINGS]
+        ? [
+          ...ATTACHED_PLATFORM_QUEUE_BINDINGS,
+          ...(environment === "staging" ? [stagingQueueHealthProbeContract[0]] : []),
+        ]
         : [...ATTACHED_PLATFORM_QUEUE_BINDINGS].filter((binding) =>
           binding !== "MALWARE_SCAN_QUEUE"
         ),
+    );
+    assert.deepEqual(
+      config.queues.producers
+        .map(({ binding }) => binding)
+        .filter((binding) => binding.endsWith("_DLQ")),
+      environmentDlqMetricsContract.map(([binding]) => binding),
     );
     assert.deepEqual(
       [...PLATFORM_QUEUE_BINDINGS].filter((binding) =>
@@ -208,6 +282,17 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             retry_delay: 30,
           },
           {
+            // This second-level consumer has no further DLQ. It retries D1
+            // terminalization separately, then acknowledges only a durable
+            // terminal job ledger state.
+            queue: `${environment}-document-analysis-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
+          },
+          {
             queue: `${environment}-ocr-processing`,
             max_batch_size: 1,
             max_batch_timeout: 5,
@@ -217,6 +302,16 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             retry_delay: 30,
           },
           {
+            // OCR is a separate prerequisite path: its terminalizer must
+            // remain available even while document-analysis capacity is busy.
+            queue: `${environment}-ocr-processing-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
+          },
+          {
             queue: `${environment}-document-export`,
             max_batch_size: 1,
             max_batch_timeout: 5,
@@ -224,6 +319,16 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             dead_letter_queue: `${environment}-document-export-dlq`,
             max_concurrency: 1,
             retry_delay: 30,
+          },
+          {
+            // Exports have a durable source record, so a retry-exhausted
+            // delivery is terminalized by the same audited DLQ contract.
+            queue: `${environment}-document-export-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
           },
           {
             queue: `${environment}-legal-sources-sync`,
@@ -270,6 +375,32 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
             max_concurrency: 1,
             retry_delay: 30,
           },
+          {
+            // The scanner DLQ only records retry exhaustion. It cannot mark a
+            // quarantined file safe or enqueue extraction/analysis work.
+            queue: `${environment}-malware-scan-dlq`,
+            max_batch_size: 1,
+            max_batch_timeout: 5,
+            max_retries: 10,
+            max_concurrency: 1,
+            retry_delay: 60,
+          },
+          ...(environment === "staging"
+            ? [{
+              queue: "staging-queue-health",
+              max_batch_size: 1,
+              max_batch_timeout: 5,
+              max_retries: 3,
+              max_concurrency: 1,
+              retry_delay: 30,
+            }, {
+              queue: "staging-legal-evaluation",
+              max_batch_size: 1,
+              max_batch_timeout: 1,
+              max_retries: 0,
+              max_concurrency: 4,
+            }]
+            : []),
         ]
         : [],
     );
@@ -304,8 +435,8 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       ...config.d1_databases.map((entry) => String(entry.database_name)),
       ...config.r2_buckets.map((entry) => String(entry.bucket_name)),
       ...config.queues.producers.map(({ queue }) => queue),
-      ...config.queues.consumers.map(({ dead_letter_queue }) =>
-        dead_letter_queue
+      ...config.queues.consumers.flatMap(({ dead_letter_queue }) =>
+        dead_letter_queue ? [dead_letter_queue] : []
       ),
       ...config.vectorize.map((entry) => String(entry.index_name)),
       ...config.analytics_engine_datasets.map((entry) =>
@@ -413,32 +544,42 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
   assert.match(serialized, /"MALWARE_SCAN_QUEUE"/);
   assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
-  assert.equal(source.env.production.queues.consumers.length, 8);
-  assert.equal(source.env.staging.queues.consumers.length, 8);
+  assert.equal(source.env.production.queues.consumers.length, 12);
+  assert.equal(source.env.staging.queues.consumers.length, 14);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
     [
       "staging-document-analysis",
+      "staging-document-analysis-dlq",
       "staging-ocr-processing",
+      "staging-ocr-processing-dlq",
       "staging-document-export",
+      "staging-document-export-dlq",
       "staging-legal-sources-sync",
       "staging-email-notifications",
       "staging-data-retention-cleanup",
       "staging-notifications",
       "staging-malware-scan",
+      "staging-malware-scan-dlq",
+      "staging-queue-health",
+      "staging-legal-evaluation",
     ],
   );
   assert.deepEqual(
     source.env.production.queues.consumers.map(({ queue }) => queue),
     [
       "production-document-analysis",
+      "production-document-analysis-dlq",
       "production-ocr-processing",
+      "production-ocr-processing-dlq",
       "production-document-export",
+      "production-document-export-dlq",
       "production-legal-sources-sync",
       "production-email-notifications",
       "production-data-retention-cleanup",
       "production-notifications",
       "production-malware-scan",
+      "production-malware-scan-dlq",
     ],
   );
 });

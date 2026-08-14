@@ -1,4 +1,4 @@
-.global-search-trigger{min-width:170px!important;justify-content:flex-start!important}
+.global-search-trigger{min-width:170px!important;min-height:44px;justify-content:flex-start!important}
 .global-search-trigger span{font-size:12px}
 .global-search-trigger kbd{margin-inline-start:auto;padding:2px 5px;border:1px solid #d8ddde;border-radius:5px;background:#f4f5f3;color:#6c7a82;font-family:inherit;font-size:10px}
 .global-search-layer{position:fixed;z-index:900;inset:100% 0 auto;height:calc(100vh - 76px);display:block;background:#f7f5f0}
@@ -22,5 +22,5 @@
 .global-search-message{grid-column:1/-1;align-self:center;padding:80px 20px;color:#687982;font-size:16px;text-align:center}
 .global-search-message.error{color:#91372f}
 .global-search-dialog>footer{display:flex;min-height:50px;align-items:center;justify-content:center;gap:22px;padding:0 24px;border-top:1px solid #e3e6e5;background:#fff;color:#6c7b83;font-size:11px}
-@media(max-width:1050px){.global-search-trigger{min-width:42px!important}.global-search-trigger span,.global-search-trigger kbd{display:none}}
+@media(max-width:1050px){.global-search-trigger{min-width:44px!important}.global-search-trigger span,.global-search-trigger kbd{display:none}}
 @media(max-width:800px){.global-search-layer{height:calc(100vh - 70px)}.global-search-dialog>header{min-height:76px;padding:10px 14px}.global-search-dialog input{height:52px;font-size:17px}.global-search-results{width:100%;padding:14px;grid-template-columns:1fr}.global-search-dialog>footer{padding-bottom:env(safe-area-inset-bottom)}}

@@ -10,6 +10,17 @@
 Updated: 2026-07-30
 Scope: protected staging; production execution is not authorized.
 
+## Migrations 0112–0113 / interactive reliability rollback
+
+For a staging regression in the common AI deadline, telemetry or dependency
+projection, first set `STAGING_SYNTHETIC_PROBES_ENABLED=false` (if it is on) or
+restore the previously verified staging Worker. The two migrations are additive
+and append-only: leave their tables, triggers and evidence in place. Restore
+D1 only for demonstrated corruption after preserving the current state and
+verifying the private backup in isolation. A missing or stale health record is
+an `unknown`/`stale` status, not a reason to write synthetic green evidence.
+See [AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).
+
 ## Cinematic prototype
 
 The design slice is additive and schema-free. Immediate rollback is Worker traffic to the previous verified staging version or removal of the staging-only route files in a follow-up artifact. Existing canonical routes and CSS remain intact.

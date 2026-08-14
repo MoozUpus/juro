@@ -35,11 +35,10 @@ and ARIA status. It never infers listening when the microphone is off.
 ## Avatar boundary
 
 The repository still has no owner-approved rigged GLB/FBX/USDZ/BLEND asset.
-Voice mode therefore uses only the verified static
-`/jurobek-avatar.webp` poster. It is explicitly labelled static and is not used
-as fake lip sync or proof of a live lawyer. The disabled “voice with avatar”
-control remains unavailable until the approved rig, animation clips, visual
-review and GPU/memory gates exist.
+Plain voice does not use an avatar poster. `/jurobek-avatar.webp` remains a
+static onboarding brand image only. No “voice with avatar” control is shipped;
+it must not return until an approved rig, animation clips, visual review and
+GPU/memory gates exist.
 
 Realtime voice and audio/video consultation providers remain separate
 feature-off capabilities. Plain voice and text continue to work without WebGL.

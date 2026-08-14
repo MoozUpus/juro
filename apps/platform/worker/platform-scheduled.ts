@@ -1,12 +1,11 @@
 import { dispatchOutbox } from "./platform-outbox";
 import {
-  LEGAL_CORPUS_SYNC_CRON,
-  enqueueLexPdfNormalizationRecovery,
-  recoverStaleScheduledCorpusFetchRequests,
-  reconcileScheduledCorpusSyncRuns,
-  startScheduledCorpusSync,
-} from "../lib/legal/scheduled-corpus-sync";
-import { evaluateLegalCorpusAlerts } from "../lib/legal/corpus-alerts";
+  LEX_METADATA_DISCOVERY_CRON,
+  lexMetadataRetryDue,
+  reconcileStaleLexMetadataMonitorRuns,
+  runLexMetadataMonitor,
+} from "../lib/legal/metadata-monitor";
+import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-health";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
@@ -14,12 +13,23 @@ import { reconcileAnalysisVersionObjectWrites } from "../lib/document-analysis/v
 import { reconcileBuilderVersionObjectWrites } from "../lib/document-builder/document-version-object-write";
 import { taskReminderSubjectId } from "../lib/notifications/task-reminder-dispatch";
 import { taskReminderEmailJobId } from "../lib/notifications/task-reminder-email";
-import type { PlatformJobEnv } from "./platform-jobs";
+import {
+  expectedQueueName,
+  type PlatformJobEnv,
+} from "./platform-jobs";
+import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
+import { reconcileQueueDlqHealth } from "./queue-dlq-health-reconciliation";
 
 const OUTBOX_CRON = "*/5 * * * *";
 const LOCK_NAME = "outbox-dispatch";
 const LOCK_MS = 4 * 60 * 1_000;
 const TASK_REMINDER_BATCH_SIZE = 100;
+const QUEUE_DLQ_RECONCILIATION_BATCH_SIZE = 20;
+// Source consumers retry at most three times with short bounded delays. The
+// larger grace window prevents Cron from racing a delayed source delivery or a
+// five-minute execution lease, but still makes a dropped/busy DLQ observable
+// within one operational interval.
+export const QUEUE_DLQ_RECONCILIATION_GRACE_MS = 15 * 60 * 1_000;
 
 type DueTaskReminder = {
   reminderId: string;
@@ -74,6 +84,15 @@ async function maybeRunStagingDocumentAnalysisProbe(env: PlatformJobEnv) {
   const { runStagingDocumentAnalysisProbe } = await import("./staging-document-analysis-probe");
   return runStagingDocumentAnalysisProbe(env);
 }
+
+async function maybeEnqueueStagingQueueHealthProbe(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "staging"
+    || (env as Record<string, unknown>).STAGING_QUEUE_HEALTH_PROBE_ENABLED !== "true"
+  ) return null;
+  const { enqueueStagingQueueHealthProbe } = await import("./staging-queue-health-probe");
+  return enqueueStagingQueueHealthProbe(env);
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -82,6 +101,188 @@ function logScheduled(
   if (level === "error") console.error(entry);
   else console.log(entry);
 }
+
+type RetryExhaustedQueueJob = {
+  jobId: string;
+  idempotencyKey: string;
+  queueName: string;
+  jobType:
+    | "document.analyze"
+    | "document.index"
+    | "ocr.process"
+    | "document.export"
+    | "malware.scan";
+  subjectId: string;
+  workspaceId: string;
+  correlationId: string;
+  envelopeHash: string;
+  attempt: number;
+};
+
+export type QueueDlqReconciliationSummary = {
+  eligible: number;
+  terminalized: number;
+};
+
+/**
+ * Recovers the small failure window in which an implemented document-related
+ * DLQ cannot terminalize its own ledger entry before that DLQ consumer
+ * exhausts retries.
+ *
+ * This is deliberately a terminalization-only pass: it does not resubmit a
+ * provider call, mutate analysis/OCR/index/export state, promote a quarantined
+ * file, or mark user work as successful. The existing append-only
+ * operational-redrive flow remains the only way to republish the original
+ * identifiers after review. Every UPDATE is fenced by the source queue,
+ * immutable envelope hash, attempt count, expired lease, and a
+ * dispatched/retrying outbox record.
+ */
+export async function reconcileRetryExhaustedQueueJobs(
+  env: Pick<PlatformJobEnv, "APP_ENV" | "DB">,
+  input: {
+    now?: Date;
+    limit?: number;
+  } = {},
+): Promise<QueueDlqReconciliationSummary> {
+  const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  const cutoffIso = new Date(
+    now.getTime() - QUEUE_DLQ_RECONCILIATION_GRACE_MS,
+  ).toISOString();
+  const limit = Math.max(
+    1,
+    Math.min(
+      QUEUE_DLQ_RECONCILIATION_BATCH_SIZE,
+      Math.trunc(input.limit ?? QUEUE_DLQ_RECONCILIATION_BATCH_SIZE),
+    ),
+  );
+  const documentAnalysisQueue = expectedQueueName(
+    "document.analyze",
+    env.APP_ENV,
+  );
+  const ocrQueue = expectedQueueName("ocr.process", env.APP_ENV);
+  const documentExportQueue = expectedQueueName("document.export", env.APP_ENV);
+  const malwareScanQueue = expectedQueueName("malware.scan", env.APP_ENV);
+
+  const candidates = await env.DB.prepare(`
+    SELECT
+      j.id AS jobId,
+      j.idempotency_key AS idempotencyKey,
+      j.queue_name AS queueName,
+      j.job_type AS jobType,
+      j.subject_id AS subjectId,
+      j.workspace_id AS workspaceId,
+      j.correlation_id AS correlationId,
+      j.envelope_hash AS envelopeHash,
+      j.attempt AS attempt
+    FROM job_runs j
+    JOIN job_outbox o
+      ON o.idempotency_key=j.idempotency_key
+     AND o.job_type=j.job_type
+     AND o.subject_id=j.subject_id
+     AND COALESCE(o.workspace_id,'')=COALESCE(j.workspace_id,'')
+     AND o.correlation_id=j.correlation_id
+    WHERE (
+        (j.queue_name=? AND j.job_type IN ('document.analyze','document.index'))
+        OR (j.queue_name=? AND j.job_type='ocr.process')
+        OR (j.queue_name=? AND j.job_type='document.export')
+        OR (j.queue_name=? AND j.job_type='malware.scan')
+      )
+      AND j.status IN ('running','retrying')
+      AND j.attempt>=3
+      AND j.updated_at<=?
+      AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
+      AND (j.lease_expires_at IS NULL OR j.lease_expires_at<=?)
+      AND o.status IN ('dispatched','retrying')
+      AND (o.lease_expires_at IS NULL OR o.lease_expires_at<=?)
+    ORDER BY j.updated_at ASC,j.id ASC
+    LIMIT ?
+  `).bind(
+    documentAnalysisQueue,
+    ocrQueue,
+    documentExportQueue,
+    malwareScanQueue,
+    cutoffIso,
+    cutoffIso,
+    nowIso,
+    nowIso,
+    limit,
+  ).all<RetryExhaustedQueueJob>();
+
+  let terminalized = 0;
+  for (const candidate of candidates.results) {
+    const updated = await env.DB.prepare(`
+      UPDATE job_runs
+      SET status='dead_lettered',
+          lease_owner=NULL,
+          lease_expires_at=NULL,
+          next_attempt_at=NULL,
+          error_code=COALESCE(error_code,'JOB_TRANSIENT_FAILURE'),
+          finished_at=?,
+          updated_at=?
+      WHERE id=?
+        AND idempotency_key=?
+        AND queue_name=?
+        AND job_type=?
+        AND subject_id=?
+        AND workspace_id=?
+        AND correlation_id=?
+        AND envelope_hash=?
+        AND attempt=?
+        AND status IN ('running','retrying')
+        AND updated_at<=?
+        AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+        AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+        AND EXISTS (
+          SELECT 1
+          FROM job_outbox o
+          WHERE o.idempotency_key=job_runs.idempotency_key
+            AND o.job_type=job_runs.job_type
+            AND o.subject_id=job_runs.subject_id
+            AND COALESCE(o.workspace_id,'')=COALESCE(job_runs.workspace_id,'')
+            AND o.correlation_id=job_runs.correlation_id
+            AND o.status IN ('dispatched','retrying')
+            AND (o.lease_expires_at IS NULL OR o.lease_expires_at<=?)
+        )
+    `).bind(
+      nowIso,
+      nowIso,
+      candidate.jobId,
+      candidate.idempotencyKey,
+      candidate.queueName,
+      candidate.jobType,
+      candidate.subjectId,
+      candidate.workspaceId,
+      candidate.correlationId,
+      candidate.envelopeHash,
+      candidate.attempt,
+      cutoffIso,
+      cutoffIso,
+      nowIso,
+      nowIso,
+    ).run();
+    terminalized += Number(updated.meta.changes ?? 0);
+  }
+
+  if (terminalized > 0) {
+    await recordDependencyHealthEvidence(env, {
+      key: "queue_dlq",
+      state: "degraded",
+      safeErrorCode: "DLQ_BACKLOG",
+      evidenceKind: "scheduled_job",
+      startedAt: now.getTime(),
+    }, now);
+  }
+
+  return { eligible: candidates.results.length, terminalized };
+}
+
+/**
+ * Backward-compatible name retained for callers that only knew the original
+ * document/OCR recovery scope. It now reconciles the full set of durable
+ * document-related DLQ jobs, including export and malware scan.
+ */
+export const reconcileRetryExhaustedDocumentJobs = reconcileRetryExhaustedQueueJobs;
 
 /**
  * Enqueues opaque reminder identifiers through the durable outbox. The queue
@@ -269,7 +470,7 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
-  if (controller.cron !== OUTBOX_CRON && controller.cron !== LEGAL_CORPUS_SYNC_CRON) {
+  if (controller.cron !== OUTBOX_CRON && controller.cron !== LEX_METADATA_DISCOVERY_CRON) {
     logScheduled("error", {
       event: "scheduled.unknown_cron",
       environment: env.APP_ENV,
@@ -279,17 +480,28 @@ export async function handleScheduled(
     return;
   }
 
-  if (controller.cron === LEGAL_CORPUS_SYNC_CRON) {
-    const summary = await startScheduledCorpusSync(env, {
-      discoveryWait: (delayMs) => scheduler.wait(delayMs),
+  if (controller.cron === LEX_METADATA_DISCOVERY_CRON) {
+    if ((env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED !== "true") {
+      logScheduled("info", {
+        event: "scheduled.lex_metadata_monitor_disabled",
+        environment: env.APP_ENV,
+        cron: controller.cron,
+      });
+      controller.noRetry();
+      return;
+    }
+    const summary = await runLexMetadataMonitor(env, {
+      wait: (delayMs) => scheduler.wait(delayMs),
     });
     logScheduled("info", {
-      event: "scheduled.legal_corpus_started",
+      event: "scheduled.lex_metadata_monitor_finished",
       environment: env.APP_ENV,
       cron: controller.cron,
-      started: summary.started,
-      busy: summary.busy,
-      empty: summary.empty,
+      status: summary.status,
+      discovered: summary.discovered,
+      processed: summary.processed,
+      changed: summary.changed,
+      errors: summary.errors,
     });
     return;
   }
@@ -304,23 +516,56 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
+  const startedAt = Date.now();
   let failureCode = "OUTBOX_DISPATCH_FAILED";
   try {
     failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
     const now = new Date().toISOString();
     const taskReminders = await enqueueDueTaskReminders(env, now);
-    failureCode = "LEGAL_CORPUS_RETRY_RECOVERY_FAILED";
-    const corpusRetriesRecovered =
-      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-        ? await recoverStaleScheduledCorpusFetchRequests(env, { now: new Date(now) })
-        : 0;
-    failureCode = "LEGAL_CORPUS_PDF_NORMALIZATION_RECOVERY_FAILED";
-    const lexPdfNormalizationsEnqueued =
-      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-        ? await enqueueLexPdfNormalizationRecovery(env, { now: new Date(now) })
-        : 0;
+    const lexMetadataMonitorEnabled = (env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED === "true";
+    let lexMetadataStaleRuns = 0;
+    let lexMetadataRetry: Awaited<ReturnType<typeof runLexMetadataMonitor>> | null = null;
+    if (lexMetadataMonitorEnabled) {
+      failureCode = "LEX_METADATA_MONITOR_RECONCILE_FAILED";
+      lexMetadataStaleRuns = await reconcileStaleLexMetadataMonitorRuns(env, { now: new Date(now) });
+    }
+    const directLexRetrievalEnabled = (env as Record<string, unknown>).LEGAL_DIRECT_RETRIEVAL_ENABLED === "true";
+    failureCode = "LEX_SOURCE_HEALTH_CHECK_FAILED";
+    const lexSourceHealth = directLexRetrievalEnabled
+      ? await runDirectLegalSourceHealthCheck({
+        db: env.DB,
+        environment: env.APP_ENV,
+      })
+      : {
+        state: "unknown" as const,
+        alertCode: "DIRECT_SOURCE_HEALTH_UNKNOWN" as const,
+        checkedAt: null,
+        ageMinutes: null,
+        sources: [],
+      };
+    if (lexMetadataMonitorEnabled) {
+      failureCode = "LEX_METADATA_MONITOR_RETRY_FAILED";
+      lexMetadataRetry = await lexMetadataRetryDue(env, new Date(now))
+        ? await runLexMetadataMonitor(env, {
+          now: new Date(now),
+          runType: "metadata_retry",
+          wait: (delayMs) => scheduler.wait(delayMs),
+        })
+        : null;
+    }
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
+    failureCode = "QUEUE_HEALTH_PROBE_ENQUEUE_FAILED";
+    const queueHealthProbe = await maybeEnqueueStagingQueueHealthProbe(env);
+    failureCode = "QUEUE_DLQ_RECONCILIATION_FAILED";
+    const documentDlqReconciliation = await reconcileRetryExhaustedQueueJobs(
+      env,
+      { now: new Date(now) },
+    );
+    failureCode = "QUEUE_DLQ_HEALTH_RECONCILIATION_FAILED";
+    const queueDlqHealth = await reconcileQueueDlqHealth(env, {
+      now: new Date(now),
+    });
     failureCode = "MEMORY_RETENTION_CLEANUP_FAILED";
     const memoryRetention = await purgeDueDeletedUserMemories({
       db: env.DB,
@@ -362,15 +607,15 @@ export async function handleScheduled(
       failureCode = documentAnalysisProbe.errorCode ?? failureCode;
       throw new Error(failureCode);
     }
-    failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
-    const corpusRunsCompleted =
-      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-        ? await reconcileScheduledCorpusSyncRuns(env)
-        : 0;
-    failureCode = "LEGAL_CORPUS_ALERT_EVALUATION_FAILED";
-    const corpusAlerts = (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-      ? await evaluateLegalCorpusAlerts(env, { now: new Date(now) })
-      : { created: 0, failedRuns: 0, staleSources: 0 };
+    // `scheduled_runs` makes this completion idempotent per cron slot. This
+    // must be a heartbeat, not a throttled product event, otherwise cron
+    // jitter can suppress a real D1 success immediately before its age limit.
+    await recordDependencyHealthEvidence(env, {
+      key: "d1",
+      state: "operational",
+      evidenceKind: "scheduled_job",
+      startedAt,
+    });
     failureCode = "SCHEDULE_COMPLETION_FAILED";
     await finishSchedule(env, run, "completed", null);
     logScheduled("info", {
@@ -381,10 +626,20 @@ export async function handleScheduled(
       dispatched: summary.dispatched,
       retrying: summary.retrying,
       rejected: summary.rejected,
+      queueDlqEligible: documentDlqReconciliation.eligible,
+      queueDlqTerminalized: documentDlqReconciliation.terminalized,
+      queueDlqHealthState: queueDlqHealth.state,
+      queueDlqDocumentBacklog: queueDlqHealth.documentAnalysisBacklog,
+      queueDlqOcrBacklog: queueDlqHealth.ocrBacklog,
+      queueDlqDocumentExportBacklog: queueDlqHealth.documentExportBacklog,
+      queueDlqMalwareScanBacklog: queueDlqHealth.malwareScanBacklog,
+      queueDlqDurableDeadLettered: queueDlqHealth.durableDeadLettered,
       taskRemindersDue: taskReminders.due,
       taskRemindersEnqueued: taskReminders.enqueued,
-      corpusRetriesRecovered,
-      lexPdfNormalizationsEnqueued,
+      lexMetadataStaleRuns,
+      lexSourceHealthState: lexSourceHealth.state,
+      lexSourceHealthError: lexSourceHealth.alertCode,
+      lexMetadataRetryStatus: lexMetadataRetry?.status ?? "not_due",
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,
       guestAiRetentionEligible: guestAiRetention.eligible,
@@ -419,10 +674,10 @@ export async function handleScheduled(
       documentAnalysisProbeCompleted: documentAnalysisProbe?.completed ?? 0,
       documentAnalysisProbeFailed: documentAnalysisProbe?.failed ?? 0,
       documentAnalysisProbeSkipped: documentAnalysisProbe?.skipped ?? 0,
-      corpusRunsCompleted,
-      corpusAlertsCreated: corpusAlerts.created,
-      corpusFailedRunAlerts: corpusAlerts.failedRuns,
-      corpusStaleSourceAlerts: corpusAlerts.staleSources,
+      queueHealthProbeEnqueued: queueHealthProbe?.enqueued ?? 0,
+      queueHealthProbeStale: queueHealthProbe?.stale ?? 0,
+      queueHealthProbeFailed: queueHealthProbe?.failed ?? 0,
+      queueHealthProbeSkipped: queueHealthProbe?.skipped ?? 0,
     });
   } catch {
     try {

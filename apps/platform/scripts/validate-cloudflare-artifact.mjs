@@ -204,15 +204,23 @@ assert.deepEqual(
 );
 if (["staging", "production"].includes(requestedEnvironment)) {
   assert.equal(artifact.vars?.MALWARE_SCAN_ENABLED, "true");
-  assert.equal(artifact.vars?.MALWARE_SCANNER_PROBE_ENABLED, "false");
-  assert.equal(artifact.vars?.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED, "false");
+  assert.equal(
+    artifact.vars?.MALWARE_SCANNER_PROBE_ENABLED,
+    "false",
+  );
+  assert.equal(
+    artifact.vars?.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED,
+    requestedEnvironment === "production"
+      ? "false"
+      : (artifact.vars?.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED === "true" ? "true" : "false"),
+  );
   assert.deepEqual(artifact.migrations, selected.migrations);
   assert.deepEqual(artifact.durable_objects, selected.durable_objects);
   assert.deepEqual(artifact.containers, selected.containers);
   assert.deepEqual(artifact.services, selected.services);
 }
 
-const queueContract = [
+const sourceQueueContract = [
   ["DOCUMENT_ANALYSIS_QUEUE", "document-analysis"],
   ["OCR_PROCESSING_QUEUE", "ocr-processing"],
   ["DOCUMENT_EXPORT_QUEUE", "document-export"],
@@ -221,10 +229,39 @@ const queueContract = [
   ["DATA_RETENTION_CLEANUP_QUEUE", "data-retention-cleanup"],
   ["NOTIFICATIONS_QUEUE", "notifications"],
 ];
+const documentDlqContract = [
+  ["DOCUMENT_ANALYSIS_DLQ", "document-analysis-dlq"],
+  ["OCR_PROCESSING_DLQ", "ocr-processing-dlq"],
+];
+const isolatedDlqContract = [
+  ...documentDlqContract,
+  ["DOCUMENT_EXPORT_DLQ", "document-export-dlq"],
+  ["MALWARE_SCAN_DLQ", "malware-scan-dlq"],
+];
+const stagingQueueHealthProbeContract = [
+  ["STAGING_QUEUE_HEALTH_PROBE_QUEUE", "queue-health"],
+];
 const hasAsyncConsumers = ["staging", "production"].includes(requestedEnvironment);
-if (hasAsyncConsumers) {
-  queueContract.push(["MALWARE_SCAN_QUEUE", "malware-scan"]);
-}
+const queueContract = hasAsyncConsumers
+  ? [
+    sourceQueueContract[0],
+    isolatedDlqContract[0],
+    sourceQueueContract[1],
+    isolatedDlqContract[1],
+    sourceQueueContract[2],
+    isolatedDlqContract[2],
+    ...sourceQueueContract.slice(3),
+    ["MALWARE_SCAN_QUEUE", "malware-scan"],
+    isolatedDlqContract[3],
+    ...(requestedEnvironment === "staging" ? stagingQueueHealthProbeContract : []),
+  ]
+  : [
+    sourceQueueContract[0],
+    documentDlqContract[0],
+    sourceQueueContract[1],
+    documentDlqContract[1],
+    ...sourceQueueContract.slice(2),
+  ];
 assert.deepEqual(
   artifact.queues?.producers,
   queueContract.map(([binding, suffix]) => ({
@@ -232,7 +269,7 @@ assert.deepEqual(
     queue: `${requestedEnvironment}-${suffix}`,
   })),
 );
-const consumerContract = [
+const sourceConsumerContract = [
   ["document-analysis", 1, 3, 1],
   ["ocr-processing", 1, 3, 1],
   ["document-export", 1, 3, 1],
@@ -245,15 +282,54 @@ const consumerContract = [
 assert.deepEqual(
   artifact.queues?.consumers,
   hasAsyncConsumers
-    ? consumerContract.map(([suffix, batchSize, retries, concurrency]) => ({
-      queue: `${requestedEnvironment}-${suffix}`,
-      max_batch_size: batchSize,
-      max_batch_timeout: 5,
-      max_retries: retries,
-      dead_letter_queue: `${requestedEnvironment}-${suffix}-dlq`,
-      max_concurrency: concurrency,
-      retry_delay: 30,
-    }))
+    ? (() => {
+      const sourceConsumers = sourceConsumerContract.map(([suffix, batchSize, retries, concurrency]) => ({
+        queue: `${requestedEnvironment}-${suffix}`,
+        max_batch_size: batchSize,
+        max_batch_timeout: 5,
+        max_retries: retries,
+        dead_letter_queue: `${requestedEnvironment}-${suffix}-dlq`,
+        max_concurrency: concurrency,
+        retry_delay: 30,
+      }));
+      const dlqConsumer = (suffix) => ({
+        // Terminalizable document work records retry exhaustion durably after
+        // its source queue exhausts retries. These consumers have no recursive
+        // DLQ; their D1 bookkeeping retries are bounded here and a scheduled
+        // reconciler fences any residual busy delivery.
+        queue: `${requestedEnvironment}-${suffix}-dlq`,
+        max_batch_size: 1,
+        max_batch_timeout: 5,
+        max_retries: 10,
+        max_concurrency: 1,
+        retry_delay: 60,
+      });
+      return [
+        sourceConsumers[0],
+        dlqConsumer("document-analysis"),
+        sourceConsumers[1],
+        dlqConsumer("ocr-processing"),
+        sourceConsumers[2],
+        dlqConsumer("document-export"),
+        ...sourceConsumers.slice(3, -1),
+        sourceConsumers.at(-1),
+        dlqConsumer("malware-scan"),
+        ...(requestedEnvironment === "staging" ? [{
+          queue: `${requestedEnvironment}-queue-health`,
+          max_batch_size: 1,
+          max_batch_timeout: 5,
+          max_retries: 3,
+          max_concurrency: 1,
+          retry_delay: 30,
+        }, {
+          queue: `${requestedEnvironment}-legal-evaluation`,
+          max_batch_size: 1,
+          max_batch_timeout: 1,
+          max_retries: 0,
+          max_concurrency: 4,
+        }] : []),
+      ];
+    })()
     : [],
   "Only isolated staging or production consumers may be attached",
 );

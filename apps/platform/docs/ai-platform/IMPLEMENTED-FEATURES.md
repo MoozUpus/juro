@@ -565,9 +565,14 @@ Protected staging now contains a single server-side entitlement boundary shared 
 
 Worker version `5feeab28-f23e-4dd6-a95c-88963306bf2a` serves 100% of `juro-platform-staging`. Staging currently has no subscriptions, consultation slots, or bookings, so a live paid handoff is not claimed. Production is unchanged. See `STAGING-PHASE7-ENTITLEMENTS-HANDOFF-EVIDENCE.md`.
 
-## Phase 8 cinematic staging prototype — 2026-07-30
+## Historical: Phase 8 cinematic staging prototype — retired 2026-08-12
 
-Protected staging now contains an isolated Cinematic Legal Intelligence surface without replacing canonical routes:
+This is retained only as historical staging evidence. The isolated Cinematic
+Legal Intelligence routes, surface, scoped CSS and runtime guard were removed
+from the application artifact on 2026-08-12 because the current scope excludes
+an AI/voice avatar. Canonical routes and production UI were not replaced.
+
+The retired prototype had contained:
 
 - exact staging-only server guard and noindex metadata;
 - personal and business-workspace prototype routes;
@@ -580,7 +585,7 @@ Protected staging now contains an isolated Cinematic Legal Intelligence surface 
 
 Local type-check, lint, 41 targeted core tests, 28 rendered Worker tests, full 416-test regression, staging/production-profile builds, artifact checks, document smokes, secret scan, and Impeccable detector pass. Worker version `cfef8153-3322-4ce5-b271-3478a0531b28` serves 100% of `juro-platform-staging`; D1 integrity and exact binding/Access/production read-backs pass.
 
-Authenticated visual/browser, axe, zoom, real-device, WebGL/GPU/memory, and performance gates remain open; see `STAGING-PHASE8-CINEMATIC-PROTOTYPE-EVIDENCE.md`.
+The historic visual/browser, axe, zoom, real-device, WebGL/GPU/memory, and performance gates were never a release approval; see `STAGING-PHASE8-CINEMATIC-PROTOTYPE-EVIDENCE.md`.
 
 ## Phase 5 completed-analysis JSON export — 2026-07-31
 

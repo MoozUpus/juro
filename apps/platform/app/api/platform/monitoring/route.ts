@@ -2,9 +2,8 @@ import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import {
-  filterTrustedVerifiedLegalSources,
-  isTrustedVerifiedLegalSource,
-} from "../../../../lib/legal/source-trust";
+  summarizeLexMetadataMonitoringFreshness,
+} from "../../../../lib/legal/monitoring-freshness";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const topics = new Set([
@@ -35,7 +34,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
   const workspace = await workspaceForUser(user);
   const locale = new URL(request.url).searchParams.get("locale") === "uz" ? "uz" : "ru";
   const db = requireD1();
-  const [preference, updates, sourceCheck] = await db.batch([
+  const [preference, updates, sourceCheck, latestRun] = await db.batch([
     db.prepare(
       `SELECT id,audience,topics_json AS topicsJson,channels_json AS channelsJson,
         frequency,locale,document_impact_consent AS documentImpactConsent,
@@ -43,30 +42,31 @@ export const GET = withApiErrors(async function GET(request: Request) {
        FROM monitoring_preferences WHERE workspace_id=? AND user_id=? LIMIT 1`,
     ).bind(workspace.id, user.id),
     db.prepare(
-      `SELECT u.id,u.title_original AS titleOriginal,u.original_language AS originalLanguage,
-        u.title_ru AS titleRu,u.title_uz AS titleUz,u.summary_ru AS summaryRu,u.summary_uz AS summaryUz,
-        u.change_summary_ru AS changeSummaryRu,u.change_summary_uz AS changeSummaryUz,
-        u.recommended_action_ru AS recommendedActionRu,u.recommended_action_uz AS recommendedActionUz,
-        u.topics_json AS topicsJson,u.affected_audiences_json AS affectedAudiencesJson,
-        u.adopted_at AS adoptedAt,u.effective_at AS effectiveAt,u.published_at AS publishedAt,
-        s.act_title AS sourceTitle,s.act_identifier AS sourceIdentifier,
-        s.official_url AS officialUrl,s.revision_date AS sourceRevisionDate,
-        s.last_checked_at AS sourceLastCheckedAt,s.status AS sourceStatus,
-        s.source_type AS sourceType,s.verification_state AS verificationState,
-        s.verified_at AS sourceVerifiedAt,s.content_sha256 AS sourceContentSha256
-       FROM legislation_updates u JOIN legal_sources s ON s.id=u.source_id
-       WHERE u.status='published_verified' AND u.verified_at IS NOT NULL
-         AND s.status='verified' AND s.verification_state='verified'
-         AND s.verified_at IS NOT NULL AND s.content_sha256 IS NOT NULL
-       ORDER BY u.published_at DESC LIMIT 50`,
+      `SELECT e.id,e.act_title AS title,e.change_type AS changeType,e.detected_at AS publishedAt,
+        e.canonical_url AS officialUrl,m.canonical_id AS sourceIdentifier,m.locale AS originalLanguage,
+        m.act_title AS sourceTitle,m.revision_date AS sourceRevisionDate,
+        m.last_checked_at AS sourceLastCheckedAt,m.http_status AS sourceHttpStatus,
+        m.last_error_code AS sourceErrorCode
+       FROM legal_monitoring_change_events e
+       JOIN legal_monitoring_metadata m ON m.id=e.metadata_id
+       WHERE m.http_status BETWEEN 200 AND 299 AND m.last_error_code IS NULL
+       ORDER BY e.detected_at DESC LIMIT 50`,
     ),
     db.prepare(
-      `SELECT official_url AS officialUrl,status,source_type AS sourceType,
-        verification_state AS verificationState,verified_at AS verifiedAt,
-        content_sha256 AS contentSha256,last_checked_at AS lastCheckedAt
-       FROM legal_sources WHERE status='verified' AND verification_state='verified'
-         AND verified_at IS NOT NULL AND content_sha256 IS NOT NULL`,
+      `SELECT canonical_url AS canonicalUrl,last_checked_at AS lastCheckedAt,
+        http_status AS httpStatus,last_error_code AS lastErrorCode
+       FROM legal_monitoring_metadata`,
     ),
+    db.prepare(
+      `SELECT status,run_type AS runType,discovered_count AS discoveredCount,
+        fetched_count AS fetchedCount,changed_count AS changedCount,
+        verified_count AS verifiedCount,error_count AS errorCount,
+        started_at AS startedAt,finished_at AS finishedAt,error_summary AS errorSummary
+       FROM source_sync_runs
+       WHERE environment=? AND source_kind='lex'
+         AND run_type IN ('metadata_monitor','metadata_retry','manual_metadata_monitor')
+       ORDER BY started_at DESC LIMIT 1`,
+    ).bind(runtimeEnv().APP_ENV),
   ]);
   const rawPreference = preference.results[0] as Record<string, unknown> | undefined;
   const parsedPreference = rawPreference ? {
@@ -76,30 +76,33 @@ export const GET = withApiErrors(async function GET(request: Request) {
     channels: parseJson<string[]>(String(rawPreference.channelsJson || "[]"), ["in_app"]),
     documentImpactConsent: Boolean(rawPreference.documentImpactConsent),
   } : null;
-  const selectedTopics = new Set(parsedPreference?.topics ?? []);
   const selectedAudience = String(parsedPreference?.audience || "");
-  const trustedSourceStatusRows = filterTrustedVerifiedLegalSources(
-    sourceCheck.results.map((raw) => {
+  const sourceStatusRows = sourceCheck.results.map((raw) => {
       const item = raw as Record<string, unknown>;
       return {
         ...item,
-        officialUrl: String(item.officialUrl || ""),
-        status: String(item.status || ""),
-        sourceType: String(item.sourceType || ""),
-        verificationState: String(item.verificationState || ""),
-        verifiedAt: String(item.verifiedAt || ""),
-        contentSha256: String(item.contentSha256 || ""),
+        canonicalUrl: String(item.canonicalUrl || ""),
         lastCheckedAt: String(item.lastCheckedAt || ""),
+        httpStatus: Number(item.httpStatus || 0),
+        lastErrorCode: item.lastErrorCode ? String(item.lastErrorCode) : null,
       };
-    }),
-  );
-  const lastCheckedAt = trustedSourceStatusRows.reduce<string | null>(
-    (latest, source) => !latest || source.lastCheckedAt > latest
-      ? source.lastCheckedAt
-      : latest,
-    null,
-  );
+    });
+  const now = new Date();
+  const freshness = summarizeLexMetadataMonitoringFreshness(sourceStatusRows, now);
   const env = runtimeEnv();
+  const latestRunRow = latestRun.results[0] as Record<string, unknown> | undefined;
+  const run = latestRunRow ? {
+    status: String(latestRunRow.status || "unknown"),
+    runType: String(latestRunRow.runType || ""),
+    discoveredCount: Number(latestRunRow.discoveredCount || 0),
+    fetchedCount: Number(latestRunRow.fetchedCount || 0),
+    changedCount: Number(latestRunRow.changedCount || 0),
+    verifiedCount: Number(latestRunRow.verifiedCount || 0),
+    errorCount: Number(latestRunRow.errorCount || 0),
+    startedAt: String(latestRunRow.startedAt || ""),
+    finishedAt: latestRunRow.finishedAt ? String(latestRunRow.finishedAt) : null,
+    errorSummary: latestRunRow.errorSummary ? String(latestRunRow.errorSummary) : null,
+  } : null;
   return response({
     preference: parsedPreference,
     updates: updates.results
@@ -107,31 +110,32 @@ export const GET = withApiErrors(async function GET(request: Request) {
         const item = raw as Record<string, unknown>;
         return {
           ...item,
+          id: String(item.id),
           officialUrl: String(item.officialUrl || ""),
-          sourceStatus: String(item.sourceStatus || ""),
-          sourceType: String(item.sourceType || ""),
-          verificationState: String(item.verificationState || ""),
-          sourceVerifiedAt: String(item.sourceVerifiedAt || ""),
-          sourceContentSha256: String(item.sourceContentSha256 || ""),
-          title: locale === "uz" ? (item.titleUz || item.titleOriginal) : (item.titleRu || item.titleOriginal),
-          summary: locale === "uz" ? item.summaryUz : item.summaryRu,
-          changeSummary: locale === "uz" ? item.changeSummaryUz : item.changeSummaryRu,
-          recommendedAction: locale === "uz" ? item.recommendedActionUz : item.recommendedActionRu,
-          topics: parseJson<string[]>(String(item.topicsJson || "[]"), []),
-          affectedAudiences: parseJson<string[]>(String(item.affectedAudiencesJson || "[]"), []),
+          sourceStatus: "metadata",
+          sourceLastCheckedAt: String(item.sourceLastCheckedAt || ""),
+          title: String(item.title || "Lex.uz"),
+          summary: null,
+          changeSummary: String(item.changeType || "") === "metadata_changed"
+            ? (locale === "ru" ? "Lex.uz изменил metadata записи; откройте официальный акт для проверки содержания." : "Lex.uz yozuv metadata’larini o‘zgartirdi; mazmunini tekshirish uchun rasmiy aktni oching.")
+            : (locale === "ru" ? "Lex.uz обнаружил новый акт в официальном RSS; откройте ссылку для проверки содержания." : "Lex.uz rasmiy RSS’da yangi aktni aniqladi; mazmunini tekshirish uchun havolani oching."),
+          recommendedAction: null,
+          topics: [] as string[],
+          affectedAudiences: [] as string[],
+          adoptedAt: null,
+          effectiveAt: null,
+          publishedAt: String(item.publishedAt || ""),
+          sourceTitle: String(item.sourceTitle || item.title || "Lex.uz"),
+          sourceIdentifier: item.sourceIdentifier ? String(item.sourceIdentifier) : null,
+          sourceRevisionDate: item.sourceRevisionDate ? String(item.sourceRevisionDate) : null,
+          originalLanguage: String(item.originalLanguage || "ru"),
         };
       })
       .filter((item) => {
         try {
-          const hasSafeSource = isTrustedVerifiedLegalSource({
-            officialUrl: String(item.officialUrl),
-            status: String(item.sourceStatus || ""),
-            sourceType: String(item.sourceType || ""),
-            verificationState: String(item.verificationState || ""),
-            verifiedAt: String(item.sourceVerifiedAt || ""),
-            contentSha256: String(item.sourceContentSha256 || ""),
-          });
-          const matchesTopic = !selectedTopics.size || item.topics.some((topic: string) => selectedTopics.has(topic));
+          const url = new URL(String(item.officialUrl));
+          const hasSafeSource = url.protocol === "https:" && (url.hostname === "lex.uz" || url.hostname === "www.lex.uz");
+          const matchesTopic = true; // RSS metadata does not infer a legal topic from an act title.
           const matchesAudience = !selectedAudience || item.affectedAudiences.length === 0
             || item.affectedAudiences.includes(selectedAudience);
           return hasSafeSource && matchesTopic && matchesAudience;
@@ -140,11 +144,18 @@ export const GET = withApiErrors(async function GET(request: Request) {
         }
       }),
     status: {
-      integration: env.LEGISLATION_FEED_PROVIDER ? "adapter_pending" : "not_configured",
-      automaticPublication: false,
+      integration: (env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED !== "true"
+        ? "disabled"
+        : freshness.state === "fresh" ? "active" : "degraded",
+      automaticPublication: true,
+      controlledBeta: false,
       emailConfigured: Boolean(env.RESEND_API_KEY && env.EMAIL_FROM),
-      lastCheckedAt,
-      verifiedSourceCount: trustedSourceStatusRows.length,
+      lastCheckedAt: freshness.latestCheckedAt,
+      verifiedSourceCount: freshness.freshSourceCount,
+      freshness,
+      trustedSourceCount: freshness.trustedSourceCount,
+      lexIngestionEnabled: (env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED === "true",
+      lastRun: run,
     },
   });
 });

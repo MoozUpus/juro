@@ -33,13 +33,17 @@ motion is added. At narrow widths the index and language columns stack, while
 all controls retain visible focus and 44 px minimum height.
 
 Updated: 2026-07-30
-Status: implemented as a scoped staging-only prototype; production UI is unchanged and replacement is not authorized.
+Status: the former scoped staging-only prototype was retired on 2026-08-12;
+production UI is unchanged and replacement is not authorized.
 
 ## Purpose and scope
 
 This system translates **Cinematic Legal Intelligence** into a functional application. It creates a dark, controlled orientation shell around light, stable legal work surfaces. It does not turn the dashboard into a landing page and never allows styling, animation, or Jurobek to outrank legal content, evidence, uncertainty, deadlines, or the user's current object context.
 
-The contract is implemented on staging-only routes `/:locale/:accountType/prototypes/platform/cinematic` and `/:locale/business/:workspaceId/prototypes/platform/cinematic`. An exact server environment guard fails closed outside staging, both routes require a real session, and existing production routes retain their current CSS until the owner separately approves visual replacement.
+The former staging-only routes were removed because the active scope excludes an
+AI/voice avatar and a runtime guard still bundled their static poster into the
+shared Worker artifact. Existing production routes retain their current CSS
+until the owner separately approves a future visual replacement.
 
 ## Current-state defect
 
@@ -47,7 +51,7 @@ The contract is implemented on staging-only routes `/:locale/:accountType/protot
 
 Normalization must:
 
-1. preserve the current production selectors while the prototype is isolated;
+1. preserve current production selectors while existing routes are incrementally migrated;
 2. introduce semantic tokens under the prototype/application boundary;
 3. migrate shared components by role rather than find-and-replace color values;
 4. remove the duplicate global override only during the separately approved production migration;
@@ -159,7 +163,7 @@ The regular ring is not allowed directly against navy (`2.81:1`), and the invers
 
 ### Dashboard
 
-The cinematic entry zone is compact. It contains greeting/current context, one fast AI entry, one suggested next action, the nearest critical deadline, controlled Jurobek/static fallback, and voice-mode entry when enabled. At 320–390 px, the nearest deadline/next action gets first-view priority; clear navigation exposes cases, tasks, documents, analyses, calendar, lawyer requests, notifications, usage, and tariff without forcing all regions above the fold.
+The cinematic entry zone is compact. It contains greeting/current context, one fast AI entry, one suggested next action, and the nearest critical deadline. AI/voice-avatar imagery is outside the current dashboard scope; ordinary text or plain-voice entry remains a separate capability when enabled. At 320–390 px, the nearest deadline/next action gets first-view priority; clear navigation exposes cases, tasks, documents, analyses, calendar, lawyer requests, notifications, usage, and tariff without forcing all regions above the fold.
 
 ### AI and legal evidence
 
@@ -167,7 +171,7 @@ The cinematic entry zone is compact. It contains greeting/current context, one f
 - Confirmed findings, assumptions, risks, sources, action plan, deadlines, and provider details are structurally distinct.
 - A score cannot be the first or largest risk signal. Evidence, severity, uncertainty, consequence, and next action precede it.
 - Streaming reserves stable space, exposes stop/retry/partial recovery, and announces useful status without reading every token to assistive technology.
-- Until the owner-approved rigged asset exists, plain voice remains functional and may use the canonical existing static Jurobek poster only as a nonanimated identity/fallback surface; the `voice-with-avatar` feature remains off. The current generic `.digital-face` is not migrated. There is no fake lip-sync, listening indicator, or speaking state: each must follow the actual microphone, transcription, processing, and audio lifecycle.
+- Plain voice remains functional without an avatar poster; `voice-with-avatar` is out of scope and off. `/jurobek-avatar.webp` is retained only as the static onboarding brand image. There is no fake lip-sync, listening indicator, or speaking state: each plain-voice state follows the actual microphone, transcription, processing, and audio lifecycle.
 
 ### Documents and analysis
 
@@ -196,14 +200,14 @@ Use accessible primitives already present or a single justified primitive librar
 
 - Press feedback may use `scale(.98)` for suitable pressables.
 - CSS handles hover/press/focus; hover motion is gated by `(hover: hover) and (pointer: fine)`.
-- Tooltip/small popover: 160 ms enter, 120 ms exit. Menu/select: 180 ms enter, 140 ms exit. Source/context panel: 220 ms enter, 160 ms exit. Drawer/modal: 240–260 ms enter, 160–180 ms exit. Avatar state crossfade: 220 ms enter, 160 ms exit. Exit is always faster than enter.
+- Tooltip/small popover: 160 ms enter, 120 ms exit. Menu/select: 180 ms enter, 140 ms exit. Source/context panel: 220 ms enter, 160 ms exit. Drawer/modal: 240–260 ms enter, 160–180 ms exit. Exit is always faster than enter.
 - Transitions are interruptible: a new user action cancels or reverses the current transition from its rendered state, never queues a second sequence, blocks input, or waits for a marketing animation.
 - No `transition: all`, `ease-in` UI entrance, layout-property animation, row-by-row table animation, scroll hijacking, or repeated decorative stagger.
 - Frequent keyboard/document actions are immediate.
-- Jurobek motion is disabled until the approved rig exists; the approved static poster and truthful textual state remain canonical. Generic AI avatars are prohibited.
+- Jurobek motion and all AI-avatar surfaces are out of scope. The static Jurobek poster is limited to onboarding brand identity; generic AI avatars are prohibited.
 - `prefers-reduced-motion: reduce` removes tracking, parallax, springs, large translation, and character sequences, while preserving state, status, focus, and a short color/opacity response.
 - `prefers-contrast: more` increases structural boundaries and removes low-contrast light effects. `forced-colors: active` preserves native focus, control, link, selected, and error semantics instead of forcing brand colors.
-- `Save-Data`, unavailable WebGL, context loss, device limitation, or 3D load failure keeps text/voice functional and selects the static poster. Closing voice/avatar mode must stop media tracks, audio, animation loops, observers, and listeners and dispose GPU resources. `JUROBEK-3D.md`, `VOICE-AVATAR.md`, `3D-PERFORMANCE.md`, and `WEBGL-FALLBACK.md` become authoritative when those implementation documents exist.
+- Text and plain voice remain functional regardless of `Save-Data`, WebGL availability, context loss, or device limitation because no avatar renderer is initialized. A future owner-approved avatar integration must document resource cleanup, reduced-motion behavior, and fallback in `JUROBEK-3D.md`, `VOICE-AVATAR.md`, `3D-PERFORMANCE.md`, and `WEBGL-FALLBACK.md` before it ships.
 
 ## State and announcement contract
 
@@ -212,7 +216,7 @@ Every migrated surface must define loading/skeleton, first-use, empty, success, 
 - Skeletons match the geometry of the content they replace and do not impersonate completion.
 - Streaming announces meaningful phase changes and completion, not every token.
 - Upload/analysis announces stage changes, errors, and completion, not every percentage update.
-- Avatar/voice announces actual idle, ready, listening, transcribing, thinking, speaking, paused, completed, offline, and error states; animation is never the only signal.
+- Plain voice announces actual ready, listening, transcribing, thinking, speaking, paused, completed, offline, and error states; animation is never the only signal.
 - Recoverable errors keep user input and expose retry. Fatal errors expose a safe route away and a correlation ID without secrets.
 - Offline/stale/partial states visibly distinguish cached or incomplete evidence from current verified data.
 - Permission and plan-limit states do not disclose inaccessible object existence and provide only authorized next actions.

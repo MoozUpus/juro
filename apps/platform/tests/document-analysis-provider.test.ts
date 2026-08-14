@@ -1,17 +1,25 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { env } from "cloudflare:workers";
 import {
   documentAnalysisResultSchema,
+  documentAnalysisAnthropicWireJsonSchema,
   documentAnalysisJsonSchema,
   enforceDocumentAnalysisSourceBoundary,
   enforceDocumentExcerptBoundary,
+  parseAnthropicDocumentAnalysisWireResult,
   parseDocumentAnalysisResult,
 } from "../lib/document-analysis/schema";
 import { buildDocumentAnalysisProviderInput } from "../lib/document-analysis/input";
 import {
+  documentAnalysisFallbackAllowed,
+  documentAnalysisMaxOutputTokens,
   documentAnalysisProviderMaxAttempts,
+  documentAnalysisTimeoutMs,
   documentFallbackEligible,
+  runDocumentAnalysis,
 } from "../lib/document-analysis/provider";
+import type { AiRuntimeSettings } from "../lib/ai/runtime-settings";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 
 const base = {
@@ -56,6 +64,25 @@ test("document analysis output is strict, bounded and JSON-schema backed", () =>
   assert.deepEqual(parseDocumentAnalysisResult(base), base);
   assert.equal(documentAnalysisJsonSchema.type, "object");
   assert.equal(documentAnalysisResultSchema.safeParse({ ...base, hidden: true }).success, false);
+});
+
+test("Anthropic document wire schema removes nullable grammar unions and restores canonical nulls", () => {
+  assert.equal(countSchemaKeyword(documentAnalysisAnthropicWireJsonSchema, "anyOf"), 0);
+  const wire = {
+    ...base,
+    userSide: "",
+    risks: [{
+      ...base.risks[0],
+      clause: "",
+      page: 0,
+      exactExcerpt: "",
+      proposedWording: "",
+    }],
+  };
+  assert.deepEqual(parseAnthropicDocumentAnalysisWireResult(wire), {
+    ...base,
+    risks: [{ ...base.risks[0], clause: null, page: null, exactExcerpt: null, proposedWording: null }],
+  });
 });
 
 test("document analysis cannot claim legal compliance without a verified source", () => {
@@ -226,4 +253,278 @@ test("document analysis fails over from an unavailable Anthropic request but nev
 test("document analysis gives its fallback a turn after one primary attempt by default", () => {
   assert.equal(documentAnalysisProviderMaxAttempts(), 1);
   assert.equal(documentAnalysisProviderMaxAttempts(2), 2);
+});
+
+test("quick document analysis has an explicit compact output budget", () => {
+  assert.equal(documentAnalysisMaxOutputTokens("quick"), 3_600);
+  assert.equal(documentAnalysisMaxOutputTokens("full"), 8_192);
+  assert.equal(documentAnalysisMaxOutputTokens("expert"), 8_192);
+  assert.equal(documentAnalysisTimeoutMs("quick"), 60_000);
+  assert.equal(documentAnalysisTimeoutMs("expert"), 90_000);
+});
+
+test("document analysis sends Anthropic a forced envelope and restores the canonical validated result", async () => {
+  const runtime = env as unknown as {
+    ANTHROPIC_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    AI_PROVIDER?: string;
+    AI_PROVIDER_API_KEY?: string;
+  };
+  const originalRuntime = {
+    ANTHROPIC_API_KEY: runtime.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: runtime.OPENAI_API_KEY,
+    AI_PROVIDER: runtime.AI_PROVIDER,
+    AI_PROVIDER_API_KEY: runtime.AI_PROVIDER_API_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+  const settings: AiRuntimeSettings = {
+    environment: "staging",
+    version: 1,
+    openaiChatModel: "gpt-test",
+    openaiDeepModel: "gpt-test",
+    anthropicChatFallbackModel: "claude-test",
+    anthropicDocumentModel: "claude-sonnet-4-6",
+    openaiDocumentFallbackModel: "gpt-test",
+    responseTone: "clear",
+    configHash: "a".repeat(64),
+    source: "environment",
+    createdAt: null,
+  };
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    delete runtime.OPENAI_API_KEY;
+    delete runtime.AI_PROVIDER;
+    delete runtime.AI_PROVIDER_API_KEY;
+    globalThis.fetch = async (input, init) => {
+      assert.equal(String(input), "https://api.anthropic.com/v1/messages");
+      const request = JSON.parse(String(init?.body)) as {
+        model?: string;
+        max_tokens?: number;
+        output_config?: { format?: { type?: string; schema?: Record<string, unknown> } };
+        tools?: Array<{ name?: string; input_schema?: Record<string, unknown> }>;
+        tool_choice?: { type?: string; name?: string };
+        system?: string;
+      };
+      assert.equal(request.model, "claude-sonnet-4-6");
+      assert.equal(request.max_tokens, 3_600);
+      assert.equal(request.output_config, undefined);
+      assert.equal(request.tools?.length, 1);
+      assert.equal(request.tools?.[0]?.name, "emit_result");
+      assert.equal(request.tools?.[0]?.input_schema?.type, "object");
+      assert.deepEqual(request.tool_choice, { type: "tool", name: "emit_result" });
+      assert.match(request.system ?? "", /officialLexSources пусты/);
+      assert.match(request.system ?? "", /legalComplianceStatus обязан быть unverified/);
+      const nativeWireResult = {
+        ...base,
+        userSide: "",
+        risks: [{
+          ...base.risks[0],
+          clause: "",
+          page: 0,
+          exactExcerpt: "",
+          proposedWording: "",
+        }],
+      };
+      return Response.json({
+        id: "msg_document_native_json",
+        model: "claude-sonnet-4-6",
+        stop_reason: "tool_use",
+        content: [{ type: "tool_use", name: "emit_result", input: { payload_json: JSON.stringify(nativeWireResult) } }],
+        usage: { input_tokens: 20, output_tokens: 30 },
+      });
+    };
+    const result = await runDocumentAnalysis({
+      fileName: "synthetic-contract.txt",
+      mimeType: "text/plain",
+      extractedText: "срок определяется дополнительно",
+      detectedLanguage: "ru",
+      extractionWarnings: [],
+      packageContext: null,
+      locale: "ru",
+      mode: "quick",
+      userSide: null,
+      sources: [],
+      legalDatabaseAsOf: "unavailable",
+      requestId: "synthetic-document-native-json",
+    }, {
+      runtimeSettings: settings,
+      providerMaxAttempts: 1,
+      fallbackEnabled: false,
+    });
+    assert.equal(result.provider, "anthropic");
+    assert.equal(result.data.summary, base.summary);
+    assert.equal(result.data.userSide, null);
+    assert.equal(result.data.risks[0]?.page, null);
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalRuntime)) {
+      if (value === undefined) delete runtime[key as keyof typeof originalRuntime];
+      else runtime[key as keyof typeof originalRuntime] = value;
+    }
+  }
+});
+
+test("Anthropic document failures carry bounded non-content output diagnostics", async () => {
+  await expectAnthropicDocumentFailure({
+    id: "msg_max_tokens",
+    model: "claude-sonnet-4-6",
+    stop_reason: "max_tokens",
+    content: [],
+  }, "anthropic_output_max_tokens");
+  await expectAnthropicDocumentFailure({
+    id: "msg_tool_missing",
+    model: "claude-sonnet-4-6",
+    stop_reason: "end_turn",
+    content: [],
+  }, "anthropic_tool_result_missing");
+  await expectAnthropicDocumentFailure({
+    id: "msg_envelope_json_invalid",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", name: "emit_result", input: { payload_json: "not valid json" } }],
+  }, "anthropic_envelope_json_invalid");
+  await expectAnthropicDocumentFailure({
+    id: "msg_envelope_schema_invalid",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{ type: "tool_use", name: "emit_result", input: { payload_json: "{}" } }],
+  }, "anthropic_envelope_schema_invalid");
+  await expectAnthropicDocumentFailure({
+    id: "msg_source_boundary",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{
+      type: "tool_use",
+      name: "emit_result",
+      input: { payload_json: JSON.stringify(anthropicWireResult({ legalComplianceStatus: "verified" })) },
+    }],
+  }, "document_source_boundary");
+  await expectAnthropicDocumentFailure({
+    id: "msg_excerpt_boundary",
+    model: "claude-sonnet-4-6",
+    stop_reason: "tool_use",
+    content: [{
+      type: "tool_use",
+      name: "emit_result",
+      input: { payload_json: JSON.stringify(anthropicWireResult()) },
+    }],
+  }, "document_excerpt_boundary", "В синтетическом документе нет указанной цитаты.");
+});
+
+function anthropicWireResult(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    ...base,
+    userSide: "",
+    risks: base.risks.map((risk) => ({
+      ...risk,
+      clause: risk.clause ?? "",
+      page: risk.page ?? 0,
+      exactExcerpt: risk.exactExcerpt ?? "",
+      proposedWording: risk.proposedWording ?? "",
+    })),
+    ...overrides,
+  };
+}
+
+async function expectAnthropicDocumentFailure(
+  responseBody: unknown,
+  expectedProviderErrorType: string,
+  extractedText = "срок определяется дополнительно",
+): Promise<void> {
+  const runtime = env as unknown as {
+    ANTHROPIC_API_KEY?: string;
+    OPENAI_API_KEY?: string;
+    AI_PROVIDER?: string;
+    AI_PROVIDER_API_KEY?: string;
+  };
+  const originalRuntime = {
+    ANTHROPIC_API_KEY: runtime.ANTHROPIC_API_KEY,
+    OPENAI_API_KEY: runtime.OPENAI_API_KEY,
+    AI_PROVIDER: runtime.AI_PROVIDER,
+    AI_PROVIDER_API_KEY: runtime.AI_PROVIDER_API_KEY,
+  };
+  const originalFetch = globalThis.fetch;
+  try {
+    runtime.ANTHROPIC_API_KEY = "synthetic-anthropic-key";
+    delete runtime.OPENAI_API_KEY;
+    delete runtime.AI_PROVIDER;
+    delete runtime.AI_PROVIDER_API_KEY;
+    globalThis.fetch = async () => Response.json(responseBody);
+    await assert.rejects(
+      runDocumentAnalysis({
+        fileName: "synthetic-contract.txt",
+        mimeType: "text/plain",
+        extractedText,
+        detectedLanguage: "ru",
+        extractionWarnings: [],
+        packageContext: null,
+        locale: "ru",
+        mode: "quick",
+        userSide: null,
+        sources: [],
+        legalDatabaseAsOf: "unavailable",
+        requestId: `synthetic-document-${expectedProviderErrorType}`,
+      }, {
+        runtimeSettings: {
+          environment: "staging",
+          version: 1,
+          openaiChatModel: "gpt-test",
+          openaiDeepModel: "gpt-test",
+          anthropicChatFallbackModel: "claude-test",
+          anthropicDocumentModel: "claude-sonnet-4-6",
+          openaiDocumentFallbackModel: "gpt-test",
+          responseTone: "clear",
+          configHash: "a".repeat(64),
+          source: "environment",
+          createdAt: null,
+        },
+        providerMaxAttempts: 1,
+        fallbackEnabled: false,
+      }),
+      (error: unknown) => error instanceof AiUnavailableError
+        && error.code === "INVALID_AI_OUTPUT"
+        && error.providerErrorType === expectedProviderErrorType,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    for (const [key, value] of Object.entries(originalRuntime)) {
+      if (value === undefined) delete runtime[key as keyof typeof originalRuntime];
+      else runtime[key as keyof typeof originalRuntime] = value;
+    }
+  }
+}
+
+function countSchemaKeyword(value: unknown, keyword: string): number {
+  if (Array.isArray(value)) return value.reduce((total, item) => total + countSchemaKeyword(item, keyword), 0);
+  if (!value || typeof value !== "object") return 0;
+  return Object.entries(value as Record<string, unknown>).reduce(
+    (total, [key, nested]) => total + (key === keyword ? 1 : 0) + countSchemaKeyword(nested, keyword),
+    0,
+  );
+}
+
+test("controlled document probes never begin a fallback after their shared deadline or explicit one-shot policy", () => {
+  const retryableFailure = new AiUnavailableError("timeout", "PROVIDER_TIMEOUT", true);
+  assert.equal(
+    documentAnalysisFallbackAllowed(retryableFailure, {
+      fallbackEnabled: false,
+      deadlineAt: 2_000,
+      now: () => 1_000,
+    }),
+    false,
+  );
+  assert.equal(
+    documentAnalysisFallbackAllowed(retryableFailure, {
+      deadlineAt: 1_000,
+      now: () => 1_000,
+    }),
+    false,
+  );
+  assert.equal(
+    documentAnalysisFallbackAllowed(retryableFailure, {
+      deadlineAt: 2_000,
+      now: () => 1_000,
+    }),
+    true,
+  );
 });

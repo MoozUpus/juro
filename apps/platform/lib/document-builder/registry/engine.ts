@@ -72,6 +72,7 @@ export function validateQuestionnaire(definition: DocumentDefinition, answers: Q
     if (field.required && !isFilled(value)) errors[field.id] = "required";
     if (typeof value === "string" && field.validation?.minLength && value.trim().length < field.validation.minLength) errors[field.id] = "minLength";
     if (typeof value === "string" && field.validation?.maxLength && value.length > field.validation.maxLength) errors[field.id] = "maxLength";
+    if (typeof value === "string" && value && field.validation?.pattern && !(new RegExp(field.validation.pattern).test(value))) errors[field.id] = "pattern";
   });
   return errors;
 }

@@ -56,16 +56,16 @@ CREATE TABLE `ai_quality_review_events` (
 		OR (`request_action`='resolve' AND `feedback_id` IS NOT NULL AND `review_version`>0 AND `classification` IS NOT NULL AND `feedback_updated_at` IS NOT NULL AND `result_count`=1)
 	),
 	CONSTRAINT `ai_quality_review_count_check` CHECK (`result_count` BETWEEN 0 AND 200),
-	CONSTRAINT `ai_quality_review_filters_hash_check` CHECK (`filters_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_result_digest_check` CHECK (`result_digest` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_question_hash_check` CHECK (`question_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_answer_hash_check` CHECK (`answer_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_comment_hash_check` CHECK (`comment_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_notes_hash_check` CHECK (`notes_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_corrected_hash_check` CHECK (`corrected_answer_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_golden_hash_check` CHECK (`golden_answer_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_previous_hash_check` CHECK (`previous_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
-	CONSTRAINT `ai_quality_review_event_hash_check` CHECK (`event_hash` GLOB replace(hex(zeroblob(32)),'0','[A-F0-9]')),
+	CONSTRAINT `ai_quality_review_filters_hash_check` CHECK (length(`filters_hash`)=64 AND `filters_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_result_digest_check` CHECK (length(`result_digest`)=64 AND `result_digest` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_question_hash_check` CHECK (length(`question_hash`)=64 AND `question_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_answer_hash_check` CHECK (length(`answer_hash`)=64 AND `answer_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_comment_hash_check` CHECK (length(`comment_hash`)=64 AND `comment_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_notes_hash_check` CHECK (length(`notes_hash`)=64 AND `notes_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_corrected_hash_check` CHECK (length(`corrected_answer_hash`)=64 AND `corrected_answer_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_golden_hash_check` CHECK (length(`golden_answer_hash`)=64 AND `golden_answer_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_previous_hash_check` CHECK (length(`previous_hash`)=64 AND `previous_hash` NOT GLOB '*[^A-F0-9]*'),
+	CONSTRAINT `ai_quality_review_event_hash_check` CHECK (length(`event_hash`)=64 AND `event_hash` NOT GLOB '*[^A-F0-9]*'),
 	CONSTRAINT `ai_quality_review_mfa_time_check` CHECK (`actor_mfa_verified_at`<=`created_at`)
 );
 --> statement-breakpoint

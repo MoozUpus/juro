@@ -92,6 +92,7 @@ const installInheritedEnvironmentKeys = new Set([
 
 const coreTestFiles = [
   "tests/document-builder.test.ts",
+  "tests/pinfl-validation.test.ts",
   "tests/document-comparison.test.ts",
   "tests/comparison-export.test.ts",
   "tests/comparison-change-decision.test.ts",
@@ -102,6 +103,7 @@ const coreTestFiles = [
   "tests/document-analysis-provider.test.ts",
   "tests/clamav-output.test.ts",
   "tests/document-analysis-processor.test.ts",
+  "tests/document-analysis-chunking.test.ts",
   "tests/document-analysis-revisions.test.ts",
   "tests/document-analysis-case-link.test.ts",
   "tests/document-case-link.test.ts",
@@ -111,6 +113,7 @@ const coreTestFiles = [
   "tests/knowledge-base.test.ts",
   "tests/knowledge-base-admin.test.ts",
   "tests/lawyer-review-replies.test.ts",
+  "tests/lawyer-document-verification-boundary.test.ts",
   "tests/lawyer-phone-contact.test.ts",
   "tests/ai-feedback.test.ts",
   "tests/ai-quality-review.test.ts",
@@ -135,19 +138,27 @@ const coreTestFiles = [
   "tests/legal-source-trust.test.ts",
   "tests/legal-source-fetch.test.ts",
   "tests/legal-source-discovery.test.ts",
+  "tests/lex-metadata-monitor.test.ts",
+  "tests/live-lex-runtime-boundary.test.ts",
   "tests/legal-source-acquisition.test.ts",
   "tests/legal-scheduled-corpus-sync.test.ts",
   "tests/legal-scheduled-corpus-lifecycle.test.ts",
   "tests/legal-evaluation-corpus.test.ts",
   "tests/document-evaluation-corpus.test.ts",
   "tests/legal-source-parser.test.ts",
-  "tests/legal-source-normalization.test.ts",
+ "tests/legal-source-normalization.test.ts",
   "tests/legal-language.test.ts",
   "tests/legal-hybrid-ranking.test.ts",
-  "tests/legal-source-health.test.ts",
+ "tests/legal-source-health.test.ts",
+  "tests/direct-source-health.test.ts",
   "tests/legal-corpus-alerts.test.ts",
   "tests/legal-source-review.test.ts",
   "tests/ai-platform.test.ts",
+  "tests/ai-chat-slo-contract.test.ts",
+  "tests/ai-execution-budget.test.ts",
+  "tests/legal-chat-timeout.test.ts",
+  "tests/ai-provider-fallback.test.ts",
+  "tests/provider-request-timeout.test.ts",
   "tests/ai-runtime-settings.test.ts",
   "tests/ai-client-retry.test.ts",
   "tests/ai-branch-history.test.ts",
@@ -165,8 +176,10 @@ const coreTestFiles = [
   "tests/policy-acceptance.test.ts",
   "tests/onboarding-profile.test.ts",
   "tests/workspace-routing.test.ts",
+  "tests/root-layout-language.test.ts",
   "tests/workspace-creation.test.ts",
   "tests/workspace-invitations.test.ts",
+  "tests/monitoring-preferences.test.ts",
   "tests/platform-core.test.ts",
   "tests/billing-foundation.test.ts",
   "tests/checkout-service.test.ts",
@@ -188,10 +201,19 @@ const cloudflareTestFiles = [
   "tests/migration-0097-builder-version-object-writes.test.ts",
   "tests/migration-0098-task-reminder-email.test.ts",
   "tests/migration-0099-staging-email-delivery-probe.test.ts",
+  "tests/staging-provider-probe.test.ts",
+  "tests/staging-legal-evaluation.test.ts",
+  "tests/staging-legal-agent-artifacts.test.ts",
   "tests/migration-0101-document-index-scheduling.test.ts",
   "tests/migration-0102-d1-redrive-hash-check.test.ts",
+  "tests/migration-0114-document-export-redrive-parity.test.ts",
+  "tests/migration-0115-document-analysis-capacity-terminalization.test.ts",
   "tests/migration-0103-d1-completed-result-hash-guard.test.ts",
   "tests/migration-0104-d1-case-lifecycle-hash-guard.test.ts",
+  "tests/dependency-health.test.ts",
+  "tests/dependency-health-evidence.test.ts",
+  "tests/queue-dlq-health-reconciliation.test.ts",
+  "tests/staging-queue-health-probe.test.ts",
   "tests/task-reminder-email.test.ts",
   "tests/staging-email-delivery-probe.test.ts",
     "tests/staging-malware-scanner-probe.test.ts",
@@ -645,6 +667,45 @@ async function validateArtifact(environment) {
       ),
     },
   );
+  await runNodeEntry(
+    resolve(projectRoot, "scripts", "verify-artifact-performance-budgets.mjs"),
+    [],
+    {
+      environment: commandEnvironment,
+      label: `${environment} artifact performance-budget verification`,
+      timeoutMs: parseDuration(
+        process.env.SITES_ARTIFACT_TIMEOUT || "2m",
+        "SITES_ARTIFACT_TIMEOUT",
+      ),
+      killAfterMs: parseDuration(
+        process.env.SITES_BUILD_KILL_AFTER || "10s",
+        "SITES_BUILD_KILL_AFTER",
+      ),
+    },
+  );
+}
+
+async function runArtifactPerformanceBudget(args) {
+  if (args.length > 1 || (args.length === 1 && args[0] !== "--json")) {
+    throw new Error("performance-budget accepts only --json");
+  }
+  const { environment } = await prepareEnvironment({}, { policy: "offline" });
+  await runNodeEntry(
+    resolve(projectRoot, "scripts", "verify-artifact-performance-budgets.mjs"),
+    args,
+    {
+      environment,
+      label: "artifact performance-budget verification",
+      timeoutMs: parseDuration(
+        process.env.SITES_ARTIFACT_TIMEOUT || "2m",
+        "SITES_ARTIFACT_TIMEOUT",
+      ),
+      killAfterMs: parseDuration(
+        process.env.SITES_BUILD_KILL_AFTER || "10s",
+        "SITES_BUILD_KILL_AFTER",
+      ),
+    },
+  );
 }
 
 async function normalizeGeneratedWranglerConfig() {
@@ -1041,10 +1102,15 @@ async function main() {
       await build(environment);
       return;
     }
-    case "artifact":
-      await validateArtifact(
-        selectedEnvironment(parseEnvironmentArgs("artifact", args)),
-      );
+    case "artifact": {
+      // Build the requested environment before validating so a stale artifact
+      // from another preflight cannot be mistaken for this one.
+      const environment = selectedEnvironment(parseEnvironmentArgs("artifact", args));
+      await build(environment);
+      return;
+    }
+    case "performance-budget":
+      await runArtifactPerformanceBudget(args);
       return;
     case "matrix":
       assertNoArgs("matrix", args);
@@ -1084,7 +1150,7 @@ async function main() {
     }
     default:
       throw new Error(
-        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|matrix|cf-types|cf-types-check|db-generate>",
+        "Usage: node scripts/platform-tasks.mjs <install-ci|dev|start|test|test-rendered|test-cloudflare|smoke-document-builder|smoke-document-comparison|smoke-case-create|type-check|lint|build|artifact|performance-budget|matrix|cf-types|cf-types-check|db-generate>",
       );
   }
 }

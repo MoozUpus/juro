@@ -1,37 +1,90 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="820" viewBox="0 0 1600 820" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="980" viewBox="0 0 1600 980" role="img" aria-labelledby="title desc">
   <title id="title">JURO product ecosystem</title>
-  <desc id="desc">JURO product map: legal information, document work, analysis, cases and a partial human-lawyer hand-off.</desc>
+  <desc id="desc">A map of current, partial and planned JURO product capabilities.</desc>
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#062844"/><stop offset="1" stop-color="#031b2e"/></linearGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="48%"><stop stop-color="#BE974F" stop-opacity=".17"/><stop offset="1" stop-color="#BE974F" stop-opacity="0"/></radialGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="150%" height="160%"><feDropShadow dx="0" dy="12" stdDeviation="16" flood-color="#00111f" flood-opacity=".4"/></filter>
-    <style>.ui{font-family:Inter,Manrope,Arial,sans-serif}.serif{font-family:Georgia,'Times New Roman',serif}.h{fill:#fff;font-size:48px;font-weight:700}.copy{fill:#b8c8d1;font-size:17px}.card{fill:#f8f6f2}.kicker{fill:#caa866;font-size:11px;font-weight:800;letter-spacing:1.4px}.cardh{fill:#062844;font-size:20px;font-weight:800}.cardcopy{fill:#607987;font-size:14px}.status{font-size:10px;font-weight:800;letter-spacing:1.2px}</style>
+    <style>
+      .ui { font-family: Inter, Manrope, Arial, sans-serif; }
+      .serif { font-family: Georgia, "Times New Roman", serif; }
+      .title { fill: #062844; font-size: 46px; font-weight: 700; }
+      .copy { fill: #527080; font-size: 17px; }
+      .card-title { fill: #062844; font-size: 20px; font-weight: 800; }
+      .card-copy { fill: #527080; font-size: 14px; }
+      .status { font-size: 11px; font-weight: 800; letter-spacing: 1.3px; }
+    </style>
+    <filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#062844" flood-opacity=".1"/></filter>
   </defs>
-  <rect width="1600" height="820" fill="url(#bg)"/><rect width="1600" height="820" fill="url(#glow)"/>
-  <path d="M0 105H1600M0 710H1600M90 0V820M1510 0V820" stroke="#dce6ed" stroke-opacity=".08"/>
-  <g class="ui"><text x="100" y="99" class="h serif">One legal workspace. One connected context.</text><text x="100" y="137" class="copy">The map separates implemented work from partial hand-off and planned commercial surfaces.</text></g>
+  <rect width="1600" height="980" fill="#f8f6f2"/>
+  <path d="M0 117H1600M0 836H1600M80 0V980M1520 0V980" stroke="#062844" stroke-opacity=".08"/>
+  <g class="ui">
+    <text x="100" y="105" class="title serif">One legal workspace, connected by context.</text>
+    <text x="100" y="142" class="copy">Solid paths are implemented in the repository. Dashed paths are partial or planned product surfaces.</text>
 
-  <g fill="none" stroke="#BE974F" stroke-width="2.5"><path d="M558 386H442V270"/><path d="M558 467H442V600"/><path d="M1042 386H1158V270"/><path d="M1042 467H1158V600"/><path d="M800 323V232"/></g>
-  <g fill="none" stroke="#8ca0aa" stroke-width="2.5" stroke-dasharray="8 9"><path d="M800 540V660"/><path d="M449 656H630"/><path d="M1151 656H970"/></g>
+    <g filter="url(#shadow)">
+      <rect x="555" y="340" width="490" height="250" rx="28" fill="#062844"/>
+      <image href="juro-mark.png" x="600" y="385" width="58" height="58"/>
+      <text x="685" y="418" fill="#fff" font-size="28" font-weight="800" letter-spacing="5">JURO</text>
+      <text x="600" y="482" fill="#BE974F" font-size="13" font-weight="800" letter-spacing="1.8">CURRENT PRODUCT CORE</text>
+      <text x="600" y="525" fill="#fff" font-size="27" font-weight="700">Questions, documents</text>
+      <text x="600" y="558" fill="#fff" font-size="27" font-weight="700">and next actions, together.</text>
+    </g>
 
-  <g class="ui" filter="url(#shadow)">
-    <rect x="558" y="323" width="484" height="217" rx="28" fill="#f8f6f2"/>
-    <image href="juro-mark.png" x="603" y="363" width="52" height="52"/>
-    <text x="683" y="398" fill="#062844" font-size="29" font-weight="800" letter-spacing="5">JURO</text>
-    <text x="603" y="451" class="kicker">CURRENT PRODUCT CORE</text>
-    <text x="603" y="488" fill="#062844" font-size="25" font-weight="800">Legal information, documents</text><text x="603" y="518" fill="#062844" font-size="25" font-weight="800">and practical next actions.</text>
+    <g stroke="#BE974F" stroke-width="2" fill="none">
+      <path d="M555 425H440V295"/>
+      <path d="M555 510H420V630"/>
+      <path d="M1045 425H1160V295"/>
+      <path d="M1045 510H1180V630"/>
+      <path d="M800 340V240"/>
+      <path d="M800 590V700"/>
+    </g>
+    <g class="ui">
+      <rect x="130" y="190" width="310" height="150" rx="18" fill="#fff" stroke="#dbe4e8"/>
+      <text x="160" y="228" class="status" fill="#9b773b">WORKING</text>
+      <text x="160" y="265" class="card-title">AI legal chat</text>
+      <text x="160" y="292" class="card-copy">Structured questions, source cards</text>
+      <text x="160" y="313" class="card-copy">and citation-aware responses.</text>
 
-    <rect x="132" y="160" width="310" height="142" rx="19" class="card"/><text x="158" y="191" class="status" fill="#9b773b">WORKING</text><text x="158" y="229" class="cardh">AI legal information</text><text x="158" y="255" class="cardcopy">Questions, source cards and</text><text x="158" y="276" class="cardcopy">citation-aware responses.</text>
+      <rect x="120" y="595" width="300" height="150" rx="18" fill="#fff" stroke="#dbe4e8"/>
+      <text x="150" y="633" class="status" fill="#9b773b">WORKING</text>
+      <text x="150" y="670" class="card-title">Documents &amp; storage</text>
+      <text x="150" y="697" class="card-copy">Build drafts, versions and generated</text>
+      <text x="150" y="718" class="card-copy">files with private object storage.</text>
 
-    <rect x="1158" y="160" width="310" height="142" rx="19" class="card"/><text x="1184" y="191" class="status" fill="#9b773b">PARTIAL</text><text x="1184" y="229" class="cardh">Document intelligence</text><text x="1184" y="255" class="cardcopy">Review, comparison and</text><text x="1184" y="276" class="cardcopy">risk-oriented workflows.</text>
+      <rect x="1160" y="190" width="310" height="150" rx="18" fill="#fff" stroke="#dbe4e8"/>
+      <text x="1190" y="228" class="status" fill="#9b773b">PARTIAL</text>
+      <text x="1190" y="265" class="card-title">Document intelligence</text>
+      <text x="1190" y="292" class="card-copy">Review, redline comparison and</text>
+      <text x="1190" y="313" class="card-copy">risk-oriented analysis workflows.</text>
 
-    <rect x="132" y="572" width="310" height="142" rx="19" class="card"/><text x="158" y="603" class="status" fill="#9b773b">WORKING</text><text x="158" y="641" class="cardh">Documents &amp; storage</text><text x="158" y="667" class="cardcopy">Drafts, versions and generated</text><text x="158" y="688" class="cardcopy">files in protected workflows.</text>
+      <rect x="1180" y="595" width="300" height="150" rx="18" fill="#fff" stroke="#dbe4e8"/>
+      <text x="1210" y="633" class="status" fill="#9b773b">WORKING</text>
+      <text x="1210" y="670" class="card-title">Cases &amp; action plans</text>
+      <text x="1210" y="697" class="card-copy">Link actions, deadlines, documents</text>
+      <text x="1210" y="718" class="card-copy">and legal context to a case.</text>
 
-    <rect x="1158" y="572" width="310" height="142" rx="19" class="card"/><text x="1184" y="603" class="status" fill="#9b773b">WORKING</text><text x="1184" y="641" class="cardh">Cases &amp; action plans</text><text x="1184" y="667" class="cardcopy">Deadlines, actions and legal</text><text x="1184" y="688" class="cardcopy">context linked to a case.</text>
+      <rect x="645" y="100" width="310" height="122" rx="18" fill="#fff" stroke="#dbe4e8"/>
+      <text x="675" y="137" class="status" fill="#9b773b">WORKING</text>
+      <text x="675" y="174" class="card-title">Source-aware answers</text>
+      <text x="675" y="201" class="card-copy">Evidence is shown alongside the response.</text>
 
-    <rect x="645" y="132" width="310" height="100" rx="17" fill="#112f48" stroke="#caa866" stroke-opacity=".55"/><text x="671" y="161" class="status" fill="#caa866">WORKING</text><text x="671" y="200" fill="#fff" font-size="19" font-weight="800">Source-aware answers</text>
-
-    <rect x="622" y="660" width="356" height="108" rx="18" fill="#112f48" stroke="#a9bac3" stroke-dasharray="8 8"/><text x="650" y="690" class="status" fill="#caa866">PARTIAL / HUMAN WORKFLOW</text><text x="650" y="728" fill="#fff" font-size="19" font-weight="800">Lawyer profiles, hand-off &amp; admin</text>
+      <rect x="640" y="720" width="320" height="122" rx="18" fill="#fff" stroke="#dbe4e8"/>
+      <text x="670" y="757" class="status" fill="#9b773b">PARTIAL</text>
+      <text x="670" y="794" class="card-title">Lawyer &amp; admin operations</text>
+      <text x="670" y="821" class="card-copy">Controlled profiles, hand-off and administration.</text>
+    </g>
+    <g stroke="#8495a0" stroke-width="2" stroke-dasharray="7 8" fill="none">
+      <path d="M290 745V850H570"/>
+      <path d="M1330 745V850H1030"/>
+    </g>
+    <g>
+      <rect x="570" y="835" width="460" height="73" rx="18" fill="#f2e7d1" stroke="#BE974F" stroke-opacity=".65"/>
+      <text x="600" y="865" class="status" fill="#9b773b">PLANNED / NOT A LIVE PAYMENT SERVICE</text>
+      <text x="600" y="891" fill="#062844" font-size="16" font-weight="700">Production payments and broader ecosystem integrations</text>
+    </g>
+    <g transform="translate(100 930)">
+      <path d="M0 0H58" stroke="#BE974F" stroke-width="3"/>
+      <text x="72" y="5" class="copy">Implemented / working path</text>
+      <path d="M330 0H388" stroke="#8495a0" stroke-width="3" stroke-dasharray="7 7"/>
+      <text x="402" y="5" class="copy">Partial or planned path</text>
+    </g>
   </g>
-  <g class="ui"><rect x="100" y="752" width="402" height="40" rx="20" fill="#f1e5cf"/><text x="123" y="777" fill="#8e6a31" font-size="11" font-weight="800" letter-spacing="1">PLANNED</text><text x="218" y="777" fill="#062844" font-size="13" font-weight="700">Payments and wider integrations</text><path d="M1035 772H1103" stroke="#BE974F" stroke-width="3"/><text x="1118" y="777" fill="#b8c8d1" font-size="13">Implemented / working</text><path d="M1314 772H1382" stroke="#8ca0aa" stroke-width="3" stroke-dasharray="8 8"/><text x="1396" y="777" fill="#b8c8d1" font-size="13">Partial / planned</text></g>
 </svg>

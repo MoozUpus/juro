@@ -1,4 +1,5 @@
 import { runtimeEnv } from "../../../lib/document-builder/storage/runtime";
+import { dependencyHealthEnvironment } from "../../../lib/operations/dependency-health";
 import { readPublicStatus } from "../../../lib/operations/system-status";
 
 const publicHeaders = {
@@ -7,7 +8,8 @@ const publicHeaders = {
 };
 
 export async function GET(request: Request): Promise<Response> {
-  const db = runtimeEnv().DB;
+  const runtime = runtimeEnv();
+  const db = runtime.DB;
   const locale = new URL(request.url).searchParams.get("lang") === "uz" ? "uz" : "ru";
   if (!db) {
     return Response.json(
@@ -16,7 +18,11 @@ export async function GET(request: Request): Promise<Response> {
     );
   }
   try {
-    return Response.json(await readPublicStatus({ db, locale }), { headers: publicHeaders });
+    return Response.json(await readPublicStatus({
+      db,
+      locale,
+      environment: dependencyHealthEnvironment(runtime.APP_ENV),
+    }), { headers: publicHeaders });
   } catch {
     return Response.json(
       { code: "STATUS_TEMPORARILY_UNAVAILABLE", locale },

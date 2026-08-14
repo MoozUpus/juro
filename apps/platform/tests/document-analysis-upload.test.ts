@@ -3,6 +3,7 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   documentAnalysisUploadForUser,
+  DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT,
   hashUploadIntent,
   initializeDocumentAnalysisUpload,
   parseDocumentAnalysisUploadIntent,
@@ -29,6 +30,32 @@ test("document analysis upload validates size, MIME/extension and idempotency ke
   assert.throws(() => parseUploadIdempotencyKey("short"), /Idempotency-Key/);
 });
 
+test("ZIP packages beyond the deployed bounded extractor are rejected before upload state exists", () => {
+  assert.throws(
+    () => parseDocumentAnalysisUploadIntent({
+      ...intent,
+      fileName: "contracts.zip",
+      mimeType: "application/zip",
+      sizeBytes: DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT + 1,
+      locale: "ru",
+    }),
+    (error: unknown) => error instanceof Error
+      && error.message.includes("20 МБ")
+      && "code" in error
+      && error.code === "DOCUMENT_ANALYSIS_CAPACITY_UNAVAILABLE",
+  );
+  assert.throws(
+    () => parseDocumentAnalysisUploadIntent({
+      ...intent,
+      fileName: "contracts.zip",
+      mimeType: "application/zip",
+      sizeBytes: DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT + 1,
+      locale: "uz",
+    }),
+    /20 MB dan katta ZIP-paketlar/,
+  );
+});
+
 test("magic-byte validation rejects MIME spoofing", () => {
   assert.equal(validateUploadMagicBytes("application/pdf", new TextEncoder().encode("%PDF-1.7"), new Uint8Array()), true);
   assert.equal(validateUploadMagicBytes("application/pdf", new TextEncoder().encode("MZ....."), new Uint8Array()), false);
@@ -51,7 +78,7 @@ test("upload initialization is tenant-scoped, idempotent, and binds the request 
   };
   const first = await initializeDocumentAnalysisUpload(input);
   assert.equal(first.replay, false);
-  assert.match(first.record.r2Key, /^quarantine-v2\/workspace-a\//);
+  assert.match(first.record.r2Key, /^analysis-input-v1\/workspace-a\//);
   assert.doesNotMatch(first.record.r2Key, /contract/i);
 
   const replay = await initializeDocumentAnalysisUpload(input);

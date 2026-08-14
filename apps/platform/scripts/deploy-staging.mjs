@@ -23,4 +23,6 @@ const config = JSON.parse(await readFile(configPath, "utf8"));
 if (config.targetEnvironment !== "staging" || config.name !== "juro-platform-staging" || config.vars?.APP_ENV !== "staging") {
   throw new Error("Refusing deployment: generated artifact is not the verified juro-platform-staging configuration.");
 }
-await run(process.execPath, [resolve(root, "node_modules", "wrangler", "bin", "wrangler.js"), "deploy", "--config", configPath, ...arguments_]);
+// The malware scanner Container is rolled out independently. Keep the application
+// deployment deterministic and avoid an interactive container-rollout prompt.
+await run(process.execPath, [resolve(root, "node_modules", "wrangler", "bin", "wrangler.js"), "deploy", "--config", configPath, "--containers-rollout", "none", ...arguments_]);

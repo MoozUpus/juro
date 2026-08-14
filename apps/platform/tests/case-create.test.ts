@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import {
+  CASE_SCENARIOS,
+  LEGACY_CASE_SCENARIO_MIGRATIONS,
   caseCreateInputSchema,
+  caseDirectionsForAccount,
   caseScenariosForAccount,
   caseScenarioSteps,
 } from "../lib/platform/case-create";
@@ -12,11 +15,30 @@ test("case creation input is strict, localized and audience-specific", () => {
   const personal = caseScenariosForAccount("individual");
   const entrepreneur = caseScenariosForAccount("entrepreneur");
   const business = caseScenariosForAccount("business");
-  assert.deepEqual(personal.map((item) => item.id), ["unpaid-salary", "debt", "consumer"]);
-  assert.deepEqual(entrepreneur.map((item) => item.id), personal.map((item) => item.id));
-  assert.deepEqual(business.map((item) => item.id), ["debt-recovery", "contract-breach"]);
+  assert.equal(Object.keys(CASE_SCENARIOS).length, 52);
+  assert.equal(caseDirectionsForAccount("individual").length, 11);
+  assert.equal(caseDirectionsForAccount("business").length, 11);
+  assert.equal(personal.length, 52);
+  assert.equal(entrepreneur.length, 52);
+  assert.equal(business.length, 52);
+  assert.equal(caseScenarioSteps("debt-recovery", "ru").length, 4);
+  assert.deepEqual(LEGACY_CASE_SCENARIO_MIGRATIONS, {
+    "unpaid-salary": "unpaid-salary",
+    debt: "debt",
+    consumer: "consumer",
+    "contract-breach": "contract-breach",
+    "debt-recovery": "debt-recovery",
+  });
+  assert.ok(personal.some((item) => item.direction === "business"));
+  assert.ok(personal.some((item) => item.direction === "other"));
   assert.equal(caseScenarioSteps("debt", "ru").length, 4);
   assert.equal(caseScenarioSteps("debt", "uz").length, 4);
+  for (const direction of caseDirectionsForAccount("individual")) {
+    assert.ok(
+      direction.id === "other" || caseScenariosForAccount("individual", direction.id).length >= 5,
+      `${direction.id} must expose at least five scenarios`,
+    );
+  }
 
   assert.equal(caseCreateInputSchema.safeParse({
     title: " Возврат долга ",
@@ -39,10 +61,10 @@ test("case creation input is strict, localized and audience-specific", () => {
   }).success, false);
   assert.equal(caseCreateInputSchema.safeParse({
     title: "Дело",
-    legalArea: "contract-breach",
+    legalArea: "business-registration",
     locale: "ru",
     accountType: "individual",
-  }).success, false);
+  }).success, true);
   assert.equal(caseCreateInputSchema.safeParse({
     title: "Дело",
     legalArea: "debt",

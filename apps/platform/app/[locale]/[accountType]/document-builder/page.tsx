@@ -20,5 +20,5 @@ export async function generateMetadata({
 export default async function CanonicalDocumentBuilder({ params }: { params: Promise<{ locale: string; accountType: string }> }) {
   const { locale, accountType } = await params;
   await requireChatGPTUser(`/${locale}/${accountType}/document-builder`);
-  return <DocumentBuilderPage/>;
+  return <DocumentBuilderPage embedded signInPath={`/${locale}/${accountType}/document-builder`}/>;
 }

@@ -3,13 +3,13 @@
  *
  * The probes deliberately request only each public robots endpoint. They never
  * fetch, retain, index, or parse a legal document, so this operational module
- * cannot reintroduce an owned Lex/Advice corpus.
+ * cannot reintroduce an owned legal corpus.
  */
 const HEALTH_TIMEOUT_MS = 10_000;
 const HEALTH_MAX_BYTES = 32 * 1024;
 const FRESH_WITHIN_MS = 24 * 60 * 60 * 1_000;
 
-export const directHealthKinds = ["lex", "advice"] as const;
+export const directHealthKinds = ["lex"] as const;
 export type DirectHealthKind = typeof directHealthKinds[number];
 export type DirectHealthStatus = "healthy" | "unavailable";
 export type DirectHealthState = "fresh" | "degraded" | "stale" | "unknown";
@@ -35,7 +35,6 @@ export type DirectLegalSourceHealth = {
 
 const endpoints: Record<DirectHealthKind, string> = {
   lex: "https://lex.uz/robots.txt",
-  advice: "https://advice.uz/robots.txt",
 };
 
 function publicHealthError(error: unknown): string {
@@ -57,7 +56,11 @@ async function boundedHealthFetch(
   try {
     const response = await fetchImpl(endpointUrl, {
       method: "GET",
-      redirect: "error",
+      // Cloudflare's fetch path does not consistently surface `redirect:
+      // "error"` failures for an otherwise valid public HTTPS endpoint. Keep
+      // redirects observable and reject them below instead of treating a
+      // worker-runtime transport quirk as Lex unavailability.
+      redirect: "manual",
       credentials: "omit",
       cache: "no-store",
       signal: controller.signal,
@@ -68,7 +71,7 @@ async function boundedHealthFetch(
     });
     const contentLength = Number(response.headers.get("content-length") ?? "0");
     const contentType = response.headers.get("content-type")?.toLocaleLowerCase() ?? "";
-    if (!response.ok || (contentLength > 0 && contentLength > HEALTH_MAX_BYTES) || !contentType.includes("text")) {
+    if (!response.ok || response.status >= 300 || (contentLength > 0 && contentLength > HEALTH_MAX_BYTES) || !contentType.includes("text")) {
       try { await response.body?.cancel(); } catch { /* best effort */ }
       throw new Error("DIRECT_SOURCE_HEALTH_UNAVAILABLE");
     }
@@ -139,7 +142,7 @@ export async function readDirectLegalSourceHealth(
     `SELECT source_kind AS sourceKind,status,checked_at AS checkedAt,
             latency_ms AS latencyMs,error_code AS errorCode,endpoint_url AS endpointUrl
        FROM legal_source_health_checks
-      WHERE environment=? AND source_kind IN ('lex','advice')
+      WHERE environment=? AND source_kind='lex'
       ORDER BY checked_at DESC,id DESC
       LIMIT 24`,
   ).bind(environment).all<HealthRow>();

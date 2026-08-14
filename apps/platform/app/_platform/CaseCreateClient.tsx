@@ -2,9 +2,9 @@
 
 import { CircleAlert, LoaderCircle, Plus, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
-import { caseScenariosForAccount } from "../../lib/platform/case-create";
+import { caseDirectionsForAccount, caseScenariosForAccount, type CaseDirectionId } from "../../lib/platform/case-create";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
 
@@ -12,12 +12,22 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
   const ru = locale === "ru";
   const base = usePlatformBasePath();
   const router = useRouter();
-  const scenarios = caseScenariosForAccount(accountType);
-  const [selected, setSelected] = useState(scenarios[0].id);
+  const directions = caseDirectionsForAccount(accountType);
+  const [direction, setDirection] = useState<CaseDirectionId>(directions[0]?.id ?? "employment");
+  const scenarios = useMemo(() => caseScenariosForAccount(accountType, direction), [accountType, direction]);
+  const [selected, setSelected] = useState(() =>
+    caseScenariosForAccount(accountType, directions[0]?.id ?? "employment")[0]?.id ?? "unpaid-salary",
+  );
+  const [scenarioQuery, setScenarioQuery] = useState("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+
+  const visibleScenarios = scenarios.filter((scenario) => {
+    const query = scenarioQuery.trim().toLocaleLowerCase();
+    return !query || `${scenario.ru} ${scenario.uz}`.toLocaleLowerCase().includes(query);
+  });
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,9 +63,37 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
 
       <form onSubmit={submit} aria-describedby="case-create-note">
         <fieldset>
-          <legend>{ru ? "Выберите тип ситуации" : "Vaziyat turini tanlang"}</legend>
+          <legend>{ru ? "1. Выберите направление" : "1. Yo‘nalishni tanlang"}</legend>
+          <div className="case-create-directions" role="list">
+            {directions.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                aria-pressed={direction === item.id}
+                onClick={() => {
+                  setDirection(item.id);
+                  setSelected(caseScenariosForAccount(accountType, item.id)[0]?.id ?? "unpaid-salary");
+                  setScenarioQuery("");
+                }}
+              >
+                {item[locale]}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend>{ru ? "2. Выберите ситуацию" : "2. Vaziyatni tanlang"}</legend>
+          <label className="case-create-scenario-search">
+            <span className="sr-only">{ru ? "Поиск ситуации" : "Vaziyatni qidirish"}</span>
+            <input
+              value={scenarioQuery}
+              onChange={(event) => setScenarioQuery(event.target.value)}
+              placeholder={ru ? "Поиск в выбранном направлении" : "Tanlangan yo‘nalishda qidirish"}
+            />
+          </label>
           <div className="case-create-scenarios">
-            {scenarios.map((scenario) => (
+            {visibleScenarios.map((scenario) => (
               <button
                 key={scenario.id}
                 type="button"
@@ -63,9 +101,11 @@ export function CaseCreateClient({ locale, accountType }: { locale: PlatformLoca
                 onClick={() => setSelected(scenario.id)}
               >
                 {scenario[locale]}
+                {scenario.requiresLawyerReview && <small>{ru ? "Рекомендуется проверка юристом" : "Yurist tekshiruvi tavsiya etiladi"}</small>}
               </button>
             ))}
           </div>
+          {!visibleScenarios.length && <p className="case-create-empty">{ru ? "Ситуация не найдена. Опишите её AI-юристу — JURO предложит подходящий план." : "Vaziyat topilmadi. Uni AI-yuristga yozing — JURO mos reja taklif qiladi."}</p>}
         </fieldset>
 
         <label>

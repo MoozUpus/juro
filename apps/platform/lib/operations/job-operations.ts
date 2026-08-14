@@ -47,6 +47,10 @@ const recoverableTerminalErrorCodes = new Set([
   "USER_DOCUMENT_INDEX_FAILED",
   "OCR_PROVIDER_UNAVAILABLE",
   "OCR_PERSISTENCE_FAILED",
+  // A worker can transiently lose the race to claim an export that is still
+  // being finalized. Its durable terminal record must remain redrivable
+  // through the same staff-audited path as R2 write failures.
+  "DOCUMENT_EXPORT_NOT_READY",
   "DOCUMENT_EXPORT_OBJECT_FAILED",
   "EMAIL_CONFIGURATION_UNAVAILABLE",
   "EMAIL_PROVIDER_UNAVAILABLE",

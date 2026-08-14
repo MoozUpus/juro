@@ -14,3 +14,15 @@ password/corruption -> terminal failure; timeout -> retry; page count above 500
 PDF counts and image pages are accumulated before any provider batch.
 
 No provider key, session secret, or raw user content is sent to analytics. See `PRIVACY-DATA-MAP.md` and `R2-STORAGE.md`.
+
+Interactive legal chat: authenticated/guest request -> one 30-second absolute
+budget -> bounded D1-only verified retrieval -> optional source-bound SSE
+preliminary state -> primary provider / remaining-budget fallback -> strict
+source/schema validation -> durable completion and usage reconciliation ->
+content-free SLO evidence. Live Lex/Advice fetching is excluded from this
+interactive path. A failure or expired deadline releases the reservation; it
+does not create a late successful charge. This contract is deployed to the
+2026-08-12 staging checkpoint, not production. The latest OpenAI and Anthropic
+observations are individually within their documented request budgets, but the
+sample count remains insufficient for p50/p95 certification. See
+[AI-RELIABILITY-SLO.md](./AI-RELIABILITY-SLO.md).
