@@ -103,9 +103,13 @@ export function reciprocalRankFusion(
   sparse: readonly LegalCorpusRetrievalItem[],
   dense: readonly DenseCorpusCandidate[],
   limit = 12,
+  hydratedDense: readonly LegalCorpusRetrievalItem[] = [],
 ): LegalCorpusRetrievalItem[] {
   const byChunk = new Map<string, LegalCorpusRetrievalItem>();
   const score = new Map<string, number>();
+  hydratedDense.forEach((item) => {
+    if (!byChunk.has(item.chunkId)) byChunk.set(item.chunkId, { ...item });
+  });
   sparse.forEach((item, index) => {
     byChunk.set(item.chunkId, { ...item, sparseRank: index + 1 });
     score.set(item.chunkId, (score.get(item.chunkId) ?? 0) + 1 / (RRF_K + index + 1));
@@ -121,6 +125,96 @@ export function reciprocalRankFusion(
     .sort((left, right) => (right.fusionScore ?? 0) - (left.fusionScore ?? 0)
       || left.chunkId.localeCompare(right.chunkId))
     .slice(0, Math.max(1, Math.min(limit, 30)));
+}
+
+async function hydrateDenseCandidates(input: {
+  db: D1Database;
+  candidates: readonly DenseCorpusCandidate[];
+  scope: LegalCorpusSearchScope;
+  officialOnly: boolean;
+}): Promise<LegalCorpusRetrievalItem[]> {
+  const chunkIds = [...new Set(input.candidates.map((candidate) => candidate.chunkId))]
+    .filter((chunkId) => /^[A-Za-z0-9:_-]{1,200}$/u.test(chunkId))
+    .slice(0, 60);
+  if (chunkIds.length === 0) return [];
+
+  const scope = input.scope;
+  const asOfDate = scope.asOfDate ?? null;
+  const tenantId = scope.tenantId ?? null;
+  const userId = scope.userId ?? null;
+  const matterId = scope.matterId ?? null;
+  const placeholders = chunkIds.map(() => "?").join(",");
+  const rows = await input.db.prepare(`
+    SELECT chunk.id AS chunkId,
+      document.id AS documentId,document.title AS documentTitle,
+      document.document_type AS documentType,
+      provision.article_number AS articleNumber,provision.article_title AS articleTitle,
+      chunk.content_text AS exactQuote,
+      provision.source_url AS sourceUrl,provision.language AS language,
+      provision.status AS status,provision.valid_from AS validFrom,provision.valid_to AS validTo,
+      version.version_date AS versionDate,version.fetched_at AS fetchedAt,
+      chunk.content_sha256 AS contentHash,
+      document.provider AS provider,
+      document.scope AS scope,document.tenant_id AS tenantId,
+      document.owner_user_id AS ownerUserId,document.matter_id AS matterId
+    FROM legal_corpus_chunks AS chunk
+    INNER JOIN legal_corpus_provisions AS provision ON provision.id=chunk.provision_id
+    INNER JOIN legal_corpus_versions AS version ON version.id=provision.version_id
+    INNER JOIN legal_corpus_variants AS variant ON variant.id=provision.variant_id
+    INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
+    WHERE chunk.id IN (${placeholders})
+      AND document.availability_status='ready'
+      AND (?=0 OR document.provider='lex_uz')
+      AND (
+        (? IS NULL AND variant.current_version_id=version.id
+          AND (?=1 OR provision.status='active'))
+        OR
+        (? IS NOT NULL AND version.valid_from IS NOT NULL
+          AND version.valid_from<=?
+          AND (version.valid_to IS NULL OR version.valid_to>?))
+      )
+      AND (
+        document.scope='global'
+        OR (document.scope='tenant' AND ? IS NOT NULL AND document.tenant_id=?)
+        OR (document.scope='user' AND ? IS NOT NULL
+          AND document.owner_user_id=?
+          AND (document.tenant_id IS NULL OR document.tenant_id=?)
+          AND (document.matter_id IS NULL OR document.matter_id=?))
+      )
+  `).bind(
+    ...chunkIds,
+    input.officialOnly ? 1 : 0,
+    asOfDate, scope.includeHistorical ? 1 : 0,
+    asOfDate, asOfDate, asOfDate,
+    tenantId, tenantId,
+    userId, userId, tenantId, matterId,
+  ).all<SparseRow>();
+
+  const byId = new Map(rows.results
+    .filter((row) => scopeAllows(row, scope))
+    .map((row) => [row.chunkId, row]));
+  return chunkIds.flatMap((chunkId) => {
+    const row = byId.get(chunkId);
+    if (!row) return [];
+    return [{
+      chunkId: row.chunkId,
+      documentId: row.documentId,
+      documentTitle: row.documentTitle,
+      documentType: row.documentType,
+      articleNumber: row.articleNumber,
+      articleTitle: row.articleTitle,
+      exactQuote: row.exactQuote,
+      sourceUrl: row.sourceUrl,
+      language: row.language,
+      status: row.status,
+      validFrom: row.validFrom,
+      validTo: row.validTo,
+      versionDate: row.versionDate,
+      fetchedAt: row.fetchedAt,
+      contentHash: row.contentHash,
+      provider: row.provider,
+    }];
+  });
 }
 
 /**
@@ -300,16 +394,24 @@ export async function retrieveLegalCorpus(input: {
       sparseRank: index + 1,
     }));
   let dense: DenseCorpusCandidate[] = [];
+  let hydratedDense: LegalCorpusRetrievalItem[] = [];
   if (input.denseSearch) {
     try {
       dense = await input.denseSearch(input.query.slice(0, MAX_QUERY_LENGTH), limit * 2);
+      hydratedDense = await hydrateDenseCandidates({
+        db: input.db,
+        candidates: dense,
+        scope,
+        officialOnly: input.officialOnly ?? false,
+      });
     } catch {
       // Dense search is an optional provider. Sparse results remain a safe,
       // complete fallback and no provider error is surfaced as legal evidence.
       dense = [];
+      hydratedDense = [];
     }
   }
-  return reciprocalRankFusion(sparse, dense, limit);
+  return reciprocalRankFusion(sparse, dense, limit, hydratedDense);
 }
 
 export function assessLegalCorpusCoverage(input: {

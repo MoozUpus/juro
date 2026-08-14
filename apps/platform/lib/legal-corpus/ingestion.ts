@@ -25,6 +25,8 @@ import {
   type LegalCorpusLanguage,
 } from "./trust";
 import { diffCorpusProvisions, type CorpusProvisionSnapshot } from "./versioning";
+import { LegalCorpusEmbeddingError } from "./embeddings";
+import { QdrantCorpusError } from "./qdrant";
 
 const MAX_PROVISIONS_PER_VERSION = 8_000;
 const MAX_CHUNKS_PER_VERSION = 16_000;
@@ -160,11 +162,17 @@ function safeErrorCode(error: unknown): string {
   if (error instanceof LegalSourceFetchError || error instanceof LegalSourceParserError) {
     return error.code;
   }
+  if (error instanceof QdrantCorpusError || error instanceof LegalCorpusEmbeddingError) {
+    return error.code;
+  }
   return "LEGAL_CORPUS_INGESTION_FAILED";
 }
 
 function retryable(error: unknown): boolean {
-  return error instanceof LegalSourceFetchError && error.retryable;
+  return (error instanceof LegalSourceFetchError
+    || error instanceof QdrantCorpusError
+    || error instanceof LegalCorpusEmbeddingError)
+    && error.retryable;
 }
 
 function retryAt(now: Date, attempt: number): string {
@@ -641,7 +649,12 @@ export async function seedLexCorpusJobsFromMetadata(
  * the distributed backpressure mechanism. */
 export async function runNextLegalCorpusIngestionJob(
   env: LegalCorpusIngestionEnv,
-  input: { now?: Date; wait?: (delayMs: number) => Promise<void>; fetchImpl?: FetchLike } = {},
+  input: {
+    now?: Date;
+    wait?: (delayMs: number) => Promise<void>;
+    fetchImpl?: FetchLike;
+    afterIngest?: (result: LegalCorpusIngestionResult) => Promise<void>;
+  } = {},
 ): Promise<LegalCorpusJobRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
     return { claimed: false, status: "disabled", jobId: null, safeErrorCode: null };
@@ -669,6 +682,9 @@ export async function runNextLegalCorpusIngestionJob(
       wait: input.wait,
       fetchImpl: input.fetchImpl,
     });
+    if (result.status !== "halted_suspicious_change" && result.versionId && input.afterIngest) {
+      await input.afterIngest(result);
+    }
     const terminal = result.status === "halted_suspicious_change";
     await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
       SET status=?,next_attempt_at=NULL,last_error_code=?,updated_at=? WHERE id=?

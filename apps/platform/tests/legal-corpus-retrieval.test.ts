@@ -48,6 +48,15 @@ test("RRF is stable with duplicate, sparse-only and dense-only ranks", () => {
   assert.equal(assessLegalCorpusCoverage({ query: "статья 1 и статья 3", sources: [source("a")] }), "partial_coverage");
 });
 
+test("RRF retains a hydrated dense-only result without inventing a sparse rank", () => {
+  const denseOnly = source("dense-only");
+  const fused = reciprocalRankFusion([], [{ chunkId: denseOnly.chunkId, score: 0.9 }], 12, [denseOnly]);
+  assert.deepEqual(fused.map((item) => item.chunkId), ["dense-only"]);
+  assert.equal(fused[0]?.denseRank, 1);
+  assert.equal(fused[0]?.sparseRank, undefined);
+  assert.equal(fused[0]?.fusionScore, 1 / 61);
+});
+
 test("sparse retrieval returns only the current, scope-authorized version", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
@@ -87,6 +96,65 @@ test("sparse retrieval returns only the current, scope-authorized version", asyn
       "SELECT COUNT(*) AS count FROM legal_corpus_sparse_terms",
     ).get() as { count: number }).count > 0);
     assert.equal(assessLegalCorpusCoverage({ query: "статья 25", sources: results }), "good_coverage");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("dense-only retrieval hydrates evidence from D1 and enforces user scope", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const now = "2026-08-14T00:00:00.000Z";
+  const hash = "b".repeat(64);
+  try {
+    sqlite.prepare(`INSERT INTO legal_corpus_documents (
+      id,provider,jurisdiction,source_class,scope,tenant_id,owner_user_id,matter_id,visibility,
+      canonical_url,title,availability_status,trusted,verification_status,approval_required,created_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "private:1", "user_upload", "UZ", "USER_TRUSTED_PRIVATE", "user", "tenant-1", "user-1", "matter-1",
+      "private", null, "Private evidence", "ready", 1, "user_supplied", 0, now, now,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_variants (
+      id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      "variant:1", "private:1", "ru", 1, null, null, now, "version:1", now, now,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_versions (
+      id,variant_id,previous_version_id,version_number,status,valid_from,valid_to,version_date,content_sha256,
+      raw_object_key,normalized_object_key,source_url,fetched_at,change_type,created_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "version:1", "variant:1", null, 1, "active", "2026-01-01", null, "2026-01-01", hash,
+      "private/raw", "private/normalized", null, now, "new", now,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_provisions (
+      id,document_id,variant_id,version_id,article_number,article_number_normalized,article_title,part,chapter,section,
+      sequence,text,exact_quote_source,language,status,valid_from,valid_to,source_url,content_sha256,created_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "provision:1", "private:1", "variant:1", "version:1", null, null, "Private note", null, null, null,
+      0, "Confidential dense-only evidence", "Confidential dense-only evidence", "ru", "active", "2026-01-01", null,
+      null, hash, now,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_chunks (
+      id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at
+    ) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      "chunk:private:1", "provision:1", "version:1", 0, 1, "Confidential dense-only evidence", hash, "[]", now, now,
+    );
+
+    const denseSearch = async () => [{ chunkId: "chunk:private:1", score: 0.99 }];
+    assert.deepEqual(await retrieveLegalCorpus({
+      db: d1, query: "unmatched query", denseSearch,
+    }), []);
+    assert.deepEqual(await retrieveLegalCorpus({
+      db: d1, query: "unmatched query", denseSearch,
+      scope: { tenantId: "tenant-1", userId: "other-user", matterId: "matter-1" },
+    }), []);
+    const allowed = await retrieveLegalCorpus({
+      db: d1, query: "unmatched query", denseSearch,
+      scope: { tenantId: "tenant-1", userId: "user-1", matterId: "matter-1" },
+    });
+    assert.equal(allowed.length, 1);
+    assert.equal(allowed[0]?.chunkId, "chunk:private:1");
+    assert.equal(allowed[0]?.denseRank, 1);
+    assert.equal(allowed[0]?.sparseRank, undefined);
   } finally {
     sqlite.close();
   }

@@ -16,6 +16,7 @@
     "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
     "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
     "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+    "LEGAL_CORPUS_DENSE_ENABLED": "false",
     "LEGAL_CORPUS_SHADOW_MODE": "false"
   },
   "triggers": {
@@ -61,6 +62,7 @@
         "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+        "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "false"
       },
       "triggers": {
@@ -94,6 +96,7 @@
         "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+        "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "false"
       },
       "triggers": {

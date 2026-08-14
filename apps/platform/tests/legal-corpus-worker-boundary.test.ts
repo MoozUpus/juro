@@ -125,6 +125,7 @@ test("dedicated Worker config is route-free and fail-closed in every environment
     assert.deepEqual(environment.routes ?? [], []);
     assert.equal(environment.vars.LEGAL_CORPUS_ENABLED, "false");
     assert.equal(environment.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
+    assert.equal(environment.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
     assert.deepEqual(environment.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);
   }
 });

@@ -8,6 +8,8 @@ import {
   seedLexCatalogDiscoveryCheckpoints,
 } from "../lib/legal-corpus/lex-catalog-discovery";
 import { featureEnabled } from "../lib/legal-corpus/trust";
+import { syncLegalCorpusVersionToQdrant } from "../lib/legal-corpus/qdrant-indexing";
+import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
 export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
@@ -15,7 +17,10 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 4 * 60_000;
 
-type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv;
+type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
+  OPENAI_API_KEY?: string;
+  EMBEDDING_MODEL?: string;
+};
 
 type ClaimedRun = {
   id: string;
@@ -166,6 +171,10 @@ export async function handleLegalCorpusScheduled(
     });
     const ingestion = await runNextLegalCorpusIngestionJob(env, {
       wait: (delayMs) => scheduler.wait(delayMs),
+      afterIngest: async (result) => {
+        if (!result.versionId) return;
+        await syncLegalCorpusVersionToQdrant(env, result.versionId);
+      },
     });
     const errorCode = discovery.safeErrorCode ?? ingestion.safeErrorCode;
     const failed = discovery.status === "failed"

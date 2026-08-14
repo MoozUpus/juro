@@ -68,7 +68,10 @@ function indexedSource(item: LegalCorpusRetrievalItem): LegalSourceProviderResul
 export class LexUzIndexedProvider implements LegalSourceProvider {
   readonly id = "lex_uz_indexed" as const;
 
-  constructor(private readonly db: D1Database) {}
+  constructor(
+    private readonly db: D1Database,
+    private readonly denseSearch?: (query: string, limit: number) => Promise<Array<{ chunkId: string; score: number }>>,
+  ) {}
 
   async search(request: LegalSourceProviderRequest): Promise<LegalSourceProviderResult[]> {
     const results = await retrieveLegalCorpus({
@@ -77,6 +80,7 @@ export class LexUzIndexedProvider implements LegalSourceProvider {
       scope: request.scope,
       limit: request.limit,
       officialOnly: true,
+      denseSearch: this.denseSearch,
     });
     return results.map(indexedSource).filter((source): source is LegalSourceProviderResult => Boolean(source));
   }

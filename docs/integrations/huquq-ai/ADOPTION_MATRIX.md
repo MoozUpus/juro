@@ -21,7 +21,7 @@ The following source-system dispositions are final for this integration:
 | Gemini provider | REJECT | Provider abstraction remains OpenAI primary with Anthropic fallback; no Gemini credential or adapter is added. |
 | Demo billing/plans | REJECT | JURO billing workflows are unchanged; no demo payment code or pricing model is carried over. |
 | Local Lex corpus/raw HTML | REJECT | No legislation corpus, raw HTML, or evaluation answer is committed. Staging ingestion is separately feature-gated and source-policy controlled. |
-| Qdrant deployment | REJECT | JURO uses its existing D1/Vectorize-compatible path. Qdrant needs a reproducible quality benchmark and separate infrastructure approval. |
+| Qdrant Docker deployment | REJECT | The upstream deployment is not copied. JURO has a new native REST adapter, but real infrastructure still needs a reproducible benchmark and separate approval. |
 | Huquq AI name, logo, CSS identity, screenshots | REJECT | JURO name, navigation, design system, and only JURO-owned presentation assets are retained. |
 
 | # | Huquq AI component | Source path | Purpose | JURO equivalent / target | Decision | License | Risk | Test / control |
@@ -34,9 +34,9 @@ The following source-system dispositions are final for this integration:
 | 6 | Follow-up and article parsing | `services/query.py` | query context, exact article | planner + `legal-language.ts` | REIMPLEMENT | MIT concepts | RU/UZ false match | `legal-language.test.ts` |
 | 7 | Document aliases | `services/aliases.py` | code/name detection | planner aliases + language normalizer | REIMPLEMENT | MIT concepts | Incorrect act | Unit tests |
 | 8 | Coverage detection | `services/coverage.py` | good/partial/weak/no coverage | `legal-ai-gateway.ts` validation | ADAPT | MIT | Nearby norm as answer | Gateway tests |
-| 9 | Dense embedding search | `services/embedding.py` | semantic candidates | Vectorize + OpenAI embeddings | ADAPT | MIT concepts | stale/unverified text | semantic retrieval tests |
-| 10 | BM25 sparse search | `services/sparse.py` | lexical relevance | `hybrid-ranking.ts` BM25 rerank | REIMPLEMENT | MIT concepts | ranking drift | hybrid-ranking tests |
-| 11 | Hybrid search and RRF | `services/retrieval.py` | fuse dense/sparse hits | `hybrid-ranking.ts`, verified retrieval | REIMPLEMENT | MIT concepts | duplicates/order | RRF unit tests |
+| 9 | Dense embedding search | `services/embedding.py` | semantic candidates | `legal-corpus/embeddings.ts`, Qdrant named `dense` vector | REIMPLEMENT | MIT concepts | stale/unverified text, cost | embedding/Qdrant/indexing tests; cost circuit |
+| 10 | BM25 sparse search | `services/sparse.py` | lexical relevance | exportable D1 BM25 plus Qdrant named `sparse` vector | REIMPLEMENT | MIT concepts | ranking drift | retrieval/Qdrant tests |
+| 11 | Hybrid search and RRF | `services/retrieval.py` | fuse dense/sparse hits | Qdrant dense+sparse RRF → D1 hydration → outer BM25 RRF | REIMPLEMENT | MIT concepts | duplicates/order/scope leak | retrieval/Qdrant tests |
 | 12 | LLM reranker | `services/rerank.py` | final relevance ranking | deterministic BM25 now; provider reranker needs evaluation | REJECT | MIT | cost/ungrounded rerank | Feature-gated limitation |
 | 13 | Grounded generation | `services/generate.py` | context-only legal answer | `legal-ai-gateway.ts` + providers | ADAPT | MIT concepts | fabricated citations | Gateway tests |
 | 14 | Gemini LLM client | `services/llm.py` | generation/tools | OpenAI primary, Anthropic fallback | REJECT | MIT | provider policy conflict | Provider-routing tests |

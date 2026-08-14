@@ -5,6 +5,7 @@ import {
   ingestOfficialLexDocument,
   runNextLegalCorpusIngestionJob,
 } from "../lib/legal-corpus/ingestion";
+import { QdrantCorpusError } from "../lib/legal-corpus/qdrant";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 class MemoryBucket {
@@ -133,6 +134,41 @@ test("queued corpus jobs claim once and do not leak text into the queue", async 
       (sqlite.prepare("SELECT language FROM legal_corpus_variants").get() as { language: string }).language,
       "uz-Cyrl",
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a retryable Qdrant post-ingest failure keeps the corpus job retryable", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/67891",
+      now,
+      correlationId: "qdrant-retry-test",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchFor(lexHtml()),
+      afterIngest: async () => {
+        throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
+      },
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "retrying",
+      jobId: queued.jobId,
+      safeErrorCode: "QDRANT_REQUEST_FAILED",
+    });
+    const job = sqlite.prepare(`SELECT status,last_error_code AS errorCode,next_attempt_at AS nextAttemptAt
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+      status: string; errorCode: string; nextAttemptAt: string | null;
+    };
+    assert.equal(job.status, "retrying");
+    assert.equal(job.errorCode, "QDRANT_REQUEST_FAILED");
+    assert.ok(job.nextAttemptAt);
   } finally {
     sqlite.close();
   }

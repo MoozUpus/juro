@@ -12,7 +12,9 @@ No upstream implementation file is copied literally. No individual JURO source f
 therefore bears a verbatim-derived-file header. The following behaviours were rewritten
 for JURO: intent routing, query normalization and aliases, retrieval ranking, coverage,
 grounded claim/citation validation, live-source tools, article chunking, drafting and
-evaluation patterns. Target paths and each decision are listed in
+evaluation patterns. The dense+sparse Qdrant behaviour was also fully rewritten
+as JURO-native TypeScript in `apps/platform/lib/legal-corpus/{embeddings,qdrant,qdrant-indexing,retrieval}.ts`;
+no upstream Python/Qdrant client or deployment file was copied. Target paths and each decision are listed in
 `docs/integrations/huquq-ai/ADOPTION_MATRIX.md`.
 
 The Huquq AI local corpus, raw HTML, Markdown, screenshots, logos, product name, legal

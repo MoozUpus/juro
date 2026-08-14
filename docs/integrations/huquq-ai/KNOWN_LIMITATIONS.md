@@ -8,7 +8,9 @@
   reproducible run exist.
 - Advice.uz and court-practice retrieval remain unavailable unless separately verified;
   they must not be presented as official APIs.
-- Qdrant is not deployed. JURO's existing Vectorize/D1 path is used for the compatible
-  dense/indexed design; any Qdrant adoption needs benchmark and infrastructure approval.
+- Qdrant is not deployed or configured. The checked-in REST adapter, dense+sparse
+  indexer and D1 rehydration path are tested but remain disabled in all environments;
+  activation still needs a reproducible benchmark, a private compatible collection,
+  server-side secrets and controlled staging evidence.
 - `status.juro.uz` now resolves and is attached to the production Worker. Its
   status-host fence still needs to be preserved in every future routing change.

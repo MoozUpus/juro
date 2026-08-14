@@ -20,9 +20,17 @@ import {
   featureEnabled,
   type LegalCorpusFeatureFlag,
 } from "./trust";
+import { createQdrantDenseSearch } from "./qdrant-indexing";
 
 type CorpusRuntimeEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
-  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
+  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>
+  & {
+    OPENAI_API_KEY?: string;
+    EMBEDDING_MODEL?: string;
+    QDRANT_URL?: string;
+    QDRANT_API_KEY?: string;
+    QDRANT_COLLECTION?: string;
+  };
 
 export type LegalChatSourceEvidence = {
   sourceId: string;
@@ -226,7 +234,14 @@ export async function retrieveCorpusAwareLegalSources(input: {
 
   let indexed: LegalSourceProviderResult[] = [];
   try {
-    indexed = await new LexUzIndexedProvider(input.env.DB).search({
+    const denseSearch = input.env.APP_ENV
+      ? createQdrantDenseSearch({
+        ...input.env,
+        APP_ENV: input.env.APP_ENV,
+        DB: input.env.DB,
+      })
+      : undefined;
+    indexed = await new LexUzIndexedProvider(input.env.DB, denseSearch).search({
       query: input.query,
       scope: input.scope,
       limit: input.limit,

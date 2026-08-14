@@ -4,8 +4,9 @@
 
 `apps/platform/lib/legal-corpus` is a JURO-owned Cloudflare/D1/R2 subsystem.
 It is not a Huquq AI runtime and does not add FastAPI, SQLite authentication,
-Gemini, Qdrant, Docker services, Huquq AI branding, screenshots, or a legal
-corpus to Git.
+Gemini, a bundled Qdrant/Docker deployment, Huquq AI branding, screenshots, or
+a legal corpus to Git. It contains a JURO-native Qdrant REST adapter that is
+inert until a separate server-side feature flag and infrastructure are approved.
 
 | Layer | Responsibility | Boundary |
 | --- | --- | --- |
@@ -15,7 +16,8 @@ corpus to Git.
 | Ingestion | Fetch one official Lex variant, validate HTML, parse articles | One job per dedicated corpus tick, robots/crawl delay respected |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
-| Retrieval | Exportable D1 BM25-style sparse terms, optional dense provider, RRF | Current-version and tenant/user scope filters |
+| Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
+| Dense indexing | OpenAI 1,536-dimensional embeddings plus deterministic sparse term hashes | Dedicated corpus Worker only; Qdrant collection must already expose named `dense` and `sparse` vectors |
 | Provider contract | Indexed Lex first, live Lex fallback only when needed | Typed source shape; no arbitrary URL tool |
 | Citation validation | Filters model-proposed citations against source packets | No generated URLs, title/article/quote checks |
 | Admin control | Metrics, coverage proof, bounded seed/retry and immutable audit | Isolated `apps/admin` Worker, host-only admin cookie, service binding and fresh source MFA |
@@ -87,6 +89,16 @@ imports nor invokes discovery or ingestion. Both corpus flags are `false` in
 development, staging and production configuration, so deploying the isolated
 runtime alone cannot begin a crawl. This keeps official-source acquisition
 bounded and prevents parallel mass crawling.
+
+`LEGAL_CORPUS_DENSE_ENABLED` is an additional independent deny-by-default
+switch. When enabled, the dedicated Worker checks that the configured Qdrant
+collection is `dense(1536, Cosine) + sparse`, embeds only global official
+chunks, writes both named vectors and marks the prior version non-current.
+Interactive retrieval queries Qdrant dense and sparse ranks, but accepts only
+chunk IDs that D1 rehydrates under the same official/current/point-in-time and
+tenant predicates as BM25. Provider calls are blocked by JURO's existing cost
+circuit before network access and recorded in the system usage ledger. JURO
+does not create, delete or expose a Qdrant deployment automatically.
 
 `/legal-corpus` lives on the isolated admin Worker rather than the ordinary
 platform UI. It reads through the private `PLATFORM_ADMIN_API` service binding.

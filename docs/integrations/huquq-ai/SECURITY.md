@@ -10,3 +10,7 @@
   cross-tenant document access is exposed to a model.
 - Feature flags are deny-by-default. A disabled source or failed validation yields an
   honest unavailable result, not a best-effort legal conclusion.
+- Qdrant is server-only, HTTPS-only outside localhost development, accepts no
+  credentials in URLs, follows no redirects, uses bounded responses/timeouts and
+  returns only IDs. `QDRANT_API_KEY` is a secret and is never checked into Wrangler
+  vars. D1 reauthorization is mandatory before a vector candidate becomes evidence.

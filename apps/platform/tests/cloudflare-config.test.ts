@@ -158,6 +158,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
       "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
       "LEGAL_CORPUS_HISTORICAL_ENABLED",
+      "LEGAL_CORPUS_DENSE_ENABLED",
       "LEGAL_CORPUS_SHADOW_MODE",
     ]) {
       assert.equal(config.vars[flag], "false", `${environment} must keep ${flag} fail-closed`);
@@ -535,6 +536,7 @@ test("pins verified D1 identifiers for every isolated environment and excludes s
     "IDENTITY_KEYRING",
     "AI_PROVIDER_API_KEY",
     "LEGISLATION_FEED_API_KEY",
+    "QDRANT_API_KEY",
     "PAYMENT_API_KEY",
     "PAYMENT_WEBHOOK_SECRET",
   ]) {

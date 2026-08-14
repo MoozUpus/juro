@@ -14,7 +14,10 @@ type LegalSourceRecord = {
 };
 ```
 
-`LexUzIndexedProvider` returns only a verified, activated D1 publication;
+`LexUzIndexedProvider` returns only a technically validated, ready official D1
+corpus version. Optional Qdrant results carry only chunk identifiers; the
+provider rehydrates title, article, exact quote, status, version and URL from
+D1 before returning this contract.
 `LexUzLiveProvider` is a rate-limited, allow-listed fallback.
 `AdviceUzProvider`, `InternalJuroMaterialsProvider` and `CourtPracticeProvider`
 are interface names only until a source is legally available, verified and enabled. A
