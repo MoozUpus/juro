@@ -141,8 +141,11 @@ test("scanner promotion requires strict evidence and never trusts document instr
 
 test("AI and document processors revalidate provider citations before persistence", () => {
   const aiRoute = source("app/api/platform/ai/route.ts");
+  const gateway = source("lib/ai/legal-ai-gateway.ts");
   const processor = source("lib/document-analysis/processor.ts");
-  assert.match(aiRoute, /enforceLegalChatSourceBoundary\(/);
+  assert.match(aiRoute, /gateway\.generateGroundedAnswer\(/);
+  assert.match(gateway, /validateLegalGatewayAnswer\(/);
+  assert.match(gateway, /sourceSpanId/);
   assert.match(aiRoute, /errorCode: "INVALID_AI_OUTPUT"/);
   assert.match(aiRoute, /return response\(\{[\s\S]*code: "INVALID_AI_OUTPUT"[\s\S]*\}, 422\)/);
   assert.match(aiRoute, /originalUrl: source\.officialUrl/);

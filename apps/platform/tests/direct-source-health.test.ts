@@ -1,45 +1,49 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-  runDirectLegalSourceHealthCheck,
-  summarizeDirectLegalSourceHealth,
-} from "../lib/legal/direct-source-health";
+import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-health";
 
-test("direct health distinguishes unknown, stale and unavailable states without legal content", () => {
-  const now = new Date("2026-08-06T12:00:00.000Z");
-  assert.equal(summarizeDirectLegalSourceHealth([], now).state, "unknown");
-  assert.equal(summarizeDirectLegalSourceHealth([
-    { sourceKind: "lex", status: "healthy", checkedAt: "2026-08-04T00:00:00.000Z", latencyMs: 12, errorCode: null, endpointUrl: "https://lex.uz/robots.txt" },
-    { sourceKind: "advice", status: "healthy", checkedAt: "2026-08-04T00:00:00.000Z", latencyMs: 12, errorCode: null, endpointUrl: "https://advice.uz/robots.txt" },
-  ], now).state, "stale");
-  const degraded = summarizeDirectLegalSourceHealth([
-    { sourceKind: "lex", status: "healthy", checkedAt: now.toISOString(), latencyMs: 12, errorCode: null, endpointUrl: "https://lex.uz/robots.txt" },
-    { sourceKind: "advice", status: "unavailable", checkedAt: now.toISOString(), latencyMs: 20, errorCode: "DIRECT_SOURCE_HEALTH_UNAVAILABLE", endpointUrl: "https://advice.uz/robots.txt" },
-  ], now);
-  assert.equal(degraded.state, "degraded");
-  assert.equal(degraded.alertCode, "DIRECT_SOURCE_UNAVAILABLE");
-});
-
-test("direct health persists only bounded endpoint metadata", async () => {
-  const inserted: unknown[][] = [];
+test("direct Lex health accepts only an HTTPS text response and records no source content", async () => {
+  const writes: Array<{ sql: string; values: unknown[] }> = [];
   const db = {
-    prepare() {
+    prepare(sql: string) {
       return {
-        bind(...values: unknown[]) { inserted.push(values); return this; },
+        bind(...values: unknown[]) {
+          writes.push({ sql, values });
+          return { run: async () => ({ results: [], success: true, meta: { changes: 1 } }) };
+        },
       };
     },
-    async batch(statements: unknown[]) { return statements; },
+    batch: async (statements: Array<{ run: () => Promise<unknown> }>) => Promise.all(statements.map((statement) => statement.run())),
   } as unknown as D1Database;
-  const now = new Date("2026-08-06T12:00:00.000Z");
-  const result = await runDirectLegalSourceHealthCheck({
+  let request: RequestInit | undefined;
+  const health = await runDirectLegalSourceHealthCheck({
     db,
     environment: "staging",
-    now: () => now,
-    fetchImpl: (async () => new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })) as typeof fetch,
+    now: () => new Date("2026-08-13T15:30:00.000Z"),
+    fetchImpl: async (_input, init) => {
+      request = init;
+      return new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain; charset=utf-8" } });
+    },
   });
-  assert.equal(result.state, "fresh");
-  assert.equal(inserted.length, 2);
-  assert.equal(inserted.flat().some((value) => typeof value === "string" && /<html|article|excerpt/i.test(value)), false);
-  assert.deepEqual(inserted.map((row) => row[7]), ["https://lex.uz/robots.txt", "https://advice.uz/robots.txt"]);
+  assert.equal(request?.redirect, "manual");
+  assert.equal(health.state, "fresh");
+  assert.equal(health.sources[0]?.status, "healthy");
+  assert.equal(writes.length, 1);
+  assert.match(writes[0]!.sql, /legal_source_health_checks/);
+  assert.doesNotMatch(writes[0]!.sql, /legal_sources|content|embedding/i);
+});
+
+test("direct Lex health marks redirects unavailable rather than following them", async () => {
+  const db = {
+    prepare() { return { bind() { return { run: async () => ({ results: [], success: true, meta: { changes: 1 } }) }; } }; },
+    batch: async (statements: Array<{ run: () => Promise<unknown> }>) => Promise.all(statements.map((statement) => statement.run())),
+  } as unknown as D1Database;
+  const health = await runDirectLegalSourceHealthCheck({
+    db,
+    environment: "staging",
+    fetchImpl: async () => new Response(null, { status: 302, headers: { location: "https://example.test/" } }),
+  });
+  assert.equal(health.state, "degraded");
+  assert.equal(health.sources[0]?.status, "unavailable");
 });

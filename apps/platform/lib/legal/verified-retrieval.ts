@@ -2,7 +2,9 @@ import type { LegalSourceContext } from "../ai/provider";
 import { legalSourceLifecycleEvidenceSchema } from "./source-lifecycle";
 import { legalSourcePublicationEvidenceSchema } from "./source-publication";
 import { legalSourceApplicabilityEvidenceSchema } from "./source-review";
-import { filterTrustedVerifiedLegalSources } from "./source-trust";
+import { filterVerifiedLexSources } from "./source-trust";
+import { rankSparseBm25, reciprocalRankFusion } from "./hybrid-ranking";
+import { normalizeLegalSearchQuery } from "./legal-language";
 import {
   semanticLegalChunkRanks,
   type LegalSemanticSearchEnv,
@@ -174,9 +176,9 @@ export function legalDatabaseFreshnessFromCorpusRuns(
   rows: readonly CorpusSyncRow[],
   now = new Date(),
 ): LegalDatabaseFreshness {
-  const latest = new Map<"lex" | "advice", string>();
+  const latest = new Map<"lex", string>();
   for (const row of rows) {
-    if (row.sourceKind !== "lex" && row.sourceKind !== "advice") continue;
+    if (row.sourceKind !== "lex") continue;
     const timestamp = validTime(row.finishedAt);
     if (timestamp === null || timestamp > now.getTime() + MAX_CLOCK_SKEW_MS) continue;
     const existing = latest.get(row.sourceKind);
@@ -185,12 +187,7 @@ export function legalDatabaseFreshnessFromCorpusRuns(
     }
   }
   const lex = latest.get("lex");
-  const advice = latest.get("advice");
-  if (!lex || !advice) return unavailableFreshness();
-  return legalDatabaseFreshnessFromAsOf(
-    Date.parse(lex) <= Date.parse(advice) ? lex : advice,
-    now,
-  );
+  return lex ? legalDatabaseFreshnessFromAsOf(lex, now) : unavailableFreshness();
 }
 
 export function legalSearchKeywords(
@@ -199,7 +196,7 @@ export function legalSearchKeywords(
   limit = MAX_RETRIEVAL_LEXICAL_KEYWORDS,
 ): string[] {
   return [...new Set(
-    value
+    normalizeLegalSearchQuery(value, locale)
       .slice(0, 80_000)
       .toLocaleLowerCase(locale === "ru" ? "ru" : "uz")
       // Act, article, and clause identifiers can be short numbers. Keep them
@@ -460,7 +457,7 @@ export async function validateVerifiedLegalSourceEvidence(
     effectiveDate: effectiveAt,
     applicabilityStatus: applicability,
   };
-  if (filterTrustedVerifiedLegalSources([source]).length !== 1) return null;
+  if (filterVerifiedLexSources([source]).length !== 1) return null;
   return {
     source,
     evidence: {
@@ -484,7 +481,7 @@ async function retrieveCorpusFreshness(
     SELECT source_kind AS sourceKind,finished_at AS finishedAt
     FROM source_sync_runs
     WHERE status='success' AND finished_at IS NOT NULL
-      AND source_kind IN ('lex','advice')
+      AND source_kind='lex'
       AND run_type IN ('initial_corpus','scheduled_corpus','manual_corpus')
       AND discovered_count>0
       AND fetched_count=discovered_count
@@ -529,6 +526,7 @@ async function hasIndexedVerifiedSource(
       ON version.id=activation.version_id AND version.source_id=source.id
     INNER JOIN legal_source_chunks chunk ON chunk.version_id=version.id
     WHERE source.status='verified' AND source.verification_state='verified'
+      AND source.source_type='lex'
       AND version.status='verified' AND source.locale=?
       AND chunk.vector_id IS NOT NULL AND chunk.indexed_at IS NOT NULL
     LIMIT 1
@@ -709,16 +707,42 @@ export async function retrieveVerifiedLegalSources(
     ...semanticVectorIds,
   ).all<VerifiedLegalSourceEvidenceRow>();
 
-  if (semantic.vectorRanks.size > 0) {
-    rows.results.sort((left, right) => {
-      const leftRank = left.vectorId ? semantic.vectorRanks.get(left.vectorId) : undefined;
-      const rightRank = right.vectorId ? semantic.vectorRanks.get(right.vectorId) : undefined;
-      if (leftRank === undefined && rightRank === undefined) return 0;
-      if (leftRank === undefined) return 1;
-      if (rightRank === undefined) return -1;
-      return leftRank - rightRank;
-    });
-  }
+  // Sparse BM25 gives exact title/article and lexical evidence an independent
+  // rank. Dense Vectorize results remain source ids only, then RRF merges both
+  // bounded lists before validation reloads the full source evidence.
+  const candidateId = (row: VerifiedLegalSourceEvidenceRow) => `${row.versionId}:${row.chunkId}`;
+  const sparseRanking = rankSparseBm25(query, rows.results.map((row) => ({
+    id: candidateId(row),
+    value: row,
+    title: `${row.actTitle} ${row.heading ?? ""}`,
+    body: row.bodyText,
+    identifiers: [
+      row.actIdentifier,
+      row.canonicalRef,
+      row.article,
+      row.heading,
+    ].filter(Boolean).join(" "),
+  })));
+  const denseRanking = rows.results
+    .filter((row) => row.vectorId && semantic.vectorRanks.has(row.vectorId))
+    .sort((left, right) =>
+      semantic.vectorRanks.get(left.vectorId!)! - semantic.vectorRanks.get(right.vectorId!)!
+    )
+    .map((row, index) => ({
+      id: candidateId(row),
+      value: row,
+      // The score is intentionally rank-derived: Vectorize scores are not
+      // comparable with BM25 scores.
+      score: 1 / (index + 1),
+    }));
+  const fusedRanks = reciprocalRankFusion([sparseRanking, denseRanking], {
+    limit: rows.results.length,
+  });
+  const fusedPosition = new Map(fusedRanks.map((candidate, index) => [candidate.id, index]));
+  rows.results.sort((left, right) => (
+    (fusedPosition.get(candidateId(left)) ?? Number.MAX_SAFE_INTEGER)
+      - (fusedPosition.get(candidateId(right)) ?? Number.MAX_SAFE_INTEGER)
+  ));
 
   const maxResults = Math.max(1, Math.min(12, limit));
   const attempted = new Set<string>();

@@ -19,7 +19,7 @@ const providerAlertRowSchema = z.object({
 const legalCorpusAlertRowSchema = z.object({
   id: z.string().uuid(),
   environment: z.enum(["development", "staging", "production"]),
-  sourceKind: z.enum(["lex", "advice"]),
+  sourceKind: z.literal("lex"),
   alertType: z.enum(["legal_corpus_sync_failed", "legal_corpus_stale"]),
   severity: z.enum(["warning", "critical"]),
   reason: z.enum(["run_failed", "never_succeeded", "stale_success"]),
@@ -74,7 +74,7 @@ function providerFailure(status: number): OperationalAlertEmailError {
 
 function alertCopy(row: OperationalAlertRow): { subject: string; html: string } {
   if (row.domain === "legal_corpus") {
-    const source = row.sourceKind === "lex" ? "Lex.uz" : "Advice.uz";
+    const source = "Lex.uz";
     const reason = ({
       run_failed: "последняя синхронизация завершилась ошибкой",
       never_succeeded: "успешная полная синхронизация ещё не зафиксирована",

@@ -40,7 +40,13 @@ export function legalCitationStatements(input: {
     const validated = input.sourceAccessMode === "direct"
       ? source?.verificationState === "direct_validated"
       : source?.verificationState === "verified";
-    if (!source || !validated || seen.has(source.officialUrl)) return [];
+    const officialLex = (() => {
+      try {
+        const url = new URL(source?.officialUrl ?? "");
+        return url.protocol === "https:" && (url.hostname === "lex.uz" || url.hostname === "www.lex.uz");
+      } catch { return false; }
+    })();
+    if (!source || source.sourceType !== "lex" || !officialLex || !validated || seen.has(source.officialUrl)) return [];
     seen.add(source.officialUrl);
     return [input.db.prepare(
       `INSERT INTO legal_source_references (
@@ -63,7 +69,7 @@ export function legalCitationStatements(input: {
       citation.actTitle.slice(0, 500),
       citation.actIdentifier,
       citation.article,
-      citation.excerpt?.slice(0, 1_200) ?? null,
+      null,
       citation.status,
       citation.effectiveDate,
       source.lastCheckedAt,

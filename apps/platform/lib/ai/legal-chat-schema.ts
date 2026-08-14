@@ -61,6 +61,10 @@ export const suggestedDocumentSchema = z.object({
 }).strict();
 
 export const legalChatResponseSchema = z.object({
+  // Structured Outputs follows schema property order. Put the first
+  // independently verifiable legal unit first so the server can validate and
+  // stream a useful answer before the rest of the response finishes.
+  confirmedFindings: z.array(legalFindingSchema).max(16),
   responseKind: z.enum(["answer", "clarification_required"]),
   summary: z.string().min(1).max(1_500),
   answer: z.string().min(1).max(20_000),
@@ -69,7 +73,6 @@ export const legalChatResponseSchema = z.object({
   answerMode: z.enum(["short", "detailed"]),
   reasoningMode: z.enum(["fast", "deep"]),
   clarificationQuestions: z.array(z.string().min(1).max(500)).max(8),
-  confirmedFindings: z.array(legalFindingSchema).max(16),
   assumptions: z.array(legalAssumptionSchema).max(16),
   risks: z.array(legalRiskSchema).max(16),
   sources: z.array(legalSourceRefSchema).max(12),
@@ -122,9 +125,12 @@ export function forceClarificationWithoutVerifiedSources(
     legalDatabaseAsOf: string;
   },
 ): LegalChatResponse {
-  const clarificationQuestions = result.clarificationQuestions.length > 0
-    ? result.clarificationQuestions
-    : [options.locale === "ru" ? "Какие факты и даты можно уточнить?" : "Qaysi faktlar va sanalarni aniqlashtirish mumkin?"];
+  // When no verified source survives, no provider-authored prose may remain in
+  // the terminal payload — including a seemingly harmless clarification that
+  // can smuggle an unsupported deadline, document list or legal premise.
+  const clarificationQuestions = [options.locale === "ru"
+    ? "Какие факты и даты можно уточнить?"
+    : "Qaysi faktlar va sanalarni aniqlashtirish mumkin?"];
   return {
     ...result,
     responseKind: "clarification_required",
@@ -140,8 +146,10 @@ export function forceClarificationWithoutVerifiedSources(
     reasoningMode: options.reasoningMode,
     clarificationQuestions,
     confirmedFindings: [],
+    assumptions: [],
     risks: [],
     sources: [],
+    requiredDocuments: [],
     actionPlan: [],
     deadlines: [],
     successOutlook: null,

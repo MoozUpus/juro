@@ -10,13 +10,11 @@ import {
   type AnalysisPackageContext,
   type ExtractedDocument,
 } from "../document-comparison/types";
-import type { LegalSemanticSearchEnv } from "../legal/semantic-retrieval";
 import {
   legalDatabaseFreshnessFromAsOf,
-  retrieveVerifiedLegalSources,
   type LegalDatabaseFreshness,
-  type VerifiedLegalRetrieval,
 } from "../legal/verified-retrieval";
+import { retrieveLiveLexSourcesForDocument } from "../legal/live-lex-retrieval";
 import {
   documentAnalysisResultSchema,
   enforceDocumentAnalysisFreshness,
@@ -29,7 +27,7 @@ import {
   OcrProcessingError,
   scheduleOcrProcessing,
 } from "./ocr-processor";
-import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
+import { chunkDocumentForAnalysis } from "./chunking";
 import {
   extractAnalysisDocument,
   isAnalysisPackageContext,
@@ -48,7 +46,7 @@ import type { BuilderRuntimeEnv } from "../document-builder/storage/runtime";
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
 
-export type DocumentAnalysisProcessorEnv = LegalSemanticSearchEnv & BuilderRuntimeEnv & {
+export type DocumentAnalysisProcessorEnv = BuilderRuntimeEnv & {
   DB: D1Database;
   BUCKET: R2Bucket;
 };
@@ -252,8 +250,11 @@ export type DocumentAnalysisProcessorDependencies = {
     query: string,
     locale: "ru" | "uz",
     limit?: number,
-    options?: { semantic?: LegalSemanticSearchEnv },
-  ) => Promise<VerifiedLegalRetrieval>;
+  ) => Promise<{
+    sources: import("../ai/provider").LegalSourceContext[];
+    freshness: LegalDatabaseFreshness;
+    legalDatabaseAsOf: string;
+  }>;
   analyze: (input: {
     fileName: string;
     mimeType: string;
@@ -264,7 +265,7 @@ export type DocumentAnalysisProcessorDependencies = {
     locale: "ru" | "uz";
     mode: "quick" | "full" | "expert";
     userSide: string | null;
-    sources: VerifiedLegalRetrieval["sources"];
+    sources: import("../ai/provider").LegalSourceContext[];
     legalDatabaseAsOf: string;
     requestId: string;
     beforeProviderCall?: (input: {
@@ -346,7 +347,7 @@ function withSequentialAnalysisSession(
 
 const defaultDependencies: DocumentAnalysisProcessorDependencies = {
   extract: extractAnalysisDocument,
-  retrieve: retrieveVerifiedLegalSources,
+  retrieve: retrieveLiveLexSourcesForDocument,
   analyze: async (input) => {
     const { runDocumentAnalysis } = await import("./provider");
     return runDocumentAnalysis(input, {
@@ -482,14 +483,6 @@ async function analyzeObject(
         throw error;
       }
     }
-    if (extracted.text.length > DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT) {
-      // Chunk synthesis is intentionally not emulated.  Until a real,
-      // tenant-scoped chunking handler is deployed, the source text must not
-      // be sent to a provider or held in an unfinishable state.
-      await setAnalysisState(env.DB, row, "failed", "DOCUMENT_ANALYSIS_CAPACITY_REQUIRED");
-      throw new DocumentAnalysisProcessingError("DOCUMENT_ANALYSIS_CAPACITY_REQUIRED", false);
-    }
-
     diagnosticStage = "version";
     await storeInitialAnalysisDocumentVersion(env, {
       analysisId: row.analysisId,
@@ -501,7 +494,10 @@ async function analyzeObject(
 
     diagnosticStage = "retrieval";
     const request = parseRequestMetadata(row.summaryJson);
-    const retrieval = await deps.retrieve(env.DB, extracted.text, request.locale, 8, { semantic: env });
+    // The full document never becomes a Lex query. A bounded structural
+    // sample gives live retrieval the document's subject without handing it a
+    // local corpus or building any document-to-law embedding index.
+    const retrieval = await deps.retrieve(env.DB, extracted.text.slice(0, 12_000), request.locale, 5);
     diagnosticStage = "runtime";
     const providerEnvironment = parseProviderEnvironment(env.APP_ENV);
     const runtimeSettings = await resolveAiRuntimeSettings({ db: env.DB, env });
@@ -513,40 +509,48 @@ async function analyzeObject(
     let ai: AiStructuredResult<DocumentAnalysisResult>;
     try {
       diagnosticStage = "provider";
-      ai = await deps.analyze({
-        fileName: row.fileName,
-        mimeType: row.mimeType,
-        extractedText: extracted.text,
-        detectedLanguage: extracted.detectedLanguage,
-        extractionWarnings: extracted.warningCode ? [extracted.warningCode] : [],
-        packageContext: extracted.packageContext ?? null,
-        locale: request.locale,
-        mode: request.mode,
-        userSide: null,
-        sources: retrieval.sources,
-        legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
-        requestId: `document-analysis-${row.analysisId}`,
-        runtimeSettings,
-        beforeProviderCall: async (call) => {
-          try {
-            await assertProviderCallAllowed({
-              db: env.DB,
-              environment: providerEnvironment,
-              provider: call.provider,
-            });
-          } catch (error) {
-            if (error instanceof ProviderCostControlError && error.code === "PROVIDER_CIRCUIT_OPEN") {
-              throw new AiUnavailableError(
-                "AI-провайдер остановлен системой контроля расходов.",
-                "PROVIDER_CIRCUIT_OPEN",
-                false,
-              );
+      const chunks = chunkDocumentForAnalysis(extracted.text);
+      const chunkResults: AiStructuredResult<DocumentAnalysisResult>[] = [];
+      for (const chunk of chunks) {
+        chunkResults.push(await deps.analyze({
+          fileName: row.fileName,
+          mimeType: row.mimeType,
+          extractedText: chunk.text,
+          detectedLanguage: extracted.detectedLanguage,
+          extractionWarnings: [
+            ...(extracted.warningCode ? [extracted.warningCode] : []),
+            ...(chunks.length > 1 ? [`DOCUMENT_CHUNK_${chunk.index}_OF_${chunk.total}`] : []),
+          ],
+          packageContext: extracted.packageContext ?? null,
+          locale: request.locale,
+          mode: request.mode,
+          userSide: null,
+          sources: retrieval.sources,
+          legalDatabaseAsOf: retrieval.legalDatabaseAsOf,
+          requestId: `document-analysis-${row.analysisId}-chunk-${chunk.index}`,
+          runtimeSettings,
+          beforeProviderCall: async (call) => {
+            try {
+              await assertProviderCallAllowed({
+                db: env.DB,
+                environment: providerEnvironment,
+                provider: call.provider,
+              });
+            } catch (error) {
+              if (error instanceof ProviderCostControlError && error.code === "PROVIDER_CIRCUIT_OPEN") {
+                throw new AiUnavailableError(
+                  "AI-провайдер остановлен системой контроля расходов.",
+                  "PROVIDER_CIRCUIT_OPEN",
+                  false,
+                );
+              }
+              throw error;
             }
-            throw error;
-          }
-          providerCalls.push({ ...call, startedAt: new Date().toISOString() });
-        },
-      });
+            providerCalls.push({ ...call, startedAt: new Date().toISOString() });
+          },
+        }));
+      }
+      ai = mergeChunkAnalysisResults(chunkResults);
     } catch (error) {
       const completedAt = new Date().toISOString();
       const errorCode = isAiProviderError(error) ? error.code : "PROVIDER_UNAVAILABLE";
@@ -919,6 +923,64 @@ async function persistNormalizedAnalysis(
       now,
     ),
   ]);
+}
+
+function uniqueBy<T>(items: readonly T[], key: (item: T) => string, limit: number): T[] {
+  const seen = new Set<string>();
+  const output: T[] = [];
+  for (const item of items) {
+    const signature = key(item);
+    if (seen.has(signature)) continue;
+    seen.add(signature);
+    output.push(item);
+    if (output.length >= limit) break;
+  }
+  return output;
+}
+
+/**
+ * A long document is analysed fragment-by-fragment; this deterministic merge
+ * retains only schema-bounded findings and never invents a cross-fragment
+ * legal conclusion. Each source and excerpt still goes through the canonical
+ * source/excerpt validation below against the original document text.
+ */
+function mergeChunkAnalysisResults(
+  results: readonly AiStructuredResult<DocumentAnalysisResult>[],
+): AiStructuredResult<DocumentAnalysisResult> {
+  const first = results[0];
+  const last = results.at(-1);
+  if (!first || !last) throw new Error("DOCUMENT_ANALYSIS_CHUNKS_EMPTY");
+  const data = results.map((result) => result.data);
+  const allVerified = data.every((result) => result.legalComplianceStatus === "verified");
+  const anyOfficialSource = data.some((result) => result.sources.length > 0);
+  const summaries = data.map((result) => result.summary.trim()).filter(Boolean);
+  return {
+    ...last,
+    attempts: results.reduce((total, result) => total + result.attempts, 0),
+    latencyMs: results.reduce((total, result) => total + result.latencyMs, 0),
+    usage: {
+      inputTokens: results.reduce((total, result) => total + result.usage.inputTokens, 0),
+      outputTokens: results.reduce((total, result) => total + result.usage.outputTokens, 0),
+      cachedInputTokens: results.reduce((total, result) => total + result.usage.cachedInputTokens, 0),
+    },
+    data: {
+      ...first.data,
+      summary: summaries.join("\n\n").slice(0, 4_000) || first.data.summary,
+      legalComplianceStatus: allVerified ? "verified" : anyOfficialSource ? "partial" : "unverified",
+      parties: uniqueBy(data.flatMap((result) => result.parties), (item) => `${item.name}|${item.role}|${item.isUserSide}`, 30),
+      amounts: uniqueBy(data.flatMap((result) => result.amounts), (item) => item, 50),
+      dates: uniqueBy(data.flatMap((result) => result.dates), (item) => item, 50),
+      obligations: uniqueBy(data.flatMap((result) => result.obligations), (item) => `${item.party}|${item.obligation}|${item.clause ?? ""}|${item.deadline ?? ""}`, 100),
+      deadlines: uniqueBy(data.flatMap((result) => result.deadlines), (item) => `${item.title}|${item.value}|${item.clause ?? ""}`, 50),
+      risks: uniqueBy(data.flatMap((result) => result.risks), (item) => `${item.riskType}|${item.title}|${item.exactExcerpt ?? ""}`, 100),
+      missingClauses: uniqueBy(data.flatMap((result) => result.missingClauses), (item) => `${item.title}|${item.reason}`, 50),
+      contradictions: uniqueBy(data.flatMap((result) => result.contradictions), (item) => item, 50),
+      questions: uniqueBy(data.flatMap((result) => result.questions), (item) => item, 30),
+      recommendations: uniqueBy(data.flatMap((result) => result.recommendations), (item) => item, 50),
+      sources: uniqueBy(data.flatMap((result) => result.sources), (item) => item.sourceId, 12),
+      extractionWarnings: uniqueBy(data.flatMap((result) => result.extractionWarnings), (item) => item, 20),
+    },
+  };
 }
 
 function assertSafeReadyState(row: AnalysisRow): void {

@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const operationalFeatureKeys = [
   "ai_chat",
+  "ai_openai_primary",
+  "ai_anthropic_fallback",
+  "ai_lex_web_discovery",
   "document_analysis_upload",
   "lawyer_handoff",
   "voice_mode",

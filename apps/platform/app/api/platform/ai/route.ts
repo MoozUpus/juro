@@ -1,8 +1,14 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../lib/document-builder/auth/api";
 import { isoNow, parseJson } from "../../../../lib/document-builder/storage/db";
+import { getPublishedDocuments } from "../../../../lib/document-builder/registry";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { AiUnavailableError } from "../../../../lib/document-builder/ai/openai";
 import { aiProviderStatus, legalAiProvider, type LegalAiProgress } from "../../../../lib/ai/provider";
+import {
+  createLegalAiGateway,
+  type GroundedLegalPreliminary,
+} from "../../../../lib/ai/legal-ai-gateway";
+import { classifyLegalIntent } from "../../../../lib/ai/legal-query-planner";
 import {
   AiRunConflictError,
   beginAiRunFinalization,
@@ -15,18 +21,16 @@ import { AiBranchInputError, deleteAiConversation, listAiAnswerVersions, resolve
 import { loadAiConversationTurns, selectAiConversationMessage } from "../../../../lib/ai/conversation-branch-reader";
 import {
   enforceLegalDatabaseFreshness,
-  enforceLegalChatSourceBoundary,
   parseLegalChatResponse,
 } from "../../../../lib/ai/legal-chat-schema";
-import { createUnavailableVerifiedSourceClarification } from "../../../../lib/ai/fast-clarification";
 import {
   legalDatabaseFreshnessFromAsOf,
 } from "../../../../lib/legal/verified-retrieval";
 import {
-  retrieveInteractiveVerifiedLegalSources,
-  unavailableInteractiveVerifiedLegalRetrieval,
-  type InteractiveVerifiedLegalRetrieval,
-} from "../../../../lib/legal/interactive-verified-retrieval";
+  retrieveLiveLexSources,
+  type LiveLexRetrievalResult,
+} from "../../../../lib/legal/live-lex-retrieval";
+import { discoverOfficialLexUrls } from "../../../../lib/legal/openai-lex-discovery";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
   AI_INTERACTIVE_FINALIZATION_RESERVE_MS,
@@ -70,6 +74,25 @@ import {
 
 const INSTRUCTION_VERSION = "juro-legal-chat-v2-conversation";
 
+function matchingDocumentTemplates(question: string, locale: "ru" | "uz") {
+  const terms = [...new Set(question.toLocaleLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? [])].slice(0, 20);
+  return getPublishedDocuments()
+    .map((definition) => {
+      const haystack = `${definition.categorySlug} ${definition.titleRu} ${definition.titleUz} ${definition.descriptionRu} ${definition.descriptionUz}`.toLocaleLowerCase();
+      const score = terms.reduce((total, term) => total + (haystack.includes(term) ? 1 : 0), 0)
+        + (definition.popular ? 0.25 : 0);
+      return { definition, score };
+    })
+    .filter((item) => item.score > 0)
+    .sort((left, right) => right.score - left.score || left.definition.code.localeCompare(right.definition.code))
+    .slice(0, 8)
+    .map(({ definition }) => ({
+      templateCode: definition.code,
+      title: locale === "ru" ? definition.titleRu : definition.titleUz,
+      categorySlug: definition.categorySlug,
+    }));
+}
+
 function response(body: unknown, status = 200) {
   return Response.json(body, {
     status,
@@ -78,7 +101,7 @@ function response(body: unknown, status = 200) {
 }
 
 export const GET = withApiErrors(async function GET(request: Request) {
-  const user = await requireApiUser();
+  const user = await requireApiUser(request);
   const workspace = await workspaceForUser(user);
   const db = requireD1();
   const entitlements = await workspaceEntitlements(db, workspace.id);
@@ -115,7 +138,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
 
 export const DELETE = withApiErrors(async function DELETE(request: Request) {
   assertSafeWrite(request);
-  const user = await requireApiUser();
+  const user = await requireApiUser(request);
   const workspace = await workspaceForUser(user);
   const conversationId = new URL(request.url).searchParams.get("conversationId") || "";
   if (!/^[0-9a-z_-]{1,128}$/i.test(conversationId)) {
@@ -136,21 +159,12 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
   return response({ deleted: true, conversationId });
 });
 
-type AiRouteProgress = LegalAiProgress | {
+type AiRouteProgress = LegalAiProgress
+  | { stage: "lex_search_started" }
+  | { stage: "source_verified" }
+  | {
   stage: "preliminary";
-  preliminary: {
-    kind: "verified_excerpt" | "clarification_required";
-    message: string;
-    excerpt?: string;
-    sources: Array<{
-      actTitle: string;
-      article: string | null;
-      originalUrl: string;
-      verifiedAt: string;
-    }>;
-    sourceFreshness: "fresh" | "stale" | "unavailable";
-    legalDatabaseAsOf: string;
-  };
+  preliminary: GroundedLegalPreliminary;
 };
 
 async function executePost(
@@ -177,7 +191,7 @@ async function executePostWithinBudget(
   let user: Awaited<ReturnType<typeof requireApiUser>>;
   let workspace: Awaited<ReturnType<typeof workspaceForUser>>;
   try {
-    user = await requireApiUser();
+    user = await requireApiUser(request);
     workspace = await workspaceForUser(user);
     authStage.complete();
   } catch (error) {
@@ -203,11 +217,8 @@ async function executePostWithinBudget(
   let fallbackFromProgress: "openai" | "anthropic" | null = null;
   const emitProgress = async (event: AiRouteProgress) => {
     await onProgress?.(event);
-    // These are only recorded after an SSE client has actually received the
-    // useful event. A regular JSON POST has no early user-visible response.
-    if (onProgress && event.stage === "preliminary" && preliminaryAtMs === null) {
-      preliminaryAtMs = budget.elapsedMs;
-    }
+    // Research progress is deliberately not counted as useful answer content.
+    // The first useful timestamp remains the validated, durable terminal answer.
     if (onProgress && event.stage === "provider_delta" && providerFirstDeltaAtMs === null) {
       providerFirstDeltaAtMs = budget.elapsedMs;
     }
@@ -249,24 +260,17 @@ async function executePostWithinBudget(
     return response({ error: locale === "ru" ? "Сообщение слишком длинное. Сократите его до 8 000 символов." : "Xabar juda uzun. Uni 8 000 belgigacha qisqartiring." }, 413);
   }
 
-  const provider = legalAiProvider();
-  const providerStatus = aiProviderStatus();
-  if (!provider || !providerStatus.model) {
-    return response({
-      code: "AI_PROVIDER_UNAVAILABLE",
-      error: locale === "ru"
-        ? "AI-провайдер пока не подключён. Сообщение не отправлено и не показано как успешно обработанное."
-        : "AI-provayder hozircha ulanmagan. Xabar yuborilmadi va muvaffaqiyatli qayta ishlangan deb ko‘rsatilmadi.",
-    }, 503);
-  }
-
   const providerEnvironment = parseProviderEnvironment(runtimeEnv().APP_ENV);
   const entitlements = await workspaceEntitlements(db, workspace.id);
   if (body?.caseId) {
     const accessible = await db.prepare("SELECT id FROM cases WHERE id=? AND workspace_id=? LIMIT 1").bind(body.caseId, workspace.id).first();
     if (!accessible) return response({ code: "ACCESS_DENIED", error: locale === "ru" ? "Дело не найдено в этом пространстве." : "Bu makonda ish topilmadi." }, 404);
   }
-  const conversationId = body?.conversationId || crypto.randomUUID();
+  const conversationId = body?.conversationId || `conversation_${(await sha256Json({
+    workspaceId: workspace.id,
+    userId: user.id,
+    idempotencyKey,
+  })).slice(0, 48)}`;
   const existingConversation = Boolean(body?.conversationId);
   if (existingConversation) {
     const accessible = await db.prepare(
@@ -314,6 +318,37 @@ async function executePostWithinBudget(
       ? branchTurns.slice(0, -1)
       : branchTurns,
   );
+  const intent = classifyLegalIntent(question);
+  if (intent.intent === "conversation" || intent.intent === "out_of_scope") {
+    return completeNonChargeableIntent({
+      db,
+      workspaceId: workspace.id,
+      userId: user.id,
+      caseId: body?.caseId || null,
+      conversationId,
+      existingConversation,
+      question,
+      locale,
+      answerMode,
+      reasoningMode,
+      idempotencyKey,
+      branchInput,
+      usageLimit: entitlements.aiAnswerCyclesMonthly,
+      intent: intent.intent,
+    });
+  }
+  const provider = legalAiProvider();
+  const providerStatus = aiProviderStatus();
+  if (!provider || !providerStatus.model) {
+    return response({
+      code: "AI_PROVIDER_UNAVAILABLE",
+      error: locale === "ru"
+        ? "AI-провайдер пока не подключён. Сообщение не отправлено и не показано как успешно обработанное."
+        : "AI-provayder hozircha ulanmagan. Xabar yuborilmadi va muvaffaqiyatli qayta ishlangan deb ko‘rsatilmadi.",
+    }, 503);
+  }
+  const gateway = createLegalAiGateway(provider);
+  const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
   let voiceRecording: VoiceRecordingRow | null = null;
   if (body?.voiceRecordingId) {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.voiceRecordingId)) {
@@ -333,11 +368,22 @@ async function executePostWithinBudget(
       return response({ code: error.code, error: error.message }, error.status);
     }
   }
-  const retrievalQuestion = contextualRetrievalQuestion(conversationHistory, question);
+  const rewrite = gateway.rewriteFollowUp({ question, locale, conversationHistory });
+  const researchPlan = gateway.planOfficialResearch({
+    question: rewrite.query,
+    locale,
+    conversationHistory,
+  });
+  // Preserve the user's legal intent through the retrieval boundary. The
+  // direct retriever compacts this into its own bounded Lex search query, but
+  // still needs the full rewritten question to rank action-plan and follow-up
+  // spans (for example, formation articles versus a generic scope provision).
+  const retrievalQuestion = rewrite.query;
+  await emitProgress({ stage: "lex_search_started" });
   // These two bounded reads are independent. Start them together so a slow
-  // encrypted-memory lookup cannot delay the first source-bound SSE brief.
+  // encrypted-memory lookup cannot delay safe, source-free SSE progress.
   const memoryStage = budget.beginStage("memory_context", { timeoutMs: 1_250 });
-  const retrievalStage = budget.beginStage("verified_retrieval", { timeoutMs: 2_250 });
+  const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 2_900 });
   const memoryContext = (async () => {
     try {
       const keyring = memoryKeyring(runtimeEnv().IDENTITY_KEYRING);
@@ -360,33 +406,78 @@ async function executePostWithinBudget(
       return { memoryEncryption: null, memories: [] as UserMemory[] };
     }
   })();
-  const verifiedRetrieval = (async (): Promise<InteractiveVerifiedLegalRetrieval> => {
+  const liveLexRetrieval = (async (): Promise<LiveLexRetrievalResult> => {
     try {
-      const result = await retrieveInteractiveVerifiedLegalSources({
-        db,
+      const result = await retrieveLiveLexSources({
         query: retrievalQuestion,
         locale,
-        applicableAt: applicableAt ?? undefined,
         signal: retrievalStage.signal,
-        limit: 2,
+        limit: 3,
+        budgetMs: 2_750,
+        discoverOfficialUrls: async (query, discoveryLocale, discoverySignal) => {
+          const usage = await usageSummary(db, workspace.id, user.id, entitlements.aiAnswerCyclesMonthly);
+          if (usage.used >= usage.limit) throw new Error("PLAN_LIMIT_PRECHECK");
+          await assertProviderCallAllowed({ db, environment: providerEnvironment, provider: "openai" });
+          const startedAt = isoNow();
+          return discoverOfficialLexUrls({
+            query,
+            locale: discoveryLocale,
+            requestId: idempotencyKey,
+            safetyIdentifier,
+            signal: discoverySignal,
+            timeoutMs: Math.min(3_500, budget.remainingMs),
+            onTelemetry: async (event) => {
+              try {
+                const completedAt = isoNow();
+                const eventHash = (await sha256Json({
+                  idempotencyKey,
+                  providerResponseId: event.providerResponseId,
+                  startedAt,
+                })).slice(0, 48);
+                await recordProviderUsage({
+                  db,
+                  environment: providerEnvironment,
+                  workspaceId: workspace.id,
+                  userId: user.id,
+                  feature: "legal_chat",
+                  operation: "web_search",
+                  provider: "openai",
+                  model: event.model,
+                  providerRequestId: event.providerResponseId,
+                  inputTokens: event.inputTokens,
+                  outputTokens: event.outputTokens,
+                  cachedInputTokens: 0,
+                  status: "succeeded",
+                  startedAt,
+                  completedAt,
+                  eventId: `provider_usage_discovery_${eventHash}`,
+                });
+              } catch {
+                console.warn(JSON.stringify({ event: "ai.lex_discovery_usage_deferred" }));
+              }
+            },
+          });
+        },
       });
       retrievalStage.complete();
       return result;
     } catch (error) {
       retrievalStage.fail();
       if (signal.aborted) throw error;
-      return unavailableInteractiveVerifiedLegalRetrieval("VERIFIED_RETRIEVAL_TIMEOUT");
+      return await retrieveLiveLexSources({
+        query: "",
+        locale,
+        limit: 1,
+        budgetMs: 1,
+      });
     }
   })();
-  // The source-bound preliminary result is independent of personal-memory
-  // decryption. Do not make a bounded-but-slower optional memory read hold up
-  // the only safe <=5s user-visible result on the SSE path.
-  const retrieval = await verifiedRetrieval;
+  // Source verification progress is content-free. A separate preliminary
+  // event is emitted only after a complete provider finding passes the same
+  // authoritative Lex claim/span gate as the terminal answer.
+  const retrieval = await liveLexRetrieval;
   const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
-  await emitProgress({
-    stage: "preliminary",
-    preliminary: preliminaryForVerifiedRetrieval({ retrieval, locale, answerMode, reasoningMode }),
-  });
+  await emitProgress({ stage: "source_verified" });
   const { memoryEncryption, memories } = await memoryContext;
   const requestHash = await sha256Json({
     question,
@@ -407,7 +498,6 @@ async function executePostWithinBudget(
       updatedAt: memory.updatedAt,
     })),
   });
-  const safetyIdentifier = await sha256Json({ scope: "openai-safety-v1", userId: user.id });
   const runtimeSettings = await resolveAiRuntimeSettings({ db, env: runtimeEnv() });
   const instructionHash = await sha256Json({
     version: INSTRUCTION_VERSION,
@@ -418,7 +508,7 @@ async function executePostWithinBudget(
     freshness,
     evidence,
     sources: sources.map((source) => ({
-      id: source.id, hash: source.contentSha256, excerpt: source.excerpt || null,
+      id: source.id, hash: source.contentSha256,
     })),
   });
 
@@ -476,6 +566,7 @@ async function executePostWithinBudget(
   const providerCalls: Array<{
     provider: "openai" | "anthropic";
     model: string;
+    attempt: number;
     startedAt: string;
   }> = [];
   const providerFailures: Array<{
@@ -484,7 +575,7 @@ async function executePostWithinBudget(
     providerStatus: number | null;
     providerErrorType: string | null;
   }> = [];
-  const beforeProviderCall = async (call: { provider: "openai" | "anthropic"; model: string }) => {
+  const beforeProviderCall = async (call: { provider: "openai" | "anthropic"; model: string; attempt: number }) => {
     try {
       await assertProviderCallAllowed({
         db,
@@ -510,8 +601,8 @@ async function executePostWithinBudget(
   // this stage is telemetry-only and the provider receives budget.signal.
   const providerStage = budget.beginStage("provider_execution");
   try {
-    aiResult = await provider.runLegalChat({
-      question, locale, answerMode, reasoningMode, sources, legalDatabaseAsOf,
+    const gatewayResult = await gateway.generateGroundedAnswer({
+      question: rewrite.query, locale, answerMode, reasoningMode, sources, legalDatabaseAsOf,
       applicableAt: applicableAt?.toISOString(),
       requestId: reservation.correlationId, safetyIdentifier,
       conversationHistory,
@@ -521,13 +612,36 @@ async function executePostWithinBudget(
         scope: memory.scope,
       })),
       runtimeSettings,
+      intent: intent.intent,
+      researchPlan: {
+        domain: researchPlan.domain,
+        articleNumber: researchPlan.articleNumber,
+        actName: researchPlan.actName,
+        needsDocument: researchPlan.needsDocument,
+        needsActionPlan: researchPlan.needsActionPlan,
+      },
+      availableDocumentTemplates: intent.intent === "document"
+        ? matchingDocumentTemplates(rewrite.query, locale)
+        : [],
     }, {
       signal,
       budget,
       onProgress: emitProgress,
+      onGroundedPreliminary: async (preliminary) => {
+        if (
+          !onProgress
+          || preliminaryAtMs !== null
+          || retrieval.sourceValidationStatus !== "validated"
+          || freshness.status !== "fresh"
+        ) return;
+        const emittedAtMs = budget.elapsedMs;
+        await emitProgress({ stage: "preliminary", preliminary });
+        preliminaryAtMs = emittedAtMs;
+      },
       beforeProviderCall,
       onProviderFailure: async (failure) => { providerFailures.push(failure); },
     });
+    aiResult = gatewayResult.run;
     providerStage.complete();
   } catch (error) {
     providerStage.fail();
@@ -571,7 +685,7 @@ async function executePostWithinBudget(
     }
     const completedAt = isoNow();
     try {
-      for (const call of providerCalls) {
+      for (const [callIndex, call] of providerCalls.entries()) {
         await recordProviderUsage({
           db,
           environment: providerEnvironment,
@@ -588,7 +702,7 @@ async function executePostWithinBudget(
           errorCode: code,
           startedAt: call.startedAt,
           completedAt,
-          eventId: `provider_usage_${reservation.runId}_${call.provider}`,
+          eventId: `provider_usage_${reservation.runId}_${call.provider}_${call.attempt}_${callIndex}`,
         });
       }
     } catch {
@@ -624,16 +738,9 @@ async function executePostWithinBudget(
   let result;
   const validationStage = budget.beginStage("validation");
   try {
-    const boundedResult = enforceLegalChatSourceBoundary(
-      parseLegalChatResponse(aiResult.data),
-      new Set(sources.filter((source) => source.excerpt?.trim()).map((source) => source.id)),
-    );
+    const boundedResult = parseLegalChatResponse(aiResult.data);
     const sourceById = new Map(sources.map((source) => [source.id, source]));
-    // A verified corpus card can be shown even if the model elects not to cite
-    // it. It is server-owned metadata, not a model legal assertion.
-    const returnedSources = boundedResult.sources.length > 0
-      ? boundedResult.sources
-      : verifiedSourceCards(sources);
+    const returnedSources = boundedResult.sources;
     const canonicalResult = {
       ...boundedResult,
       sources: returnedSources.map((reference) => {
@@ -643,7 +750,7 @@ async function executePostWithinBudget(
           actTitle: source.actTitle,
           actIdentifier: source.actIdentifier,
           article: source.article ?? null,
-          excerpt: source.excerpt ?? null,
+          excerpt: null,
           originalUrl: source.officialUrl,
           status: "current" as const,
           effectiveDate: source.effectiveDate ?? null,
@@ -742,7 +849,9 @@ async function executePostWithinBudget(
 
   try {
     const completedAt = isoNow();
-    for (const call of providerCalls.filter((call) => call.provider !== aiResult.provider)) {
+    const successfulCallIndex = providerCalls.findLastIndex((call) => call.provider === aiResult.provider);
+    for (const [callIndex, call] of providerCalls.entries()) {
+      if (callIndex === successfulCallIndex) continue;
       await recordProviderUsage({
         db,
         environment: providerEnvironment,
@@ -756,13 +865,13 @@ async function executePostWithinBudget(
         outputTokens: 0,
         cachedInputTokens: 0,
         status: "failed",
-        errorCode: "FALLBACK_USED",
+        errorCode: call.provider === aiResult.provider ? "RETRY_USED" : "FALLBACK_USED",
         startedAt: call.startedAt,
         completedAt,
-        eventId: `provider_usage_${reservation.runId}_${call.provider}`,
+        eventId: `provider_usage_${reservation.runId}_${call.provider}_${call.attempt}_${callIndex}`,
       });
     }
-    const successfulCall = [...providerCalls].reverse().find((call) => call.provider === aiResult.provider);
+    const successfulCall = successfulCallIndex >= 0 ? providerCalls[successfulCallIndex] : undefined;
     await recordProviderUsage({
       db,
       environment: providerEnvironment,
@@ -779,7 +888,7 @@ async function executePostWithinBudget(
       status: "succeeded",
       startedAt: successfulCall?.startedAt ?? completedAt,
       completedAt,
-      eventId: `provider_usage_${reservation.runId}_${aiResult.provider}`,
+      eventId: `provider_usage_${reservation.runId}_${aiResult.provider}_${successfulCall?.attempt ?? aiResult.attempts}_success`,
     });
   } catch {
     // Cost telemetry is reconciled from the completed ai_run. It must never
@@ -802,7 +911,7 @@ async function executePostWithinBudget(
     db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,created_at) VALUES (?,?,'user',?,?)")
       .bind(userMessageId, conversationId, question, now),
     db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,'assistant',?,?,?)")
-      .bind(assistantMessageId, conversationId, result.answer, JSON.stringify(result), now),
+      .bind(assistantMessageId, conversationId, result.answer, JSON.stringify(metadataOnlyLegalResult(result)), now),
     db.prepare(
       "INSERT INTO message_branches (id,conversation_id,workspace_id,owner_user_id,parent_branch_id,forked_from_message_id,request_message_id,response_message_id,operation,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
     ).bind(branchId, conversationId, workspace.id, user.id, branchInput.parentBranchId, branchInput.forkedFromMessageId, userMessageId, assistantMessageId, branchInput.operation, now),
@@ -821,7 +930,7 @@ async function executePostWithinBudget(
       conversationId,
       messageId: assistantMessageId,
       now,
-      sourceAccessMode: "approved_package",
+      sourceAccessMode: "direct",
     }),
     ...(voiceRecording ? [linkVoiceRecordingStatement({
       db,
@@ -841,7 +950,7 @@ async function executePostWithinBudget(
       sourceCount: result.sources.length, responseKind: result.responseKind,
       sourceFreshnessStatus: freshness.status,
       sourceFreshnessAsOf: freshness.asOf,
-      verifiedRetrievalErrorCodes: retrieval.errors.map((error) => error.code).slice(0, 4),
+      liveLexRetrievalErrorCodes: retrieval.errors.map((error) => error.code).slice(0, 4),
       branchId, operation: branchInput.operation,
       sourceMessageId: branchInput.forkedFromMessageId,
     }), now),
@@ -944,9 +1053,19 @@ async function executePostWithinBudget(
 
 const guardedExecutePost = withApiErrors(executePost);
 
+/**
+ * Executes the exact interactive route for the staging-only canonical
+ * evaluation runner. Authentication is still resolved from the supplied
+ * Request; the runner provides a short-lived synthetic session and cannot
+ * bypass tenant, quota, source, provider, validation, or persistence logic.
+ */
+export function executeAiPostForInternalEvaluation(request: Request) {
+  return guardedExecutePost(request);
+}
+
 export async function POST(request: Request) {
   if (!request.headers.get("accept")?.includes("text/event-stream")) {
-    return guardedExecutePost(request);
+    return executeAiPostForInternalEvaluation(request);
   }
   const abortController = new AbortController();
   const encoder = new TextEncoder();
@@ -1090,76 +1209,143 @@ function boundedConversationHistory(
   return selected.reverse();
 }
 
-function contextualRetrievalQuestion(
-  history: Array<{ user: string; assistant: string }>,
-  question: string,
-) {
-  const earlierQuestion = history.at(-1)?.user;
-  return earlierQuestion
-    ? `${earlierQuestion.slice(0, 2_000)}\n${question}`.slice(0, 4_000)
-    : question;
+function metadataOnlyLegalResult(result: ReturnType<typeof parseLegalChatResponse>) {
+  return {
+    ...result,
+    sources: result.sources.map((source) => ({ ...source, excerpt: null })),
+  };
 }
 
-function verifiedSourceCards(sources: ReadonlyArray<{
-  id: string;
-  actTitle: string;
-  actIdentifier: string | null;
-  article?: string | null;
-  excerpt?: string | null;
-  officialUrl: string;
-  applicabilityStatus?: "current" | "historical";
-  effectiveDate?: string | null;
-  verifiedAt: string;
-}>) {
-  return sources.map((source) => ({
-    sourceId: source.id,
-    actTitle: source.actTitle,
-    actIdentifier: source.actIdentifier,
-    article: source.article ?? null,
-    excerpt: source.excerpt ?? null,
-    originalUrl: source.officialUrl,
-    status: source.applicabilityStatus ?? "current" as const,
-    effectiveDate: source.effectiveDate ?? null,
-    verifiedAt: source.verifiedAt,
-  }));
-}
-
-function preliminaryForVerifiedRetrieval(input: {
-  retrieval: InteractiveVerifiedLegalRetrieval;
+async function completeNonChargeableIntent(input: {
+  db: D1Database;
+  workspaceId: string;
+  userId: string;
+  caseId: string | null;
+  conversationId: string;
+  existingConversation: boolean;
+  question: string;
   locale: "ru" | "uz";
   answerMode: "short" | "detailed";
   reasoningMode: "fast" | "deep";
-}) {
-  const sources = input.retrieval.sources.slice(0, 2).map((source) => ({
-    actTitle: source.actTitle,
-    article: source.article ?? null,
-    originalUrl: source.officialUrl,
-    verifiedAt: source.verifiedAt,
-  }));
-  const firstExcerpt = input.retrieval.sources[0]?.excerpt?.trim().slice(0, 700);
-  const hasVerifiedSources = sources.length > 0
-    && Boolean(firstExcerpt)
-    && input.retrieval.sourceValidationStatus === "validated";
-  const clarification = hasVerifiedSources
-    ? null
-    : createUnavailableVerifiedSourceClarification({
-      locale: input.locale,
-      answerMode: input.answerMode,
-      reasoningMode: input.reasoningMode,
-      legalDatabaseAsOf: input.retrieval.legalDatabaseAsOf,
-    });
-  return {
-    kind: hasVerifiedSources ? "verified_excerpt" as const : "clarification_required" as const,
-    message: hasVerifiedSources
-      ? (input.locale === "ru"
-        ? "Проверенный фрагмент официального источника по вашему вопросу:"
-        : "Savolingiz bo‘yicha rasmiy manbaning tasdiqlangan parchasi:")
-      : clarification!.answer,
-    ...(hasVerifiedSources ? { excerpt: firstExcerpt } : {}),
-    sources,
-    sourceFreshness: input.retrieval.freshness.status,
-    legalDatabaseAsOf: input.retrieval.legalDatabaseAsOf,
+  idempotencyKey: string;
+  branchInput: {
+    parentBranchId: string | null;
+    forkedFromMessageId: string | null;
+    sourceMessageId: string | null;
+    operation: "new" | "follow_up" | "edit" | "regenerate";
+    versionNumber: number;
   };
+  usageLimit: number;
+  intent: "conversation" | "out_of_scope";
+}) {
+  const now = isoNow();
+  const keyHash = (await sha256Json({
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    idempotencyKey: input.idempotencyKey,
+  })).slice(0, 48);
+  const userMessageId = `intent_user_${keyHash}`;
+  const assistantMessageId = `intent_assistant_${keyHash}`;
+  const branchId = `intent_branch_${keyHash}`;
+  const messageVersionId = `intent_version_${keyHash}`;
+  const greeting = input.locale === "ru"
+    ? "Здравствуйте! Я помогу разобраться в правовом вопросе Узбекистана, подготовить план действий или перейти к существующему конструктору документов JURO. Опишите ситуацию простыми словами."
+    : "Assalomu alaykum! O‘zbekiston huquqi bo‘yicha masalani tushuntirish, harakatlar rejasini tuzish yoki JURO hujjat konstruktoriga o‘tishda yordam beraman. Vaziyatni oddiy so‘zlar bilan yozing.";
+  const outOfScope = input.locale === "ru"
+    ? "Этот запрос выходит за безопасные возможности AI-юриста JURO. Я могу помочь с правовым вопросом Узбекистана, официальными основаниями Lex.uz, планом действий или существующим шаблоном документа."
+    : "Bu so‘rov JURO AI-yuristining xavfsiz imkoniyatlaridan tashqarida. O‘zbekiston huquqi, Lex.uz rasmiy asoslari, harakatlar rejasi yoki mavjud hujjat shabloni bo‘yicha yordam bera olaman.";
+  const answer = input.intent === "conversation" ? greeting : outOfScope;
+  const result = parseLegalChatResponse({
+    responseKind: "answer",
+    summary: input.locale === "ru" ? "Чем может помочь JURO" : "JURO qanday yordam beradi",
+    answer,
+    language: input.locale,
+    jurisdiction: "UZ",
+    answerMode: input.answerMode,
+    reasoningMode: input.reasoningMode,
+    clarificationQuestions: [],
+    confirmedFindings: [],
+    assumptions: [],
+    risks: [],
+    sources: [],
+    requiredDocuments: [],
+    actionPlan: [],
+    deadlines: [],
+    successOutlook: null,
+    urgency: "normal",
+    suggestedDocument: null,
+    suggestLawyer: false,
+    legalDatabaseAsOf: "unavailable",
+    sourceAccessMode: "direct",
+    sourcesRetrievedAt: null,
+    sourceValidationStatus: "unavailable",
+  });
+  const contentSha256 = await sha256Json(input.question);
+  const statements = [
+    ...(input.existingConversation ? [] : [input.db.prepare(
+      "INSERT INTO conversations (id,workspace_id,owner_user_id,case_id,title,locale,status,created_at,updated_at) VALUES (?,?,?,?,?,?,'active',?,?)",
+    ).bind(input.conversationId, input.workspaceId, input.userId, input.caseId, input.question.slice(0, 120), input.locale, now, now)]),
+    input.db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,created_at) VALUES (?,?,'user',?,?)")
+      .bind(userMessageId, input.conversationId, input.question, now),
+    input.db.prepare("INSERT INTO conversation_messages (id,conversation_id,author_type,content,structured_json,created_at) VALUES (?,?,'assistant',?,?,?)")
+      .bind(assistantMessageId, input.conversationId, result.answer, JSON.stringify(result), now),
+    input.db.prepare(
+      "INSERT INTO message_branches (id,conversation_id,workspace_id,owner_user_id,parent_branch_id,forked_from_message_id,request_message_id,response_message_id,operation,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    ).bind(branchId, input.conversationId, input.workspaceId, input.userId, input.branchInput.parentBranchId, input.branchInput.forkedFromMessageId, userMessageId, assistantMessageId, input.branchInput.operation, now),
+    input.db.prepare(
+      "INSERT INTO message_versions (id,conversation_id,branch_id,message_id,source_message_id,created_by_user_id,operation,version_number,content_sha256,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
+    ).bind(messageVersionId, input.conversationId, branchId, userMessageId, input.branchInput.sourceMessageId, input.userId, input.branchInput.operation, input.branchInput.versionNumber, contentSha256, now),
+    input.db.prepare("UPDATE conversations SET updated_at=? WHERE id=? AND workspace_id=?")
+      .bind(now, input.conversationId, input.workspaceId),
+    input.db.prepare(
+      "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'conversation',?,'ai_chat_nonchargeable_intent',?,?)",
+    ).bind(crypto.randomUUID(), input.workspaceId, input.userId, input.conversationId, JSON.stringify({ intent: input.intent, charged: false, lexRetrieval: false }), now),
+  ];
+  try {
+    await input.db.batch(statements);
+  } catch (error) {
+    if (error instanceof Error && /UNIQUE constraint/i.test(error.message)) {
+      const replay = await loadConversationResult(
+        input.db,
+        input.conversationId,
+        input.workspaceId,
+        input.userId,
+        branchId,
+        assistantMessageId,
+      );
+      return response({ ...replay, idempotentReplay: true }, 200);
+    }
+    throw error;
+  }
+  const sourceFreshness = legalDatabaseFreshnessFromAsOf("unavailable");
+  const turns = await conversationTurnsForClient({
+    db: input.db,
+    conversationId: input.conversationId,
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    leafBranchId: branchId,
+  });
+  return response({
+    conversationId: input.conversationId,
+    messageId: assistantMessageId,
+    requestMessageId: userMessageId,
+    branchId,
+    operation: input.branchInput.operation,
+    question: input.question,
+    branches: await listAiAnswerVersions({
+      db: input.db,
+      conversationId: input.conversationId,
+      workspaceId: input.workspaceId,
+      userId: input.userId,
+      branchId,
+    }),
+    turns,
+    result,
+    facts: [],
+    sources: [],
+    sourceFreshness,
+    usage: await usageSummary(input.db, input.workspaceId, input.userId, input.usageLimit),
+  }, 201);
 }
 
 async function usageSummary(db: D1Database, workspaceId: string, userId: string, limit: number) {
@@ -1263,7 +1449,7 @@ async function recordLegalChatSlo(input: {
     const stage = (name: string) => snapshot.stages.find((timing) => timing.stage === name);
     const auth = stage("auth");
     const context = stage("memory_context");
-    const retrieval = stage("verified_retrieval");
+    const retrieval = stage("live_lex_retrieval");
     const provider = stage("provider_execution");
     const validation = stage("validation");
     const persistence = stage("persistence");

@@ -16,7 +16,7 @@ test("legal source health reports freshness and work queues without source conte
   } as unknown as D1Database;
   const health = await legalSourceHealth(db, new Date("2026-08-02T00:00:00.000Z"));
   assert.equal(health.freshness.status, "fresh");
-  assert.deepEqual(health.latestRuns.map((run) => run.sourceKind), ["lex", "advice"]);
+  assert.deepEqual(health.latestRuns.map((run) => run.sourceKind), ["lex"]);
   assert.equal(health.pendingReviewCount, 2);
   assert.equal(health.approvedPendingPublicationCount, 1);
   assert.equal(health.pendingFetchCount, 2);

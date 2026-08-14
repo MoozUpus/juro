@@ -17,7 +17,7 @@ type Count = { total: number };
 
 export type LegalSourceHealth = {
   freshness: LegalDatabaseFreshness;
-  latestRuns: Array<{ sourceKind: "lex" | "advice"; status: string; finishedAt: string | null; errorCount: number }>;
+  latestRuns: Array<{ sourceKind: "lex"; status: string; finishedAt: string | null; errorCount: number }>;
   pendingReviewCount: number;
   approvedPendingPublicationCount: number;
   pendingFetchCount: number;
@@ -35,7 +35,7 @@ export async function legalSourceHealth(
         error_count AS errorCount
       FROM source_sync_runs
       WHERE run_type IN ('scheduled_corpus','manual_corpus')
-        AND source_kind IN ('lex','advice')
+        AND source_kind='lex'
       ORDER BY started_at DESC LIMIT 24
     `).all<CorpusRun>(),
     db.prepare("SELECT count(*) AS total FROM legal_review_queue WHERE status IN ('pending','in_review')")
@@ -45,12 +45,12 @@ export async function legalSourceHealth(
     db.prepare("SELECT count(*) AS total FROM legal_source_fetch_requests WHERE status IN ('queued','retrying','running')")
       .first<Count>(),
   ]);
-  const latest = new Map<"lex" | "advice", CorpusRun>();
+  const latest = new Map<"lex", CorpusRun>();
   for (const run of runs.results) {
-    if ((run.sourceKind !== "lex" && run.sourceKind !== "advice") || latest.has(run.sourceKind)) continue;
+    if (run.sourceKind !== "lex" || latest.has(run.sourceKind)) continue;
     latest.set(run.sourceKind, run);
   }
-  const latestRuns = (["lex", "advice"] as const).flatMap((sourceKind) => {
+  const latestRuns = (["lex"] as const).flatMap((sourceKind) => {
     const run = latest.get(sourceKind);
     return run ? [{ sourceKind, status: run.status, finishedAt: run.finishedAt, errorCount: Number(run.errorCount ?? 0) }] : [];
   });

@@ -57,13 +57,26 @@ type Preference = {
   lastDeliveredAt?: string | null;
 };
 type MonitoringStatus = {
-  integration: "not_configured" | "adapter_pending";
+  integration: "disabled" | "active" | "degraded";
   automaticPublication: boolean;
   controlledBeta: boolean;
   emailConfigured: boolean;
   lastCheckedAt: string | null;
   verifiedSourceCount: number;
   trustedSourceCount: number;
+  lexIngestionEnabled: boolean;
+  lastRun: {
+    status: string;
+    runType: string;
+    discoveredCount: number;
+    fetchedCount: number;
+    changedCount: number;
+    verifiedCount: number;
+    errorCount: number;
+    startedAt: string;
+    finishedAt: string | null;
+    errorSummary: string | null;
+  } | null;
   freshness: {
     state: "fresh" | "stale" | "unavailable";
     latestCheckedAt: string | null;
@@ -95,13 +108,13 @@ type LegislationUpdate = {
 
 const copy = {
   ru: {
-    eyebrow: "JURO · проверяемые обновления",
+    eyebrow: "JURO · Lex.uz metadata",
     title: "Мониторинг законодательства",
-    intro: "Выберите области права. В контролируемой бета-версии JURO показывает только опубликованные записи с недавно проверенным официальным источником.",
+    intro: "Выберите области права. JURO ежедневно сверяет официальные RSS-метаданные Lex.uz и показывает обнаруженные изменения без локальной копии текста НПА.",
     settings: "Настройки мониторинга",
     preferences: "Предпочтения мониторинга",
     preferencesHint: "Сохраняются только темы, аудитория и желаемая частота для текущего пространства.",
-    preferenceOnlyNotice: "Автоматическая публикация или свежие проверенные источники сейчас недоступны. JURO не отправляет уведомления и не запускает проверку документов автоматически.",
+    preferenceOnlyNotice: "Пока Lex.uz недоступен или нет свежего запуска, настройки сохранены, но уведомления не отправляются.",
     audience: "Кого затрагивают обновления",
     individual: "Физическое лицо",
     business: "Бизнес",
@@ -125,20 +138,23 @@ const copy = {
     savePreferences: "Сохранить предпочтения",
     saved: "Настройки мониторинга сохранены.",
     savedPreferenceOnly: "Предпочтения сохранены. Автоматическая доставка пока отключена.",
-    integrationOff: "Автоматическая интеграция с официальной лентой пока не подключена.",
-    integrationPending: "Адаптер официальной ленты настроен, но автоматическая публикация ещё не разрешена.",
-    honestStatus: "Автопубликация отключена. Лента — контролируемая бета-версия: она не доказывает полноту законодательства и показывает только записи с актуальной ручной проверкой источника.",
-    controlledBeta: "Контролируемая бета-версия",
-    fresh: "Показаны только свежие проверенные источники",
-    stale: "Публикация скрыта: проверка источников устарела",
-    unavailable: "Публикация скрыта: свежих проверенных источников нет",
-    coverage: "Покрытие не является полным реестром законодательства.",
-    feed: "Обновления · бета-версия",
-    empty: "Свежих проверенных обновлений по выбранным темам пока нет",
+    integrationOff: "Lex.uz metadata-мониторинг сейчас отключён.",
+    integrationPending: "Мониторинг Lex.uz включён, но свежий запуск ещё не завершён.",
+    integrationActive: "Последний запуск Lex.uz успешно получил официальные metadata.",
+    honestStatus: "JURO хранит только технические metadata: URL, идентификатор, дату и fingerprint. Полный текст НПА и редакционные очереди не используются.",
+    controlledBeta: "Статус Lex.uz",
+    fresh: "Есть свежий успешный запуск",
+    stale: "Последняя сверка Lex.uz устарела",
+    unavailable: "Нет свежего результата Lex.uz",
+    coverage: "Лента показывает обнаруженные RSS-изменения Lex.uz; она не делает юридический вывод о содержании изменения.",
+    feed: "Обновления Lex.uz",
+    empty: "Обнаруженных изменений Lex.uz пока нет",
     emptyHint: "JURO не создаёт демонстрационную ленту и не подставляет вымышленные даты.",
     lastCheck: "Последняя проверка источников",
+    lastRun: "Последний запуск Lex.uz",
+    found: "Найдено / обработано / ошибок",
     never: "ещё не выполнялась",
-    sources: "Свежих проверенных источников",
+    sources: "Проверено metadata",
     adopted: "Принят",
     effective: "Вступает в силу",
     changed: "Что изменилось",
@@ -151,13 +167,13 @@ const copy = {
     retry: "Повторить",
   },
   uz: {
-    eyebrow: "JURO · tekshiriladigan yangilanishlar",
+    eyebrow: "JURO · Lex.uz metadata",
     title: "Qonunchilik monitoringi",
-    intro: "Huquq sohalarini tanlang. Nazorat qilinadigan beta-versiyada JURO faqat yaqinda tekshirilgan rasmiy manbaga bog‘langan e’lon qilingan yozuvlarni ko‘rsatadi.",
+    intro: "Huquq sohalarini tanlang. JURO har kuni Lex.uz rasmiy RSS metadata’larini tekshiradi va NPA matnining mahalliy nusxasisiz aniqlangan o‘zgarishlarni ko‘rsatadi.",
     settings: "Monitoring sozlamalari",
     preferences: "Monitoring afzalliklari",
     preferencesHint: "Faqat joriy makon uchun mavzular, auditoriya va kerakli tezlik sifatida saqlanadi.",
-    preferenceOnlyNotice: "Avtomatik e’lon qilish yoki yangi tekshirilgan manbalar hozir mavjud emas. JURO bildirishnomalarni yubormaydi va hujjatlarni avtomatik tekshirmaydi.",
+    preferenceOnlyNotice: "Lex.uz mavjud bo‘lmaguncha yoki yangi ishga tushirish bo‘lmaguncha afzalliklar saqlanadi, lekin bildirishnomalar yuborilmaydi.",
     audience: "Yangilanishlar kimga taalluqli",
     individual: "Jismoniy shaxs",
     business: "Biznes",
@@ -181,20 +197,23 @@ const copy = {
     savePreferences: "Afzalliklarni saqlash",
     saved: "Monitoring sozlamalari saqlandi.",
     savedPreferenceOnly: "Afzalliklar saqlandi. Avtomatik yetkazib berish hozir o‘chirilgan.",
-    integrationOff: "Rasmiy lenta bilan avtomatik integratsiya hali ulanmagan.",
-    integrationPending: "Rasmiy lenta adapteri sozlangan, ammo avtomatik e’lon qilishga hali ruxsat berilmagan.",
-    honestStatus: "Avtomatik e’lon o‘chirilgan. Lenta — nazorat qilinadigan beta-versiya: u qonunchilik to‘liqligini isbotlamaydi va faqat manbasi yaqinda qo‘lda tekshirilgan yozuvlarni ko‘rsatadi.",
-    controlledBeta: "Nazorat qilinadigan beta-versiya",
-    fresh: "Faqat yangi tekshirilgan manbalar ko‘rsatiladi",
-    stale: "Nashr yashirilgan: manbalar tekshiruvi eskirgan",
-    unavailable: "Nashr yashirilgan: yangi tekshirilgan manbalar yo‘q",
-    coverage: "Qamrov qonunchilikning to‘liq reyestri emas.",
-    feed: "Yangilanishlar · beta-versiya",
-    empty: "Tanlangan mavzular bo‘yicha yangi tekshirilgan yangilanishlar hozircha yo‘q",
+    integrationOff: "Lex.uz metadata monitoringi hozir o‘chirilgan.",
+    integrationPending: "Lex.uz monitoringi yoqilgan, ammo yangi ishga tushirish hali tugamagan.",
+    integrationActive: "Oxirgi Lex.uz ishga tushirilishi rasmiy metadata’larni muvaffaqiyatli oldi.",
+    honestStatus: "JURO faqat texnik metadata’larni saqlaydi: URL, identifikator, sana va fingerprint. NPA to‘liq matni va tahririy navbatlar ishlatilmaydi.",
+    controlledBeta: "Lex.uz holati",
+    fresh: "Yangi muvaffaqiyatli ishga tushirish mavjud",
+    stale: "Lex.uz oxirgi tekshiruvi eskirgan",
+    unavailable: "Lex.uz’ning yangi natijasi yo‘q",
+    coverage: "Lenta Lex.uz RSS orqali aniqlangan o‘zgarishlarni ko‘rsatadi; o‘zgarish mazmuni bo‘yicha huquqiy xulosa bermaydi.",
+    feed: "Lex.uz yangilanishlari",
+    empty: "Lex.uz’da aniqlangan o‘zgarishlar hozircha yo‘q",
     emptyHint: "JURO namoyish lentasini yaratmaydi va soxta sanalarni qo‘ymaydi.",
     lastCheck: "Manbalar oxirgi tekshirilgan vaqt",
+    lastRun: "Lex.uz oxirgi ishga tushirilishi",
+    found: "Topilgan / qayta ishlangan / xatolar",
     never: "hali bajarilmagan",
-    sources: "Yangi tekshirilgan manbalar",
+    sources: "Tekshirilgan metadata",
     adopted: "Qabul qilingan",
     effective: "Kuchga kiradi",
     changed: "Nima o‘zgardi",
@@ -223,13 +242,15 @@ const topicLabels: Record<Topic, { ru: string; uz: string }> = {
 };
 
 const defaultStatus: MonitoringStatus = {
-  integration: "not_configured",
+  integration: "disabled",
   automaticPublication: false,
   controlledBeta: true,
   emailConfigured: false,
   lastCheckedAt: null,
   verifiedSourceCount: 0,
   trustedSourceCount: 0,
+  lexIngestionEnabled: false,
+  lastRun: null,
   freshness: {
     state: "unavailable",
     latestCheckedAt: null,
@@ -347,12 +368,14 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
           <div>
             <small>{t.controlledBeta}</small>
             <strong>{status.freshness.state === "fresh" ? t.fresh : status.freshness.state === "stale" ? t.stale : t.unavailable}</strong>
-            <p>{status.integration === "not_configured" ? t.integrationOff : t.integrationPending} {t.honestStatus}</p>
+            <p>{status.integration === "disabled" ? t.integrationOff : status.integration === "active" ? t.integrationActive : t.integrationPending} {t.honestStatus}</p>
           </div>
         </div>
         <dl>
           <div><dt>{t.lastCheck}</dt><dd>{status.lastCheckedAt ? formatDate(status.lastCheckedAt, locale, true) : t.never}</dd></div>
           <div><dt>{t.sources}</dt><dd>{status.verifiedSourceCount}</dd></div>
+          <div><dt>{t.lastRun}</dt><dd>{status.lastRun?.finishedAt ? formatDate(status.lastRun.finishedAt, locale, true) : t.never}</dd></div>
+          <div><dt>{t.found}</dt><dd>{status.lastRun ? `${status.lastRun.discoveredCount} / ${status.lastRun.fetchedCount} / ${status.lastRun.errorCount}` : "—"}</dd></div>
         </dl>
       </section>
 

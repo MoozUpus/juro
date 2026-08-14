@@ -312,7 +312,7 @@ test("document analysis sends Anthropic a forced envelope and restores the canon
       assert.equal(request.tools?.[0]?.name, "emit_result");
       assert.equal(request.tools?.[0]?.input_schema?.type, "object");
       assert.deepEqual(request.tool_choice, { type: "tool", name: "emit_result" });
-      assert.match(request.system ?? "", /verifiedSources пусты/);
+      assert.match(request.system ?? "", /officialLexSources пусты/);
       assert.match(request.system ?? "", /legalComplianceStatus обязан быть unverified/);
       const nativeWireResult = {
         ...base,

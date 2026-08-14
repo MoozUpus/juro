@@ -1,12 +1,11 @@
 import { dispatchOutbox } from "./platform-outbox";
 import {
-  LEGAL_CORPUS_SYNC_CRON,
-  enqueueLexPdfNormalizationRecovery,
-  recoverStaleScheduledCorpusFetchRequests,
-  reconcileScheduledCorpusSyncRuns,
-  startScheduledCorpusSync,
-} from "../lib/legal/scheduled-corpus-sync";
-import { evaluateLegalCorpusAlerts } from "../lib/legal/corpus-alerts";
+  LEX_METADATA_DISCOVERY_CRON,
+  lexMetadataRetryDue,
+  reconcileStaleLexMetadataMonitorRuns,
+  runLexMetadataMonitor,
+} from "../lib/legal/metadata-monitor";
+import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-health";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
@@ -471,7 +470,7 @@ export async function handleScheduled(
     controller.noRetry();
     return;
   }
-  if (controller.cron !== OUTBOX_CRON && controller.cron !== LEGAL_CORPUS_SYNC_CRON) {
+  if (controller.cron !== OUTBOX_CRON && controller.cron !== LEX_METADATA_DISCOVERY_CRON) {
     logScheduled("error", {
       event: "scheduled.unknown_cron",
       environment: env.APP_ENV,
@@ -481,29 +480,28 @@ export async function handleScheduled(
     return;
   }
 
-  if (controller.cron === LEGAL_CORPUS_SYNC_CRON) {
-    if (env.LEGAL_ADVICE_INGESTION_ENABLED !== "true") {
-      // Do not enqueue the legacy corpus pipeline while its consumer is in its
-      // terminal dormant mode. Health remains unknown until real evidence is
-      // produced after a separately approved activation.
+  if (controller.cron === LEX_METADATA_DISCOVERY_CRON) {
+    if ((env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED !== "true") {
       logScheduled("info", {
-        event: "scheduled.legal_corpus_disabled",
+        event: "scheduled.lex_metadata_monitor_disabled",
         environment: env.APP_ENV,
         cron: controller.cron,
       });
       controller.noRetry();
       return;
     }
-    const summary = await startScheduledCorpusSync(env, {
-      discoveryWait: (delayMs) => scheduler.wait(delayMs),
+    const summary = await runLexMetadataMonitor(env, {
+      wait: (delayMs) => scheduler.wait(delayMs),
     });
     logScheduled("info", {
-      event: "scheduled.legal_corpus_started",
+      event: "scheduled.lex_metadata_monitor_finished",
       environment: env.APP_ENV,
       cron: controller.cron,
-      started: summary.started,
-      busy: summary.busy,
-      empty: summary.empty,
+      status: summary.status,
+      discovered: summary.discovered,
+      processed: summary.processed,
+      changed: summary.changed,
+      errors: summary.errors,
     });
     return;
   }
@@ -524,16 +522,37 @@ export async function handleScheduled(
     failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
     const now = new Date().toISOString();
     const taskReminders = await enqueueDueTaskReminders(env, now);
-    failureCode = "LEGAL_CORPUS_RETRY_RECOVERY_FAILED";
-    const corpusRetriesRecovered =
-      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-        ? await recoverStaleScheduledCorpusFetchRequests(env, { now: new Date(now) })
-        : 0;
-    failureCode = "LEGAL_CORPUS_PDF_NORMALIZATION_RECOVERY_FAILED";
-    const lexPdfNormalizationsEnqueued =
-      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-        ? await enqueueLexPdfNormalizationRecovery(env, { now: new Date(now) })
-        : 0;
+    const lexMetadataMonitorEnabled = (env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED === "true";
+    let lexMetadataStaleRuns = 0;
+    let lexMetadataRetry: Awaited<ReturnType<typeof runLexMetadataMonitor>> | null = null;
+    if (lexMetadataMonitorEnabled) {
+      failureCode = "LEX_METADATA_MONITOR_RECONCILE_FAILED";
+      lexMetadataStaleRuns = await reconcileStaleLexMetadataMonitorRuns(env, { now: new Date(now) });
+    }
+    const directLexRetrievalEnabled = (env as Record<string, unknown>).LEGAL_DIRECT_RETRIEVAL_ENABLED === "true";
+    failureCode = "LEX_SOURCE_HEALTH_CHECK_FAILED";
+    const lexSourceHealth = directLexRetrievalEnabled
+      ? await runDirectLegalSourceHealthCheck({
+        db: env.DB,
+        environment: env.APP_ENV,
+      })
+      : {
+        state: "unknown" as const,
+        alertCode: "DIRECT_SOURCE_HEALTH_UNKNOWN" as const,
+        checkedAt: null,
+        ageMinutes: null,
+        sources: [],
+      };
+    if (lexMetadataMonitorEnabled) {
+      failureCode = "LEX_METADATA_MONITOR_RETRY_FAILED";
+      lexMetadataRetry = await lexMetadataRetryDue(env, new Date(now))
+        ? await runLexMetadataMonitor(env, {
+          now: new Date(now),
+          runType: "metadata_retry",
+          wait: (delayMs) => scheduler.wait(delayMs),
+        })
+        : null;
+    }
     failureCode = "OUTBOX_DISPATCH_FAILED";
     const summary = await dispatchOutbox(env, 100);
     failureCode = "QUEUE_HEALTH_PROBE_ENQUEUE_FAILED";
@@ -588,15 +607,6 @@ export async function handleScheduled(
       failureCode = documentAnalysisProbe.errorCode ?? failureCode;
       throw new Error(failureCode);
     }
-    failureCode = "LEGAL_CORPUS_RECONCILE_FAILED";
-    const corpusRunsCompleted =
-      (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-        ? await reconcileScheduledCorpusSyncRuns(env)
-        : 0;
-    failureCode = "LEGAL_CORPUS_ALERT_EVALUATION_FAILED";
-    const corpusAlerts = (env as Record<string, unknown>).LEGAL_ADVICE_INGESTION_ENABLED === "true"
-      ? await evaluateLegalCorpusAlerts(env, { now: new Date(now) })
-      : { created: 0, failedRuns: 0, staleSources: 0 };
     // `scheduled_runs` makes this completion idempotent per cron slot. This
     // must be a heartbeat, not a throttled product event, otherwise cron
     // jitter can suppress a real D1 success immediately before its age limit.
@@ -626,8 +636,10 @@ export async function handleScheduled(
       queueDlqDurableDeadLettered: queueDlqHealth.durableDeadLettered,
       taskRemindersDue: taskReminders.due,
       taskRemindersEnqueued: taskReminders.enqueued,
-      corpusRetriesRecovered,
-      lexPdfNormalizationsEnqueued,
+      lexMetadataStaleRuns,
+      lexSourceHealthState: lexSourceHealth.state,
+      lexSourceHealthError: lexSourceHealth.alertCode,
+      lexMetadataRetryStatus: lexMetadataRetry?.status ?? "not_due",
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,
       guestAiRetentionEligible: guestAiRetention.eligible,
@@ -666,10 +678,6 @@ export async function handleScheduled(
       queueHealthProbeStale: queueHealthProbe?.stale ?? 0,
       queueHealthProbeFailed: queueHealthProbe?.failed ?? 0,
       queueHealthProbeSkipped: queueHealthProbe?.skipped ?? 0,
-      corpusRunsCompleted,
-      corpusAlertsCreated: corpusAlerts.created,
-      corpusFailedRunAlerts: corpusAlerts.failedRuns,
-      corpusStaleSourceAlerts: corpusAlerts.staleSources,
     });
   } catch {
     try {

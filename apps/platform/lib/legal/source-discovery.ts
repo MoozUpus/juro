@@ -32,6 +32,11 @@ export type AdviceSitemapDiscovery = {
 
 export type LexRssDiscovery = {
   candidates: LegalSourceReference[];
+  entries: Array<{
+    reference: LegalSourceReference;
+    title: string | null;
+    publishedAt: string | null;
+  }>;
   robotsUrl: string;
   rssUrls: string[];
   fetchedAt: string;
@@ -232,17 +237,41 @@ function isAllowedLexRssUrl(value: string): boolean {
   return LEX_RSS_URLS.includes(value as (typeof LEX_RSS_URLS)[number]);
 }
 
-function rssLinks(xml: string): string[] {
+function decodeXmlText(value: string): string {
+  return value
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#39;", "'")
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/gu, "$1")
+    .replace(/<[^>]+>/gu, "")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function itemValue(item: string, tag: "title" | "link" | "pubDate"): string | null {
+  const match = new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, "iu").exec(item);
+  const value = match?.[1] ? decodeXmlText(match[1]) : "";
+  return value || null;
+}
+
+function rssMetadataEntries(xml: string): Array<{ link: string; title: string | null; publishedAt: string | null }> {
   if (!/<rss(?:\s|>)/i.test(xml) || !/<channel(?:\s|>)/i.test(xml)) {
     throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_UNAVAILABLE", false);
   }
-  const links: string[] = [];
-  const expression = /<link(?:\s[^>]*)?>\s*([^<\s][^<]*?)\s*<\/link>/gi;
-  for (const match of xml.matchAll(expression)) {
-    const value = match[1]?.trim().replaceAll("&amp;", "&");
-    if (value) links.push(value);
-  }
-  return links;
+  return [...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/giu)].flatMap((match) => {
+    const item = match[1] ?? "";
+    const link = itemValue(item, "link");
+    if (!link) return [];
+    const publishedRaw = itemValue(item, "pubDate");
+    const timestamp = publishedRaw ? Date.parse(publishedRaw) : NaN;
+    return [{
+      link: link.replaceAll("&amp;", "&"),
+      title: itemValue(item, "title"),
+      publishedAt: Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : null,
+    }];
+  });
 }
 
 export async function discoverAdviceSitemapDocuments(options: {
@@ -252,6 +281,10 @@ export async function discoverAdviceSitemapDocuments(options: {
   timeoutMs?: number;
   wait?: (delayMs: number) => Promise<void>;
 } = {}): Promise<AdviceSitemapDiscovery> {
+  // Kept as a typed compatibility export for callers compiled against the
+  // old ingestion subsystem. It must never perform network I/O.
+  throw new LegalSourceDiscoveryError("LEGAL_SOURCE_DISCOVERY_UNAVAILABLE", false);
+  /* c8 ignore start -- permanently disabled legacy implementation */
   const fetchImpl = options.fetchImpl ?? fetch;
   const maxDocuments = options.maxDocuments ?? DEFAULT_MAX_DOCUMENTS;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -304,6 +337,7 @@ export async function discoverAdviceSitemapDocuments(options: {
     sitemapUrls,
     fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
   };
+  /* c8 ignore stop */
 }
 
 export async function discoverLexRssDocuments(options: {
@@ -340,6 +374,7 @@ export async function discoverLexRssDocuments(options: {
   }
 
   const candidates = new Map<string, LegalSourceReference>();
+  const entries = new Map<string, LexRssDiscovery["entries"][number]>();
   const rssUrls: string[] = [];
   const perFeedLimit = Math.ceil(maxDocuments / LEX_RSS_URLS.length);
   for (const rssUrl of LEX_RSS_URLS) {
@@ -354,15 +389,22 @@ export async function discoverLexRssDocuments(options: {
     }
     rssUrls.push(rssUrl);
     let feedCandidates = 0;
-    for (const link of rssLinks(await readText(response, MAX_BYTES))) {
+    for (const entry of rssMetadataEntries(await readText(response, MAX_BYTES))) {
       try {
-        const absolute = new URL(link, rssUrl);
+        const absolute = new URL(entry.link, rssUrl);
         const source = classifyLegalSourceUrl(absolute.href);
         if (source.sourceKind !== "lex" || source.locale !== (rssUrl.includes("/ru/") ? "ru" : "uz")) {
           continue;
         }
         if (!candidates.has(source.canonicalUrl)) feedCandidates += 1;
         candidates.set(source.canonicalUrl, source);
+        if (!entries.has(source.canonicalUrl)) {
+          entries.set(source.canonicalUrl, {
+            reference: source,
+            title: entry.title,
+            publishedAt: entry.publishedAt,
+          });
+        }
       } catch {
         // RSS entries outside JURO's exact Lex document allowlist are ignored.
       }
@@ -371,6 +413,7 @@ export async function discoverLexRssDocuments(options: {
   }
   return {
     candidates: [...candidates.values()].slice(0, maxDocuments),
+    entries: [...entries.values()].slice(0, maxDocuments),
     robotsUrl: LEX_ROBOTS_URL,
     rssUrls,
     fetchedAt: (options.now ?? (() => new Date()))().toISOString(),

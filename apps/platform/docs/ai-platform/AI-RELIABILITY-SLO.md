@@ -1,21 +1,33 @@
 # Interactive AI reliability and status evidence
 
-Status: **staging deployed; statistical SLO and dependency-health gates remain open**.
-Updated: 2026-08-12
+Status: **exact staging candidate meets legal-chat SLO; external legal-review gate remains open**.
+Updated: 2026-08-14
 
 This document describes the contracts introduced with migrations `0112` and
-`0113`, plus the evidence actually observed for their 2026-08-12 staging
-checkpoint. It does not claim production deployment, a healthy provider fleet,
-or measured p50/p95 performance.
+`0113`, plus the evidence observed at the 2026-08-12 and 2026-08-14 staging
+checkpoints. It does not claim production deployment, a healthy provider fleet
+or completed legal review.
 
-## Local SLO hardening awaiting rollout
+## Exact-candidate checkpoint — 2026-08-14
 
-The two-second post-provider finalization reserve and the SSE preliminary
-ordering described below are source changes in the current local branch. They
-have passed local build/type/test gates, but have **not** been deployed to
-staging or production by this change. The checkpoint evidence in the next
-section predates this hardening and cannot certify it until a separate staging
-deployment and fresh representative samples are recorded.
+Staging Worker `e201be50-1c16-42aa-8031-3a379c6b7c06`, created at
+`2026-08-13T21:41:19.571047Z`, includes the bounded direct-Lex retrieval,
+validated preliminary ordering and two-second finalization reserve described
+below. Production was not deployed.
+
+The 20 consecutive authenticated legal-chat requests from
+`2026-08-13T21:42:17.947Z` through `2026-08-13T21:45:56.533Z` produced these
+content-free nearest-rank results:
+
+- p50/p95 first useful: **2287/3649 ms**;
+- p50/p95 complete useful: **3915/6632 ms**;
+- 20/20 completed inside 30 seconds and 19/20 individually reached first
+  useful inside five seconds.
+
+This satisfies the configured sample minimum and the p95 legal-chat SLO for
+this exact staging candidate. It does not certify another deployment, the
+Anthropic tail, legal correctness or production readiness. The named external
+human review of all 314 cases remains absent and fail-closed.
 
 ## Staging checkpoint — 2026-08-12
 
@@ -71,16 +83,18 @@ of this rollout.
   validation/persistence; it never starts another 30-second window. A result
   that cannot be durably finalized within the deadline is failed and its usage
   reservation is released rather than charged as a late success.
-- Interactive retrieval has a 2.25-second stage limit and reads only reviewed,
-  locally persisted D1 legal evidence. Live Lex/Advice fetches are not on the
-  user-answer path. A timeout or unavailable verified corpus produces the
-  existing fail-closed clarification boundary, not an unverified legal claim.
-- On the registered SSE path, the server sends a real, source-bound preliminary
-  event immediately after bounded retrieval and before awaiting optional
-  encrypted-memory context: either a verified excerpt with canonical metadata
-  or an explicit clarification-required state. It is not model text and does
-  not bypass the final Zod, source-boundary, usage or persistence checks. A
-  regular JSON request has no early-result claim.
+- Interactive retrieval has a 2.9-second route-stage limit and uses only
+  request-scoped direct live Lex.uz evidence. Advice.uz, a local legal corpus,
+  Vectorize and embeddings are not on the user-answer path. A timeout, dirty
+  parse or unavailable source produces a fail-closed clarification boundary,
+  not an unverified legal claim.
+- On the registered SSE path, the server may send source-free research progress
+  after bounded retrieval. That event is not a legal answer, is not counted as
+  first useful content and contains neither provider text nor a raw source
+  excerpt. A preliminary answer is rendered only after the complete candidate
+  finding passes question relevance, exact Lex span, source quality and hash
+  validation. The complete response remains the only durable, chargeable
+  result.
 - Provider deltas are progress-only diagnostics. The browser never renders a
   delta as a legal answer; it renders only the server-owned preliminary object
   or the final validated, durably persisted response.
@@ -94,13 +108,11 @@ The operational targets are **first useful SSE result within 5 seconds** and
 **durably completed response within 30 seconds**. They are targets, not a
 performance assertion.
 
-The five-second target applies only where a source-bound result is safe to
-show: registered SSE chat can expose a verified source excerpt or a validated
-clarification after retrieval. It does not claim that an OpenAI/Anthropic token
-or an HTTP header is legal content, and it does not promise an early result for
-the non-streaming guest endpoint. External provider latency and D1 latency can
-still cause a truthful no-charge timeout; the shared deadline prevents those
-attempts from becoming late successful charges.
+The five-second target applies to the first validated useful result. Research
+progress, an OpenAI/Anthropic token, a response header or a raw Lex excerpt does
+not qualify. External Lex, provider and D1 latency can still cause a truthful
+no-charge timeout; the shared deadline prevents those attempts from becoming
+late successful charges.
 
 Migration `0113_ai_slo_telemetry.sql` adds the append-only,
 content-free `ai_slo_telemetry_events` ledger. It records only an opaque
@@ -156,8 +168,9 @@ rows. It has no HTTP endpoint and is inert in development and production.
 This flag is separate from `MALWARE_SCANNER_PROBE_ENABLED` and
 `STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED`; turning on provider probes does not
 enable a scanner or document-analysis execution. `LEGAL_DIRECT_RETRIEVAL_ENABLED`
-continues to govern staff/health tooling and does not permit live retrieval in
-interactive chat. The exact probe contract is in
+is enabled on the exact staging candidate and permits the bounded interactive
+Lex.uz-only path described above; it does not enable Advice.uz ingestion, a
+local legal corpus, embeddings or Vectorize. The exact probe contract is in
 [STAGING-PROVIDER-PROBE.md](./STAGING-PROVIDER-PROBE.md).
 
 The asynchronous document-analysis reliability candidate is separate from this
@@ -182,8 +195,12 @@ rollout and needs separate approval. See [ROLLBACK.md](./ROLLBACK.md).
 
 ## Open gates
 
-- Sufficient, representative staging samples are required before reporting
-  p50/p95 or claiming either SLO is met.
+- The 20-sample p50/p95 result applies only to Worker
+  `e201be50-1c16-42aa-8031-3a379c6b7c06`; any relevant code, configuration,
+  model or binding change requires a new window.
+- The external named human review and staging-persisted evidence for all 314
+  legal-evaluation cases are still absent, so the production release gate
+  remains fail-closed.
 - The post-deploy Anthropic recovery is one fresh operational observation, not
   enough data to certify its tail behavior or the end-to-end SLO.
 - Browser, accessibility, legal-quality, scanner and document-analysis gates

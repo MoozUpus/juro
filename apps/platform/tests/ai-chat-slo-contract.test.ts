@@ -6,16 +6,25 @@ async function source(relativePath: string): Promise<string> {
   return readFile(new URL(relativePath, import.meta.url), "utf8");
 }
 
-test("SSE emits only a source-bound preliminary before waiting for optional memory context", async () => {
+test("SSE keeps source verification content-free and reserves preliminary output for a grounded claim", async () => {
   const route = await source("../app/api/platform/ai/route.ts");
-  const retrieval = route.indexOf("const retrieval = await verifiedRetrieval;");
-  const preliminary = route.indexOf("preliminary: preliminaryForVerifiedRetrieval");
+  const retrieval = route.indexOf("const retrieval = await liveLexRetrieval;");
+  const sourceVerified = route.indexOf('await emitProgress({ stage: "source_verified" });');
   const memory = route.indexOf("const { memoryEncryption, memories } = await memoryContext;");
+  const groundedPreliminary = route.indexOf("onGroundedPreliminary: async (preliminary)");
 
   assert.ok(retrieval >= 0);
-  assert.ok(preliminary > retrieval);
-  assert.ok(memory > preliminary);
+  assert.ok(sourceVerified > retrieval);
+  assert.ok(memory > sourceVerified);
+  assert.ok(groundedPreliminary > memory);
   assert.match(route, /AI_INTERACTIVE_FINALIZATION_RESERVE_MS/);
+  assert.match(route, /retrieveLiveLexSources/);
+  assert.match(route, /retrieval\.sourceValidationStatus !== "validated"/);
+  assert.match(route, /freshness\.status !== "fresh"/);
+  assert.match(route, /let preliminaryAtMs: number \| null = null/);
+  assert.doesNotMatch(route, /kind: "research_progress"/);
+  assert.doesNotMatch(route, /kind: "lex_excerpt"|firstExcerpt/u);
+  assert.doesNotMatch(route, /retrieveInteractiveVerifiedLegalSources/);
   assert.match(route, /budget\.remainingMs < AI_INTERACTIVE_FINALIZATION_RESERVE_MS/);
 });
 
@@ -30,6 +39,8 @@ test("the browser never presents an unvalidated provider delta as a legal answer
   assert.match(deltaBlock, /setStreamStatus/);
   assert.doesNotMatch(deltaBlock, /setPreliminary|setAnswer/);
   assert.match(client, /<strong>\{preliminary\.message\}<\/strong>/);
+  assert.match(client, /safeOfficialUrl\(preliminary\.source\.canonicalUrl\)/);
+  assert.match(client, /setPreliminary\(null\);[\s\S]*const cancelled = isUserCancelledAiRequest/);
 });
 
 test("providers do not publish a started state when the common deadline is already exhausted", async () => {
@@ -39,12 +50,12 @@ test("providers do not publish a started state when the common deadline is alrea
   ]);
 
   const openAiAllocated = openAi.indexOf("const providerBudgetMs = legalChatProviderTimeoutMs");
-  const openAiBeforeCall = openAi.indexOf('await options.beforeProviderCall?.({ provider: "openai", model });');
+  const openAiBeforeCall = openAi.indexOf('onAttempt: ({ attempt }) => options.beforeProviderCall?.({ provider: "openai", model, attempt })');
   assert.ok(openAiAllocated >= 0);
   assert.ok(openAiBeforeCall > openAiAllocated);
 
   const anthropicAllocated = anthropic.indexOf("const providerBudgetMs = legalChatProviderTimeoutMs");
-  const anthropicBeforeCall = anthropic.indexOf('await options.beforeProviderCall?.({ provider: "anthropic", model });');
+  const anthropicBeforeCall = anthropic.indexOf('await options.beforeProviderCall?.({ provider: "anthropic", model, attempt: 1 });');
   const anthropicStarted = anthropic.indexOf('await options.onProgress?.({ stage: "provider_started", provider: "anthropic", model });');
   assert.ok(anthropicAllocated >= 0);
   assert.ok(anthropicBeforeCall > anthropicAllocated);

@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { legalEvaluationResultsSchema } from "./legal-evaluation-corpus";
 
-export const LEGAL_EVALUATION_CORPUS_VERSION = "2026-08-05.1";
+export const LEGAL_EVALUATION_CORPUS_VERSION = "2026-08-13.1";
 export const LEGAL_EVALUATION_MANIFEST_VERSION = 1;
 export const LEGAL_EVALUATION_RESULTS_ENVELOPE_VERSION = 1;
 

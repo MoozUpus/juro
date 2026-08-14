@@ -119,6 +119,8 @@ export async function callOpenAiStructured<T>(options: {
   requestId?: string;
   model?: string;
   maxAttempts?: 1 | 2;
+  /** Content-free hook invoked immediately before each real HTTP attempt. */
+  onAttempt?: (input: { attempt: 1 | 2; model: string }) => void | Promise<void>;
   signal?: AbortSignal;
   onProgress?: (event: AiStructuredProgress) => void | Promise<void>;
   /**
@@ -126,11 +128,15 @@ export async function callOpenAiStructured<T>(options: {
    * It deliberately carries no model output or request content.
    */
   onFirstContent?: (timing: ProviderRequestFirstContentTiming) => void | Promise<void>;
+  /** Server-only accumulated structured output; never forward it to a client or log. */
+  onOutputTextBuffer?: (input: { attempt: 1 | 2; text: string }) => void | Promise<void>;
   safetyIdentifier?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | "max";
   textVerbosity?: "low" | "medium" | "high";
   /** Bound generated output for latency-sensitive structured interactions. */
   maxOutputTokens?: number;
+  /** The only browsing tool supported by this low-level adapter. */
+  webSearchAllowedDomains?: readonly ("lex.uz" | "www.lex.uz")[];
 }): Promise<AiStructuredResult<T>> {
   const configuration = runtimeEnv();
   const apiKey = configuration.OPENAI_API_KEY || (configuration.AI_PROVIDER === "openai" ? configuration.AI_PROVIDER_API_KEY : undefined);
@@ -152,6 +158,7 @@ export async function callOpenAiStructured<T>(options: {
     if (options.signal?.aborted) {
       throw new AiUnavailableError("AI-запрос отменён пользователем.", "AI_CANCELLED", false);
     }
+    await options.onAttempt?.({ attempt: attempt as 1 | 2, model });
     try {
       await options.onProgress?.({ stage: "provider_started", provider: "openai", model });
       const { response, payload } = await runProviderRequestWithTimeouts({
@@ -175,6 +182,13 @@ export async function callOpenAiStructured<T>(options: {
             ...(options.safetyIdentifier ? { safety_identifier: options.safetyIdentifier } : {}),
             ...(options.reasoningEffort ? { reasoning: { effort: options.reasoningEffort } } : {}),
             ...(options.maxOutputTokens ? { max_output_tokens: options.maxOutputTokens } : {}),
+            ...(options.webSearchAllowedDomains?.length ? {
+              tools: [{
+                type: "web_search",
+                filters: { allowed_domains: [...options.webSearchAllowedDomains] },
+              }],
+              tool_choice: "auto",
+            } : {}),
             stream: Boolean(options.onProgress),
             text: {
               ...(options.textVerbosity ? { verbosity: options.textVerbosity } : {}),
@@ -191,7 +205,14 @@ export async function callOpenAiStructured<T>(options: {
         consume: async (response, _signal, timing) => ({
           response,
           payload: options.onProgress && response.ok
-            ? await readOpenAiEventStream(response, options.onProgress, timing.markFirstContent)
+            ? await readOpenAiEventStream(
+              response,
+              options.onProgress,
+              timing.markFirstContent,
+              options.onOutputTextBuffer
+                ? (text) => options.onOutputTextBuffer?.({ attempt: attempt as 1 | 2, text })
+                : undefined,
+            )
             : await response.json().catch(() => ({})) as ResponsesApiPayload,
         }),
       });
@@ -286,10 +307,12 @@ async function readOpenAiEventStream(
   response: Response,
   onProgress: (event: AiStructuredProgress) => void | Promise<void>,
   markFirstContent?: () => Promise<void>,
+  onOutputTextBuffer?: (text: string) => void | Promise<void>,
 ): Promise<ResponsesApiPayload> {
   try {
     return await readResponsesSse(response, onProgress, {
       onFirstDelta: async () => { await markFirstContent?.(); },
+      onOutputTextBuffer,
     }) as ResponsesApiPayload;
   } catch (error) {
     if (error instanceof ResponsesSseError) {

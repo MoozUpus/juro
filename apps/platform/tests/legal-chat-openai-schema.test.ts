@@ -29,5 +29,6 @@ test("legal-chat schema is valid for OpenAI Structured Outputs and excludes serv
   assert.equal("sourceAccessMode" in properties, false);
   assert.equal("sourcesRetrievedAt" in properties, false);
   assert.equal("sourceValidationStatus" in properties, false);
+  assert.equal(Object.keys(properties)[0], "confirmedFindings");
   assertStructuredOutputObjectRules(schema);
 });

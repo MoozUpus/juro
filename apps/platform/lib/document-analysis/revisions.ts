@@ -423,6 +423,11 @@ export async function applySuggestedRevisions(
     )),
     ...invalid.map((item) => invalidUpdate(env.DB, item, input, now)),
     env.DB.prepare(
+      `UPDATE document_analysis_lawyer_verifications
+          SET status='needs_recheck',invalidated_at=?,updated_at=?
+        WHERE analysis_id=? AND status='verified' AND document_version_id<>?`,
+    ).bind(now, now, input.analysisId, versionId),
+    env.DB.prepare(
       `INSERT INTO workspace_audit_events
        (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
        VALUES (?,?,?,'analysis_document_version',?,'analysis_revisions_applied',?,?)`,
@@ -436,6 +441,14 @@ export async function applySuggestedRevisions(
         skippedRevisionIds: invalid.map((item) => item.revision.id),
         normalizedTextOnly: true,
       }), now,
+    ),
+    env.DB.prepare(
+      `INSERT INTO workspace_audit_events
+       (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
+       VALUES (?,?,?,'document_analysis',?,'lawyer_verifications_require_recheck',?,?)`,
+    ).bind(
+      crypto.randomUUID(), input.workspaceId, input.userId, input.analysisId,
+      JSON.stringify({ newVersionId: versionId, previousVersionId: latest.id }), now,
     ),
   ];
   try {

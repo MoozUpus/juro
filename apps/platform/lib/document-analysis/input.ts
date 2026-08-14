@@ -28,7 +28,7 @@ export function buildDocumentAnalysisProviderInput(input: DocumentAnalysisProvid
       mode: input.mode,
       legalDatabaseAsOf: input.legalDatabaseAsOf,
     },
-    verifiedSources: input.sources.map((source) => ({
+    officialLexSources: input.sources.map((source) => ({
       sourceId: source.id,
       actTitle: source.actTitle,
       actIdentifier: source.actIdentifier,

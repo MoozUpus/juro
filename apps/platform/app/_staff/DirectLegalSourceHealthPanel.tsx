@@ -9,7 +9,7 @@ type Health = {
   alertCode: string | null;
   checkedAt: string | null;
   ageMinutes: number | null;
-  sources: Array<{ sourceKind: "lex" | "advice"; status: "healthy" | "unavailable"; checkedAt: string; latencyMs: number; errorCode: string | null }>;
+  sources: Array<{ sourceKind: "lex"; status: "healthy" | "unavailable"; checkedAt: string; latencyMs: number; errorCode: string | null }>;
 };
 
 const copy = {
@@ -47,6 +47,6 @@ export function DirectLegalSourceHealthPanel({ locale }: { locale: Locale }) {
   const title = status === "fresh" ? l.fresh : status === "degraded" ? l.degraded : status === "stale" ? l.stale : l.unknown;
   return <main className="staff-console"><a className="staff-skip" href="#direct-source-health">{locale === "ru" ? "К содержанию" : "Tarkibga"}</a><div className="staff-main" id="direct-source-health">
     <section className="staff-heading"><div><span>{l.eyebrow}</span><h1>{l.title}</h1><p>{l.description}</p></div><button type="button" onClick={() => void load(true)} disabled={busy}>{busy ? <RefreshCw className="is-spinning" aria-hidden="true"/> : <RefreshCw aria-hidden="true"/>}{l.check}</button></section>
-    {error ? <p className="staff-error" role="alert">{error}</p> : <section className="staff-health" aria-busy={busy} aria-live="polite"><div className={`staff-health-state state-${status}`}>{status === "fresh" ? <ShieldCheck aria-hidden="true"/> : <ShieldAlert aria-hidden="true"/>}<div><b>{title}</b><small>{l.last}: {date(health?.checkedAt ?? null)}</small></div></div><div className={health?.alertCode ? "staff-health-alert" : "staff-health-clear"}><b>{health?.alertCode ? l.alert : l.noAlert}</b><small>{health?.alertCode ?? "—"}</small></div><div className="staff-health-grid">{health?.sources.map((source) => <article key={source.sourceKind}><span>{source.sourceKind === "lex" ? "lex.uz" : "advice.uz"}</span><b>{source.status}</b><small>{date(source.checkedAt)} · {l.latency}: {source.latencyMs} ms{source.errorCode ? ` · ${source.errorCode}` : ""}</small></article>)}</div></section>}
+    {error ? <p className="staff-error" role="alert">{error}</p> : <section className="staff-health" aria-busy={busy} aria-live="polite"><div className={`staff-health-state state-${status}`}>{status === "fresh" ? <ShieldCheck aria-hidden="true"/> : <ShieldAlert aria-hidden="true"/>}<div><b>{title}</b><small>{l.last}: {date(health?.checkedAt ?? null)}</small></div></div><div className={health?.alertCode ? "staff-health-alert" : "staff-health-clear"}><b>{health?.alertCode ? l.alert : l.noAlert}</b><small>{health?.alertCode ?? "—"}</small></div><div className="staff-health-grid">{health?.sources.map((source) => <article key={source.sourceKind}><span>lex.uz</span><b>{source.status}</b><small>{date(source.checkedAt)} · {l.latency}: {source.latencyMs} ms{source.errorCode ? ` · ${source.errorCode}` : ""}</small></article>)}</div></section>}
   </div></main>;
 }

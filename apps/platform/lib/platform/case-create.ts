@@ -17,6 +17,7 @@ export const CASE_DIRECTIONS = {
   migration: { ru: "Миграция, гражданство и госуслуги", uz: "Migratsiya, fuqarolik va davlat xizmatlari" },
   transport: { ru: "Транспорт, таможня и имущество", uz: "Transport, bojxona va mol-mulk" },
   digital: { ru: "Цифровые права, IP, образование и здоровье", uz: "Raqamli huquqlar, IP, ta’lim va sog‘liq" },
+  other: { ru: "Другое", uz: "Boshqa" },
 } as const satisfies Record<string, Localized>;
 
 export type CaseDirectionId = keyof typeof CASE_DIRECTIONS;
@@ -67,8 +68,8 @@ function scenario(
 }
 
 /**
- * Editorial catalogue modelled on Advice.uz topic navigation, but it contains
- * no Advice.uz URLs or legal conclusions. User-facing legal sources stay Lex.uz.
+ * Editorial catalogue contains no external-source URLs or legal conclusions.
+ * User-facing legal sources stay Lex.uz-only.
  */
 export const CASE_SCENARIOS = {
   "unpaid-salary": scenario("employment", "Невыплата заработной платы", "Ish haqi to‘lanmasligi"),
@@ -95,14 +96,14 @@ export const CASE_SCENARIOS = {
   consumer: scenario("civil", "Возврат товара, гарантия и качество услуг", "Tovarni qaytarish, kafolat va xizmat sifati"),
   insurance: scenario("civil", "Страховой случай и выплата", "Sug‘urta hodisasi va to‘lov"),
 
-  "business-registration": scenario("business", "Регистрация бизнеса и выбор формы", "Biznesni ro‘yxatdan o‘tkazish va shakl tanlash", { audience: "business", risk: "standard", requiresLawyerReview: false }),
-  "commercial-contract": scenario("business", "Коммерческий договор и оплата", "Tijorat shartnomasi va to‘lov", { audience: "business", risk: "standard", requiresLawyerReview: false }),
+  "business-registration": scenario("business", "Регистрация бизнеса и выбор формы", "Biznesni ro‘yxatdan o‘tkazish va shakl tanlash", { audience: "all", risk: "standard", requiresLawyerReview: false }),
+  "commercial-contract": scenario("business", "Коммерческий договор и оплата", "Tijorat shartnomasi va to‘lov", { audience: "all", risk: "standard", requiresLawyerReview: false }),
   // Stable legacy ID kept so saved cases and inbound links from the previous
   // catalogue remain resolvable after the direction catalogue migration.
-  "debt-recovery": scenario("business", "Взыскание задолженности", "Qarzdorlikni undirish", { audience: "business", risk: "elevated", requiresLawyerReview: true }),
-  "founder-dispute": scenario("business", "Спор учредителей или участников", "Ta’sischilar yoki ishtirokchilar nizosi", { audience: "business", risk: "elevated", requiresLawyerReview: true }),
-  "licence-inspection": scenario("business", "Лицензия, разрешение или проверка", "Litsenziya, ruxsatnoma yoki tekshiruv", { audience: "business", risk: "elevated", requiresLawyerReview: true }),
-  "business-reorganisation": scenario("business", "Закрытие или реорганизация бизнеса", "Biznesni yopish yoki qayta tashkil etish", { audience: "business", risk: "elevated", requiresLawyerReview: true }),
+  "debt-recovery": scenario("business", "Взыскание задолженности", "Qarzdorlikni undirish", { audience: "all", risk: "elevated", requiresLawyerReview: true }),
+  "founder-dispute": scenario("business", "Спор учредителей или участников", "Ta’sischilar yoki ishtirokchilar nizosi", { audience: "all", risk: "elevated", requiresLawyerReview: true }),
+  "licence-inspection": scenario("business", "Лицензия, разрешение или проверка", "Litsenziya, ruxsatnoma yoki tekshiruv", { audience: "all", risk: "elevated", requiresLawyerReview: true }),
+  "business-reorganisation": scenario("business", "Закрытие или реорганизация бизнеса", "Biznesni yopish yoki qayta tashkil etish", { audience: "all", risk: "elevated", requiresLawyerReview: true }),
 
   "tax-dispute": scenario("finance", "Налоговая задолженность, возврат или спор", "Soliq qarzdorligi, qaytarish yoki nizo", { audience: "all", risk: "elevated", requiresLawyerReview: true }),
   "bank-payment": scenario("finance", "Банковская карта, перевод или платёж", "Bank kartasi, o‘tkazma yoki to‘lov"),
@@ -133,6 +134,8 @@ export const CASE_SCENARIOS = {
   "intellectual-property": scenario("digital", "Авторское право и товарный знак", "Mualliflik huquqi va tovar belgisi", { audience: "all", risk: "elevated", requiresLawyerReview: true }),
   education: scenario("digital", "Образование, договор и права учащегося", "Ta’lim, shartnoma va o‘quvchi huquqlari"),
   healthcare: scenario("digital", "Медицинские документы и услуги", "Tibbiy hujjatlar va xizmatlar", { audience: "all", risk: "elevated", requiresLawyerReview: true }),
+
+  other: scenario("other", "Другая ситуация", "Boshqa vaziyat"),
 } as const satisfies Record<string, Scenario>;
 
 export type CaseScenarioId = keyof typeof CASE_SCENARIOS;

@@ -304,7 +304,7 @@ function riskLabel(risk: string, ru: boolean) {
 function safeOfficialUrl(value: string) {
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && (url.hostname === "lex.uz" || url.hostname.endsWith(".lex.uz") || url.hostname === "advice.uz" || url.hostname.endsWith(".advice.uz"));
+    return url.protocol === "https:" && (url.hostname === "lex.uz" || url.hostname.endsWith(".lex.uz"));
   } catch {
     return false;
   }

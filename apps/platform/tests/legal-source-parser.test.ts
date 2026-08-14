@@ -136,18 +136,56 @@ test("parser extracts the current Lex div-based document structure without wrapp
     rawContentSha256,
   });
 
-  assert.equal(snapshot.primarySelector, "main");
+  assert.equal(snapshot.primarySelector, "lex-document");
   assert.equal(snapshot.documentTitle, "Закон Республики Узбекистан");
   assert.deepEqual(
     snapshot.blocks.map((block) => block.kind),
-    ["paragraph", "heading", "paragraph", "paragraph"],
+    ["paragraph", "heading", "paragraph"],
   );
   assert.equal(
     snapshot.blocks.filter((block) => block.text.includes(actText.trim())).length,
-    2,
+    1,
   );
   assert.equal(snapshot.plainText.includes("Технический раздел"), false);
   assert.equal(snapshot.plainText.includes("Скрытая служебная команда"), false);
+});
+
+test("Lex parser strips reader controls and preserves article structure", () => {
+  const legalText = "Общество действует на основании устава и закона. ".repeat(10);
+  const snapshot = normalizeLegalSourceHtml({
+    html: `<html><body><main><div id="divCont">
+      <div class="ACT_TITLE lx_elem"><div class="lx_elem2">Предложения по документу\nПрослушать аудио\nПолучить ссылку из элемента документа\n«Об обществах с ограниченной ответственностью»</div></div>
+      <button>Получить ссылку на элемент документа</button>
+      <div class="CHAPTER_TITLE lx_elem">Глава 1. Общие положения</div>
+      <div class="ARTICLE_TITLE lx_elem">Статья 4. Правовое положение общества</div>
+      <div class="ACT_TEXT lx_elem">${legalText}</div>
+      <div class="document-toolbar">Получить ссылку</div>
+    </div></main></body></html>`,
+    reference,
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.primarySelector, "lex-document");
+  assert.equal(snapshot.documentTitle, "«Об обществах с ограниченной ответственностью»");
+  assert.equal(snapshot.plainText.includes("Предложения по документу"), false);
+  assert.equal(snapshot.plainText.includes("Прослушать аудио"), false);
+  assert.equal(snapshot.plainText.includes("Получить ссылку"), false);
+  assert.equal(snapshot.blocks.some((block) => block.semanticRole === "chapter"), true);
+  assert.equal(snapshot.blocks.some((block) => block.semanticRole === "article"), true);
+});
+
+test("Lex parser recognizes official Uzbek number-first modda headings", () => {
+  const snapshot = normalizeLegalSourceHtml({
+    html: `<html lang="uz"><body><main><h1>Mas’uliyati cheklangan jamiyatlar to‘g‘risida</h1><h2>11-modda. Jamiyatni ta’sis etish tartibi</h2><p>${"Jamiyatni ta’sis etish to‘g‘risidagi qaror va ta’sis hujjatlari qonun talablariga muvofiq bo‘lishi kerak. ".repeat(6)}</p></main></body></html>`,
+    reference: {
+      ...reference,
+      canonicalId: "-8151376",
+      canonicalUrl: "https://lex.uz/uz/docs/-8151376",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.blocks.some((block) => block.text.startsWith("11-modda") && block.semanticRole === "article"), true);
 });
 
 test("Advice parser extracts only the current document container", () => {
