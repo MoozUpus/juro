@@ -64,25 +64,11 @@ Muhandislik asoslari va kod xaritasini [Product foundations](docs/github/PRODUCT
 
 ## Mahsulot tajribasi
 
-<img src="docs/github/screenshots/public-website.webp" width="100%" alt="JURO ommaviy sayti uchun bezatilgan ekran tasviri">
+<img src="docs/github/product-experience.svg" width="100%" alt="JURO mahsulotining original illyustratsiyasi: huquqiy ma’lumot, hujjatlar bilan ish va qisman review sirtlari">
 
-**Ommaviy kirish nuqtasi — LIVE.** [juro.uz](https://juro.uz) saytida yuridik vaziyat, hujjat yoki keyingi harakatdan boshlang.
-
-| Himoyalangan ish maydoni | Hujjat workflow’i |
-|---|---|
-| <img src="docs/github/screenshots/platform-dashboard.webp" alt="Account ma’lumotlarisiz JURO himoyalangan ish maydoni uchun bezatilgan ekran tasviri" width="100%"> | <img src="docs/github/screenshots/document-builder.webp" alt="JURO hujjat workflow’i uchun bezatilgan ekran tasviri" width="100%"> |
-| Yuridik vaziyatni himoyalangan ish maydoni bilan bog‘lang. | Tartibli draftni boshlang va hujjat ustida ishlashni davom ettiring. |
-
-| Huquqiy ma’lumotga kirish | Review va taqqoslash sirti |
-|---|---|
-| <img src="docs/github/screenshots/ai-chat.webp" alt="Suhbat ma’lumotlarisiz JURO huquqiy ma’lumot boshlang‘ich holati uchun bezatilgan ekran tasviri" width="100%"> | <img src="docs/github/screenshots/document-analysis.webp" alt="JURO hujjat review va comparison uchun bezatilgan ekran tasviri" width="100%"> |
-| Kontekstdan boshlang: manba kartalari faqat dalil mavjud bo‘lganda chiqadi. | Review va taqqoslash interfeysi bor; end-to-end yuridik tahlil holati PARTIAL bo‘lib qoladi. |
-
-> Oldingi tor ekran tasviri ommaviy taqdimotdan olib tashlandi: u JURO responsive-QA standartiga mos kelmadi. U faqat tekshirilgan mobil ekran tasviri paydo bo‘lganda qaytadi.
+Bu mahsulot illyustratsiyasi, jonli interfeys haqidagi da’vo emas. Ommaviy kirish nuqtasi — [juro.uz](https://juro.uz); himoyalangan workflow’lar [app.juro.uz](https://app.juro.uz) orqali mavjud. Undagi statuslar repository matritsasiga asoslangan: huquqiy ma’lumot va hujjatlar bilan ish — WORKING, hujjat review’i va yuristga yo‘naltirish esa PARTIAL bo‘lib qoladi.
 
 ## Huquqiy kontekstdan amaliy ishga
-
-<img src="docs/github/operating-model.svg" width="100%" alt="JURO operatsion modeli: huquqiy kontekst va manbalardan himoyalangan ish va qisman yuristga yo‘naltirishgacha">
 
 JURO alohida chat oynasi emas, bog‘langan workflow sifatida shakllantirilgan. Foydalanuvchi kontekstdan boshlashi, manbalardagi mavjud dalillarni ko‘rishi, himoyalangan maydonda davom etishi va — joriy ssenariy bunga ruxsat bersa — inson yordamiga murojaat qilishi mumkin.
 
@@ -116,8 +102,6 @@ JURO mustaqil deploy qilinadigan ommaviy va himoyalangan ilovalarga ega monorepo
 <img src="docs/github/trust-layer.svg" width="100%" alt="JURO ishonch, maxfiylik va yuridik xavfsizlik chegaralari">
 
 Repozitoriyda bir nechta asosiy chegara tekshirilishi mumkin: server-side credentials, backend orqali D1/R2 kirishi, himoyalangan ownership yoki workspace checks, manbalarni ko‘rsatish va AI natijasidagi aniq cheklovlar. Bu yerda GDPR, ISO, SOC 2, data residency yoki boshqa sertifikatlar da’vo qilinmaydi.
-
-<img src="docs/github/engineering-commitments.svg" width="100%" alt="JUROning manbalar, himoyalangan ish va inson hand-off’i bo‘yicha muhandislik majburiyatlari">
 
 Zaifliklar haqida [SECURITY.md](SECURITY.md) bo‘yicha yopiq tarzda xabar bering. Issue yoki pull requestga secrets, shaxsiy ma’lumotlar, foydalanuvchi hujjatlari yoki production logsni qo‘shmang.
 
