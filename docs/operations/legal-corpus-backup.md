@@ -46,3 +46,28 @@ The private object keys are:
 
 These checks cover staging only. They are not evidence that production was
 migrated, ingested or rolled out.
+
+## Staging migration evidence — 0127 admin control
+
+Before `0127_legal_corpus_admin_control.sql`, a complete `juro-staging` export
+was restored into isolated SQLite. `PRAGMA quick_check` returned `ok`, foreign
+key violations were zero, and the topology contained 247 tables, 544 indexes,
+327 triggers and 127 migration records. The SQL export and private R2 readback
+shared SHA-256
+`8a764c121e7d2cf5d0d68b50a877b047f738ee408cc972eeeceade9a17e3900f`.
+
+After the migration, a second complete export restored with 248 tables, 547
+indexes, 329 triggers and 128 migration records. `PRAGMA quick_check` returned
+`ok`, foreign key violations were zero, and the export/readback SHA-256 was
+`c642f0b34515042b30e1505e3dacd6555020220e981a67d7cff500aebf0e45b6`.
+
+The private objects are:
+
+- `legal-corpus/migrations/2026-08-15/pre-0127-7af9aa2/juro-staging.sql`
+- `legal-corpus/migrations/2026-08-15/post-0127-7af9aa2/juro-staging.sql`
+
+The six local plaintext export/readback/restore files and their dedicated
+temporary directory were deleted after verification. The private R2 objects
+remain the recoverable staging backups. Corpus feature flags remained `false`;
+this migration and backup evidence did not start ingestion or modify
+production.

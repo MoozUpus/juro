@@ -15,9 +15,10 @@ corpus to Git.
 | Ingestion | Fetch one official Lex variant, validate HTML, parse articles | One job per outbox tick, robots/crawl delay respected |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
-| Retrieval | FTS5 BM25 sparse, optional dense provider, RRF | Current-version and tenant/user scope filters |
+| Retrieval | Exportable D1 BM25-style sparse terms, optional dense provider, RRF | Current-version and tenant/user scope filters |
 | Provider contract | Indexed Lex first, live Lex fallback only when needed | Typed source shape; no arbitrary URL tool |
 | Citation validation | Filters model-proposed citations against source packets | No generated URLs, title/article/quote checks |
+| Admin control | Metrics, coverage proof, bounded seed/retry and immutable audit | Isolated `apps/admin` Worker, host-only admin cookie, service binding and fresh source MFA |
 
 ## Current-version invariant
 
@@ -81,6 +82,16 @@ The daily metadata cron seeds the 44 checkpoints only when the corpus flags
 are enabled. The five-minute scheduler holds a distributed D1 lease and runs
 at most one catalog page and one document ingestion job sequentially. This
 keeps the official source crawl bounded and prevents parallel mass crawling.
+
+`/legal-corpus` lives on the isolated admin Worker rather than the ordinary
+platform UI. It reads through the private `PLATFORM_ADMIN_API` service binding.
+Only `super_admin` can view or operate it; the 15-minute host-only session is
+revalidated against the originating TOTP/MFA and current administrator
+assignment on every request. Writes additionally require same-origin CSRF,
+both server-side corpus flags, a 10–500 character technical reason and a valid
+append-only SHA-256 event chain. There is intentionally no legal approval
+queue. A catalog row is marked complete only when every expected document is
+indexed or has an explicit `technically_unavailable` result.
 
 Production's D1 `migrations_pattern` includes `0121` and production-safe
 `0124–0129` while structurally excluding staging-only evidence migrations

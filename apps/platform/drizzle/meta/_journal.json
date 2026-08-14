@@ -890,6 +890,13 @@
       "when": 1786818000000,
       "tag": "0126_exportable_legal_corpus_sparse_index",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1786821600000,
+      "tag": "0127_legal_corpus_admin_control",
+      "breakpoints": true
     }
   ]
 }

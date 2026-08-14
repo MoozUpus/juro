@@ -37,7 +37,9 @@ be used to claim source coverage, recall, or corpus-size parity. On 2026-08-15,
 migrations `0124_full_legal_corpus.sql`,
 `0125_lex_catalog_discovery.sql`, and the export-safety correction
 `0126_exportable_legal_corpus_sparse_index.sql` were applied to **staging
-only** after pre-migration backup/restore verification. All new staging corpus
+only** after pre-migration backup/restore verification. Migration
+`0127_legal_corpus_admin_control.sql` was then applied to staging with its own
+pre/post full-export restore and private-R2 readback gate. All new staging corpus
 registries remain empty and all corpus feature flags remain disabled.
 Production has not received these migrations.
 

@@ -51,6 +51,31 @@ type Review = {
   status: string;
   createdAt: string;
 };
+type LegalCorpusDashboard = {
+  environment: "development" | "staging" | "production";
+  featureFlags: Record<string, boolean>;
+  lexHealth: { state: string; checkedAt: string | null; alertCode: string | null };
+  totals: Record<string, number | string | null>;
+  coverage: Array<{
+    categoryKey: string; language: string; status: string; expectedDocuments: number | null;
+    discoveredDocuments: number; fetchedDocuments: number; extractedDocuments: number;
+    indexedDocuments: number; technicallyUnavailable: number; pageNumber: number;
+    lastErrorCode: string | null; updatedAt: string; complete: boolean;
+  }>;
+  checkpoints: Array<{
+    id: string; categoryKey: string; language: string; status: string; pageNumber: number;
+    lastErrorCode: string | null; updatedAt: string; canRetry: boolean;
+  }>;
+  failures: Array<{
+    id: string; jobId: string | null; language: string | null; attemptedAt: string;
+    errorCode: string; safeMessage: string; retryState: string; canRetry: boolean;
+  }>;
+  events: Array<{
+    id: string; action: string; targetType: string; targetId: string | null;
+    reason: string; actorUserId: string; createdAt: string;
+  }>;
+  integrity: { valid: boolean; checked: number };
+};
 
 function cookie(request: Request, name: string): string | null {
   const source = request.headers.get("cookie");
@@ -98,7 +123,7 @@ function page(environment: Env["APP_ENV"], title: string, body: string, options:
   const role = options.role ? `<span class="role">${escaped(options.role)}</span>` : "";
   const environmentLabel = environment === "production" ? "production" : environment === "staging" ? "staging" : "development";
   return new Response(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow,noarchive"><title>${escaped(title)} · JURO</title><style>
-    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:72rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}.filters{display:flex;flex-wrap:wrap;gap:.45rem;margin:1rem 0}.filters a{border:1px solid #8596a5;border-radius:999px;color:#102a43;padding:.4rem .65rem;text-decoration:none}.filters a[aria-current=page]{background:#062844;border-color:#062844;color:#fff}.filters a:hover,.filters a:focus-visible{outline:3px solid #be974f;outline-offset:2px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}.review-body{max-width:34rem;white-space:pre-wrap;overflow-wrap:anywhere}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль ${environmentLabel}</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/lawyers">Профили юристов</a><a href="/reviews">Отзывы</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
+    :root{color-scheme:light;font-family:Inter,ui-sans-serif,system-ui,sans-serif;background:#edf0f4;color:#102a43}*{box-sizing:border-box}body{margin:0}.shell{min-height:100vh;display:grid;grid-template-columns:15rem minmax(0,1fr)}aside{background:#062844;color:#fff;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}main{max-width:92rem;width:100%;padding:2.25rem;margin:0 auto}.brand{font-weight:800;letter-spacing:.12em;color:#d8b36b}.role{font-size:.78rem;border:1px solid #7992a8;border-radius:999px;padding:.25rem .5rem;color:#e8edf2}.nav{display:grid;gap:.35rem}.nav a{color:#dbe7ef;text-decoration:none;padding:.55rem .65rem;border-radius:.45rem}.nav a:hover,.nav a:focus-visible{outline:2px solid #d8b36b;outline-offset:2px;background:#123e60}.panel{background:#fff;border:1px solid #ced7df;border-radius:.8rem;padding:1.25rem;margin:1rem 0;box-shadow:0 .2rem .9rem #0a264015}.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.8rem}.metric{padding:1rem;background:#f7f8fa;border:1px solid #dbe1e7;border-radius:.6rem}.metric strong{display:block;font-size:1.8rem}.notice{background:#fff5dc;color:#5b3a00;border-left:.25rem solid #be974f;padding:.8rem 1rem;border-radius:.4rem}.filters{display:flex;flex-wrap:wrap;gap:.45rem;margin:1rem 0}.filters a{border:1px solid #8596a5;border-radius:999px;color:#102a43;padding:.4rem .65rem;text-decoration:none}.filters a[aria-current=page]{background:#062844;border-color:#062844;color:#fff}.filters a:hover,.filters a:focus-visible{outline:3px solid #be974f;outline-offset:2px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:.7rem;border-bottom:1px solid #dde4ea;vertical-align:top}button{font:inherit;background:#062844;color:#fff;border:0;border-radius:.5rem;padding:.6rem .85rem;cursor:pointer}button:hover,button:focus-visible{outline:3px solid #be974f;outline-offset:2px}input,textarea,select{font:inherit;width:100%;border:1px solid #8596a5;border-radius:.4rem;padding:.55rem}label{display:grid;gap:.35rem;margin:.65rem 0}.actions{display:flex;gap:.5rem;flex-wrap:wrap}form.inline{display:inline}.danger{background:#812f2a}.review-body{max-width:34rem;white-space:pre-wrap;overflow-wrap:anywhere}.scroll{overflow:auto}.compact{min-width:68rem;font-size:.78rem}.code{font:600 .72rem ui-monospace,monospace;overflow-wrap:anywhere}.ok{color:#176c4c}.warn{color:#8a5a12}.flags{display:grid;grid-template-columns:repeat(auto-fit,minmax(19rem,1fr));gap:.5rem}.flags span{display:flex;justify-content:space-between;gap:.6rem;padding:.55rem;border:1px solid #dbe1e7;border-radius:.45rem}.flags code{font-size:.7rem;overflow-wrap:anywhere}.small{color:#52677a;font-size:.72rem}.corpus-actions{display:grid;grid-template-columns:repeat(auto-fit,minmax(18rem,1fr));gap:.7rem}.corpus-actions form{padding:.75rem;border:1px solid #dbe1e7;border-radius:.55rem}.corpus-actions textarea{min-height:5rem}@media(max-width:48rem){.shell{display:block}aside{gap:.75rem}main{padding:1rem}.nav{grid-template-columns:repeat(2,minmax(0,1fr))}}</style></head><body><div class="shell"><aside><div><div class="brand">JURO ADMIN</div><p>Изолированная консоль ${environmentLabel}</p>${role}</div><nav class="nav"><a href="/">Обзор</a><a href="/legal-corpus">Legal Corpus</a><a href="/lawyers">Профили юристов</a><a href="/reviews">Отзывы</a><a href="${escaped("/logout")}">Сеанс</a></nav><p>Отдельная cookie. Каждое действие журналируется.</p></aside><main><h1>${escaped(title)}</h1>${notice}${body}</main></div></body></html>`, { headers: securityHeaders() });
 }
 
 function securityHeaders(): Headers {
@@ -256,6 +281,87 @@ async function transitionLifecycle(request: Request, env: Env, session: string, 
   return lawyerList(request, env, session, "Lifecycle-действие сейчас недоступно.");
 }
 
+function count(value: unknown): string {
+  const parsed = Number(value ?? 0);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed.toLocaleString("ru-RU") : "0";
+}
+
+async function legalCorpus(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
+  const result = await platform<LegalCorpusDashboard>(env, "/api/internal/admin/legal-corpus", { session });
+  if (!result.response.ok || !result.body) {
+    if (result.response.status === 403) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
+    return page(env.APP_ENV, "Legal Corpus", "<p>Метрики корпуса временно недоступны. Миграции и service binding должны быть проверены до повторной попытки.</p>", { notice });
+  }
+  const data = result.body;
+  const csrfToken = cookie(request, ADMIN_CSRF_COOKIE) ?? "";
+  const metricLabels: Record<string, string> = {
+    canonicalDocuments: "Канонические документы", languageVariants: "Языковые версии",
+    uniqueProvisions: "Уникальные нормы", currentProvisions: "Текущие нормы",
+    currentChunks: "Текущие chunks", indexedChunks: "Chunks в индексе",
+    activeDocuments: "Действующие документы", repealedDocuments: "Утратившие силу",
+    historicalVersions: "Исторические версии", documentsFetchedToday: "Получено сегодня",
+    liveOrManualQueued: "Live/manual в очереди", failedDocuments: "Ошибки документов",
+  };
+  const metrics = Object.entries(metricLabels).map(([key, label]) =>
+    `<div class="metric"><span>${escaped(label)}</span><strong>${count(data.totals[key])}</strong></div>`,
+  ).join("");
+  const flags = Object.entries(data.featureFlags).map(([key, enabled]) =>
+    `<span><code>${escaped(key)}</code><strong class="${enabled ? "ok" : "warn"}">${enabled ? "ON" : "OFF"}</strong></span>`,
+  ).join("");
+  const coverage = data.coverage.map((row) => `<tr><th>${escaped(row.categoryKey)}<br><span class="small">${escaped(row.language)} · ${escaped(row.status)} · стр. ${escaped(row.pageNumber)}</span><br><strong class="${row.complete ? "ok" : "warn"}">${row.complete ? "Покрытие подтверждено" : "Покрытие не доказано"}</strong></th><td>${escaped(row.discoveredDocuments)}</td><td>${escaped(row.fetchedDocuments)}</td><td>${escaped(row.extractedDocuments)}</td><td>${escaped(row.indexedDocuments)}</td><td>${escaped(row.technicallyUnavailable)}</td><td>${escaped(row.expectedDocuments ?? "—")}</td><td>${escaped(row.updatedAt)}${row.lastErrorCode ? `<br><code class="code warn">${escaped(row.lastErrorCode)}</code>` : ""}</td></tr>`).join("");
+  const actionsEnabled = data.featureFlags.LEGAL_CORPUS_ENABLED
+    && data.featureFlags.LEGAL_CORPUS_AUTO_INGEST_ENABLED
+    && data.integrity.valid;
+  const hidden = `<input type="hidden" name="_csrf" value="${escaped(csrfToken)}">`;
+  const reason = `<label>Техническая причина<textarea name="reason" required minlength="10" maxlength="500"></textarea></label>`;
+  const seed = actionsEnabled ? `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="seed_discovery">${reason}<button>Создать checkpoints</button></form>` : "";
+  const checkpointForms = actionsEnabled ? data.checkpoints.filter((item) => item.canRetry).map((item) => `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="retry_discovery"><input type="hidden" name="checkpointId" value="${escaped(item.id)}"><strong>${escaped(item.categoryKey)} · ${escaped(item.language)}</strong><p class="small">${escaped(item.status)} · ${escaped(item.lastErrorCode ?? "—")}</p>${reason}<button>Повторить checkpoint</button></form>`).join("") : "";
+  const failureForms = actionsEnabled ? data.failures.filter((item) => item.canRetry && item.jobId).map((item) => `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="retry_ingestion"><input type="hidden" name="jobId" value="${escaped(item.jobId)}"><strong>${escaped(item.errorCode)}</strong><p class="small">${escaped(item.language ?? "—")} · ${escaped(item.safeMessage)}</p>${reason}<button>Повторить ingestion</button></form>`).join("") : "";
+  const failures = data.failures.map((item) => `<tr><td><code class="code">${escaped(item.errorCode)}</code></td><td>${escaped(item.language ?? "—")}</td><td>${escaped(item.safeMessage)}</td><td>${escaped(item.retryState)}</td><td>${escaped(item.attemptedAt)}</td></tr>`).join("");
+  const events = [...data.events].reverse().map((item) => `<tr><td>${escaped(item.action)}</td><td><code class="code">${escaped(item.targetId ?? item.targetType)}</code></td><td>${escaped(item.reason)}</td><td><code class="code">${escaped(item.actorUserId)}</code></td><td>${escaped(item.createdAt)}</td></tr>`).join("");
+  const gateNotice = actionsEnabled
+    ? `<p class="ok">Управление разрешено: обе corpus feature flags включены, audit-chain валидна.</p>`
+    : `<p class="notice">Управление заблокировано. Corpus ingestion остаётся выключенным либо audit-chain не прошла проверку. Просмотр метрик доступен.</p>`;
+  return page(env.APP_ENV, "Legal Corpus", `
+    ${gateNotice}
+    <section class="panel"><h2>Техническое состояние</h2><p>Lex.uz: <strong>${escaped(data.lexHealth.state)}</strong> · проверено ${escaped(data.lexHealth.checkedAt ?? "—")} · audit ${data.integrity.valid ? "valid" : "invalid"} (${escaped(data.integrity.checked)})</p><section class="metrics">${metrics}</section></section>
+    <section class="panel"><h2>Feature flags</h2><div class="flags">${flags}</div></section>
+    <section class="panel"><h2>Покрытие по категориям и языкам</h2><p class="small">Complete означает: checkpoint завершён и каждый ожидаемый документ либо индексирован, либо имеет подтверждённый статус technically_unavailable.</p><div class="scroll"><table class="compact"><thead><tr><th>Категория / язык</th><th>Найдено</th><th>Получено</th><th>Разобрано</th><th>Индексировано</th><th>Недоступно</th><th>Ожидается</th><th>Обновлено</th></tr></thead><tbody>${coverage || "<tr><td colspan=\"8\">Checkpoints ещё не созданы.</td></tr>"}</tbody></table></div></section>
+    <section class="panel"><h2>Управление</h2><p class="small">Здесь нет юридического approval workflow: только технически ограниченные seed/retry действия с причиной, CSRF, отдельной admin-session и свежей MFA.</p><div class="corpus-actions">${seed}${checkpointForms}${failureForms}</div>${actionsEnabled && !checkpointForms && !failureForms ? "<p>Нет объектов для повторной попытки.</p>" : ""}</section>
+    <section class="panel"><h2>Последние технические ошибки</h2><div class="scroll"><table><thead><tr><th>Код</th><th>Язык</th><th>Безопасное сообщение</th><th>Retry state</th><th>Время</th></tr></thead><tbody>${failures || "<tr><td colspan=\"5\">Ошибок нет.</td></tr>"}</tbody></table></div></section>
+    <section class="panel"><h2>Неизменяемый журнал корпуса</h2><div class="scroll"><table><thead><tr><th>Действие</th><th>Объект</th><th>Причина</th><th>Actor</th><th>Время</th></tr></thead><tbody>${events || "<tr><td colspan=\"5\">Ручных действий нет.</td></tr>"}</tbody></table></div></section>
+  `, { notice, role: "super admin · legal corpus" });
+}
+
+async function legalCorpusAction(request: Request, env: Env, session: string): Promise<Response> {
+  if (!await csrf(request)) return page(env.APP_ENV, "Запрос отклонён", "<p>Проверка происхождения или CSRF не пройдена.</p>");
+  const form = await request.formData();
+  const action = form.get("action");
+  const reason = form.get("reason");
+  const checkpointId = form.get("checkpointId");
+  const jobId = form.get("jobId");
+  if (
+    (action !== "seed_discovery" && action !== "retry_discovery" && action !== "retry_ingestion")
+    || typeof reason !== "string" || reason.trim().length < 10 || reason.trim().length > 500
+    || (action === "retry_discovery" && (typeof checkpointId !== "string" || !/^[A-Za-z0-9:_-]{1,180}$/.test(checkpointId)))
+    || (action === "retry_ingestion" && (typeof jobId !== "string" || !/^[A-Za-z0-9:_-]{1,180}$/.test(jobId)))
+  ) return legalCorpus(request, env, session, "Проверьте действие и техническую причину.");
+  const payload = action === "retry_discovery"
+    ? { action, checkpointId, reason: reason.trim() }
+    : action === "retry_ingestion"
+      ? { action, jobId, reason: reason.trim() }
+      : { action, reason: reason.trim() };
+  const result = await platform<{ action?: string; affected?: number; code?: string }>(env, "/api/internal/admin/legal-corpus", {
+    method: "POST", session, headers: { "content-type": "application/json" }, body: JSON.stringify(payload),
+  });
+  const message = result.response.ok
+    ? `Действие ${result.body?.action ?? action} записано; затронуто: ${result.body?.affected ?? 0}.`
+    : result.body?.code === "LEGAL_CORPUS_ADMIN_DISABLED"
+      ? "Corpus ingestion выключен feature flags; действие не выполнялось."
+      : `Действие не выполнено: ${result.body?.code ?? `HTTP_${result.response.status}`}.`;
+  return legalCorpus(request, env, session, message);
+}
+
 async function reviewList(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
   const result = await platform<{ reviews: Review[] }>(env, "/api/internal/admin/reviews?status=pending&limit=50", { session });
   if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
@@ -296,6 +402,8 @@ export default {
       const session = cookie(request, ADMIN_SESSION_COOKIE);
       if (!session) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
       if (request.method === "GET" && url.pathname === "/") return dashboard(request, env, session);
+      if (request.method === "GET" && url.pathname === "/legal-corpus") return legalCorpus(request, env, session);
+      if (request.method === "POST" && url.pathname === "/legal-corpus/actions") return legalCorpusAction(request, env, session);
       if (request.method === "GET" && url.pathname === "/lawyers") return lawyerList(request, env, session);
       if (request.method === "GET" && url.pathname === "/reviews") return reviewList(request, env, session);
       const match = /^\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);

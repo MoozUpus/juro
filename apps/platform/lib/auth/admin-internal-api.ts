@@ -12,6 +12,13 @@ import { moderateLawyerProfile } from "../platform/lawyer-profile-moderation-ser
 import { LawyerProfileLifecycleError, transitionLawyerProfileLifecycle } from "../platform/lawyer-profile-lifecycle-service";
 import { lawyerReviewModerationInputSchema, lawyerReviewModerationListSchema } from "../platform/lawyer-review-moderation";
 import { LawyerReviewModerationServiceError, listLawyerReviews, moderateLawyerReview } from "../platform/lawyer-review-moderation-service";
+import {
+  LegalCorpusAdminError,
+  legalCorpusAdminActionSchema,
+  performLegalCorpusAdminAction,
+  readLegalCorpusAdminDashboard,
+} from "../legal-corpus/admin-operations";
+import type { LegalCorpusFeatureFlag } from "../legal-corpus/trust";
 
 const SESSION_HEADER = "x-juro-admin-session";
 const INTERNAL_TOKEN_HEADER = "x-juro-admin-internal-token";
@@ -36,7 +43,7 @@ type AdminInternalEnv = {
   // Keep the existing token accepted during the rollout so the pre-isolation
   // admin path remains a valid rollback target.
   ADMIN_CONSOLE_TOKEN?: string;
-};
+} & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 function environment(value: unknown): AdminDomainEnvironment | null {
   return value === "development" || value === "staging" || value === "production"
@@ -240,6 +247,74 @@ async function reviews(request: Request, env: AdminInternalEnv): Promise<Respons
   return noStore({ reviews: reviews.results });
 }
 
+async function legalCorpusDashboard(request: Request, env: AdminInternalEnv): Promise<Response> {
+  const authenticated = await requirePrincipal(request, env);
+  if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "legal.corpus.manage")) {
+    return noStore({ code: "ACCESS_DENIED" }, 403);
+  }
+  const dashboard = await readLegalCorpusAdminDashboard({
+    env: { ...env, DB: authenticated.db, APP_ENV: authenticated.environment },
+  });
+  await appendAdminDomainAudit(authenticated.db, {
+    environment: authenticated.environment,
+    principal: authenticated.principal,
+    action: "legal_corpus_viewed",
+    entityType: "legal_corpus",
+    metadata: {
+      canonicalDocuments: dashboard.totals.canonicalDocuments,
+      indexedChunks: dashboard.totals.indexedChunks,
+      failedDocuments: dashboard.totals.failedDocuments,
+    },
+  });
+  return noStore(dashboard);
+}
+
+async function legalCorpusAction(request: Request, env: AdminInternalEnv): Promise<Response> {
+  const authenticated = await requirePrincipal(request, env);
+  if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "legal.corpus.manage")) {
+    return noStore({ code: "ACCESS_DENIED" }, 403);
+  }
+  const payload = legalCorpusAdminActionSchema.safeParse(await parseJson(request));
+  if (!payload.success) return noStore({ code: "LEGAL_CORPUS_ADMIN_INVALID" }, 400);
+  const now = new Date();
+  const assignment = await authenticated.db.prepare(`SELECT id FROM platform_staff_assignments
+    WHERE user_id=? AND role='administrator' AND revoked_at IS NULL AND granted_at<=? AND expires_at>?
+    ORDER BY granted_at DESC,id LIMIT 1`).bind(
+      authenticated.principal.userId,
+      now.toISOString(),
+      now.toISOString(),
+    ).first<{ id: string }>();
+  if (!assignment) return noStore({ code: "ACCESS_DENIED" }, 403);
+  try {
+    const result = await performLegalCorpusAdminAction({
+      env: { ...env, DB: authenticated.db, APP_ENV: authenticated.environment },
+      staff: {
+        userId: authenticated.principal.userId,
+        sessionId: authenticated.principal.sessionId,
+        assignmentIds: [assignment.id],
+        mfaVerifiedAt: authenticated.principal.sourceMfaVerifiedAt,
+      },
+      value: payload.data,
+      now,
+    });
+    await appendAdminDomainAudit(authenticated.db, {
+      environment: authenticated.environment,
+      principal: authenticated.principal,
+      action: `legal_corpus_${result.action}`,
+      entityType: "legal_corpus",
+      metadata: { affected: result.affected },
+      now,
+    });
+    return noStore(result, 201);
+  } catch (error) {
+    if (!(error instanceof LegalCorpusAdminError)) throw error;
+    if (error.code === "LEGAL_CORPUS_ADMIN_NOT_FOUND") return noStore({ code: error.code }, 404);
+    if (error.code === "LEGAL_CORPUS_ADMIN_DISABLED") return noStore({ code: error.code }, 423);
+    if (error.code === "LEGAL_CORPUS_ADMIN_INVALID") return noStore({ code: error.code }, 400);
+    return noStore({ code: error.code }, 409);
+  }
+}
+
 async function moderateReview(request: Request, env: AdminInternalEnv, reviewId: string): Promise<Response> {
   const authenticated = await requirePrincipal(request, env);
   if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "lawyer.reviews.moderate")) return noStore({ code: "ACCESS_DENIED" }, 403);
@@ -311,6 +386,8 @@ export async function handleInternalAdminRequest(request: Request, env: AdminInt
   if (url.pathname === "/api/internal/admin/session/consume" && request.method === "POST") return consume(request, env);
   if (url.pathname === "/api/internal/admin/session/logout" && request.method === "POST") return logout(request, env);
   if (url.pathname === "/api/internal/admin/dashboard" && request.method === "GET") return dashboard(request, env);
+  if (url.pathname === "/api/internal/admin/legal-corpus" && request.method === "GET") return legalCorpusDashboard(request, env);
+  if (url.pathname === "/api/internal/admin/legal-corpus" && request.method === "POST") return legalCorpusAction(request, env);
   if (url.pathname === "/api/internal/admin/lawyers" && request.method === "GET") return lawyerProfiles(request, env);
   if (url.pathname === "/api/internal/admin/reviews" && request.method === "GET") return reviews(request, env);
   const moderation = /^\/api\/internal\/admin\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);
