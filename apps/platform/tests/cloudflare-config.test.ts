@@ -150,6 +150,18 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
       "true",
     );
+    for (const flag of [
+      "LEGAL_CORPUS_ENABLED",
+      "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
+      "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
+      "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
+      "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
+      "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
+      "LEGAL_CORPUS_HISTORICAL_ENABLED",
+      "LEGAL_CORPUS_SHADOW_MODE",
+    ]) {
+      assert.equal(config.vars[flag], "false", `${environment} must keep ${flag} fail-closed`);
+    }
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
       "true",
@@ -189,7 +201,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.d1_databases[0]?.migrations_pattern,
       environment === "production"
-        ? "./drizzle/0121_fix_ai_quality_hash_constraints.sql"
+        ? "./drizzle/012[145-9]_*.sql"
         : undefined,
     );
     assert.deepEqual(

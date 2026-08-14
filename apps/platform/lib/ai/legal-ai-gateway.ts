@@ -204,7 +204,10 @@ function validateSpanForClaim(
   source: LegalSourceContext,
   span: LegalSourceSpan,
 ): boolean {
-  if (source.sourceType !== "lex" || source.verificationState !== "direct_validated") return false;
+  if (
+    source.sourceType !== "lex"
+    || !["direct_validated", "verified"].includes(source.verificationState)
+  ) return false;
   if (!source.sourceQuality?.passed || !officialLexUrl(source.officialUrl)) return false;
   if (span.quality !== "high" || containsLegalSourceUiNoise(span.text)) return false;
   if (!/^[a-f0-9]{64}$/u.test(span.textSha256)) return false;

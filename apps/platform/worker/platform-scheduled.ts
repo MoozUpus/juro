@@ -6,6 +6,15 @@ import {
   runLexMetadataMonitor,
 } from "../lib/legal/metadata-monitor";
 import { runDirectLegalSourceHealthCheck } from "../lib/legal/direct-source-health";
+import {
+  runNextLegalCorpusIngestionJob,
+  seedLexCorpusJobsFromMetadata,
+  type LegalCorpusIngestionEnv,
+} from "../lib/legal-corpus/ingestion";
+import {
+  runNextLexCatalogDiscoveryPage,
+  seedLexCatalogDiscoveryCheckpoints,
+} from "../lib/legal-corpus/lex-catalog-discovery";
 import { purgeDueDeletedUserMemories } from "../lib/ai/user-memory";
 import { purgeExpiredGuestAiSessions } from "../lib/ai/guest-session";
 import { purgeExpiredVoiceRecordings } from "../lib/ai/voice-recording";
@@ -481,12 +490,16 @@ export async function handleScheduled(
   }
 
   if (controller.cron === LEX_METADATA_DISCOVERY_CRON) {
-    if ((env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED !== "true") {
+    const metadataEnabled = (env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED === "true";
+    if (!metadataEnabled) {
       logScheduled("info", {
         event: "scheduled.lex_metadata_monitor_disabled",
         environment: env.APP_ENV,
         cron: controller.cron,
       });
+      // Keep the whole daily legal-source path inert when its existing
+      // monitor gate is disabled. This avoids a corpus job whose consumer
+      // would be fail-closed and preserves the established scheduler contract.
       controller.noRetry();
       return;
     }
@@ -502,6 +515,21 @@ export async function handleScheduled(
       processed: summary.processed,
       changed: summary.changed,
       errors: summary.errors,
+    });
+    const seeded = await seedLexCorpusJobsFromMetadata(
+      env as LegalCorpusIngestionEnv,
+    );
+    const catalogSeeded = await seedLexCatalogDiscoveryCheckpoints(env);
+    // The five-minute outbox cron owns processing. Keeping this daily slot to
+    // discovery/seeding only avoids two concurrent Lex fetches at 19:00.
+    logScheduled("info", {
+      event: "scheduled.legal_corpus_seed_finished",
+      environment: env.APP_ENV,
+      cron: controller.cron,
+      seeded: seeded.queued,
+      considered: seeded.considered,
+      catalogCheckpointsCreated: catalogSeeded.created,
+      catalogCheckpointsConsidered: catalogSeeded.considered,
     });
     return;
   }
@@ -543,6 +571,18 @@ export async function handleScheduled(
         ageMinutes: null,
         sources: [],
       };
+    const legalCorpusAutoIngestEnabled = (env as Record<string, unknown>).LEGAL_CORPUS_ENABLED === "true"
+      && (env as Record<string, unknown>).LEGAL_CORPUS_AUTO_INGEST_ENABLED === "true";
+    const legalCatalogPage = legalCorpusAutoIngestEnabled
+      ? await runNextLexCatalogDiscoveryPage(env, {
+        wait: (delayMs) => scheduler.wait(delayMs),
+      })
+      : null;
+    const legalCorpusJob = legalCorpusAutoIngestEnabled
+      ? await runNextLegalCorpusIngestionJob(env as LegalCorpusIngestionEnv, {
+        wait: (delayMs) => scheduler.wait(delayMs),
+      })
+      : null;
     if (lexMetadataMonitorEnabled) {
       failureCode = "LEX_METADATA_MONITOR_RETRY_FAILED";
       lexMetadataRetry = await lexMetadataRetryDue(env, new Date(now))
@@ -639,6 +679,12 @@ export async function handleScheduled(
       lexMetadataStaleRuns,
       lexSourceHealthState: lexSourceHealth.state,
       lexSourceHealthError: lexSourceHealth.alertCode,
+      legalCorpusJobStatus: legalCorpusJob?.status ?? "disabled",
+      legalCorpusJobClaimed: legalCorpusJob?.claimed ?? false,
+      legalCorpusJobError: legalCorpusJob?.safeErrorCode ?? null,
+      legalCatalogStatus: legalCatalogPage?.status ?? "disabled",
+      legalCatalogClaimed: legalCatalogPage?.claimed ?? false,
+      legalCatalogError: legalCatalogPage?.safeErrorCode ?? null,
       lexMetadataRetryStatus: lexMetadataRetry?.status ?? "not_due",
       memoryRetentionEligible: memoryRetention.eligible,
       memoryRetentionPurged: memoryRetention.purged,

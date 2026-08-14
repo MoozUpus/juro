@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-const localeSchema = z.enum(["ru", "uz"]);
+// Lex.uz exposes separate Uzbek Cyrillic URLs under `/uzc`.  Keep the
+// concrete source locale instead of silently folding that official text into
+// Uzbek Latin; callers map it to the BCP-47 `uz-Cyrl` corpus language.
+const localeSchema = z.enum(["ru", "uz", "uzc", "en"]);
 
 export type LegalSourceKind = "lex" | "advice";
 export type LegalSourceLocale = z.infer<typeof localeSchema>;
@@ -42,6 +45,7 @@ export type LegalSourceReference = {
   canonicalId: string;
   canonicalUrl: string;
   host: string;
+  revisionDate?: string;
 };
 
 export type FetchedLegalSource = LegalSourceReference & {
@@ -120,11 +124,12 @@ function parseSourcePath(url: URL, sourceKind: LegalSourceKind): {
   adviceRoute?: "document" | "documents";
 } | null {
   if (sourceKind === "lex") {
-    const match = /^\/(ru|uz)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
-    if (!match) return null;
-    const locale = localeSchema.safeParse(match[1]);
-    if (!locale.success || !match[2]) return null;
-    return { locale: locale.data, canonicalId: match[2] };
+    const localized = /^\/(ru|uz|uzc|en)\/docs\/(-?\d+)\/?$/.exec(url.pathname);
+    const cyrillic = /^\/docs\/(-?\d+)\/?$/.exec(url.pathname);
+    const locale = localeSchema.safeParse(localized?.[1] ?? (cyrillic ? "uzc" : null));
+    const canonicalId = localized?.[2] ?? cyrillic?.[1];
+    if (!locale.success || !canonicalId) return null;
+    return { locale: locale.data, canonicalId };
   }
 
   const match = /^\/(ru|oz)\/(document|documents)\/(\d+)\/?$/.exec(
@@ -151,6 +156,20 @@ function hasAllowedAdviceCardQuery(url: URL): boolean {
     && entries[0][1].length <= 240;
 }
 
+function allowedLexRevisionQuery(url: URL): { raw: string; iso: string } | null {
+  if (!url.search) return null;
+  const entries = [...url.searchParams.entries()];
+  if (entries.length !== 1 || entries[0]?.[0] !== "ONDATE") return null;
+  const raw = entries[0][1];
+  const match = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s\d{2})?$/u.exec(raw);
+  if (!match) return null;
+  const [, day, month, year] = match;
+  const iso = `${year}-${month}-${day}`;
+  const candidate = new Date(`${iso}T00:00:00Z`);
+  if (!Number.isFinite(candidate.getTime()) || candidate.toISOString().slice(0, 10) !== iso) return null;
+  return { raw, iso };
+}
+
 export function classifyLegalSourceUrl(value: string): LegalSourceReference {
   let url: URL;
   try {
@@ -169,7 +188,10 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
     // Advice search result cards currently retain a harmless `keyword` query.
     // It is stripped before any source fetch. Lex document URLs do not permit
     // a query string at all.
-    (url.search !== "" && (sourceKind !== "advice" || !hasAllowedAdviceCardQuery(url)))
+    (url.search !== ""
+      && (sourceKind === "lex"
+        ? !allowedLexRevisionQuery(url)
+        : sourceKind !== "advice" || !hasAllowedAdviceCardQuery(url)))
   ) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
   }
@@ -184,14 +206,18 @@ export function classifyLegalSourceUrl(value: string): LegalSourceReference {
 
   const canonicalHost = sourceKind === "lex" ? "lex.uz" : "advice.uz";
   const canonicalPath = sourceKind === "lex"
-    ? `/${path.locale}/docs/${path.canonicalId}`
+    ? path.locale === "uzc"
+      ? `/docs/${path.canonicalId.replace(/^-/, "")}`
+      : `/${path.locale}/docs/${path.canonicalId}`
     : `/${path.locale === "ru" ? "ru" : "oz"}/${path.adviceRoute ?? "documents"}/${path.canonicalId}`;
+  const revision = sourceKind === "lex" ? allowedLexRevisionQuery(url) : null;
   return {
     sourceKind,
     locale: path.locale,
     canonicalId: path.canonicalId,
-    canonicalUrl: `https://${canonicalHost}${canonicalPath}`,
+    canonicalUrl: `https://${canonicalHost}${canonicalPath}${revision ? `?ONDATE=${encodeURIComponent(revision.raw)}` : ""}`,
     host: canonicalHost,
+    ...(revision ? { revisionDate: revision.iso } : {}),
   };
 }
 
@@ -593,7 +619,6 @@ export async function fetchLegalSource(
           || candidate.port !== ""
           || candidate.username !== ""
           || candidate.password !== ""
-          || candidate.search !== ""
           || candidate.hash !== ""
         ) return false;
         try {

@@ -869,6 +869,27 @@
       "when": 1786807200000,
       "tag": "0123_legal_evaluation_human_review_records",
       "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1786810800000,
+      "tag": "0124_full_legal_corpus",
+      "breakpoints": true
+    },
+    {
+      "idx": 125,
+      "version": "7",
+      "when": 1786814400000,
+      "tag": "0125_lex_catalog_discovery",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1786818000000,
+      "tag": "0126_exportable_legal_corpus_sparse_index",
+      "breakpoints": true
     }
   ]
 }
