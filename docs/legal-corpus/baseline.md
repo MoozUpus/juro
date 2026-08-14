@@ -39,9 +39,15 @@ migrations `0124_full_legal_corpus.sql`,
 `0126_exportable_legal_corpus_sparse_index.sql` were applied to **staging
 only** after pre-migration backup/restore verification. Migration
 `0127_legal_corpus_admin_control.sql` was then applied to staging with its own
-pre/post full-export restore and private-R2 readback gate. All new staging corpus
-registries remain empty and all corpus feature flags remain disabled.
-Production has not received these migrations.
+pre/post full-export restore and private-R2 readback gate. Migration
+`0128_owner_corpus_publications.sql` was then applied under the same gate.
+
+After the branch CI and staging browser smoke passed, production-safe migrations
+`0124–0128` were applied to production. Staging-only evidence migrations
+`0122–0123` remained excluded. Both environments have verified pre/post
+isolated restores and private-R2 readback evidence. All new corpus registries
+remain empty and all corpus feature flags remain disabled; no crawl or corpus
+traffic cutover was started.
 
 ## Verified public catalog shape
 

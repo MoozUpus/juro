@@ -13,3 +13,7 @@ validation → OpenAI primary/retry or Anthropic fallback → citation-filtered 
 Read [the matrix](ADOPTION_MATRIX.md) before changing the retrieval path. Rollout stays
 feature-gated; the Qdrant adapter and corpus ingestion remain disabled and production
 activation remains outside this integration.
+
+The 2026-08-15 infrastructure deployment, D1 restore evidence, Worker versions
+and authenticated browser smoke are recorded in
+[FULL_LEGAL_CORPUS_RELEASE_EVIDENCE_2026-08-15.md](FULL_LEGAL_CORPUS_RELEASE_EVIDENCE_2026-08-15.md).

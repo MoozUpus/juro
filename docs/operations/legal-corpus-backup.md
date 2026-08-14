@@ -71,3 +71,26 @@ temporary directory were deleted after verification. The private R2 objects
 remain the recoverable staging backups. Corpus feature flags remained `false`;
 this migration and backup evidence did not start ingestion or modify
 production.
+
+## Staging and production release evidence — 0128 / 0124–0128
+
+Migration `0128_owner_corpus_publications.sql` was applied to staging only after
+a full export restored with `quick_check=ok`, zero foreign-key violations and a
+matching private-R2 readback. The pre/post SHA-256 values were respectively
+`be14908649ec07f727cabdbe1c2622ec096b9b479b14e529c0b91e60c664de94` and
+`b18b7412b201ebc31b375da328b3b2c30a78f27b5c8192e5f5a9ce06243164de`.
+
+The production release then captured Time-Travel bookmark
+`00000915-0000000a-000050c7-d63e76604752eede4907e81cb350859b` and rehearsed a
+full restore before applying production-safe migrations `0124–0128`.
+Staging-only migrations `0122–0123` remained excluded. The production pre/post
+export SHA-256 values were
+`78fe976cf8b226957d3819fc90cca474f26973f1b1f0ccf0ba28962db0200fec` and
+`4a9e5d8d3c187ec66da6af7f9218ef651a2a117cb824357456838223b966190a`;
+both isolated restores passed `quick_check` with zero foreign-key violations,
+and both private-R2 readbacks matched byte-for-byte.
+
+The complete version IDs, object keys, topology counts and browser-smoke record
+are in
+`docs/integrations/huquq-ai/FULL_LEGAL_CORPUS_RELEASE_EVIDENCE_2026-08-15.md`.
+No corpus feature flag was enabled and no corpus row or pending job was created.
