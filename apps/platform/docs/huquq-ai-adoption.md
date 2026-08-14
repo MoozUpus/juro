@@ -1,9 +1,9 @@
 # huquq-ai adoption audit
 
-Audit date: 2026-08-13  
-Upstream: `toxirerkinov70-commits/huquq-ai`  
-Pinned commit: `1bce500c69b8213373d8ce0b40d56be7d83f6aec`  
-Commit author/date: Toxir Erkinov, 2026-08-02T19:31:32+05:00  
+Audit date: 2026-08-13
+Upstream: `toxirerkinov70-commits/huquq-ai`
+Pinned commit: `1bce500c69b8213373d8ce0b40d56be7d83f6aec`
+Commit author/date: Toxir Erkinov, 2026-08-02T19:31:32+05:00
 License: MIT, Copyright (c) 2026 Toxir Erkinov
 
 This is a clean TypeScript/Cloudflare adaptation. JURO does not vendor the upstream repository, runtime, data, generated corpus, frontend or infrastructure. The upstream MIT notice is preserved here and next to every adapted implementation group.

@@ -50,4 +50,3 @@ test("release gate blocks unsupported claims, latency, timeout and input drift",
   assert.match(result.failures.join(" "), /P95_COMPLETION_SLO_FAILED/);
   assert.match(result.failures.join(" "), /UI_NOISE_DETECTED/);
 });
-

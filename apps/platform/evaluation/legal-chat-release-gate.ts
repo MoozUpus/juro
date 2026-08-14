@@ -34,4 +34,3 @@ export function evaluateLegalChatModelRelease(input: {
   if (input.candidate.uiNoiseRate > 0) failures.push("UI_NOISE_DETECTED");
   return { passed: failures.length === 0, failures };
 }
-
