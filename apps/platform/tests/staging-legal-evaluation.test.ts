@@ -15,6 +15,10 @@ test("canonical legal evaluation runner is staging-only, token-gated, and prompt
   assert.match(route, /authorization/u);
   assert.match(route, /STAGING_LEGAL_EVALUATION_TOKEN/u);
   assert.match(route, /stagingLegalEvaluationEnabled/u);
+  assert.match(route, /requirePlatformStaffRequest\(request, "staff\.operations\.manage"/u);
+  assert.match(route, /freshMfaWithinMs: 15 \* 60 \* 1_000/u);
+  assert.match(route, /assertSafeWrite\(request\)/u);
+  assert.match(route, /withPlatformStaffErrors\(postStagingLegalEvaluation\)/u);
   assert.doesNotMatch(route, /body\.prompt|question:/u);
   assert.match(runner, /legalEvaluationCorpus\.find/u);
   assert.match(runner, /executeAiPostForInternalEvaluation/u);

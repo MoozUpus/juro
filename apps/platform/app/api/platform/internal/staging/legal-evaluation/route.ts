@@ -6,6 +6,11 @@ import {
   stagingLegalEvaluationRequestSchema,
   StagingLegalEvaluationError,
 } from "../../../../../../lib/ai/staging-legal-evaluation";
+import { assertSafeWrite } from "../../../../../../lib/auth/safe-write";
+import {
+  requirePlatformStaffRequest,
+  withPlatformStaffErrors,
+} from "../../../../../../lib/auth/staff-http";
 import { runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 
 function noStore(body: unknown, status = 200): Response {
@@ -48,14 +53,22 @@ async function boundedJson(request: Request): Promise<unknown | null> {
   }
 }
 
-export async function POST(request: Request) {
+async function postStagingLegalEvaluation(request: Request) {
   const env = runtimeEnv();
   if (!stagingLegalEvaluationEnabled(env)) return noStore({ code: "NOT_FOUND" }, 404);
-  if (!env.STAGING_LEGAL_EVALUATION_TOKEN) {
-    return noStore({ code: "LEGAL_EVALUATION_AUTH_UNAVAILABLE" }, 503);
-  }
-  if (!await fixedTimeMatch(request.headers.get("authorization"), env.STAGING_LEGAL_EVALUATION_TOKEN)) {
-    return noStore({ code: "ACCESS_DENIED" }, 403);
+
+  const bearerAuthorized = await fixedTimeMatch(
+    request.headers.get("authorization"),
+    env.STAGING_LEGAL_EVALUATION_TOKEN,
+  );
+  if (!bearerAuthorized) {
+    // A fresh-MFA operator can run the canonical staging corpus through the
+    // existing browser session. This avoids requiring a Cloudflare Access
+    // service token while keeping the bearer path for isolated automation.
+    assertSafeWrite(request);
+    await requirePlatformStaffRequest(request, "staff.operations.manage", {
+      freshMfaWithinMs: 15 * 60 * 1_000,
+    });
   }
   const parsed = stagingLegalEvaluationRequestSchema.safeParse(await boundedJson(request));
   if (!parsed.success) return noStore({ code: "INVALID_INPUT" }, 400);
@@ -79,3 +92,5 @@ export async function POST(request: Request) {
     return noStore({ code: "LEGAL_EVALUATION_INTERNAL_FAILED" }, 500);
   }
 }
+
+export const POST = withPlatformStaffErrors(postStagingLegalEvaluation);
