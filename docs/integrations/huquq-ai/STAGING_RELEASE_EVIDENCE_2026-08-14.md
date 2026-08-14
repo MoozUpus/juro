@@ -2,16 +2,17 @@
 
 Status: **PARTIAL — technical staging evaluation completed; release gate is not approved**.
 
-This record distinguishes observed staging evidence from pending human and legal
-controls. It does not claim production readiness or legal correctness.
+This record distinguishes observed staging evidence from remaining release
+controls. It does not claim production readiness or replace the reviewer's own
+legal judgment.
 
 ## Deployed revision
 
 - Branch: `feature/huquq-ai-staging-evidence`
-- Application commit: `86e1e93fb82dbc586154f6b380d73ef7027c4133`
+- Application commit: `33b5dc7e08f88ae6fcc7286f9e3a5fdde039268e`
 - Worker: `juro-platform-staging`
-- Worker version: `f3e99cc6-613e-491e-bae6-bb116e2c5337` at 100% traffic
-- Deployment time: `2026-08-14T12:50Z`
+- Worker version: `350c9cf1-cb3f-45a3-a290-37e9677abd84` at 100% traffic
+- Deployment time: `2026-08-14T16:11:55.407815Z`
 
 The deployment used `npm run deploy:staging`; it builds the flattened staging
 artifact and deploys only that Worker with `--containers-rollout none`. It does
@@ -25,7 +26,7 @@ not target the `juro` production Worker and does not apply a D1 migration.
   frame denial, and `X-Robots-Tag: noindex, nofollow, noarchive`.
 - A remote read-only D1 query returned `reachable = 1` from the staging DB
   (`bb716a96-b2fb-4823-90d6-6c228fed181a`) in EEUR; no rows were written.
-- The remote D1 migration ledger contains 122 applied migrations. Wrangler also
+- The remote D1 migration ledger contains 123 applied migrations. Wrangler also
   reports no pending staging migrations.
 - The deployed staging configuration has `LEGAL_LEX_INGESTION_ENABLED=true`,
   retains `LEGAL_ADVICE_INGESTION_ENABLED=false` and
@@ -61,7 +62,8 @@ violations. The restore preserved `232` tables, `517` indexes, `313` triggers,
 and `121` migration-ledger rows; the export SHA-256 was
 `692262e0c6b0c2bef6c0c5baf49c1d5417b2abe2f34caf81eca5a88960ba2c7f`.
 The D1 control-plane report at the time showed 232 tables and a 24.5 MB staging
-database. The temporary export and local restore are pending local cleanup.
+database. The temporary export and local restore were removed at the owner's
+direction after this verification.
 
 ## AI-quality audit repair
 
@@ -80,6 +82,22 @@ browser session. This is a local browser-extension block; it is not evidence
 of a JURO authorization failure. The remote migration ledger and resulting
 table definition were verified read-only.
 
+## Human legal-review attestation
+
+On `2026-08-14T16:13:11.149Z`, the authenticated reviewer recorded an immutable
+`confirmed_correct` attestation for `staging-20260814-canonical`. The record is
+bound to a `legal_reviewer` assignment and a fresh MFA verification at
+`2026-08-14T16:04:08.503Z` (within the 15-minute control window). It covers
+`314/314` completed, unique canonical scenarios.
+
+The scope was recomputed read-only from the ordered completed attempts and
+matched the stored scope digest:
+`8948CB47D96DCF68256ECDE87B0CF39E4776B7A2296607AD5091D22826E88EDE`.
+The immutable event hash was also recomputed and matched:
+`3074EE1621522D6B17F6A006E6543F540AC4446D17DA32251D3063AB32F74EE2`.
+Its previous hash is the all-zero genesis value. This is a real reviewer
+decision recorded by the protected flow; it is not an AI-generated approval.
+
 ## Release-gate state
 
 | Gate | Status | Evidence / reason |
@@ -87,26 +105,25 @@ table definition were verified read-only.
 | Enforceable provider-evaluation monetary cap | ACTIVE | Effective daily policies cap each provider at `$15/day`; OpenAI and Anthropic pricing records were added from official provider pricing. Staging circuit policy is `12` failures per `15` minutes. |
 | Real 314-scenario staging execution | COMPLETE | `staging-20260814-canonical` has `314/314` unique completed records. Historical failed attempts are retained as provider-reliability evidence. |
 | Isolated D1 export/restore integrity | COMPLETE | Fresh staging export restored locally; `quick_check=ok`, zero foreign-key violations, and topology/migration counts matched the remote D1 metadata. |
-| Human legal review | NOT RUN | The evidence endpoint accepts only records tied to a completed run and a fresh-MFA `legal_reviewer` immutable `correct` review. An AI/Codex annotation is explicitly not human legal approval. |
-| Legal-evaluation evidence export | NOT RUN | It depends on all 314 persisted reviewed runs and the same fresh-MFA legal-reviewer session. |
+| Human legal review | COMPLETE | A fresh-MFA `legal_reviewer` recorded the immutable `confirmed_correct` attestation for the verified `314/314` canonical-run scope. The scope digest and event-hash chain were recomputed read-only. |
+| Legal-evaluation evidence export | NOT RUN | The existing export validator requires 314 individual persisted feedback/review records. A whole-run attestation deliberately does not synthesize those records, so this separate evidence gate is not claimed as complete. |
 | Corpus ingestion | ENABLED IN STAGING | Lex-only staging ingestion is enabled behind the existing fresh-MFA manual endpoint. Advice.uz and the staff source API remain disabled; no corpus is committed to Git and no source is published without the review lifecycle. |
-| Controlled production rollout | NOT APPROVED | Production preflight/dry-run passed against the isolated `juro` artifact, but no production upload, migration, R2 write, queue write, DNS change, or traffic change was performed. Human legal evidence remains absent. |
+| Controlled production rollout | NOT APPROVED | Production preflight/dry-run passed against the isolated `juro` artifact, but no production upload, migration, R2 write, queue write, DNS change, or traffic change was performed. The individual-record evidence-export gate remains open. |
 
-## What the user must authenticate as
+## Remaining controlled action
 
-The remaining actions are deliberately bound to a named account and a physical
-second factor. They cannot be truthfully completed by source code, a Cloudflare
-OAuth deployment token, or an AI agent without that account's fresh Access and
-TOTP session:
+The remaining evidence action is deliberately bound to a named account and a
+physical second factor. It cannot be truthfully completed by source code, a
+Cloudflare OAuth deployment token, or an AI agent without that account's fresh
+Access and TOTP session:
 
-1. A `legal_reviewer` reviews the actual outputs and resolves the immutable
-   AI-quality events. The reviewer determines legal correctness; this record does
-   not purport to make that determination. The reviewer may then run the enabled
-   Lex-only staging ingestion endpoint; its fresh-MFA guard cannot be bypassed
-   with a service token.
-2. The authenticated reviewer exports the persisted evidence, after which the
-   strict CLI validator can verify the envelope and its digest.
+1. The authenticated reviewer creates the 314 individual persisted
+   feedback/review records required by the existing export contract, then exports
+   that evidence. The strict CLI validator can then verify the envelope and its
+   digest. The whole-run attestation above remains immutable and is not expanded
+   into fabricated per-scenario decisions.
 
-Once those controlled human actions are complete, the 314-run and evidence
-validator can be executed without weakening Access, MFA, provider secrets, or
-the legal-review audit trail.
+The completed whole-run review does not authorize production rollout. The
+individual-record evidence gate and a separate production approval remain
+required without weakening Access, MFA, provider secrets, or the legal-review
+audit trail.
