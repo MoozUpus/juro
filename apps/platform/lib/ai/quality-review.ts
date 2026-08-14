@@ -414,7 +414,17 @@ async function appendEvent(input: {
       if (message.includes("AI_QUALITY_REVIEW_STALE") || message.includes("version_uidx")) {
         throw new AiQualityReviewError("AI_QUALITY_REVIEW_STALE");
       }
-      if (!message.includes("CHAIN_CONFLICT") && !message.includes("chain_uidx")) break;
+      if (!message.includes("CHAIN_CONFLICT") && !message.includes("chain_uidx")) {
+        // The UI deliberately returns a generic error so that failed audit writes
+        // cannot reveal queue content. Keep a bounded, metadata-only reason in
+        // Worker logs to diagnose an unexpected constraint or binding fault.
+        console.error(JSON.stringify({
+          event: "ai_quality_review_audit_write_failed",
+          action: input.action,
+          reason: message.replace(/[^A-Za-z0-9_.: -]/g, "").slice(0, 160),
+        }));
+        break;
+      }
     }
   }
   if (lastError instanceof AiQualityReviewError) throw lastError;
