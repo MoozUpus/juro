@@ -32,8 +32,12 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Locale is selected from the canonical route by the inline script before
+  // hydration. The root App Router layout has no route params, so React's
+  // static server fallback remains Russian; suppress only this deliberately
+  // pre-hydration attribute difference rather than masking descendant errors.
   return (
-    <html lang="ru">
+    <html lang="ru" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
