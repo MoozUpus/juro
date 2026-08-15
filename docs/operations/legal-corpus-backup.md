@@ -17,6 +17,21 @@ Record the D1 database ID, export timestamp, manifest key, manifest SHA-256,
 row counts and index version in the release evidence. Backup creation alone is
 not restore evidence.
 
+The staging Qdrant Container has ephemeral disk. A dense release therefore also
+requires a collection snapshot in the private `BACKUP_BUCKET`. Snapshot
+creation is automatic only after Lex acquisition is disabled, no ingestion job
+or dense chunk remains pending, and Qdrant current/total point counts match the
+D1 vector-ID ledger. The Worker streams the snapshot directly to R2 using the
+Qdrant SHA-256 as R2's write-time integrity check, verifies size and checksum by
+`head()`, writes a separately hashed JSON manifest, records that manifest in
+`legal_corpus_snapshots`, and deletes only the temporary Container-local
+snapshot. The API key, vector values and legal text are not written to the
+manifest or logs.
+
+Do not treat the private snapshot as a release backup until the final evidence
+also records an independent R2 readback hash and a successful isolated restore
+with point-count and representative hybrid-query parity.
+
 The corpus sparse index must use ordinary exportable D1 tables. Do not add an
 FTS5 virtual table to the application D1 database: Wrangler rejects a full D1
 export while such a table exists. Migration

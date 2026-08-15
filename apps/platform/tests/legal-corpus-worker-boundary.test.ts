@@ -109,6 +109,7 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.match(privateServices, /QDRANT__SERVICE__API_KEY/u);
   assert.match(corpusConfig, /"binding": "QDRANT_SERVICE"/u);
   assert.match(corpusConfig, /"binding": "LEGAL_CORPUS_EMBEDDING_SERVICE"/u);
+  assert.match(corpusConfig, /"binding": "BACKUP_BUCKET"/u);
   const production = corpusConfig.slice(corpusConfig.indexOf('"production"'));
   assert.doesNotMatch(production, /"binding": "QDRANT_SERVICE"/u);
   assert.match(production, /"LEGAL_CORPUS_DENSE_ENABLED": "false"/u);
@@ -207,12 +208,14 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     routes?: unknown[];
     vars: Record<string, string>;
     triggers: { crons: string[] };
+    r2_buckets: Array<{ binding: string; bucket_name: string }>;
     env: Record<string, {
       workers_dev: boolean;
       preview_urls: boolean;
       routes?: unknown[];
       vars: Record<string, string>;
       triggers: { crons: string[] };
+      r2_buckets: Array<{ binding: string; bucket_name: string }>;
     }>;
   };
   assert.equal(config.main, "./worker/legal-corpus-worker.ts");
@@ -222,6 +225,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     assert.deepEqual(environment.routes ?? [], []);
     assert.equal(environment.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
     assert.deepEqual(environment.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);
+    assert.equal(environment.r2_buckets.some(({ binding }) => binding === "BACKUP_BUCKET"), true);
   }
   for (const environment of [config, config.env.production]) {
     assert.equal(environment.vars.LEGAL_CORPUS_ENABLED, "false");

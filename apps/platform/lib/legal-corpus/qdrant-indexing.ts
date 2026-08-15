@@ -11,13 +11,17 @@ import {
   type QdrantCorpusEnv,
   type QdrantCorpusPoint,
 } from "./qdrant";
+import {
+  ensureLegalCorpusQdrantAvailable,
+  type LegalCorpusQdrantSnapshotEnv,
+} from "./qdrant-snapshots";
 import { featureEnabled, type LegalCorpusFeatureFlag, type LegalCorpusLanguage } from "./trust";
 
 const BATCH_SIZE = 32;
 const MAX_VERSION_SYNC_CHUNKS = 16_000;
 export const LEGAL_CORPUS_QDRANT_BACKFILL_CHUNKS_PER_BATCH = 64;
 
-type IndexEnv = LegalCorpusEmbeddingEnv & QdrantCorpusEnv
+type IndexEnv = LegalCorpusEmbeddingEnv & QdrantCorpusEnv & LegalCorpusQdrantSnapshotEnv
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 type VersionRow = {
@@ -113,7 +117,10 @@ export async function syncLegalCorpusVersionToQdrant(
 
   const client = options.client ?? new QdrantLegalCorpusClient(env);
   const embeddings = options.embeddings ?? new OpenAiLegalCorpusEmbeddingProvider(env);
-  await client.ensureCompatible();
+  if (options.client) await client.ensureCompatible();
+  else await ensureLegalCorpusQdrantAvailable(env, {
+    client: client as QdrantLegalCorpusClient,
+  });
   if (version.isCurrent === 1 && version.previousVersionId) {
     await client.setVersionCurrent(version.previousVersionId, false);
   }
@@ -236,10 +243,16 @@ export async function runNextLegalCorpusQdrantBackfillBatch(
 
 export function createQdrantDenseSearch(env: IndexEnv):
 ((query: string, limit: number) => Promise<Array<{ chunkId: string; score: number }>>) | undefined {
-  if (!featureEnabled(env, "LEGAL_CORPUS_DENSE_ENABLED")) return undefined;
+  if (
+    !featureEnabled(env, "LEGAL_CORPUS_ENABLED")
+    || !featureEnabled(env, "LEGAL_CORPUS_DENSE_ENABLED")
+  ) return undefined;
   const client = new QdrantLegalCorpusClient(env);
   const embeddings = new OpenAiLegalCorpusEmbeddingProvider(env);
   return async (query, limit) => {
+    // Container disk is ephemeral. Restore the verified private-R2 snapshot
+    // before paying for a query embedding or accepting any vector candidate.
+    await ensureLegalCorpusQdrantAvailable(env, { client });
     const [[vector], sparse] = await Promise.all([
       embeddings.embed([query], { feature: "legal_corpus_retrieval" }),
       encodeQdrantSparseQuery(query),

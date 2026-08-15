@@ -102,6 +102,37 @@ test("Qdrant requests prefer the private service binding over public fetch", asy
   assert.equal(serviceRequests[0]?.headers.get("api-key"), "test-secret");
 });
 
+test("platform requests can address the singleton private Container without public DNS", async () => {
+  const requests: Request[] = [];
+  const names: string[] = [];
+  let starts = 0;
+  const client = new QdrantLegalCorpusClient({
+    ...configured,
+    QDRANT_URL: "https://qdrant.internal",
+    QDRANT_CONTAINER: {
+      getByName(name: string) {
+        names.push(name);
+        return {
+          async startAndWaitForPorts() { starts += 1; },
+          async fetch(request: Request) {
+            requests.push(request);
+            return response([{ chunkId: "chunk:container", score: 0.91 }]);
+          },
+        };
+      },
+    },
+  }, async () => {
+    throw new Error("public fetch must not run");
+  });
+  assert.deepEqual(await client.queryDense(denseVector(), 2), [
+    { chunkId: "chunk:container", score: 0.91 },
+  ]);
+  assert.deepEqual(names, ["juro-legal-corpus-qdrant-v1"]);
+  assert.equal(starts, 1);
+  assert.equal(requests[0]?.url,
+    "https://qdrant.internal/collections/juro_legal_staging/points/query");
+});
+
 test("collection compatibility requires 1536-dimensional cosine dense plus named sparse vectors", async () => {
   const compatible = new QdrantLegalCorpusClient(configured, async () => Response.json({
     status: "ok",
@@ -191,6 +222,61 @@ test("collection bootstrap refuses to replace an incompatible existing collectio
   await assert.rejects(() => client.ensureCompatible(), (error: unknown) =>
     error instanceof QdrantCorpusError && error.code === "QDRANT_COLLECTION_INCOMPATIBLE");
   assert.deepEqual(methods, ["GET"]);
+});
+
+test("snapshot lifecycle preserves Qdrant checksum across download, upload and cleanup", async () => {
+  const snapshotBytes = new TextEncoder().encode("verified-qdrant-snapshot");
+  const checksum = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", snapshotBytes)),
+    (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const requests: Array<{ url: string; method: string; contentType: string | null; body: Uint8Array }> = [];
+  const client = new QdrantLegalCorpusClient(configured, async (input, init) => {
+    const method = String(init?.method ?? "GET");
+    const url = String(input);
+    const body = init?.body
+      ? new Uint8Array(await new Response(init.body as BodyInit).arrayBuffer())
+      : new Uint8Array();
+    requests.push({ url, method, contentType: new Headers(init?.headers).get("content-type"), body });
+    if (method === "POST" && url.endsWith("/snapshots?wait=true")) {
+      return Response.json({
+        status: "ok",
+        result: {
+          name: "legal.snapshot",
+          size: snapshotBytes.byteLength,
+          creation_time: "2026-08-15T16:00:00.000Z",
+          checksum,
+        },
+      });
+    }
+    if (method === "GET" && url.endsWith("/snapshots/legal.snapshot")) {
+      return new Response(snapshotBytes, {
+        headers: { "content-length": String(snapshotBytes.byteLength) },
+      });
+    }
+    return Response.json({ status: "ok", result: true });
+  });
+  const info = await client.createSnapshot();
+  assert.deepEqual(info, {
+    name: "legal.snapshot",
+    size: snapshotBytes.byteLength,
+    creationTime: "2026-08-15T16:00:00.000Z",
+    checksumSha256: checksum,
+  });
+  const downloaded = await client.downloadSnapshot(info.name);
+  assert.deepEqual(new Uint8Array(await downloaded.arrayBuffer()), snapshotBytes);
+  await client.restoreSnapshot({
+    name: info.name,
+    size: info.size,
+    checksumSha256: checksum,
+    body: new Blob([snapshotBytes]).stream(),
+  });
+  await client.deleteSnapshot(info.name);
+  const restore = requests.find((entry) => entry.url.includes("/snapshots/upload?"));
+  assert.ok(restore);
+  assert.equal(restore.method, "POST");
+  assert.match(restore.contentType ?? "", /^multipart\/form-data; boundary=juro-/u);
+  assert.match(new TextDecoder().decode(restore.body), /verified-qdrant-snapshot/u);
+  assert.match(restore.url, new RegExp(`checksum=${checksum}$`, "u"));
+  assert.equal(requests.at(-1)?.method, "DELETE");
 });
 
 test("hybrid Qdrant fusion preserves dense-only and sparse-only candidates", async () => {

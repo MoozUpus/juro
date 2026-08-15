@@ -5,9 +5,13 @@ import type { LegalCorpusLanguage } from "./trust";
 
 const RESPONSE_LIMIT = 1_000_000;
 const REQUEST_TIMEOUT_MS = 8_000;
+const SNAPSHOT_REQUEST_TIMEOUT_MS = 120_000;
 const COLLECTION_PATTERN = /^[A-Za-z0-9_-]{1,80}$/u;
+const SNAPSHOT_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]{0,239}$/u;
+const SHA256_PATTERN = /^[a-f0-9]{64}$/u;
 const POINT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const VECTOR_DIMENSIONS = 1_536;
+export const LEGAL_CORPUS_QDRANT_INSTANCE = "juro-legal-corpus-qdrant-v1";
 const COLLECTION_CONFIGURATION = {
   vectors: {
     dense: {
@@ -30,6 +34,19 @@ export type QdrantCorpusEnv = {
   QDRANT_API_KEY?: string;
   QDRANT_COLLECTION?: string;
   QDRANT_SERVICE?: Fetcher;
+  QDRANT_CONTAINER?: {
+    getByName(name: string): {
+      startAndWaitForPorts(): Promise<unknown>;
+      fetch(request: Request): Promise<Response>;
+    };
+  };
+};
+
+export type QdrantSnapshotInfo = {
+  name: string;
+  size: number;
+  creationTime: string;
+  checksumSha256: string;
 };
 
 export type QdrantSparseVector = {
@@ -82,13 +99,30 @@ const collectionResponseSchema = z.object({
   }).passthrough(),
 }).passthrough();
 
+const countResponseSchema = z.object({
+  status: z.string(),
+  result: z.object({ count: z.number().int().nonnegative() }).passthrough(),
+}).passthrough();
+
+const snapshotResponseSchema = z.object({
+  status: z.string(),
+  result: z.object({
+    name: z.string().regex(SNAPSHOT_NAME_PATTERN),
+    size: z.number().int().positive().safe(),
+    creation_time: z.string().datetime({ offset: true }),
+    checksum: z.string().regex(SHA256_PATTERN),
+  }).passthrough(),
+}).passthrough();
+
 export class QdrantCorpusError extends Error {
   constructor(
     readonly code:
       | "QDRANT_CONFIGURATION_REJECTED"
       | "QDRANT_REQUEST_FAILED"
       | "QDRANT_RESPONSE_REJECTED"
-      | "QDRANT_COLLECTION_INCOMPATIBLE",
+      | "QDRANT_COLLECTION_INCOMPATIBLE"
+      | "QDRANT_SNAPSHOT_REQUIRED"
+      | "QDRANT_SNAPSHOT_INVALID",
     readonly retryable: boolean,
   ) {
     super(code);
@@ -167,29 +201,41 @@ async function limitedJson(response: Response): Promise<unknown> {
   }
 }
 
-async function request(
+async function requestResponse(
   env: QdrantCorpusEnv,
   suffix: string,
   init: RequestInit,
   fetchImpl: typeof fetch,
-  options: { allowNotFound?: boolean } = {},
-): Promise<unknown | undefined> {
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+  options: { allowNotFound?: boolean; timeoutMs?: number } = {},
+): Promise<Response | undefined> {
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
+    const headers = new Headers(init.headers);
+    if (env.QDRANT_API_KEY) headers.set("api-key", env.QDRANT_API_KEY);
+    if (init.body !== undefined && init.body !== null && !headers.has("content-type")) {
+      headers.set("content-type", "application/json");
+    }
     const requestInit: RequestInit = {
       ...init,
       redirect: "error",
       signal: timeout,
-      headers: {
-        "Content-Type": "application/json",
-        ...(env.QDRANT_API_KEY ? { "api-key": env.QDRANT_API_KEY } : {}),
-        ...init.headers,
-      },
+      headers,
     };
-    response = env.QDRANT_SERVICE
-      ? await env.QDRANT_SERVICE.fetch(new Request(endpoint(env, suffix), requestInit))
-      : await fetchImpl(endpoint(env, suffix), requestInit);
+    const request = new Request(endpoint(env, suffix), (
+      init.body instanceof ReadableStream
+        ? { ...requestInit, duplex: "half" as const }
+        : requestInit
+    ) as RequestInit);
+    if (env.QDRANT_SERVICE) {
+      response = await env.QDRANT_SERVICE.fetch(request);
+    } else if (env.QDRANT_CONTAINER) {
+      const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
+      await container.startAndWaitForPorts();
+      response = await container.fetch(request);
+    } else {
+      response = await fetchImpl(endpoint(env, suffix), requestInit);
+    }
   } catch {
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
   }
@@ -203,7 +249,18 @@ async function request(
     await response.body?.cancel().catch(() => undefined);
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", retryable);
   }
-  return limitedJson(response);
+  return response;
+}
+
+async function request(
+  env: QdrantCorpusEnv,
+  suffix: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch,
+  options: { allowNotFound?: boolean; timeoutMs?: number } = {},
+): Promise<unknown | undefined> {
+  const response = await requestResponse(env, suffix, init, fetchImpl, options);
+  return response ? limitedJson(response) : undefined;
 }
 
 function points(result: z.infer<typeof queryResponseSchema>): Array<z.infer<typeof pointSchema>> {
@@ -265,6 +322,18 @@ export class QdrantLegalCorpusClient {
     ) {
       throw new QdrantCorpusError("QDRANT_COLLECTION_INCOMPATIBLE", false);
     }
+  }
+
+  async collectionExists(): Promise<boolean> {
+    const result = await request(this.env, "", { method: "GET" }, this.fetchImpl, {
+      allowNotFound: true,
+    });
+    if (result === undefined) return false;
+    const parsed = collectionResponseSchema.safeParse(result);
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+    return true;
   }
 
   /** Creates only the configured environment-scoped collection when it does
@@ -362,6 +431,137 @@ export class QdrantLegalCorpusClient {
       .map(([chunkId, score]) => ({ chunkId, score }))
       .sort((left, right) => right.score - left.score || left.chunkId.localeCompare(right.chunkId))
       .slice(0, limit);
+  }
+
+  async countPoints(currentOnly = false): Promise<number> {
+    const parsed = countResponseSchema.safeParse(await request(this.env, "/points/count", {
+      method: "POST",
+      body: JSON.stringify({
+        exact: true,
+        ...(currentOnly ? { filter: officialFilter(this.env.APP_ENV) } : {}),
+      }),
+    }, this.fetchImpl));
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+    return parsed.data.result.count;
+  }
+
+  async createSnapshot(): Promise<QdrantSnapshotInfo> {
+    const parsed = snapshotResponseSchema.safeParse(await request(
+      this.env,
+      "/snapshots?wait=true",
+      { method: "POST" },
+      this.fetchImpl,
+      { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
+    ));
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+    return {
+      name: parsed.data.result.name,
+      size: parsed.data.result.size,
+      creationTime: parsed.data.result.creation_time,
+      checksumSha256: parsed.data.result.checksum,
+    };
+  }
+
+  async downloadSnapshot(snapshotName: string): Promise<Response> {
+    if (!SNAPSHOT_NAME_PATTERN.test(snapshotName)) {
+      throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
+    }
+    const response = await requestResponse(
+      this.env,
+      `/snapshots/${encodeURIComponent(snapshotName)}`,
+      { method: "GET" },
+      this.fetchImpl,
+      { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
+    );
+    if (!response?.body) {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+    return response;
+  }
+
+  async deleteSnapshot(snapshotName: string): Promise<void> {
+    if (!SNAPSHOT_NAME_PATTERN.test(snapshotName)) {
+      throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
+    }
+    const parsed = mutationResponseSchema.safeParse(await request(
+      this.env,
+      `/snapshots/${encodeURIComponent(snapshotName)}?wait=true`,
+      { method: "DELETE" },
+      this.fetchImpl,
+      { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
+    ));
+    if (!parsed.success || parsed.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+  }
+
+  async restoreSnapshot(input: {
+    name: string;
+    size: number;
+    checksumSha256: string;
+    body: ReadableStream<Uint8Array>;
+  }): Promise<void> {
+    if (
+      !SNAPSHOT_NAME_PATTERN.test(input.name)
+      || !Number.isSafeInteger(input.size)
+      || input.size < 1
+      || !SHA256_PATTERN.test(input.checksumSha256)
+    ) {
+      throw new QdrantCorpusError("QDRANT_SNAPSHOT_INVALID", false);
+    }
+    const boundary = `juro-${crypto.randomUUID()}`;
+    const encoder = new TextEncoder();
+    const prefix = encoder.encode(
+      `--${boundary}\r\nContent-Disposition: form-data; name="snapshot"; filename="${input.name}"\r\n`
+      + "Content-Type: application/octet-stream\r\n\r\n",
+    );
+    const suffix = encoder.encode(`\r\n--${boundary}--\r\n`);
+    const reader = input.body.getReader();
+    let prefixSent = false;
+    let suffixSent = false;
+    const body = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (!prefixSent) {
+          prefixSent = true;
+          controller.enqueue(prefix);
+          return;
+        }
+        const part = await reader.read();
+        if (!part.done) {
+          controller.enqueue(part.value);
+          return;
+        }
+        if (!suffixSent) {
+          suffixSent = true;
+          controller.enqueue(suffix);
+        }
+        controller.close();
+      },
+      async cancel(reason) {
+        await reader.cancel(reason).catch(() => undefined);
+      },
+    });
+    const parsed = mutationResponseSchema.safeParse(await request(
+      this.env,
+      `/snapshots/upload?wait=true&priority=snapshot&checksum=${input.checksumSha256}`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": `multipart/form-data; boundary=${boundary}`,
+          "content-length": String(prefix.byteLength + input.size + suffix.byteLength),
+        },
+        body,
+      },
+      this.fetchImpl,
+      { timeoutMs: SNAPSHOT_REQUEST_TIMEOUT_MS },
+    ));
+    if (!parsed.success || parsed.data.status !== "ok" || parsed.data.result !== true) {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
   }
 
   async upsert(pointsToWrite: readonly QdrantCorpusPoint[]): Promise<void> {

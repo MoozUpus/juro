@@ -138,6 +138,19 @@ the `QDRANT_SERVICE` binding. The corpus Worker reaches OpenAI embeddings only
 through `LEGAL_CORPUS_EMBEDDING_SERVICE`; it has no OpenAI secret of its own.
 Production declares neither private binding and remains fail-closed.
 
+Cloudflare Container disk is ephemeral, so a persisted D1 vector ID is never
+accepted as proof that the point still exists. Dense backfill is structurally
+blocked while Lex acquisition is enabled. After acquisition is frozen and one
+entire cron invocation starts with no missing vectors or pending jobs, the
+corpus Worker creates a Qdrant collection snapshot, streams it to the private
+`BACKUP_BUCKET` with Qdrant's SHA-256 as the R2 write checksum, verifies the R2
+head and stores a hashed manifest in `legal_corpus_snapshots`. A later cold
+Container start may restore only that environment/collection-matched manifest.
+If D1 records vector IDs but no valid snapshot exists, JURO fails closed instead
+of creating an empty collection. IDs written after the snapshot cutoff are
+cleared after restore and rebuilt deterministically; source text is never placed
+in a public artifact or log.
+
 Owner materials enter by promoting an already completed document analysis; the
 existing private upload, quarantine, malware scan and OCR pipeline remains the
 only file-ingress surface. The actor must own the analysis, the file must be

@@ -37,6 +37,12 @@ real dense/sparse/hybrid REST contract and rehearses collection snapshot
 download and upload recovery. This proves adapter and recovery compatibility,
 not corpus relevance. Dense activation still requires the frozen-corpus
 benchmark, point-count parity and retained snapshot/restore evidence.
+Because Container disk is ephemeral, JURO streams the frozen Qdrant collection
+snapshot to private R2 with Qdrant's SHA-256 enforced by the R2 write. A hashed
+D1-ledgered manifest binds environment, collection, point counts, cutoff,
+object version and checksum. Cold start restores only that verified object;
+tracked D1 point IDs without a valid snapshot cause a fail-closed error rather
+than silent creation of an empty collection.
 
 User uploads use JURO's existing private-document path, not the legal Qdrant
 collection. When `LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST=true`, the AI route may

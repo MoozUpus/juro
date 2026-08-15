@@ -2,8 +2,8 @@ import { Container } from "@cloudflare/containers";
 import { z } from "zod";
 
 import { LEGAL_CORPUS_EMBEDDING_DIMENSIONS } from "../lib/legal-corpus/embeddings";
+import { LEGAL_CORPUS_QDRANT_INSTANCE } from "../lib/legal-corpus/qdrant";
 
-const QDRANT_INSTANCE = "juro-legal-corpus-qdrant-v1";
 const MAX_EMBEDDING_BATCH = 32;
 const MAX_EMBEDDING_INPUT_CHARS = 24_000;
 const MAX_EMBEDDING_REQUEST_BYTES = 800_000;
@@ -41,6 +41,9 @@ function qdrantRequestAllowed(request: Request, collection: string): boolean {
   const url = new URL(request.url);
   if (url.pathname === "/healthz" && request.method === "GET") return true;
   const prefix = `/collections/${encodeURIComponent(collection)}`;
+  if (request.method === "DELETE" && !url.pathname.startsWith(`${prefix}/snapshots/`)) {
+    return false;
+  }
   return url.pathname === prefix || url.pathname.startsWith(`${prefix}/`);
 }
 
@@ -97,7 +100,7 @@ export async function handleLegalCorpusQdrantServiceRequest(
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
   try {
-    const container = env.QDRANT_CONTAINER.getByName(QDRANT_INSTANCE);
+    const container = env.QDRANT_CONTAINER.getByName(LEGAL_CORPUS_QDRANT_INSTANCE);
     await container.startAndWaitForPorts();
     const response = await container.fetch(request);
     const headers = new Headers(response.headers);

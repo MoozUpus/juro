@@ -14,8 +14,11 @@
   route and the credential is not copied into the corpus Worker. Dense retrieval is
   still disabled, so the container is dormant and no full-corpus collection has been
   created or backfilled. Activation still requires the frozen-corpus benchmark,
-  point-count parity, a retained snapshot and a proved restore. Production has no
-  Qdrant binding and every corpus flag remains disabled.
+  point-count parity, a retained snapshot and a proved restore. The application
+  now implements checksum-verified private-R2 snapshot persistence and cold
+  restore for the Container's ephemeral disk, but no full-corpus staging snapshot
+  exists while dense remains disabled. Production has no Qdrant binding and every
+  corpus flag remains disabled.
 - The owner-material promotion path is implemented, regression-tested and
   enabled only in staging. No owner document had been promoted as of
   2026-08-15 14:11 +05:00. Its first use still requires a real completed

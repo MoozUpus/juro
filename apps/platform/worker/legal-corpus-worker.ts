@@ -10,6 +10,7 @@ import {
 import { featureEnabled } from "../lib/legal-corpus/trust";
 import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
+import { createLegalCorpusQdrantSnapshot } from "../lib/legal-corpus/qdrant-snapshots";
 import { createPacedLexFetch } from "../lib/legal-corpus/lex-request-pacer";
 import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance";
 
@@ -30,6 +31,7 @@ const INGESTION_JOBS_PER_RUN = 8;
 const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
+  BACKUP_BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
   LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher;
@@ -56,7 +58,8 @@ function ingestionEnabled(env: LegalCorpusWorkerEnv): boolean {
 
 function denseBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
   return featureEnabled(env, "LEGAL_CORPUS_ENABLED")
-    && featureEnabled(env, "LEGAL_CORPUS_DENSE_ENABLED");
+    && featureEnabled(env, "LEGAL_CORPUS_DENSE_ENABLED")
+    && !ingestionEnabled(env);
 }
 
 function enabled(env: LegalCorpusWorkerEnv): boolean {
@@ -236,6 +239,13 @@ export async function handleLegalCorpusScheduled(
         if (result.status === "empty" || result.status === "disabled") break;
       }
     }
+    const qdrantSnapshot = denseBackfillEnabled(env)
+      // Snapshot only after an entire scheduled invocation starts with no
+      // remaining backfill work. This creates a clean freeze boundary one
+      // cron tick after the last vector write.
+      && qdrantBackfills[0]?.status === "empty"
+      ? await createLegalCorpusQdrantSnapshot(env)
+      : null;
     const errorCode = discoveries.find((result) => result.safeErrorCode)?.safeErrorCode
       ?? ingestions.find((result) => result.safeErrorCode)?.safeErrorCode
       ?? null;
@@ -255,6 +265,7 @@ export async function handleLegalCorpusScheduled(
       ingestionClaimed: ingestions.filter((result) => result.claimed).length,
       qdrantBackfillBatches: qdrantBackfills.filter((result) => result.status === "indexed").length,
       qdrantBackfillChunks: qdrantBackfills.reduce((sum, result) => sum + result.chunkCount, 0),
+      qdrantSnapshotStatus: qdrantSnapshot?.status ?? "not_attempted",
       errorCode,
     });
   } catch {

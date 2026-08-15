@@ -34,6 +34,10 @@
     {
       "binding": "BUCKET",
       "bucket_name": "juro-development-files"
+    },
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "juro-development-backups"
     }
   ],
   "observability": {
@@ -83,6 +87,10 @@
         {
           "binding": "BUCKET",
           "bucket_name": "juro-staging-files"
+        },
+        {
+          "binding": "BACKUP_BUCKET",
+          "bucket_name": "juro-staging-backups"
         }
       ],
       "services": [
@@ -127,6 +135,10 @@
         {
           "binding": "BUCKET",
           "bucket_name": "juro-private-documents"
+        },
+        {
+          "binding": "BACKUP_BUCKET",
+          "bucket_name": "juro-production-backups"
         }
       ]
     }
