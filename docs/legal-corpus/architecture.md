@@ -149,6 +149,14 @@ continues to request `officialOnly`; therefore owner text cannot supply a legal
 citation or freshness claim. A separate non-official materials consumer may
 use it only after its own product and evaluation gate.
 
+Completed user analyses use a separate private retrieval path. Scheduling the
+initial normalized version, reindexing a corrected version, and searching the
+private Vectorize namespace all fail closed unless
+`LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST=true`. Every candidate vector is
+rehydrated through the D1 owner/workspace ledger before private R2 text is
+returned. This technical auto-trust never promotes a user upload into the
+global corpus and never makes it legal citation evidence.
+
 `/legal-corpus` lives on the isolated admin Worker rather than the ordinary
 platform UI. It reads through the private `PLATFORM_ADMIN_API` service binding.
 Only `super_admin` can view or operate it; the 15-minute host-only session is

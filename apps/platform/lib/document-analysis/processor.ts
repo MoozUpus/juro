@@ -39,16 +39,24 @@ import {
   storeInitialAnalysisDocumentVersion,
   suggestedRevisionId,
 } from "./revisions";
-import { scheduleUserDocumentIndexStatements } from "./user-document-vectors";
+import { scheduleTrustedUserDocumentIndexStatements } from "./user-document-vectors";
 import { resolveAiRuntimeSettings, type AiRuntimeSettings } from "../ai/runtime-settings";
-import type { BuilderRuntimeEnv } from "../document-builder/storage/runtime";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
 
-export type DocumentAnalysisProcessorEnv = BuilderRuntimeEnv & {
+export type DocumentAnalysisProcessorEnv = {
+  APP_ENV?: "development" | "staging" | "production";
   DB: D1Database;
   BUCKET: R2Bucket;
+  LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST?: string;
+  OPENAI_API_KEY?: string;
+  OPENAI_MODEL?: string;
+  OPENAI_CHAT_MODEL?: string;
+  OPENAI_DEEP_MODEL?: string;
+  ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_DOCUMENT_MODEL?: string;
+  ANTHROPIC_FALLBACK_MODEL?: string;
 };
 
 type AnalysisRow = {
@@ -389,7 +397,7 @@ export async function executeDocumentAnalysisJob(
   }
 
   try {
-    await persistNormalizedAnalysis(scopedEnv.DB, row, persisted);
+    await persistNormalizedAnalysis(scopedEnv, row, persisted);
     return { status: "completed", analysisId };
   } catch (error) {
     if (error instanceof DocumentAnalysisProcessingError) throw error;
@@ -770,10 +778,11 @@ async function analyzeObject(
 }
 
 async function persistNormalizedAnalysis(
-  db: D1Database,
+  env: DocumentAnalysisProcessorEnv,
   row: AnalysisRow,
   persisted: PersistedAnalysis,
 ): Promise<void> {
+  const db = env.DB;
   const now = new Date().toISOString();
   const summary = legacyCompatibleSummary(persisted);
   const summaryJson = JSON.stringify(summary);
@@ -895,7 +904,7 @@ async function persistNormalizedAnalysis(
     db.prepare(
       "UPDATE document_analyses SET status='completed',summary_json=?,result_sha256=?,error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND status='persisting'",
     ).bind(summaryJson, resultSha256, now, row.analysisId, row.workspaceId),
-    ...scheduleUserDocumentIndexStatements(db, {
+    ...scheduleTrustedUserDocumentIndexStatements(env, {
       analysisId: row.analysisId,
       documentVersionId: sourceVersion.id,
       workspaceId: row.workspaceId,
@@ -919,6 +928,7 @@ async function persistNormalizedAnalysis(
         revisionCount,
         sourceFreshnessStatus: persisted.sourceFreshness.status,
         sourceFreshnessAsOf: persisted.sourceFreshness.asOf,
+        privateCorpusIndexScheduled: env.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST === "true",
       }),
       now,
     ),

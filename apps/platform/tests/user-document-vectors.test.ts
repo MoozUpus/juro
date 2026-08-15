@@ -6,10 +6,36 @@ import {
   deleteUserDocumentVectorsForOwner,
   executeUserDocumentIndexJob,
   scheduleUserDocumentIndexStatements,
+  scheduleTrustedUserDocumentIndexStatements,
   searchUserDocuments,
 } from "../lib/document-analysis/user-document-vectors";
 
 const now = "2026-08-04T12:00:00.000Z";
+
+test("private document auto-trust scheduling is fail-closed behind its release flag", () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const input = {
+      analysisId: "analysis-a",
+      documentVersionId: "analysis-version-a",
+      workspaceId: "workspace-a",
+      ownerUserId: "user-a",
+      sourceHash: "a".repeat(64),
+      language: "ru" as const,
+      now,
+    };
+    assert.equal(scheduleTrustedUserDocumentIndexStatements({
+      DB: d1,
+      LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST: "false",
+    }, input).length, 0);
+    assert.equal(scheduleTrustedUserDocumentIndexStatements({
+      DB: d1,
+      LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST: "true",
+    }, input).length, 2);
+  } finally {
+    sqlite.close();
+  }
+});
 
 class FakeVectorize {
   readonly vectors = new Map<string, VectorizeVector>();

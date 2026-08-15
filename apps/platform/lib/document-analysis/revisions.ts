@@ -4,7 +4,7 @@ import {
   recordAnalysisVersionObjectWriteFailure,
   requireAttachedAnalysisVersionObjectWrite,
 } from "./version-object-write";
-import { scheduleUserDocumentIndexStatements } from "./user-document-vectors";
+import { scheduleTrustedUserDocumentIndexStatements } from "./user-document-vectors";
 
 export type AnalysisDocumentVersion = {
   id: string;
@@ -267,7 +267,7 @@ export async function decideSuggestedRevision(
 }
 
 export async function applySuggestedRevisions(
-  env: { DB: D1Database; BUCKET: R2Bucket },
+  env: { DB: D1Database; BUCKET: R2Bucket; LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST?: string },
   input: {
     analysisId: string;
     workspaceId: string;
@@ -403,7 +403,7 @@ export async function applySuggestedRevisions(
       r2Key, objectWrite.id, fileName, bytes.byteLength, sha256, idempotencyKey, selectionSha256,
       JSON.stringify(appliedRevisionIds), input.userId, now,
     ),
-    ...scheduleUserDocumentIndexStatements(env.DB, {
+    ...scheduleTrustedUserDocumentIndexStatements(env, {
       analysisId: input.analysisId,
       documentVersionId: versionId,
       workspaceId: input.workspaceId,

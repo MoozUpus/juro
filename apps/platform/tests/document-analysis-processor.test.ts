@@ -334,6 +334,7 @@ test("safe retrying document analysis persists normalized result, usage, audit a
   assert.equal(persistedRisk.sourceIds, "[]");
   assert.equal((fixture.sqlite.prepare("SELECT count(*) AS count FROM analysis_document_versions").get() as { count: number }).count, 1);
   assert.equal((fixture.sqlite.prepare("SELECT count(*) AS count FROM suggested_revisions").get() as { count: number }).count, 1);
+  assert.equal((fixture.sqlite.prepare("SELECT count(*) AS count FROM user_document_index_jobs").get() as { count: number }).count, 0);
   assert.equal((fixture.sqlite.prepare("SELECT action FROM workspace_audit_events").get() as { action: string }).action, "analysis_completed");
   fixture.sqlite.close();
 });
@@ -425,6 +426,7 @@ test("extracted text beyond the single-request boundary is analysed in bounded c
 
   const completed = await executeDocumentAnalysisJob({
     DB: fixture.db,
+    LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST: "true",
     BUCKET: {
       async get(key: string) {
         const version = stored.get(key);

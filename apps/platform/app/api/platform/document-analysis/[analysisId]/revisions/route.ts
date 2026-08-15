@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../lib/document-builder/auth/api";
-import { requireD1, requireR2 } from "../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireR2, runtimeEnv } from "../../../../../../lib/document-builder/storage/runtime";
 import {
   AnalysisRevisionError,
   applySuggestedRevisions,
@@ -70,7 +70,11 @@ export const POST = withApiErrors(async function POST(
   if (!parsed.success) return response({ code: "ANALYSIS_REVISION_INVALID_SELECTION", error: "Некорректный список исправлений." }, 400);
   try {
     const result = await applySuggestedRevisions(
-      { DB: requireD1(), BUCKET: requireR2() },
+      {
+        DB: requireD1(),
+        BUCKET: requireR2(),
+        LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST: runtimeEnv().LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST,
+      },
       {
         analysisId,
         workspaceId: workspace.id,

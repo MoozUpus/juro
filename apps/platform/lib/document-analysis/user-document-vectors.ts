@@ -303,6 +303,20 @@ export function scheduleUserDocumentIndexStatements(
   ];
 }
 
+/**
+ * Private document indexing is an explicit corpus feature. Keeping the flag
+ * check next to statement construction prevents an upload from being queued
+ * when a deployment has not approved automatic private-corpus ingestion.
+ */
+export function scheduleTrustedUserDocumentIndexStatements(
+  env: { DB: D1Database; LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST?: string },
+  input: Parameters<typeof scheduleUserDocumentIndexStatements>[1],
+): D1PreparedStatement[] {
+  return env.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST === "true"
+    ? scheduleUserDocumentIndexStatements(env.DB, input)
+    : [];
+}
+
 async function loadIndexJob(db: D1Database, jobId: string, workspaceId: string): Promise<IndexJobRow | null> {
   return db.prepare(
     `SELECT job.id,job.analysis_id AS analysisId,job.document_version_id AS documentVersionId,
