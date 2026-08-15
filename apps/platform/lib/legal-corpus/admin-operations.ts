@@ -327,7 +327,12 @@ export async function readLegalCorpusAdminDashboard(input: {
       (SELECT count(DISTINCT variant_id) FROM legal_corpus_versions WHERE fetched_at>=?) AS documentsFetchedToday,
       (SELECT count(*) FROM legal_corpus_ingestion_jobs WHERE status IN ('queued','retrying') AND correlation_id NOT LIKE 'lex-catalog:%') AS liveOrManualQueued,
       (SELECT count(DISTINCT coalesce(canonical_document_id,source_url)) FROM legal_corpus_failures WHERE retry_state IN ('terminal','technically_unavailable')) AS failedDocuments,
-      (SELECT max(finished_at) FROM legal_corpus_runs WHERE status='success') AS lastSuccessfulUpdate`).bind(dayStart).first<CountRow>();
+      (SELECT max(finished_at) FROM (
+        SELECT finished_at FROM legal_corpus_runs WHERE status='success' AND finished_at IS NOT NULL
+        UNION ALL
+        SELECT finished_at FROM scheduled_runs
+          WHERE schedule_name='legal-corpus-worker' AND status='completed' AND finished_at IS NOT NULL
+      )) AS lastSuccessfulUpdate`).bind(dayStart).first<CountRow>();
   const coverage = await input.env.DB.prepare(`SELECT cp.category_key AS categoryKey,cp.language,cp.status,
       cp.expected_document_count AS expectedDocuments,cp.discovered_document_count AS discoveredDocuments,
       (SELECT count(DISTINCT sa.document_id) FROM legal_corpus_discovery_documents dd

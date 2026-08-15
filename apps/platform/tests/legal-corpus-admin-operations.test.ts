@@ -141,6 +141,9 @@ test("dashboard proves coverage from indexed or technically unavailable document
       INSERT INTO legal_source_health_checks
         (id,environment,source_kind,status,checked_at,latency_ms,error_code,endpoint_url,created_at)
       VALUES ('health-lex','staging','lex','healthy','2026-08-15T11:59:00.000Z',120,NULL,'https://lex.uz/robots.txt','2026-08-15T11:59:00.000Z');
+      INSERT INTO scheduled_runs
+        (id,schedule_name,cron,scheduled_for,idempotency_key,holder_id,status,error_code,started_at,finished_at,created_at,updated_at)
+      VALUES ('corpus-run-1','legal-corpus-worker','*/5 * * * *','2026-08-15T11:55:00.000Z','staging:corpus-run-1','holder-1','completed',NULL,'2026-08-15T11:55:00.000Z','2026-08-15T11:58:00.000Z','2026-08-15T11:55:00.000Z','2026-08-15T11:58:00.000Z');
     `);
     const dashboard = await readLegalCorpusAdminDashboard({ env, now });
     assert.equal(dashboard.lexHealth.state, "fresh");
@@ -150,6 +153,7 @@ test("dashboard proves coverage from indexed or technically unavailable document
     assert.equal(dashboard.totals.currentProvisions, 1);
     assert.equal(dashboard.totals.indexedChunks, 1);
     assert.equal(dashboard.totals.historicalVersions, 1);
+    assert.equal(dashboard.totals.lastSuccessfulUpdate, "2026-08-15T11:58:00.000Z");
     const coverage = dashboard.coverage.find((row) => row.categoryKey === "laws" && row.language === "ru");
     assert.deepEqual(coverage && {
       discovered: coverage.discoveredDocuments,
