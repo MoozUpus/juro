@@ -258,6 +258,38 @@ fully fetched, extracted and indexed category/language checkpoints. The crawl
 therefore remains below both the 44/44 coverage gate and the pinned
 1,283 / 20,296 / 22,513 release floor.
 
+## Qdrant engine and snapshot-restore gate
+
+The local Docker Desktop installation could not host Qdrant because its visible
+runtime status reported `Virtualization support not detected`. No BIOS,
+virtualization or Windows security setting was changed. Instead, commit
+`aa4446b9d44f2c9415c61139a4b8f756a7b7d9dd` added an isolated GitHub Actions
+service-container gate using official Qdrant `v1.18.2`, pinned to the amd64 OCI
+digest
+`sha256:da65a06bc75e42702f80c992b99c5144b0fbd675ae7a96d2991de0bf957b7071`.
+Qdrant's complete Apache-2.0 text and attribution are stored in
+`third_party/licenses/qdrant-Apache-2.0.txt` and `THIRD_PARTY_NOTICES.md`.
+
+GitHub Actions run
+[31887777456](https://github.com/MoozUpus/juro/actions/runs/31887777456)
+passed against the real Qdrant REST API. It created a collection with named
+1,536-dimensional cosine `dense` and `sparse` vectors, inserted three scoped
+points, and verified the same expected first result for dense, sparse and
+hybrid queries. It then created and downloaded a 118,784-byte collection
+snapshot with SHA-256
+`90851de58c459248d2bdf35f18460e8f5bd5278f32da347591a9f20380618a5b`,
+deleted the collection, recovered the uploaded snapshot with
+`priority=snapshot`, verified 3/3 restored points and repeated the hybrid query.
+Artifact `qdrant-snapshot-gate-31887777456` (GitHub artifact ID `9247727317`)
+retains the machine-readable evidence for 30 days.
+
+This closes real engine-contract and snapshot-restore rehearsal only. It does
+not activate dense retrieval, provision a private staging Qdrant service or
+claim legal relevance from a three-point infrastructure fixture. The final
+Qdrant benchmark remains bound to the frozen full corpus, the 314 reviewed
+scenarios, an approved provider-pricing envelope and the same corpus snapshot
+hash used by the release verifier.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

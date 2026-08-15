@@ -41,6 +41,15 @@ The completed 314-scenario direct-source review is necessary evidence, but it
 does not pass this separate indexed-corpus gate: the staging corpus is still
 growing, the frozen snapshot benchmark has not run, and dense Qdrant retrieval
 remains disabled.
+
+The independent Qdrant engine gate passed in GitHub Actions run
+[31887777456](https://github.com/MoozUpus/juro/actions/runs/31887777456).
+It used the real Qdrant 1.18.2 REST API with 1,536-dimensional named dense and
+sparse vectors, verified dense/sparse/hybrid ordering, downloaded a collection
+snapshot, recorded its SHA-256, restored it by upload and repeated the query.
+That three-point infrastructure fixture is deliberately not counted as the
+314-scenario legal relevance benchmark.
+
 The command must fail while the corpus is empty, flags are disabled, evidence is
 stale, the benchmark uses another snapshot, a provider request is unpriced or a
 metric is absent. A passing JSON report may be recorded only after the real
