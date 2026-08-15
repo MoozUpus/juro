@@ -82,6 +82,21 @@ test("parser deterministically extracts semantic legal blocks and excludes chrom
   assert.deepEqual(normalizedLegalSourceSnapshotSchema.parse(first), first);
 });
 
+test("parser preserves the official English Lex locale", () => {
+  const snapshot = normalizeLegalSourceHtml({
+    html: legalHtml().replace('lang="ru"', 'lang="en"'),
+    reference: {
+      ...reference,
+      locale: "en",
+      canonicalUrl: "https://lex.uz/en/docs/42",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.source.locale, "en");
+  assert.deepEqual(normalizedLegalSourceSnapshotSchema.parse(snapshot), snapshot);
+});
+
 test("parser chooses the largest primary candidate without falling back to body", () => {
   const snapshot = normalizeLegalSourceHtml({
     html: `<html><body>

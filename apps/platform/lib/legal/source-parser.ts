@@ -60,10 +60,12 @@ export const normalizedLegalSourceSnapshotSchema = z.object({
   }).strict(),
   source: z.object({
     sourceKind: z.enum(["lex", "advice"]),
-    // `uzc` is Lex.uz's official Uzbek Cyrillic route.  It is represented as
+    // `uzc` is Lex.uz's official Uzbek Cyrillic route. It is represented as
     // `uz-Cyrl` in the new corpus, but retained here to preserve exact source
     // identity and never pass a transliteration off as the official text.
-    locale: z.enum(["ru", "uz", "uzc"]),
+    // English is also an official Lex route and must survive normalization so
+    // the multilingual ingestion worker does not dead-letter valid `/en/docs`.
+    locale: z.enum(["ru", "uz", "uzc", "en"]),
     canonicalId: z.string().min(1),
     canonicalUrl: z.url(),
     rawContentSha256: z.string().regex(/^[0-9a-f]{64}$/),
