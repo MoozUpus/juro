@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   handleLegalCorpusScheduled,
+  legalCorpusIngestionJobBudget,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SEED_CRON,
 } from "../worker/legal-corpus-worker";
@@ -91,6 +92,21 @@ test("seed schedule is locked, idempotent, bounded and leaves a completed run", 
   assert.ok(checkpointCount > 0);
   assert.equal(lockCount, 0);
   assert.equal(scheduled.noRetryCalls(), 2);
+});
+
+test("empty discovery slots are reused without increasing the ten-request run budget", () => {
+  assert.equal(legalCorpusIngestionJobBudget([]), 8);
+  assert.equal(legalCorpusIngestionJobBudget([
+    { claimed: true, status: "completed" },
+    { claimed: true, status: "completed" },
+  ]), 8);
+  assert.equal(legalCorpusIngestionJobBudget([
+    { claimed: true, status: "completed" },
+    { claimed: false, status: "empty" },
+  ]), 9);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "empty" }]), 10);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 8);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 8);
 });
 
 test("private dense services stay behind service bindings and staging-only flags", () => {

@@ -30,6 +30,19 @@ const INGESTION_JOBS_PER_RUN = 8;
 // the complete current corpus to resume from D1 after a Worker restart.
 const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
 
+export function legalCorpusIngestionJobBudget(
+  discoveries: readonly { claimed: boolean; status: string }[],
+): number {
+  // Reuse only catalogue slots that were proved empty. A failed/disabled
+  // discovery does not grant extra source traffic. The maximum remains ten
+  // Lex fetch slots per invocation (2 discovery + 8 ingestion, or 0 + 10), so
+  // the shared host pacer and previously measured five-minute bound stay
+  // authoritative.
+  if (!discoveries.some((result) => result.status === "empty")) return INGESTION_JOBS_PER_RUN;
+  const claimed = discoveries.filter((result) => result.claimed).length;
+  return INGESTION_JOBS_PER_RUN + Math.max(0, DISCOVERY_PAGES_PER_RUN - claimed);
+}
+
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   BACKUP_BUCKET?: R2Bucket;
   OPENAI_API_KEY?: string;
@@ -224,7 +237,8 @@ export async function handleLegalCorpusScheduled(
         discoveries.push(result);
         if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
       }
-      for (let index = 0; index < INGESTION_JOBS_PER_RUN; index += 1) {
+      const ingestionBudget = legalCorpusIngestionJobBudget(discoveries);
+      for (let index = 0; index < ingestionBudget; index += 1) {
         const result = await runNextLegalCorpusIngestionJob(env, { wait, fetchImpl });
         ingestions.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
