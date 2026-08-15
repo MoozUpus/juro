@@ -215,6 +215,49 @@ jobs and zero terminal/technically-unavailable failures. Checkpoints were 8
 completed, 34 queued and 2 retrying. These numbers still do not satisfy the
 release floor or prove category completeness.
 
+## Catalog completion proof and cron-window repair
+
+Commit `86238616060153ccf14f3d287faa8f93a842a121` made catalog completion
+provable. A checkpoint that reaches the real end of a Lex result set without a
+reported total now persists its deduplicated discovered count as the expected
+count; a final page that contradicts an explicit total retries instead of being
+marked complete. Due retries are claimed before ordinary queued checkpoints so
+they cannot starve behind a long catalog backlog. GitHub Actions run
+[31885554381](https://github.com/MoozUpus/juro/actions/runs/31885554381)
+passed both platform and website jobs before the staging-only corpus Worker was
+deployed as `0c1586b7-7437-4862-8bc3-53d0cccc1c1a`.
+
+Real staging timing then showed that two catalog pages plus nine ingestion jobs
+took slightly longer than the five-minute cron interval. The `13:05Z` run
+completed in `301.614` seconds and therefore missed the `13:10Z` tick. Commit
+`7295494a65a74b77dcf6803be445fb6da3db2569` reduced the sequential ingestion
+batch to eight without changing the shared 20-second Lex host pacer or adding
+concurrency. Focused tests passed 13/13; platform lint, type-check and the
+legal-corpus artifact dry-run passed; GitHub Actions run
+[31886104901](https://github.com/MoozUpus/juro/actions/runs/31886104901)
+passed both jobs.
+
+Before that deployment, D1 Time Travel bookmark
+`0000139e-0000007b-000050c8-35a3a3b70b3cc0b34ab5a28f6d892988` was recorded.
+The staging-only corpus Worker was deployed as
+`f9f5e2df-581c-42c6-bf1c-84781b1bb3ae`. Its first full new-code run started at
+`13:15:00.083Z`, completed successfully at `13:19:47.910Z` in `287.827`
+seconds and released the lease in time for the next run to start at
+`13:20:00.036Z`. This proves the intended throughput correction on the real
+staging scheduler; it does not relax source pacing.
+
+The read-only snapshot at 2026-08-15 18:20 +05:00 contained 325 ready official
+documents, 435 language variants, 454 immutable versions, 7,917 unique current
+provisions, 18,178 indexed current chunks and 19,520 indexed chunks across all
+immutable versions. There were 450 completed ingestion jobs, 2,398
+queued/retrying jobs, zero terminal jobs and zero terminal or technically
+unavailable failures. Catalog state was 10 completed, 33 queued and one running;
+no completed checkpoint had a null expected count and no retry was overdue.
+Applying the same per-checkpoint formula as the admin console produced 4/44
+fully fetched, extracted and indexed category/language checkpoints. The crawl
+therefore remains below both the 44/44 coverage gate and the pinned
+1,283 / 20,296 / 22,513 release floor.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
