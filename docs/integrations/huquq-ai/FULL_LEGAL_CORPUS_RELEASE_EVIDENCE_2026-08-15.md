@@ -340,6 +340,53 @@ technically unavailable failures. Checkpoints were 11 completed and 33 queued.
 This remains below the 44/44 coverage gate and the pinned
 1,283 / 20,296 / 22,513 floor.
 
+## Resumable dense backfill and legacy-language resolution
+
+Commit `a45b0d1dc089d1d189067c776452fbbd9b788711` added a bounded Qdrant
+backfill that remains active after Lex acquisition is frozen. D1's persisted
+deterministic point IDs are the resume cursor; one scheduled invocation is
+limited to four 64-chunk batches. Release evidence schema version 2 now fails
+unless Qdrant's current point count equals the frozen corpus current-chunk
+count, its total point count is not lower, the restored snapshot reports the
+same current and total counts, and the Qdrant snapshot artifact has its own
+SHA-256.
+
+During the continuing crawl, four legacy Russian routes (`2772517`, `2772450`,
+`2570005` and `2772662`) returned a short official page that explicitly states
+that the act text is provided in Uzbek. The previous parser treated this as
+`LEGAL_SOURCE_CONTENT_INSUFFICIENT`, producing four dead-letter jobs. Commits
+`815a7bf`, `0d85dbf` and `d3e08c5` distinguish that fixed Lex notice from a
+broken document, give due retries priority over the ordinary queue and detect
+the warning even when Lex places it beside rather than inside `#divBody`.
+JURO does not translate or synthesize the unavailable Russian text. The four
+jobs were retried through corpus Worker version
+`a30d9107-c4e9-41ec-bee3-063518142040` and completed with
+`LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE`; all prior failure rows were preserved
+but their resolution state became `technically_unavailable`. The ledger then
+contained no terminal failure and no dead-letter ingestion job.
+
+Exact-head CI run
+[31891376925](https://github.com/MoozUpus/juro/actions/runs/31891376925)
+passed on `d3e08c559dba6616c493fe3b5f3f8b204efe9c1d`. Qdrant gate run
+[31891376973](https://github.com/MoozUpus/juro/actions/runs/31891376973)
+also passed on that head. Its 118,784-byte engine-contract snapshot has SHA-256
+`40ea6be69fb279d9501e2268cadb91ec14495d8c5674fb5f28f850a35c30f19c`;
+artifact `qdrant-snapshot-gate-31891376973` has artifact ID `9248633326` and is
+retained for 30 days. The admin seed-form fix was republished independently as
+staging admin Worker `0c6be85d-e24a-4e7b-ae7a-1fbf6213a91a`.
+
+The read-only staging snapshot at 2026-08-15 20:04 +05:00 contained 413
+canonical documents, 557 language variants, 9,518 unique provisions, 21,313
+current provisions, 21,358 current/indexed chunks and 53 historical versions.
+Jobs were 608 completed, 3,394 queued and one running at the sampled instant,
+with no dead-letter job. Failure evidence contained five retrying records and
+13 technically-unavailable records representing four distinct documents; no
+terminal record remained. Checkpoints were 12 completed and 32 queued. Applying
+the release formula produced 6/44 complete checkpoints, 2,891 expected
+category/language documents, 557 indexed documents and four confirmed
+technically-unavailable documents. The crawl therefore remains in progress and
+no full-corpus, dense-retrieval or 314-scenario benchmark claim is made.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
