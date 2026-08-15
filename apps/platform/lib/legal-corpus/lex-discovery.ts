@@ -16,6 +16,13 @@ export type LexDocumentEffectivity = {
   validTo: string | null;
 };
 
+export type LexDocumentMetadata = {
+  documentType: string | null;
+  documentNumber: string | null;
+  adoptingAuthority: string | null;
+  adoptionDate: string | null;
+};
+
 export const LEX_CORPUS_CATEGORIES = [
   { key: "laws", searchKind: "nat", query: "sort_id=3975&form_id=3968" },
   { key: "oliy_majlis", searchKind: "oliy", query: "" },
@@ -181,6 +188,35 @@ export function parseLexDocumentEffectivity(html: string): LexDocumentEffectivit
     status: repealed ? "repealed" : notYetEffective || !validFrom ? "unknown" : "active",
     validFrom,
     validTo,
+  };
+}
+
+const DOCUMENT_TYPE_PATTERN = /(?<!\p{L})(?:конституционный\s+закон|закон|кодекс|указ|постановление|распоряжение|приказ|решение|низом|қонун|кодекс|фармон|қарор|буйруқ|qonun|kodeks|farmon|qaror|buyruq|decision|decree|resolution|order|law|code)(?!\p{L})/iu;
+const AUTHORITY_PATTERN = /(?:президент|кабинет\s+министров|министерств|комитет|комисси|верховн\p{L}*\s+суд|сенат|законодательн\p{L}*\s+палат|prezident|vazirlar\s+mahkamasi|vazirlik|qo['‘’]?mita|komissiya|oliy\s+sud|senat|qonunchilik\s+palatasi|президент|вазирлар\s+маҳкамаси|вазирлик|қўмита|комиссия|олий\s+суд|сенат|қонунчилик\s+палатаси|president|cabinet|ministry|committee|commission|supreme\s+court|senate|legislative\s+chamber)/iu;
+
+/** Reads the official document-card label from Lex's own metadata header.
+ * Missing or ambiguous fields stay null; neither fetch time nor body text is
+ * used to invent document requisites. */
+export function parseLexDocumentMetadata(html: string): LexDocumentMetadata {
+  const text = visibleText(effectivityMetadataHtml(html));
+  const numbered = /^(?<descriptor>.{2,600}?)(?:,|\s)+(?:от|dated|санали|даги|dagi)?\s*(?<date>\d{2}\.\d{2}\.\d{4})(?:\s*(?:г\.|й\.|y\.)?)?\s*(?:№|N(?:o\.?|º)?)\s*(?<number>[\p{L}\d][\p{L}\d./\-–—]*)/iu.exec(text);
+  if (!numbered?.groups) {
+    return { documentType: null, documentNumber: null, adoptingAuthority: null, adoptionDate: null };
+  }
+  const descriptor = numbered.groups.descriptor.replace(/\s+/gu, " ").trim();
+  const typeMatch = DOCUMENT_TYPE_PATTERN.exec(descriptor);
+  const documentType = typeMatch?.[0]?.replace(/\s+/gu, " ").trim() ?? null;
+  const remainder = documentType
+    ? `${descriptor.slice(0, typeMatch?.index ?? 0)} ${descriptor.slice((typeMatch?.index ?? 0) + (typeMatch?.[0].length ?? 0))}`
+      .replace(/^[\s,.:;–—-]+|[\s,.:;–—-]+$/gu, "")
+      .replace(/\s+/gu, " ")
+      .trim()
+    : "";
+  return {
+    documentType,
+    documentNumber: numbered.groups.number.trim(),
+    adoptingAuthority: remainder && AUTHORITY_PATTERN.test(remainder) ? remainder : null,
+    adoptionDate: lexDateToIso(numbered.groups.date),
   };
 }
 

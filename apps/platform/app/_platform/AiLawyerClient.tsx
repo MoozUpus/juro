@@ -21,9 +21,29 @@ type SourceFreshness = { status: "fresh" | "stale" | "unavailable"; asOf: string
 type Conversation = { id: string; title: string; locale: string; status: string; updatedAt: string; lastAnswer: string | null; facts: Fact[] };
 type CaseOption = { id: string; title: string; status: string; updatedAt: string };
 type Fact = { id: string; statement: string; status: string };
-type Source = { sourceId: string; actTitle: string; actIdentifier: string | null; article: string | null; excerpt?: string | null; originalUrl: string; status: string; effectiveDate: string | null; verifiedAt: string };
+type Source = {
+  sourceId: string;
+  actTitle: string;
+  actIdentifier: string | null;
+  article: string | null;
+  excerpt?: string | null;
+  originalUrl: string;
+  status: string;
+  effectiveDate: string | null;
+  verifiedAt: string;
+  documentType?: string | null;
+  documentNumber?: string | null;
+  adoptingAuthority?: string | null;
+  sourceClass?: string;
+  language?: "uz-Latn" | "uz-Cyrl" | "ru" | "en";
+  sourceOrigin?: "indexed" | "live";
+};
 type ArticleDetails = {
   documentTitle: string;
+  documentType: string | null;
+  documentNumber: string | null;
+  adoptingAuthority: string | null;
+  sourceClass: string;
   articleNumber: string | null;
   articleTitle: string | null;
   part: string | null;
@@ -39,6 +59,8 @@ type ArticleDetails = {
   versionDate: string | null;
   officialUrl: string;
   verifiedAt: string;
+  availableLanguages: Array<{ language: string; officialUrl: string; verifiedAt: string; official: boolean }>;
+  versionHistory: Array<{ versionNumber: number; status: string; validFrom: string | null; validTo: string | null; versionDate: string | null; fetchedAt: string }>;
 };
 type AiPreliminary = {
   kind: "grounded_answer";
@@ -868,6 +890,10 @@ function LegalSourceCard({
 
   const display = details ?? {
     documentTitle: source.actTitle,
+    documentType: source.documentType ?? null,
+    documentNumber: source.documentNumber ?? source.actIdentifier ?? null,
+    adoptingAuthority: source.adoptingAuthority ?? null,
+    sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
     articleNumber: source.article,
     articleTitle: null,
     part: null,
@@ -876,21 +902,28 @@ function LegalSourceCard({
     text: source.excerpt ?? null,
     fullArticle: false,
     truncated: false,
-    language: locale,
+    language: source.language ?? locale,
     status: source.status,
     validFrom: source.effectiveDate,
     validTo: null,
     versionDate: source.effectiveDate,
     officialUrl: source.originalUrl,
     verifiedAt: retrievedAt ?? source.verifiedAt,
+    availableLanguages: [],
+    versionHistory: [],
   } satisfies ArticleDetails;
+
+  const origin = source.sourceOrigin ?? (sourceAccessMode === "direct" ? "live" : "indexed");
 
   return <article className="ai-source-card">
     <div className="ai-source-card-body">
       <strong>{source.actTitle}</strong>
       {source.article && <span>{source.article}</span>}
+      {(source.documentType || source.documentNumber) && <small>{[source.documentType, source.documentNumber].filter(Boolean).join(" · ")}</small>}
+      {source.adoptingAuthority && <small>{source.adoptingAuthority}</small>}
       {source.excerpt && <q>{source.excerpt}</q>}
       <em>{source.status}{source.effectiveDate ? ` · ${formatDate(source.effectiveDate, ru)}` : ""}</em>
+      <small>{sourceClassLabel(source.sourceClass, ru)} · {languageLabel(source.language ?? (locale === "uz" ? "uz-Latn" : "ru"), ru)} · {origin === "live" ? (ru ? "live Lex.uz" : "live Lex.uz") : (ru ? "локальный индекс" : "lokal indeks")}</small>
       <small>{sourceAccessMode === "direct"
         ? (ru ? "Проверено напрямую по Lex.uz" : "Lex.uz orqali bevosita tekshirildi")
         : (ru ? "Проверено по утверждённому пакету источников" : "Tasdiqlangan manbalar paketi bo‘yicha tekshirildi")}</small>
@@ -915,12 +948,24 @@ function LegalSourceCard({
             {[display.part, display.chapter, display.section].filter(Boolean).length > 0 && <small>{[display.part, display.chapter, display.section].filter(Boolean).join(" · ")}</small>}
           </div>
           <dl>
+            {display.documentType && <div><dt>{ru ? "Тип документа" : "Hujjat turi"}</dt><dd>{display.documentType}</dd></div>}
+            {display.documentNumber && <div><dt>{ru ? "Номер документа" : "Hujjat raqami"}</dt><dd>{display.documentNumber}</dd></div>}
+            {display.adoptingAuthority && <div><dt>{ru ? "Принявший орган" : "Qabul qilgan organ"}</dt><dd>{display.adoptingAuthority}</dd></div>}
+            <div><dt>{ru ? "Тип источника" : "Manba turi"}</dt><dd>{sourceClassLabel(display.sourceClass, ru)}</dd></div>
             <div><dt>{ru ? "Язык" : "Til"}</dt><dd>{display.language}</dd></div>
             <div><dt>{ru ? "Статус" : "Holat"}</dt><dd>{display.status}</dd></div>
             <div><dt>{ru ? "Редакция" : "Tahrir"}</dt><dd>{display.versionDate ? formatDate(display.versionDate, ru) : "—"}</dd></div>
             <div><dt>{ru ? "Действует" : "Amal qiladi"}</dt><dd>{display.validFrom ? formatDate(display.validFrom, ru) : "—"}{display.validTo ? ` — ${formatDate(display.validTo, ru)}` : ""}</dd></div>
             <div><dt>{ru ? "Проверено" : "Tekshirildi"}</dt><dd>{formatDate(display.verifiedAt, ru)}</dd></div>
           </dl>
+          {display.availableLanguages.length > 0 && <section className="ai-source-modal-related" aria-label={ru ? "Доступные языки" : "Mavjud tillar"}>
+            <h3>{ru ? "Доступные языки" : "Mavjud tillar"}</h3>
+            <div>{display.availableLanguages.map((variant) => <a key={`${variant.language}:${variant.officialUrl}`} href={variant.officialUrl} target="_blank" rel="noreferrer">{languageLabel(variant.language, ru)}{variant.official ? " · official" : ""}</a>)}</div>
+          </section>}
+          {display.versionHistory.length > 0 && <details className="ai-source-modal-history">
+            <summary>{ru ? `История редакций (${display.versionHistory.length})` : `Tahrirlar tarixi (${display.versionHistory.length})`}</summary>
+            <ol>{display.versionHistory.map((version) => <li key={`${version.versionNumber}:${version.fetchedAt}`}><strong>#{version.versionNumber}</strong><span>{version.versionDate ? formatDate(version.versionDate, ru) : formatDate(version.fetchedAt, ru)} · {version.status}{version.validFrom ? ` · ${formatDate(version.validFrom, ru)}` : ""}{version.validTo ? ` — ${formatDate(version.validTo, ru)}` : ""}</span></li>)}</ol>
+          </details>}
           <div className="ai-source-modal-text">{display.text || (ru ? "Текст статьи не сохранён." : "Modda matni saqlanmagan.")}</div>
         </>}
         <footer><a href={display.officialUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Официальный источник" : "Rasmiy manba"}</a></footer>
@@ -1111,6 +1156,23 @@ function coverageLabel(
   return ru
     ? "Покрытие отсутствует — достаточная норма не найдена"
     : "Qamrov yo‘q — yetarli norma topilmadi";
+}
+
+function languageLabel(language: string, ru: boolean): string {
+  if (language === "uz-Latn") return ru ? "Узбекский (латиница)" : "O‘zbekcha (lotin)";
+  if (language === "uz-Cyrl") return ru ? "Узбекский (кириллица)" : "Ўзбекча (кирилл)";
+  if (language === "en") return "English";
+  return ru ? "Русский" : "Rus tili";
+}
+
+function sourceClassLabel(sourceClass: string | undefined, ru: boolean): string {
+  if (sourceClass === "OFFICIAL_GOVERNMENT_GUIDANCE") return ru ? "Официальное разъяснение" : "Rasmiy tushuntirish";
+  if (sourceClass === "OWNER_TRUSTED_GLOBAL") return ru ? "Материал JURO" : "JURO materiali";
+  if (sourceClass === "TENANT_TRUSTED_PRIVATE") return ru ? "Материал организации" : "Tashkilot materiali";
+  if (sourceClass === "USER_TRUSTED_PRIVATE") return ru ? "Личный документ" : "Shaxsiy hujjat";
+  if (sourceClass === "DERIVED_TRANSLATION") return ru ? "Производный перевод" : "Hosila tarjima";
+  if (sourceClass === "SECONDARY_REFERENCE") return ru ? "Вторичный источник" : "Ikkilamchi manba";
+  return ru ? "Официальное законодательство" : "Rasmiy qonunchilik";
 }
 
 function safeOfficialUrl(value: string) {

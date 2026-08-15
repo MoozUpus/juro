@@ -13,6 +13,10 @@ test("full article endpoint is private, ownership-scoped and restricted to valid
   assert.match(route, /citation_validation_status='validated'/);
   assert.match(route, /hostname === "lex\.uz" \|\| url\.hostname === "www\.lex\.uz"/);
   assert.match(route, /legal_corpus_variants/);
+  assert.match(route, /document\.document_number AS documentNumber/);
+  assert.match(route, /document\.adopting_authority AS adoptingAuthority/);
+  assert.match(route, /availableLanguages/);
+  assert.match(route, /versionHistory/);
   assert.match(route, /document\.scope='global'/);
   assert.match(route, /document\.availability_status='ready'/);
   assert.match(route, /MAX_ARTICLE_CHARACTERS = 200_000/);
@@ -32,5 +36,9 @@ test("AI source cards expose a safe full-text modal and official URL separately"
   assert.match(client, /api\/platform\/ai\/citations\/\$\{encodeURIComponent\(messageId\)\}/);
   assert.match(client, /target="_blank" rel="noreferrer"/);
   assert.match(client, /event\.key === "Escape"/);
+  assert.match(client, /Тип документа/);
+  assert.match(client, /Принявший орган/);
+  assert.match(client, /Доступные языки/);
+  assert.match(client, /История редакций/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML/);
 });

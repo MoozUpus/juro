@@ -13,13 +13,14 @@ inert until a separate server-side feature flag and infrastructure are approved.
 | Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; at most two robots-aware GET/POST pages per scheduler lease |
 | Lex metadata monitor | Discover bounded official RSS metadata | Existing robots-aware monitor, no source text stored |
 | Corpus job ledger | Idempotent queued/fetch/retry state | D1; identifiers and official URLs only |
-| Ingestion | Fetch official Lex variants, validate HTML, parse articles | At most nine sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected |
+| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most nine sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
 | Dense indexing | OpenAI 1,536-dimensional embeddings plus deterministic sparse term hashes | Dedicated corpus Worker only; Qdrant collection must already expose named `dense` and `sparse` vectors |
 | Provider contract | Indexed Lex first, live Lex fallback only when needed | Typed source shape; no arbitrary URL tool |
 | Citation validation | Filters model-proposed citations against source packets | No generated URLs, title/article/quote checks |
+| Source UX | Server-owned cards and full-article modal | Type, number, adopting authority, language, live/indexed origin, available official variants and immutable version history are read from the validated corpus packet, never authored by the model |
 | Admin control | Metrics, coverage proof, bounded seed/retry and immutable audit | Isolated `apps/admin` Worker, host-only admin cookie, service binding and fresh source MFA |
 
 ## Current-version invariant
@@ -83,6 +84,13 @@ direct Lex path only for weak, stale or absent coverage. A validated live
 document is queued idempotently for permanent ingestion when auto-ingest is
 enabled. Shadow mode consults the index but preserves the existing visible
 answer path.
+
+The release verifier also enforces the pinned corpus floor from
+`toxirerkinov70-commits/huquq-ai@1bce500c69b8213373d8ce0b40d56be7d83f6aec`:
+at least 1,283 canonical documents, 20,296 unique provisions and 22,513 indexed
+chunks. These are minimum acceptance counts, not reported JURO achievements;
+all 44 category/language checkpoints must still independently prove
+discovered/fetched/extracted/indexed-or-technically-unavailable completeness.
 
 The route-free `juro-legal-corpus-*` Worker owns corpus scheduling. Its
 `5 19 * * *` UTC seed slot runs five minutes after the existing bounded Lex

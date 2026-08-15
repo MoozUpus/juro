@@ -31,6 +31,10 @@ const source: LegalSourceContext = {
   article: "Статья 3",
   excerpt: "Общество подлежит государственной регистрации.",
   applicabilityStatus: "current",
+  documentType: "Закон",
+  documentNumber: "ЗРУ-42",
+  adoptingAuthority: "Олий Мажлис Республики Узбекистан",
+  sourceClass: "OFFICIAL_LEGISLATION",
   spans: [{
     id: "span:abc:1:0",
     article: "Статья 3",
@@ -360,6 +364,12 @@ test("gateway ignores an invented provider source card and rebuilds the used Lex
     status: "current",
     effectiveDate: null,
     verifiedAt: source.verifiedAt,
+    documentType: source.documentType,
+    documentNumber: source.documentNumber,
+    adoptingAuthority: source.adoptingAuthority,
+    sourceClass: source.sourceClass,
+    language: "ru",
+    sourceOrigin: "live",
   }]);
   assert.equal(validated.run.data.answer.includes("государственной регистрации"), true);
   assert.equal(validated.run.data.answer.includes("Invented"), false);

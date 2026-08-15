@@ -6,6 +6,7 @@ import {
   discoverLexRevisionHistory,
   languageVariantsFromLinks,
   parseLexDocumentEffectivity,
+  parseLexDocumentMetadata,
   parseLexDocumentUrl,
 } from "../lib/legal-corpus/lex-discovery";
 import {
@@ -67,6 +68,27 @@ test("Lex effectivity is derived from official visible status, never fetch time"
       Аввалги қарор ўз кучини йўқотган деб ҳисоблансин.
     </div></div></main>
   `), { status: "active", validFrom: "2024-12-24", validTo: null });
+});
+
+test("Lex metadata uses only the official document header and keeps ambiguous fields null", () => {
+  assert.deepEqual(parseLexDocumentMetadata(`
+    <main><div class="docHeader"><div class="docHeader__item-label">
+      Постановление Центральной избирательной комиссии Республики Узбекистан,
+      от 24.12.2024 г. № 1424
+    </div><div>Дата вступления в силу</div><div>24.12.2024</div></div>
+    <div class="container docBody-container">В тексте упомянут приказ № 99.</div></main>
+  `), {
+    documentType: "Постановление",
+    documentNumber: "1424",
+    adoptingAuthority: "Центральной избирательной комиссии Республики Узбекистан",
+    adoptionDate: "2024-12-24",
+  });
+  assert.deepEqual(parseLexDocumentMetadata("<main><p>Закон без официальной карточки № 7.</p></main>"), {
+    documentType: null,
+    documentNumber: null,
+    adoptingAuthority: null,
+    adoptionDate: null,
+  });
 });
 
 test("provision parser keeps article structure and only splits genuinely large articles", () => {

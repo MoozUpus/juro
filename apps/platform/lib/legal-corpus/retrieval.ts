@@ -4,7 +4,11 @@ import {
   normalizeLegalSearchQuery,
   transliterateUzbek,
 } from "../legal/legal-language";
-import { canAccessCorpusScope, type LegalCorpusLanguage } from "./trust";
+import {
+  canAccessCorpusScope,
+  type LegalCorpusLanguage,
+  type LegalCorpusSourceClass,
+} from "./trust";
 
 const RRF_K = 60;
 const MAX_QUERY_LENGTH = 3_000;
@@ -24,6 +28,9 @@ export type LegalCorpusRetrievalItem = {
   documentId: string;
   documentTitle: string;
   documentType: string | null;
+  documentNumber: string | null;
+  adoptingAuthority: string | null;
+  sourceClass: LegalCorpusSourceClass;
   articleNumber: string | null;
   articleTitle: string | null;
   exactQuote: string;
@@ -147,7 +154,8 @@ async function hydrateDenseCandidates(input: {
   const rows = await input.db.prepare(`
     SELECT chunk.id AS chunkId,
       document.id AS documentId,coalesce(variant.title,document.title) AS documentTitle,
-      document.document_type AS documentType,
+      document.document_type AS documentType,document.document_number AS documentNumber,
+      document.adopting_authority AS adoptingAuthority,document.source_class AS sourceClass,
       provision.article_number AS articleNumber,provision.article_title AS articleTitle,
       chunk.content_text AS exactQuote,
       provision.source_url AS sourceUrl,provision.language AS language,
@@ -213,6 +221,9 @@ async function hydrateDenseCandidates(input: {
       documentId: row.documentId,
       documentTitle: row.documentTitle,
       documentType: row.documentType,
+      documentNumber: row.documentNumber,
+      adoptingAuthority: row.adoptingAuthority,
+      sourceClass: row.sourceClass,
       articleNumber: row.articleNumber,
       articleTitle: row.articleTitle,
       exactQuote: row.exactQuote,
@@ -326,7 +337,8 @@ export async function retrieveLegalCorpus(input: {
     )
     SELECT candidate.chunkId AS chunkId,
       document.id AS documentId,coalesce(variant.title,document.title) AS documentTitle,
-      document.document_type AS documentType,
+      document.document_type AS documentType,document.document_number AS documentNumber,
+      document.adopting_authority AS adoptingAuthority,document.source_class AS sourceClass,
       provision.article_number AS articleNumber,provision.article_title AS articleTitle,
       chunk.content_text AS exactQuote,
       provision.source_url AS sourceUrl,provision.language AS language,
@@ -403,6 +415,9 @@ export async function retrieveLegalCorpus(input: {
       documentId: row.documentId,
       documentTitle: row.documentTitle,
       documentType: row.documentType,
+      documentNumber: row.documentNumber,
+      adoptingAuthority: row.adoptingAuthority,
+      sourceClass: row.sourceClass,
       articleNumber: row.articleNumber,
       articleTitle: row.articleTitle,
       exactQuote: row.exactQuote,

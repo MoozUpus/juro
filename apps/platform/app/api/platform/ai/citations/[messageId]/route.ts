@@ -17,7 +17,13 @@ type CitationRow = {
 };
 
 type CorpusArticleRow = {
+  documentId: string;
+  variantId: string;
   documentTitle: string;
+  documentType: string | null;
+  documentNumber: string | null;
+  adoptingAuthority: string | null;
+  sourceClass: string;
   articleNumber: string | null;
   articleTitle: string | null;
   part: string | null;
@@ -31,6 +37,22 @@ type CorpusArticleRow = {
   validTo: string | null;
   versionDate: string | null;
   sourceUrl: string;
+  fetchedAt: string;
+};
+
+type CorpusLanguageRow = {
+  language: string;
+  sourceUrl: string | null;
+  verifiedAt: string;
+  official: number;
+};
+
+type CorpusVersionRow = {
+  versionNumber: number;
+  status: string;
+  validFrom: string | null;
+  validTo: string | null;
+  versionDate: string | null;
   fetchedAt: string;
 };
 
@@ -90,7 +112,10 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
 
   const articleNumber = normalizedArticle(citation.articleReference);
   const articles = articleNumber ? await db.prepare(`SELECT
+      document.id AS documentId,variant.id AS variantId,
       coalesce(variant.title,document.title) AS documentTitle,
+      document.document_type AS documentType,document.document_number AS documentNumber,
+      document.adopting_authority AS adoptingAuthority,document.source_class AS sourceClass,
       provision.article_number AS articleNumber,provision.article_title AS articleTitle,
       provision.part,provision.chapter,provision.section,
       substr(provision.text,1,?) AS text,length(provision.text) AS textLength,
@@ -108,6 +133,20 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
   ).all<CorpusArticleRow>() : null;
   const articleRows = articles?.results ?? [];
   const article = articleRows[0] ?? null;
+  const languageRows = article ? (await db.prepare(`SELECT
+      language,source_url AS sourceUrl,last_verified_at AS verifiedAt,
+      is_official_language_version AS official
+    FROM legal_corpus_variants
+    WHERE document_id=?
+    ORDER BY CASE language WHEN 'uz-Latn' THEN 1 WHEN 'uz-Cyrl' THEN 2 WHEN 'ru' THEN 3 ELSE 4 END
+    LIMIT 8`).bind(article.documentId).all<CorpusLanguageRow>()).results : [];
+  const versionRows = article ? (await db.prepare(`SELECT
+      version_number AS versionNumber,status,valid_from AS validFrom,valid_to AS validTo,
+      version_date AS versionDate,fetched_at AS fetchedAt
+    FROM legal_corpus_versions
+    WHERE variant_id=?
+    ORDER BY version_number DESC,fetched_at DESC
+    LIMIT 20`).bind(article.variantId).all<CorpusVersionRow>()).results : [];
   const combinedArticleText = articleRows
     .map((row) => row.text.trim())
     .filter(Boolean)
@@ -119,6 +158,10 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
 
   return response({
     documentTitle: article?.documentTitle ?? citation.title,
+    documentType: article?.documentType ?? null,
+    documentNumber: article?.documentNumber ?? null,
+    adoptingAuthority: article?.adoptingAuthority ?? null,
+    sourceClass: article?.sourceClass ?? "OFFICIAL_LEGISLATION",
     articleNumber: article?.articleNumber ?? citation.articleReference,
     articleTitle: article?.articleTitle ?? null,
     part: article?.part ?? null,
@@ -134,5 +177,12 @@ export const GET = withApiErrors(async function GET(request: Request, context: C
     versionDate: article?.versionDate ?? citation.effectiveDate,
     officialUrl: citation.canonicalUrl,
     verifiedAt: article?.fetchedAt ?? citation.validatedAt,
+    availableLanguages: languageRows.flatMap((row) => row.sourceUrl && officialLexUrl(row.sourceUrl) ? [{
+      language: row.language,
+      officialUrl: row.sourceUrl,
+      verifiedAt: row.verifiedAt,
+      official: row.official === 1,
+    }] : []),
+    versionHistory: versionRows,
   });
 });

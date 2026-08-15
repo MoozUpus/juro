@@ -12,6 +12,7 @@ import {
   discoverLexRevisionHistory,
   lexLanguageFamilyId,
   parseLexDocumentEffectivity,
+  parseLexDocumentMetadata,
   parseLexDocumentUrl,
   parseLexRevisionUrl,
   type LexDiscoveredDocument,
@@ -325,6 +326,7 @@ export async function ingestOfficialLexDocument(
   const languageVariants = discoverLexLanguageVariants(rawHtml, currentDocument);
   const revisionHistory = discoverLexRevisionHistory(rawHtml, currentDocument);
   const effectivity = parseLexDocumentEffectivity(rawHtml);
+  const documentMetadata = parseLexDocumentMetadata(rawHtml);
   const documentId = await linkedDocumentId(env.DB, languageVariants)
     ?? lexLanguageFamilyId(languageVariants);
   const normalized = normalizeLegalSourceHtml({
@@ -361,6 +363,21 @@ export async function ingestOfficialLexDocument(
   const now = nowIso(input.now);
   const current = await existingVariant(env.DB, documentId, currentDocument.language);
   const variantId = current?.variantId ?? `${documentId}:${currentDocument.language}`;
+  if (current) {
+    await env.DB.prepare(`UPDATE legal_corpus_documents SET
+      document_type=coalesce(?,document_type),
+      document_number=coalesce(?,document_number),
+      adopting_authority=coalesce(?,adopting_authority),
+      adoption_date=coalesce(?,adoption_date),updated_at=?
+      WHERE id=?`).bind(
+      documentMetadata.documentType,
+      documentMetadata.documentNumber,
+      documentMetadata.adoptingAuthority,
+      documentMetadata.adoptionDate,
+      nowIso(input.now),
+      current.documentId,
+    ).run();
+  }
   const alreadyStored = await storedVersionByHash(env.DB, variantId, versionHash);
   if (alreadyStored) {
     if (revision) {
@@ -458,12 +475,19 @@ export async function ingestOfficialLexDocument(
   const header = [
     env.DB.prepare(`INSERT INTO legal_corpus_documents
       (id,provider,jurisdiction,source_class,scope,tenant_id,owner_user_id,matter_id,visibility,canonical_url,title,short_title,document_type,document_number,adopting_authority,adoption_date,publication_date,availability_status,trusted,verification_status,approval_required,created_at,updated_at)
-      VALUES (?,?,?,?,? ,NULL,NULL,NULL,?,?,?,?,?,NULL,NULL,NULL,NULL,'ready',1,'official_source',0,?,?)
-      ON CONFLICT(id) DO UPDATE SET updated_at=excluded.updated_at
+      VALUES (?,?,?,?,? ,NULL,NULL,NULL,?,?,?,?,?,?,?,?,?,'ready',1,'official_source',0,?,?)
+      ON CONFLICT(id) DO UPDATE SET
+        document_type=coalesce(excluded.document_type,legal_corpus_documents.document_type),
+        document_number=coalesce(excluded.document_number,legal_corpus_documents.document_number),
+        adopting_authority=coalesce(excluded.adopting_authority,legal_corpus_documents.adopting_authority),
+        adoption_date=coalesce(excluded.adoption_date,legal_corpus_documents.adoption_date),
+        updated_at=excluded.updated_at
     `).bind(
       documentId, "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", "global",
       currentDocument.sourceUrl, normalized.documentTitle, normalized.documentTitle.slice(0, 240),
-      "legal_act", now, now,
+      documentMetadata.documentType, documentMetadata.documentNumber,
+      documentMetadata.adoptingAuthority, documentMetadata.adoptionDate, null,
+      now, now,
     ),
     env.DB.prepare(`INSERT INTO legal_corpus_variants
       (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at,title,short_title)

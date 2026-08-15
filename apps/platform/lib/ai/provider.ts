@@ -54,6 +54,10 @@ export type LegalSourceContext = {
   excerpt?: string | null;
   effectiveDate?: string | null;
   applicabilityStatus?: "current" | "historical";
+  documentType?: string | null;
+  documentNumber?: string | null;
+  adoptingAuthority?: string | null;
+  sourceClass?: "OFFICIAL_LEGISLATION" | "OFFICIAL_GOVERNMENT_GUIDANCE" | "OWNER_TRUSTED_GLOBAL" | "TENANT_TRUSTED_PRIVATE" | "USER_TRUSTED_PRIVATE" | "DERIVED_TRANSLATION" | "SECONDARY_REFERENCE";
   /** Request-scoped clean text. It must never be persisted after generation. */
   spans?: LegalSourceSpan[];
   sourceQuality?: {

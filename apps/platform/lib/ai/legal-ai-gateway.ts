@@ -368,6 +368,9 @@ function canonicalLegacySource(
   source: LegalSourceContext,
   span: LegalSourceSpan,
 ): LegalChatResponse["sources"][number] {
+  const language = source.locale === "uzc" ? "uz-Cyrl" as const
+    : source.locale === "uz" ? "uz-Latn" as const
+      : source.locale === "en" ? "en" as const : "ru" as const;
   return {
     sourceId: source.id,
     actTitle: source.actTitle,
@@ -378,6 +381,12 @@ function canonicalLegacySource(
     status: source.applicabilityStatus ?? "current",
     effectiveDate: source.effectiveDate ?? null,
     verifiedAt: source.verifiedAt,
+    documentType: source.documentType ?? null,
+    documentNumber: source.documentNumber ?? source.actIdentifier ?? null,
+    adoptingAuthority: source.adoptingAuthority ?? null,
+    sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
+    language,
+    sourceOrigin: source.verificationState === "direct_validated" ? "live" : "indexed",
   };
 }
 

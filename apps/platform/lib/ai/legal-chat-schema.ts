@@ -21,7 +21,7 @@ export const legalRiskSchema = z.object({
   sourceIds: sourceIdList,
 }).strict();
 
-export const legalSourceRefSchema = z.object({
+const legalSourceRefModelSchema = z.object({
   sourceId: z.string().min(1).max(160),
   actTitle: z.string().min(1).max(500),
   actIdentifier: z.string().max(240).nullable(),
@@ -31,6 +31,28 @@ export const legalSourceRefSchema = z.object({
   status: z.enum(["current", "historical", "repealed", "pending_effect", "unconfirmed"]),
   effectiveDate: z.string().max(64).nullable(),
   verifiedAt: z.string().max(64),
+}).strict();
+
+/**
+ * These fields are attached from the validated corpus packet by JURO. They are
+ * deliberately absent from the provider schema so the model cannot invent
+ * document metadata, provenance, language, or live/indexed state.
+ */
+export const legalSourceRefSchema = legalSourceRefModelSchema.extend({
+  documentType: z.string().max(160).nullable().optional(),
+  documentNumber: z.string().max(240).nullable().optional(),
+  adoptingAuthority: z.string().max(500).nullable().optional(),
+  sourceClass: z.enum([
+    "OFFICIAL_LEGISLATION",
+    "OFFICIAL_GOVERNMENT_GUIDANCE",
+    "OWNER_TRUSTED_GLOBAL",
+    "TENANT_TRUSTED_PRIVATE",
+    "USER_TRUSTED_PRIVATE",
+    "DERIVED_TRANSLATION",
+    "SECONDARY_REFERENCE",
+  ]).optional(),
+  language: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]).optional(),
+  sourceOrigin: z.enum(["indexed", "live"]).optional(),
 }).strict();
 
 export const requiredDocumentSchema = z.object({
@@ -102,12 +124,14 @@ export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
  * OpenAI Structured Outputs requires every property in an object schema to be
  * listed as required, whereas these three fields must remain server-owned.
  */
-export const legalChatModelResponseSchema = legalChatResponseSchema.omit({
-  sourceAccessMode: true,
-  sourcesRetrievedAt: true,
-  sourceValidationStatus: true,
-  coverageStatus: true,
-});
+export const legalChatModelResponseSchema = legalChatResponseSchema
+  .omit({
+    sourceAccessMode: true,
+    sourcesRetrievedAt: true,
+    sourceValidationStatus: true,
+    coverageStatus: true,
+  })
+  .extend({ sources: z.array(legalSourceRefModelSchema).max(12) });
 
 export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, {
   target: "draft-7",
