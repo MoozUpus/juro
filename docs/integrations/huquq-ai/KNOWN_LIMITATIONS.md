@@ -30,11 +30,12 @@
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
 - Staging corpus acquisition is still in progress. The read-only snapshot at
-  2026-08-15 20:46 +05:00 had 414 canonical documents, 593 language variants,
-  9,664 unique current provisions and 23,140 current/indexed chunks. There were
-  657 completed jobs, 3,657 queued/retrying jobs, one running job at the sampled
-  instant, zero terminal failures and 13 preserved technically-unavailable
-  failure records. Only 7/44 category/language checkpoints passed the full
+  2026-08-15 21:52 +05:00 had 418 canonical documents, 698 language variants,
+  10,272 unique current provisions and 27,535 current/indexed chunks. There were
+  771 completed jobs, 4,307 queued jobs, one running job at the sampled instant,
+  zero failed/dead-letter jobs and 13 preserved technically-unavailable failure
+  records representing four documents. Only 7/44 category/language checkpoints
+  passed the full
   release formula. This is below the 1,283 / 20,296 release floors and is not
   evidence that coverage is complete; exceeding the chunk minimum alone does
   not satisfy the gate.

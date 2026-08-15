@@ -442,6 +442,74 @@ documents. The chunk floor alone is exceeded; the canonical-document,
 unique-provision and 44/44 checkpoint gates are not, so no full-corpus,
 dense-retrieval or final 314-scenario benchmark claim is made.
 
+## Ephemeral-container snapshot persistence and admin health
+
+Commit `a673cfeebd18a730e0186ee9800ad1ce267ab266` closes the data-loss
+boundary created by a Qdrant Container's ephemeral local disk. Once Lex
+acquisition is frozen and one whole dense-backfill invocation begins empty,
+the corpus Worker verifies exact D1/Qdrant point parity, creates a collection
+snapshot, streams it directly into the private staging backup bucket with the
+Qdrant SHA-256 as the R2 upload checksum, verifies object size and checksum,
+stores a separately checksum-verified JSON manifest and records the immutable
+snapshot ledger row. A cold or partial collection now fails closed unless it
+can restore an environment- and collection-matched private-R2 snapshot. Only
+post-snapshot point IDs are reset for deterministic replay after restore; the
+source D1 chunks are not deleted or rewritten.
+
+Staging platform Worker `3b103259-5f38-4f19-81b6-23dceffc5e5d` and corpus
+Worker `3f6081d5-dd05-4603-beaa-b945167489af` published that lifecycle while
+keeping `LEGAL_CORPUS_DENSE_ENABLED=false`. The immediate read-only D1 check
+contained zero snapshot-ledger rows and zero dense vector IDs, proving that
+deployment did not start a paid provider backfill or manufacture a snapshot.
+Local verification passed 186/186 tests, lint, type-check, staging build,
+platform artifact validation, corpus Worker dry-run and the focused snapshot
+suite. Exact-head CI
+[31895828352](https://github.com/MoozUpus/juro/actions/runs/31895828352)
+and Qdrant gate
+[31895828373](https://github.com/MoozUpus/juro/actions/runs/31895828373)
+passed on `a673cfeebd18a730e0186ee9800ad1ce267ab266`. The latter retained artifact
+`qdrant-snapshot-gate-31895828373` (ID `9249767609`) containing a real
+118,784-byte Qdrant 1.18.2 snapshot with SHA-256
+`d437647cd7b2c3d28a71bf6290380abc39019bbc77be2b273c181b4928da5ccc`.
+
+Commit `0fe520256b0203b9394a80e70797ef469078ec83` adds a non-mutating Qdrant
+health record to the isolated corpus dashboard. It distinguishes disabled,
+not configured, collection missing, incompatible, unavailable and ready
+states. With the current dense flag off, the dashboard does not wake the
+Container or make a Qdrant request. When enabled, it validates the exact
+1,536-dimensional cosine dense plus sparse collection contract and reports
+exact total/current point counts without exposing the URL, collection name or
+API key. Staging platform Worker `c9a2a3e8-950c-4944-b2d1-2e717b30cfe7`
+and admin Worker `4337ee1c-212b-4b3c-b724-a4357f21ef14` now contain this
+surface. The unauthenticated boundary still redirects to Cloudflare Access;
+the connected in-app session had expired, so authenticated post-deploy visual
+QA remains pending and is not claimed.
+
+The exact-head Qdrant gate
+[31896757755](https://github.com/MoozUpus/juro/actions/runs/31896757755)
+passed on `0fe520256b0203b9394a80e70797ef469078ec83`. Artifact
+`qdrant-snapshot-gate-31896757755` (ID `9250007931`) records a 118,784-byte
+snapshot with SHA-256
+`306cb8cfff40cb1b41f16a17e4f18057428bd684771114134f165305e982fe49`
+and successful dense, sparse, hybrid, deletion, upload-restore and restored
+hybrid checks. Exact-head application CI
+[31896757760](https://github.com/MoozUpus/juro/actions/runs/31896757760)
+also passed both application jobs, including 186/186 platform tests, artifact
+validation, the Cloudflare environment matrix and dependency-licence policy.
+
+Sequential read-only staging samples between 2026-08-15 21:52 and 22:01
++05:00 contained 418 canonical documents, 698 language variants, 10,272
+unique current provisions, 27,489 current provisions, 27,535 current/indexed
+chunks and 73 historical versions. Jobs were 771 completed, 4,307 queued, one
+running at the first sampled instant and zero failed/dead-letter. The exact
+admin formula still produced only 7/44 complete checkpoints: 12 checkpoint
+rows had discovery status `completed`, 2,891 category/language documents were
+expected, 3,851 source entries had been discovered, 711 documents were
+indexed under those checkpoints and four were technically unavailable. The
+crawl therefore remains below the canonical-document, unique-provision and
+44/44 gates. Qdrant snapshot-ledger and dense-vector-ID counts remained zero;
+no full-corpus dense or final 314-scenario claim is made.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
