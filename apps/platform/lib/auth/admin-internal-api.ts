@@ -18,7 +18,10 @@ import {
   performLegalCorpusAdminAction,
   readLegalCorpusAdminDashboard,
 } from "../legal-corpus/admin-operations";
-import type { LegalCorpusFeatureFlag } from "../legal-corpus/trust";
+import {
+  LEGAL_CORPUS_FEATURE_FLAGS,
+  type LegalCorpusFeatureFlag,
+} from "../legal-corpus/trust";
 
 const SESSION_HEADER = "x-juro-admin-session";
 const INTERNAL_TOKEN_HEADER = "x-juro-admin-internal-token";
@@ -45,6 +48,22 @@ type AdminInternalEnv = {
   // admin path remains a valid rollback target.
   ADMIN_CONSOLE_TOKEN?: string;
 } & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
+
+export function legalCorpusAdminRuntimeEnv(
+  env: AdminInternalEnv,
+  db: D1Database,
+  appEnvironment: AdminDomainEnvironment,
+): AdminInternalEnv & { DB: D1Database; APP_ENV: AdminDomainEnvironment } {
+  const featureFlags = Object.fromEntries(
+    LEGAL_CORPUS_FEATURE_FLAGS.map((flag) => [flag, env[flag]]),
+  ) as Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
+  return {
+    DB: db,
+    BUCKET: env.BUCKET,
+    APP_ENV: appEnvironment,
+    ...featureFlags,
+  };
+}
 
 function environment(value: unknown): AdminDomainEnvironment | null {
   return value === "development" || value === "staging" || value === "production"
@@ -254,7 +273,7 @@ async function legalCorpusDashboard(request: Request, env: AdminInternalEnv): Pr
     return noStore({ code: "ACCESS_DENIED" }, 403);
   }
   const dashboard = await readLegalCorpusAdminDashboard({
-    env: { ...env, DB: authenticated.db, APP_ENV: authenticated.environment },
+    env: legalCorpusAdminRuntimeEnv(env, authenticated.db, authenticated.environment),
   });
   await appendAdminDomainAudit(authenticated.db, {
     environment: authenticated.environment,
@@ -294,7 +313,7 @@ async function legalCorpusAction(request: Request, env: AdminInternalEnv): Promi
   if (!assignment) return noStore({ code: "ACCESS_DENIED" }, 403);
   try {
     const result = await performLegalCorpusAdminAction({
-      env: { ...env, DB: authenticated.db, APP_ENV: authenticated.environment },
+      env: legalCorpusAdminRuntimeEnv(env, authenticated.db, authenticated.environment),
       staff: {
         userId: authenticated.principal.userId,
         sessionId: authenticated.principal.sessionId,

@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { PlatformStaffAccess } from "../lib/auth/staff-access";
 import { adminRoleAllows } from "../lib/auth/admin-domain-session";
+import { legalCorpusAdminRuntimeEnv } from "../lib/auth/admin-internal-api";
 import {
   LegalCorpusAdminError,
   performLegalCorpusAdminAction,
@@ -30,6 +31,24 @@ function enabledEnv(db: D1Database) {
     LEGAL_CORPUS_MULTILINGUAL_ENABLED: "true",
   };
 }
+
+test("admin runtime copies non-enumerable Cloudflare corpus bindings explicitly", () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const runtime = {} as Parameters<typeof legalCorpusAdminRuntimeEnv>[0];
+    Object.defineProperties(runtime, {
+      LEGAL_CORPUS_ENABLED: { value: "true", enumerable: false },
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: { value: "true", enumerable: false },
+      LEGAL_CORPUS_DENSE_ENABLED: { value: "false", enumerable: false },
+    });
+    const copied = legalCorpusAdminRuntimeEnv(runtime, d1, "staging");
+    assert.equal(copied.DB, d1);
+    assert.equal(copied.APP_ENV, "staging");
+    assert.equal(copied.LEGAL_CORPUS_ENABLED, "true");
+    assert.equal(copied.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
+    assert.equal(copied.LEGAL_CORPUS_DENSE_ENABLED, "false");
+  } finally { sqlite.close(); }
+});
 
 test("admin corpus actions are fail-closed behind both ingestion flags", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
