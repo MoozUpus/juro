@@ -703,7 +703,8 @@ export async function runNextLegalCorpusIngestionJob(
   const candidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
-    ORDER BY created_at ASC LIMIT 1
+    ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
+      coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
   `).bind(now).first<IngestionJob>();
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs

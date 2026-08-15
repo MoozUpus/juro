@@ -285,6 +285,37 @@ test("an explicit official alternate-language notice resolves as technically una
   }
 });
 
+test("a due retry is claimed before the ordinary ingestion backlog", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10001",
+      now,
+      correlationId: "ordinary-backlog",
+    });
+    const retry = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10002",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "due-retry",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='retrying',next_attempt_at=? WHERE id=?`).run(now.toISOString(), retry.jobId);
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.equal(run.jobId, retry.jobId);
+    assert.equal(run.status, "completed");
+    const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(queued.jobId) as { status: string };
+    assert.equal(untouched.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("ingestion links official RU UZ Cyrillic UZ Latin and EN variants into one family", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
