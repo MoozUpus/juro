@@ -174,6 +174,37 @@ zero terminal jobs and zero terminal technical failures. Discovery checkpoints
 were 7 completed, 35 queued and 2 retrying. This is still below the
 1,283 / 20,296 / 22,513 release floor.
 
+## English Lex ingestion repair
+
+The continuing crawl surfaced one real English-only contract defect in
+`https://lex.uz/en/docs/6408192`: the fetch layer accepted the official `en`
+route while the normalized snapshot schema still accepted only `ru`, `uz` and
+`uzc`. The valid page was therefore recorded as a generic non-retryable failure.
+Commit `e31504a61f6150a1dc4fc737f4513649c3cc68a0` adds `en` to the same typed
+schema and a regression that round-trips an English normalized snapshot.
+Platform lint/type-check, 15 focused parser/ingestion tests and GitHub Actions
+run [31883644191](https://github.com/MoozUpus/juro/actions/runs/31883644191)
+passed.
+
+Before the bounded staging repair, D1 Time Travel bookmark
+`0000139b-0000526a-000050c8-52a0e849c458c453705352ac31e28991` was recorded.
+The corrected corpus Worker was deployed as
+`274b094f-5996-4891-8fc8-0c41e0b76861`; the platform Worker was deployed as
+`d36fc836-29a3-40ab-b26a-021eeb8c7b75`. The repair statements were conditional
+on the exact job ID, English language, old generic error, exact attempt count
+and dead-letter state. Two early repair attempts were consumed by the already
+running pre-deploy `12:10:16–12:14:56Z` invocation and are not counted as
+passes. After that invocation released the distributed lease, the new Worker
+completed the same job at `12:16:59Z`.
+
+The persisted English variant is current and contains 13 unique provisions and
+13 indexed chunks. A post-run read-only check returned zero terminal jobs and
+zero terminal/technically-unavailable failures. At 2026-08-15 17:18 +05:00 the
+whole staging corpus contained 285 ready documents, 384 language variants, 395
+versions, 17,802 provisions and 17,840 indexed chunks; 391 jobs were completed,
+2,162 were queued/retrying and one was running. This remains below the release
+floor and does not claim complete category coverage.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
