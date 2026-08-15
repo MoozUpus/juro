@@ -19,17 +19,25 @@
   analysis, the actor's explicit rights confirmation, a current administrator
   or legal-reviewer assignment, fresh MFA, malware/OCR/R2 integrity checks and
   post-action audit.
-- Owner materials are intentionally excluded from official Lex citations and
-  do not affect legal-answer freshness. A non-official materials UX/provider
-  remains a separate evaluated product decision.
-- Staging corpus acquisition is still in progress. At 2026-08-15 14:36 +05:00
-  it had 65 official canonical documents, 103 language variants, 107 versions,
-  8,026 provisions and 8,038 chunks; this is not evidence that the release
-  coverage thresholds are satisfied.
+- Owner materials remain intentionally excluded from official Lex citations
+  and do not affect legal-answer freshness. User-upload factual grounding now
+  has a separate private provider path; it does not promote owner material into
+  global law or make a private document an official source.
+- Staging corpus acquisition is still in progress. The read-only snapshot at
+  2026-08-15 16:00 +05:00 had 178 ready canonical documents, 256 language
+  variants, 260 versions, 13,517 provisions and 13,552 indexed chunks. There
+  were 1,372 queued/retrying jobs, one running job and zero terminal technical
+  failures. This is below the 1,283 / 20,296 / 22,513 release floor and is not
+  evidence that coverage is complete.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed
   for the AI-chat light/dark empty state and caught one dark-history contrast
   regression that was fixed and reverified. A real source-bearing answer is
   still required before claiming visual QA of the full-article modal.
+- Private-document grounded chat, its private source card and the authenticated
+  R2-backed full-document branch are implemented and locally regression-tested.
+  They are not yet claimed as staging browser evidence until a completed,
+  indexed staging user document produces a real answer under an authenticated
+  owner session.
 - `status.juro.uz` now resolves and is attached to the production Worker. Its
   status-host fence still needs to be preserved in every future routing change.

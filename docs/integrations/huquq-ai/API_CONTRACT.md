@@ -23,6 +23,25 @@ D1 before returning this contract.
 are interface names only until a source is legally available, verified and enabled. A
 browser never receives the retrieval-service key.
 
+## Private user-document evidence
+
+Private uploads do not implement `LegalSourceRecord` and are never returned by
+an official-law provider. The server-only AI contract carries a bounded
+`LegalSourceContext` with `sourceType="internal"`,
+`sourceClass="USER_TRUSTED_PRIVATE"`, `verificationState="user_supplied"` and
+an opaque `juro-private://document/ud_<digest>` locator. Provider payloads get
+only the display title, source class/type, exact bounded span, page marker and
+source ID. Authorization IDs, R2 keys and source hashes are not included.
+
+The locator is not a downloadable URL. The authenticated
+`GET /api/platform/ai/citations/:messageId?sourceUrl=<locator>` route accepts it
+only when a validated citation belongs to the requested message and its
+conversation belongs to the current workspace/user. It rehydrates the vector
+ledger and latest analysis version in D1, enforces owner/access scope, then
+checks private R2 byte size and SHA-256 before returning bounded plain text.
+Any mismatch returns `CITATION_UNAVAILABLE` without falling back to a public or
+signed object URL.
+
 ## Owner material promotion
 
 `POST /api/internal/admin/legal-corpus` accepts `publish_owner_material` only

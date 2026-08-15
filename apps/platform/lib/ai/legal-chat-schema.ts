@@ -195,6 +195,26 @@ export function enforceLegalDatabaseFreshness(
   },
 ): LegalChatResponse {
   if (freshness.status === "unavailable") {
+    const privateFactsOnly = result.sources.length > 0
+      && result.sources.every((source) => source.sourceClass === "USER_TRUSTED_PRIVATE");
+    if (privateFactsOnly) {
+      const warning = options.locale === "ru"
+        ? "Факты ниже подтверждены только содержанием вашего документа. Достаточная норма в правовой базе JURO не найдена; документ не является официальным источником законодательства."
+        : "Quyidagi faktlar faqat sizning hujjatingiz mazmuni bilan tasdiqlangan. JURO huquqiy bazasida yetarli norma topilmadi; hujjat qonunchilikning rasmiy manbasi emas.";
+      return {
+        ...result,
+        assumptions: [{
+          statement: options.locale === "ru"
+            ? "Правовое основание требует отдельной проверки"
+            : "Huquqiy asos alohida tekshirilishi kerak",
+          impact: warning,
+        }, ...result.assumptions].slice(0, 16),
+        deadlines: [],
+        successOutlook: null,
+        suggestLawyer: true,
+        legalDatabaseAsOf: freshness.asOf,
+      };
+    }
     return forceClarificationWithoutVerifiedSources(result, {
       ...options,
       legalDatabaseAsOf: freshness.asOf,

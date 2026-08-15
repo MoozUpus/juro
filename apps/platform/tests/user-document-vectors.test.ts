@@ -7,8 +7,13 @@ import {
   executeUserDocumentIndexJob,
   scheduleUserDocumentIndexStatements,
   scheduleTrustedUserDocumentIndexStatements,
+  searchUserDocumentEvidence,
   searchUserDocuments,
 } from "../lib/document-analysis/user-document-vectors";
+import {
+  retrieveTrustedUserDocumentSources,
+} from "../lib/document-analysis/user-document-chat-sources";
+import { parsePrivateDocumentLocator } from "../lib/document-analysis/private-document-locator";
 
 const now = "2026-08-04T12:00:00.000Z";
 
@@ -142,6 +147,13 @@ test("user document chunking is deterministic, overlapping and bounded", () => {
   assert.ok(first.length <= 300);
   assert.equal(first[0]?.start, 0);
   assert.ok((first[1]?.start ?? 0) < (first[0]?.end ?? 0));
+
+  const windowsText = "  Заголовок\r\nПервое условие.\r\nОплата до 10 числа.  ";
+  const windowsChunk = chunkUserDocument(windowsText)[0]!;
+  assert.equal(
+    windowsText.slice(windowsChunk.start, windowsChunk.end).replace(/\r\n?/g, "\n").trim(),
+    windowsChunk.text,
+  );
 });
 
 test("0080 indexes immutable text and search fails closed across tenants and tampered metadata", async () => {
@@ -206,6 +218,22 @@ test("0080 indexes immutable text and search fails closed across tenants and tam
     }, { fetchImpl: embeddingFetch() });
     assert.equal(ownerResults.length, 1);
     assert.match(ownerResults[0]!.snippet, /10 числа/);
+    assert.equal("sourceHash" in ownerResults[0]!, false);
+    const evidence = await searchUserDocumentEvidence(env, {
+      workspaceId: "workspace-a", userId: "user-a", query: "срок оплаты",
+    }, { fetchImpl: embeddingFetch() });
+    assert.equal(evidence[0]?.sourceHash, sourceHash);
+    assert.equal(evidence[0]?.workspaceId, "workspace-a");
+    assert.equal(evidence[0]?.ownerUserId, "user-a");
+    const chatSources = await retrieveTrustedUserDocumentSources(env, {
+      workspaceId: "workspace-a", userId: "user-a", query: "срок оплаты", locale: "ru",
+    }, { fetchImpl: embeddingFetch(), now: new Date(now) });
+    assert.equal(chatSources.sources.length, 1);
+    assert.equal(chatSources.sources[0]?.sourceClass, "USER_TRUSTED_PRIVATE");
+    assert.equal(chatSources.sources[0]?.sourceType, "internal");
+    assert.equal(chatSources.sources[0]?.verificationState, "user_supplied");
+    assert.equal(parsePrivateDocumentLocator(chatSources.sources[0]!.officialUrl), evidence[0]?.id);
+    assert.equal(chatSources.sources[0]?.spans?.[0]?.textSha256.length, 64);
     const memberResults = await searchUserDocuments(env, {
       workspaceId: "workspace-a", userId: "user-b", query: "срок оплаты",
     }, { fetchImpl: embeddingFetch() });
@@ -238,9 +266,9 @@ test("0080 indexes immutable text and search fails closed across tenants and tam
         provider_request_id AS providerRequestId,price_version_id AS priceVersionId
        FROM ai_provider_usage_events ORDER BY created_at,id`,
     ).all() as Array<Record<string, unknown>>;
-    assert.equal(usage.length, 5);
+    assert.equal(usage.length, 7);
     assert.equal(usage.filter((event) => event.feature === "document_indexing").length, 1);
-    assert.equal(usage.filter((event) => event.feature === "document_search").length, 4);
+    assert.equal(usage.filter((event) => event.feature === "document_search").length, 6);
     assert.ok(usage.every((event) => event.status === "succeeded"));
     assert.ok(usage.every((event) => event.provider === "openai"));
     assert.ok(usage.every((event) => event.model === "text-embedding-3-large"));
@@ -251,8 +279,8 @@ test("0080 indexes immutable text and search fails closed across tenants and tam
       `SELECT sum(request_count) AS requests,sum(unpriced_request_count) AS unpriced
        FROM ai_cost_daily_aggregates`,
     ).get() as { requests: number; unpriced: number };
-    assert.equal(aggregate.requests, 5);
-    assert.equal(aggregate.unpriced, 5);
+    assert.equal(aggregate.requests, 7);
+    assert.equal(aggregate.unpriced, 7);
   } finally {
     sqlite.close();
   }

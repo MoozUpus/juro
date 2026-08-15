@@ -42,7 +42,7 @@ The following source-system dispositions are final for this integration:
 | 14 | Gemini LLM client | `services/llm.py` | generation/tools | OpenAI primary, Anthropic fallback | REJECT | MIT | provider policy conflict | Provider-routing tests |
 | 15 | Tool calling | `services/tools.py`, `agentic.py` | legal search/live tools | `legal-agent-tools.ts` | ADAPT | MIT concepts | SSRF/unbounded calls | Tool boundary tests |
 | 16 | Agent modes | `services/agents.py` | legal-domain presets | automatic JURO legal-domain research planner; no manual selector until each mode has evaluation evidence | ADAPT | MIT concepts | non-working UI mode | Planner/route tests; absent modes are not advertised |
-| 17 | Attachments | `services/attachments.py` | file analysis | JURO private R2/quarantine pipeline | ADAPT | MIT concepts | malware/tenant leak | Document-analysis tests |
+| 17 | Attachments | `services/attachments.py` | file analysis and chat context | JURO private R2/quarantine pipeline plus owner-scoped Vectorize → D1/R2 revalidated factual AI evidence | ADAPT | MIT concepts | malware/tenant leak; private text presented as law | Document-analysis, cross-tenant, private-grounding, citation and prompt-injection tests |
 | 18 | Drafting | `services/drafting.py` | blanks, legal grounds | JURO Document Builder integration | ADAPT | MIT concepts | invented facts | Suggested-document tests |
 | 19 | Registry/chunk store | `services/corpus.py` | article data access | D1 reviewed sources/chunks | REIMPLEMENT | MIT concepts | corpus in Git | Source evidence tests |
 | 20 | Lex discover/fetch/extract | `parser/lex/{discover,fetch,extract}.py` | official-source acquisition | JURO discovery/fetch/parser | ADAPT | MIT concepts | robots/SSRF/UI noise | Legal source tests |

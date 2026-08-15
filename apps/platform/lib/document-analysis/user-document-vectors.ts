@@ -81,6 +81,7 @@ type SearchLedgerRow = {
   sizeBytes: number;
   fileName: string;
   caseId: string | null;
+  uploadedAt: string;
 };
 
 export type UserDocumentSearchResult = {
@@ -94,6 +95,20 @@ export type UserDocumentSearchResult = {
   score: number;
   caseId: string | null;
   page: number | null;
+};
+
+/**
+ * Server-only evidence used to ground factual statements from a user's own
+ * document. Public search results deliberately omit the authorization and
+ * integrity fields below.
+ */
+export type UserDocumentSearchEvidence = UserDocumentSearchResult & {
+  workspaceId: string;
+  ownerUserId: string;
+  sourceHash: string;
+  language: "ru" | "uz" | "mixed" | "unknown";
+  accessScope: "owner" | "workspace";
+  uploadedAt: string;
 };
 
 const embeddingResponseSchema = z.object({
@@ -129,6 +144,7 @@ async function createEmbeddings(
   inputs: readonly string[],
   fetchImpl: typeof fetch,
   usage: { workspaceId: string; userId: string; feature: "document_indexing" | "document_search" },
+  signal?: AbortSignal,
 ): Promise<number[][]> {
   if (!env.OPENAI_API_KEY) {
     throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_CONFIGURATION_UNAVAILABLE", false);
@@ -172,6 +188,7 @@ async function createEmbeddings(
         dimensions: EMBEDDING_DIMENSIONS,
         encoding_format: "float",
       }),
+      signal,
     });
   } catch {
     await recordFailure("PROVIDER_NETWORK_ERROR");
@@ -226,26 +243,28 @@ async function createEmbeddings(
 }
 
 export function chunkUserDocument(text: string): Chunk[] {
-  const normalized = text.replace(/\r\n?/g, "\n").trim();
-  if (!normalized) return [];
+  const firstContent = text.search(/\S/u);
+  if (firstContent < 0) return [];
+  let contentEnd = text.length;
+  while (contentEnd > firstContent && /\s/u.test(text[contentEnd - 1] ?? "")) contentEnd -= 1;
   const chunks: Chunk[] = [];
-  let start = 0;
-  while (start < normalized.length && chunks.length < MAX_CHUNKS) {
-    let end = Math.min(start + CHUNK_CHAR_LIMIT, normalized.length);
-    if (end < normalized.length) {
+  let start = firstContent;
+  while (start < contentEnd && chunks.length < MAX_CHUNKS) {
+    let end = Math.min(start + CHUNK_CHAR_LIMIT, contentEnd);
+    if (end < contentEnd) {
       const boundary = Math.max(
-        normalized.lastIndexOf("\n", end),
-        normalized.lastIndexOf(". ", end),
-        normalized.lastIndexOf(" ", end),
+        text.lastIndexOf("\n", end),
+        text.lastIndexOf(". ", end),
+        text.lastIndexOf(" ", end),
       );
       if (boundary > start + Math.floor(CHUNK_CHAR_LIMIT * 0.6)) end = boundary + 1;
     }
-    const chunkText = normalized.slice(start, end).trim();
+    const chunkText = text.slice(start, end).replace(/\r\n?/g, "\n").trim();
     if (chunkText) chunks.push({ index: chunks.length, start, end, text: chunkText });
-    if (end >= normalized.length) break;
+    if (end >= contentEnd) break;
     start = Math.max(start + 1, end - CHUNK_OVERLAP);
   }
-  if (start < normalized.length && chunks.length >= MAX_CHUNKS) {
+  if (start < contentEnd && chunks.length >= MAX_CHUNKS) {
     throw new UserDocumentVectorError("USER_DOCUMENT_VECTOR_STATE_REJECTED", false);
   }
   return chunks;
@@ -518,11 +537,11 @@ function metadataNumber(metadata: Record<string, VectorizeVectorMetadata> | unde
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-export async function searchUserDocuments(
+export async function searchUserDocumentEvidence(
   env: UserDocumentVectorEnv,
   input: { workspaceId: string; userId: string; query: string; limit?: number },
-  options: { fetchImpl?: typeof fetch } = {},
-): Promise<UserDocumentSearchResult[]> {
+  options: { fetchImpl?: typeof fetch; signal?: AbortSignal } = {},
+): Promise<UserDocumentSearchEvidence[]> {
   const query = input.query.normalize("NFKC").trim().slice(0, 500);
   if (query.length < 2) return [];
   const membership = await env.DB.prepare(
@@ -534,6 +553,7 @@ export async function searchUserDocuments(
     [query],
     options.fetchImpl ?? fetch,
     { workspaceId: input.workspaceId, userId: input.userId, feature: "document_search" },
+    options.signal,
   );
   let matches: VectorizeMatches;
   try {
@@ -555,7 +575,7 @@ export async function searchUserDocuments(
       job.document_version_id AS documentVersionId,job.workspace_id AS workspaceId,
       job.owner_user_id AS ownerUserId,job.source_hash AS sourceHash,job.language,
       job.access_scope AS accessScope,version.r2_key AS r2Key,version.size_bytes AS sizeBytes,
-      version.file_name AS fileName,analysis.case_id AS caseId
+      version.file_name AS fileName,version.created_at AS uploadedAt,analysis.case_id AS caseId
      FROM user_document_vector_chunks chunk
      JOIN user_document_index_jobs job ON job.id=chunk.job_id AND job.status='submitted'
      JOIN analysis_document_versions version ON version.id=job.document_version_id
@@ -572,7 +592,7 @@ export async function searchUserDocuments(
   ).bind(...ids, input.workspaceId, input.userId).all<SearchLedgerRow>();
   const byVector = new Map(ledger.results.map((row) => [row.vectorId, row]));
   const textCache = new Map<string, string>();
-  const results: UserDocumentSearchResult[] = [];
+  const results: UserDocumentSearchEvidence[] = [];
   for (const match of matches.matches) {
     const row = byVector.get(match.id);
     if (!row) continue;
@@ -609,14 +629,42 @@ export async function searchUserDocuments(
       documentVersionId: row.documentVersionId,
       title: row.fileName,
       subtitle: row.caseId ? "Содержимое документа · связано с делом" : "Содержимое документа",
-      snippet: snippet.slice(0, 420),
+      snippet: snippet.slice(0, CHUNK_CHAR_LIMIT),
       score: Number(match.score),
       caseId: row.caseId,
       page: Number(row.page) > 0 ? Number(row.page) : null,
+      workspaceId: row.workspaceId,
+      ownerUserId: row.ownerUserId,
+      sourceHash: row.sourceHash,
+      language: row.language === "ru" || row.language === "uz" || row.language === "mixed"
+        ? row.language
+        : "unknown",
+      accessScope: row.accessScope === "workspace" ? "workspace" : "owner",
+      uploadedAt: row.uploadedAt,
     });
     if (results.length >= Math.min(Math.max(input.limit ?? 6, 1), 10)) break;
   }
   return results;
+}
+
+export async function searchUserDocuments(
+  env: UserDocumentVectorEnv,
+  input: { workspaceId: string; userId: string; query: string; limit?: number },
+  options: { fetchImpl?: typeof fetch; signal?: AbortSignal } = {},
+): Promise<UserDocumentSearchResult[]> {
+  const evidence = await searchUserDocumentEvidence(env, input, options);
+  return evidence.map((result) => ({
+    type: result.type,
+    id: result.id,
+    analysisId: result.analysisId,
+    documentVersionId: result.documentVersionId,
+    title: result.title,
+    subtitle: result.subtitle,
+    snippet: result.snippet.slice(0, 420),
+    score: result.score,
+    caseId: result.caseId,
+    page: result.page,
+  }));
 }
 
 export async function deleteUserDocumentVectorsForOwner(

@@ -51,6 +51,8 @@ type ArticleDetails = {
   section: string | null;
   text: string | null;
   fullArticle: boolean;
+  fullDocument?: boolean;
+  privateSource?: boolean;
   truncated: boolean;
   language: string;
   status: string;
@@ -595,6 +597,10 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
     return (ru ? ruLabels : uzLabels)[type];
   }
 
+  const visibleSources = answer?.result.sources.filter((source) =>
+    safeOfficialUrl(source.originalUrl) || isTrustedPrivateSource(source)) ?? [];
+  const hasPrivateSources = visibleSources.some(isTrustedPrivateSource);
+
   if (loading) return <div className="ai-workspace-loading"><LoaderCircle className="spin" /></div>;
   return (
     <section className={`ai-workspace ${voiceMode ? "ai-workspace-voice" : ""} ${theme === "dark" ? "ai-theme-dark" : "ai-theme-light"}`}>
@@ -710,7 +716,7 @@ export function AiLawyerClient({ locale }: { locale: PlatformLocale }) {
       <aside className="ai-context">
         <header><BookOpenCheck /><strong>{ru ? "Контекст" : "Kontekst"}</strong></header>
         <section><h2>{ru ? "Факты для подтверждения" : "Tasdiqlash uchun faktlar"}</h2>{answer?.facts.length ? answer.facts.map((fact) => <div className={`ai-fact ${fact.status}`} key={fact.id}><p>{fact.statement}</p>{fact.status === "proposed" ? <span><button onClick={() => void updateFact(fact.id, "confirmed")} aria-label={ru ? "Подтвердить факт" : "Faktni tasdiqlash"}><Check /></button><button onClick={() => void updateFact(fact.id, "rejected")} aria-label={ru ? "Отклонить факт" : "Faktni rad etish"}><X /></button></span> : <small>{fact.status === "confirmed" ? (ru ? "Подтверждено" : "Tasdiqlandi") : (ru ? "Отклонено" : "Rad etildi")}</small>}</div>) : <p>{ru ? "Предположения появятся после разбора." : "Taxminlar tahlildan keyin paydo bo‘ladi."}</p>}</section>
-        <section className="ai-evidence"><h2>{ru ? "Основания в Lex.uz" : "Lex.uz asoslari"}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{answer?.result.sources.length ? answer.result.sources.map((source) => safeOfficialUrl(source.originalUrl) ? <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer.messageId} retrievedAt={answer.result.sourcesRetrievedAt} sourceAccessMode={answer.result.sourceAccessMode} cases={cases} locale={locale} /> : null) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
+        <section className="ai-evidence"><h2>{hasPrivateSources ? (ru ? "Источники" : "Manbalar") : (ru ? "Основания в Lex.uz" : "Lex.uz asoslari")}</h2>{answer?.result.coverageStatus && <p className={`ai-coverage ai-coverage-${answer.result.coverageStatus}`}>{coverageLabel(answer.result.coverageStatus, ru)}</p>}{visibleSources.length ? visibleSources.map((source) => <LegalSourceCard key={`${source.sourceId}:${source.article || "source"}`} source={source} messageId={answer?.messageId} retrievedAt={answer?.result.sourcesRetrievedAt} sourceAccessMode={answer?.result.sourceAccessMode} cases={cases} locale={locale} />) : <p>{ru ? "Подтверждённое основание Lex.uz не найдено; статья и ссылка не выдумываются." : "Tasdiqlangan Lex.uz asosi topilmadi; modda va havola o‘ylab topilmaydi."}</p>}</section>
       </aside>
     </section>
   );
@@ -855,6 +861,7 @@ function LegalSourceCard({
   const [details, setDetails] = useState<ArticleDetails | null>(null);
   const [error, setError] = useState("");
   const closeRef = useRef<HTMLButtonElement | null>(null);
+  const privateSource = isTrustedPrivateSource(source);
 
   useEffect(() => {
     if (!open) return;
@@ -880,9 +887,13 @@ function LegalSourceCard({
       if (!response.ok) throw new Error(body.error || body.code || "CITATION_UNAVAILABLE");
       setDetails(body);
     } catch {
-      setError(ru
-        ? "Полный текст сейчас недоступен. Ниже остаётся проверенный фрагмент из ответа."
-        : "To‘liq matn hozir mavjud emas. Quyida javobdagi tekshirilgan parcha qoladi.");
+      setError(privateSource
+        ? (ru
+          ? "Документ сейчас недоступен. Ниже остаётся фрагмент, проверенный при формировании ответа."
+          : "Hujjat hozir mavjud emas. Quyida javob tuzilganda tekshirilgan parcha qoladi.")
+        : (ru
+          ? "Полный текст сейчас недоступен. Ниже остаётся проверенный фрагмент из ответа."
+          : "To‘liq matn hozir mavjud emas. Quyida javobdagi tekshirilgan parcha qoladi."));
     } finally {
       setLoading(false);
     }
@@ -901,6 +912,8 @@ function LegalSourceCard({
     section: null,
     text: source.excerpt ?? null,
     fullArticle: false,
+    fullDocument: false,
+    privateSource,
     truncated: false,
     language: source.language ?? locale,
     status: source.status,
@@ -922,26 +935,28 @@ function LegalSourceCard({
       {(source.documentType || source.documentNumber) && <small>{[source.documentType, source.documentNumber].filter(Boolean).join(" · ")}</small>}
       {source.adoptingAuthority && <small>{source.adoptingAuthority}</small>}
       {source.excerpt && <q>{source.excerpt}</q>}
-      <em>{source.status}{source.effectiveDate ? ` · ${formatDate(source.effectiveDate, ru)}` : ""}</em>
-      <small>{sourceClassLabel(source.sourceClass, ru)} · {languageLabel(source.language ?? (locale === "uz" ? "uz-Latn" : "ru"), ru)} · {origin === "live" ? (ru ? "live Lex.uz" : "live Lex.uz") : (ru ? "локальный индекс" : "lokal indeks")}</small>
-      <small>{sourceAccessMode === "direct"
-        ? (ru ? "Проверено напрямую по Lex.uz" : "Lex.uz orqali bevosita tekshirildi")
-        : (ru ? "Проверено по утверждённому пакету источников" : "Tasdiqlangan manbalar paketi bo‘yicha tekshirildi")}</small>
+      <em>{sourceStatusLabel(source.status, ru)}{source.effectiveDate ? ` · ${formatDate(source.effectiveDate, ru)}` : ""}</em>
+      <small>{sourceClassLabel(source.sourceClass, ru)} · {languageLabel(source.language ?? (locale === "uz" ? "uz-Latn" : "ru"), ru)} · {privateSource ? (ru ? "защищённый индекс" : "himoyalangan indeks") : origin === "live" ? "live Lex.uz" : (ru ? "локальный индекс" : "lokal indeks")}</small>
+      <small>{privateSource
+        ? (ru ? "Доступ и целостность файла проверены для текущего пользователя" : "Faylga kirish va uning yaxlitligi joriy foydalanuvchi uchun tekshirildi")
+        : sourceAccessMode === "direct"
+          ? (ru ? "Проверено напрямую по Lex.uz" : "Lex.uz orqali bevosita tekshirildi")
+          : (ru ? "Проверено по утверждённому пакету источников" : "Tasdiqlangan manbalar paketi bo‘yicha tekshirildi")}</small>
     </div>
     <div className="ai-source-actions">
-      <button type="button" onClick={() => void showArticle()}><BookOpenCheck aria-hidden="true" />{ru ? "Текст статьи" : "Modda matni"}</button>
-      <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish"}</a>
+      <button type="button" onClick={() => void showArticle()}><BookOpenCheck aria-hidden="true" />{privateSource ? (ru ? "Текст документа" : "Hujjat matni") : (ru ? "Текст статьи" : "Modda matni")}</button>
+      {!privateSource && <a href={source.originalUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Открыть Lex.uz" : "Lex.uz saytini ochish"}</a>}
     </div>
-    <SourceBookmarkControl source={source} cases={cases} locale={locale} />
+    {!privateSource && <SourceBookmarkControl source={source} cases={cases} locale={locale} />}
     {open && <div className="ai-source-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setOpen(false); }}>
       <section className="ai-source-modal" role="dialog" aria-modal="true" aria-labelledby="ai-source-modal-title">
         <header>
-          <div><small>JURO · LEX.UZ</small><h2 id="ai-source-modal-title">{display.fullArticle ? (ru ? "Полный текст статьи" : "Moddaning to‘liq matni") : (ru ? "Проверенный фрагмент" : "Tekshirilgan parcha")}</h2></div>
+          <div><small>{privateSource ? "JURO · PRIVATE DOCUMENT" : "JURO · LEX.UZ"}</small><h2 id="ai-source-modal-title">{privateSource ? (ru ? "Документ пользователя" : "Foydalanuvchi hujjati") : display.fullArticle ? (ru ? "Полный текст статьи" : "Moddaning to‘liq matni") : (ru ? "Проверенный фрагмент" : "Tekshirilgan parcha")}</h2></div>
           <button ref={closeRef} type="button" aria-label={ru ? "Закрыть" : "Yopish"} onClick={() => setOpen(false)}><X /></button>
         </header>
         {loading ? <div className="ai-source-modal-state" role="status"><LoaderCircle className="spin" />{ru ? "Загружаем проверенную редакцию…" : "Tekshirilgan tahrir yuklanmoqda…"}</div> : <>
           {error && <p className="ai-source-modal-warning" role="status">{error}</p>}
-          {display.truncated && <p className="ai-source-modal-warning" role="status">{ru ? "Очень длинная статья показана частично; полная редакция доступна по официальной ссылке." : "Juda uzun modda qisman ko‘rsatildi; to‘liq tahrir rasmiy havolada mavjud."}</p>}
+          {display.truncated && <p className="ai-source-modal-warning" role="status">{privateSource ? (ru ? "Очень длинный документ показан частично." : "Juda uzun hujjat qisman ko‘rsatildi.") : (ru ? "Очень длинная статья показана частично; полная редакция доступна по официальной ссылке." : "Juda uzun modda qisman ko‘rsatildi; to‘liq tahrir rasmiy havolada mavjud.")}</p>}
           <div className="ai-source-modal-heading">
             <strong>{display.documentTitle}</strong>
             {(display.articleNumber || display.articleTitle) && <span>{[display.articleNumber, display.articleTitle].filter(Boolean).join(" · ")}</span>}
@@ -953,9 +968,9 @@ function LegalSourceCard({
             {display.adoptingAuthority && <div><dt>{ru ? "Принявший орган" : "Qabul qilgan organ"}</dt><dd>{display.adoptingAuthority}</dd></div>}
             <div><dt>{ru ? "Тип источника" : "Manba turi"}</dt><dd>{sourceClassLabel(display.sourceClass, ru)}</dd></div>
             <div><dt>{ru ? "Язык" : "Til"}</dt><dd>{display.language}</dd></div>
-            <div><dt>{ru ? "Статус" : "Holat"}</dt><dd>{display.status}</dd></div>
-            <div><dt>{ru ? "Редакция" : "Tahrir"}</dt><dd>{display.versionDate ? formatDate(display.versionDate, ru) : "—"}</dd></div>
-            <div><dt>{ru ? "Действует" : "Amal qiladi"}</dt><dd>{display.validFrom ? formatDate(display.validFrom, ru) : "—"}{display.validTo ? ` — ${formatDate(display.validTo, ru)}` : ""}</dd></div>
+            <div><dt>{ru ? "Статус" : "Holat"}</dt><dd>{sourceStatusLabel(display.status, ru)}</dd></div>
+            <div><dt>{privateSource ? (ru ? "Версия документа" : "Hujjat versiyasi") : (ru ? "Редакция" : "Tahrir")}</dt><dd>{display.versionDate ? formatDate(display.versionDate, ru) : "—"}</dd></div>
+            {!privateSource && <div><dt>{ru ? "Действует" : "Amal qiladi"}</dt><dd>{display.validFrom ? formatDate(display.validFrom, ru) : "—"}{display.validTo ? ` — ${formatDate(display.validTo, ru)}` : ""}</dd></div>}
             <div><dt>{ru ? "Проверено" : "Tekshirildi"}</dt><dd>{formatDate(display.verifiedAt, ru)}</dd></div>
           </dl>
           {display.availableLanguages.length > 0 && <section className="ai-source-modal-related" aria-label={ru ? "Доступные языки" : "Mavjud tillar"}>
@@ -964,11 +979,11 @@ function LegalSourceCard({
           </section>}
           {display.versionHistory.length > 0 && <details className="ai-source-modal-history">
             <summary>{ru ? `История редакций (${display.versionHistory.length})` : `Tahrirlar tarixi (${display.versionHistory.length})`}</summary>
-            <ol>{display.versionHistory.map((version) => <li key={`${version.versionNumber}:${version.fetchedAt}`}><strong>#{version.versionNumber}</strong><span>{version.versionDate ? formatDate(version.versionDate, ru) : formatDate(version.fetchedAt, ru)} · {version.status}{version.validFrom ? ` · ${formatDate(version.validFrom, ru)}` : ""}{version.validTo ? ` — ${formatDate(version.validTo, ru)}` : ""}</span></li>)}</ol>
+            <ol>{display.versionHistory.map((version) => <li key={`${version.versionNumber}:${version.fetchedAt}`}><strong>#{version.versionNumber}</strong><span>{version.versionDate ? formatDate(version.versionDate, ru) : formatDate(version.fetchedAt, ru)} · {sourceStatusLabel(version.status, ru)}{version.validFrom ? ` · ${formatDate(version.validFrom, ru)}` : ""}{version.validTo ? ` — ${formatDate(version.validTo, ru)}` : ""}</span></li>)}</ol>
           </details>}
           <div className="ai-source-modal-text">{display.text || (ru ? "Текст статьи не сохранён." : "Modda matni saqlanmagan.")}</div>
         </>}
-        <footer><a href={display.officialUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Официальный источник" : "Rasmiy manba"}</a></footer>
+        {!privateSource && <footer><a href={display.officialUrl} target="_blank" rel="noreferrer"><ExternalLink aria-hidden="true" />{ru ? "Официальный источник" : "Rasmiy manba"}</a></footer>}
       </section>
     </div>}
   </article>;
@@ -1173,6 +1188,29 @@ function sourceClassLabel(sourceClass: string | undefined, ru: boolean): string 
   if (sourceClass === "DERIVED_TRANSLATION") return ru ? "Производный перевод" : "Hosila tarjima";
   if (sourceClass === "SECONDARY_REFERENCE") return ru ? "Вторичный источник" : "Ikkilamchi manba";
   return ru ? "Официальное законодательство" : "Rasmiy qonunchilik";
+}
+
+function sourceStatusLabel(status: string, ru: boolean): string {
+  if (status === "user_supplied") return ru ? "Предоставлен пользователем" : "Foydalanuvchi taqdim etgan";
+  if (status === "current" || status === "active") return ru ? "Действует" : "Amalda";
+  if (status === "historical") return ru ? "Историческая редакция" : "Tarixiy tahrir";
+  if (status === "repealed") return ru ? "Утратил силу" : "O‘z kuchini yo‘qotgan";
+  if (status === "pending_effect") return ru ? "Ещё не вступил в силу" : "Hali kuchga kirmagan";
+  return ru ? "Статус не подтверждён" : "Holat tasdiqlanmagan";
+}
+
+function isTrustedPrivateSource(source: Source): boolean {
+  if (source.sourceClass !== "USER_TRUSTED_PRIVATE") return false;
+  try {
+    const url = new URL(source.originalUrl);
+    return url.protocol === "juro-private:"
+      && url.hostname === "document"
+      && /^\/ud_[a-f0-9]{61}$/u.test(url.pathname)
+      && !url.search
+      && !url.hash;
+  } catch {
+    return false;
+  }
 }
 
 function safeOfficialUrl(value: string) {

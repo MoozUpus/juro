@@ -8,6 +8,7 @@ import { z } from "zod";
  */
 
 import { containsLegalSourceUiNoise } from "../legal/source-parser";
+import { parsePrivateDocumentLocator } from "../document-analysis/private-document-locator";
 import {
   classifyLegalIntent,
   planLegalResearch,
@@ -141,6 +142,20 @@ function officialLexUrl(value: string): boolean {
   }
 }
 
+function trustedPrivateSource(source: LegalSourceContext): boolean {
+  return source.sourceType === "internal"
+    && source.sourceClass === "USER_TRUSTED_PRIVATE"
+    && source.verificationState === "user_supplied"
+    && source.status === "user_supplied"
+    && parsePrivateDocumentLocator(source.officialUrl) !== null
+    && /^[a-f0-9]{64}$/u.test(source.contentSha256)
+    && source.sourceQuality?.passed === true;
+}
+
+function claimTypeForSource(claim: CandidateClaim, source: LegalSourceContext): LegalGatewayClaim["type"] {
+  return trustedPrivateSource(source) ? "fact" : claim.type;
+}
+
 function legalTerms(value: string): string[] {
   // Uzbek apostrophes are written with several Unicode characters. Treat
   // them as part of the word before tokenization; otherwise a term such as
@@ -204,11 +219,11 @@ function validateSpanForClaim(
   source: LegalSourceContext,
   span: LegalSourceSpan,
 ): boolean {
-  if (
-    source.sourceType !== "lex"
-    || !["direct_validated", "verified"].includes(source.verificationState)
-  ) return false;
-  if (!source.sourceQuality?.passed || !officialLexUrl(source.officialUrl)) return false;
+  const verifiedLex = source.sourceType === "lex"
+    && ["direct_validated", "verified"].includes(source.verificationState)
+    && source.sourceQuality?.passed === true
+    && officialLexUrl(source.officialUrl);
+  if (!verifiedLex && !trustedPrivateSource(source)) return false;
   if (span.quality !== "high" || containsLegalSourceUiNoise(span.text)) return false;
   if (!/^[a-f0-9]{64}$/u.test(span.textSha256)) return false;
   const spanText = span.text.toLocaleLowerCase();
@@ -332,6 +347,10 @@ export function validateGroundedPreliminaryFinding(input: {
     new Map(input.sources.map((source) => [source.id, source])),
   );
   if (!match) return null;
+  // Streaming preliminaries are intentionally limited to authoritative law.
+  // Private files may ground terminal factual claims only after the complete
+  // answer has passed the same tenant-scoped final validation path.
+  if (trustedPrivateSource(match.source)) return null;
   if (input.question && !claimAnswersQuestion(input.question, candidate.text, match.span)) return null;
   const claim: LegalGatewayClaim = {
     text: candidate.text,
@@ -407,7 +426,7 @@ function sourceGroundedFallback(
       if (sentence.length < 40) continue;
       const candidate: CandidateClaim = {
         text: sentence,
-        type: "legal_basis",
+        type: trustedPrivateSource(source) ? "fact" : "legal_basis",
         sourceIds: [source.id],
       };
       if (!validateSpanForClaim(candidate, source, span)) continue;
@@ -415,7 +434,7 @@ function sourceGroundedFallback(
       return {
         claim: {
           text: sentence,
-          type: "legal_basis",
+          type: claimTypeForSource(candidate, source),
           sourceId: source.id,
           sourceSpanId: span.id,
           confidence: 1,
@@ -447,7 +466,7 @@ export function validateLegalGatewayAnswer(input: {
     if (input.question && !claimAnswersQuestion(input.question, claim.text, match.span)) return [];
     return [{
       text: claim.text,
-      type: claim.type,
+      type: claimTypeForSource(claim, match.source),
       sourceId: match.source.id,
       sourceSpanId: match.span.id,
       confidence: Math.min(1, Math.max(0.5, match.coverage)),

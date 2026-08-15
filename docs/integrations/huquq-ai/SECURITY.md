@@ -6,6 +6,18 @@
   support a claim. Repealed material is historical-only.
 - Uploaded files stay in the existing private R2/quarantine/ownership flow. Do not add a
   public legal-document URL or log source text, full questions, PINFL, mail or tokens.
+- User-upload grounding is independently gated by
+  `LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST`. A Vectorize hit is never authority:
+  D1 must revalidate active workspace membership, owner/access scope, latest
+  immutable document version and exact metadata, then R2 size and SHA-256 must
+  match. Failure returns no private context. The browser receives neither an
+  R2 key nor a public/signed file URL; full-text access repeats the same
+  conversation, tenant, D1 and R2 checks.
+- `USER_TRUSTED_PRIVATE` spans may support factual claims about the uploaded
+  document only. The gateway converts them to `fact`, excludes them from
+  streaming legal preliminaries, and never lets them establish legislation,
+  legal freshness or coverage. Instructions embedded in a file remain
+  untrusted data for both OpenAI and Anthropic.
 - Tool calls are typed, bounded, audited and permission checked. No arbitrary URL, SQL or
   cross-tenant document access is exposed to a model.
 - Feature flags are deny-by-default. A disabled source or failed validation yields an

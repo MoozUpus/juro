@@ -85,3 +85,82 @@ test("citation persistence accepts only an exact validated span excerpt", () => 
   });
   assert.equal(bindings[0]?.[13], null);
 });
+
+test("citation persistence accepts a validated private locator without treating it as Lex", () => {
+  const bindings: unknown[][] = [];
+  const db = {
+    prepare() {
+      return {
+        bind(...values: unknown[]) {
+          bindings.push(values);
+          return {} as D1PreparedStatement;
+        },
+      };
+    },
+  } as unknown as D1Database;
+  const vectorId = `ud_${"d".repeat(61)}`;
+  const source: LegalSourceContext = {
+    id: `private:${vectorId}`,
+    actTitle: "Договор аренды.md",
+    actIdentifier: null,
+    officialUrl: `juro-private://document/${vectorId}`,
+    revisionDate: "2026-08-15T08:00:00.000Z",
+    lastCheckedAt: "2026-08-15T08:01:00.000Z",
+    locale: "ru",
+    publishedAt: "2026-08-15T08:00:00.000Z",
+    sourceType: "internal",
+    status: "user_supplied",
+    verificationState: "user_supplied",
+    verifiedAt: "2026-08-15T08:01:00.000Z",
+    contentSha256: "a".repeat(64),
+    sourceClass: "USER_TRUSTED_PRIVATE",
+    excerpt: "Оплата производится до 10 числа.",
+    spans: [{
+      id: `${vectorId}:span`,
+      article: null,
+      paragraph: "page:1",
+      text: "Оплата производится до 10 числа.",
+      textSha256: "b".repeat(64),
+      quality: "high",
+    }],
+    sourceQuality: {
+      passed: true, title: true, sufficientText: true, clean: true,
+      locale: true, canonicalUrl: true, structured: true,
+    },
+  };
+  const citations = [{
+    sourceId: source.id,
+    actTitle: source.actTitle,
+    actIdentifier: null,
+    article: null,
+    excerpt: source.excerpt ?? null,
+    originalUrl: source.officialUrl,
+    status: "current",
+    effectiveDate: null,
+    verifiedAt: source.verifiedAt,
+  }];
+  const statements = legalCitationStatements({
+    db,
+    sources: [source],
+    citations,
+    aiRunId: "run-private",
+    conversationId: "conversation-private",
+    messageId: "message-private",
+    now: "2026-08-15T08:02:00.000Z",
+    sourceAccessMode: "approved_package",
+  });
+  assert.equal(statements.length, 1);
+  assert.equal(bindings[0]?.[5], "internal");
+  assert.equal(bindings[0]?.[8], source.officialUrl);
+  assert.equal(bindings[0]?.[13], source.excerpt);
+
+  const rejected = legalCitationStatements({
+    db,
+    sources: [{ ...source, officialUrl: "https://example.invalid/private" }],
+    citations,
+    aiRunId: "run-forged-private",
+    now: "2026-08-15T08:03:00.000Z",
+    sourceAccessMode: "approved_package",
+  });
+  assert.equal(rejected.length, 0);
+});
