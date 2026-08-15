@@ -15,6 +15,7 @@
     "deploy:production": "node scripts/deploy-production.mjs",
     "deploy:legal-corpus:staging": "wrangler deploy --config wrangler.legal-corpus.jsonc --env staging",
     "validate:legal-corpus:artifact": "wrangler deploy --dry-run --config wrangler.legal-corpus.jsonc --env staging --outdir dist/legal-corpus-worker",
+    "validate:legal-corpus:qdrant-gate": "tsx scripts/verify-qdrant-snapshot-gate.ts",
     "validate:legal-corpus:release": "tsx scripts/validate-legal-corpus-release.ts",
     "start": "node scripts/platform-tasks.mjs start",
     "test": "node scripts/platform-tasks.mjs test",
