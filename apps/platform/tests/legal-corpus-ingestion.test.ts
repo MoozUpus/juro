@@ -232,6 +232,82 @@ test("a retryable Qdrant post-ingest failure keeps the corpus job retryable", as
   }
 });
 
+test("an unknown operational failure is retried within the bounded job budget", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/67892",
+      now,
+      correlationId: "bounded-operational-retry",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchFor(lexHtml()),
+      afterIngest: async () => {
+        throw new Error("database temporarily unavailable");
+      },
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "retrying",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_INGESTION_FAILED",
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,max_attempts AS maxAttempts
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; maxAttempts: number;
+      };
+    assert.equal(job.status, "retrying");
+    assert.equal(job.attemptCount, 1);
+    assert.equal(job.maxAttempts, 5);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a first-attempt generic dead letter is automatically redriven and preserves failure evidence", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/67893",
+      now,
+      correlationId: "automatic-dead-letter-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=1,last_error_code='LEGAL_CORPUS_INGESTION_FAILED'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,1,'terminal')`).run(
+      "generic-dead-letter", queued.jobId, "lexuz:67893",
+      "https://lex.uz/docs/67893", "uz-Cyrl", now.toISOString(),
+      "LEGAL_CORPUS_INGESTION_FAILED", "LEGAL_CORPUS_INGESTION_FAILED",
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState
+      FROM legal_corpus_failures WHERE id='generic-dead-letter'`).get() as {
+        retryable: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, { retryable: 1, retryState: "retrying" });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("an explicit official alternate-language notice resolves as technically unavailable", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

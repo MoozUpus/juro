@@ -33,6 +33,13 @@ import { buildSparseTermEntries, sparseTermsJson } from "./sparse-index";
 const MAX_PROVISIONS_PER_VERSION = 8_000;
 const MAX_CHUNKS_PER_VERSION = 16_000;
 const WRITE_BATCH_SIZE = 90;
+const RETRYABLE_INTERNAL_ERROR_CODES = new Set([
+  "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
+]);
+const RECOVERABLE_DEAD_LETTER_CODES = [
+  "LEGAL_CORPUS_INGESTION_FAILED",
+  ...RETRYABLE_INTERNAL_ERROR_CODES,
+] as const;
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -118,6 +125,12 @@ function objectStem(documentId: string, language: LegalCorpusLanguage, hash: str
   return `legal-corpus/lex-uz/${documentId.replaceAll(":", "/")}/${language}/${hash}`;
 }
 
+function internalErrorCode(error: unknown): string | null {
+  if (!(error instanceof TypeError)) return null;
+  const message = error.message.trim();
+  return /^LEGAL_CORPUS_[A-Z0-9_]{1,100}$/u.test(message) ? message : null;
+}
+
 function safeErrorCode(error: unknown): string {
   if (error instanceof LegalSourceFetchError || error instanceof LegalSourceParserError) {
     return error.code;
@@ -125,14 +138,21 @@ function safeErrorCode(error: unknown): string {
   if (error instanceof QdrantCorpusError || error instanceof LegalCorpusEmbeddingError) {
     return error.code;
   }
+  const internal = internalErrorCode(error);
+  if (internal) return internal;
   return "LEGAL_CORPUS_INGESTION_FAILED";
 }
 
 function retryable(error: unknown): boolean {
-  return (error instanceof LegalSourceFetchError
+  if (error instanceof LegalSourceFetchError
     || error instanceof QdrantCorpusError
-    || error instanceof LegalCorpusEmbeddingError)
-    && error.retryable;
+    || error instanceof LegalCorpusEmbeddingError) return error.retryable;
+  const internal = internalErrorCode(error);
+  if (internal) return RETRYABLE_INTERNAL_ERROR_CODES.has(internal);
+  // Unknown non-TypeError failures are treated as transient infrastructure
+  // errors, but remain bounded by the job's max-attempts budget. Parser and
+  // invariant TypeErrors stay fail-closed unless explicitly allowlisted.
+  return !(error instanceof TypeError);
 }
 
 function technicallyUnavailable(error: unknown): boolean {
@@ -293,6 +313,29 @@ async function recordFailure(input: {
     input.errorCode.slice(0, 120), input.errorCode.slice(0, 400),
     input.retryable ? 1 : 0, input.retryCount, input.retryState,
   ).run();
+}
+
+async function reconcileRecoverableDeadLetter(
+  db: D1Database,
+  now: string,
+): Promise<void> {
+  const placeholders = RECOVERABLE_DEAD_LETTER_CODES.map(() => "?").join(",");
+  const stranded = await db.prepare(`SELECT id FROM legal_corpus_ingestion_jobs
+    WHERE status='dead_letter' AND attempt_count<max_attempts
+      AND last_error_code IN (${placeholders})
+    ORDER BY updated_at ASC,id ASC LIMIT 1
+  `).bind(...RECOVERABLE_DEAD_LETTER_CODES).first<{ id: string }>();
+  if (!stranded) return;
+  const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
+    SET status='retrying',next_attempt_at=?,updated_at=?
+    WHERE id=? AND status='dead_letter' AND attempt_count<max_attempts
+  `).bind(now, now, stranded.id).run();
+  if (Number(updated.meta.changes ?? 0) !== 1) return;
+  await db.prepare(`UPDATE legal_corpus_failures
+    SET retryable=1,retry_state='retrying'
+    WHERE job_id=? AND retry_state='terminal'
+      AND error_code IN (${placeholders})
+  `).bind(stranded.id, ...RECOVERABLE_DEAD_LETTER_CODES).run();
 }
 
 /**
@@ -700,6 +743,7 @@ export async function runNextLegalCorpusIngestionJob(
   }
   const nowDate = input.now ?? new Date();
   const now = nowIso(nowDate);
+  await reconcileRecoverableDeadLetter(env.DB, now);
   const candidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
