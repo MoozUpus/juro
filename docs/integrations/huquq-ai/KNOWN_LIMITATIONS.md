@@ -24,9 +24,10 @@
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
 - Staging corpus acquisition is still in progress. The read-only snapshot at
-  2026-08-15 16:00 +05:00 had 178 ready canonical documents, 256 language
-  variants, 260 versions, 13,517 provisions and 13,552 indexed chunks. There
-  were 1,372 queued/retrying jobs, one running job and zero terminal technical
+  2026-08-15 16:45 +05:00 had 245 ready canonical documents, 335 language
+  variants, 341 versions, 15,742 provisions and 15,778 indexed chunks. There
+  were 1,815 queued/retrying jobs, no running job at the instant of the query,
+  337 completed jobs and zero terminal technical
   failures. This is below the 1,283 / 20,296 / 22,513 release floor and is not
   evidence that coverage is complete.
 - The new source-card and full-article modal passed type-check, focused boundary
@@ -35,9 +36,10 @@
   regression that was fixed and reverified. A real source-bearing answer is
   still required before claiming visual QA of the full-article modal.
 - Private-document grounded chat, its private source card and the authenticated
-  R2-backed full-document branch are implemented and locally regression-tested.
-  They are not yet claimed as staging browser evidence until a completed,
-  indexed staging user document produces a real answer under an authenticated
-  owner session.
+  R2-backed full-document branch are implemented, regression-tested and passed
+  one authenticated staging browser scenario on 2026-08-15. The scenario
+  proved exact factual grounding, an explicit no-legal-coverage warning, a
+  protected full-document modal and no Lex.uz link on the private source. This
+  single scenario is not a broad document-quality or retrieval benchmark.
 - `status.juro.uz` now resolves and is attached to the production Worker. Its
   status-host fence still needs to be preserved in every future routing change.

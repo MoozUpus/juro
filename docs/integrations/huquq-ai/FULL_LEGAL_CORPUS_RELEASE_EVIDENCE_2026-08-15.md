@@ -138,6 +138,42 @@ readable history cards and the browser log contained no console entries. This
 visual check did not submit a paid provider request and did not claim a visual
 pass for a source modal without a selected source-bearing answer.
 
+## Private document grounding and admin-form recheck
+
+Commit `d35881f4d9b833dd103cb06d19c93b81667808c8` passed GitHub Actions
+run [31882271516](https://github.com/MoozUpus/juro/actions/runs/31882271516)
+for both platform and website jobs. It was then deployed to the staging
+platform Worker as version `6b194331-bb66-41ef-bcc2-65bbcf52e332`.
+
+An authenticated staging user submitted one bounded provider-backed question
+asking for a payment term in their uploaded documents and explicitly directing
+JURO to treat the document as a fact, not as legislation. The answer extracted
+the unfilled repayment-date placeholder from an indexed private document,
+reported that the legal basis still required separate verification and did not
+turn the document into an official source. The source card was labelled as a
+private document in the protected index. Its full-document control opened one
+authenticated dialog; the rendered result contained no `Open Lex.uz` link.
+The test did not expose a public or signed R2 URL, object key, owner ID,
+workspace ID or document hash.
+
+The isolated staging admin Worker was redeployed from the same branch as
+version `a934e14c-3d13-46b9-885d-2f995d23c482`. Its primary
+`seed_discovery` form supplies a fixed hidden audit reason and therefore does
+not require the operator to type into `Technical reason`. Manual retry,
+withdrawal and publication actions continue to require a human-entered reason
+because those are distinct audit events. Admin type-check, the Wrangler staging
+dry-run and all six focused corpus-admin tests passed. The current browser
+session had already lost its fresh-MFA admin window, so this record does not
+claim a post-redeploy visual admin pass.
+
+The read-only staging corpus snapshot at 2026-08-15 16:45 +05:00 contained
+245 ready official documents, 335 language variants, 341 immutable versions,
+15,742 provisions and 15,778 indexed chunks. It also contained 337 completed
+jobs, 1,815 queued/retrying jobs, no running job at the instant of the query,
+zero terminal jobs and zero terminal technical failures. Discovery checkpoints
+were 7 completed, 35 queued and 2 retrying. This is still below the
+1,283 / 20,296 / 22,513 release floor.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
