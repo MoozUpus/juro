@@ -281,3 +281,19 @@ test("parser rejects a primary container without enough legal content", () => {
       && error.code === "LEGAL_SOURCE_CONTENT_INSUFFICIENT",
   );
 });
+
+test("parser distinguishes an explicit Lex alternate-language notice from a broken document", () => {
+  assert.throws(
+    () => normalizeLegalSourceHtml({
+      html: `<html><body><main id="divCont">
+        <div class="ACT_TITLE lx_elem">Постановление Пленума</div>
+        <div class="ACT_TEXT lx_elem">Настоящее постановление утратило силу.</div>
+        <div class="ACT_TEXT lx_elem">Текст акта приводится на узбекском языке.</div>
+      </main></body></html>`,
+      reference,
+      rawContentSha256,
+    }),
+    (error: unknown) => error instanceof LegalSourceParserError
+      && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
+  );
+});

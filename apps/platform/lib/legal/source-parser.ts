@@ -16,6 +16,7 @@ import type {
 export const LEGAL_SOURCE_PARSER_ERROR_CODES = [
   "LEGAL_SOURCE_PRIMARY_CONTENT_MISSING",
   "LEGAL_SOURCE_CONTENT_INSUFFICIENT",
+  "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
   "LEGAL_SOURCE_PARSE_TOO_COMPLEX",
 ] as const;
 
@@ -120,6 +121,12 @@ const LEX_UI_NOISE_PATTERNS = [
   /Ҳужжатга таклиф юбориш/giu,
   /Аудиони тинглаш/giu,
   /Ҳужжат элементидан ҳавола олиш/giu,
+] as const;
+const LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS = [
+  /Текст акта приводится на [^.\n]{2,80} языке/iu,
+  /Hujjat matni [^.\n]{2,80} tilida (?:berilgan|keltirilgan)/iu,
+  /Ҳужжат матни [^.\n]{2,80} тилида (?:берилган|келтирилган)/iu,
+  /The text of (?:this|the) act is (?:available|provided) in [^.\n]{2,80}/iu,
 ] as const;
 const LEX_UI_CLASS_PATTERN = /(?:^|[-_])(?:audio|button|comment|control|footer|menu|navigation|proposal|share|toolbar)(?:$|[-_])/iu;
 const MAX_NODES = 50_000;
@@ -473,6 +480,11 @@ export function normalizeLegalSourceHtml(input: {
   const blocks = collectBlocks(primary, input.reference.sourceKind);
   const plainText = blocks.map((block) => block.text).join("\n\n");
   if (blocks.length === 0 || plainText.length < 200) {
+    const primaryText = removeLegalSourceUiNoise(collectText(primary));
+    if (input.reference.sourceKind === "lex"
+      && LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS.some((pattern) => pattern.test(primaryText))) {
+      throw new LegalSourceParserError("LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE");
+    }
     throw new LegalSourceParserError("LEGAL_SOURCE_CONTENT_INSUFFICIENT");
   }
   if (plainText.length > MAX_PLAIN_TEXT) {

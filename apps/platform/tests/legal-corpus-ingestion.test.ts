@@ -232,6 +232,59 @@ test("a retryable Qdrant post-ingest failure keeps the corpus job retryable", as
   }
 });
 
+test("an explicit official alternate-language notice resolves as technically unavailable", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const unavailableHtml = `<html><body><main id="divCont">
+    <div class="ACT_TITLE lx_elem">Постановление Пленума</div>
+    <div class="ACT_TEXT lx_elem">Настоящее постановление утратило силу.</div>
+    <div class="ACT_TEXT lx_elem">Текст акта приводится на узбекском языке.</div>
+  </main></body></html>`;
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/2772517",
+      now,
+      correlationId: "alternate-language-test",
+    });
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,1,'terminal')`).run(
+      "prior-short-document-failure", queued.jobId, "lexuz:2772517",
+      "https://lex.uz/ru/docs/2772517", "ru", now.toISOString(),
+      "LEGAL_SOURCE_CONTENT_INSUFFICIENT", "LEGAL_SOURCE_CONTENT_INSUFFICIENT",
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchFor(unavailableHtml),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
+    });
+    const job = sqlite.prepare(`SELECT status,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      errorCode: "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
+    });
+    const failures = sqlite.prepare(`SELECT error_code AS errorCode,retryable,retry_state AS retryState
+      FROM legal_corpus_failures WHERE job_id=? ORDER BY attempted_at,id`).all(queued.jobId) as Array<{
+        errorCode: string; retryable: number; retryState: string;
+      }>;
+    assert.equal(failures.length, 2);
+    assert.equal(failures.every((failure) => failure.retryable === 0
+      && failure.retryState === "technically_unavailable"), true);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("ingestion links official RU UZ Cyrillic UZ Latin and EN variants into one family", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

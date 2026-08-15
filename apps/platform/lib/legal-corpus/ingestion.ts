@@ -135,6 +135,11 @@ function retryable(error: unknown): boolean {
     && error.retryable;
 }
 
+function technicallyUnavailable(error: unknown): boolean {
+  return error instanceof LegalSourceParserError
+    && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE";
+}
+
 function retryAt(now: Date, attempt: number): string {
   const delayMs = Math.min(60 * 60_000, 60_000 * 2 ** Math.max(0, attempt - 1));
   return new Date(now.getTime() + delayMs).toISOString();
@@ -731,19 +736,32 @@ export async function runNextLegalCorpusIngestionJob(
     };
   } catch (error) {
     const errorCode = safeErrorCode(error);
-    const shouldRetry = retryable(error) && attempt < candidate.maxAttempts;
+    const unavailable = technicallyUnavailable(error);
+    const shouldRetry = !unavailable && retryable(error) && attempt < candidate.maxAttempts;
+    if (unavailable) {
+      // A prior parser version reported this explicit Lex language notice as a
+      // terminal short-document failure. Preserve the records while correcting
+      // their resolution state for the same job after the official page has
+      // been re-read by the current parser.
+      await env.DB.prepare(`UPDATE legal_corpus_failures
+        SET retryable=0,retry_state='technically_unavailable'
+        WHERE job_id=? AND retry_state IN ('pending','retrying','terminal')
+          AND error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
+      `).bind(candidate.id).run();
+    }
     await recordFailure({
       db: env.DB, jobId: candidate.id, documentId: candidate.canonicalDocumentId,
       sourceUrl: candidate.sourceUrl, language: candidate.language, now, errorCode,
       retryable: shouldRetry, retryCount: attempt,
-      retryState: shouldRetry ? "retrying" : "terminal",
+      retryState: unavailable ? "technically_unavailable" : shouldRetry ? "retrying" : "terminal",
     });
     await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
       SET status=?,next_attempt_at=?,last_error_code=?,updated_at=? WHERE id=?
-    `).bind(shouldRetry ? "retrying" : "dead_letter", shouldRetry ? retryAt(nowDate, attempt) : null, errorCode, now, candidate.id).run();
+    `).bind(unavailable ? "completed" : shouldRetry ? "retrying" : "dead_letter",
+      shouldRetry ? retryAt(nowDate, attempt) : null, errorCode, now, candidate.id).run();
     return {
       claimed: true,
-      status: shouldRetry ? "retrying" : "failed",
+      status: unavailable ? "completed" : shouldRetry ? "retrying" : "failed",
       jobId: candidate.id,
       safeErrorCode: errorCode,
     };
