@@ -309,6 +309,37 @@ attestation/event/scope/export digests and complete-file SHA-256 alongside the
 frozen corpus snapshot hash. Final metrics still cannot be generated until the
 full corpus is frozen and the real 314-scenario indexed benchmark runs.
 
+## Current-head verification and staging admin refresh
+
+Commit `512ad0ff7b516c7743ba8abbe6cff31a32b02bc8` binds the protected human-review
+export to final corpus evidence. GitHub Actions run
+[31888475666](https://github.com/MoozUpus/juro/actions/runs/31888475666)
+passed both platform and website jobs. Qdrant gate run
+[31888475668](https://github.com/MoozUpus/juro/actions/runs/31888475668)
+also passed on that exact head. Its 118,784-byte snapshot had SHA-256
+`3dd4056befbf3cc907eef807589a7c3a44b12f9a1c0c7e73c35620aaf2c4a0e5`;
+machine-readable artifact `qdrant-snapshot-gate-31888475668` has artifact ID
+`9247900399`.
+
+The staging admin Worker was refreshed as version
+`51243369-48df-4255-960f-22d5edc1495a` after an already-open browser page
+displayed the retired required textarea on the primary seed action. The current
+Worker supplies the primary seed audit reason as a fixed hidden value. Staging
+D1 already contains all 44 category/language checkpoints, so a refreshed page
+must not render the primary seed form at all. Manual retry, withdrawal and
+owner-publication actions still require a human-entered technical reason. The
+admin type-check and Wrangler staging dry-run passed before deployment. The
+available browser session did not have a fresh admin MFA window, so no
+post-refresh authenticated visual pass is claimed.
+
+The read-only staging snapshot at 2026-08-15 19:04 +05:00 contained 365 ready
+official documents, 8,601 unique current provisions and 19,400 indexed current
+chunks. It contained 521 completed jobs, 2,851 queued/retrying jobs, one
+running job at the sampled instant, zero terminal jobs and zero terminal or
+technically unavailable failures. Checkpoints were 11 completed and 33 queued.
+This remains below the 44/44 coverage gate and the pinned
+1,283 / 20,296 / 22,513 floor.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
