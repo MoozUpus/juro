@@ -217,6 +217,15 @@ test("dashboard proves coverage from indexed or technically unavailable document
       INSERT INTO legal_corpus_failures
         (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,safe_message,retryable,retry_count,retry_state)
       VALUES ('failure-101',NULL,'lexuz:101','https://lex.uz/ru/docs/101','ru','2026-08-15T10:00:00.000Z',404,'LEX_DOCUMENT_NOT_FOUND','Official document was not available.',0,5,'technically_unavailable');
+      INSERT INTO legal_corpus_ingestion_jobs
+        (id,job_type,status,provider,canonical_document_id,variant_id,source_url,language,idempotency_key,
+         attempt_count,max_attempts,next_attempt_at,last_error_code,correlation_id,created_at,updated_at)
+      VALUES ('job-recovered','fetch','completed','lex_uz','lexuz:100',NULL,'https://lex.uz/ru/docs/100','ru',
+        'job-recovered-key',2,5,NULL,NULL,'job-recovered-correlation','2026-08-15T09:00:00.000Z','2026-08-15T10:01:00.000Z');
+      INSERT INTO legal_corpus_failures
+        (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,safe_message,retryable,retry_count,retry_state)
+      VALUES ('failure-recovered','job-recovered','lexuz:100','https://lex.uz/ru/docs/100','ru',
+        '2026-08-15T10:00:30.000Z',NULL,'LEGAL_CORPUS_INGESTION_FAILED','LEGAL_CORPUS_INGESTION_FAILED',1,1,'retrying');
       INSERT INTO legal_source_health_checks
         (id,environment,source_kind,status,checked_at,latency_ms,error_code,endpoint_url,created_at)
       VALUES ('health-lex','staging','lex','healthy','2026-08-15T11:59:00.000Z',120,NULL,'https://lex.uz/robots.txt','2026-08-15T11:59:00.000Z');
@@ -235,6 +244,12 @@ test("dashboard proves coverage from indexed or technically unavailable document
     assert.equal(dashboard.totals.indexedChunks, 1);
     assert.equal(dashboard.totals.historicalVersions, 1);
     assert.equal(dashboard.totals.lastSuccessfulUpdate, "2026-08-15T11:58:00.000Z");
+    const recovered = dashboard.failures.find((failure) => failure.id === "failure-recovered");
+    assert.deepEqual(recovered && {
+      retryState: recovered.retryState,
+      retryable: recovered.retryable,
+      canRetry: recovered.canRetry,
+    }, { retryState: "resolved", retryable: false, canRetry: false });
     const coverage = dashboard.coverage.find((row) => row.categoryKey === "laws" && row.language === "ru");
     assert.deepEqual(coverage && {
       discovered: coverage.discoveredDocuments,

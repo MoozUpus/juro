@@ -433,10 +433,16 @@ export async function readLegalCorpusAdminDashboard(input: {
       attempt_count AS attemptCount,next_attempt_at AS nextAttemptAt,last_error_code AS lastErrorCode,updated_at AS updatedAt
       FROM legal_corpus_discovery_checkpoints ORDER BY updated_at DESC,id LIMIT 100`)
     .all<CheckpointRow>();
-  const failures = await input.env.DB.prepare(`SELECT id,job_id AS jobId,source_url AS sourceUrl,language,attempted_at AS attemptedAt,
-      http_status AS httpStatus,error_code AS errorCode,safe_message AS safeMessage,retryable,retry_count AS retryCount,retry_state AS retryState
-      FROM legal_corpus_failures WHERE source_url IS NULL OR source_url LIKE 'https://lex.uz/%'
-      ORDER BY attempted_at DESC,id LIMIT 100`).all<FailureRow>();
+  const failures = await input.env.DB.prepare(`SELECT failure.id,failure.job_id AS jobId,
+      failure.source_url AS sourceUrl,failure.language,failure.attempted_at AS attemptedAt,
+      failure.http_status AS httpStatus,failure.error_code AS errorCode,failure.safe_message AS safeMessage,
+      CASE WHEN job.status='completed' AND failure.retry_state='retrying' THEN 0 ELSE failure.retryable END AS retryable,
+      failure.retry_count AS retryCount,
+      CASE WHEN job.status='completed' AND failure.retry_state='retrying' THEN 'resolved' ELSE failure.retry_state END AS retryState
+    FROM legal_corpus_failures failure
+    LEFT JOIN legal_corpus_ingestion_jobs job ON job.id=failure.job_id
+    WHERE failure.source_url IS NULL OR failure.source_url LIKE 'https://lex.uz/%'
+    ORDER BY failure.attempted_at DESC,failure.id LIMIT 100`).all<FailureRow>();
   const events = await recentAdminEvents(input.env.DB, environment);
   const ownerEvents = await recentOwnerPublicationEvents(input.env.DB, environment);
   const lexHealth = await readDirectLegalSourceHealth(input.env.DB, environment, now);
