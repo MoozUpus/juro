@@ -7,7 +7,7 @@ const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const commitSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const isoTimestampSchema = z.string().datetime({ offset: true });
 
-export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 1;
+export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 2;
 export const LEGAL_CORPUS_RELEASE_SCENARIO_COUNT = 314;
 export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
   LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length;
@@ -117,6 +117,11 @@ export const legalCorpusBenchmarkEvidenceSchema = z.object({
   rrfEnabled: z.literal(true),
   qdrantVectorSize: z.literal(1536),
   qdrantDistance: z.literal("Cosine"),
+  qdrantCurrentPointCount: z.number().int().nonnegative(),
+  qdrantTotalPointCount: z.number().int().nonnegative(),
+  qdrantSnapshotSha256: sha256Schema,
+  qdrantSnapshotCurrentPointCount: z.number().int().nonnegative(),
+  qdrantSnapshotTotalPointCount: z.number().int().nonnegative(),
   rerankMode: z.enum(["deterministic", "openai", "local", "validated_fallback"]),
   recallAt5: z.number().min(0).max(1),
   recallAt10: z.number().min(0).max(1),
@@ -183,6 +188,10 @@ export type LegalCorpusReleaseVerdict = {
     indexedDocuments: number;
     technicallyUnavailable: number;
     technicalUnavailabilityRate: number;
+    qdrantCurrentPointCount: number;
+    qdrantTotalPointCount: number;
+    qdrantSnapshotCurrentPointCount: number;
+    qdrantSnapshotTotalPointCount: number;
   };
 };
 
@@ -295,6 +304,18 @@ export function evaluateLegalCorpusReleaseEvidence(
   );
   if (totals.currentChunks === 0) failures.push("CHUNKS_EMPTY");
   if (totals.indexedChunks !== totals.currentChunks) failures.push("CURRENT_CHUNKS_NOT_FULLY_INDEXED");
+  if (benchmark.qdrantCurrentPointCount !== totals.currentChunks) {
+    failures.push("QDRANT_CURRENT_POINT_COUNT_MISMATCH");
+  }
+  if (benchmark.qdrantTotalPointCount < benchmark.qdrantCurrentPointCount) {
+    failures.push("QDRANT_TOTAL_POINT_COUNT_INVALID");
+  }
+  if (benchmark.qdrantSnapshotCurrentPointCount !== benchmark.qdrantCurrentPointCount) {
+    failures.push("QDRANT_SNAPSHOT_CURRENT_POINT_COUNT_MISMATCH");
+  }
+  if (benchmark.qdrantSnapshotTotalPointCount !== benchmark.qdrantTotalPointCount) {
+    failures.push("QDRANT_SNAPSHOT_TOTAL_POINT_COUNT_MISMATCH");
+  }
   minimum(
     failures,
     "INDEXED_CHUNK_COUNT_BELOW_BASELINE",
@@ -339,6 +360,10 @@ export function evaluateLegalCorpusReleaseEvidence(
       indexedDocuments,
       technicallyUnavailable,
       technicalUnavailabilityRate,
+      qdrantCurrentPointCount: benchmark.qdrantCurrentPointCount,
+      qdrantTotalPointCount: benchmark.qdrantTotalPointCount,
+      qdrantSnapshotCurrentPointCount: benchmark.qdrantSnapshotCurrentPointCount,
+      qdrantSnapshotTotalPointCount: benchmark.qdrantSnapshotTotalPointCount,
     },
   };
 }

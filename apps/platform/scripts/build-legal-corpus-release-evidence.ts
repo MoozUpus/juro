@@ -7,6 +7,7 @@ import {
   verifyLegalEvaluationHumanEvidence,
 } from "../evaluation/legal-evaluation-human-evidence";
 import {
+  LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION,
   evaluateLegalCorpusReleaseEvidence,
   legalCorpusBenchmarkEvidenceSchema,
   legalCorpusDashboardEvidenceSchema,
@@ -51,7 +52,7 @@ async function main(): Promise<void> {
 
   const capturedAt = new Date().toISOString();
   const evidence = legalCorpusReleaseEvidenceSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION,
     environment: "staging",
     capturedAt,
     applicationCommit,

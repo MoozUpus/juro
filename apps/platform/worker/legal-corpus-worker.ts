@@ -8,7 +8,7 @@ import {
   seedLexCatalogDiscoveryCheckpoints,
 } from "../lib/legal-corpus/lex-catalog-discovery";
 import { featureEnabled } from "../lib/legal-corpus/trust";
-import { syncLegalCorpusVersionToQdrant } from "../lib/legal-corpus/qdrant-indexing";
+import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
 import { createPacedLexFetch } from "../lib/legal-corpus/lex-request-pacer";
 import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance";
@@ -24,6 +24,10 @@ const DISCOVERY_PAGES_PER_RUN = 2;
 // authoritative. A ninth job pushed real staging runs past the next tick and
 // halved effective throughput without increasing source politeness.
 const INGESTION_JOBS_PER_RUN = 8;
+// Dense activation happens only after the source queue is frozen. Four
+// 64-chunk batches cap one invocation at eight embedding calls while allowing
+// the complete current corpus to resume from D1 after a Worker restart.
+const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   OPENAI_API_KEY?: string;
@@ -44,9 +48,18 @@ function log(
   else console.log(entry);
 }
 
-function enabled(env: LegalCorpusWorkerEnv): boolean {
+function ingestionEnabled(env: LegalCorpusWorkerEnv): boolean {
   return featureEnabled(env, "LEGAL_CORPUS_ENABLED")
     && featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED");
+}
+
+function denseBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
+  return featureEnabled(env, "LEGAL_CORPUS_ENABLED")
+    && featureEnabled(env, "LEGAL_CORPUS_DENSE_ENABLED");
+}
+
+function enabled(env: LegalCorpusWorkerEnv): boolean {
+  return ingestionEnabled(env) || denseBackfillEnabled(env);
 }
 
 async function claimRun(
@@ -144,6 +157,15 @@ export async function handleLegalCorpusScheduled(
     controller.noRetry();
     return;
   }
+  if (controller.cron === LEGAL_CORPUS_SEED_CRON && !ingestionEnabled(env)) {
+    log("info", {
+      event: "legal_corpus.seed_disabled",
+      environment: env.APP_ENV,
+      cron: controller.cron,
+    });
+    controller.noRetry();
+    return;
+  }
 
   const run = await claimRun(controller, env);
   if (!run) {
@@ -186,27 +208,32 @@ export async function handleLegalCorpusScheduled(
     // a manual approval gate. The seed operation is idempotent, so a fresh or
     // partially restored environment can safely recreate only the missing
     // category/language checkpoints before claiming the next page.
-    const catalog = await seedLexCatalogDiscoveryCheckpoints(env);
-    const wait = (delayMs: number) => scheduler.wait(delayMs);
-    const fetchImpl = createPacedLexFetch({ db: env.DB, wait });
+    let catalog = { considered: 0, created: 0 };
     const discoveries: Awaited<ReturnType<typeof runNextLexCatalogDiscoveryPage>>[] = [];
-    for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
-      const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl });
-      discoveries.push(result);
-      if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
-    }
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
-    for (let index = 0; index < INGESTION_JOBS_PER_RUN; index += 1) {
-      const result = await runNextLegalCorpusIngestionJob(env, {
-        wait,
-        fetchImpl,
-        afterIngest: async (ingested) => {
-          if (!ingested.versionId) return;
-          await syncLegalCorpusVersionToQdrant(env, ingested.versionId);
-        },
-      });
-      ingestions.push(result);
-      if (result.status === "empty" || result.status === "disabled") break;
+    if (ingestionEnabled(env)) {
+      catalog = await seedLexCatalogDiscoveryCheckpoints(env);
+      const wait = (delayMs: number) => scheduler.wait(delayMs);
+      const fetchImpl = createPacedLexFetch({ db: env.DB, wait });
+      for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
+        const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl });
+        discoveries.push(result);
+        if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
+      }
+      for (let index = 0; index < INGESTION_JOBS_PER_RUN; index += 1) {
+        const result = await runNextLegalCorpusIngestionJob(env, { wait, fetchImpl });
+        ingestions.push(result);
+        if (result.status === "empty" || result.status === "disabled") break;
+      }
+    }
+    const qdrantBackfills: Awaited<ReturnType<typeof runNextLegalCorpusQdrantBackfillBatch>>[] = [];
+    const ingestionClaimed = ingestions.some((result) => result.claimed);
+    if (denseBackfillEnabled(env) && !ingestionClaimed) {
+      for (let index = 0; index < QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN; index += 1) {
+        const result = await runNextLegalCorpusQdrantBackfillBatch(env);
+        qdrantBackfills.push(result);
+        if (result.status === "empty" || result.status === "disabled") break;
+      }
     }
     const errorCode = discoveries.find((result) => result.safeErrorCode)?.safeErrorCode
       ?? ingestions.find((result) => result.safeErrorCode)?.safeErrorCode
@@ -225,6 +252,8 @@ export async function handleLegalCorpusScheduled(
       checkpointsCreated: catalog.created,
       ingestionJobs: ingestions.length,
       ingestionClaimed: ingestions.filter((result) => result.claimed).length,
+      qdrantBackfillBatches: qdrantBackfills.filter((result) => result.status === "indexed").length,
+      qdrantBackfillChunks: qdrantBackfills.reduce((sum, result) => sum + result.chunkCount, 0),
       errorCode,
     });
   } catch {

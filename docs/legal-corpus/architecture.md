@@ -118,7 +118,11 @@ Staging alone enables acquisition.
 `LEGAL_CORPUS_DENSE_ENABLED` is an additional independent deny-by-default
 switch. When enabled, the dedicated Worker checks that the configured Qdrant
 collection is `dense(1536, Cosine) + sparse`, embeds only global official
-chunks, writes both named vectors and marks the prior version non-current.
+chunks, writes both named vectors and marks the prior version non-current. When
+Lex acquisition is frozen, the same process schedule performs a bounded,
+resumable backfill of missing current chunks. Persisted deterministic vector IDs
+are the progress cursor, so an interrupted run continues without re-embedding
+completed chunks; each scheduled invocation is capped to four 64-chunk batches.
 Interactive retrieval queries Qdrant dense and sparse ranks, but accepts only
 chunk IDs that D1 rehydrates under the same official/current/point-in-time and
 tenant predicates as BM25. Provider calls are blocked by JURO's existing cost

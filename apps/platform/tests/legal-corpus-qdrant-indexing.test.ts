@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  runNextLegalCorpusQdrantBackfillBatch,
   syncLegalCorpusVersionToQdrant,
 } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusPoint } from "../lib/legal-corpus/qdrant";
@@ -50,6 +51,26 @@ function seedVersion(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void
     "lexuz:42:ru:v2:p0:c0", "lexuz:42:ru:v2:p0", "lexuz:42:ru:v2", 0, 1,
     "Official provision content", hash,
     JSON.stringify([{ term: "article", termFrequency: 1, titleFrequency: 2, articleFrequency: 3 }]), now, now,
+  );
+}
+
+function seedSecondChunk(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
+  const now = "2026-08-15T00:00:00.000Z";
+  const hash = "e".repeat(64);
+  sqlite.prepare(`INSERT INTO legal_corpus_provisions (
+    id,document_id,variant_id,version_id,article_number,article_number_normalized,article_title,sequence,text,
+    exact_quote_source,language,status,valid_from,valid_to,source_url,content_sha256,created_at
+  ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    "lexuz:42:ru:v2:p1", "lexuz:42", "lexuz:42:ru", "lexuz:42:ru:v2", "13", "13", "Article 13", 1,
+    "Second official provision", "Second official provision", "ru", "active", "2026-01-01", null,
+    "https://lex.uz/ru/docs/42", hash, now,
+  );
+  sqlite.prepare(`INSERT INTO legal_corpus_chunks (
+    id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at
+  ) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+    "lexuz:42:ru:v2:p1:c0", "lexuz:42:ru:v2:p1", "lexuz:42:ru:v2", 0, 1,
+    "Second official provision", hash,
+    JSON.stringify([{ term: "second", termFrequency: 1, titleFrequency: 1, articleFrequency: 1 }]), now, now,
   );
 }
 
@@ -102,4 +123,82 @@ test("Qdrant sync embeds only global official chunks, demotes the previous versi
   } finally {
     sqlite.close();
   }
+});
+
+test("Qdrant backfill resumes from persisted chunk ids and stops when current global corpus is complete", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  seedVersion(sqlite);
+  seedSecondChunk(sqlite);
+  const points: QdrantCorpusPoint[] = [];
+  const env = {
+    APP_ENV: "staging" as const,
+    DB: d1,
+    LEGAL_CORPUS_DENSE_ENABLED: "true",
+    QDRANT_URL: "https://qdrant.internal.example",
+    QDRANT_API_KEY: "secret",
+    QDRANT_COLLECTION: "legal",
+  };
+  const dependencies = {
+    maxChunks: 1,
+    now: new Date("2026-08-15T01:00:00.000Z"),
+    client: {
+      assertCompatible: async () => undefined,
+      setVersionCurrent: async () => undefined,
+      upsert: async (batch: QdrantCorpusPoint[]) => { points.push(...batch); },
+    },
+    embeddings: {
+      embed: async (inputs: readonly string[]) => inputs.map(() => Array.from({ length: 1536 }, () => 0.01)),
+    },
+  };
+  try {
+    const first = await runNextLegalCorpusQdrantBackfillBatch(env, dependencies);
+    assert.deepEqual(first, {
+      status: "indexed",
+      versionId: "lexuz:42:ru:v2",
+      chunkCount: 1,
+      remainingChunkCount: 1,
+    });
+    const second = await runNextLegalCorpusQdrantBackfillBatch(env, dependencies);
+    assert.deepEqual(second, {
+      status: "indexed",
+      versionId: "lexuz:42:ru:v2",
+      chunkCount: 1,
+      remainingChunkCount: 0,
+    });
+    assert.deepEqual(await runNextLegalCorpusQdrantBackfillBatch(env, dependencies), {
+      status: "empty",
+      versionId: null,
+      chunkCount: 0,
+      remainingChunkCount: 0,
+    });
+    assert.equal(points.length, 2);
+    assert.equal(new Set(points.map((point) => point.id)).size, 2);
+    const stored = sqlite.prepare(
+      "SELECT count(*) AS count FROM legal_corpus_chunks WHERE dense_vector_id IS NOT NULL",
+    ).get() as { count: number };
+    assert.equal(Number(stored.count), 2);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("Qdrant backfill is D1-inert while dense retrieval is disabled", async () => {
+  let databaseCalls = 0;
+  const result = await runNextLegalCorpusQdrantBackfillBatch({
+    APP_ENV: "staging",
+    LEGAL_CORPUS_DENSE_ENABLED: "false",
+    DB: {
+      prepare() {
+        databaseCalls += 1;
+        throw new Error("DB must remain untouched");
+      },
+    } as unknown as D1Database,
+  });
+  assert.deepEqual(result, {
+    status: "disabled",
+    versionId: null,
+    chunkCount: 0,
+    remainingChunkCount: 0,
+  });
+  assert.equal(databaseCalls, 0);
 });

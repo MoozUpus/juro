@@ -135,15 +135,47 @@ test("process schedule self-seeds a fresh corpus without an admin action", async
   assert.equal(scheduled.noRetryCalls(), 1);
 });
 
+test("frozen corpus keeps resumable dense backfill alive without restarting Lex ingestion", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const scheduled = controller(LEGAL_CORPUS_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 15));
+  try {
+    await handleLegalCorpusScheduled(scheduled.value, {
+      APP_ENV: "staging",
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "false",
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      DB: d1,
+      BUCKET: {} as R2Bucket,
+    });
+    const run = sqlite.prepare(`SELECT status,error_code AS errorCode
+      FROM scheduled_runs WHERE schedule_name='legal-corpus-worker'`).get() as {
+        status: string;
+        errorCode: string | null;
+      };
+    const checkpoints = Number((sqlite.prepare(
+      "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints",
+    ).get() as { count: number }).count);
+    assert.equal(run.status, "completed");
+    assert.equal(run.errorCode, null);
+    assert.equal(checkpoints, 0);
+    assert.equal(scheduled.noRetryCalls(), 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("main application scheduler cannot import or invoke heavy corpus work", () => {
   const mainScheduler = readFileSync(new URL("../worker/platform-scheduled.ts", import.meta.url), "utf8");
   const corpusWorker = readFileSync(new URL("../worker/legal-corpus-worker.ts", import.meta.url), "utf8");
   assert.doesNotMatch(mainScheduler, /runNextLegalCorpusIngestionJob|runNextLexCatalogDiscoveryPage|seedLexCatalogDiscoveryCheckpoints/u);
   assert.match(corpusWorker, /runNextLegalCorpusIngestionJob/u);
   assert.match(corpusWorker, /runNextLexCatalogDiscoveryPage/u);
+  assert.match(corpusWorker, /runNextLegalCorpusQdrantBackfillBatch/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
   assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 8;/u);
+  assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
+  assert.doesNotMatch(corpusWorker, /afterIngest:/u);
 });
 
 test("dedicated Worker is route-free, production-fail-closed and staging-bounded", () => {

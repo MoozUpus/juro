@@ -36,12 +36,17 @@ MFA-bound event-hash chain, and binds the attestation, scope, export and file
 digests into the release envelope. A literal `reviewedScenarioCount: 314`
 without that cryptographic binding is not accepted as release evidence.
 
-The evidence envelope is bound to an application commit and corpus snapshot
-SHA-256. It requires all 44 category/language checkpoints, a frozen ingestion
-queue, fresh Lex health, intact admin audit history, dense+sparse RRF with the
-declared 1,536-dimensional Qdrant schema, and exactly 314 individually reviewed
-scenarios. It also enforces recall, exactness, abstention, partial-answer,
-groundedness, latency, pricing and invalid/stale-source thresholds.
+The version 2 evidence envelope is bound to an application commit and corpus
+snapshot SHA-256. It requires all 44 category/language checkpoints, a frozen
+ingestion queue, fresh Lex health, intact admin audit history, dense+sparse RRF
+with the declared 1,536-dimensional Qdrant schema, and exactly 314 individually
+reviewed scenarios. The benchmark must report current and total Qdrant point
+counts plus the restored snapshot's current and total counts. Current points
+must equal the frozen corpus's current chunk count, total points cannot be lower,
+and both restored counts must match the source collection. A separate SHA-256 is
+required for the Qdrant snapshot artifact. The gate also enforces recall,
+exactness, abstention, partial-answer, groundedness, latency, pricing and
+invalid/stale-source thresholds.
 
 Corpus size is fail-closed as well: the evidence must contain at least 1,283
 canonical documents, 20,296 unique provisions and 22,513 indexed chunks. These

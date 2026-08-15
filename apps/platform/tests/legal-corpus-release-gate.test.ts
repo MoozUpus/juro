@@ -15,7 +15,7 @@ const snapshot = "b".repeat(64);
 
 function validEvidence(): LegalCorpusReleaseEvidence {
   return legalCorpusReleaseEvidenceSchema.parse({
-    schemaVersion: 1,
+    schemaVersion: 2,
     environment: "staging",
     capturedAt: "2026-08-15T11:58:00.000Z",
     applicationCommit: commit,
@@ -100,6 +100,11 @@ function validEvidence(): LegalCorpusReleaseEvidence {
       rrfEnabled: true,
       qdrantVectorSize: 1536,
       qdrantDistance: "Cosine",
+      qdrantCurrentPointCount: 22_513,
+      qdrantTotalPointCount: 25_000,
+      qdrantSnapshotSha256: "2".repeat(64),
+      qdrantSnapshotCurrentPointCount: 22_513,
+      qdrantSnapshotTotalPointCount: 25_000,
       rerankMode: "deterministic",
       recallAt5: 0.94,
       recallAt10: 0.97,
@@ -195,6 +200,21 @@ test("release gate rejects snapshot drift, unresolved failures and metric regres
     "CITATION_PRECISION_FAILED",
     "INVALID_LINK_RATE_FAILED",
     "P95_COMPLETE_ANSWER_FAILED",
+  ]) assert.ok(verdict.failures.includes(code), code);
+});
+
+test("release gate rejects incomplete or drifted Qdrant snapshot evidence", () => {
+  const evidence = validEvidence();
+  evidence.benchmark.qdrantCurrentPointCount -= 1;
+  evidence.benchmark.qdrantTotalPointCount = evidence.benchmark.qdrantCurrentPointCount - 1;
+  evidence.benchmark.qdrantSnapshotCurrentPointCount -= 2;
+  evidence.benchmark.qdrantSnapshotTotalPointCount += 1;
+  const verdict = evaluateLegalCorpusReleaseEvidence(evidence, now);
+  for (const code of [
+    "QDRANT_CURRENT_POINT_COUNT_MISMATCH",
+    "QDRANT_TOTAL_POINT_COUNT_INVALID",
+    "QDRANT_SNAPSHOT_CURRENT_POINT_COUNT_MISMATCH",
+    "QDRANT_SNAPSHOT_TOTAL_POINT_COUNT_MISMATCH",
   ]) assert.ok(verdict.failures.includes(code), code);
 });
 
