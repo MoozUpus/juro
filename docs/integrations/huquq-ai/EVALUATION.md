@@ -36,7 +36,7 @@ MFA-bound event-hash chain, and binds the attestation, scope, export and file
 digests into the release envelope. A literal `reviewedScenarioCount: 314`
 without that cryptographic binding is not accepted as release evidence.
 
-The version 2 evidence envelope is bound to an application commit and corpus
+The version 3 evidence envelope is bound to an application commit and corpus
 snapshot SHA-256. It requires all 44 category/language checkpoints, a frozen
 ingestion queue, fresh Lex health, intact admin audit history, dense+sparse RRF
 with the declared 1,536-dimensional Qdrant schema, and exactly 314 individually

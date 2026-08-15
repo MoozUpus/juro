@@ -510,6 +510,15 @@ crawl therefore remains below the canonical-document, unique-provision and
 44/44 gates. Qdrant snapshot-ledger and dense-vector-ID counts remained zero;
 no full-corpus dense or final 314-scenario claim is made.
 
+The current release envelope is schema version 3. It no longer trusts a
+dashboard `complete` boolean or a lower provider-reported expected count by
+itself: for every category/language row it independently requires
+`expected == discovered` and
+`indexed + technically_unavailable == discovered`. It also binds a fresh
+ready Qdrant dashboard probe and its exact current/total point counts to the
+benchmark. Disabled, stale, incompatible, missing or count-drifted Qdrant
+health therefore fails the release gate before rollout.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

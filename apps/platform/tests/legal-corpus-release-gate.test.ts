@@ -15,7 +15,7 @@ const snapshot = "b".repeat(64);
 
 function validEvidence(): LegalCorpusReleaseEvidence {
   return legalCorpusReleaseEvidenceSchema.parse({
-    schemaVersion: 2,
+    schemaVersion: 3,
     environment: "staging",
     capturedAt: "2026-08-15T11:58:00.000Z",
     applicationCommit: commit,
@@ -49,6 +49,15 @@ function validEvidence(): LegalCorpusReleaseEvidence {
         LEGAL_CORPUS_SHADOW_MODE: true,
       },
       lexHealth: { state: "fresh" },
+      qdrantHealth: {
+        configured: true,
+        enabled: true,
+        status: "ready",
+        totalPoints: 25_000,
+        currentPoints: 22_513,
+        errorCode: null,
+        checkedAt: "2026-08-15T11:59:00.000Z",
+      },
       totals: {
         canonicalDocuments: 1_283,
         languageVariants: 2_400,
@@ -130,6 +139,22 @@ test("release gate accepts only complete frozen staging evidence", () => {
   assert.equal(verdict.passed, true);
   assert.equal(verdict.observed.checkpointCount, 44);
   assert.equal(verdict.observed.completeCheckpointCount, 44);
+  assert.equal(verdict.observed.discoveredDocuments, 4_400);
+});
+
+test("release gate resolves every discovered ID instead of trusting a lower expected count", () => {
+  const evidence = validEvidence();
+  const row = evidence.dashboard.coverage[0]!;
+  row.discoveredDocuments = 101;
+  row.complete = true;
+  const verdict = evaluateLegalCorpusReleaseEvidence(evidence, now);
+  const key = `${row.categoryKey}:${row.language}`;
+  for (const code of [
+    `CHECKPOINT_DISCOVERY_COUNT_MISMATCH:${key}`,
+    `CHECKPOINT_COVERAGE_GAP:${key}`,
+    `CHECKPOINT_INCOMPLETE:${key}`,
+  ]) assert.ok(verdict.failures.includes(code), code);
+  assert.equal(verdict.passed, false);
 });
 
 test("release gate enforces the pinned Huquq AI and owner reserve corpus floor", () => {
@@ -215,6 +240,23 @@ test("release gate rejects incomplete or drifted Qdrant snapshot evidence", () =
     "QDRANT_TOTAL_POINT_COUNT_INVALID",
     "QDRANT_SNAPSHOT_CURRENT_POINT_COUNT_MISMATCH",
     "QDRANT_SNAPSHOT_TOTAL_POINT_COUNT_MISMATCH",
+  ]) assert.ok(verdict.failures.includes(code), code);
+});
+
+test("release gate binds fresh dashboard Qdrant health to the benchmark counts", () => {
+  const evidence = validEvidence();
+  evidence.dashboard.qdrantHealth.status = "unavailable";
+  evidence.dashboard.qdrantHealth.errorCode = "QDRANT_REQUEST_FAILED";
+  evidence.dashboard.qdrantHealth.currentPoints = 22_512;
+  evidence.dashboard.qdrantHealth.totalPoints = null;
+  evidence.dashboard.qdrantHealth.checkedAt = "2026-08-13T11:59:00.000Z";
+  const verdict = evaluateLegalCorpusReleaseEvidence(evidence, now);
+  for (const code of [
+    "QDRANT_HEALTH_NOT_READY",
+    "QDRANT_HEALTH_ERROR",
+    "QDRANT_HEALTH_STALE",
+    "QDRANT_HEALTH_CURRENT_POINT_COUNT_MISMATCH",
+    "QDRANT_HEALTH_TOTAL_POINT_COUNT_MISMATCH",
   ]) assert.ok(verdict.failures.includes(code), code);
 });
 

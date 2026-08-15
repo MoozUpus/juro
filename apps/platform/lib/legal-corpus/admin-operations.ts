@@ -459,7 +459,9 @@ export async function readLegalCorpusAdminDashboard(input: {
       pageNumber: nonNegative(row.pageNumber),
       complete: row.status === "completed"
         && row.expectedDocuments !== null
-        && nonNegative(row.indexedDocuments) + nonNegative(row.technicallyUnavailable) >= nonNegative(row.expectedDocuments),
+        && nonNegative(row.expectedDocuments) === nonNegative(row.discoveredDocuments)
+        && nonNegative(row.indexedDocuments) + nonNegative(row.technicallyUnavailable)
+          === nonNegative(row.discoveredDocuments),
     })),
     checkpoints: checkpoints.results.map((row) => ({ ...row, canRetry: ["retrying", "failed", "dead_letter"].includes(row.status) })),
     failures: failures.results.map((row) => ({

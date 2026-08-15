@@ -7,7 +7,7 @@ const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const commitSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const isoTimestampSchema = z.string().datetime({ offset: true });
 
-export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 2;
+export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 3;
 export const LEGAL_CORPUS_RELEASE_SCENARIO_COUNT = 314;
 export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
   LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length;
@@ -159,6 +159,15 @@ export const legalCorpusDashboardEvidenceSchema = z.object({
   environment: z.literal("staging"),
   featureFlags: legalCorpusFeatureFlagsEvidenceSchema,
   lexHealth: z.object({ state: z.literal("fresh") }).passthrough(),
+  qdrantHealth: z.object({
+    configured: z.boolean(),
+    enabled: z.boolean(),
+    status: z.enum(["disabled", "not_configured", "ready", "collection_missing", "incompatible", "unavailable"]),
+    totalPoints: z.number().int().nonnegative().nullable(),
+    currentPoints: z.number().int().nonnegative().nullable(),
+    errorCode: z.string().min(1).max(120).nullable(),
+    checkedAt: isoTimestampSchema,
+  }).strict(),
   totals: legalCorpusTotalsEvidenceSchema,
   coverage: z.array(legalCorpusCoverageEvidenceSchema).max(LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS),
   failures: z.array(legalCorpusFailureEvidenceSchema).max(10_000),
@@ -185,6 +194,7 @@ export type LegalCorpusReleaseVerdict = {
     checkpointCount: number;
     completeCheckpointCount: number;
     expectedDocuments: number;
+    discoveredDocuments: number;
     indexedDocuments: number;
     technicallyUnavailable: number;
     technicalUnavailabilityRate: number;
@@ -255,6 +265,7 @@ export function evaluateLegalCorpusReleaseEvidence(
   );
   const observedCoverageKeys = new Set<string>();
   let expectedDocuments = 0;
+  let discoveredDocuments = 0;
   let indexedDocuments = 0;
   let technicallyUnavailable = 0;
   let completeCheckpointCount = 0;
@@ -264,13 +275,25 @@ export function evaluateLegalCorpusReleaseEvidence(
     observedCoverageKeys.add(key);
     if (!expectedCoverageKeys.has(key)) failures.push(`CHECKPOINT_UNEXPECTED:${key}`);
     if (row.expectedDocuments === null) failures.push(`CHECKPOINT_EXPECTED_COUNT_MISSING:${key}`);
-    else expectedDocuments += row.expectedDocuments;
+    else {
+      expectedDocuments += row.expectedDocuments;
+      if (row.expectedDocuments !== row.discoveredDocuments) {
+        failures.push(`CHECKPOINT_DISCOVERY_COUNT_MISMATCH:${key}`);
+      }
+    }
+    discoveredDocuments += row.discoveredDocuments;
     indexedDocuments += row.indexedDocuments;
     technicallyUnavailable += row.technicallyUnavailable;
-    if (row.complete && row.status === "completed" && row.lastErrorCode === null) completeCheckpointCount += 1;
+    const resolvedDocuments = row.indexedDocuments + row.technicallyUnavailable;
+    const independentlyComplete = row.complete
+      && row.status === "completed"
+      && row.lastErrorCode === null
+      && row.expectedDocuments !== null
+      && row.expectedDocuments === row.discoveredDocuments
+      && resolvedDocuments === row.discoveredDocuments;
+    if (independentlyComplete) completeCheckpointCount += 1;
     else failures.push(`CHECKPOINT_INCOMPLETE:${key}`);
-    if (row.expectedDocuments !== null
-      && row.indexedDocuments + row.technicallyUnavailable < row.expectedDocuments) {
+    if (resolvedDocuments !== row.discoveredDocuments) {
       failures.push(`CHECKPOINT_COVERAGE_GAP:${key}`);
     }
   }
@@ -281,9 +304,9 @@ export function evaluateLegalCorpusReleaseEvidence(
     failures.push("CHECKPOINT_COUNT_MISMATCH");
   }
 
-  const technicalUnavailabilityRate = expectedDocuments === 0
+  const technicalUnavailabilityRate = discoveredDocuments === 0
     ? 1
-    : technicallyUnavailable / expectedDocuments;
+    : technicallyUnavailable / discoveredDocuments;
   if (technicalUnavailabilityRate > LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumTechnicalUnavailabilityRate) {
     failures.push("TECHNICAL_UNAVAILABILITY_RATE_FAILED");
   }
@@ -333,6 +356,19 @@ export function evaluateLegalCorpusReleaseEvidence(
     failures.push("UNRESOLVED_INGESTION_FAILURES");
   }
 
+  const qdrantHealth = evidence.dashboard.qdrantHealth;
+  if (!qdrantHealth.configured) failures.push("QDRANT_HEALTH_NOT_CONFIGURED");
+  if (!qdrantHealth.enabled) failures.push("QDRANT_HEALTH_DISABLED");
+  if (qdrantHealth.status !== "ready") failures.push("QDRANT_HEALTH_NOT_READY");
+  if (qdrantHealth.errorCode !== null) failures.push("QDRANT_HEALTH_ERROR");
+  if (!fresh(qdrantHealth.checkedAt, now)) failures.push("QDRANT_HEALTH_STALE");
+  if (qdrantHealth.currentPoints !== benchmark.qdrantCurrentPointCount) {
+    failures.push("QDRANT_HEALTH_CURRENT_POINT_COUNT_MISMATCH");
+  }
+  if (qdrantHealth.totalPoints !== benchmark.qdrantTotalPointCount) {
+    failures.push("QDRANT_HEALTH_TOTAL_POINT_COUNT_MISMATCH");
+  }
+
   minimum(failures, "RECALL_AT_5_FAILED", benchmark.recallAt5, LEGAL_CORPUS_RELEASE_THRESHOLDS.recallAt5);
   minimum(failures, "RECALL_AT_10_FAILED", benchmark.recallAt10, LEGAL_CORPUS_RELEASE_THRESHOLDS.recallAt10);
   minimum(failures, "MRR_FAILED", benchmark.mrr, LEGAL_CORPUS_RELEASE_THRESHOLDS.mrr);
@@ -357,6 +393,7 @@ export function evaluateLegalCorpusReleaseEvidence(
       checkpointCount: coverage.length,
       completeCheckpointCount,
       expectedDocuments,
+      discoveredDocuments,
       indexedDocuments,
       technicallyUnavailable,
       technicalUnavailabilityRate,
