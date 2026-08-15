@@ -41,6 +41,7 @@
     "test:cloudflare": "node scripts/platform-tasks.mjs test-cloudflare",
     "lint": "node scripts/platform-tasks.mjs lint",
     "type-check": "node scripts/platform-tasks.mjs type-check",
+    "license:check": "node ../../scripts/check-dependency-licenses.mjs .",
     "db:generate": "node scripts/platform-tasks.mjs db-generate"
   },
   "dependencies": {

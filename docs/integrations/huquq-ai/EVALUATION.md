@@ -1,8 +1,12 @@
 # Evaluation
 
-JURO must store only lawyer-reviewed ground truth. Until review is complete, every case
-is `LEGAL_REVIEW_REQUIRED`; no recall, groundedness or latency result is a published
-achievement.
+JURO stores only lawyer-reviewed ground truth. The protected staging run
+`staging-20260814-canonical` has 314/314 immutable per-scenario records linked
+to the fresh-MFA `confirmed_correct` legal-review attestation described in
+`STAGING_RELEASE_EVIDENCE_2026-08-14.md`. New or changed cases remain
+`LEGAL_REVIEW_REQUIRED` until they pass that same human workflow. The attestation
+does not retroactively turn unit fixtures into ground truth and does not publish
+an indexed-corpus recall, groundedness or latency achievement.
 
 Required suites are RU, Uzbek Latin, Uzbek Cyrillic, mixed-language, hard, versioning,
 citation and security cases. Measure recall@5/@10, MRR, citation precision/recall,
@@ -27,6 +31,10 @@ scenarios. It also enforces recall, exactness, abstention, partial-answer,
 groundedness, latency, pricing and invalid/stale-source thresholds.
 
 These values are release policy thresholds, not reported product achievements.
+The completed 314-scenario direct-source review is necessary evidence, but it
+does not pass this separate indexed-corpus gate: the staging corpus is still
+growing, the frozen snapshot benchmark has not run, and dense Qdrant retrieval
+remains disabled.
 The command must fail while the corpus is empty, flags are disabled, evidence is
 stale, the benchmark uses another snapshot, a provider request is unpriced or a
 metric is absent. A passing JSON report may be recorded only after the real

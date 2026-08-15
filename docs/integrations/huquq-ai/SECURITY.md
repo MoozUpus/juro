@@ -17,14 +17,17 @@
 - Owner material publication is fail-closed behind
   `LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST=false`. Enabling the flag alone is not
   sufficient: the request must come from the isolated admin host, pass CSRF,
-  carry both admin and legal-reviewer assignments, fresh MFA, ownership,
-  malware-safe file state, verified OCR bytes and two explicit confirmations.
+  carry a current administrator or legal-reviewer assignment, fresh MFA,
+  ownership, malware-safe file state, verified OCR bytes and an explicit
+  rights-to-publish confirmation. No legal-approval confirmation is collected.
 - Deterministic pre-publication checks reject common e-mail, phone, PINFL and
   passport patterns plus known prompt-injection imperatives before corpus R2
   or D1 writes. Failure records expose only a bounded error code, never text.
-- `legal_corpus_owner_publications` is append-only and contains hashes and
-  actor evidence, not legal text. Cross-owner publication and stale MFA are
+- `legal_corpus_owner_ingestions` is append-only and contains hashes and
+  actor evidence, not legal text. Cross-owner ingestion and stale MFA are
   regression-tested. Owner material is excluded from the official Lex provider.
+- Legacy `legal_corpus_owner_publications` rows remain immutable and readable
+  for provenance; new technical auto-trust writes use the 0129 tables only.
 - Withdrawal is a separate immutable event and remains available with ingestion
   disabled. It removes the material from sparse and dense rehydration through
   the D1 availability predicate without deleting audit evidence or blocking

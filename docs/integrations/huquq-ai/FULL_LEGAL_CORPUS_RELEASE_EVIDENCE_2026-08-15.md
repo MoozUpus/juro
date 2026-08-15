@@ -77,6 +77,67 @@ login redirect, not-found state or browser console error. The smoke was
 read-only: it did not submit an AI question, upload a file, create a document or
 change user data.
 
+## Subsequent controlled staging activation
+
+The initial inert deployment above remains the production baseline. Later on
+2026-08-15, staging alone enabled official-source acquisition after separate
+approval and applied staging migrations `0129–0132`. Production flags and DNS
+were not changed.
+
+Migration `0132` added the distributed Lex host pacer. Its pre-migration export
+had SHA-256
+`f43f54280f3debf171877e1a7a344e7dac277bbae30ae8a4a05dc62edbcc2a57`
+and restored with `quick_check=ok`, zero foreign-key violations, 252 tables,
+557 indexes, 343 triggers and 132 migrations. The post-migration export had
+SHA-256
+`1d0c4235b8c5811e11f1c00b22b97de1cc2d70055b9ab6d3be5dfc8ab1e609b8`
+and restored with `quick_check=ok`, zero foreign-key violations, 253 tables,
+558 indexes, 343 triggers and 133 migrations. Private staging R2 readback
+matched both exports byte-for-byte:
+
+- `legal-corpus/migrations/2026-08-15/pre-0132-20260815T082819Z/juro-staging.sql`;
+- `legal-corpus/migrations/2026-08-15/post-0132-20260815T082819Z/juro-staging.sql`.
+
+One first restore process exceeded the bounded command window and left an
+incomplete local file; it was not used as evidence. A second distinct restore
+target completed and supplied the figures above.
+
+The 08:40 UTC paced batch ran for about 4 minutes 49 seconds and released its
+lease before the next cron. No overlapping crawler started. By 14:11 +05:00,
+staging had 54 official canonical documents and zero owner materials; an
+earlier exact count recorded 390 discovered URLs, 45 canonical documents,
+49 language variants, 53 immutable versions, 3,741 provisions, 3,748 chunks,
+405 queued/retrying jobs and zero terminal failures. Counts continue to change
+while the bounded Worker is active and are not presented as coverage success.
+
+Staging versions after the UI, pacing and maintenance update are:
+
+- platform: `a44f13ec-c3b8-4be9-a2ba-950f6a9312f7`;
+- isolated admin: `16ff2e82-5c40-4b31-b80f-ff1d9a471db5`;
+- isolated corpus: `0166a779-2d31-4884-a889-40017ca1af82`.
+
+The platform and admin type-checks, platform lint, focused retrieval/citation/
+maintenance tests, corpus dry-run and staging artifact build passed. The
+artifact exposed `/api/platform/ai/citations/:messageId`, stayed within every
+configured raw-size budget and deployed successfully. Post-deploy browser QA
+reached the expected fresh-MFA gate; it did not claim an authenticated visual
+pass after that 15-minute session expired.
+
+At 14:36 +05:00 the continuing staging crawl contained 662 discovered URLs,
+65 canonical official Lex documents, 103 language variants, 107 immutable
+versions, 8,026 provisions and 8,038 chunks. There were 694 queued/retrying
+jobs, one bounded running job and zero technically-unavailable terminal
+failures. This remains below the canonical-document release threshold.
+
+The ordinary authenticated staging user session loaded the AI chat after the
+platform deployment. Light and dark themes rendered the empty state and the
+desktop three-column layout; the dark preference survived reload. The first
+visual pass exposed low-contrast conversation cards, which were corrected and
+redeployed before the second screenshot. The corrected dark view retained
+readable history cards and the browser log contained no console entries. This
+visual check did not submit a paid provider request and did not claim a visual
+pass for a source modal without a selected source-bearing answer.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

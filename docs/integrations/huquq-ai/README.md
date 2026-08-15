@@ -18,3 +18,5 @@ remain disabled pending the reproducible release gate.
 The 2026-08-15 infrastructure deployment, D1 restore evidence, Worker versions
 and authenticated browser smoke are recorded in
 [FULL_LEGAL_CORPUS_RELEASE_EVIDENCE_2026-08-15.md](FULL_LEGAL_CORPUS_RELEASE_EVIDENCE_2026-08-15.md).
+The reproducible npm licence-family scan is recorded in
+[DEPENDENCY_LICENSES.md](DEPENDENCY_LICENSES.md).

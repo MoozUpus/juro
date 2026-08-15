@@ -36,14 +36,16 @@ through the isolated admin service binding. Its body is strictly validated:
   title: string;
   language: "ru" | "uz-Latn" | "uz-Cyrl" | "en";
   rightsConfirmed: true;
-  legalReviewConfirmed: true;
   reason: string;
 }
 ```
 
-The authenticated actor must be both `super_admin` and `legal_reviewer`, own
-the analysis and have fresh MFA. The endpoint returns only bounded IDs/counts;
-it never returns source text, the OCR derivative, R2 keys or credentials.
+The isolated admin session must be `super_admin`. The authenticated publisher
+must own the analysis, hold a current `administrator` or `legal_reviewer`
+assignment and have fresh MFA. The endpoint performs technical auto-trust after
+malware, extraction and R2-integrity checks; it does not collect or invent a
+legal-review decision. The endpoint returns only bounded IDs/counts; it never
+returns source text, the OCR derivative, R2 keys or credentials.
 
 `withdraw_owner_material` accepts only the published corpus `documentId` and a
 10–500 character reason. It remains available when ingestion flags are off,

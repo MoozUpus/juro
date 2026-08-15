@@ -49,7 +49,7 @@ The live public entry is [juro.uz](https://juro.uz); the protected product platf
 
 <img src="docs/github/ai-answer-flow.svg" width="100%" alt="JURO source-aware legal information flow from question or document to citations and optional lawyer hand-off">
 
-The implemented legal-information path starts with a question or document, identifies the request, retrieves relevant public-source pages, assembles bounded context and presents a structured response with source cards when evidence is available. Its public-source layer is query-scoped retrieval from Lex.uz and Advice.uz pages; JURO does not claim an official third-party API integration.
+The implemented legal-information path starts with a question or document, identifies the request, retrieves relevant official Lex.uz pages, assembles bounded context and presents a structured response with source cards when evidence is available. JURO uses verified HTML retrieval and does not claim an official Lex.uz API. Advice.uz is not used as a legal citation provider in the active answer path.
 
 An answer is useful only when its boundary is clear:
 

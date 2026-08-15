@@ -37,11 +37,11 @@ The following source-system dispositions are final for this integration:
 | 9 | Dense embedding search | `services/embedding.py` | semantic candidates | `legal-corpus/embeddings.ts`, Qdrant named `dense` vector | REIMPLEMENT | MIT concepts | stale/unverified text, cost | embedding/Qdrant/indexing tests; cost circuit |
 | 10 | BM25 sparse search | `services/sparse.py` | lexical relevance | exportable D1 BM25 plus Qdrant named `sparse` vector | REIMPLEMENT | MIT concepts | ranking drift | retrieval/Qdrant tests |
 | 11 | Hybrid search and RRF | `services/retrieval.py` | fuse dense/sparse hits | Qdrant dense+sparse RRF → D1 hydration → outer BM25 RRF | REIMPLEMENT | MIT concepts | duplicates/order/scope leak | retrieval/Qdrant tests |
-| 12 | LLM reranker | `services/rerank.py` | final relevance ranking | deterministic BM25 now; provider reranker needs evaluation | REJECT | MIT | cost/ungrounded rerank | Feature-gated limitation |
+| 12 | LLM reranker | `services/rerank.py` | final relevance ranking | validated deterministic BM25 fallback; provider reranker needs evaluation | REJECT | MIT | cost/ungrounded rerank | Retrieval ordering tests; release evidence declares deterministic fallback |
 | 13 | Grounded generation | `services/generate.py` | context-only legal answer | `legal-ai-gateway.ts` + providers | ADAPT | MIT concepts | fabricated citations | Gateway tests |
 | 14 | Gemini LLM client | `services/llm.py` | generation/tools | OpenAI primary, Anthropic fallback | REJECT | MIT | provider policy conflict | Provider-routing tests |
 | 15 | Tool calling | `services/tools.py`, `agentic.py` | legal search/live tools | `legal-agent-tools.ts` | ADAPT | MIT concepts | SSRF/unbounded calls | Tool boundary tests |
-| 16 | Agent modes | `services/agents.py` | legal-domain presets | JURO AI lawyer modes | ADAPT | MIT concepts | non-working UI mode | UI/route tests |
+| 16 | Agent modes | `services/agents.py` | legal-domain presets | automatic JURO legal-domain research planner; no manual selector until each mode has evaluation evidence | ADAPT | MIT concepts | non-working UI mode | Planner/route tests; absent modes are not advertised |
 | 17 | Attachments | `services/attachments.py` | file analysis | JURO private R2/quarantine pipeline | ADAPT | MIT concepts | malware/tenant leak | Document-analysis tests |
 | 18 | Drafting | `services/drafting.py` | blanks, legal grounds | JURO Document Builder integration | ADAPT | MIT concepts | invented facts | Suggested-document tests |
 | 19 | Registry/chunk store | `services/corpus.py` | article data access | D1 reviewed sources/chunks | REIMPLEMENT | MIT concepts | corpus in Git | Source evidence tests |
@@ -56,10 +56,10 @@ The following source-system dispositions are final for this integration:
 | 28 | Source screenshots/logo/mark | `docs/*.png`, `frontend/logo.svg` | upstream identity | JURO branding only | REJECT | assets/brand not assumed | IP confusion | Not copied |
 | 29 | Legal texts/local corpus | source `data/` history | retrieval content | request-scoped Lex or reviewed JURO records | REJECT | external data rights | republishing source text | Source gates |
 | 30 | Docker/Caddy/Compose | Docker/Compose/Caddy files | self-hosting | Cloudflare Workers/D1/R2 | REJECT | MIT | architecture replacement | Wrangler validation |
-| 31 | Eval questions/runner | `eval/*` | regression discipline | JURO evaluation corpus | ADAPT | answers not copied | false ground truth | `LEGAL_REVIEW_REQUIRED` |
+| 31 | Eval questions/runner | `eval/*` | regression discipline | JURO evaluation corpus | ADAPT | answers not copied | false ground truth | immutable 314-scenario review evidence; new cases remain `LEGAL_REVIEW_REQUIRED` |
 | 32 | Pytest/API tests | `tests/*` | legal regression patterns | TypeScript node tests | REIMPLEMENT | MIT concepts | shallow parity | Legal/security tests |
 | 33 | README/legal docs | `README.md`, `docs/legal/*` | documentation | JURO integration docs | REIMPLEMENT | MIT concepts | unsupported claims | This documentation |
-| 34 | Global owner materials | attachment/corpus patterns | trusted internal knowledge | completed JURO analysis → immutable R2/D1 corpus promotion | REIMPLEMENT | MIT concepts | rights, cross-tenant leak, non-official text used as law | dual confirmation, owner check, malware/OCR SHA, fresh MFA, immutable audit, official-only exclusion tests |
+| 34 | Global owner materials | attachment/corpus patterns | trusted internal knowledge | completed JURO analysis → immutable R2/D1 corpus promotion | REIMPLEMENT | MIT concepts | rights, cross-tenant leak, non-official text used as law | rights confirmation, current staff assignment, owner check, malware/OCR SHA, fresh MFA, immutable audit, official-only exclusion tests |
 
 No Huquq AI runtime file is copied verbatim into JURO. The only literal upstream text
 stored here is the MIT licence notice at `third_party/licenses/huquq-ai-MIT.txt`.

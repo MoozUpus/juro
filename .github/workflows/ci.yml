@@ -67,3 +67,6 @@ jobs:
       - name: Audit platform production dependencies
         if: matrix.app == 'apps/platform'
         run: npm audit --omit=dev --audit-level=high
+
+      - name: Enforce dependency licence policy
+        run: npm run license:check

@@ -10,10 +10,10 @@ inert until a separate server-side feature flag and infrastructure are approved.
 
 | Layer | Responsibility | Boundary |
 | --- | --- | --- |
-| Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; one robots-aware GET/POST page per scheduler lease |
+| Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; at most two robots-aware GET/POST pages per scheduler lease |
 | Lex metadata monitor | Discover bounded official RSS metadata | Existing robots-aware monitor, no source text stored |
 | Corpus job ledger | Idempotent queued/fetch/retry state | D1; identifiers and official URLs only |
-| Ingestion | Fetch one official Lex variant, validate HTML, parse articles | One job per dedicated corpus tick, robots/crawl delay respected |
+| Ingestion | Fetch official Lex variants, validate HTML, parse articles | At most nine sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
@@ -86,14 +86,26 @@ answer path.
 
 The route-free `juro-legal-corpus-*` Worker owns corpus scheduling. Its
 `5 19 * * *` UTC seed slot runs five minutes after the existing bounded Lex
-metadata monitor, and its five-minute processing slot holds the single
-`legal-corpus-worker` D1 lease before running at most one catalog page and one
-document ingestion job sequentially. The ordinary platform Worker neither
-imports nor invokes discovery or ingestion. Development and production keep
-both acquisition flags `false`. Staging sets them only on the isolated Worker
-and matching admin boundary; the shared lease, one-page/one-document limit and
-20-second robots delay keep acquisition bounded and prevent parallel mass
-crawling.
+metadata monitor. The five-minute processing slot also idempotently creates
+missing catalog checkpoints before claiming work, so a fresh environment does
+not depend on a manual admin form. It then holds the single
+`legal-corpus-worker` D1 lease for the whole batch. A batch processes at most
+two catalog pages and nine ingestion jobs sequentially. Every real Lex request,
+including `robots.txt`, first claims a host-wide D1 time window; the observed
+`Crawl-delay` is cached for the Worker run and persisted for later runs. The
+seven-minute lease prevents the next five-minute cron from starting a second
+crawler while a paced batch is still active.
+
+The daily seed also creates maintenance jobs without performing network I/O.
+Daily work prioritizes stale codes and the Constitution while the normal
+metadata/catalog flow discovers new documents. Every Monday in Tashkent it
+queues variants not checked during the previous week and safely reopens only
+completed catalog checkpoints. On the first local day of each month it queues
+every official variant for a full content-hash verification. These jobs use the
+same sequential process cron, lock and host pacer; old versions are never
+deleted. The ordinary platform Worker neither imports nor invokes discovery or
+ingestion. Development and production keep both acquisition flags `false`.
+Staging alone enables acquisition.
 
 `LEGAL_CORPUS_DENSE_ENABLED` is an additional independent deny-by-default
 switch. When enabled, the dedicated Worker checks that the configured Qdrant
@@ -105,22 +117,24 @@ tenant predicates as BM25. Provider calls are blocked by JURO's existing cost
 circuit before network access and recorded in the system usage ledger. JURO
 does not create, delete or expose a Qdrant deployment automatically.
 
-Owner materials enter through an explicit promotion path, not a second upload
-surface. The actor must own an already completed document analysis whose file
-is `analysis_safe` and whose OCR derivative passes the existing R2 byte-count
-and SHA-256 checks. The same actor must hold active administrator and
-`legal_reviewer` assignments with MFA no older than 15 minutes, and must check
-separate rights-to-publish and human-legal-review confirmations. The normalized
-text is copied to an immutable private R2 key, then article-first chunks and an
-exportable sparse index are written before the current-version pointer changes.
-`legal_corpus_owner_publications` stores no document text: it is append-only
-evidence linking hashes, roles, MFA, reason and the resulting version.
-An owner can issue a separate immutable withdrawal through the same dual-role,
-fresh-MFA boundary even while ingestion flags are off. The withdrawal changes
-only the mutable availability projection to `disabled`; retrieval excludes it
-immediately, while hashes and prior versions remain for audit. Publication
+Owner materials enter by promoting an already completed document analysis; the
+existing private upload, quarantine, malware scan and OCR pipeline remains the
+only file-ingress surface. The actor must own the analysis, the file must be
+`analysis_safe`, and the OCR derivative must pass R2 byte-count and SHA-256
+checks. The same actor must hold a current `administrator` or `legal_reviewer`
+assignment with MFA no older than 15 minutes and explicitly confirm publication
+rights. No human legal-review confirmation or approval queue exists. The
+normalized text is copied to an immutable private R2 key, then article-first
+chunks and an exportable sparse index are written before the current-version
+pointer changes. `legal_corpus_owner_ingestions` stores no document text: it is
+append-only technical auto-trust evidence linking hashes, assignment, MFA,
+reason and the resulting version. A publisher can issue a separate immutable
+withdrawal even while ingestion flags are off. The withdrawal changes only the
+mutable availability projection to `disabled`; retrieval excludes it
+immediately, while hashes and prior versions remain for audit. Ingestion
 evidence uses opaque identifiers without foreign keys to private analysis rows,
-so normal document/account retention is not blocked.
+so normal document/account retention is not blocked. Legacy 0128 publication
+tables remain immutable for provenance but receive no new writes.
 
 Owner materials never become official Lex evidence. `LexUzIndexedProvider`
 continues to request `officialOnly`; therefore owner text cannot supply a legal
@@ -131,11 +145,15 @@ use it only after its own product and evaluation gate.
 platform UI. It reads through the private `PLATFORM_ADMIN_API` service binding.
 Only `super_admin` can view or operate it; the 15-minute host-only session is
 revalidated against the originating TOTP/MFA and current administrator
-assignment on every request. Writes additionally require same-origin CSRF,
-both server-side corpus flags, a 10–500 character technical reason and a valid
-append-only SHA-256 event chain. There is intentionally no legal approval
-queue. A catalog row is marked complete only when every expected document is
-indexed or has an explicit `technically_unavailable` result.
+assignment on every request. Owner ingestion independently accepts that
+administrator assignment (or a current legal-reviewer assignment) as the
+publisher evidence. Writes additionally require same-origin CSRF, both
+server-side corpus flags, a 10–500 character technical reason and a valid
+append-only SHA-256 event chain. The automatic initial seed is not a manual
+write and therefore presents no reason field; reason remains mandatory for
+staff retries and owner-material actions. There is intentionally no legal
+approval queue. A catalog row is marked complete only when every expected
+document is indexed or has an explicit `technically_unavailable` result.
 
 Production's D1 `migrations_pattern` includes `0121` and production-safe
 `0124–0128` while structurally excluding staging-only evidence migrations

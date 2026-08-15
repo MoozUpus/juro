@@ -13,12 +13,23 @@
   activation still needs a reproducible benchmark, a private compatible collection,
   server-side secrets and controlled staging evidence. Bounded sparse corpus
   acquisition is enabled only in staging; production corpus flags remain disabled.
-- The owner-material promotion path is implemented and regression-tested but
-  remains disabled in every environment. No owner document has been promoted.
-  Its first staging use still requires a real completed analysis, the actor's
-  explicit rights/legal-review confirmations, fresh MFA and post-action audit.
+- The owner-material promotion path is implemented, regression-tested and
+  enabled only in staging. No owner document had been promoted as of
+  2026-08-15 14:11 +05:00. Its first use still requires a real completed
+  analysis, the actor's explicit rights confirmation, a current administrator
+  or legal-reviewer assignment, fresh MFA, malware/OCR/R2 integrity checks and
+  post-action audit.
 - Owner materials are intentionally excluded from official Lex citations and
   do not affect legal-answer freshness. A non-official materials UX/provider
   remains a separate evaluated product decision.
+- Staging corpus acquisition is still in progress. At 2026-08-15 14:36 +05:00
+  it had 65 official canonical documents, 103 language variants, 107 versions,
+  8,026 provisions and 8,038 chunks; this is not evidence that the release
+  coverage thresholds are satisfied.
+- The new source-card and full-article modal passed type-check, focused boundary
+  tests and staging artifact/deployment checks. Authenticated desktop QA passed
+  for the AI-chat light/dark empty state and caught one dark-history contrast
+  regression that was fixed and reverified. A real source-bearing answer is
+  still required before claiming visual QA of the full-article modal.
 - `status.juro.uz` now resolves and is attached to the production Worker. Its
   status-host fence still needs to be preserved in every future routing change.

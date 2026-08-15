@@ -10,3 +10,7 @@ Copyright (c) 2026 Toxir Erkinov. Licensed under the MIT License; the complete n
 in `third_party/licenses/huquq-ai-MIT.txt`. JURO does not distribute the upstream
 corpus, legal-source text, screenshots, logo, name or external datasets under this
 notice. See `docs/integrations/huquq-ai-provenance.md`.
+
+The installed npm dependency-family inventory and reviewed dual/copyleft
+exceptions are recorded in
+`docs/integrations/huquq-ai/DEPENDENCY_LICENSES.md`.
