@@ -20,8 +20,21 @@ cross-tenant document attempts.
 The indexed corpus has a separate fail-closed verifier:
 
 ```text
+npm run build:legal-corpus:release-evidence -- \
+  --dashboard <frozen-dashboard.json> \
+  --benchmark <indexed-314-benchmark.json> \
+  --human-review <mfa-human-review-evidence.json> \
+  --application-commit <40-char-sha> \
+  --corpus-snapshot-sha256 <64-char-sha256> \
+  --output <release-evidence.json>
 npm run evaluate:legal:corpus-release -- --evidence <release-evidence.json>
 ```
+
+The builder parses the strict dashboard and benchmark schemas, verifies the
+314-record human export digest, canonical evaluation-corpus hash and complete
+MFA-bound event-hash chain, and binds the attestation, scope, export and file
+digests into the release envelope. A literal `reviewedScenarioCount: 314`
+without that cryptographic binding is not accepted as release evidence.
 
 The evidence envelope is bound to an application commit and corpus snapshot
 SHA-256. It requires all 44 category/language checkpoints, a frozen ingestion

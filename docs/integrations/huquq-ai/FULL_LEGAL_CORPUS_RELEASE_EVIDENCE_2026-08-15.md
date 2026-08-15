@@ -290,6 +290,25 @@ Qdrant benchmark remains bound to the frozen full corpus, the 314 reviewed
 scenarios, an approved provider-pricing envelope and the same corpus snapshot
 hash used by the release verifier.
 
+## Human-review binding for the final benchmark
+
+The owner-supplied protected export
+`staging-20260814-canonical-human-review-evidence.json` is 323,133 bytes and
+has SHA-256
+`159c66da580010286b7b010348bf3c65ce66f136436618fc6b4e10d6d4ef4b1c`.
+JURO's existing strict schema and verifier parsed all 314 records, confirmed
+314 `correct` classifications, matched the canonical evaluation-corpus hash,
+recomputed the export digest and validated every event hash and previous-hash
+link with zero failures. The export itself is not committed because it contains
+staff/session audit identifiers.
+
+The indexed-corpus release schema now requires a cryptographic human-review
+binding, not only a claimed count. The release-evidence builder validates the
+protected export first and records its evaluation run, corpus hash,
+attestation/event/scope/export digests and complete-file SHA-256 alongside the
+frozen corpus snapshot hash. Final metrics still cannot be generated until the
+full corpus is frozen and the real 314-scenario indexed benchmark runs.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

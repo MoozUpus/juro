@@ -20,6 +20,21 @@ function validEvidence(): LegalCorpusReleaseEvidence {
     capturedAt: "2026-08-15T11:58:00.000Z",
     applicationCommit: commit,
     corpusSnapshotSha256: snapshot,
+    humanReview: {
+      schemaVersion: 1,
+      corpusVersion: "2026-08-13.1",
+      corpusSha256: "c".repeat(64),
+      evaluationRunId: "staging-20260814-canonical",
+      attestationId: "22000000-0000-4000-8000-000000000001",
+      attestationEventHash: "d".repeat(64),
+      scopeDigest: "e".repeat(64),
+      exportDigest: "f".repeat(64),
+      fileSha256: "1".repeat(64),
+      recordCount: 314,
+      correctCount: 314,
+      exportedAt: "2026-08-14T12:06:38.000Z",
+      verified: true,
+    },
     dashboard: {
       environment: "staging",
       featureFlags: {
@@ -186,5 +201,14 @@ test("release gate rejects snapshot drift, unresolved failures and metric regres
 test("release evidence schema requires exactly 314 reviewed scenarios", () => {
   const evidence = validEvidence() as unknown as { benchmark: { scenarioCount: number } };
   evidence.benchmark.scenarioCount = 313;
+  assert.equal(legalCorpusReleaseEvidenceSchema.safeParse(evidence).success, false);
+});
+
+test("release evidence schema requires a verified cryptographic human-review binding", () => {
+  const evidence = validEvidence() as unknown as { humanReview: { verified: boolean; fileSha256: string } };
+  evidence.humanReview.verified = false;
+  assert.equal(legalCorpusReleaseEvidenceSchema.safeParse(evidence).success, false);
+  evidence.humanReview.verified = true;
+  evidence.humanReview.fileSha256 = "not-a-digest";
   assert.equal(legalCorpusReleaseEvidenceSchema.safeParse(evidence).success, false);
 });

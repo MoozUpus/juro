@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { LEGAL_EVALUATION_CORPUS_VERSION } from "../../evaluation/legal-evaluation-contract";
 import { LEX_CORPUS_CATEGORIES, LEX_CORPUS_LANGUAGES } from "./lex-discovery";
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
@@ -50,7 +51,7 @@ export const LEGAL_CORPUS_RELEASE_THRESHOLDS = Object.freeze({
   maximumEvidenceAgeMs: 24 * 60 * 60_000,
 });
 
-const featureFlagsSchema = z.object({
+export const legalCorpusFeatureFlagsEvidenceSchema = z.object({
   LEGAL_CORPUS_ENABLED: z.boolean(),
   LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: z.boolean(),
   LEGAL_CORPUS_AUTO_INGEST_ENABLED: z.boolean(),
@@ -62,7 +63,7 @@ const featureFlagsSchema = z.object({
   LEGAL_CORPUS_SHADOW_MODE: z.boolean(),
 }).strict();
 
-const totalsSchema = z.object({
+export const legalCorpusTotalsEvidenceSchema = z.object({
   canonicalDocuments: z.number().int().nonnegative(),
   languageVariants: z.number().int().nonnegative(),
   uniqueProvisions: z.number().int().nonnegative(),
@@ -78,7 +79,7 @@ const totalsSchema = z.object({
   lastSuccessfulUpdate: isoTimestampSchema.nullable(),
 }).strict();
 
-const coverageSchema = z.object({
+export const legalCorpusCoverageEvidenceSchema = z.object({
   categoryKey: z.enum(LEX_CORPUS_CATEGORIES.map(({ key }) => key)),
   language: z.enum(LEX_CORPUS_LANGUAGES.map(({ language }) => language)),
   status: z.string().min(1).max(40),
@@ -94,13 +95,13 @@ const coverageSchema = z.object({
   complete: z.boolean(),
 }).strict();
 
-const failureSchema = z.object({
+export const legalCorpusFailureEvidenceSchema = z.object({
   retryState: z.string().min(1).max(40),
   retryable: z.boolean(),
   canRetry: z.boolean(),
 }).passthrough();
 
-const benchmarkSchema = z.object({
+export const legalCorpusBenchmarkEvidenceSchema = z.object({
   generatedAt: isoTimestampSchema,
   applicationCommit: commitSchema,
   corpusSnapshotSha256: sha256Schema,
@@ -133,22 +134,41 @@ const benchmarkSchema = z.object({
   p95CompleteAnswerMs: z.number().int().nonnegative(),
 }).strict();
 
+export const legalCorpusHumanReviewBindingSchema = z.object({
+  schemaVersion: z.literal(1),
+  corpusVersion: z.literal(LEGAL_EVALUATION_CORPUS_VERSION),
+  corpusSha256: sha256Schema,
+  evaluationRunId: z.string().trim().min(1).max(160).regex(/^[A-Za-z0-9._:-]+$/u),
+  attestationId: z.string().uuid(),
+  attestationEventHash: sha256Schema,
+  scopeDigest: sha256Schema,
+  exportDigest: sha256Schema,
+  fileSha256: sha256Schema,
+  recordCount: z.literal(LEGAL_CORPUS_RELEASE_SCENARIO_COUNT),
+  correctCount: z.literal(LEGAL_CORPUS_RELEASE_SCENARIO_COUNT),
+  exportedAt: isoTimestampSchema,
+  verified: z.literal(true),
+}).strict();
+
+export const legalCorpusDashboardEvidenceSchema = z.object({
+  environment: z.literal("staging"),
+  featureFlags: legalCorpusFeatureFlagsEvidenceSchema,
+  lexHealth: z.object({ state: z.literal("fresh") }).passthrough(),
+  totals: legalCorpusTotalsEvidenceSchema,
+  coverage: z.array(legalCorpusCoverageEvidenceSchema).max(LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS),
+  failures: z.array(legalCorpusFailureEvidenceSchema).max(10_000),
+  integrity: z.object({ valid: z.boolean(), checked: z.number().int().nonnegative() }).strict(),
+}).strict();
+
 export const legalCorpusReleaseEvidenceSchema = z.object({
   schemaVersion: z.literal(LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION),
   environment: z.literal("staging"),
   capturedAt: isoTimestampSchema,
   applicationCommit: commitSchema,
   corpusSnapshotSha256: sha256Schema,
-  dashboard: z.object({
-    environment: z.literal("staging"),
-    featureFlags: featureFlagsSchema,
-    lexHealth: z.object({ state: z.literal("fresh") }).passthrough(),
-    totals: totalsSchema,
-    coverage: z.array(coverageSchema).max(LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS),
-    failures: z.array(failureSchema).max(10_000),
-    integrity: z.object({ valid: z.boolean(), checked: z.number().int().nonnegative() }).strict(),
-  }).strict(),
-  benchmark: benchmarkSchema,
+  humanReview: legalCorpusHumanReviewBindingSchema,
+  dashboard: legalCorpusDashboardEvidenceSchema,
+  benchmark: legalCorpusBenchmarkEvidenceSchema,
 }).strict();
 
 export type LegalCorpusReleaseEvidence = z.infer<typeof legalCorpusReleaseEvidenceSchema>;
@@ -192,12 +212,17 @@ export function evaluateLegalCorpusReleaseEvidence(
   const totals = evidence.dashboard.totals;
   const coverage = evidence.dashboard.coverage;
   const benchmark = evidence.benchmark;
+  const humanReview = evidence.humanReview;
 
   if (!fresh(evidence.capturedAt, now)) failures.push("EVIDENCE_STALE");
   if (!fresh(benchmark.generatedAt, now)) failures.push("BENCHMARK_STALE");
   if (!fresh(totals.lastSuccessfulUpdate, now)) failures.push("CORPUS_UPDATE_STALE");
   if (benchmark.applicationCommit !== evidence.applicationCommit) failures.push("BENCHMARK_COMMIT_MISMATCH");
   if (benchmark.corpusSnapshotSha256 !== evidence.corpusSnapshotSha256) failures.push("BENCHMARK_CORPUS_MISMATCH");
+  if (humanReview.recordCount !== benchmark.reviewedScenarioCount
+    || humanReview.correctCount !== benchmark.scenarioCount) {
+    failures.push("HUMAN_REVIEW_SCENARIO_MISMATCH");
+  }
 
   for (const flag of [
     "LEGAL_CORPUS_ENABLED",
