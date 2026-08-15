@@ -76,7 +76,9 @@ All corpus flags are server-side and default to `false`. Production keeps every
 corpus flag disabled. After explicit approval, verified D1 backup/restore and
 the fail-closed release verifier were in place, staging alone enabled bounded
 official-source acquisition, multilingual parsing, historical discovery and
-shadow retrieval. Dense Qdrant retrieval remains disabled. The direct
+shadow retrieval. Staging also has a private, route-free Qdrant Container and
+embedding service binding, but dense Qdrant retrieval remains disabled and the
+container remains dormant. The direct
 request-scoped Lex flow continues to serve visible answers until the staging
 evidence gate verifies indexed retrieval. When
 enabled, chat searches indexed trusted chunks first and uses the validated
@@ -117,7 +119,9 @@ Staging alone enables acquisition.
 
 `LEGAL_CORPUS_DENSE_ENABLED` is an additional independent deny-by-default
 switch. When enabled, the dedicated Worker checks that the configured Qdrant
-collection is `dense(1536, Cosine) + sparse`, embeds only global official
+collection is `dense(1536, Cosine) + sparse`; it creates only that exact
+environment-scoped collection when absent and refuses to replace an
+incompatible collection. It embeds only global official
 chunks, writes both named vectors and marks the prior version non-current. When
 Lex acquisition is frozen, the same process schedule performs a bounded,
 resumable backfill of missing current chunks. Persisted deterministic vector IDs
@@ -127,7 +131,12 @@ Interactive retrieval queries Qdrant dense and sparse ranks, but accepts only
 chunk IDs that D1 rehydrates under the same official/current/point-in-time and
 tenant predicates as BM25. Provider calls are blocked by JURO's existing cost
 circuit before network access and recorded in the system usage ledger. JURO
-does not create, delete or expose a Qdrant deployment automatically.
+does not delete an existing collection or expose Qdrant publicly; staging
+container provisioning remains explicit in the environment configuration.
+The platform Worker owns the pinned staging container and exposes it only through
+the `QDRANT_SERVICE` binding. The corpus Worker reaches OpenAI embeddings only
+through `LEGAL_CORPUS_EMBEDDING_SERVICE`; it has no OpenAI secret of its own.
+Production declares neither private binding and remains fail-closed.
 
 Owner materials enter by promoting an already completed document analysis; the
 existing private upload, quarantine, malware scan and OCR pipeline remains the

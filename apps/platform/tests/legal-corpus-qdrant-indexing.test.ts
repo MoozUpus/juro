@@ -99,7 +99,7 @@ test("Qdrant sync embeds only global official chunks, demotes the previous versi
     }, "lexuz:42:ru:v2", {
       now: new Date("2026-08-15T01:00:00.000Z"),
       client: {
-        assertCompatible: async () => { compatibilityChecks += 1; },
+        ensureCompatible: async () => { compatibilityChecks += 1; return "existing" as const; },
         setVersionCurrent: async (versionId, isCurrent) => { demoted.push({ versionId, isCurrent }); },
         upsert: async (batch) => { points.push(...batch); },
       },
@@ -142,7 +142,7 @@ test("Qdrant backfill resumes from persisted chunk ids and stops when current gl
     maxChunks: 1,
     now: new Date("2026-08-15T01:00:00.000Z"),
     client: {
-      assertCompatible: async () => undefined,
+      ensureCompatible: async () => "existing" as const,
       setVersionCurrent: async () => undefined,
       upsert: async (batch: QdrantCorpusPoint[]) => { points.push(...batch); },
     },

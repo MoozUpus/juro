@@ -60,11 +60,15 @@ does not pass this separate indexed-corpus gate: the staging corpus is still
 growing, the frozen snapshot benchmark has not run, and dense Qdrant retrieval
 remains disabled.
 
-The independent Qdrant engine gate passed in GitHub Actions run
-[31887777456](https://github.com/MoozUpus/juro/actions/runs/31887777456).
+The independent Qdrant engine gate passed again on the private-staging-service
+head in GitHub Actions run
+[31893157240](https://github.com/MoozUpus/juro/actions/runs/31893157240).
 It used the real Qdrant 1.18.2 REST API with 1,536-dimensional named dense and
 sparse vectors, verified dense/sparse/hybrid ordering, downloaded a collection
-snapshot, recorded its SHA-256, restored it by upload and repeated the query.
+snapshot (118,784 bytes, SHA-256
+`8c0a7eb8b172e11f904b13ac96505d304049e8b366fc0b7f0a9a6bfc323d430d`),
+restored it by upload and repeated the query. Artifact
+`qdrant-snapshot-gate-31893157240` has GitHub artifact ID `9249080373`.
 That three-point infrastructure fixture is deliberately not counted as the
 314-scenario legal relevance benchmark.
 

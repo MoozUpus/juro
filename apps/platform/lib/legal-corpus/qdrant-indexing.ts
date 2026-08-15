@@ -59,7 +59,7 @@ export type LegalCorpusQdrantBackfillResult = {
 };
 
 type QdrantSyncDependencies = {
-  client?: Pick<QdrantLegalCorpusClient, "assertCompatible" | "setVersionCurrent" | "upsert">;
+  client?: Pick<QdrantLegalCorpusClient, "ensureCompatible" | "setVersionCurrent" | "upsert">;
   embeddings?: LegalCorpusEmbeddingProvider;
   now?: Date;
 };
@@ -113,7 +113,7 @@ export async function syncLegalCorpusVersionToQdrant(
 
   const client = options.client ?? new QdrantLegalCorpusClient(env);
   const embeddings = options.embeddings ?? new OpenAiLegalCorpusEmbeddingProvider(env);
-  await client.assertCompatible();
+  await client.ensureCompatible();
   if (version.isCurrent === 1 && version.previousVersionId) {
     await client.setVersionCurrent(version.previousVersionId, false);
   }

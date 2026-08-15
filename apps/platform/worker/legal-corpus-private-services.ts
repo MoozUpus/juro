@@ -44,6 +44,21 @@ function qdrantRequestAllowed(request: Request, collection: string): boolean {
   return url.pathname === prefix || url.pathname.startsWith(`${prefix}/`);
 }
 
+async function secretMatches(provided: string, expected: string): Promise<boolean> {
+  const encoder = new TextEncoder();
+  const [providedHash, expectedHash] = await Promise.all([
+    crypto.subtle.digest("SHA-256", encoder.encode(provided)),
+    crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+  ]);
+  const left = new Uint8Array(providedHash);
+  const right = new Uint8Array(expectedHash);
+  let difference = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    difference |= left[index]! ^ right[index]!;
+  }
+  return difference === 0;
+}
+
 export class LegalCorpusQdrantContainer extends Container<LegalCorpusPrivateServiceEnv> {
   defaultPort = 6_333;
   requiredPorts = [6_333];
@@ -68,13 +83,17 @@ export async function handleLegalCorpusQdrantServiceRequest(
   env: LegalCorpusPrivateServiceEnv,
 ): Promise<Response> {
   const collection = env.QDRANT_COLLECTION?.trim() ?? "";
+  const expectedApiKey = env.QDRANT_API_KEY?.trim() ?? "";
+  const providedApiKey = request.headers.get("api-key") ?? "";
   if (
     !env.QDRANT_CONTAINER
-    || !env.QDRANT_API_KEY?.trim()
+    || !expectedApiKey
     || !COLLECTION_PATTERN.test(collection)
-    || request.headers.get("api-key") !== env.QDRANT_API_KEY
     || !qdrantRequestAllowed(request, collection)
   ) {
+    return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
+  }
+  if (!(await secretMatches(providedApiKey, expectedApiKey))) {
     return privateJson("QDRANT_PRIVATE_ROUTE_REJECTED", 404);
   }
   try {

@@ -102,7 +102,9 @@ test("private dense services stay behind service bindings and staging-only flags
   const corpusConfig = readFileSync(new URL("../wrangler.legal-corpus.jsonc", import.meta.url), "utf8");
   assert.match(platformWorker, /url\.hostname === "qdrant\.internal"/u);
   assert.match(platformWorker, /url\.hostname === "embeddings\.internal"/u);
-  assert.match(privateServices, /request\.headers\.get\("api-key"\) !== env\.QDRANT_API_KEY/u);
+  assert.match(privateServices, /secretMatches\(providedApiKey, expectedApiKey\)/u);
+  assert.match(privateServices, /crypto\.subtle\.digest\("SHA-256"/u);
+  assert.doesNotMatch(privateServices, /providedApiKey\s*!==\s*expectedApiKey/u);
   assert.match(privateServices, /enableInternet = false/u);
   assert.match(privateServices, /QDRANT__SERVICE__API_KEY/u);
   assert.match(corpusConfig, /"binding": "QDRANT_SERVICE"/u);

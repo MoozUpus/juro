@@ -24,14 +24,19 @@ to sparse ranking; it never produces a fabricated source.
 
 JURO now contains a JURO-native, server-only Qdrant REST adapter for named
 `dense` and `sparse` vectors. It does not copy the upstream Python client or
-Docker deployment or activate retrieval. The adapter is guarded by
-`LEGAL_CORPUS_DENSE_ENABLED=false`, requires a pre-existing compatible
-collection, and rehydrates every candidate from D1 before use. An isolated CI
+Docker topology or activate retrieval. Staging has a pinned Qdrant 1.18.2
+Cloudflare Container behind a route-free Worker service binding. The corpus
+Worker also reaches the platform-owned embedding credential through a private
+relay, so no provider key is copied into that Worker. The adapter is guarded by
+`LEGAL_CORPUS_DENSE_ENABLED=false`; on activation it may create only the exact
+configured absent collection and refuses to replace an incompatible one. Every
+candidate is rehydrated from D1 before use. Production has neither Qdrant service
+binding nor container. An isolated CI
 gate pulls the official Qdrant 1.18.2 image by amd64 OCI digest, exercises the
 real dense/sparse/hybrid REST contract and rehearses collection snapshot
 download and upload recovery. This proves adapter and recovery compatibility,
-not corpus relevance. A private staging deployment and activation still
-require the frozen-corpus benchmark and server-side credentials.
+not corpus relevance. Dense activation still requires the frozen-corpus
+benchmark, point-count parity and retained snapshot/restore evidence.
 
 User uploads use JURO's existing private-document path, not the legal Qdrant
 collection. When `LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST=true`, the AI route may

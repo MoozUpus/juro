@@ -16,6 +16,8 @@ const configured = {
   QDRANT_COLLECTION: "juro_legal_staging",
 };
 
+const denseVector = (first = 0.1): number[] => [first, ...Array<number>(1535).fill(0)];
+
 function response(points: Array<{ chunkId: string; score: number }>) {
   return Response.json({
     status: "ok",
@@ -52,7 +54,7 @@ test("dense queries use only the configured collection, server API key and globa
     capturedRequests.push({ url: String(input), init: init ?? {} });
     return response([{ chunkId: "chunk:1", score: 0.9 }]);
   });
-  const result = await client.queryDense([0.1, 0.2, 0.3], 9);
+  const result = await client.queryDense(denseVector(), 9);
   assert.deepEqual(result, [{ chunkId: "chunk:1", score: 0.9 }]);
   const captured = capturedRequests[0];
   assert.ok(captured);
@@ -91,7 +93,7 @@ test("Qdrant requests prefer the private service binding over public fetch", asy
     directCalls += 1;
     return new Response();
   });
-  assert.deepEqual(await client.queryDense([0.1, 0.2], 3), [
+  assert.deepEqual(await client.queryDense(denseVector(), 3), [
     { chunkId: "chunk:service", score: 0.88 },
   ]);
   assert.equal(directCalls, 0);
@@ -128,6 +130,69 @@ test("collection compatibility requires 1536-dimensional cosine dense plus named
     error instanceof QdrantCorpusError && error.code === "QDRANT_COLLECTION_INCOMPATIBLE");
 });
 
+test("collection bootstrap creates only the configured dense+sparse collection and validates it", async () => {
+  const requests: Array<{ url: string; method: string; body: string }> = [];
+  let readCount = 0;
+  const client = new QdrantLegalCorpusClient(configured, async (input, init) => {
+    requests.push({
+      url: String(input),
+      method: String(init?.method ?? "GET"),
+      body: String(init?.body ?? ""),
+    });
+    if ((init?.method ?? "GET") === "GET") {
+      readCount += 1;
+      if (readCount === 1) return new Response(null, { status: 404 });
+      return Response.json({
+        status: "ok",
+        result: {
+          config: {
+            params: {
+              vectors: { dense: { size: 1536, distance: "Cosine" } },
+              sparse_vectors: { sparse: {} },
+            },
+          },
+        },
+      });
+    }
+    return Response.json({ status: "ok", result: true });
+  });
+  assert.equal(await client.ensureCompatible(), "created");
+  assert.deepEqual(requests.map((entry) => entry.method), ["GET", "PUT", "GET"]);
+  assert.ok(requests.every((entry) => entry.url ===
+    "https://qdrant.internal.example/collections/juro_legal_staging"));
+  const configuration = JSON.parse(requests[1]!.body) as {
+    vectors: { dense: { size: number; distance: string; on_disk: boolean } };
+    sparse_vectors: { sparse: { index: { on_disk: boolean } } };
+    on_disk_payload: boolean;
+  };
+  assert.deepEqual(configuration, {
+    vectors: { dense: { size: 1536, distance: "Cosine", on_disk: true } },
+    sparse_vectors: { sparse: { index: { on_disk: true } } },
+    on_disk_payload: true,
+  });
+});
+
+test("collection bootstrap refuses to replace an incompatible existing collection", async () => {
+  const methods: string[] = [];
+  const client = new QdrantLegalCorpusClient(configured, async (_input, init) => {
+    methods.push(String(init?.method ?? "GET"));
+    return Response.json({
+      status: "ok",
+      result: {
+        config: {
+          params: {
+            vectors: { dense: { size: 768, distance: "Cosine" } },
+            sparse_vectors: {},
+          },
+        },
+      },
+    });
+  });
+  await assert.rejects(() => client.ensureCompatible(), (error: unknown) =>
+    error instanceof QdrantCorpusError && error.code === "QDRANT_COLLECTION_INCOMPATIBLE");
+  assert.deepEqual(methods, ["GET"]);
+});
+
 test("hybrid Qdrant fusion preserves dense-only and sparse-only candidates", async () => {
   const client = new QdrantLegalCorpusClient(configured, async (_input, init) => {
     const body = JSON.parse(String(init?.body)) as { using: string };
@@ -136,7 +201,7 @@ test("hybrid Qdrant fusion preserves dense-only and sparse-only candidates", asy
       : response([{ chunkId: "sparse-only", score: 4.2 }, { chunkId: "both", score: 3.1 }]);
   });
   const result = await client.queryHybrid({
-    dense: [0.1, 0.2],
+    dense: denseVector(),
     sparse: { indices: [1, 4], values: [1, 0.5] },
     limit: 5,
   });
@@ -182,12 +247,14 @@ test("upsert emits named dense+sparse vectors and no private scope payload", asy
     status: "active",
     isCurrent: true,
     articleNumber: "12",
-    dense: [0.1, 0.2, 0.3],
+    dense: denseVector(),
     sparse: { indices: [3, 7], values: [1, 0.5] },
   }]);
   assert.ok(body);
   const serialized = JSON.stringify(body);
-  assert.match(serialized, /"dense":\[0.1,0.2,0.3\]/u);
+  const points = (body as { points: Array<{ vector: { dense: number[] } }> }).points;
+  assert.equal(points[0]?.vector.dense.length, 1536);
+  assert.equal(points[0]?.vector.dense[0], 0.1);
   assert.match(serialized, /"sparse":\{"indices":\[3,7\]/u);
   assert.match(serialized, /"scope":"global"/u);
   assert.doesNotMatch(serialized, /tenant_id|owner_user_id|matter_id/u);

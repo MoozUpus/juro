@@ -8,11 +8,14 @@
   reproducible run exist.
 - Advice.uz and court-practice retrieval remain unavailable unless separately verified;
   they must not be presented as official APIs.
-- Qdrant is not deployed or configured. The checked-in REST adapter, dense+sparse
-  indexer and D1 rehydration path are tested, but dense retrieval remains disabled;
-  activation still needs a reproducible benchmark, a private compatible collection,
-  server-side secrets and controlled staging evidence. Bounded sparse corpus
-  acquisition is enabled only in staging; production corpus flags remain disabled.
+- A pinned Qdrant 1.18.2 container and private service-binding proxy are deployed
+  only in staging. The separate corpus Worker reaches Qdrant and the platform-owned
+  OpenAI embedding credential through private bindings; neither service has a public
+  route and the credential is not copied into the corpus Worker. Dense retrieval is
+  still disabled, so the container is dormant and no full-corpus collection has been
+  created or backfilled. Activation still requires the frozen-corpus benchmark,
+  point-count parity, a retained snapshot and a proved restore. Production has no
+  Qdrant binding and every corpus flag remains disabled.
 - The owner-material promotion path is implemented, regression-tested and
   enabled only in staging. No owner document had been promoted as of
   2026-08-15 14:11 +05:00. Its first use still requires a real completed
@@ -24,12 +27,14 @@
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
 - Staging corpus acquisition is still in progress. The read-only snapshot at
-  2026-08-15 17:33 +05:00 had 292 ready canonical documents, 396 language
-  variants, 410 versions, 18,156 provisions and 18,194 indexed chunks. There
-  were 2,217 queued/retrying jobs, no running job at the instant of the query,
-  406 completed jobs and zero terminal technical
-  failures. This is below the 1,283 / 20,296 / 22,513 release floor and is not
-  evidence that coverage is complete.
+  2026-08-15 20:46 +05:00 had 414 canonical documents, 593 language variants,
+  9,664 unique current provisions and 23,140 current/indexed chunks. There were
+  657 completed jobs, 3,657 queued/retrying jobs, one running job at the sampled
+  instant, zero terminal failures and 13 preserved technically-unavailable
+  failure records. Only 7/44 category/language checkpoints passed the full
+  release formula. This is below the 1,283 / 20,296 release floors and is not
+  evidence that coverage is complete; exceeding the chunk minimum alone does
+  not satisfy the gate.
 - The new source-card and full-article modal passed type-check, focused boundary
   tests and staging artifact/deployment checks. Authenticated desktop QA passed
   for the AI-chat light/dark empty state and caught one dark-history contrast

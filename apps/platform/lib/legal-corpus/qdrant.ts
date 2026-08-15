@@ -8,6 +8,21 @@ const REQUEST_TIMEOUT_MS = 8_000;
 const COLLECTION_PATTERN = /^[A-Za-z0-9_-]{1,80}$/u;
 const POINT_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[45][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 const VECTOR_DIMENSIONS = 1_536;
+const COLLECTION_CONFIGURATION = {
+  vectors: {
+    dense: {
+      size: VECTOR_DIMENSIONS,
+      distance: "Cosine",
+      on_disk: true,
+    },
+  },
+  sparse_vectors: {
+    sparse: {
+      index: { on_disk: true },
+    },
+  },
+  on_disk_payload: true,
+} as const;
 
 export type QdrantCorpusEnv = {
   APP_ENV: "development" | "staging" | "production";
@@ -157,7 +172,8 @@ async function request(
   suffix: string,
   init: RequestInit,
   fetchImpl: typeof fetch,
-): Promise<unknown> {
+  options: { allowNotFound?: boolean } = {},
+): Promise<unknown | undefined> {
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
@@ -176,6 +192,10 @@ async function request(
       : await fetchImpl(endpoint(env, suffix), requestInit);
   } catch {
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
+  }
+  if (options.allowNotFound && response.status === 404) {
+    await response.body?.cancel().catch(() => undefined);
+    return undefined;
   }
   if (!response.ok) {
     const retryable = response.status === 408 || response.status === 409
@@ -247,8 +267,45 @@ export class QdrantLegalCorpusClient {
     }
   }
 
+  /** Creates only the configured environment-scoped collection when it does
+   * not exist, then validates the exact dense+sparse contract. It never
+   * replaces or deletes an incompatible collection. */
+  async ensureCompatible(): Promise<"created" | "existing"> {
+    const existing = await request(this.env, "", {
+      method: "GET",
+    }, this.fetchImpl, { allowNotFound: true });
+    if (existing !== undefined) {
+      const parsed = collectionResponseSchema.safeParse(existing);
+      if (!parsed.success || parsed.data.status !== "ok") {
+        throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+      }
+      const dense = parsed.data.result.config.params.vectors.dense;
+      const sparse = parsed.data.result.config.params.sparse_vectors?.sparse;
+      if (
+        !dense
+        || typeof dense !== "object"
+        || Number((dense as Record<string, unknown>).size) !== VECTOR_DIMENSIONS
+        || String((dense as Record<string, unknown>).distance ?? "").toLocaleLowerCase("en") !== "cosine"
+        || !sparse
+        || typeof sparse !== "object"
+      ) {
+        throw new QdrantCorpusError("QDRANT_COLLECTION_INCOMPATIBLE", false);
+      }
+      return "existing";
+    }
+    const created = mutationResponseSchema.safeParse(await request(this.env, "", {
+      method: "PUT",
+      body: JSON.stringify(COLLECTION_CONFIGURATION),
+    }, this.fetchImpl));
+    if (!created.success || created.data.status !== "ok") {
+      throw new QdrantCorpusError("QDRANT_RESPONSE_REJECTED", false);
+    }
+    await this.assertCompatible();
+    return "created";
+  }
+
   async queryDense(vector: readonly number[], limit = 20): Promise<DenseCorpusCandidate[]> {
-    if (vector.length < 1 || vector.length > 4_096 || vector.some((value) => !Number.isFinite(value))) {
+    if (vector.length !== VECTOR_DIMENSIONS || vector.some((value) => !Number.isFinite(value))) {
       throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
     }
     return candidates(await request(this.env, "/points/query", {
@@ -312,8 +369,16 @@ export class QdrantLegalCorpusClient {
       throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
     }
     for (const point of pointsToWrite) {
-      if (!POINT_ID_PATTERN.test(point.id) || point.dense.length < 1
-        || point.sparse.indices.length !== point.sparse.values.length) {
+      if (
+        !POINT_ID_PATTERN.test(point.id)
+        || point.dense.length !== VECTOR_DIMENSIONS
+        || point.dense.some((value) => !Number.isFinite(value))
+        || point.sparse.indices.length === 0
+        || point.sparse.indices.length !== point.sparse.values.length
+        || point.sparse.indices.some((value, index) => !Number.isInteger(value) || value < 0
+          || (index > 0 && value <= point.sparse.indices[index - 1]!))
+        || point.sparse.values.some((value) => !Number.isFinite(value) || value <= 0)
+      ) {
         throw new QdrantCorpusError("QDRANT_CONFIGURATION_REJECTED", false);
       }
     }
