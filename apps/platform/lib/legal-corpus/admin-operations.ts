@@ -45,7 +45,6 @@ export const legalCorpusAdminActionSchema = z.discriminatedUnion("action", [
     title: z.string().trim().min(2).max(300),
     language: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]),
     rightsConfirmed: z.literal(true),
-    legalReviewConfirmed: z.literal(true),
     reason: z.string().trim().min(10).max(500),
   }).strict(),
   z.object({
@@ -232,6 +231,14 @@ async function recentOwnerPublicationEvents(
   environment: OperationalEnvironment,
 ): Promise<LegalCorpusAdminEvent[]> {
   const result = await db.prepare(`SELECT * FROM (
+      SELECT id,'owner_material_auto_trusted' AS action,'owner_material' AS targetType,
+        document_id AS targetId,reason,actor_user_id AS actorUserId,created_at AS createdAt
+      FROM legal_corpus_owner_ingestions WHERE environment=?
+      UNION ALL
+      SELECT id,'owner_material_withdrawn' AS action,'owner_material' AS targetType,
+        document_id AS targetId,reason,actor_user_id AS actorUserId,created_at AS createdAt
+      FROM legal_corpus_owner_ingestion_withdrawals WHERE environment=?
+      UNION ALL
       SELECT id,'owner_material_published' AS action,'owner_material' AS targetType,
         document_id AS targetId,reason,actor_user_id AS actorUserId,created_at AS createdAt
       FROM legal_corpus_owner_publications WHERE environment=?
@@ -239,7 +246,9 @@ async function recentOwnerPublicationEvents(
       SELECT id,'owner_material_withdrawn' AS action,'owner_material' AS targetType,
         document_id AS targetId,reason,actor_user_id AS actorUserId,created_at AS createdAt
       FROM legal_corpus_owner_withdrawals WHERE environment=?
-    ) ORDER BY createdAt DESC,id DESC LIMIT 50`).bind(environment, environment).all<LegalCorpusAdminEvent>();
+    ) ORDER BY createdAt DESC,id DESC LIMIT 50`).bind(
+      environment, environment, environment, environment,
+    ).all<LegalCorpusAdminEvent>();
   return result.results;
 }
 
@@ -479,7 +488,6 @@ export async function performLegalCorpusAdminAction(input: {
         title: input.value.title,
         language: input.value.language,
         rightsConfirmed: input.value.rightsConfirmed,
-        legalReviewConfirmed: input.value.legalReviewConfirmed,
         reason: input.value.reason,
         now: new Date(now),
       });

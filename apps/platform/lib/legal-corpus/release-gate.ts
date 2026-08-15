@@ -184,6 +184,8 @@ export function evaluateLegalCorpusReleaseEvidence(
     "LEGAL_CORPUS_ENABLED",
     "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
     "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
+    "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
+    "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
     "LEGAL_CORPUS_HISTORICAL_ENABLED",
     "LEGAL_CORPUS_DENSE_ENABLED",
     "LEGAL_CORPUS_SHADOW_MODE",
@@ -191,8 +193,6 @@ export function evaluateLegalCorpusReleaseEvidence(
     if (!flags[flag]) failures.push(`FEATURE_FLAG_REQUIRED:${flag}`);
   }
   if (flags.LEGAL_CORPUS_AUTO_INGEST_ENABLED) failures.push("CORPUS_NOT_FROZEN");
-  if (flags.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST) failures.push("OWNER_AUTO_TRUST_ENABLED");
-  if (flags.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST) failures.push("USER_AUTO_TRUST_ENABLED");
   if (!evidence.dashboard.integrity.valid) failures.push("ADMIN_AUDIT_INTEGRITY_FAILED");
 
   const expectedCoverageKeys = new Set(

@@ -47,6 +47,7 @@ type ExistingVariant = {
   currentVersionId: string | null;
   currentHash: string | null;
   currentVersionNumber: number | null;
+  currentValidFrom: string | null;
 };
 
 type StoredProvision = {
@@ -153,7 +154,8 @@ async function existingVariant(
     SELECT variant.id AS variantId,variant.document_id AS documentId,
       variant.current_version_id AS currentVersionId,
       current_version.content_sha256 AS currentHash,
-      current_version.version_number AS currentVersionNumber
+      current_version.version_number AS currentVersionNumber,
+      current_version.valid_from AS currentValidFrom
     FROM legal_corpus_variants AS variant
     LEFT JOIN legal_corpus_versions AS current_version
       ON current_version.id=variant.current_version_id
@@ -335,6 +337,17 @@ export async function ingestOfficialLexDocument(
     },
     rawContentSha256: sourceHash,
   });
+  const normalizedJson = JSON.stringify(normalized);
+  const normalizedHash = await sha256(normalizedJson);
+  const versionHash = await sha256(JSON.stringify({
+    sourceHash,
+    normalizedHash,
+    status: effectivity.status,
+    validFrom: effectivity.validFrom,
+    validTo: effectivity.validTo,
+    currentRevisionDate: revisionHistory.currentRevisionDate,
+    revisionDate: revision?.revisionDate ?? null,
+  }));
   const provisions = parseLegalProvisions(normalized.plainText, parsed.language);
   if (provisions.length === 0 || provisions.length > MAX_PROVISIONS_PER_VERSION) {
     throw new TypeError("LEGAL_CORPUS_PROVISION_LIMIT_REJECTED");
@@ -348,7 +361,7 @@ export async function ingestOfficialLexDocument(
   const now = nowIso(input.now);
   const current = await existingVariant(env.DB, documentId, currentDocument.language);
   const variantId = current?.variantId ?? `${documentId}:${currentDocument.language}`;
-  const alreadyStored = await storedVersionByHash(env.DB, variantId, sourceHash);
+  const alreadyStored = await storedVersionByHash(env.DB, variantId, versionHash);
   if (alreadyStored) {
     if (revision) {
       return {
@@ -361,7 +374,26 @@ export async function ingestOfficialLexDocument(
       env.DB.prepare(`UPDATE legal_corpus_variants
         SET source_url=?,last_verified_at=?,updated_at=? WHERE id=?`).bind(sourceUrl, now, now, current.variantId),
       env.DB.prepare(`UPDATE legal_corpus_documents SET updated_at=? WHERE id=?`).bind(now, current.documentId),
+      env.DB.prepare(`UPDATE legal_corpus_variants
+        SET title=?,short_title=?,updated_at=? WHERE id=?`).bind(
+        normalized.documentTitle, normalized.documentTitle.slice(0, 240), now, current.variantId,
+      ),
     ]);
+    const resumesPartialWrite = alreadyStored.versionNumber > (current.currentVersionNumber ?? 0);
+    if (resumesPartialWrite) {
+      if (
+        alreadyStored.validFrom
+        && (!current.currentValidFrom || alreadyStored.validFrom > current.currentValidFrom)
+      ) {
+        await env.DB.prepare(`UPDATE legal_corpus_versions
+          SET valid_to=? WHERE id=? AND valid_to IS NULL
+            AND (valid_from IS NULL OR valid_from<?)
+        `).bind(alreadyStored.validFrom, current.currentVersionId, alreadyStored.validFrom).run();
+      }
+      await env.DB.prepare(`UPDATE legal_corpus_variants
+        SET current_version_id=?,source_url=?,last_verified_at=?,updated_at=? WHERE id=?
+      `).bind(alreadyStored.versionId, currentDocument.sourceUrl, now, now, variantId).run();
+    }
     await persistLanguageAliasesAndQueue({
       env, documentId: current.documentId, variants: languageVariants,
       currentSourceUrl: sourceUrl, now: input.now ?? new Date(),
@@ -371,7 +403,8 @@ export async function ingestOfficialLexDocument(
     });
     return {
       status: "unchanged", documentId: current.documentId, variantId: current.variantId,
-      versionId: current.currentVersionId, provisionCount: 0, chunkCount: 0, sourceUrl,
+      versionId: resumesPartialWrite ? alreadyStored.versionId : current.currentVersionId,
+      provisionCount: 0, chunkCount: 0, sourceUrl,
     };
   }
 
@@ -393,18 +426,22 @@ export async function ingestOfficialLexDocument(
   const stem = objectStem(currentDocument.canonicalDocumentId, currentDocument.language, sourceHash);
   const rawObjectKey = `${stem}/raw.html`;
   const normalizedObjectKey = `${stem}/normalized.json`;
-  const normalizedJson = JSON.stringify(normalized);
   await env.BUCKET.put(rawObjectKey, fetched.bytes, {
     httpMetadata: { contentType: fetched.contentType },
     customMetadata: { sourceSha256: sourceHash, sourceUrl },
   });
   await env.BUCKET.put(normalizedObjectKey, normalizedJson, {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
-    customMetadata: { sourceSha256: sourceHash, sourceUrl },
+    customMetadata: {
+      sourceSha256: sourceHash,
+      normalizedSha256: normalizedHash,
+      versionSha256: versionHash,
+      sourceUrl,
+    },
   });
 
   const versionNumber = await nextVersionNumber(env.DB, variantId);
-  const versionId = `${variantId}:v${versionNumber}:${sourceHash.slice(0, 12)}`;
+  const versionId = `${variantId}:v${versionNumber}:${versionHash.slice(0, 12)}`;
   const changeType = revision ? "modified" : previous.length === 0
     ? "new"
     : diff.changes.some((change) => change.change === "modified" || change.change === "renumbered")
@@ -429,10 +466,15 @@ export async function ingestOfficialLexDocument(
       "legal_act", now, now,
     ),
     env.DB.prepare(`INSERT INTO legal_corpus_variants
-      (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at)
-      VALUES (?,?,?,1,NULL,?,?,NULL,?,?)
-      ON CONFLICT(document_id,language,is_official_language_version) DO UPDATE SET source_url=excluded.source_url,last_verified_at=excluded.last_verified_at,updated_at=excluded.updated_at
-    `).bind(variantId, documentId, currentDocument.language, currentDocument.sourceUrl, now, now, now),
+      (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at,title,short_title)
+      VALUES (?,?,?,1,NULL,?,?,NULL,?,?,?,?)
+      ON CONFLICT(document_id,language,is_official_language_version) DO UPDATE SET
+        source_url=excluded.source_url,last_verified_at=excluded.last_verified_at,
+        title=excluded.title,short_title=excluded.short_title,updated_at=excluded.updated_at
+    `).bind(
+      variantId, documentId, currentDocument.language, currentDocument.sourceUrl,
+      now, now, now, normalized.documentTitle, normalized.documentTitle.slice(0, 240),
+    ),
     // The current pointer is intentionally updated only after all immutable
     // provision rows exist, so a retry can safely resume a partial write.
     env.DB.prepare(`INSERT INTO legal_corpus_versions
@@ -442,7 +484,7 @@ export async function ingestOfficialLexDocument(
     `).bind(
       versionId, variantId, revision ? null : current?.currentVersionId ?? null, versionNumber,
       versionStatus, revisionDate, validTo, revisionDate ?? dateOnly(fetched.fetchedAt),
-      sourceHash, rawObjectKey, normalizedObjectKey,
+      versionHash, rawObjectKey, normalizedObjectKey,
       sourceUrl, fetched.fetchedAt, changeType, now,
     ),
   ];
@@ -505,6 +547,16 @@ export async function ingestOfficialLexDocument(
   }
   await runBatches(env.DB, provisionStatements);
   if (!revision) {
+    if (
+      current?.currentVersionId
+      && revisionDate
+      && (!current.currentValidFrom || revisionDate > current.currentValidFrom)
+    ) {
+      await env.DB.prepare(`UPDATE legal_corpus_versions
+        SET valid_to=? WHERE id=? AND valid_to IS NULL
+          AND (valid_from IS NULL OR valid_from<?)
+      `).bind(revisionDate, current.currentVersionId, revisionDate).run();
+    }
     await env.DB.prepare(`UPDATE legal_corpus_variants
       SET current_version_id=?,source_url=?,last_verified_at=?,updated_at=? WHERE id=?
     `).bind(versionId, currentDocument.sourceUrl, now, now, variantId).run();
@@ -603,8 +655,8 @@ export async function seedLexCorpusJobsFromMetadata(
   return { considered: candidates.results.length, queued };
 }
 
-/** Runs one job per invocation: Lex.uz crawl delay and the D1 job claim form
- * the distributed backpressure mechanism. */
+/** Claims and runs one job. Callers may invoke it sequentially with the same
+ * D1-paced fetch function to form a bounded batch without parallel crawling. */
 export async function runNextLegalCorpusIngestionJob(
   env: LegalCorpusIngestionEnv,
   input: {

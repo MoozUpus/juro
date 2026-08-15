@@ -51,6 +51,7 @@ export type LegalChatSourceRetrieval = {
   sourceValidationStatus: "validated" | "unavailable";
   errors: Array<{ code: string }>;
   evidence: LegalChatSourceEvidence[];
+  coverageStatus: "good_coverage" | "partial_coverage" | "weak_coverage" | "no_coverage";
 };
 
 type LiveSearchInput = Parameters<typeof retrieveLiveLexSources>[0];
@@ -149,6 +150,7 @@ function indexedContext(source: LegalSourceProviderResult): LegalSourceContext |
 function indexedRetrieval(
   sources: readonly LegalSourceProviderResult[],
   now: Date,
+  coverageStatus: LegalChatSourceRetrieval["coverageStatus"],
 ): LegalChatSourceRetrieval {
   const contexts = sources.map(indexedContext).filter((source): source is LegalSourceContext => Boolean(source));
   const retrievedAt = contexts.map((source) => source.lastCheckedAt)
@@ -175,7 +177,47 @@ function indexedRetrieval(
       validatedAt: source.verifiedAt,
       validationStatus: "validated",
     })),
+    coverageStatus,
   };
+}
+
+function liveCoverage(
+  query: string,
+  sources: readonly LegalSourceContext[],
+): LegalChatSourceRetrieval["coverageStatus"] {
+  return assessLegalCorpusCoverage({
+    query,
+    sources: sources.flatMap((source) => {
+      const exactQuote = source.spans?.[0]?.text ?? source.excerpt ?? "";
+      if (!exactQuote.trim()) return [];
+      return [{
+        chunkId: source.id,
+        documentId: source.actIdentifier ?? source.id,
+        documentTitle: source.actTitle,
+        documentType: "legal_act",
+        articleNumber: source.article ?? null,
+        articleTitle: null,
+        exactQuote,
+        sourceUrl: source.officialUrl,
+        language: source.locale === "uzc" ? "uz-Cyrl" as const
+          : source.locale === "uz" ? "uz-Latn" as const
+            : source.locale === "en" ? "en" as const : "ru" as const,
+        status: source.applicabilityStatus === "historical" ? "historical" as const : "active" as const,
+        validFrom: source.effectiveDate ?? null,
+        validTo: null,
+        versionDate: source.revisionDate,
+        fetchedAt: source.lastCheckedAt,
+        contentHash: source.contentSha256,
+      }];
+    }),
+  });
+}
+
+function withLiveCoverage(
+  result: LiveLexRetrievalResult,
+  query: string,
+): LegalChatSourceRetrieval {
+  return { ...result, coverageStatus: liveCoverage(query, result.sources) };
 }
 
 async function queueValidatedLiveSources(
@@ -229,7 +271,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
     discoverOfficialUrls: input.discoverOfficialUrls,
   };
   if (!featureEnabled(input.env, "LEGAL_CORPUS_ENABLED")) {
-    return liveSearch(liveInput);
+    return withLiveCoverage(await liveSearch(liveInput), input.query);
   }
 
   let indexed: LegalSourceProviderResult[] = [];
@@ -251,7 +293,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
     indexed = [];
   }
   const coverage = providerCoverage(input.query, indexed);
-  const indexedPacket = indexedRetrieval(indexed, input.now ?? new Date());
+  const indexedPacket = indexedRetrieval(indexed, input.now ?? new Date(), coverage);
   const hasUsableIndexedCoverage = indexedPacket.sources.length > 0
     && (coverage === "good_coverage" || coverage === "partial_coverage");
   const liveEnabled = featureEnabled(input.env, "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED");
@@ -268,13 +310,15 @@ export async function retrieveCorpusAwareLegalSources(input: {
   if (featureEnabled(input.env, "LEGAL_CORPUS_SHADOW_MODE")) {
     const live = await liveSearch(liveInput);
     await queueValidatedLiveSources(input.env, live, input.correlationId);
-    return live;
+    return withLiveCoverage(live, input.query);
   }
   if (useIndexed) return indexedPacket;
   if (!liveEnabled) {
-    return hasUsableIndexedCoverage ? indexedPacket : indexedRetrieval([], input.now ?? new Date());
+    return hasUsableIndexedCoverage
+      ? indexedPacket
+      : indexedRetrieval([], input.now ?? new Date(), "no_coverage");
   }
   const live = await liveSearch(liveInput);
   await queueValidatedLiveSources(input.env, live, input.correlationId);
-  return live;
+  return withLiveCoverage(live, input.query);
 }

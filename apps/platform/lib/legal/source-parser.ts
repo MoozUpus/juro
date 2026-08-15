@@ -115,6 +115,9 @@ const LEX_UI_NOISE_PATTERNS = [
   /Hujjatga taklif yuborish/giu,
   /Audioni tinglash/giu,
   /Hujjat elementidan havola olish/giu,
+  /Ҳужжатга таклиф юбориш/giu,
+  /Аудиони тинглаш/giu,
+  /Ҳужжат элементидан ҳавола олиш/giu,
 ] as const;
 const LEX_UI_CLASS_PATTERN = /(?:^|[-_])(?:audio|button|comment|control|footer|menu|navigation|proposal|share|toolbar)(?:$|[-_])/iu;
 const MAX_NODES = 50_000;

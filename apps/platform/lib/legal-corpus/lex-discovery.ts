@@ -152,10 +152,22 @@ function dateAfter(text: string, labels: readonly string[]): string | null {
   return null;
 }
 
+function effectivityMetadataHtml(html: string): string {
+  const header = /<div\b[^>]*class\s*=\s*["'][^"']*\bdocHeader\b[^"']*["'][^>]*>/iu.exec(html);
+  if (header?.index === undefined) return html;
+  const suffix = html.slice(header.index);
+  const boundary = /<div\b[^>]*class\s*=\s*["'][^"']*\bdocBody-container\b[^"']*["'][^>]*>/iu.exec(suffix);
+  return boundary?.index === undefined ? suffix : suffix.slice(0, boundary.index);
+}
+
 /** Extracts document-level effectivity only from visible official page text.
  * It deliberately does not infer a legal date from fetch time. */
 export function parseLexDocumentEffectivity(html: string): LexDocumentEffectivity {
-  const text = visibleText(html);
+  // Legal text frequently repeals a different act. Only Lex's document
+  // metadata header may determine whether the current source itself is in
+  // force; otherwise a clause such as "the previous decision is repealed"
+  // would poison the current version status.
+  const text = visibleText(effectivityMetadataHtml(html));
   const validFrom = dateAfter(text, [
     "Дата вступления в силу", "Кучга кириш санаси", "Kuchga kirish sanasi", "Effective date",
   ]);

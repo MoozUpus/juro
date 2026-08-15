@@ -241,7 +241,8 @@ async function boundedFetch(
       await response.body?.cancel();
       throw new LexCatalogDiscoveryError(
         "LEX_CATALOG_UPSTREAM_UNAVAILABLE",
-        response.status === 408 || response.status === 425 || response.status === 429 || response.status >= 500,
+        response.status === 403 || response.status === 408 || response.status === 425
+          || response.status === 429 || response.status >= 500,
       );
     }
     return response;
@@ -270,7 +271,14 @@ export async function fetchLexCatalogPage(input: {
   if (!allowedUrls.has(input.searchUrl)) throw new LexCatalogDiscoveryError("LEX_CATALOG_URL_REJECTED", false);
   const fetchImpl = input.fetchImpl ?? fetch;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const robotsResponse = await boundedFetch(fetchImpl, ROBOTS_URL, { method: "GET" }, timeoutMs);
+  // Lex.uz currently rejects robots.txt with HTTP 406 when a narrow Accept
+  // header is supplied, while the same public resource is available with the
+  // ordinary wildcard request header. Keep the transparent crawler user agent
+  // and override only content negotiation for this text resource.
+  const robotsResponse = await boundedFetch(fetchImpl, ROBOTS_URL, {
+    method: "GET",
+    headers: { Accept: "*/*" },
+  }, timeoutMs);
   const robotsType = (robotsResponse.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLocaleLowerCase();
   if (robotsType !== "text/plain") {
     await robotsResponse.body?.cancel();
@@ -331,6 +339,14 @@ export async function seedLexCatalogDiscoveryCheckpoints(
       if (Number(result.meta.changes ?? 0) === 1) created += 1;
     }
   }
+  // A catalog edge can temporarily refuse Cloudflare egress while the same
+  // allowlisted URL remains reachable elsewhere. Older Worker versions
+  // classified such a 403 as terminal. Recover only that bounded error and
+  // retain the attempt counter so five consecutive failures still stop.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET status='retrying',next_attempt_at=?,updated_at=?
+    WHERE status='dead_letter' AND last_error_code='LEX_CATALOG_UPSTREAM_UNAVAILABLE'
+      AND attempt_count<5`).bind(timestamp, timestamp).run();
   return { considered: LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length, created };
 }
 
@@ -357,7 +373,8 @@ export async function runNextLexCatalogDiscoveryPage(
       view_state_generator AS viewStateGenerator,attempt_count AS attemptCount
     FROM legal_corpus_discovery_checkpoints
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
-    ORDER BY created_at,id LIMIT 1`).bind(now).first<DiscoveryCheckpoint>();
+    ORDER BY CASE status WHEN 'queued' THEN 0 ELSE 1 END,attempt_count,created_at,id LIMIT 1`)
+    .bind(now).first<DiscoveryCheckpoint>();
   if (!candidate) {
     return { claimed: false, status: "empty", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
   }

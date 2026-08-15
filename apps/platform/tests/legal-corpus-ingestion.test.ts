@@ -100,6 +100,64 @@ test("official Lex ingestion is article-first, immutable and idempotent", async 
   }
 });
 
+test("a newer current version closes only the prior validity interval", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const first = await ingestOfficialLexDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/12346",
+      now,
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    const updatedHtml = lexHtml()
+      .replace("01.01.2020", "01.02.2021")
+      .replace("Первое правило", "Уточнённое первое правило");
+    const second = await ingestOfficialLexDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/12346",
+      now: new Date("2026-08-15T12:00:00.000Z"),
+      fetchImpl: fetchFor(updatedHtml),
+    });
+
+    assert.equal(first.status, "indexed");
+    assert.equal(second.status, "indexed");
+    const versions = sqlite.prepare(`SELECT id,version_number AS versionNumber,
+      valid_from AS validFrom,valid_to AS validTo FROM legal_corpus_versions
+      ORDER BY version_number`).all() as Array<{
+        id: string; versionNumber: number; validFrom: string; validTo: string | null;
+      }>;
+    assert.deepEqual(versions.map((version) => ({
+      versionNumber: version.versionNumber,
+      validFrom: version.validFrom,
+      validTo: version.validTo,
+    })), [
+      { versionNumber: 1, validFrom: "2020-01-01", validTo: "2021-02-01" },
+      { versionNumber: 2, validFrom: "2021-02-01", validTo: null },
+    ]);
+    sqlite.prepare("UPDATE legal_corpus_variants SET current_version_id=?")
+      .run(first.versionId);
+    const resumed = await ingestOfficialLexDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/12346",
+      now: new Date("2026-08-15T12:05:00.000Z"),
+      fetchImpl: fetchFor(updatedHtml),
+    });
+    assert.equal(resumed.status, "unchanged");
+    assert.equal(resumed.versionId, second.versionId);
+    assert.equal(
+      (sqlite.prepare("SELECT current_version_id AS currentVersionId FROM legal_corpus_variants")
+        .get() as { currentVersionId: string }).currentVersionId,
+      second.versionId,
+    );
+    assert.throws(
+      () => sqlite.prepare("UPDATE legal_corpus_versions SET status='historical' WHERE id=?")
+        .run(versions[0]!.id),
+      /LEGAL_CORPUS_VERSION_IMMUTABLE/,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("queued corpus jobs claim once and do not leak text into the queue", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

@@ -91,6 +91,7 @@ export const legalChatResponseSchema = z.object({
   sourceAccessMode: z.enum(["direct", "approved_package"]).optional(),
   sourcesRetrievedAt: z.string().max(64).nullable().optional(),
   sourceValidationStatus: z.enum(["validated", "unavailable"]).optional(),
+  coverageStatus: z.enum(["good_coverage", "partial_coverage", "weak_coverage", "no_coverage"]).optional(),
 }).strict();
 
 export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
@@ -105,6 +106,7 @@ export const legalChatModelResponseSchema = legalChatResponseSchema.omit({
   sourceAccessMode: true,
   sourcesRetrievedAt: true,
   sourceValidationStatus: true,
+  coverageStatus: true,
 });
 
 export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, {

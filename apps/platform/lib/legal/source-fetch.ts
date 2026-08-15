@@ -558,7 +558,7 @@ export async function fetchLegalSource(
     fetchImpl,
     timeoutMs,
     maxRedirects,
-    accept: "text/plain, */*;q=0.1",
+    accept: "*/*",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
       return candidate.protocol === "https:"
@@ -709,7 +709,7 @@ export async function fetchLexPdfRepresentation(
     fetchImpl,
     timeoutMs,
     maxRedirects,
-    accept: "text/plain, */*;q=0.1",
+    accept: "*/*",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
       return candidate.protocol === "https:"

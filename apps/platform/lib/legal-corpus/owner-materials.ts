@@ -45,7 +45,7 @@ type PublicationRecord = {
   versionId: string;
   language: LegalCorpusLanguage;
   rightsConfirmed: 1;
-  legalReviewConfirmed: 1;
+  trustMode: "technical_auto_trust";
   reason: string;
   actorUserId: string;
   actorSessionId: string;
@@ -148,23 +148,24 @@ function validFreshMfa(mfaVerifiedAt: string, now: Date): boolean {
   return Number.isFinite(mfaAt) && mfaAt <= nowMs && mfaAt >= nowMs - 15 * 60_000;
 }
 
-async function requireReviewerAssignment(
+async function requireCorpusPublisherAssignment(
   db: D1Database,
   staff: Pick<PlatformStaffAccess, "userId" | "assignmentIds" | "mfaVerifiedAt">,
   now: Date,
 ): Promise<string> {
-  const assignmentId = staff.assignmentIds[0];
-  if (!assignmentId || !validFreshMfa(staff.mfaVerifiedAt, now)) {
+  if (staff.assignmentIds.length === 0 || !validFreshMfa(staff.mfaVerifiedAt, now)) {
     throw new OwnerMaterialPromotionError("OWNER_MATERIAL_NOT_READY");
   }
   const nowIso = now.toISOString();
-  const assignment = await db.prepare(`SELECT id FROM platform_staff_assignments
-    WHERE id=? AND user_id=? AND role='legal_reviewer' AND revoked_at IS NULL
-      AND granted_at<=? AND expires_at>? LIMIT 1`).bind(
-    assignmentId, staff.userId, nowIso, nowIso,
-  ).first<{ id: string }>();
-  if (!assignment) throw new OwnerMaterialPromotionError("OWNER_MATERIAL_NOT_READY");
-  return assignment.id;
+  for (const assignmentId of staff.assignmentIds) {
+    const assignment = await db.prepare(`SELECT id FROM platform_staff_assignments
+      WHERE id=? AND user_id=? AND role IN ('administrator','legal_reviewer') AND revoked_at IS NULL
+        AND granted_at<=? AND expires_at>? LIMIT 1`).bind(
+      assignmentId, staff.userId, nowIso, nowIso,
+    ).first<{ id: string }>();
+    if (assignment) return assignment.id;
+  }
+  throw new OwnerMaterialPromotionError("OWNER_MATERIAL_NOT_READY");
 }
 
 async function persistImmutableObject(
@@ -187,7 +188,7 @@ async function persistImmutableObject(
       contentType: "application/json; charset=utf-8",
       cacheControl: "private, no-store",
     },
-    customMetadata: { contentSha256: sha256, source: "owner-approved-analysis" },
+    customMetadata: { contentSha256: sha256, source: "owner-auto-trusted-analysis" },
   });
   const stored = await bucket.head(key);
   if (!stored || stored.size !== bytes.byteLength || checksumHex(stored.checksums.sha256) !== sha256) {
@@ -218,7 +219,9 @@ async function analysisRow(env: PromotionEnv, input: {
 }
 
 /**
- * Publishes only an analysis owned by the same MFA-bound legal reviewer. The
+ * Publishes only an analysis owned by the same MFA-bound owner/administrator.
+ * Trust follows from the authenticated source owner after technical validation;
+ * it is not a separate legal-review decision. The
  * completed OCR derivative is read with its existing R2 size/SHA verification;
  * source content is treated only as immutable data and never as instructions.
  */
@@ -230,7 +233,6 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
   title: string;
   language: LegalCorpusLanguage;
   rightsConfirmed: true;
-  legalReviewConfirmed: true;
   reason: string;
   now?: Date;
 }): Promise<OwnerMaterialPromotionResult> {
@@ -238,7 +240,7 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
   const createdAt = now.toISOString();
   const title = input.title.trim();
   const reason = input.reason.trim();
-  if (input.rightsConfirmed !== true || input.legalReviewConfirmed !== true
+  if (input.rightsConfirmed !== true
     || !/^[A-Za-z0-9:_-]{1,180}$/u.test(input.analysisId)
     || !/^[A-Za-z0-9:_-]{1,180}$/u.test(input.workspaceId)
     || title.length < 2 || title.length > 300 || reason.length < 10 || reason.length > 500) {
@@ -255,7 +257,7 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
     || !row.extractionSha256 || !/^[a-f0-9]{64}$/u.test(row.extractionSha256)) {
     throw new OwnerMaterialPromotionError("OWNER_MATERIAL_NOT_READY");
   }
-  const reviewerAssignmentId = await requireReviewerAssignment(input.env.DB, input.staff, now);
+  const publisherAssignmentId = await requireCorpusPublisherAssignment(input.env.DB, input.staff, now);
 
   let extracted;
   try {
@@ -277,7 +279,7 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
   const contentSha256 = await sha256Hex(text);
   const existing = await input.env.DB.prepare(`SELECT document_id AS documentId,variant_id AS variantId,
       version_id AS versionId,content_sha256 AS contentSha256
-    FROM legal_corpus_owner_publications WHERE analysis_id=? AND language=? LIMIT 1`)
+    FROM legal_corpus_owner_ingestions WHERE analysis_id=? AND language=? LIMIT 1`)
     .bind(row.analysisId, input.language).first<ExistingPublication>();
   if (existing) {
     if (existing.contentSha256 !== contentSha256) {
@@ -301,7 +303,7 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
   const normalizedObjectKey = `legal-corpus/owner/${identityHash.slice(0, 32)}/${input.language}/${contentSha256}/normalized.json`;
   const normalizedBytes = new TextEncoder().encode(JSON.stringify({
     schemaVersion: 1,
-    source: "owner-approved-analysis",
+    source: "owner-auto-trusted-analysis",
     analysisId: row.analysisId,
     fileId: row.fileId,
     scanResultId: row.scanResultId,
@@ -330,9 +332,10 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
       documentId, title, title.slice(0, 240), createdAt, createdAt,
     ),
     input.env.DB.prepare(`INSERT INTO legal_corpus_variants
-      (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at)
-      VALUES (?,?,?,1,NULL,NULL,?,NULL,?,?) ON CONFLICT(id) DO NOTHING`).bind(
+      (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at,title,short_title)
+      VALUES (?,?,?,1,NULL,NULL,?,NULL,?,?,?,?) ON CONFLICT(id) DO NOTHING`).bind(
       variantId, documentId, input.language, createdAt, createdAt, createdAt,
+      title, title.slice(0, 240),
     ),
     input.env.DB.prepare(`INSERT INTO legal_corpus_versions
       (id,variant_id,previous_version_id,version_number,status,valid_from,valid_to,version_date,content_sha256,
@@ -401,11 +404,11 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
     versionId,
     language: input.language,
     rightsConfirmed: 1,
-    legalReviewConfirmed: 1,
+    trustMode: "technical_auto_trust",
     reason,
     actorUserId: input.staff.userId,
     actorSessionId: input.staff.sessionId,
-    actorAssignmentId: reviewerAssignmentId,
+    actorAssignmentId: publisherAssignmentId,
     actorMfaVerifiedAt: input.staff.mfaVerifiedAt,
     createdAt,
   };
@@ -416,16 +419,16 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
         WHERE id=? AND (current_version_id IS NULL OR current_version_id=?)`).bind(
         versionId, createdAt, createdAt, variantId, versionId,
       ),
-      input.env.DB.prepare(`INSERT INTO legal_corpus_owner_publications
+      input.env.DB.prepare(`INSERT INTO legal_corpus_owner_ingestions
         (id,environment,analysis_id,workspace_id,file_id,scan_result_id,source_sha256,extraction_sha256,content_sha256,
-        document_id,variant_id,version_id,language,rights_confirmed,legal_review_confirmed,reason,
+        document_id,variant_id,version_id,language,rights_confirmed,trust_mode,reason,
          actor_user_id,actor_session_id,actor_assignment_id,
          actor_mfa_verified_at,record_hash,created_at)
         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).bind(
         record.id, record.environment, record.analysisId, record.workspaceId, record.fileId,
         record.scanResultId, record.sourceSha256, record.extractionSha256, record.contentSha256, record.documentId,
         record.variantId, record.versionId, record.language, record.rightsConfirmed,
-        record.legalReviewConfirmed, record.reason, record.actorUserId,
+        record.trustMode, record.reason, record.actorUserId,
         record.actorSessionId, record.actorAssignmentId, record.actorMfaVerifiedAt, recordHash,
         record.createdAt,
       ),
@@ -465,9 +468,9 @@ export async function withdrawOwnerMaterial(input: {
   const publication = await input.env.DB.prepare(`SELECT publication.id AS publicationId,
       publication.actor_user_id AS actorUserId,document.availability_status AS availabilityStatus,
       withdrawal.id AS withdrawalId
-    FROM legal_corpus_owner_publications publication
+    FROM legal_corpus_owner_ingestions publication
     JOIN legal_corpus_documents document ON document.id=publication.document_id
-    LEFT JOIN legal_corpus_owner_withdrawals withdrawal ON withdrawal.publication_id=publication.id
+    LEFT JOIN legal_corpus_owner_ingestion_withdrawals withdrawal ON withdrawal.publication_id=publication.id
     WHERE publication.document_id=? AND publication.environment=? LIMIT 1`).bind(
     input.documentId, operationalEnvironment(input.env.APP_ENV),
   ).first<{
@@ -483,7 +486,7 @@ export async function withdrawOwnerMaterial(input: {
   if (publication.withdrawalId || publication.availabilityStatus !== "ready") {
     throw new OwnerMaterialPromotionError("OWNER_MATERIAL_CONFLICT");
   }
-  const reviewerAssignmentId = await requireReviewerAssignment(input.env.DB, input.staff, now);
+  const reviewerAssignmentId = await requireCorpusPublisherAssignment(input.env.DB, input.staff, now);
   const record: WithdrawalRecord = {
     id: crypto.randomUUID(),
     environment: operationalEnvironment(input.env.APP_ENV),
@@ -498,7 +501,7 @@ export async function withdrawOwnerMaterial(input: {
   };
   const recordHash = await sha256Hex(JSON.stringify(record), true);
   try {
-    const result = await input.env.DB.prepare(`INSERT INTO legal_corpus_owner_withdrawals
+    const result = await input.env.DB.prepare(`INSERT INTO legal_corpus_owner_ingestion_withdrawals
       (id,environment,publication_id,document_id,reason,actor_user_id,actor_session_id,
        actor_assignment_id,actor_mfa_verified_at,record_hash,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(

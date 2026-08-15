@@ -146,12 +146,13 @@ async function hydrateDenseCandidates(input: {
   const placeholders = chunkIds.map(() => "?").join(",");
   const rows = await input.db.prepare(`
     SELECT chunk.id AS chunkId,
-      document.id AS documentId,document.title AS documentTitle,
+      document.id AS documentId,coalesce(variant.title,document.title) AS documentTitle,
       document.document_type AS documentType,
       provision.article_number AS articleNumber,provision.article_title AS articleTitle,
       chunk.content_text AS exactQuote,
       provision.source_url AS sourceUrl,provision.language AS language,
-      provision.status AS status,provision.valid_from AS validFrom,provision.valid_to AS validTo,
+      provision.status AS status,provision.valid_from AS validFrom,
+      coalesce(provision.valid_to,version.valid_to) AS validTo,
       version.version_date AS versionDate,version.fetched_at AS fetchedAt,
       chunk.content_sha256 AS contentHash,
       document.provider AS provider,
@@ -174,6 +175,16 @@ async function hydrateDenseCandidates(input: {
           AND (version.valid_to IS NULL OR version.valid_to>?))
       )
       AND (
+        ? IS NULL OR version.version_number=(
+          SELECT max(applicable.version_number)
+          FROM legal_corpus_versions AS applicable
+          WHERE applicable.variant_id=version.variant_id
+            AND applicable.valid_from IS NOT NULL
+            AND applicable.valid_from<=?
+            AND (applicable.valid_to IS NULL OR applicable.valid_to>?)
+        )
+      )
+      AND (
         document.scope='global'
         OR (document.scope='tenant' AND ? IS NOT NULL AND document.tenant_id=?)
         OR (document.scope='user' AND ? IS NOT NULL
@@ -185,6 +196,7 @@ async function hydrateDenseCandidates(input: {
     ...chunkIds,
     input.officialOnly ? 1 : 0,
     asOfDate, scope.includeHistorical ? 1 : 0,
+    asOfDate, asOfDate, asOfDate,
     asOfDate, asOfDate, asOfDate,
     tenantId, tenantId,
     userId, userId, tenantId, matterId,
@@ -291,6 +303,16 @@ export async function retrieveLegalCorpus(input: {
             AND (candidate_version.valid_to IS NULL OR candidate_version.valid_to>?))
         )
         AND (
+          ? IS NULL OR candidate_version.version_number=(
+            SELECT max(applicable.version_number)
+            FROM legal_corpus_versions AS applicable
+            WHERE applicable.variant_id=candidate_version.variant_id
+              AND applicable.valid_from IS NOT NULL
+              AND applicable.valid_from<=?
+              AND (applicable.valid_to IS NULL OR applicable.valid_to>?)
+          )
+        )
+        AND (
           candidate_document.scope='global'
           OR (candidate_document.scope='tenant' AND ? IS NOT NULL AND candidate_document.tenant_id=?)
           OR (candidate_document.scope='user' AND ? IS NOT NULL
@@ -303,12 +325,13 @@ export async function retrieveLegalCorpus(input: {
       LIMIT ?
     )
     SELECT candidate.chunkId AS chunkId,
-      document.id AS documentId,document.title AS documentTitle,
+      document.id AS documentId,coalesce(variant.title,document.title) AS documentTitle,
       document.document_type AS documentType,
       provision.article_number AS articleNumber,provision.article_title AS articleTitle,
       chunk.content_text AS exactQuote,
       provision.source_url AS sourceUrl,provision.language AS language,
-      provision.status AS status,provision.valid_from AS validFrom,provision.valid_to AS validTo,
+      provision.status AS status,provision.valid_from AS validFrom,
+      coalesce(provision.valid_to,version.valid_to) AS validTo,
       version.version_date AS versionDate,version.fetched_at AS fetchedAt,
       chunk.content_sha256 AS contentHash,
       document.provider AS provider,
@@ -328,6 +351,7 @@ export async function retrieveLegalCorpus(input: {
     ...terms,
     input.officialOnly ? 1 : 0,
     asOfDate, scope.includeHistorical ? 1 : 0,
+    asOfDate, asOfDate, asOfDate,
     asOfDate, asOfDate, asOfDate,
     tenantId, tenantId,
     userId, userId, tenantId, matterId,

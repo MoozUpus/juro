@@ -82,6 +82,7 @@ async function seedCompletedAnalysis(
   sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"],
   bucket: MemoryR2Bucket,
   materialText?: string,
+  staffRole: "legal_reviewer" | "administrator" = "legal_reviewer",
 ): Promise<void> {
   const sourceBytes = new TextEncoder().encode("clean owner source");
   const sourceSha256 = await sha256Hex(sourceBytes);
@@ -118,9 +119,9 @@ async function seedCompletedAnalysis(
   sqlite.prepare(`INSERT INTO platform_staff_assignments
     (id,user_id,role,grant_source,granted_by_user_id,grant_reason,granted_at,expires_at,
      revoked_at,revocation_source,revoked_by_user_id,revocation_reason,created_at,updated_at)
-    VALUES ('assignment-reviewer','owner-reviewer','legal_reviewer','operator_bootstrap',NULL,
+    VALUES ('assignment-reviewer','owner-reviewer',?,'operator_bootstrap',NULL,
      'Controlled owner corpus review','2026-08-16T10:00:00.000Z','2026-08-17T10:00:00.000Z',
-     NULL,NULL,NULL,NULL,?,?)`).run(nowIso, nowIso);
+     NULL,NULL,NULL,NULL,?,?)`).run(staffRole, nowIso, nowIso);
   sqlite.prepare(`INSERT INTO document_files
     (id,workspace_id,owner_user_id,kind,r2_key,file_name,mime_type,size_bytes,sha256,created_at,updated_at)
     VALUES ('file-owner','workspace-owner','owner-reviewer','analysis_quarantined','quarantine/owner/file-owner',
@@ -157,7 +158,7 @@ function env(d1: D1Database, bucket: MemoryR2Bucket) {
   return { DB: d1, BUCKET: bucket as unknown as R2Bucket, APP_ENV: "staging" as const };
 }
 
-test("MFA-bound owner publication reuses verified extraction and creates immutable sparse corpus evidence", async () => {
+test("MFA-bound owner auto-trust reuses verified extraction and creates immutable sparse corpus evidence", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryR2Bucket();
   try {
@@ -170,8 +171,7 @@ test("MFA-bound owner publication reuses verified extraction and creates immutab
       title: "Правила владельца JURO",
       language: "ru",
       rightsConfirmed: true,
-      legalReviewConfirmed: true,
-      reason: "Reviewed and approved for the global owner materials corpus.",
+      reason: "Automatically trust after the bounded technical validation completes.",
       now,
     });
     assert.equal(published.status, "published");
@@ -181,18 +181,18 @@ test("MFA-bound owner publication reuses verified extraction and creates immutab
     assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_sparse_terms").get() as { count: number }).count) > 0, true);
     const publication = sqlite.prepare(`SELECT record_hash AS recordHash,actor_assignment_id AS assignmentId,
       actor_mfa_verified_at AS mfaAt,rights_confirmed AS rightsConfirmed,
-      legal_review_confirmed AS legalReviewConfirmed FROM legal_corpus_owner_publications`).get() as {
+      trust_mode AS trustMode FROM legal_corpus_owner_ingestions`).get() as {
       recordHash: string; assignmentId: string; mfaAt: string;
-      rightsConfirmed: number; legalReviewConfirmed: number;
+      rightsConfirmed: number; trustMode: string;
     };
     assert.match(publication.recordHash, /^[0-9A-F]{64}$/u);
     assert.equal(publication.assignmentId, "assignment-reviewer");
     assert.equal(publication.mfaAt, reviewer.mfaVerifiedAt);
     assert.equal(publication.rightsConfirmed, 1);
-    assert.equal(publication.legalReviewConfirmed, 1);
+    assert.equal(publication.trustMode, "technical_auto_trust");
     assert.throws(
-      () => sqlite.prepare("UPDATE legal_corpus_owner_publications SET reason='tampered publication reason'").run(),
-      /LEGAL_CORPUS_OWNER_PUBLICATION_IMMUTABLE/u,
+      () => sqlite.prepare("UPDATE legal_corpus_owner_ingestions SET reason='tampered publication reason'").run(),
+      /LEGAL_CORPUS_OWNER_INGESTION_IMMUTABLE/u,
     );
     const ownerResults = await retrieveLegalCorpus({ db: d1, query: "юридическое лицо регистрируется", officialOnly: false });
     assert.equal(ownerResults[0]?.provider, "juro_owner");
@@ -200,11 +200,11 @@ test("MFA-bound owner publication reuses verified extraction and creates immutab
     const replay = await promoteCompletedAnalysisToOwnerCorpus({
       env: env(d1, bucket), staff: reviewer, analysisId: "analysis-owner", workspaceId: "workspace-owner",
       title: "Правила владельца JURO", language: "ru",
-      rightsConfirmed: true, legalReviewConfirmed: true,
-      reason: "Reviewed and approved for the global owner materials corpus.", now,
+      rightsConfirmed: true,
+      reason: "Automatically trust after the bounded technical validation completes.", now,
     });
     assert.equal(replay.status, "unchanged");
-    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_owner_publications").get() as { count: number }).count), 1);
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_owner_ingestions").get() as { count: number }).count), 1);
     await assert.rejects(
       withdrawOwnerMaterial({
         env: { DB: d1, APP_ENV: "staging" }, staff: { ...reviewer, userId: "other-user" },
@@ -220,12 +220,35 @@ test("MFA-bound owner publication reuses verified extraction and creates immutab
     assert.equal((sqlite.prepare("SELECT availability_status AS status FROM legal_corpus_documents").get() as { status: string }).status, "disabled");
     assert.equal((await retrieveLegalCorpus({ db: d1, query: "юридическое лицо регистрируется", officialOnly: false })).length, 0);
     assert.throws(
-      () => sqlite.prepare("UPDATE legal_corpus_owner_withdrawals SET reason='tampered withdrawal reason'").run(),
-      /LEGAL_CORPUS_OWNER_WITHDRAWAL_IMMUTABLE/u,
+      () => sqlite.prepare("UPDATE legal_corpus_owner_ingestion_withdrawals SET reason='tampered withdrawal reason'").run(),
+      /LEGAL_CORPUS_OWNER_INGESTION_WITHDRAWAL_IMMUTABLE/u,
     );
     sqlite.prepare("DELETE FROM document_analyses WHERE id='analysis-owner'").run();
     sqlite.prepare("DELETE FROM document_files WHERE id='file-owner'").run();
-    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_owner_publications").get() as { count: number }).count), 1);
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_owner_ingestions").get() as { count: number }).count), 1);
+  } finally { sqlite.close(); }
+});
+
+test("administrator can auto-trust an owned material after technical validation without legal review", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryR2Bucket();
+  try {
+    await seedCompletedAnalysis(sqlite, bucket, undefined, "administrator");
+    const result = await promoteCompletedAnalysisToOwnerCorpus({
+      env: env(d1, bucket),
+      staff: reviewer,
+      analysisId: "analysis-owner",
+      workspaceId: "workspace-owner",
+      title: "Автоматически доверенный материал владельца",
+      language: "ru",
+      rightsConfirmed: true,
+      reason: "Accept after malware, integrity and OCR validation without a legal approval step.",
+      now,
+    });
+    assert.equal(result.status, "published");
+    assert.equal((sqlite.prepare(
+      "SELECT trust_mode AS trustMode FROM legal_corpus_owner_ingestions",
+    ).get() as { trustMode: string }).trustMode, "technical_auto_trust");
   } finally { sqlite.close(); }
 });
 
@@ -238,7 +261,7 @@ test("owner publication rejects cross-owner access and stale MFA before any corp
       promoteCompletedAnalysisToOwnerCorpus({
         env: env(d1, bucket), staff: { ...reviewer, userId: "other-user" },
         analysisId: "analysis-owner", workspaceId: "workspace-owner", title: "Forbidden",
-        language: "ru", rightsConfirmed: true, legalReviewConfirmed: true,
+        language: "ru", rightsConfirmed: true,
         reason: "This cross-owner operation must always be rejected.", now,
       }),
       (error: unknown) => error instanceof OwnerMaterialPromotionError && error.code === "OWNER_MATERIAL_NOT_OWNED",
@@ -247,7 +270,7 @@ test("owner publication rejects cross-owner access and stale MFA before any corp
       promoteCompletedAnalysisToOwnerCorpus({
         env: env(d1, bucket), staff: { ...reviewer, mfaVerifiedAt: "2026-08-16T11:00:00.000Z" },
         analysisId: "analysis-owner", workspaceId: "workspace-owner", title: "Stale MFA",
-        language: "ru", rightsConfirmed: true, legalReviewConfirmed: true,
+        language: "ru", rightsConfirmed: true,
         reason: "This stale MFA operation must always be rejected.", now,
       }),
       (error: unknown) => error instanceof OwnerMaterialPromotionError && error.code === "OWNER_MATERIAL_NOT_READY",
@@ -269,7 +292,7 @@ test("global owner publication rejects sensitive data and prompt injection befor
         promoteCompletedAnalysisToOwnerCorpus({
           env: env(d1, bucket), staff: reviewer, analysisId: "analysis-owner",
           workspaceId: "workspace-owner", title: "Unsafe global material", language: "ru",
-          rightsConfirmed: true, legalReviewConfirmed: true,
+          rightsConfirmed: true,
           reason: "This unsafe content must be rejected before global publication.", now,
         }),
         (error: unknown) => error instanceof OwnerMaterialPromotionError && error.code === fixture.code,

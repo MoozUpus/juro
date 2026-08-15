@@ -485,7 +485,7 @@ async function executePostWithinBudget(
   // event is emitted only after a complete provider finding passes the same
   // authoritative Lex claim/span gate as the terminal answer.
   const retrieval = await liveLexRetrieval;
-  const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
+  const { sources, evidence, freshness, legalDatabaseAsOf, coverageStatus } = retrieval;
   await emitProgress({ stage: "source_verified" });
   const { memoryEncryption, memories } = await memoryContext;
   const requestHash = await sha256Json({
@@ -759,7 +759,10 @@ async function executePostWithinBudget(
           actTitle: source.actTitle,
           actIdentifier: source.actIdentifier,
           article: source.article ?? null,
-          excerpt: null,
+          excerpt: (source.spans?.find((span) => span.article === (reference.article ?? source.article))
+            ?? source.spans?.[0])?.text.slice(0, 1_200)
+            ?? source.excerpt?.slice(0, 1_200)
+            ?? null,
           originalUrl: source.officialUrl,
           status: source.applicabilityStatus ?? "current" as const,
           effectiveDate: source.effectiveDate ?? null,
@@ -769,6 +772,7 @@ async function executePostWithinBudget(
       sourceAccessMode: retrieval.sourceAccessMode,
       sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
       sourceValidationStatus: retrieval.sourceValidationStatus,
+      coverageStatus,
     };
     result = enforceLegalDatabaseFreshness(
       canonicalResult,
@@ -1143,7 +1147,9 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
   if (!conversation?.structuredJson) return null;
   const facts = await db.prepare("SELECT id,statement,status FROM confirmed_facts WHERE conversation_id=? ORDER BY created_at")
     .bind(conversationId).all();
-  const { result, sourceFreshness } = storedConversationResult(conversation.structuredJson);
+  const stored = storedConversationResult(conversation.structuredJson);
+  const result = await restoreDisplayedCitationExcerpts(db, conversation.messageId, stored.result);
+  const { sourceFreshness } = stored;
   return {
     conversationId: conversation.conversationId,
     messageId: conversation.messageId,
@@ -1179,6 +1185,36 @@ function storedConversationResult(structuredJson: string) {
   return { result, sourceFreshness };
 }
 
+async function restoreDisplayedCitationExcerpts(
+  db: D1Database,
+  messageId: string,
+  result: ReturnType<typeof parseLegalChatResponse>,
+): Promise<ReturnType<typeof parseLegalChatResponse>> {
+  try {
+    const rows = await db.prepare(`SELECT canonical_url AS canonicalUrl,
+        article_reference AS articleReference,excerpt
+      FROM legal_source_references
+      WHERE message_id=? AND citation_validation_status='validated'
+      ORDER BY created_at ASC LIMIT 12`).bind(messageId).all<{
+        canonicalUrl: string;
+        articleReference: string | null;
+        excerpt: string | null;
+      }>();
+    return {
+      ...result,
+      sources: result.sources.map((source) => {
+        const row = rows.results.find((candidate) => candidate.canonicalUrl === source.originalUrl
+          && (candidate.articleReference ?? null) === (source.article ?? null));
+        return row?.excerpt ? { ...source, excerpt: row.excerpt.slice(0, 1_200) } : source;
+      }),
+    };
+  } catch {
+    // Old rows can predate exact-quote persistence; the legal answer and its
+    // canonical Lex link remain available without inventing a quotation.
+    return result;
+  }
+}
+
 async function conversationTurnsForClient(input: {
   db: D1Database;
   conversationId: string;
@@ -1187,19 +1223,22 @@ async function conversationTurnsForClient(input: {
   leafBranchId: string | null;
 }) {
   const turns = await loadAiConversationTurns(input);
-  return turns.flatMap((turn) => {
-    if (!turn.structuredJson) return [];
-    const { result, sourceFreshness } = storedConversationResult(turn.structuredJson);
-    return [{
+  const output = [];
+  for (const turn of turns) {
+    if (!turn.structuredJson) continue;
+    const stored = storedConversationResult(turn.structuredJson);
+    const result = await restoreDisplayedCitationExcerpts(input.db, turn.responseMessageId, stored.result);
+    output.push({
       branchId: turn.branchId,
       requestMessageId: turn.requestMessageId,
       responseMessageId: turn.responseMessageId,
       question: turn.question,
       createdAt: turn.createdAt,
       result,
-      sourceFreshness,
-    }];
-  });
+      sourceFreshness: stored.sourceFreshness,
+    });
+  }
+  return output;
 }
 
 function boundedConversationHistory(

@@ -93,12 +93,55 @@ test("seed schedule is locked, idempotent, bounded and leaves a completed run", 
   assert.equal(scheduled.noRetryCalls(), 2);
 });
 
+test("process schedule self-seeds a fresh corpus without an admin action", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const scheduled = controller(LEGAL_CORPUS_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 10));
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    const url = String(input);
+    if (url === "https://lex.uz/robots.txt") {
+      return new Response("User-agent: *\nAllow: /\nCrawl-delay: 0\n", {
+        headers: { "content-type": "text/plain" },
+      });
+    }
+    return new Response("<html><body><p>No documents in this bounded fixture.</p></body></html>", {
+      headers: { "content-type": "text/html" },
+    });
+  };
+  try {
+    await handleLegalCorpusScheduled(scheduled.value, {
+      APP_ENV: "staging",
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+      DB: d1,
+      BUCKET: {} as R2Bucket,
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const checkpointCount = Number((sqlite.prepare(
+    "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints",
+  ).get() as { count: number }).count);
+  const completedCount = Number((sqlite.prepare(
+    "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints WHERE status='completed'",
+  ).get() as { count: number }).count);
+  const adminEventCount = Number((sqlite.prepare(
+    "SELECT count(*) AS count FROM legal_corpus_admin_events",
+  ).get() as { count: number }).count);
+  assert.equal(checkpointCount, 44);
+  assert.equal(completedCount, 2);
+  assert.equal(adminEventCount, 0);
+  assert.equal(scheduled.noRetryCalls(), 1);
+});
+
 test("main application scheduler cannot import or invoke heavy corpus work", () => {
   const mainScheduler = readFileSync(new URL("../worker/platform-scheduled.ts", import.meta.url), "utf8");
   const corpusWorker = readFileSync(new URL("../worker/legal-corpus-worker.ts", import.meta.url), "utf8");
   assert.doesNotMatch(mainScheduler, /runNextLegalCorpusIngestionJob|runNextLexCatalogDiscoveryPage|seedLexCatalogDiscoveryCheckpoints/u);
   assert.match(corpusWorker, /runNextLegalCorpusIngestionJob/u);
   assert.match(corpusWorker, /runNextLexCatalogDiscoveryPage/u);
+  assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
 });
 
@@ -137,6 +180,6 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_MULTILINGUAL_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_HISTORICAL_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_SHADOW_MODE, "true");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST, "false");
-  assert.equal(config.env.staging.vars.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST, "false");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST, "true");
+  assert.equal(config.env.staging.vars.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST, "true");
 });

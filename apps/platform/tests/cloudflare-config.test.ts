@@ -155,6 +155,8 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
       "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
       "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
+      "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
+      "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
       "LEGAL_CORPUS_HISTORICAL_ENABLED",
       "LEGAL_CORPUS_SHADOW_MODE",
     ]);

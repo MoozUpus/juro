@@ -170,11 +170,12 @@ test("point-in-time retrieval selects one immutable historical interval", async 
     <div class="lx_elem ARTICLE">Статья 7. Проверяемая норма</div>
     <div class="lx_elem">${body.repeat(10)}</div>
   </main>`;
+  let currentBody = "Текущее правило действует сейчас. ";
   const fetchImpl = async (input: RequestInfo | URL) => String(input).endsWith("robots.txt")
     ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
     : new Response(String(input).includes("ONDATE=")
       ? page("18.05.2022", "Историческое правило действует для прошлого периода. ")
-      : page("30.04.2023", "Текущее правило действует сейчас. "), {
+      : page("30.04.2023", currentBody), {
       headers: { "content-type": "text/html" },
     });
   const env = {
@@ -200,6 +201,17 @@ test("point-in-time retrieval selects one immutable historical interval", async 
     });
     assert.equal(historical[0]?.status, "historical");
     assert.match(historical[0]?.exactQuote ?? "", /Историческое правило/u);
+    currentBody = "Исправленное текущее правило действует сейчас. ";
+    await ingestOfficialLexDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/777",
+      now: new Date("2026-08-14T00:02:00Z"),
+      fetchImpl,
+    });
+    const correctedAtSameDate = await retrieveLegalCorpus({
+      db: d1, query: "статья 7 правило", scope: { asOfDate: "2023-05-01" },
+    });
+    assert.ok(correctedAtSameDate.length > 0);
+    assert.ok(correctedAtSameDate.every((item) => item.exactQuote.includes("Исправленное")));
     assert.deepEqual(await retrieveLegalCorpus({
       db: d1, query: "статья 7 правило", scope: { asOfDate: "2020-01-01" },
     }), []);

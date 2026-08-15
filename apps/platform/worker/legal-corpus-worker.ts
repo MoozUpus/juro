@@ -10,12 +10,16 @@ import {
 import { featureEnabled } from "../lib/legal-corpus/trust";
 import { syncLegalCorpusVersionToQdrant } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
+import { createPacedLexFetch } from "../lib/legal-corpus/lex-request-pacer";
+import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
 export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 
 const LOCK_NAME = "legal-corpus-worker";
-const LOCK_MS = 4 * 60_000;
+const LOCK_MS = 7 * 60_000;
+const DISCOVERY_PAGES_PER_RUN = 2;
+const INGESTION_JOBS_PER_RUN = 9;
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   OPENAI_API_KEY?: string;
@@ -150,8 +154,10 @@ export async function handleLegalCorpusScheduled(
 
   try {
     if (controller.cron === LEGAL_CORPUS_SEED_CRON) {
-      const metadata = await seedLexCorpusJobsFromMetadata(env);
-      const catalog = await seedLexCatalogDiscoveryCheckpoints(env);
+      const scheduledAt = new Date(controller.scheduledTime);
+      const metadata = await seedLexCorpusJobsFromMetadata(env, { now: scheduledAt });
+      const catalog = await seedLexCatalogDiscoveryCheckpoints(env, scheduledAt);
+      const maintenance = await scheduleLegalCorpusMaintenance(env, { now: scheduledAt });
       await finishRun(env, run, "completed", null);
       log("info", {
         event: "legal_corpus.seed_completed",
@@ -161,34 +167,60 @@ export async function handleLegalCorpusScheduled(
         metadataQueued: metadata.queued,
         checkpointsConsidered: catalog.considered,
         checkpointsCreated: catalog.created,
+        maintenanceLocalDate: maintenance.localDate,
+        dailyRefreshQueued: maintenance.dailyQueued,
+        weeklyRefreshQueued: maintenance.weeklyQueued,
+        monthlyRefreshQueued: maintenance.monthlyQueued,
+        catalogCheckpointsReset: maintenance.catalogCheckpointsReset,
       });
       controller.noRetry();
       return;
     }
 
-    const discovery = await runNextLexCatalogDiscoveryPage(env, {
-      wait: (delayMs) => scheduler.wait(delayMs),
-    });
-    const ingestion = await runNextLegalCorpusIngestionJob(env, {
-      wait: (delayMs) => scheduler.wait(delayMs),
-      afterIngest: async (result) => {
-        if (!result.versionId) return;
-        await syncLegalCorpusVersionToQdrant(env, result.versionId);
-      },
-    });
-    const errorCode = discovery.safeErrorCode ?? ingestion.safeErrorCode;
-    const failed = discovery.status === "failed"
-      || ingestion.status === "failed"
-      || ingestion.status === "halted_suspicious_change";
+    // The process schedule must be self-starting. Requiring a staff member to
+    // press the admin seed button would turn a resumable automatic corpus into
+    // a manual approval gate. The seed operation is idempotent, so a fresh or
+    // partially restored environment can safely recreate only the missing
+    // category/language checkpoints before claiming the next page.
+    const catalog = await seedLexCatalogDiscoveryCheckpoints(env);
+    const wait = (delayMs: number) => scheduler.wait(delayMs);
+    const fetchImpl = createPacedLexFetch({ db: env.DB, wait });
+    const discoveries: Awaited<ReturnType<typeof runNextLexCatalogDiscoveryPage>>[] = [];
+    for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
+      const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl });
+      discoveries.push(result);
+      if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
+    }
+    const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
+    for (let index = 0; index < INGESTION_JOBS_PER_RUN; index += 1) {
+      const result = await runNextLegalCorpusIngestionJob(env, {
+        wait,
+        fetchImpl,
+        afterIngest: async (ingested) => {
+          if (!ingested.versionId) return;
+          await syncLegalCorpusVersionToQdrant(env, ingested.versionId);
+        },
+      });
+      ingestions.push(result);
+      if (result.status === "empty" || result.status === "disabled") break;
+    }
+    const errorCode = discoveries.find((result) => result.safeErrorCode)?.safeErrorCode
+      ?? ingestions.find((result) => result.safeErrorCode)?.safeErrorCode
+      ?? null;
+    const failed = discoveries.some((result) => result.status === "failed")
+      || ingestions.some((result) => result.status === "failed"
+        || result.status === "halted_suspicious_change");
     await finishRun(env, run, failed ? "failed" : "completed", errorCode);
     log(failed ? "error" : "info", {
       event: failed ? "legal_corpus.process_failed" : "legal_corpus.process_completed",
       environment: env.APP_ENV,
       cron: controller.cron,
-      discoveryStatus: discovery.status,
-      discoveryClaimed: discovery.claimed,
-      ingestionStatus: ingestion.status,
-      ingestionClaimed: ingestion.claimed,
+      discoveryPages: discoveries.length,
+      discoveryClaimed: discoveries.filter((result) => result.claimed).length,
+      checkpointsConsidered: catalog.considered,
+      checkpointsCreated: catalog.created,
+      ingestionJobs: ingestions.length,
+      ingestionClaimed: ingestions.filter((result) => result.claimed).length,
       errorCode,
     });
   } catch {

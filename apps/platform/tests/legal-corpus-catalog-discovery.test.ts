@@ -61,21 +61,67 @@ test("catalog fetch rejects arbitrary URLs and honors robots crawl delay", async
     /LEX_CATALOG_URL_REJECTED/,
   );
   const waits: number[] = [];
+  const robotsAcceptHeaders: Array<string | null> = [];
   const result = await fetchLexCatalogPage({
     searchUrl: lexCatalogSearchUrl("laws", "ru"),
     wait: async (delay) => { waits.push(delay); },
-    fetchImpl: async (input) => String(input).endsWith("robots.txt")
-      ? new Response(robots, { headers: { "content-type": "text/plain" } })
-      : new Response(catalogPage({
+    fetchImpl: async (input, init) => {
+      if (String(input).endsWith("robots.txt")) {
+        robotsAcceptHeaders.push(new Headers(init?.headers).get("accept"));
+        return new Response(robots, { headers: { "content-type": "text/plain" } });
+      }
+      return new Response(catalogPage({
         page: 1, count: 2, links: ["/ru/docs/100"], nextPage: 2,
         nextTarget: "ucFoundActsControl$rptPaging$ctl01$lbPaging", viewState: "state&amp;one",
-      }), { headers: { "content-type": "text/html; charset=utf-8" } }),
+      }), { headers: { "content-type": "text/html; charset=utf-8" } });
+    },
   });
   assert.deepEqual(waits, [20_000]);
+  assert.deepEqual(robotsAcceptHeaders, ["*/*"]);
   assert.equal(result.currentPage, 1);
   assert.equal(result.expectedDocumentCount, 2);
   assert.equal(result.documents[0]?.sourceUrl, "https://lex.uz/ru/docs/100");
   assert.equal(result.viewState, "state&one");
+});
+
+test("temporary catalog access denial remains retryable and old terminal rows self-heal", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await assert.rejects(
+      fetchLexCatalogPage({
+        searchUrl: lexCatalogSearchUrl("laws", "ru"),
+        wait: async () => undefined,
+        fetchImpl: async (input) => String(input).endsWith("robots.txt")
+          ? new Response(robots, { headers: { "content-type": "text/plain" } })
+          : new Response("denied", { status: 403 }),
+      }),
+      (error: unknown) => error instanceof Error
+        && "retryable" in error
+        && (error as { retryable: boolean }).retryable,
+    );
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
+      SET status='dead_letter',attempt_count=1,next_attempt_at=NULL,
+        last_error_code='LEX_CATALOG_UPSTREAM_UNAVAILABLE'
+      WHERE id='lex-catalog:central_election_commission:en'`).run();
+    const seeded = await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:05:00.000Z"));
+    assert.deepEqual(seeded, { considered: 44, created: 0 });
+    const recovered = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      next_attempt_at AS nextAttemptAt FROM legal_corpus_discovery_checkpoints
+      WHERE id='lex-catalog:central_election_commission:en'`).get() as {
+      status: string; attemptCount: number; nextAttemptAt: string | null;
+    };
+    assert.equal(recovered.status, "retrying");
+    assert.equal(recovered.attemptCount, 1);
+    assert.equal(recovered.nextAttemptAt, "2026-08-15T00:05:00.000Z");
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("checkpoint crawler resumes POST-back pagination and queues each source once", async () => {

@@ -61,6 +61,12 @@ test("Lex effectivity is derived from official visible status, never fetch time"
     <div>Дата вступления в силу</div><div>08.11.2026</div>
     <div>Акт еще не вступил в силу</div>
   `), { status: "unknown", validFrom: "2026-11-08", validTo: null });
+  assert.deepEqual(parseLexDocumentEffectivity(`
+    <main><div class="docHeader"><div>Кучга кириш санаси</div><div>24.12.2024</div></div>
+    <div class="container docBody-container"><div id="divCont">
+      Аввалги қарор ўз кучини йўқотган деб ҳисоблансин.
+    </div></div></main>
+  `), { status: "active", validFrom: "2024-12-24", validTo: null });
 });
 
 test("provision parser keeps article structure and only splits genuinely large articles", () => {

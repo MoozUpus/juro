@@ -904,6 +904,34 @@
       "when": 1786908000000,
       "tag": "0128_owner_corpus_publications",
       "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1786911600000,
+      "tag": "0129_owner_corpus_auto_trust",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1786915200000,
+      "tag": "0130_legal_corpus_variant_titles",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1786918800000,
+      "tag": "0131_legal_corpus_version_intervals",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1786922400000,
+      "tag": "0132_lex_source_rate_limit",
+      "breakpoints": true
     }
   ]
 }

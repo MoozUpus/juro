@@ -47,6 +47,10 @@ export function legalCitationStatements(input: {
       } catch { return false; }
     })();
     if (!source || source.sourceType !== "lex" || !officialLex || !validated || seen.has(source.officialUrl)) return [];
+    const candidateExcerpt = citation.excerpt;
+    const exactExcerpt = candidateExcerpt && source.spans?.some((span) => span.text.startsWith(candidateExcerpt))
+      ? candidateExcerpt.slice(0, 1_200)
+      : null;
     seen.add(source.officialUrl);
     return [input.db.prepare(
       `INSERT INTO legal_source_references (
@@ -69,7 +73,7 @@ export function legalCitationStatements(input: {
       citation.actTitle.slice(0, 500),
       citation.actIdentifier,
       citation.article,
-      null,
+      exactExcerpt,
       citation.status,
       citation.effectiveDate,
       source.lastCheckedAt,

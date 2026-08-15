@@ -178,16 +178,17 @@ test("isolated admin domain owns the corpus surface and rechecks CSRF plus super
   assert.match(internal, /adminRoleAllows\(authenticated\.principal\.roles, "legal\.corpus\.manage"\)/u);
   assert.match(internal, /sourceMfaVerifiedAt/u);
   assert.match(internal, /legalCorpusAdminActionSchema\.safeParse/u);
-  assert.match(internal, /payload\.data\.action === "publish_owner_material"/u);
-  assert.match(internal, /payload\.data\.action === "withdraw_owner_material"/u);
-  assert.match(internal, /roles\.includes\("lawyer_moderator"\)/u);
-  assert.match(internal, /ownerMaterialMutation \? "legal_reviewer" : "administrator"/u);
+  assert.match(internal, /legalCorpusAdminActionSchema\.safeParse/u);
+  assert.doesNotMatch(internal, /ownerMaterialMutation|roles\.includes\("lawyer_moderator"\)/u);
+  assert.match(internal, /role='administrator'/u);
   assert.match(internal, /legal_corpus\.admin\.runtime_flags/u);
   assert.doesNotMatch(internal, /runtime_flags[\s\S]{0,600}(?:token|question|answer|document)/iu);
-  assert.match(worker, /Опубликовать материал владельца/u);
+  assert.match(worker, /Добавить материал владельца/u);
+  assert.match(worker, /name="reason" value="Автоматический первичный seed из защищённой панели\."/u);
+  assert.match(worker, /Причина первичного запуска записывается в защищённый журнал автоматически/u);
 });
 
-test("owner publication has an independent deny-by-default flag and explicit human confirmations", async () => {
+test("owner ingestion has an independent deny-by-default flag without a legal approval field", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const action = {
@@ -197,8 +198,7 @@ test("owner publication has an independent deny-by-default flag and explicit hum
       title: "Owner legal material",
       language: "ru" as const,
       rightsConfirmed: true as const,
-      legalReviewConfirmed: true as const,
-      reason: "Publish only after the separate owner-material gate is approved.",
+      reason: "Ingest automatically after the technical owner-material gate passes.",
     };
     await assert.rejects(
       performLegalCorpusAdminAction({
@@ -209,6 +209,6 @@ test("owner publication has an independent deny-by-default flag and explicit hum
       }),
       (error: unknown) => error instanceof LegalCorpusAdminError && error.code === "LEGAL_CORPUS_ADMIN_DISABLED",
     );
-    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_owner_publications").get() as { count: number }).count), 0);
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_owner_ingestions").get() as { count: number }).count), 0);
   } finally { sqlite.close(); }
 });
