@@ -157,14 +157,16 @@ The test did not expose a public or signed R2 URL, object key, owner ID,
 workspace ID or document hash.
 
 The isolated staging admin Worker was redeployed from the same branch as
-version `a934e14c-3d13-46b9-885d-2f995d23c482`. Its primary
+version `4af7b441-4fd4-49cf-91d4-8f2b276a9272`. Its primary
 `seed_discovery` form supplies a fixed hidden audit reason and therefore does
 not require the operator to type into `Technical reason`. Manual retry,
 withdrawal and publication actions continue to require a human-entered reason
 because those are distinct audit events. Admin type-check, the Wrangler staging
-dry-run and all six focused corpus-admin tests passed. The current browser
-session had already lost its fresh-MFA admin window, so this record does not
-claim a post-redeploy visual admin pass.
+dry-run and all six focused corpus-admin tests passed. This second bounded
+redeploy followed a reported stale form that still rendered the retired seed
+textarea; the protected page already sends `private, no-store` and
+`Pragma: no-cache`. The current browser session had already lost its fresh-MFA admin
+window, so this record does not claim a post-redeploy visual admin pass.
 
 The read-only staging corpus snapshot at 2026-08-15 16:45 +05:00 contained
 245 ready official documents, 335 language variants, 341 immutable versions,
@@ -204,6 +206,14 @@ whole staging corpus contained 285 ready documents, 384 language variants, 395
 versions, 17,802 provisions and 17,840 indexed chunks; 391 jobs were completed,
 2,162 were queued/retrying and one was running. This remains below the release
 floor and does not claim complete category coverage.
+
+The next read-only snapshot at 2026-08-15 17:33 +05:00 showed continued bounded
+progress: 292 ready documents, 396 language variants, 410 versions, 18,156
+provisions and 18,194 indexed chunks. There were 406 completed jobs, 2,217
+queued/retrying jobs, no running job at the instant of the query, zero terminal
+jobs and zero terminal/technically-unavailable failures. Checkpoints were 8
+completed, 34 queued and 2 retrying. These numbers still do not satisfy the
+release floor or prove category completeness.
 
 ## Fail-closed production state
 

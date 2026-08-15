@@ -24,10 +24,10 @@
   has a separate private provider path; it does not promote owner material into
   global law or make a private document an official source.
 - Staging corpus acquisition is still in progress. The read-only snapshot at
-  2026-08-15 17:18 +05:00 had 285 ready canonical documents, 384 language
-  variants, 395 versions, 17,802 provisions and 17,840 indexed chunks. There
-  were 2,162 queued/retrying jobs, one running job, 391 completed jobs and zero
-  terminal technical
+  2026-08-15 17:33 +05:00 had 292 ready canonical documents, 396 language
+  variants, 410 versions, 18,156 provisions and 18,194 indexed chunks. There
+  were 2,217 queued/retrying jobs, no running job at the instant of the query,
+  406 completed jobs and zero terminal technical
   failures. This is below the 1,283 / 20,296 / 22,513 release floor and is not
   evidence that coverage is complete.
 - The new source-card and full-article modal passed type-check, focused boundary
