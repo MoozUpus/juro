@@ -17,14 +17,14 @@ const robots = "User-agent: *\nAllow: /\nCrawl-delay: 20\n";
 
 function catalogPage(input: {
   page: number;
-  count: number;
+  count?: number;
   links: string[];
   nextPage?: number;
   nextTarget?: string;
   viewState: string;
 }): string {
   return `<!doctype html><html><body>
-    <div class="refind__result-export__title mb-3">По запросу найдено ${input.count} документа(ов)</div>
+    ${input.count === undefined ? "" : `<div class="refind__result-export__title mb-3">По запросу найдено ${input.count} документа(ов)</div>`}
     <form method="post" id="Form1">
       <input type="hidden" name="__VIEWSTATE" value="${input.viewState}">
       <input type="hidden" name="__VIEWSTATEGENERATOR" value="4CEDEDF5">
@@ -119,6 +119,95 @@ test("temporary catalog access denial remains retryable and old terminal rows se
     assert.equal(recovered.status, "retrying");
     assert.equal(recovered.attemptCount, 1);
     assert.equal(recovered.nextAttemptAt, "2026-08-15T00:05:00.000Z");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("seeding backfills a provable expected count for completed catalogues without totals", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
+      SET status='completed',expected_document_count=NULL,
+        discovered_document_count=12,next_event_target=NULL
+      WHERE id='lex-catalog:court_acts:ru'`).run();
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:05:00.000Z"));
+    const checkpoint = sqlite.prepare(`SELECT expected_document_count AS expected
+      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:court_acts:ru'`)
+      .get() as { expected: number | null };
+    assert.equal(checkpoint.expected, 12);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a due retry is claimed before queued catalogues", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET status='completed'
+      WHERE id NOT IN ('lex-catalog:laws:ru','lex-catalog:central_election_commission:en')`).run();
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
+      SET status='retrying',attempt_count=1,next_attempt_at='2026-08-15T00:01:00.000Z'
+      WHERE id='lex-catalog:central_election_commission:en'`).run();
+    const result = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:02:00.000Z"),
+      wait: async () => undefined,
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+          headers: { "content-type": "text/html" },
+        }),
+    });
+    assert.equal(result.checkpointId, "lex-catalog:central_election_commission:en");
+    assert.equal(result.status, "category_completed");
+    const checkpoint = sqlite.prepare(`SELECT expected_document_count AS expected
+      FROM legal_corpus_discovery_checkpoints WHERE id=?`)
+      .get(result.checkpointId) as { expected: number | null };
+    assert.equal(checkpoint.expected, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a truncated terminal page retries instead of claiming complete coverage", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare("UPDATE legal_corpus_discovery_checkpoints SET status='completed' WHERE id<>'lex-catalog:laws:ru'").run();
+    const result = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:01:00.000Z"),
+      wait: async () => undefined,
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(catalogPage({
+          page: 1, count: 2, links: ["/ru/docs/100"], viewState: "state",
+        }), { headers: { "content-type": "text/html" } }),
+    });
+    assert.equal(result.status, "retrying");
+    assert.equal(result.safeErrorCode, "LEX_CATALOG_INCOMPLETE_RESULT_SET");
+    const checkpoint = sqlite.prepare(`SELECT status,page_number AS pageNumber,
+      discovered_document_count AS discovered FROM legal_corpus_discovery_checkpoints
+      WHERE id='lex-catalog:laws:ru'`).get() as {
+      status: string; pageNumber: number; discovered: number;
+    };
+    assert.deepEqual({ ...checkpoint }, { status: "retrying", pageNumber: 0, discovered: 0 });
   } finally {
     sqlite.close();
   }

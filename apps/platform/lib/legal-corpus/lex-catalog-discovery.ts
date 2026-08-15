@@ -347,6 +347,14 @@ export async function seedLexCatalogDiscoveryCheckpoints(
     SET status='retrying',next_attempt_at=?,updated_at=?
     WHERE status='dead_letter' AND last_error_code='LEX_CATALOG_UPSTREAM_UNAVAILABLE'
       AND attempt_count<5`).bind(timestamp, timestamp).run();
+  // Lex does not expose a total on every catalogue route. Once pagination has
+  // ended, the deduplicated discovery ledger is the authoritative expected
+  // set. Persist it so coverage can prove indexed + unavailable = discovered
+  // instead of leaving a terminal checkpoint permanently unverifiable.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET expected_document_count=discovered_document_count,updated_at=?
+    WHERE status='completed' AND expected_document_count IS NULL
+      AND next_event_target IS NULL`).bind(timestamp).run();
   return { considered: LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length, created };
 }
 
@@ -373,7 +381,8 @@ export async function runNextLexCatalogDiscoveryPage(
       view_state_generator AS viewStateGenerator,attempt_count AS attemptCount
     FROM legal_corpus_discovery_checkpoints
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
-    ORDER BY CASE status WHEN 'queued' THEN 0 ELSE 1 END,attempt_count,created_at,id LIMIT 1`)
+    ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
+      COALESCE(next_attempt_at,created_at),attempt_count,created_at,id LIMIT 1`)
     .bind(now).first<DiscoveryCheckpoint>();
   if (!candidate) {
     return { claimed: false, status: "empty", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
@@ -417,16 +426,19 @@ export async function runNextLexCatalogDiscoveryPage(
       .bind(candidate.id).first<{ count: number }>();
     const discovered = Number(countRow?.count ?? 0);
     const expected = page.expectedDocumentCount ?? candidate.expectedDocumentCount;
+    if (page.nextEventTarget === null && expected !== null && discovered < expected) {
+      throw new LexCatalogDiscoveryError("LEX_CATALOG_INCOMPLETE_RESULT_SET", true);
+    }
     const completed = expected === 0
       || (expected !== null && discovered >= expected)
-      || (page.documents.length === 0 && page.nextEventTarget === null)
       || (page.nextEventTarget === null && (expected === null || discovered >= expected));
+    const persistedExpected = completed ? (expected ?? discovered) : expected;
     await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
       status=?,page_number=?,expected_document_count=?,discovered_document_count=?,
       next_event_target=?,view_state=?,view_state_generator=?,attempt_count=0,
       next_attempt_at=NULL,last_error_code=NULL,completed_at=?,updated_at=? WHERE id=?
     `).bind(
-      completed ? "completed" : "queued", page.currentPage, expected, discovered,
+      completed ? "completed" : "queued", page.currentPage, persistedExpected, discovered,
       completed ? null : page.nextEventTarget, completed ? null : page.viewState,
       completed ? null : page.viewStateGenerator, completed ? now : null, now, candidate.id,
     ).run();
