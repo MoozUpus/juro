@@ -576,8 +576,9 @@ Staging safety evidence:
 Focused upload, tenant, quarantine, owner publication and delayed-publication
 tests passed 22/22. Migration safety passed 60/60, including application of all
 migrations with zero FK violations. Platform and admin TypeScript checks and
-the admin staging dry-run passed. The full staging build/deploy published
-platform Worker `a2002289-13f8-44f3-891d-5c95f666fcf8`; isolated admin Worker
+the admin staging dry-run passed. The exact application tree from commit
+`4353e67f31dc8d8d12a70dc3c754455df37337b0` was published as platform Worker
+`2199de08-04f7-4d0a-8c7c-67b81fbae746`; isolated admin Worker
 `0b51b249-0a57-4921-a973-2df01ebba538` remains at 100% staging traffic.
 Production Workers, production D1 and DNS were not changed. The in-app browser
 runtime could not navigate the protected hostname under its URL policy, so no
