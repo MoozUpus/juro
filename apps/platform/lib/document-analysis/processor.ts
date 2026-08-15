@@ -41,6 +41,7 @@ import {
 } from "./revisions";
 import { scheduleTrustedUserDocumentIndexStatements } from "./user-document-vectors";
 import { resolveAiRuntimeSettings, type AiRuntimeSettings } from "../ai/runtime-settings";
+import { publishPendingOwnerCorpusUpload } from "../legal-corpus/owner-upload";
 
 export const DOCUMENT_ANALYSIS_INLINE_BYTE_LIMIT = 20 * 1024 * 1024;
 export { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "./limits";
@@ -50,6 +51,7 @@ export type DocumentAnalysisProcessorEnv = {
   DB: D1Database;
   BUCKET: R2Bucket;
   LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST?: string;
+  LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST?: string;
   OPENAI_API_KEY?: string;
   OPENAI_MODEL?: string;
   OPENAI_CHAT_MODEL?: string;
@@ -398,6 +400,11 @@ export async function executeDocumentAnalysisJob(
 
   try {
     await persistNormalizedAnalysis(scopedEnv, row, persisted);
+    // A protected admin upload carries an immutable owner authorization. Once
+    // scan, extraction and analysis have completed, publication is attempted
+    // automatically; failure is recorded on the request and never rolls back
+    // the user's completed private analysis.
+    await publishPendingOwnerCorpusUpload(scopedEnv, analysisId);
     return { status: "completed", analysisId };
   } catch (error) {
     if (error instanceof DocumentAnalysisProcessingError) throw error;

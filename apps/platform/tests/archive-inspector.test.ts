@@ -12,6 +12,7 @@ test("bounded ZIP packages accept only supported safe document members", () => {
   const result = inspectArchiveBytes(bytes, "application/zip");
   assert.equal(result.fileCount, 2);
   assert.equal(result.docxPackage, false);
+  assert.equal(inspectArchiveBytes(zipSync({ "act.txt": strToU8("Статья 1"), "act.json": strToU8("{}") }), "application/zip").fileCount, 2);
   assert.throws(
     () => inspectArchiveBytes(zipSync({ "../escape.pdf": strToU8("x") }), "application/zip"),
     (error) => error instanceof ArchiveInspectionError && error.code === "ARCHIVE_PATH_UNSAFE",

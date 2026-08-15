@@ -83,6 +83,7 @@ async function seedCompletedAnalysis(
   bucket: MemoryR2Bucket,
   materialText?: string,
   staffRole: "legal_reviewer" | "administrator" = "legal_reviewer",
+  preauthorizeOwnerUpload = false,
 ): Promise<void> {
   const sourceBytes = new TextEncoder().encode("clean owner source");
   const sourceSha256 = await sha256Hex(sourceBytes);
@@ -130,6 +131,16 @@ async function seedCompletedAnalysis(
     (id,workspace_id,owner_user_id,uploaded_file_id,status,summary_json,error_code,consent_version,created_at,updated_at)
     VALUES ('analysis-owner','workspace-owner','owner-reviewer','file-owner','quarantined','{}',NULL,'2026-08-16',?,?)`)
     .run(nowIso, nowIso);
+  if (preauthorizeOwnerUpload) {
+    sqlite.prepare(`INSERT INTO legal_corpus_owner_upload_requests
+      (id,environment,analysis_id,workspace_id,file_id,source_sha256,title,language,rights_confirmed,
+       reason,actor_user_id,actor_session_id,actor_assignment_id,actor_mfa_verified_at,
+       authorization_hash,status,error_code,published_document_id,created_at,updated_at)
+      VALUES ('owner-upload-request','staging','analysis-owner','workspace-owner','file-owner',?,
+       'Delayed owner material','ru',1,'Automatically publish after the technical pipeline completes.',
+       'owner-reviewer','admin-session-owner','assignment-reviewer','2026-08-16T11:55:00.000Z',?,
+       'scan_queued',NULL,NULL,?,?)`).run(sourceSha256, "A".repeat(64), nowIso, nowIso);
+  }
   sqlite.prepare(`INSERT INTO file_scan_results
     (id,analysis_id,file_id,workspace_id,owner_user_id,verdict,provider,engine,engine_version,
      signature_version,provider_scan_id,source_sha256,response_sha256,threats_json,completed_at,created_at)
@@ -249,6 +260,32 @@ test("administrator can auto-trust an owned material after technical validation 
     assert.equal((sqlite.prepare(
       "SELECT trust_mode AS trustMode FROM legal_corpus_owner_ingestions",
     ).get() as { trustMode: string }).trustMode, "technical_auto_trust");
+  } finally { sqlite.close(); }
+});
+
+test("immutable fresh-MFA upload authorization survives a delayed technical pipeline", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryR2Bucket();
+  const completedLater = new Date("2026-08-16T13:00:00.000Z");
+  try {
+    await seedCompletedAnalysis(sqlite, bucket, undefined, "legal_reviewer", true);
+    const result = await promoteCompletedAnalysisToOwnerCorpus({
+      env: env(d1, bucket),
+      staff: reviewer,
+      ownerUploadRequestId: "owner-upload-request",
+      analysisId: "analysis-owner",
+      workspaceId: "workspace-owner",
+      title: "Delayed owner material",
+      language: "ru",
+      rightsConfirmed: true,
+      reason: "Automatically publish after the technical pipeline completes.",
+      now: completedLater,
+    });
+    assert.equal(result.status, "published");
+    const publication = sqlite.prepare(`SELECT actor_mfa_verified_at AS mfaAt,created_at AS createdAt
+      FROM legal_corpus_owner_ingestions`).get() as { mfaAt: string; createdAt: string };
+    assert.equal(publication.mfaAt, reviewer.mfaVerifiedAt);
+    assert.equal(publication.createdAt, completedLater.toISOString());
   } finally { sqlite.close(); }
 });
 

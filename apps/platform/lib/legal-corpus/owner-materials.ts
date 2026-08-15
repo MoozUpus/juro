@@ -228,6 +228,7 @@ async function analysisRow(env: PromotionEnv, input: {
 export async function promoteCompletedAnalysisToOwnerCorpus(input: {
   env: PromotionEnv;
   staff: Pick<PlatformStaffAccess, "userId" | "sessionId" | "assignmentIds" | "mfaVerifiedAt">;
+  ownerUploadRequestId?: string;
   analysisId: string;
   workspaceId: string;
   title: string;
@@ -257,7 +258,15 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
     || !row.extractionSha256 || !/^[a-f0-9]{64}$/u.test(row.extractionSha256)) {
     throw new OwnerMaterialPromotionError("OWNER_MATERIAL_NOT_READY");
   }
-  const publisherAssignmentId = await requireCorpusPublisherAssignment(input.env.DB, input.staff, now);
+  const publisherAssignmentId = input.ownerUploadRequestId
+    ? await requirePreauthorizedCorpusPublisher(input.env.DB, {
+      requestId: input.ownerUploadRequestId,
+      analysisId: row.analysisId,
+      workspaceId: row.workspaceId,
+      staff: input.staff,
+      now,
+    })
+    : await requireCorpusPublisherAssignment(input.env.DB, input.staff, now);
 
   let extracted;
   try {
@@ -448,6 +457,38 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
     provisionCount: provisions.length,
     chunkCount: chunks.length,
   };
+}
+
+async function requirePreauthorizedCorpusPublisher(
+  db: D1Database,
+  input: {
+    requestId: string;
+    analysisId: string;
+    workspaceId: string;
+    staff: Pick<PlatformStaffAccess, "userId" | "sessionId" | "assignmentIds" | "mfaVerifiedAt">;
+    now: Date;
+  },
+): Promise<string> {
+  if (!/^[A-Za-z0-9:_-]{1,180}$/u.test(input.requestId)) {
+    throw new OwnerMaterialPromotionError("OWNER_MATERIAL_NOT_READY");
+  }
+  const authorization = await db.prepare(`SELECT request.actor_assignment_id AS assignmentId
+    FROM legal_corpus_owner_upload_requests request
+    JOIN platform_staff_assignments assignment ON assignment.id=request.actor_assignment_id
+      AND assignment.user_id=request.actor_user_id
+    WHERE request.id=? AND request.analysis_id=? AND request.workspace_id=?
+      AND request.actor_user_id=? AND request.actor_session_id=?
+      AND request.actor_mfa_verified_at=? AND request.status='scan_queued'
+      AND request.actor_assignment_id IN (${input.staff.assignmentIds.map(() => "?").join(",") || "NULL"})
+      AND assignment.role IN ('administrator','legal_reviewer')
+      AND assignment.revoked_at IS NULL AND assignment.granted_at<=? AND assignment.expires_at>?
+    LIMIT 1`).bind(
+    input.requestId, input.analysisId, input.workspaceId, input.staff.userId,
+    input.staff.sessionId, input.staff.mfaVerifiedAt, ...input.staff.assignmentIds,
+    input.now.toISOString(), input.now.toISOString(),
+  ).first<{ assignmentId: string }>();
+  if (!authorization) throw new OwnerMaterialPromotionError("OWNER_MATERIAL_NOT_READY");
+  return authorization.assignmentId;
 }
 
 /** Disables an owner material through a separate immutable lifecycle event. */

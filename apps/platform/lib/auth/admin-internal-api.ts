@@ -20,6 +20,7 @@ import {
 } from "../legal-corpus/admin-operations";
 import type { LegalCorpusFeatureFlag } from "../legal-corpus/trust";
 import type { QdrantCorpusEnv } from "../legal-corpus/qdrant";
+import { createOwnerCorpusUpload, OwnerCorpusUploadError } from "../legal-corpus/owner-upload";
 
 const SESSION_HEADER = "x-juro-admin-session";
 const INTERNAL_TOKEN_HEADER = "x-juro-admin-internal-token";
@@ -39,6 +40,7 @@ const lifecycleSchema = z.object({
 type AdminInternalEnv = {
   DB?: D1Database;
   BUCKET?: R2Bucket;
+  QUARANTINE_BUCKET?: R2Bucket;
   APP_ENV?: string;
   ADMIN_INTERNAL_TOKEN?: string;
   // Production's isolated admin Worker uses a separately provisioned token.
@@ -302,6 +304,13 @@ async function legalCorpusDashboard(request: Request, env: AdminInternalEnv): Pr
   const dashboard = await readLegalCorpusAdminDashboard({
     env: legalCorpusAdminRuntimeEnv(env, authenticated.db, authenticated.environment),
   });
+  const ownerUploads = await authenticated.db.prepare(`SELECT analysis_id AS analysisId,title,language,status,
+      error_code AS errorCode,published_document_id AS publishedDocumentId,created_at AS createdAt,updated_at AS updatedAt
+    FROM legal_corpus_owner_upload_requests WHERE environment=?
+    ORDER BY created_at DESC,id DESC LIMIT 25`).bind(authenticated.environment).all<{
+    analysisId: string; title: string; language: string; status: string; errorCode: string | null;
+    publishedDocumentId: string | null; createdAt: string; updatedAt: string;
+  }>();
   await appendAdminDomainAudit(authenticated.db, {
     environment: authenticated.environment,
     principal: authenticated.principal,
@@ -313,7 +322,7 @@ async function legalCorpusDashboard(request: Request, env: AdminInternalEnv): Pr
       failedDocuments: dashboard.totals.failedDocuments,
     },
   });
-  return noStore(dashboard);
+  return noStore({ ...dashboard, ownerUploads: ownerUploads.results });
 }
 
 async function legalCorpusAction(request: Request, env: AdminInternalEnv): Promise<Response> {
@@ -360,6 +369,93 @@ async function legalCorpusAction(request: Request, env: AdminInternalEnv): Promi
     if (error.code === "LEGAL_CORPUS_ADMIN_DISABLED") return noStore({ code: error.code }, 423);
     if (error.code === "LEGAL_CORPUS_ADMIN_INVALID") return noStore({ code: error.code }, 400);
     return noStore({ code: error.code }, 409);
+  }
+}
+
+async function legalCorpusUpload(request: Request, env: AdminInternalEnv): Promise<Response> {
+  const authenticated = await requirePrincipal(request, env);
+  if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "legal.corpus.manage")) {
+    return noStore({ code: "ACCESS_DENIED" }, 403);
+  }
+  if (!env.BUCKET || !env.QUARANTINE_BUCKET || env.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST !== "true") {
+    return noStore({ code: "OWNER_UPLOAD_DISABLED" }, 423);
+  }
+  const sizeBytes = Number(request.headers.get("content-length"));
+  if (!Number.isSafeInteger(sizeBytes) || sizeBytes < 1 || sizeBytes > 20 * 1024 * 1024) {
+    return noStore({ code: "OWNER_UPLOAD_INVALID" }, 413);
+  }
+  const fileName = decodeBase64UrlHeader(request.headers.get("x-juro-file-name"), 240);
+  const title = decodeBase64UrlHeader(request.headers.get("x-juro-owner-title"), 300);
+  const reason = decodeBase64UrlHeader(request.headers.get("x-juro-owner-reason"), 500);
+  const mimeType = request.headers.get("content-type")?.split(";", 1)[0]?.trim().toLocaleLowerCase() ?? "";
+  const language = request.headers.get("x-juro-owner-language");
+  const idempotencyKey = request.headers.get("idempotency-key") ?? "";
+  if (!fileName || !title || !reason
+    || !["ru", "uz-Latn", "uz-Cyrl", "en"].includes(language ?? "")
+    || request.headers.get("x-juro-rights-confirmed") !== "true") {
+    return noStore({ code: "OWNER_UPLOAD_INVALID" }, 400);
+  }
+  const bytes = new Uint8Array(await request.arrayBuffer());
+  if (bytes.byteLength !== sizeBytes) return noStore({ code: "OWNER_UPLOAD_INVALID" }, 400);
+  const now = new Date();
+  const assignments = await authenticated.db.prepare(`SELECT id FROM platform_staff_assignments
+    WHERE user_id=? AND role IN ('administrator','legal_reviewer') AND revoked_at IS NULL
+      AND granted_at<=? AND expires_at>? ORDER BY CASE role WHEN 'administrator' THEN 0 ELSE 1 END,granted_at DESC,id`)
+    .bind(authenticated.principal.userId, now.toISOString(), now.toISOString()).all<{ id: string }>();
+  try {
+    const result = await createOwnerCorpusUpload({
+      env: {
+        APP_ENV: authenticated.environment,
+        DB: authenticated.db,
+        BUCKET: env.BUCKET,
+        QUARANTINE_BUCKET: env.QUARANTINE_BUCKET,
+        LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST: env.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST,
+      },
+      staff: {
+        userId: authenticated.principal.userId,
+        sessionId: authenticated.principal.sessionId,
+        assignmentIds: assignments.results.map((item) => item.id),
+        mfaVerifiedAt: authenticated.principal.sourceMfaVerifiedAt,
+      },
+      idempotencyKey,
+      fileName,
+      mimeType,
+      bytes,
+      title,
+      language: language as "ru" | "uz-Latn" | "uz-Cyrl" | "en",
+      rightsConfirmed: true,
+      reason,
+      now,
+    });
+    await appendAdminDomainAudit(authenticated.db, {
+      environment: authenticated.environment,
+      principal: authenticated.principal,
+      action: "legal_corpus_owner_upload_created",
+      entityType: "document_analysis",
+      entityId: result.analysisId,
+      metadata: { sizeBytes, mimeType, status: result.status, replay: result.replay },
+      now,
+    });
+    return noStore(result, 202);
+  } catch (error) {
+    if (!(error instanceof OwnerCorpusUploadError)) throw error;
+    const status = error.code === "OWNER_UPLOAD_ACCESS_DENIED" ? 403
+      : error.code === "OWNER_UPLOAD_INVALID" || error.code === "OWNER_UPLOAD_UNSAFE" ? 422
+        : 409;
+    return noStore({ code: error.code }, status);
+  }
+}
+
+function decodeBase64UrlHeader(value: string | null, maxCharacters: number): string | null {
+  if (!value || !/^[A-Za-z0-9_-]{1,1200}$/u.test(value)) return null;
+  try {
+    const normalized = value.replace(/-/gu, "+").replace(/_/gu, "/");
+    const binary = atob(normalized + "=".repeat((4 - normalized.length % 4) % 4));
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    const decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes).trim();
+    return decoded.length >= 1 && decoded.length <= maxCharacters ? decoded : null;
+  } catch {
+    return null;
   }
 }
 
@@ -436,6 +532,7 @@ export async function handleInternalAdminRequest(request: Request, env: AdminInt
   if (url.pathname === "/api/internal/admin/dashboard" && request.method === "GET") return dashboard(request, env);
   if (url.pathname === "/api/internal/admin/legal-corpus" && request.method === "GET") return legalCorpusDashboard(request, env);
   if (url.pathname === "/api/internal/admin/legal-corpus" && request.method === "POST") return legalCorpusAction(request, env);
+  if (url.pathname === "/api/internal/admin/legal-corpus/uploads" && request.method === "POST") return legalCorpusUpload(request, env);
   if (url.pathname === "/api/internal/admin/lawyers" && request.method === "GET") return lawyerProfiles(request, env);
   if (url.pathname === "/api/internal/admin/reviews" && request.method === "GET") return reviews(request, env);
   const moderation = /^\/api\/internal\/admin\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);

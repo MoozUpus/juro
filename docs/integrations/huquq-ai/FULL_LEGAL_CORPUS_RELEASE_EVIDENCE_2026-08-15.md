@@ -1,6 +1,6 @@
 # Full legal corpus foundation release evidence — 2026-08-15
 
-Status: **DEPLOYED INERT — schema and Workers are live; corpus traffic and ingestion remain disabled**.
+Status: **STAGING CORPUS BUILD IN PROGRESS — production corpus remains disabled and release gates are not met**.
 
 This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
@@ -332,6 +332,16 @@ admin type-check and Wrangler staging dry-run passed before deployment. The
 available browser session did not have a fresh admin MFA window, so no
 post-refresh authenticated visual pass is claimed.
 
+After a second stale-form report, the same source was revalidated with the
+admin TypeScript check, the Wrangler staging dry-run and 18 focused
+admin-domain/corpus tests (18/18 passed), then redeployed only to
+`juro-admin-staging` as version
+`4773f017-f9b5-45e5-91eb-3aeab74ed1a9` at 100% staging traffic. DNS resolved
+and the unauthenticated route returned the expected Cloudflare Access redirect.
+Browser automation policy did not permit a post-deploy capture of the protected
+admin hostname, so this record still does not claim an authenticated visual
+pass. Production and DNS were not changed.
+
 The read-only staging snapshot at 2026-08-15 19:04 +05:00 contained 365 ready
 official documents, 8,601 unique current provisions and 19,400 indexed current
 chunks. It contained 521 completed jobs, 2,851 queued/retrying jobs, one
@@ -518,6 +528,69 @@ itself: for every category/language row it independently requires
 ready Qdrant dashboard probe and its exact current/total point counts to the
 benchmark. Disabled, stale, incompatible, missing or count-drifted Qdrant
 health therefore fails the release gate before rollout.
+
+## Quarantined owner upload and delayed publication authorization
+
+The isolated admin console now accepts a direct owner upload of PDF, DOCX,
+TXT, safe HTML, JSON or a bounded ZIP package up to 20 MiB. It no longer asks
+for an analysis ID or an empty technical-reason field on the primary path.
+The browser sends the file only to the isolated admin Worker, which forwards a
+bounded binary request over the existing service binding. The platform writes
+the source only to private quarantine R2, validates MIME plus magic bytes and
+archive/text structure, creates an immutable rights/MFA/assignment
+authorization and queues the existing malware scan. Only a clean scanner
+result can move the object into private primary R2 and queue extraction. The
+admin table exposes status, analysis ID, safe error code and resulting corpus
+document ID; it never returns file text.
+
+Migration `0133_owner_corpus_upload_requests.sql` adds the immutable request
+ledger and three mutation guards. Migration
+`0134_owner_corpus_delayed_publication.sql` replaces only the owner-ingestion
+insert guard so that a long scan/extraction can use the original immutable
+fresh-MFA upload authorization. It does not accept an arbitrary stale MFA:
+the request must match the analysis, file/hash, environment, language, reason,
+actor, session and assignment, and the administrator/legal-reviewer assignment
+must still be active at publication time. Manual publication and withdrawal
+continue to require fresh MFA at the action time.
+
+Staging safety evidence:
+
+- pre-`0133` Time Travel bookmark:
+  `000013a1-00000d3e-000050c8-4774be188ed9b3bd876dc6beabc0ed90`;
+- the complete 868,719,406-byte pre-`0133` export restored locally with
+  SHA-256 `a8c307237aec2cf538fbd3b50540934f3e95d0081b06af681fe956d374ef0e23`,
+  253 tables, 558 non-internal indexes, 343 triggers and 133 migrations;
+  `PRAGMA quick_check` returned `ok` and `foreign_key_check` returned zero rows;
+- the verifier now streams arbitrarily large Wrangler exports rather than
+  reading the whole SQL file into a size-limited JavaScript string;
+- after evidence was recorded, the plaintext SQL and local restore databases
+  were removed from the temporary directory;
+- pre-`0134` bookmark:
+  `000013a2-00000691-000050c8-34a53b1ccae13b7d27c858bce82ee160`;
+- post-`0134` bookmark:
+  `000013a2-0000070b-000050c8-b78dac850d94af66e77a3e86aa53c36e`;
+- postflight listed 135 migrations through `0134`, the request table and all
+  four expected owner-upload/publication triggers; there were zero owner-upload
+  rows before authenticated use.
+
+Focused upload, tenant, quarantine, owner publication and delayed-publication
+tests passed 22/22. Migration safety passed 60/60, including application of all
+migrations with zero FK violations. Platform and admin TypeScript checks and
+the admin staging dry-run passed. The full staging build/deploy published
+platform Worker `a2002289-13f8-44f3-891d-5c95f666fcf8`; isolated admin Worker
+`0b51b249-0a57-4921-a973-2df01ebba538` remains at 100% staging traffic.
+Production Workers, production D1 and DNS were not changed. The in-app browser
+runtime could not navigate the protected hostname under its URL policy, so no
+authenticated post-deploy visual or real-file upload pass is claimed.
+
+The read-only staging sample at 2026-08-15 23:51 +05:00 contained 418
+canonical documents, 830 language variants, 10,527 unique current provisions,
+30,451 current provisions, 30,497 current/indexed chunks and 112 historical
+versions. Checkpoints remained 12 completed and 32 queued. Jobs were 943
+completed, 5,462 queued and two running at the sampled instant. Failure
+evidence contained seven retrying and 13 technically-unavailable rows, with no
+terminal state. This still fails the canonical-document, unique-provision and
+44/44 gates; dense retrieval and final 314-scenario evaluation remain gated.
 
 ## Fail-closed production state
 

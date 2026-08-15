@@ -15,6 +15,8 @@ const RESTRICTED_LAWYER_MARKETPLACE_STATUSES = new Set<string>(["suspended", "bl
 // A moderation form can carry both a 2,000-character redaction and a reason.
 // Keep a bounded server-side limit while allowing both fields plus CSRF encoding.
 const MAX_FORM_BYTES = 8_192;
+const MAX_OWNER_UPLOAD_BYTES = 20 * 1024 * 1024;
+const MAX_OWNER_UPLOAD_FORM_BYTES = MAX_OWNER_UPLOAD_BYTES + 64 * 1024;
 
 type PlatformReply<T> = { response: Response; body: T | null };
 type Dashboard = {
@@ -80,6 +82,10 @@ type LegalCorpusDashboard = {
     reason: string; actorUserId: string; createdAt: string;
   }>;
   integrity: { valid: boolean; checked: number };
+  ownerUploads: Array<{
+    analysisId: string; title: string; language: string; status: string; errorCode: string | null;
+    publishedDocumentId: string | null; createdAt: string; updatedAt: string;
+  }>;
 };
 
 function cookie(request: Request, name: string): string | null {
@@ -185,13 +191,13 @@ async function constantTimeEqual(left: string | null, right: string | null): Pro
   return delta === 0;
 }
 
-async function csrf(request: Request): Promise<boolean> {
+async function csrf(request: Request, maxBytes = MAX_FORM_BYTES): Promise<boolean> {
   const origin = request.headers.get("origin");
   if (!origin || origin !== new URL(request.url).origin) return false;
   const site = request.headers.get("sec-fetch-site");
   if (site !== null && site !== "same-origin") return false;
   const length = Number(request.headers.get("content-length"));
-  if (Number.isFinite(length) && length > MAX_FORM_BYTES) return false;
+  if (Number.isFinite(length) && length > maxBytes) return false;
   const form = await request.clone().formData();
   const field = form.get("_csrf");
   return typeof field === "string" && constantTimeEqual(field, cookie(request, ADMIN_CSRF_COOKIE));
@@ -327,10 +333,12 @@ async function legalCorpus(request: Request, env: Env, session: string, notice?:
     : "";
   const checkpointForms = actionsEnabled ? data.checkpoints.filter((item) => item.canRetry).map((item) => `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="retry_discovery"><input type="hidden" name="checkpointId" value="${escaped(item.id)}"><strong>${escaped(item.categoryKey)} · ${escaped(item.language)}</strong><p class="small">${escaped(item.status)} · ${escaped(item.lastErrorCode ?? "—")}</p>${reason}<button>Повторить checkpoint</button></form>`).join("") : "";
   const failureForms = actionsEnabled ? data.failures.filter((item) => item.canRetry && item.jobId).map((item) => `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="retry_ingestion"><input type="hidden" name="jobId" value="${escaped(item.jobId)}"><strong>${escaped(item.errorCode)}</strong><p class="small">${escaped(item.language ?? "—")} · ${escaped(item.safeMessage)}</p>${reason}<button>Повторить ingestion</button></form>`).join("") : "";
-  const ownerPublish = ownerPublishEnabled ? `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="publish_owner_material"><strong>Добавить материал владельца</strong><p class="small">Завершённый analysis автоматически становится доверенным после malware scan, проверенного OCR и технической валидации. Отдельное юридическое одобрение не требуется; действие требует свежую MFA.</p><label>Analysis ID<input name="analysisId" required maxlength="180" pattern="[A-Za-z0-9:_-]+"></label><label>Workspace ID<input name="workspaceId" required maxlength="180" pattern="[A-Za-z0-9:_-]+"></label><label>Публичное название<input name="title" required minlength="2" maxlength="300"></label><label>Язык<select name="language"><option value="ru">Русский</option><option value="uz-Latn">O‘zbekcha (lotin)</option><option value="uz-Cyrl">Ўзбекча (кирилл)</option><option value="en">English</option></select></label><label><span><input type="checkbox" name="rightsConfirmed" value="true" required> Подтверждаю права на глобальную публикацию материала в JURO.</span></label>${reason}<button>Добавить после технической проверки</button></form>` : "";
+  const ownerUpload = ownerPublishEnabled ? `<form method="post" action="/legal-corpus/uploads" enctype="multipart/form-data">${hidden}<strong>Загрузить материал владельца</strong><p class="small">PDF, DOCX, TXT, HTML, JSON или ZIP до 20 МБ попадает в private quarantine R2, проходит malware scan и безопасное извлечение, затем автоматически индексируется. Отдельного юридического одобрения нет; требуется свежая MFA и подтверждение прав.</p><label>Файл<input type="file" name="material" required accept=".pdf,.docx,.txt,.html,.htm,.json,.zip,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/html,application/json,application/zip"></label><label>Публичное название<input name="title" required minlength="2" maxlength="300"></label><label>Язык<select name="language"><option value="ru">Русский</option><option value="uz-Latn">O‘zbekcha (lotin)</option><option value="uz-Cyrl">Ўзбекча (кирилл)</option><option value="en">English</option></select></label><label><span><input type="checkbox" name="rightsConfirmed" value="true" required> Подтверждаю права на глобальную публикацию материала в JURO.</span></label><button>Загрузить и проверить</button></form>` : "";
+  const ownerPublish = ownerPublishEnabled ? `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="publish_owner_material"><strong>Повторить публикацию завершённого анализа</strong><p class="small">Технический fallback для ранее загруженного analysis, если автоматическая публикация не завершилась. Это не юридическое одобрение; действие требует свежую MFA.</p><label>Analysis ID<input name="analysisId" required maxlength="180" pattern="[A-Za-z0-9:_-]+"></label><label>Workspace ID<input name="workspaceId" required maxlength="180" pattern="[A-Za-z0-9:_-]+"></label><label>Публичное название<input name="title" required minlength="2" maxlength="300"></label><label>Язык<select name="language"><option value="ru">Русский</option><option value="uz-Latn">O‘zbekcha (lotin)</option><option value="uz-Cyrl">Ўзбекча (кирилл)</option><option value="en">English</option></select></label><label><span><input type="checkbox" name="rightsConfirmed" value="true" required> Подтверждаю права на глобальную публикацию материала в JURO.</span></label>${reason}<button>Повторить техническую публикацию</button></form>` : "";
   const ownerWithdraw = data.integrity.valid ? `<form method="post" action="/legal-corpus/actions">${hidden}<input type="hidden" name="action" value="withdraw_owner_material"><strong>Отозвать материал владельца</strong><p class="small">Отзыв доступен даже когда ingestion flags выключены. Материал немедленно исключается из retrieval; исходные immutable версии и audit evidence сохраняются.</p><label>Corpus document ID<input name="documentId" required maxlength="180" pattern="[A-Za-z0-9:_-]+"></label>${reason}<button class="danger">Отозвать материал</button></form>` : "";
   const failures = data.failures.map((item) => `<tr><td><code class="code">${escaped(item.errorCode)}</code></td><td>${escaped(item.language ?? "—")}</td><td>${escaped(item.safeMessage)}</td><td>${escaped(item.retryState)}</td><td>${escaped(item.attemptedAt)}</td></tr>`).join("");
   const events = [...data.events].reverse().map((item) => `<tr><td>${escaped(item.action)}</td><td><code class="code">${escaped(item.targetId ?? item.targetType)}</code></td><td>${escaped(item.reason)}</td><td><code class="code">${escaped(item.actorUserId)}</code></td><td>${escaped(item.createdAt)}</td></tr>`).join("");
+  const ownerUploads = data.ownerUploads.map((item) => `<tr><td>${escaped(item.title)}<br><code class="code">${escaped(item.analysisId)}</code></td><td>${escaped(item.language)}</td><td>${escaped(item.status)}</td><td>${escaped(item.errorCode ?? "—")}</td><td><code class="code">${escaped(item.publishedDocumentId ?? "—")}</code></td><td>${escaped(item.updatedAt)}</td></tr>`).join("");
   const gateNotice = actionsEnabled
     ? `<p class="ok">Управление разрешено: обе corpus feature flags включены, audit-chain валидна.</p>`
     : `<p class="notice">Управление заблокировано. Corpus ingestion остаётся выключенным либо audit-chain не прошла проверку. Просмотр метрик доступен.</p>`;
@@ -348,7 +356,8 @@ async function legalCorpus(request: Request, env: Env, session: string, notice?:
     <section class="panel"><h2>Техническое состояние</h2><p>Lex.uz: <strong>${escaped(data.lexHealth.state)}</strong> · проверено ${escaped(data.lexHealth.checkedAt ?? "—")} · audit ${data.integrity.valid ? "valid" : "invalid"} (${escaped(data.integrity.checked)})</p><p>Qdrant: <strong class="${qdrant.status === "ready" ? "ok" : "warn"}">${escaped(qdrantLabel)}</strong> · configured ${qdrant.configured ? "yes" : "no"} · points ${escaped(qdrant.totalPoints ?? "—")} / current ${escaped(qdrant.currentPoints ?? "—")} · проверено ${escaped(qdrant.checkedAt)}${qdrant.errorCode ? ` · <code class="code warn">${escaped(qdrant.errorCode)}</code>` : ""}</p><section class="metrics">${metrics}</section></section>
     <section class="panel"><h2>Feature flags</h2><div class="flags">${flags}</div></section>
     <section class="panel"><h2>Покрытие по категориям и языкам</h2><p class="small">Complete означает: checkpoint завершён, ожидаемое и фактически обнаруженное количества совпали, а каждый обнаруженный документ либо индексирован, либо имеет подтверждённый статус technically_unavailable.</p><div class="scroll"><table class="compact"><thead><tr><th>Категория / язык</th><th>Найдено</th><th>Получено</th><th>Разобрано</th><th>Индексировано</th><th>Недоступно</th><th>Ожидается</th><th>Обновлено</th></tr></thead><tbody>${coverage || "<tr><td colspan=\"8\">Checkpoints ещё не созданы.</td></tr>"}</tbody></table></div></section>
-    <section class="panel"><h2>Управление</h2><p class="small">Первичное обнаружение запускается автоматически; пустое поле причины заполнять для него не нужно. Ручной retry остаётся отдельным аудируемым действием. Добавление owner material требует текущего назначения administrator или legal_reviewer, свежую MFA и подтверждение прав; оно не создаёт юридического заключения AI.</p><div class="corpus-actions">${ownerPublish}${ownerWithdraw}${seed}${checkpointForms}${failureForms}</div>${actionsEnabled && !checkpointForms && !failureForms ? "<p>Нет объектов для повторной попытки.</p>" : ""}</section>
+    <section class="panel"><h2>Управление</h2><p class="small">Первичное обнаружение запускается автоматически; пустое поле причины заполнять для него не нужно. Ручной retry остаётся отдельным аудируемым действием. Добавление owner material требует текущего назначения administrator или legal_reviewer, свежую MFA и подтверждение прав; оно не создаёт юридического заключения AI.</p><div class="corpus-actions">${ownerUpload}${ownerPublish}${ownerWithdraw}${seed}${checkpointForms}${failureForms}</div>${actionsEnabled && !checkpointForms && !failureForms ? "<p>Нет объектов для повторной попытки.</p>" : ""}</section>
+    <section class="panel"><h2>Загрузки владельца</h2><p class="small">Статусы отражают фактический async pipeline: quarantine → malware scan → extraction/analysis → публикация. Текст файлов здесь не выводится.</p><div class="scroll"><table><thead><tr><th>Материал / Analysis ID</th><th>Язык</th><th>Статус</th><th>Ошибка</th><th>Corpus document</th><th>Обновлено</th></tr></thead><tbody>${ownerUploads || "<tr><td colspan=\"6\">Загрузок ещё нет.</td></tr>"}</tbody></table></div></section>
     <section class="panel"><h2>Последние технические ошибки</h2><div class="scroll"><table><thead><tr><th>Код</th><th>Язык</th><th>Безопасное сообщение</th><th>Retry state</th><th>Время</th></tr></thead><tbody>${failures || "<tr><td colspan=\"5\">Ошибок нет.</td></tr>"}</tbody></table></div></section>
     <section class="panel"><h2>Неизменяемый журнал корпуса</h2><div class="scroll"><table><thead><tr><th>Действие</th><th>Объект</th><th>Причина</th><th>Actor</th><th>Время</th></tr></thead><tbody>${events || "<tr><td colspan=\"5\">Ручных действий нет.</td></tr>"}</tbody></table></div></section>
   `, { notice, role: "super admin · legal corpus" });
@@ -404,6 +413,68 @@ async function legalCorpusAction(request: Request, env: Env, session: string): P
   return legalCorpus(request, env, session, message);
 }
 
+async function ownerUploadForm(request: Request): Promise<FormData | null> {
+  const origin = request.headers.get("origin");
+  if (!origin || origin !== new URL(request.url).origin) return null;
+  const site = request.headers.get("sec-fetch-site");
+  if (site !== null && site !== "same-origin") return null;
+  const length = Number(request.headers.get("content-length"));
+  if (!Number.isFinite(length) || length < 1 || length > MAX_OWNER_UPLOAD_FORM_BYTES) return null;
+  const form = await request.formData();
+  const field = form.get("_csrf");
+  return typeof field === "string" && await constantTimeEqual(field, cookie(request, ADMIN_CSRF_COOKIE))
+    ? form
+    : null;
+}
+
+async function legalCorpusUpload(request: Request, env: Env, session: string): Promise<Response> {
+  const form = await ownerUploadForm(request);
+  if (!form) {
+    return legalCorpus(request, env, session, "Проверка происхождения, CSRF или лимита загрузки не пройдена.");
+  }
+  const material = form.get("material");
+  const title = form.get("title");
+  const language = form.get("language");
+  const rightsConfirmed = form.get("rightsConfirmed");
+  if (!(material instanceof File) || material.size < 1 || material.size > MAX_OWNER_UPLOAD_BYTES
+    || typeof title !== "string" || title.trim().length < 2 || title.trim().length > 300
+    || (language !== "ru" && language !== "uz-Latn" && language !== "uz-Cyrl" && language !== "en")
+    || rightsConfirmed !== "true") {
+    return legalCorpus(request, env, session, "Проверьте файл до 20 МБ, название, язык и подтверждение прав.");
+  }
+  const bytes = new Uint8Array(await material.arrayBuffer());
+  const result = await platform<{ analysisId?: string; status?: string; code?: string }>(
+    env,
+    "/api/internal/admin/legal-corpus/uploads",
+    {
+      method: "POST",
+      session,
+      headers: {
+        "content-type": material.type || "application/octet-stream",
+        "content-length": String(bytes.byteLength),
+        "idempotency-key": `owner-upload:${crypto.randomUUID()}`,
+        "x-juro-file-name": encodeBase64UrlHeader(material.name),
+        "x-juro-owner-title": encodeBase64UrlHeader(title.trim()),
+        "x-juro-owner-language": language,
+        "x-juro-owner-reason": encodeBase64UrlHeader("Прямая загрузка владельца из защищённой панели JURO."),
+        "x-juro-rights-confirmed": "true",
+      },
+      body: bytes,
+    },
+  );
+  const notice = result.response.ok && result.body?.analysisId
+    ? `Файл помещён в карантин. Analysis ID: ${result.body.analysisId}. Malware scan и индексация выполняются автоматически.`
+    : `Файл не принят: ${result.body?.code ?? `HTTP_${result.response.status}`}.`;
+  return legalCorpus(request, env, session, notice);
+}
+
+function encodeBase64UrlHeader(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/gu, "-").replace(/\//gu, "_").replace(/=+$/gu, "");
+}
+
 async function reviewList(request: Request, env: Env, session: string, notice?: string): Promise<Response> {
   const result = await platform<{ reviews: Review[] }>(env, "/api/internal/admin/reviews?status=pending&limit=50", { session });
   if (!result.response.ok || !result.body) return redirect(`${env.PLATFORM_ORIGIN}/ru/admin/console?reason=admin-session`);
@@ -446,6 +517,7 @@ export default {
       if (request.method === "GET" && url.pathname === "/") return dashboard(request, env, session);
       if (request.method === "GET" && url.pathname === "/legal-corpus") return legalCorpus(request, env, session);
       if (request.method === "POST" && url.pathname === "/legal-corpus/actions") return legalCorpusAction(request, env, session);
+      if (request.method === "POST" && url.pathname === "/legal-corpus/uploads") return legalCorpusUpload(request, env, session);
       if (request.method === "GET" && url.pathname === "/lawyers") return lawyerList(request, env, session);
       if (request.method === "GET" && url.pathname === "/reviews") return reviewList(request, env, session);
       const match = /^\/lawyers\/([0-9a-f-]{36})\/moderate$/.exec(url.pathname);

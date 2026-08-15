@@ -14,7 +14,7 @@ import {
   type ExtractedSection,
 } from "../document-comparison/types";
 import { verifyArchiveBytes } from "./archive-inspector";
-import { validateUploadMagicBytes } from "./upload-pipeline";
+import { validateTextUploadBytes, validateUploadMagicBytes } from "./upload-pipeline";
 
 const ZIP_MIME_TYPE = "application/zip";
 const DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -30,6 +30,10 @@ const memberMimeTypes = new Map([
   ["jpg", "image/jpeg"],
   ["jpeg", "image/jpeg"],
   ["png", "image/png"],
+  ["txt", "text/plain"],
+  ["html", "text/html"],
+  ["htm", "text/html"],
+  ["json", "application/json"],
 ]);
 
 export class PackageExtractionError extends Error {
@@ -206,6 +210,10 @@ export async function readAnalysisPackageMembers(input: {
     }
     if (!validateUploadMagicBytes(mimeType, bytes.subarray(0, 16), bytes.subarray(Math.max(0, bytes.byteLength - 16)))) {
       throw new ComparisonProcessingError("CORRUPT_FILE", "Тип содержимого файла внутри ZIP не соответствует его расширению.");
+    }
+    if ((mimeType === "text/plain" || mimeType === "text/html" || mimeType === "application/json")
+      && !validateTextUploadBytes(mimeType, bytes)) {
+      throw new ComparisonProcessingError("CORRUPT_FILE", "Текстовый файл внутри ZIP повреждён или содержит активный HTML-контент.");
     }
     if (mimeType === DOCX_MIME_TYPE) await verifyArchiveBytes(bytes, mimeType);
     members.push({ name, mimeType, bytes });
