@@ -286,9 +286,11 @@ test("parser distinguishes an explicit Lex alternate-language notice from a brok
   assert.throws(
     () => normalizeLegalSourceHtml({
       html: `<html><body><main id="divCont">
-        <div class="ACT_TITLE lx_elem">Постановление Пленума</div>
-        <div class="ACT_TEXT lx_elem">Настоящее постановление утратило силу.</div>
-        <div class="ACT_TEXT lx_elem">Текст акта приводится на узбекском языке.</div>
+        <div id="divBody">
+          <div class="ACT_TITLE lx_elem">Постановление Пленума</div>
+          <div class="ACT_TEXT lx_elem">Настоящее постановление утратило силу.</div>
+        </div>
+        <div class="COMMENT_FOR_WARNING">Текст акта приводится на узбекском языке.</div>
       </main></body></html>`,
       reference,
       rawContentSha256,

@@ -212,6 +212,16 @@ function collectText(
   return node.childNodes.map((child) => collectText(child, options)).join("");
 }
 
+function collectVisiblePageText(node: Node): string {
+  if (isTextNode(node)) return node.value;
+  if (!isElement(node) && !("childNodes" in node)) return "";
+  if (isElement(node)) {
+    if (SKIPPED_TAGS.has(node.tagName) || isHidden(node)) return "";
+    if (node.tagName === "br") return "\n";
+  }
+  return node.childNodes.map((child) => collectVisiblePageText(child)).join("");
+}
+
 function walkElements(
   root: ParentNode,
   visitor: (element: Element) => void,
@@ -480,9 +490,13 @@ export function normalizeLegalSourceHtml(input: {
   const blocks = collectBlocks(primary, input.reference.sourceKind);
   const plainText = blocks.map((block) => block.text).join("\n\n");
   if (blocks.length === 0 || plainText.length < 200) {
-    const primaryText = removeLegalSourceUiNoise(collectText(primary));
+    // Lex places the authoritative "text is in another language" warning in
+    // a sibling of #divBody on some legacy acts. Inspect the parsed document
+    // only for this fixed notice after the selected legal body is proven too
+    // short; no surrounding page chrome is admitted to the normalized text.
+    const sourceText = normalizeText(collectVisiblePageText(document));
     if (input.reference.sourceKind === "lex"
-      && LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS.some((pattern) => pattern.test(primaryText))) {
+      && LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS.some((pattern) => pattern.test(sourceText))) {
       throw new LegalSourceParserError("LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE");
     }
     throw new LegalSourceParserError("LEGAL_SOURCE_CONTENT_INSUFFICIENT");

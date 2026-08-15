@@ -236,9 +236,11 @@ test("an explicit official alternate-language notice resolves as technically una
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
   const unavailableHtml = `<html><body><main id="divCont">
-    <div class="ACT_TITLE lx_elem">Постановление Пленума</div>
-    <div class="ACT_TEXT lx_elem">Настоящее постановление утратило силу.</div>
-    <div class="ACT_TEXT lx_elem">Текст акта приводится на узбекском языке.</div>
+    <div id="divBody">
+      <div class="ACT_TITLE lx_elem">Постановление Пленума</div>
+      <div class="ACT_TEXT lx_elem">Настоящее постановление утратило силу.</div>
+    </div>
+    <div class="COMMENT_FOR_WARNING">Текст акта приводится на узбекском языке.</div>
   </main></body></html>`;
   try {
     const env = envFor(d1, bucket);
