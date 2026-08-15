@@ -19,6 +19,7 @@ import {
   readLegalCorpusAdminDashboard,
 } from "../legal-corpus/admin-operations";
 import type { LegalCorpusFeatureFlag } from "../legal-corpus/trust";
+import type { QdrantCorpusEnv } from "../legal-corpus/qdrant";
 
 const SESSION_HEADER = "x-juro-admin-session";
 const INTERNAL_TOKEN_HEADER = "x-juro-admin-internal-token";
@@ -45,7 +46,9 @@ type AdminInternalEnv = {
   // admin path remains a valid rollback target.
   ADMIN_CONSOLE_TOKEN?: string;
   WORKER_VERSION?: WorkerVersionMetadata;
-} & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
+} & Partial<Pick<QdrantCorpusEnv,
+  "QDRANT_URL" | "QDRANT_API_KEY" | "QDRANT_COLLECTION" | "QDRANT_SERVICE" | "QDRANT_CONTAINER">>
+  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 export function legalCorpusAdminRuntimeEnv(
   env: AdminInternalEnv,
@@ -65,6 +68,11 @@ export function legalCorpusAdminRuntimeEnv(
     LEGAL_CORPUS_HISTORICAL_ENABLED: env.LEGAL_CORPUS_HISTORICAL_ENABLED,
     LEGAL_CORPUS_DENSE_ENABLED: env.LEGAL_CORPUS_DENSE_ENABLED,
     LEGAL_CORPUS_SHADOW_MODE: env.LEGAL_CORPUS_SHADOW_MODE,
+    QDRANT_URL: env.QDRANT_URL,
+    QDRANT_API_KEY: env.QDRANT_API_KEY,
+    QDRANT_COLLECTION: env.QDRANT_COLLECTION,
+    QDRANT_SERVICE: env.QDRANT_SERVICE,
+    QDRANT_CONTAINER: env.QDRANT_CONTAINER,
   };
 }
 

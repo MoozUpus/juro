@@ -55,6 +55,11 @@ type LegalCorpusDashboard = {
   environment: "development" | "staging" | "production";
   featureFlags: Record<string, boolean>;
   lexHealth: { state: string; checkedAt: string | null; alertCode: string | null };
+  qdrantHealth: {
+    configured: boolean; enabled: boolean;
+    status: "disabled" | "not_configured" | "ready" | "collection_missing" | "incompatible" | "unavailable";
+    totalPoints: number | null; currentPoints: number | null; errorCode: string | null; checkedAt: string;
+  };
   totals: Record<string, number | string | null>;
   coverage: Array<{
     categoryKey: string; language: string; status: string; expectedDocuments: number | null;
@@ -329,9 +334,18 @@ async function legalCorpus(request: Request, env: Env, session: string, notice?:
   const gateNotice = actionsEnabled
     ? `<p class="ok">Управление разрешено: обе corpus feature flags включены, audit-chain валидна.</p>`
     : `<p class="notice">Управление заблокировано. Corpus ingestion остаётся выключенным либо audit-chain не прошла проверку. Просмотр метрик доступен.</p>`;
+  const qdrant = data.qdrantHealth;
+  const qdrantLabel = {
+    disabled: "выключен feature flag",
+    not_configured: "не настроен",
+    ready: "готов",
+    collection_missing: "коллекция отсутствует",
+    incompatible: "несовместимая коллекция",
+    unavailable: "недоступен",
+  }[qdrant.status];
   return page(env.APP_ENV, "Legal Corpus", `
     ${gateNotice}
-    <section class="panel"><h2>Техническое состояние</h2><p>Lex.uz: <strong>${escaped(data.lexHealth.state)}</strong> · проверено ${escaped(data.lexHealth.checkedAt ?? "—")} · audit ${data.integrity.valid ? "valid" : "invalid"} (${escaped(data.integrity.checked)})</p><section class="metrics">${metrics}</section></section>
+    <section class="panel"><h2>Техническое состояние</h2><p>Lex.uz: <strong>${escaped(data.lexHealth.state)}</strong> · проверено ${escaped(data.lexHealth.checkedAt ?? "—")} · audit ${data.integrity.valid ? "valid" : "invalid"} (${escaped(data.integrity.checked)})</p><p>Qdrant: <strong class="${qdrant.status === "ready" ? "ok" : "warn"}">${escaped(qdrantLabel)}</strong> · configured ${qdrant.configured ? "yes" : "no"} · points ${escaped(qdrant.totalPoints ?? "—")} / current ${escaped(qdrant.currentPoints ?? "—")} · проверено ${escaped(qdrant.checkedAt)}${qdrant.errorCode ? ` · <code class="code warn">${escaped(qdrant.errorCode)}</code>` : ""}</p><section class="metrics">${metrics}</section></section>
     <section class="panel"><h2>Feature flags</h2><div class="flags">${flags}</div></section>
     <section class="panel"><h2>Покрытие по категориям и языкам</h2><p class="small">Complete означает: checkpoint завершён и каждый ожидаемый документ либо индексирован, либо имеет подтверждённый статус technically_unavailable.</p><div class="scroll"><table class="compact"><thead><tr><th>Категория / язык</th><th>Найдено</th><th>Получено</th><th>Разобрано</th><th>Индексировано</th><th>Недоступно</th><th>Ожидается</th><th>Обновлено</th></tr></thead><tbody>${coverage || "<tr><td colspan=\"8\">Checkpoints ещё не созданы.</td></tr>"}</tbody></table></div></section>
     <section class="panel"><h2>Управление</h2><p class="small">Первичное обнаружение запускается автоматически; пустое поле причины заполнять для него не нужно. Ручной retry остаётся отдельным аудируемым действием. Добавление owner material требует текущего назначения administrator или legal_reviewer, свежую MFA и подтверждение прав; оно не создаёт юридического заключения AI.</p><div class="corpus-actions">${ownerPublish}${ownerWithdraw}${seed}${checkpointForms}${failureForms}</div>${actionsEnabled && !checkpointForms && !failureForms ? "<p>Нет объектов для повторной попытки.</p>" : ""}</section>

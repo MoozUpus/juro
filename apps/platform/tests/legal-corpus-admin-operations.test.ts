@@ -8,6 +8,7 @@ import {
   LegalCorpusAdminError,
   performLegalCorpusAdminAction,
   readLegalCorpusAdminDashboard,
+  readLegalCorpusQdrantHealth,
   verifyLegalCorpusAdminHistory,
 } from "../lib/legal-corpus/admin-operations";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
@@ -40,6 +41,9 @@ test("admin runtime copies non-enumerable Cloudflare corpus bindings explicitly"
       LEGAL_CORPUS_ENABLED: { value: "true", enumerable: false },
       LEGAL_CORPUS_AUTO_INGEST_ENABLED: { value: "true", enumerable: false },
       LEGAL_CORPUS_DENSE_ENABLED: { value: "false", enumerable: false },
+      QDRANT_URL: { value: "https://qdrant.internal", enumerable: false },
+      QDRANT_API_KEY: { value: "secret", enumerable: false },
+      QDRANT_COLLECTION: { value: "juro_legal_staging", enumerable: false },
     });
     const copied = legalCorpusAdminRuntimeEnv(runtime, d1, "staging");
     assert.equal(copied.DB, d1);
@@ -47,7 +51,82 @@ test("admin runtime copies non-enumerable Cloudflare corpus bindings explicitly"
     assert.equal(copied.LEGAL_CORPUS_ENABLED, "true");
     assert.equal(copied.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
     assert.equal(copied.LEGAL_CORPUS_DENSE_ENABLED, "false");
+    assert.equal(copied.QDRANT_URL, "https://qdrant.internal");
+    assert.equal(copied.QDRANT_API_KEY, "secret");
+    assert.equal(copied.QDRANT_COLLECTION, "juro_legal_staging");
   } finally { sqlite.close(); }
+});
+
+test("admin Qdrant health stays dormant when dense retrieval is disabled", async () => {
+  let calls = 0;
+  const health = await readLegalCorpusQdrantHealth({
+    env: {
+      DB: {} as D1Database,
+      APP_ENV: "staging",
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_DENSE_ENABLED: "false",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_API_KEY: "secret",
+      QDRANT_COLLECTION: "juro_legal_staging",
+      QDRANT_SERVICE: { fetch: async () => { calls += 1; return new Response(); } } as unknown as Fetcher,
+    },
+    now,
+  });
+  assert.deepEqual(health, {
+    configured: true,
+    enabled: false,
+    status: "disabled",
+    totalPoints: null,
+    currentPoints: null,
+    errorCode: null,
+    checkedAt: now.toISOString(),
+  });
+  assert.equal(calls, 0);
+});
+
+test("admin Qdrant health validates the collection and exact point counts", async () => {
+  const requests: Request[] = [];
+  const service = {
+    async fetch(input: RequestInfo | URL, init?: RequestInit) {
+      const request = input instanceof Request ? input : new Request(input, init);
+      requests.push(request);
+      if (request.url.endsWith("/points/count")) {
+        const body = await request.clone().json() as { filter?: unknown };
+        return Response.json({ status: "ok", result: { count: body.filter ? 17 : 23 } });
+      }
+      return Response.json({
+        status: "ok",
+        result: { config: { params: {
+          vectors: { dense: { size: 1536, distance: "Cosine" } },
+          sparse_vectors: { sparse: {} },
+        } } },
+      });
+    },
+  } as unknown as Fetcher;
+  const health = await readLegalCorpusQdrantHealth({
+    env: {
+      DB: {} as D1Database,
+      APP_ENV: "staging",
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_DENSE_ENABLED: "true",
+      QDRANT_URL: "https://qdrant.internal",
+      QDRANT_API_KEY: "secret",
+      QDRANT_COLLECTION: "juro_legal_staging",
+      QDRANT_SERVICE: service,
+    },
+    now,
+  });
+  assert.deepEqual(health, {
+    configured: true,
+    enabled: true,
+    status: "ready",
+    totalPoints: 23,
+    currentPoints: 17,
+    errorCode: null,
+    checkedAt: now.toISOString(),
+  });
+  assert.equal(requests.length, 4);
+  assert.ok(requests.every((request) => request.headers.get("api-key") === "secret"));
 });
 
 test("admin corpus actions are fail-closed behind both ingestion flags", async () => {
@@ -147,6 +226,8 @@ test("dashboard proves coverage from indexed or technically unavailable document
     `);
     const dashboard = await readLegalCorpusAdminDashboard({ env, now });
     assert.equal(dashboard.lexHealth.state, "fresh");
+    assert.equal(dashboard.qdrantHealth.status, "disabled");
+    assert.equal(dashboard.qdrantHealth.enabled, false);
     assert.equal(dashboard.totals.canonicalDocuments, 1);
     assert.equal(dashboard.totals.languageVariants, 1);
     assert.equal(dashboard.totals.uniqueProvisions, 1);

@@ -19,8 +19,15 @@ import {
   promoteCompletedAnalysisToOwnerCorpus,
   withdrawOwnerMaterial,
 } from "./owner-materials";
+import {
+  QdrantCorpusError,
+  QdrantLegalCorpusClient,
+  type QdrantCorpusEnv,
+} from "./qdrant";
 
 type AdminEnv = Pick<Env, "DB"> & Partial<Pick<Env, "BUCKET">> & { APP_ENV?: Env["APP_ENV"] }
+  & Partial<Pick<QdrantCorpusEnv,
+    "QDRANT_URL" | "QDRANT_API_KEY" | "QDRANT_COLLECTION" | "QDRANT_SERVICE" | "QDRANT_CONTAINER">>
   & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 export const legalCorpusAdminActionSchema = z.discriminatedUnion("action", [
@@ -140,10 +147,21 @@ export type LegalCorpusAdminEvent = {
   createdAt: string;
 };
 
+export type LegalCorpusQdrantHealth = {
+  configured: boolean;
+  enabled: boolean;
+  status: "disabled" | "not_configured" | "ready" | "collection_missing" | "incompatible" | "unavailable";
+  totalPoints: number | null;
+  currentPoints: number | null;
+  errorCode: QdrantCorpusError["code"] | null;
+  checkedAt: string;
+};
+
 export type LegalCorpusAdminDashboard = {
   environment: OperationalEnvironment;
   featureFlags: Record<LegalCorpusFeatureFlag, boolean>;
   lexHealth: DirectLegalSourceHealth;
+  qdrantHealth: LegalCorpusQdrantHealth;
   totals: LegalCorpusTotals;
   coverage: LegalCorpusCoverageRow[];
   checkpoints: LegalCorpusCheckpointView[];
@@ -224,6 +242,60 @@ async function recentAdminEvents(
     FROM legal_corpus_admin_events WHERE environment=? ORDER BY created_at DESC,id DESC LIMIT 50)
     ORDER BY createdAt,id`).bind(environment).all<StoredAdminEvent>();
   return result.results;
+}
+
+function hasQdrantConfiguration(env: AdminEnv, environment: OperationalEnvironment): boolean {
+  return Boolean(
+    env.QDRANT_URL?.trim()
+    && env.QDRANT_COLLECTION?.trim()
+    && (environment === "development" || env.QDRANT_API_KEY?.trim())
+    && (env.QDRANT_SERVICE || env.QDRANT_CONTAINER),
+  );
+}
+
+export async function readLegalCorpusQdrantHealth(input: {
+  env: AdminEnv;
+  now?: Date;
+}): Promise<LegalCorpusQdrantHealth> {
+  const environment = operationalEnvironment(input.env.APP_ENV);
+  const enabled = featureEnabled(input.env, "LEGAL_CORPUS_ENABLED")
+    && featureEnabled(input.env, "LEGAL_CORPUS_DENSE_ENABLED");
+  const configured = hasQdrantConfiguration(input.env, environment);
+  const checkedAt = (input.now ?? new Date()).toISOString();
+  const base = { configured, enabled, totalPoints: null, currentPoints: null, checkedAt };
+  // A dashboard read must not wake an otherwise dormant paid Container while
+  // dense retrieval is disabled. The configuration signal is computed only
+  // from binding presence and never exposes a URL, collection name or secret.
+  if (!enabled) return { ...base, status: "disabled", errorCode: null };
+  if (!configured) {
+    return { ...base, status: "not_configured", errorCode: "QDRANT_CONFIGURATION_REJECTED" };
+  }
+  try {
+    const client = new QdrantLegalCorpusClient({
+      APP_ENV: environment,
+      QDRANT_URL: input.env.QDRANT_URL,
+      QDRANT_API_KEY: input.env.QDRANT_API_KEY,
+      QDRANT_COLLECTION: input.env.QDRANT_COLLECTION,
+      QDRANT_SERVICE: input.env.QDRANT_SERVICE,
+      QDRANT_CONTAINER: input.env.QDRANT_CONTAINER,
+    });
+    if (!await client.collectionExists()) {
+      return { ...base, status: "collection_missing", errorCode: null };
+    }
+    await client.assertCompatible();
+    const [totalPoints, currentPoints] = await Promise.all([
+      client.countPoints(),
+      client.countPoints(true),
+    ]);
+    return { ...base, status: "ready", totalPoints, currentPoints, errorCode: null };
+  } catch (error) {
+    const code = error instanceof QdrantCorpusError ? error.code : "QDRANT_REQUEST_FAILED";
+    return {
+      ...base,
+      status: code === "QDRANT_COLLECTION_INCOMPATIBLE" ? "incompatible" : "unavailable",
+      errorCode: code,
+    };
+  }
 }
 
 async function recentOwnerPublicationEvents(
@@ -368,11 +440,13 @@ export async function readLegalCorpusAdminDashboard(input: {
   const events = await recentAdminEvents(input.env.DB, environment);
   const ownerEvents = await recentOwnerPublicationEvents(input.env.DB, environment);
   const lexHealth = await readDirectLegalSourceHealth(input.env.DB, environment, now);
+  const qdrantHealth = await readLegalCorpusQdrantHealth({ env: input.env, now });
   const integrity = await verifyLegalCorpusAdminHistory(input.env.DB, environment);
   return {
     environment,
     featureFlags: flags(input.env),
     lexHealth,
+    qdrantHealth,
     totals: totalsFrom(totals),
     coverage: coverage.results.map((row) => ({
       ...row,
