@@ -182,6 +182,8 @@ test("isolated admin domain owns the corpus surface and rechecks CSRF plus super
   assert.match(internal, /payload\.data\.action === "withdraw_owner_material"/u);
   assert.match(internal, /roles\.includes\("lawyer_moderator"\)/u);
   assert.match(internal, /ownerMaterialMutation \? "legal_reviewer" : "administrator"/u);
+  assert.match(internal, /legal_corpus\.admin\.runtime_flags/u);
+  assert.doesNotMatch(internal, /runtime_flags[\s\S]{0,600}(?:token|question|answer|document)/iu);
   assert.match(worker, /Опубликовать материал владельца/u);
 });
 

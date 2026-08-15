@@ -44,6 +44,7 @@ type AdminInternalEnv = {
   // Keep the existing token accepted during the rollout so the pre-isolation
   // admin path remains a valid rollback target.
   ADMIN_CONSOLE_TOKEN?: string;
+  WORKER_VERSION?: WorkerVersionMetadata;
 } & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
 export function legalCorpusAdminRuntimeEnv(
@@ -274,6 +275,22 @@ async function legalCorpusDashboard(request: Request, env: AdminInternalEnv): Pr
   if (!authenticated || !adminRoleAllows(authenticated.principal.roles, "legal.corpus.manage")) {
     return noStore({ code: "ACCESS_DENIED" }, 403);
   }
+  console.log(JSON.stringify({
+    event: "legal_corpus.admin.runtime_flags",
+    environment: authenticated.environment,
+    workerVersionId: env.WORKER_VERSION?.id ?? null,
+    flags: {
+      corpus: env.LEGAL_CORPUS_ENABLED === "true",
+      liveLexUz: env.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED === "true",
+      autoIngest: env.LEGAL_CORPUS_AUTO_INGEST_ENABLED === "true",
+      multilingual: env.LEGAL_CORPUS_MULTILINGUAL_ENABLED === "true",
+      ownerAutoTrust: env.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST === "true",
+      userAutoTrust: env.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST === "true",
+      historical: env.LEGAL_CORPUS_HISTORICAL_ENABLED === "true",
+      dense: env.LEGAL_CORPUS_DENSE_ENABLED === "true",
+      shadow: env.LEGAL_CORPUS_SHADOW_MODE === "true",
+    },
+  }));
   const dashboard = await readLegalCorpusAdminDashboard({
     env: legalCorpusAdminRuntimeEnv(env, authenticated.db, authenticated.environment),
   });
