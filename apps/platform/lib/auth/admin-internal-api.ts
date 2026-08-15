@@ -18,10 +18,7 @@ import {
   performLegalCorpusAdminAction,
   readLegalCorpusAdminDashboard,
 } from "../legal-corpus/admin-operations";
-import {
-  LEGAL_CORPUS_FEATURE_FLAGS,
-  type LegalCorpusFeatureFlag,
-} from "../legal-corpus/trust";
+import type { LegalCorpusFeatureFlag } from "../legal-corpus/trust";
 
 const SESSION_HEADER = "x-juro-admin-session";
 const INTERNAL_TOKEN_HEADER = "x-juro-admin-internal-token";
@@ -54,14 +51,19 @@ export function legalCorpusAdminRuntimeEnv(
   db: D1Database,
   appEnvironment: AdminDomainEnvironment,
 ): AdminInternalEnv & { DB: D1Database; APP_ENV: AdminDomainEnvironment } {
-  const featureFlags = Object.fromEntries(
-    LEGAL_CORPUS_FEATURE_FLAGS.map((flag) => [flag, env[flag]]),
-  ) as Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
   return {
     DB: db,
     BUCKET: env.BUCKET,
     APP_ENV: appEnvironment,
-    ...featureFlags,
+    LEGAL_CORPUS_ENABLED: env.LEGAL_CORPUS_ENABLED,
+    LEGAL_CORPUS_LIVE_LEXUZ_ENABLED: env.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED,
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: env.LEGAL_CORPUS_AUTO_INGEST_ENABLED,
+    LEGAL_CORPUS_MULTILINGUAL_ENABLED: env.LEGAL_CORPUS_MULTILINGUAL_ENABLED,
+    LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST: env.LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST,
+    LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST: env.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST,
+    LEGAL_CORPUS_HISTORICAL_ENABLED: env.LEGAL_CORPUS_HISTORICAL_ENABLED,
+    LEGAL_CORPUS_DENSE_ENABLED: env.LEGAL_CORPUS_DENSE_ENABLED,
+    LEGAL_CORPUS_SHADOW_MODE: env.LEGAL_CORPUS_SHADOW_MODE,
   };
 }
 
