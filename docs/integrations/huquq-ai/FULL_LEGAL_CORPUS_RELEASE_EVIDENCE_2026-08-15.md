@@ -387,6 +387,61 @@ category/language documents, 557 indexed documents and four confirmed
 technically-unavailable documents. The crawl therefore remains in progress and
 no full-corpus, dense-retrieval or 314-scenario benchmark claim is made.
 
+## Private staging dense control plane and bounded ingestion redrive
+
+Commit `8f40361252c6a4b162f98f0467f1afa61372b93c` provisioned the
+staging-only dense control plane without activating retrieval. Platform Worker
+version `f2e932d4-db6e-4732-a9e6-02b460a0730f` owns the provider secret and
+exposes a private embedding relay through a Cloudflare service binding. Corpus
+Worker version `ba4c8b37-49d1-4157-9aaa-e292df422782` reaches Qdrant only
+through `qdrant.internal`; the container has no public route or Internet
+egress. The server-side `QDRANT_API_KEY` exists in both staging Workers but was
+never printed, copied into source control or exposed to the browser.
+
+The Qdrant adapter now creates only the exact configured collection when it is
+absent, with named 1,536-dimensional cosine `dense` and `sparse` vectors. It
+then reads the collection back and refuses to delete or replace an incompatible
+existing collection. Dense payloads must contain exactly 1,536 finite values;
+sparse indices and values are also validated. `LEGAL_CORPUS_DENSE_ENABLED`
+remains `false`, so the container is dormant: no full-corpus backfill, provider
+evaluation cost or user traffic was started.
+
+Commit `c84093300af689a845ef3508fd6848babf83ba90` added a bounded,
+evidence-preserving retry for first-attempt operational ingestion failures and
+deployed corpus Worker version `d61481d9-b876-4418-9d66-c699a4bfd4d2`.
+Staging job `legal-corpus:97da3887b2d44f393113c4d42fc7` for the official
+Uzbek-Cyrillic Lex.uz document `5748890` had failed once with the safe generic
+code `LEGAL_CORPUS_INGESTION_FAILED`. The new Worker reconciled the retained
+failure row to `retrying`, claimed the same job without creating a duplicate
+and completed it on attempt 2 at `2026-08-15T16:06:02.669Z`; its job error was
+cleared. The source was not replaced, translated or fabricated.
+
+Exact-head GitHub Actions CI run
+[31894381639](https://github.com/MoozUpus/juro/actions/runs/31894381639)
+passed both application jobs on `c84093300af689a845ef3508fd6848babf83ba90`.
+Qdrant gate run
+[31894381637](https://github.com/MoozUpus/juro/actions/runs/31894381637)
+passed on the same head. It created dense and sparse vectors, verified all three
+query modes, downloaded a 118,784-byte snapshot with SHA-256
+`ae1665b90e5b51919f7a8ab2fd88dd8a58d884c113b32be2c5dd8a96ac308c78`,
+deleted the collection, restored the snapshot and verified 3/3 points plus the
+same hybrid first result. Artifact `qdrant-snapshot-gate-31894381637` has ID
+`9249386130` and is retained for 30 days.
+
+The read-only staging snapshot at 2026-08-15 21:08 +05:00 contained 418
+canonical documents, 636 language variants, 9,999 unique current provisions,
+24,637 current provisions and 24,683 current/indexed chunks. Jobs were 699
+completed, 3,871 queued, one running at the sampled instant and zero failed or
+dead-letter jobs. Failure evidence contained zero terminal rows and 13
+technically-unavailable rows representing the four previously documented
+legacy Russian routes. Checkpoints remained 12 completed and 32 queued.
+Applying the exact admin formula produced 7/44 release-complete checkpoints,
+2,891 expected category/language documents, 3,411 discovered source entries,
+636 indexed language variants and four confirmed technically-unavailable
+documents. The chunk floor alone is exceeded; the canonical-document,
+unique-provision and 44/44 checkpoint gates are not, so no full-corpus,
+dense-retrieval or final 314-scenario benchmark claim is made.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
