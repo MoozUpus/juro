@@ -30,6 +30,12 @@ declared 1,536-dimensional Qdrant schema, and exactly 314 individually reviewed
 scenarios. It also enforces recall, exactness, abstention, partial-answer,
 groundedness, latency, pricing and invalid/stale-source thresholds.
 
+Corpus size is fail-closed as well: the evidence must contain at least 1,283
+canonical documents, 20,296 unique provisions and 22,513 indexed chunks. These
+values are pinned to the audited Huquq AI commit and the owner's reserve floor;
+language completeness is not inferred from multiplication and is instead
+proved by the 44 independent checkpoints.
+
 These values are release policy thresholds, not reported product achievements.
 The completed 314-scenario direct-source review is necessary evidence, but it
 does not pass this separate indexed-corpus gate: the staging corpus is still

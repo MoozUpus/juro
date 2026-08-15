@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  LEGAL_CORPUS_BASELINE,
   evaluateLegalCorpusReleaseEvidence,
   legalCorpusReleaseEvidenceSchema,
   type LegalCorpusReleaseEvidence,
@@ -34,13 +35,13 @@ function validEvidence(): LegalCorpusReleaseEvidence {
       },
       lexHealth: { state: "fresh" },
       totals: {
-        canonicalDocuments: 1_200,
+        canonicalDocuments: 1_283,
         languageVariants: 2_400,
-        uniqueProvisions: 20_000,
-        currentProvisions: 20_000,
-        currentChunks: 22_000,
-        indexedChunks: 22_000,
-        activeDocuments: 1_100,
+        uniqueProvisions: 20_296,
+        currentProvisions: 20_296,
+        currentChunks: 22_513,
+        indexedChunks: 22_513,
+        activeDocuments: 1_183,
         repealedDocuments: 100,
         historicalVersions: 3_000,
         documentsFetchedToday: 50,
@@ -111,6 +112,28 @@ test("release gate accepts only complete frozen staging evidence", () => {
   assert.equal(verdict.observed.completeCheckpointCount, 44);
 });
 
+test("release gate enforces the pinned Huquq AI and owner reserve corpus floor", () => {
+  assert.deepEqual(LEGAL_CORPUS_BASELINE, {
+    sourceRepository: "toxirerkinov70-commits/huquq-ai",
+    sourceCommit: "1bce500c69b8213373d8ce0b40d56be7d83f6aec",
+    canonicalDocuments: 1_283,
+    uniqueProvisions: 20_296,
+    indexedChunks: 22_513,
+  });
+  const evidence = validEvidence();
+  evidence.dashboard.totals.canonicalDocuments -= 1;
+  evidence.dashboard.totals.uniqueProvisions -= 1;
+  evidence.dashboard.totals.currentProvisions -= 1;
+  evidence.dashboard.totals.currentChunks -= 1;
+  evidence.dashboard.totals.indexedChunks -= 1;
+  const verdict = evaluateLegalCorpusReleaseEvidence(evidence, now);
+  for (const code of [
+    "CANONICAL_DOCUMENT_COUNT_BELOW_BASELINE",
+    "UNIQUE_PROVISION_COUNT_BELOW_BASELINE",
+    "INDEXED_CHUNK_COUNT_BELOW_BASELINE",
+  ]) assert.ok(verdict.failures.includes(code), code);
+});
+
 test("release gate fails closed for the currently empty disabled corpus", () => {
   const evidence = validEvidence();
   evidence.dashboard.featureFlags.LEGAL_CORPUS_ENABLED = false;
@@ -133,8 +156,11 @@ test("release gate fails closed for the currently empty disabled corpus", () => 
     "FEATURE_FLAG_REQUIRED:LEGAL_CORPUS_SHADOW_MODE",
     "CHECKPOINT_COUNT_MISMATCH",
     "CORPUS_EMPTY",
+    "CANONICAL_DOCUMENT_COUNT_BELOW_BASELINE",
     "PROVISIONS_EMPTY",
+    "UNIQUE_PROVISION_COUNT_BELOW_BASELINE",
     "CHUNKS_EMPTY",
+    "INDEXED_CHUNK_COUNT_BELOW_BASELINE",
     "ACTIVE_DOCUMENTS_EMPTY",
     "HISTORICAL_VERSIONS_EMPTY",
   ]) assert.ok(verdict.failures.includes(code), code);

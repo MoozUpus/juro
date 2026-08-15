@@ -11,7 +11,26 @@ export const LEGAL_CORPUS_RELEASE_SCENARIO_COUNT = 314;
 export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
   LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length;
 
+/**
+ * The release floor is the greater of the verified Huquq AI main-branch
+ * corpus at the pinned source commit and the owner's explicit reserve floor.
+ * Keep these values immutable and raise them when a later upstream audit finds
+ * a larger corpus. Language variants are deliberately excluded from a numeric
+ * floor because completeness is proved per discovered category/language
+ * checkpoint instead of assuming that every act exists in four languages.
+ */
+export const LEGAL_CORPUS_BASELINE = Object.freeze({
+  sourceRepository: "toxirerkinov70-commits/huquq-ai",
+  sourceCommit: "1bce500c69b8213373d8ce0b40d56be7d83f6aec",
+  canonicalDocuments: 1_283,
+  uniqueProvisions: 20_296,
+  indexedChunks: 22_513,
+});
+
 export const LEGAL_CORPUS_RELEASE_THRESHOLDS = Object.freeze({
+  minimumCanonicalDocuments: LEGAL_CORPUS_BASELINE.canonicalDocuments,
+  minimumUniqueProvisions: LEGAL_CORPUS_BASELINE.uniqueProvisions,
+  minimumIndexedChunks: LEGAL_CORPUS_BASELINE.indexedChunks,
   recallAt5: 0.9,
   recallAt10: 0.95,
   mrr: 0.85,
@@ -235,10 +254,28 @@ export function evaluateLegalCorpusReleaseEvidence(
     failures.push("TECHNICAL_UNAVAILABILITY_RATE_FAILED");
   }
   if (totals.canonicalDocuments === 0) failures.push("CORPUS_EMPTY");
+  minimum(
+    failures,
+    "CANONICAL_DOCUMENT_COUNT_BELOW_BASELINE",
+    totals.canonicalDocuments,
+    LEGAL_CORPUS_RELEASE_THRESHOLDS.minimumCanonicalDocuments,
+  );
   if (totals.languageVariants < totals.canonicalDocuments) failures.push("LANGUAGE_VARIANT_COUNT_INVALID");
   if (totals.uniqueProvisions === 0 || totals.currentProvisions === 0) failures.push("PROVISIONS_EMPTY");
+  minimum(
+    failures,
+    "UNIQUE_PROVISION_COUNT_BELOW_BASELINE",
+    totals.uniqueProvisions,
+    LEGAL_CORPUS_RELEASE_THRESHOLDS.minimumUniqueProvisions,
+  );
   if (totals.currentChunks === 0) failures.push("CHUNKS_EMPTY");
   if (totals.indexedChunks !== totals.currentChunks) failures.push("CURRENT_CHUNKS_NOT_FULLY_INDEXED");
+  minimum(
+    failures,
+    "INDEXED_CHUNK_COUNT_BELOW_BASELINE",
+    totals.indexedChunks,
+    LEGAL_CORPUS_RELEASE_THRESHOLDS.minimumIndexedChunks,
+  );
   if (totals.activeDocuments === 0) failures.push("ACTIVE_DOCUMENTS_EMPTY");
   if (totals.activeDocuments + totals.repealedDocuments > totals.canonicalDocuments) {
     failures.push("DOCUMENT_STATUS_TOTAL_INVALID");
