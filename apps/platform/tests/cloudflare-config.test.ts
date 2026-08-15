@@ -150,6 +150,14 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
       "true",
     );
+    const stagingCorpusFlags = new Set([
+      "LEGAL_CORPUS_ENABLED",
+      "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
+      "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
+      "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
+      "LEGAL_CORPUS_HISTORICAL_ENABLED",
+      "LEGAL_CORPUS_SHADOW_MODE",
+    ]);
     for (const flag of [
       "LEGAL_CORPUS_ENABLED",
       "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
@@ -161,7 +169,14 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       "LEGAL_CORPUS_DENSE_ENABLED",
       "LEGAL_CORPUS_SHADOW_MODE",
     ]) {
-      assert.equal(config.vars[flag], "false", `${environment} must keep ${flag} fail-closed`);
+      const expected = environment === "staging" && stagingCorpusFlags.has(flag)
+        ? "true"
+        : "false";
+      assert.equal(
+        config.vars[flag],
+        expected,
+        `${environment} must configure ${flag} as ${expected}`,
+      );
     }
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
