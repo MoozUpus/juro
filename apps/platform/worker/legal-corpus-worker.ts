@@ -19,7 +19,11 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const DISCOVERY_PAGES_PER_RUN = 2;
-const INGESTION_JOBS_PER_RUN = 9;
+// Two catalogue pages plus eight ingestion fetches stay below the observed
+// five-minute cron window while the shared 20-second Lex host pacer remains
+// authoritative. A ninth job pushed real staging runs past the next tick and
+// halved effective throughput without increasing source politeness.
+const INGESTION_JOBS_PER_RUN = 8;
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   OPENAI_API_KEY?: string;

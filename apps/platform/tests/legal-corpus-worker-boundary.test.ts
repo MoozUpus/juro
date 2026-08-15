@@ -143,6 +143,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /runNextLexCatalogDiscoveryPage/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
+  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 8;/u);
 });
 
 test("dedicated Worker is route-free, production-fail-closed and staging-bounded", () => {

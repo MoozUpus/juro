@@ -13,7 +13,7 @@ inert until a separate server-side feature flag and infrastructure are approved.
 | Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; at most two robots-aware GET/POST pages per scheduler lease |
 | Lex metadata monitor | Discover bounded official RSS metadata | Existing robots-aware monitor, no source text stored |
 | Corpus job ledger | Idempotent queued/fetch/retry state | D1; identifiers and official URLs only |
-| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most nine sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
+| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most eight sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
@@ -98,7 +98,7 @@ metadata monitor. The five-minute processing slot also idempotently creates
 missing catalog checkpoints before claiming work, so a fresh environment does
 not depend on a manual admin form. It then holds the single
 `legal-corpus-worker` D1 lease for the whole batch. A batch processes at most
-two catalog pages and nine ingestion jobs sequentially. Every real Lex request,
+two catalog pages and eight ingestion jobs sequentially. Every real Lex request,
 including `robots.txt`, first claims a host-wide D1 time window; the observed
 `Crawl-delay` is cached for the Worker run and persisted for later runs. The
 seven-minute lease prevents the next five-minute cron from starting a second
