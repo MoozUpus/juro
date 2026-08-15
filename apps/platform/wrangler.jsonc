@@ -213,7 +213,8 @@
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
         "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
         "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-6",
-        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6"
+        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6",
+        "QDRANT_COLLECTION": "juro_legal_staging"
       },
       "d1_databases": [
         {
@@ -227,6 +228,10 @@
         {
           "tag": "v1-malware-scanner-container",
           "new_sqlite_classes": ["MalwareScannerContainer"]
+        },
+        {
+          "tag": "v2-staging-legal-corpus-qdrant",
+          "new_sqlite_classes": ["LegalCorpusQdrantContainer"]
         }
       ],
       "durable_objects": {
@@ -234,6 +239,10 @@
           {
             "name": "MALWARE_SCANNER_CONTAINER",
             "class_name": "MalwareScannerContainer"
+          },
+          {
+            "name": "QDRANT_CONTAINER",
+            "class_name": "LegalCorpusQdrantContainer"
           }
         ]
       },
@@ -242,6 +251,13 @@
           "name": "juro-staging-malware-scanner",
           "class_name": "MalwareScannerContainer",
           "image": "docker.io/clamav/clamav@sha256:4de20bd9ab45a4b763c5412b769217ef5082572ebc8a63aff1a77943419e5dd8",
+          "instance_type": "standard-1",
+          "max_instances": 1
+        },
+        {
+          "name": "juro-staging-legal-corpus-qdrant",
+          "class_name": "LegalCorpusQdrantContainer",
+          "image": "docker.io/qdrant/qdrant@sha256:da65a06bc75e42702f80c992b99c5144b0fbd675ae7a96d2991de0bf957b7071",
           "instance_type": "standard-1",
           "max_instances": 1
         }

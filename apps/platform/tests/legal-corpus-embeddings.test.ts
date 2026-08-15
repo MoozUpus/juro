@@ -101,3 +101,43 @@ test("legal corpus embedding provider validates dimensions and records system us
     sqlite.close();
   }
 });
+
+test("isolated corpus Worker can relay embeddings without receiving the OpenAI secret", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const requests: Request[] = [];
+  let directCalls = 0;
+  try {
+    const service = {
+      async fetch(input: RequestInfo | URL, init?: RequestInit) {
+        const request = input instanceof Request ? input : new Request(input, init);
+        requests.push(request);
+        return Response.json({
+          object: "list",
+          model: "text-embedding-3-large",
+          data: [{ object: "embedding", index: 0, embedding: Array.from({ length: 1536 }, () => 0.02) }],
+          usage: { prompt_tokens: 3, total_tokens: 3 },
+        });
+      },
+    } as unknown as Fetcher;
+    const provider = new OpenAiLegalCorpusEmbeddingProvider({
+      APP_ENV: "staging",
+      DB: d1,
+      EMBEDDING_MODEL: "text-embedding-3-large",
+      LEGAL_CORPUS_EMBEDDING_SERVICE: service,
+    }, async () => {
+      directCalls += 1;
+      return new Response();
+    });
+    const vectors = await provider.embed(["Mehnat kodeksi"], { feature: "legal_corpus_indexing" });
+    assert.equal(vectors[0]?.length, 1536);
+    assert.equal(directCalls, 0);
+    assert.equal(requests[0]?.url, "https://embeddings.internal/v1/embeddings");
+    assert.equal(requests[0]?.headers.get("authorization"), null);
+    assert.doesNotMatch(await requests[0]!.clone().text(), /secret|api[_-]?key/iu);
+    assert.equal(Number((sqlite.prepare(
+      "SELECT count(*) AS count FROM ai_provider_usage_events WHERE feature='legal_corpus_indexing' AND status='succeeded'",
+    ).get() as { count: number }).count), 1);
+  } finally {
+    sqlite.close();
+  }
+});

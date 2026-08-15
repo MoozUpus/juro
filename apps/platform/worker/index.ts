@@ -19,8 +19,13 @@ import {
   isStagingLegalEvaluationQueue,
 } from "./staging-legal-evaluation-queue";
 import { handleInternalAdminRequest } from "../lib/auth/admin-internal-api";
+import {
+  handleLegalCorpusEmbeddingServiceRequest,
+  handleLegalCorpusQdrantServiceRequest,
+  LegalCorpusQdrantContainer,
+} from "./legal-corpus-private-services";
 
-export { MalwareScannerContainer };
+export { MalwareScannerContainer, LegalCorpusQdrantContainer };
 
 type FrameworkEnv = PlatformJobEnv & {
   AI?: Ai;
@@ -53,6 +58,9 @@ type FrameworkEnv = PlatformJobEnv & {
   ADMIN_INTERNAL_TOKEN?: string;
   ADMIN_CONSOLE_TOKEN?: string;
   ADMIN_CONSOLE?: Fetcher;
+  QDRANT_CONTAINER?: DurableObjectNamespace<LegalCorpusQdrantContainer>;
+  QDRANT_API_KEY?: string;
+  QDRANT_COLLECTION?: string;
 };
 
 type SupportedImageOutputFormat =
@@ -96,6 +104,12 @@ const worker = {
     const url = new URL(request.url);
     if (url.hostname === "malware-scanner.internal") {
       return handleMalwareScannerServiceRequest(request, env);
+    }
+    if (url.hostname === "qdrant.internal") {
+      return handleLegalCorpusQdrantServiceRequest(request, env);
+    }
+    if (url.hostname === "embeddings.internal") {
+      return handleLegalCorpusEmbeddingServiceRequest(request, env);
     }
     // Keep the existing custom domain on the production platform Worker while
     // moving the admin UI and its host-only session cookie into the isolated

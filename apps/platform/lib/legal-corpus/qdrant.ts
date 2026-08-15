@@ -14,6 +14,7 @@ export type QdrantCorpusEnv = {
   QDRANT_URL?: string;
   QDRANT_API_KEY?: string;
   QDRANT_COLLECTION?: string;
+  QDRANT_SERVICE?: Fetcher;
 };
 
 export type QdrantSparseVector = {
@@ -160,7 +161,7 @@ async function request(
   const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   let response: Response;
   try {
-    response = await fetchImpl(endpoint(env, suffix), {
+    const requestInit: RequestInit = {
       ...init,
       redirect: "error",
       signal: timeout,
@@ -169,7 +170,10 @@ async function request(
         ...(env.QDRANT_API_KEY ? { "api-key": env.QDRANT_API_KEY } : {}),
         ...init.headers,
       },
-    });
+    };
+    response = env.QDRANT_SERVICE
+      ? await env.QDRANT_SERVICE.fetch(new Request(endpoint(env, suffix), requestInit))
+      : await fetchImpl(endpoint(env, suffix), requestInit);
   } catch {
     throw new QdrantCorpusError("QDRANT_REQUEST_FAILED", true);
   }

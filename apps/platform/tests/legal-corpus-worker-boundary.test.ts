@@ -93,6 +93,25 @@ test("seed schedule is locked, idempotent, bounded and leaves a completed run", 
   assert.equal(scheduled.noRetryCalls(), 2);
 });
 
+test("private dense services stay behind service bindings and staging-only flags", () => {
+  const platformWorker = readFileSync(new URL("../worker/index.ts", import.meta.url), "utf8");
+  const privateServices = readFileSync(
+    new URL("../worker/legal-corpus-private-services.ts", import.meta.url),
+    "utf8",
+  );
+  const corpusConfig = readFileSync(new URL("../wrangler.legal-corpus.jsonc", import.meta.url), "utf8");
+  assert.match(platformWorker, /url\.hostname === "qdrant\.internal"/u);
+  assert.match(platformWorker, /url\.hostname === "embeddings\.internal"/u);
+  assert.match(privateServices, /request\.headers\.get\("api-key"\) !== env\.QDRANT_API_KEY/u);
+  assert.match(privateServices, /enableInternet = false/u);
+  assert.match(privateServices, /QDRANT__SERVICE__API_KEY/u);
+  assert.match(corpusConfig, /"binding": "QDRANT_SERVICE"/u);
+  assert.match(corpusConfig, /"binding": "LEGAL_CORPUS_EMBEDDING_SERVICE"/u);
+  const production = corpusConfig.slice(corpusConfig.indexOf('"production"'));
+  assert.doesNotMatch(production, /"binding": "QDRANT_SERVICE"/u);
+  assert.match(production, /"LEGAL_CORPUS_DENSE_ENABLED": "false"/u);
+});
+
 test("process schedule self-seeds a fresh corpus without an admin action", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const scheduled = controller(LEGAL_CORPUS_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 10));

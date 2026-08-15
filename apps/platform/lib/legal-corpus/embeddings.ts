@@ -15,6 +15,7 @@ export type LegalCorpusEmbeddingEnv = {
   DB: D1Database;
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
+  LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher;
 };
 
 export interface LegalCorpusEmbeddingProvider {
@@ -101,7 +102,7 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
   ): Promise<number[][]> {
     const normalized = inputs.map((input) => input.normalize("NFKC").trim());
     if (
-      !this.env.OPENAI_API_KEY?.trim()
+      (!this.env.OPENAI_API_KEY?.trim() && !this.env.LEGAL_CORPUS_EMBEDDING_SERVICE)
       || normalized.length < 1
       || normalized.length > MAX_BATCH
       || normalized.some((input) => input.length < 1 || input.length > MAX_INPUT_CHARS)
@@ -148,12 +149,17 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
 
     let response: Response;
     try {
-      response = await this.fetchImpl("https://api.openai.com/v1/embeddings", {
+      const endpoint = this.env.LEGAL_CORPUS_EMBEDDING_SERVICE
+        ? "https://embeddings.internal/v1/embeddings"
+        : "https://api.openai.com/v1/embeddings";
+      const init: RequestInit = {
         method: "POST",
         redirect: "error",
         signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
         headers: {
-          authorization: `Bearer ${this.env.OPENAI_API_KEY}`,
+          ...(!this.env.LEGAL_CORPUS_EMBEDDING_SERVICE && this.env.OPENAI_API_KEY
+            ? { authorization: `Bearer ${this.env.OPENAI_API_KEY}` }
+            : {}),
           "content-type": "application/json",
         },
         body: JSON.stringify({
@@ -162,7 +168,10 @@ export class OpenAiLegalCorpusEmbeddingProvider implements LegalCorpusEmbeddingP
           dimensions: LEGAL_CORPUS_EMBEDDING_DIMENSIONS,
           encoding_format: "float",
         }),
-      });
+      };
+      response = this.env.LEGAL_CORPUS_EMBEDDING_SERVICE
+        ? await this.env.LEGAL_CORPUS_EMBEDDING_SERVICE.fetch(new Request(endpoint, init))
+        : await this.fetchImpl(endpoint, init);
     } catch {
       await recordFailure("PROVIDER_NETWORK_ERROR");
       throw new LegalCorpusEmbeddingError("LEGAL_CORPUS_EMBEDDING_REQUEST_FAILED", true);

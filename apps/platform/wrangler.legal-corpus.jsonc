@@ -63,7 +63,10 @@
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
         "LEGAL_CORPUS_DENSE_ENABLED": "false",
-        "LEGAL_CORPUS_SHADOW_MODE": "true"
+        "LEGAL_CORPUS_SHADOW_MODE": "true",
+        "QDRANT_URL": "https://qdrant.internal",
+        "QDRANT_COLLECTION": "juro_legal_staging",
+        "EMBEDDING_MODEL": "text-embedding-3-large"
       },
       "triggers": {
         "crons": ["*/5 * * * *", "5 19 * * *"]
@@ -80,6 +83,16 @@
         {
           "binding": "BUCKET",
           "bucket_name": "juro-staging-files"
+        }
+      ],
+      "services": [
+        {
+          "binding": "QDRANT_SERVICE",
+          "service": "juro-platform-staging"
+        },
+        {
+          "binding": "LEGAL_CORPUS_EMBEDDING_SERVICE",
+          "service": "juro-platform-staging"
         }
       ]
     },

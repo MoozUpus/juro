@@ -73,6 +73,33 @@ test("dense queries use only the configured collection, server API key and globa
   assert.doesNotMatch(String(captured.init.body), /test-secret/u);
 });
 
+test("Qdrant requests prefer the private service binding over public fetch", async () => {
+  const serviceRequests: Request[] = [];
+  let directCalls = 0;
+  const service = {
+    async fetch(input: RequestInfo | URL, init?: RequestInit) {
+      const request = input instanceof Request ? input : new Request(input, init);
+      serviceRequests.push(request);
+      return response([{ chunkId: "chunk:service", score: 0.88 }]);
+    },
+  } as unknown as Fetcher;
+  const client = new QdrantLegalCorpusClient({
+    ...configured,
+    QDRANT_URL: "https://qdrant.internal",
+    QDRANT_SERVICE: service,
+  }, async () => {
+    directCalls += 1;
+    return new Response();
+  });
+  assert.deepEqual(await client.queryDense([0.1, 0.2], 3), [
+    { chunkId: "chunk:service", score: 0.88 },
+  ]);
+  assert.equal(directCalls, 0);
+  assert.equal(serviceRequests[0]?.url,
+    "https://qdrant.internal/collections/juro_legal_staging/points/query");
+  assert.equal(serviceRequests[0]?.headers.get("api-key"), "test-secret");
+});
+
 test("collection compatibility requires 1536-dimensional cosine dense plus named sparse vectors", async () => {
   const compatible = new QdrantLegalCorpusClient(configured, async () => Response.json({
     status: "ok",

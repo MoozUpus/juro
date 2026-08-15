@@ -32,6 +32,7 @@ const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
+  LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher;
 };
 
 type ClaimedRun = {
