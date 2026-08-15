@@ -186,6 +186,8 @@ test("isolated admin domain owns the corpus surface and rechecks CSRF plus super
   assert.match(worker, /Добавить материал владельца/u);
   assert.match(worker, /name="reason" value="Автоматический первичный seed из защищённой панели\."/u);
   assert.match(worker, /Причина первичного запуска записывается в защищённый журнал автоматически/u);
+  const seedFormSource = worker.slice(worker.indexOf("const seed ="), worker.indexOf("const checkpointForms"));
+  assert.doesNotMatch(seedFormSource, /\$\{reason\}|textarea name="reason"/u);
 });
 
 test("owner ingestion has an independent deny-by-default flag without a legal approval field", async () => {
