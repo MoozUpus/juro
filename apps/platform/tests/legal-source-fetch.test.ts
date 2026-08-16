@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { strToU8, zipSync } from "fflate";
 import {
   LegalSourceFetchError,
   classifyLegalSourceUrl,
+  fetchLexArchiveRepresentation,
   fetchLexPdfRepresentation,
   fetchLegalSource,
 } from "../lib/legal/source-fetch";
@@ -52,6 +54,13 @@ function pdf(body = "%PDF-1.7\nsynthetic official Lex representation\n"):
   return new Response(body, {
     status: 200,
     headers: { "content-type": "application/pdf" },
+  });
+}
+
+function zip(contentType = "application/zip"): Response {
+  return new Response(zipSync({ "official.pdf": strToU8("%PDF-1.7 synthetic") }), {
+    status: 200,
+    headers: { "content-type": contentType },
   });
 }
 
@@ -305,6 +314,57 @@ test("Lex PDF representation is fetched only from the canonical official endpoin
   assert.deepEqual(
     synthetic.calls.map((call) => call.url),
     ["https://lex.uz/robots.txt", "https://lex.uz/pdffile/42"],
+  );
+});
+
+test("Lex archive representation is same-origin, robots-paced and magic-validated", async () => {
+  const synthetic = sequenceFetch([
+    robots("User-agent: *\nAllow: /\nCrawl-delay: 20\n"),
+    zip("application/octet-stream"),
+  ]);
+  const waits: number[] = [];
+  const result = await fetchLexArchiveRepresentation(
+    "https://lex.uz/docs/6783170",
+    "https://lex.uz/files/6783200.zip",
+    {
+      fetchImpl: synthetic.fetchImpl,
+      wait: async (delayMs) => {
+        waits.push(delayMs);
+      },
+      now: () => new Date("2026-08-16T08:30:00.000Z"),
+    },
+  );
+  assert.equal(result.representationUrl, "https://lex.uz/files/6783200.zip");
+  assert.equal(result.fetchedAt, "2026-08-16T08:30:00.000Z");
+  assert.match(result.contentSha256, /^[0-9a-f]{64}$/u);
+  assert.deepEqual(waits, [20_000]);
+  assert.deepEqual(synthetic.calls.map((call) => call.url), [
+    "https://lex.uz/robots.txt",
+    "https://lex.uz/files/6783200.zip",
+  ]);
+
+  const rejected = sequenceFetch([]);
+  await rejectsCode(
+    () => fetchLexArchiveRepresentation(
+      "https://lex.uz/docs/6783170",
+      "https://evil.example/files/6783200.zip",
+      { fetchImpl: rejected.fetchImpl },
+    ),
+    "LEGAL_SOURCE_URL_REJECTED",
+  );
+  assert.equal(rejected.calls.length, 0);
+
+  const invalidMagic = sequenceFetch([
+    robots(),
+    new Response("not-a-zip", { headers: { "content-type": "application/zip" } }),
+  ]);
+  await rejectsCode(
+    () => fetchLexArchiveRepresentation(
+      "https://lex.uz/docs/6783170",
+      "https://lex.uz/files/6783200.zip",
+      { fetchImpl: invalidMagic.fetchImpl },
+    ),
+    "LEGAL_SOURCE_CONTENT_TYPE_REJECTED",
   );
 });
 

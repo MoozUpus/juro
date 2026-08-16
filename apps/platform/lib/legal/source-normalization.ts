@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { extractDocument } from "../document-comparison/extract";
+import {
+  extractDocument,
+  structureDocument,
+} from "../document-comparison/extract";
 import {
   LegalSourceParserError,
   normalizeLegalSourceHtml,
@@ -353,7 +356,9 @@ async function storeLexPdfRepresentation(
   }
 }
 
-async function normalizeLexPdfRepresentation(input: {
+const PDF_ANTI_COPY_WATERMARK = /Protected\s+by\s+PDF\s+Anti-Copy\s+Free\s*\(Upgrade\s+to\s+Pro\s+Version\s+to\s+Remove\s+the\s+Watermark\)/giu;
+
+export async function normalizeLexPdfRepresentation(input: {
   bytes: Uint8Array;
   reference: ReturnType<typeof classifyLegalSourceUrl>;
   rawContentSha256: string;
@@ -372,14 +377,32 @@ async function normalizeLexPdfRepresentation(input: {
       false,
     );
   }
-  const blocks = extracted.sections.map((section, index) => ({
+  // Some official court PDFs expose only a repeated anti-copy watermark to
+  // text extraction while the legal content remains rendered as inaccessible
+  // glyphs or images.  Such a file must never enter retrieval as if the
+  // watermark were a legal provision.  If useful text remains, rebuild the
+  // sections without the known non-legal overlay.
+  const plainText = extracted.text
+    .replace(PDF_ANTI_COPY_WATERMARK, " ")
+    .replace(/\u00a0/gu, " ")
+    .replace(/[ \t]+/gu, " ")
+    .replace(/[ \t]*\n[ \t]*/gu, "\n")
+    .replace(/\n{3,}/gu, "\n\n")
+    .trim();
+  const meaningfulCharacters = plainText.replace(/[^\p{L}\p{N}]/gu, "").length;
+  const sections = structureDocument(plainText);
+  const blocks = sections.map((section, index) => ({
     index,
     kind: section.heading === section.text ? "heading" as const : "paragraph" as const,
     ...(section.heading === section.text ? { headingLevel: 1 } : {}),
     text: section.text,
   }));
-  const plainText = extracted.text.trim();
-  if (blocks.length === 0 || plainText.length < 200 || plainText.length > 1_000_000) {
+  if (
+    blocks.length === 0
+    || meaningfulCharacters < 24
+    || plainText.length < 200
+    || plainText.length > 1_000_000
+  ) {
     throw new LegalSourceNormalizationError(
       "LEGAL_SOURCE_PDF_EXTRACTION_FAILED",
       false,

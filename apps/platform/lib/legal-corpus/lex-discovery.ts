@@ -23,6 +23,11 @@ export type LexDocumentMetadata = {
   adoptionDate: string | null;
 };
 
+export type LexArchiveRepresentation = {
+  sourceUrl: string;
+  archiveId: string;
+};
+
 export const LEX_CORPUS_CATEGORIES = [
   { key: "laws", searchKind: "nat", query: "sort_id=3975&form_id=3968" },
   { key: "oliy_majlis", searchKind: "oliy", query: "" },
@@ -282,6 +287,33 @@ export function discoverLexDocumentLinks(html: string, baseUrl = LEX_ORIGIN): Le
     result.push(parsed);
   }
   return result;
+}
+
+/**
+ * Finds the immutable ZIP representation linked by a canonical Lex document
+ * page.  The page is source data, not an instruction: only one exact HTTPS
+ * `/files/<number>.zip` URL on the Lex allowlist can leave this parser.
+ */
+export function discoverLexArchiveRepresentation(
+  html: string,
+  baseUrl = LEX_ORIGIN,
+): LexArchiveRepresentation | null {
+  const representations = new Map<string, LexArchiveRepresentation>();
+  const href = /\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/giu;
+  for (const match of html.matchAll(href)) {
+    const candidate = (match[1] ?? match[2] ?? match[3])?.replaceAll("&amp;", "&");
+    if (!candidate) continue;
+    const url = officialLexUrl(candidate, baseUrl);
+    if (!url || url.search || url.hash) continue;
+    const archive = /^\/files\/(?<id>\d+)\.zip$/iu.exec(url.pathname);
+    if (!archive?.groups?.id) continue;
+    const sourceUrl = `${LEX_ORIGIN}/files/${archive.groups.id}.zip`;
+    representations.set(sourceUrl, { sourceUrl, archiveId: archive.groups.id });
+  }
+  if (representations.size > 1) {
+    throw new TypeError("LEGAL_CORPUS_ATTACHMENT_CONFLICT");
+  }
+  return [...representations.values()][0] ?? null;
 }
 
 export function languageVariantsFromLinks(

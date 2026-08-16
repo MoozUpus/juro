@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  discoverLexArchiveRepresentation,
   discoverLexDocumentLinks,
   discoverLexRevisionHistory,
   languageVariantsFromLinks,
@@ -26,6 +27,25 @@ test("Lex discovery deduplicates canonical language variants and ignores off-ori
     { canonicalDocumentId: "lexuz:111189", language: "uz-Latn", sourceUrl: "https://lex.uz/uz/docs/-111189" },
   ]);
   assert.equal(languageVariantsFromLinks("lexuz:111189", links).length, 2);
+});
+
+test("Lex archive representation accepts one exact same-origin numeric ZIP", () => {
+  assert.deepEqual(discoverLexArchiveRepresentation(`
+    <a href="https://evil.example/files/6783200.zip">outside</a>
+    <a href="/files/6783200.zip">Ҳужжат матни PDF шаклда берилган.</a>
+    <a href="/files/not-a-number.zip">invalid</a>
+    <a href="/files/6783200.zip?download=1">query</a>
+  `), {
+    sourceUrl: "https://lex.uz/files/6783200.zip",
+    archiveId: "6783200",
+  });
+  assert.throws(
+    () => discoverLexArchiveRepresentation(`
+      <a href="/files/6783200.zip">one</a>
+      <a href="/files/6783246.zip">two</a>
+    `),
+    /LEGAL_CORPUS_ATTACHMENT_CONFLICT/,
+  );
 });
 
 test("Lex revision discovery keeps only same-document ONDATE history newest first", () => {

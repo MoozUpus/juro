@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { PDFDocument, StandardFonts } from "pdf-lib";
+import PizZip from "pizzip";
 import {
   enqueueOfficialLexCorpusDocument,
   ingestOfficialLexDocument,
@@ -36,6 +38,51 @@ function fetchFor(html: string) {
     if (url.endsWith("/robots.txt")) {
       return new Response("User-agent: *\nAllow: /\n", {
         headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+  };
+}
+
+async function pdfBytes(lines: string[]): Promise<Uint8Array> {
+  const document = await PDFDocument.create();
+  const font = await document.embedFont(StandardFonts.Helvetica);
+  const page = document.addPage([595, 842]);
+  let y = 780;
+  for (const line of lines) {
+    page.drawText(line, { x: 48, y, size: 10, font });
+    y -= 20;
+  }
+  return document.save();
+}
+
+function zipPdf(bytes: Uint8Array): Uint8Array {
+  const zip = new PizZip();
+  zip.file("official.pdf", bytes);
+  return zip.generate({ type: "uint8array", compression: "DEFLATE" });
+}
+
+function archiveBackedHtml(archiveId: string): string {
+  return `<!doctype html><html><body><main id="divCont">
+    <div id="divBody">
+      <div class="lx_elem ACT_TITLE">Судебный акт</div>
+      <div class="lx_elem ACT_TEXT">Текст документа приведён в PDF.</div>
+      <a href="/files/${archiveId}.zip">Ҳужжат матни PDF шаклда берилган.</a>
+    </div>
+  </main></body></html>`;
+}
+
+function fetchForArchive(html: string, archive: Uint8Array) {
+  return async (input: RequestInfo | URL): Promise<Response> => {
+    const url = String(input);
+    if (url.endsWith("/robots.txt")) {
+      return new Response("User-agent: *\nAllow: /\n", {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+    if (/\/files\/\d+\.zip$/u.test(url)) {
+      return new Response(new Uint8Array(archive).buffer, {
+        headers: { "content-type": "application/zip" },
       });
     }
     return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
@@ -95,6 +142,105 @@ test("official Lex ingestion is article-first, immutable and idempotent", async 
       Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_versions").get() as { count: number }).count),
       1,
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a short Lex page indexes its single safe ZIP-backed official PDF", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const legalText = [
+    "OFFICIAL LEGAL ACT",
+    "Article 1 establishes the rights and duties of the parties under applicable law.",
+    "The authorized court reviews the evidence and records a reasoned decision.",
+    "Each party may submit documents, state objections, and use the appeal procedure.",
+    "The decision must identify the facts, applicable provisions, and procedural result.",
+    "This official text remains linked to the canonical Lex document and its source date.",
+  ];
+  try {
+    const archive = zipPdf(await pdfBytes(legalText));
+    const result = await ingestOfficialLexDocument(envFor(d1, bucket), {
+      sourceUrl: "https://lex.uz/docs/6783170",
+      now,
+      fetchImpl: fetchForArchive(archiveBackedHtml("6783200"), archive),
+    });
+    assert.equal(result.status, "indexed");
+    assert.equal(result.provisionCount > 0, true);
+    assert.equal(
+      [...bucket.objects.keys()].some((key) => key.endsWith(".zip")),
+      true,
+    );
+    assert.equal(
+      [...bucket.objects.keys()].some((key) => key.endsWith(".pdf")),
+      true,
+    );
+    const stored = sqlite.prepare(`SELECT raw_object_key AS rawObjectKey,
+      normalized_object_key AS normalizedObjectKey FROM legal_corpus_versions LIMIT 1`).get() as {
+        rawObjectKey: string; normalizedObjectKey: string;
+      };
+    assert.match(stored.rawObjectKey, /\/raw\.html$/u);
+    const normalized = JSON.parse(String(bucket.objects.get(stored.normalizedObjectKey))) as {
+      parser: { name: string }; plainText: string;
+    };
+    assert.equal(normalized.parser.name, "unpdf");
+    assert.match(normalized.plainText, /OFFICIAL LEGAL ACT/u);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a maxed short-page dead letter is re-read once and anti-copy-only PDF becomes unavailable", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const watermark = "Protected by PDF Anti-Copy Free (Upgrade to Pro Version to Remove the Watermark)";
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/6783216",
+      now,
+      correlationId: "legacy-short-page-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=5,max_attempts=5,
+        last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,5,'terminal')`).run(
+      "legacy-short-page", queued.jobId, "lexuz:6783216",
+      "https://lex.uz/docs/6783216", "uz-Cyrl", now.toISOString(),
+      "LEGAL_SOURCE_CONTENT_INSUFFICIENT", "LEGAL_SOURCE_CONTENT_INSUFFICIENT",
+    );
+    const archive = zipPdf(await pdfBytes([watermark, watermark, watermark]));
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchForArchive(archiveBackedHtml("6783246"), archive),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE",
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      max_attempts AS maxAttempts,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; maxAttempts: number; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      attemptCount: 6,
+      maxAttempts: 6,
+      errorCode: "LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE",
+    });
+    const failures = sqlite.prepare(`SELECT error_code AS errorCode,retry_state AS retryState
+      FROM legal_corpus_failures WHERE job_id=? ORDER BY attempted_at,id`).all(queued.jobId) as Array<{
+        errorCode: string; retryState: string;
+      }>;
+    assert.equal(failures.length, 2);
+    assert.equal(failures.every((failure) => failure.retryState === "technically_unavailable"), true);
   } finally {
     sqlite.close();
   }

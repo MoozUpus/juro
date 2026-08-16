@@ -1,14 +1,24 @@
 import {
   LegalSourceFetchError,
+  classifyLegalSourceUrl,
+  fetchLexArchiveRepresentation,
+  fetchLexPdfRepresentation,
   fetchLegalSource,
 } from "../legal/source-fetch";
 import {
   LegalSourceParserError,
   normalizeLegalSourceHtml,
+  type NormalizedLegalSourceSnapshot,
 } from "../legal/source-parser";
+import {
+  LegalSourceNormalizationError,
+  normalizeLexPdfRepresentation,
+} from "../legal/source-normalization";
+import { readAnalysisPackageMembers } from "../document-analysis/package-extractor";
 import { chunkLegalProvision, parseLegalProvisions } from "./provision-parser";
 import {
   discoverLexLanguageVariants,
+  discoverLexArchiveRepresentation,
   discoverLexRevisionHistory,
   lexLanguageFamilyId,
   parseLexDocumentEffectivity,
@@ -32,6 +42,7 @@ import { buildSparseTermEntries, sparseTermsJson } from "./sparse-index";
 
 const MAX_PROVISIONS_PER_VERSION = 8_000;
 const MAX_CHUNKS_PER_VERSION = 16_000;
+const MAX_LEX_REPRESENTATION_BYTES = 20 * 1024 * 1024;
 const WRITE_BATCH_SIZE = 90;
 const RETRYABLE_INTERNAL_ERROR_CODES = new Set([
   "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
@@ -81,6 +92,16 @@ type StoredVersion = {
   validFrom: string | null;
 };
 
+type CorpusRepresentation = {
+  kind: "lex-pdf" | "lex-zip-pdf";
+  sourceUrl: string;
+  contentType: string;
+  containerBytes: Uint8Array;
+  containerSha256: string;
+  pdfBytes: Uint8Array;
+  pdfSha256: string;
+};
+
 export type LegalCorpusIngestionResult = {
   status: "indexed" | "unchanged" | "halted_suspicious_change";
   documentId: string;
@@ -125,6 +146,113 @@ function objectStem(documentId: string, language: LegalCorpusLanguage, hash: str
   return `legal-corpus/lex-uz/${documentId.replaceAll(":", "/")}/${language}/${hash}`;
 }
 
+async function normalizeOfficialLexSource(input: {
+  rawHtml: string;
+  sourceUrl: string;
+  sourceHash: string;
+  canonicalId: string;
+  locale: "ru" | "uz" | "uzc" | "en";
+  now: Date;
+  wait?: (delayMs: number) => Promise<void>;
+  fetchImpl?: FetchLike;
+}): Promise<{
+  normalized: NormalizedLegalSourceSnapshot;
+  representation: CorpusRepresentation | null;
+}> {
+  const reference = classifyLegalSourceUrl(input.sourceUrl);
+  try {
+    return {
+      normalized: normalizeLegalSourceHtml({
+        html: input.rawHtml,
+        reference: {
+          sourceKind: "lex",
+          locale: input.locale,
+          canonicalId: input.canonicalId,
+          canonicalUrl: input.sourceUrl,
+        },
+        rawContentSha256: input.sourceHash,
+      }),
+      representation: null,
+    };
+  } catch (error) {
+    if (!(error instanceof LegalSourceParserError)
+      || error.code !== "LEGAL_SOURCE_CONTENT_INSUFFICIENT") throw error;
+  }
+
+  let representation: CorpusRepresentation;
+  const representationId = reference.canonicalId.replace(/^-/, "");
+  const embeddedPdfPath = `/pdffile/${representationId}`;
+  if (input.rawHtml.includes(embeddedPdfPath)) {
+    const fetched = await fetchLexPdfRepresentation(input.sourceUrl, {
+      fetchImpl: input.fetchImpl,
+      now: () => input.now,
+      wait: input.wait,
+      maxBytes: MAX_LEX_REPRESENTATION_BYTES,
+    });
+    representation = {
+      kind: "lex-pdf",
+      sourceUrl: fetched.representationUrl,
+      contentType: fetched.contentType,
+      containerBytes: fetched.bytes,
+      containerSha256: fetched.contentSha256,
+      pdfBytes: fetched.bytes,
+      pdfSha256: fetched.contentSha256,
+    };
+  } else {
+    const archive = discoverLexArchiveRepresentation(input.rawHtml, input.sourceUrl);
+    if (!archive) throw new TypeError("LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2");
+    const fetched = await fetchLexArchiveRepresentation(
+      input.sourceUrl,
+      archive.sourceUrl,
+      {
+        fetchImpl: input.fetchImpl,
+        now: () => input.now,
+        wait: input.wait,
+        maxBytes: MAX_LEX_REPRESENTATION_BYTES,
+      },
+    );
+    let members: Awaited<ReturnType<typeof readAnalysisPackageMembers>>;
+    try {
+      members = await readAnalysisPackageMembers({
+        bytes: fetched.bytes,
+        mimeType: "application/zip",
+      });
+    } catch {
+      throw new TypeError("LEGAL_CORPUS_ATTACHMENT_INVALID");
+    }
+    if (members.length !== 1 || members[0]?.mimeType !== "application/pdf") {
+      throw new TypeError("LEGAL_CORPUS_ATTACHMENT_LAYOUT_UNSUPPORTED");
+    }
+    const pdfBytes = members[0].bytes;
+    representation = {
+      kind: "lex-zip-pdf",
+      sourceUrl: fetched.representationUrl,
+      contentType: fetched.contentType,
+      containerBytes: fetched.bytes,
+      containerSha256: fetched.contentSha256,
+      pdfBytes,
+      pdfSha256: await sha256(pdfBytes),
+    };
+  }
+
+  try {
+    return {
+      normalized: await normalizeLexPdfRepresentation({
+        bytes: representation.pdfBytes,
+        reference,
+        rawContentSha256: input.sourceHash,
+      }),
+      representation,
+    };
+  } catch (error) {
+    if (error instanceof LegalSourceNormalizationError
+      && error.code === "LEGAL_SOURCE_PDF_EXTRACTION_FAILED") {
+      throw new TypeError("LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE");
+    }
+    throw error;
+  }
+}
+
 function internalErrorCode(error: unknown): string | null {
   if (!(error instanceof TypeError)) return null;
   const message = error.message.trim();
@@ -156,8 +284,9 @@ function retryable(error: unknown): boolean {
 }
 
 function technicallyUnavailable(error: unknown): boolean {
-  return error instanceof LegalSourceParserError
-    && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE";
+  return (error instanceof LegalSourceParserError
+    && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE")
+    || internalErrorCode(error) === "LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE";
 }
 
 function retryAt(now: Date, attempt: number): string {
@@ -320,21 +449,35 @@ async function reconcileRecoverableDeadLetter(
   now: string,
 ): Promise<void> {
   const placeholders = RECOVERABLE_DEAD_LETTER_CODES.map(() => "?").join(",");
-  const stranded = await db.prepare(`SELECT id FROM legal_corpus_ingestion_jobs
-    WHERE status='dead_letter' AND attempt_count<max_attempts
-      AND last_error_code IN (${placeholders})
+  const stranded = await db.prepare(`SELECT id,attempt_count AS attemptCount,
+      max_attempts AS maxAttempts,last_error_code AS lastErrorCode
+    FROM legal_corpus_ingestion_jobs
+    WHERE status='dead_letter' AND (
+      (attempt_count<max_attempts AND last_error_code IN (${placeholders}))
+      OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
+    )
     ORDER BY updated_at ASC,id ASC LIMIT 1
-  `).bind(...RECOVERABLE_DEAD_LETTER_CODES).first<{ id: string }>();
+  `).bind(...RECOVERABLE_DEAD_LETTER_CODES).first<{
+    id: string;
+    attemptCount: number;
+    maxAttempts: number;
+    lastErrorCode: string;
+  }>();
   if (!stranded) return;
   const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
-    SET status='retrying',next_attempt_at=?,updated_at=?
-    WHERE id=? AND status='dead_letter' AND attempt_count<max_attempts
+    SET status='retrying',
+      max_attempts=CASE WHEN attempt_count>=max_attempts THEN attempt_count+1 ELSE max_attempts END,
+      next_attempt_at=?,updated_at=?
+    WHERE id=? AND status='dead_letter' AND (
+      attempt_count<max_attempts OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
+    )
   `).bind(now, now, stranded.id).run();
   if (Number(updated.meta.changes ?? 0) !== 1) return;
   await db.prepare(`UPDATE legal_corpus_failures
     SET retryable=1,retry_state='retrying'
     WHERE job_id=? AND retry_state='terminal'
-      AND error_code IN (${placeholders})
+      AND (error_code IN (${placeholders})
+        OR error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT')
   `).bind(stranded.id, ...RECOVERABLE_DEAD_LETTER_CODES).run();
 }
 
@@ -377,21 +520,28 @@ export async function ingestOfficialLexDocument(
   const documentMetadata = parseLexDocumentMetadata(rawHtml);
   const documentId = await linkedDocumentId(env.DB, languageVariants)
     ?? lexLanguageFamilyId(languageVariants);
-  const normalized = normalizeLegalSourceHtml({
-    html: rawHtml,
-    reference: {
-      sourceKind: "lex",
-      locale: languageToLegacyLocale(currentDocument.language),
-      canonicalId: currentDocument.canonicalDocumentId,
-      canonicalUrl: sourceUrl,
-    },
-    rawContentSha256: sourceHash,
+  const normalizedSource = await normalizeOfficialLexSource({
+    rawHtml,
+    sourceUrl,
+    sourceHash,
+    canonicalId: currentDocument.canonicalDocumentId,
+    locale: languageToLegacyLocale(currentDocument.language),
+    now: input.now ?? new Date(),
+    wait: input.wait,
+    fetchImpl: input.fetchImpl,
   });
+  const { normalized, representation } = normalizedSource;
   const normalizedJson = JSON.stringify(normalized);
   const normalizedHash = await sha256(normalizedJson);
   const versionHash = await sha256(JSON.stringify({
     sourceHash,
     normalizedHash,
+    representation: representation === null ? null : {
+      kind: representation.kind,
+      sourceUrl: representation.sourceUrl,
+      containerSha256: representation.containerSha256,
+      pdfSha256: representation.pdfSha256,
+    },
     status: effectivity.status,
     validFrom: effectivity.validFrom,
     validTo: effectivity.validTo,
@@ -491,10 +641,56 @@ export async function ingestOfficialLexDocument(
   const stem = objectStem(currentDocument.canonicalDocumentId, currentDocument.language, sourceHash);
   const rawObjectKey = `${stem}/raw.html`;
   const normalizedObjectKey = `${stem}/normalized.json`;
+  const representationContainerKey = representation === null
+    ? null
+    : `${stem}/representation/${representation.containerSha256}.${representation.kind === "lex-zip-pdf" ? "zip" : "pdf"}`;
+  const representationPdfKey = representation === null
+    ? null
+    : representation.kind === "lex-pdf"
+      ? representationContainerKey
+      : `${stem}/representation/${representation.pdfSha256}.pdf`;
   await env.BUCKET.put(rawObjectKey, fetched.bytes, {
     httpMetadata: { contentType: fetched.contentType },
-    customMetadata: { sourceSha256: sourceHash, sourceUrl },
+    customMetadata: {
+      sourceSha256: sourceHash,
+      sourceUrl,
+      ...(representation === null ? {} : {
+        representationKind: representation.kind,
+        representationSourceUrl: representation.sourceUrl,
+        representationContainerSha256: representation.containerSha256,
+        representationPdfSha256: representation.pdfSha256,
+      }),
+    },
   });
+  if (representation !== null && representationContainerKey !== null) {
+    await env.BUCKET.put(representationContainerKey, representation.containerBytes, {
+      httpMetadata: { contentType: representation.contentType },
+      customMetadata: {
+        sourceSha256: sourceHash,
+        sourceUrl,
+        representationKind: representation.kind,
+        representationSourceUrl: representation.sourceUrl,
+        representationContainerSha256: representation.containerSha256,
+        representationPdfSha256: representation.pdfSha256,
+      },
+    });
+    if (
+      representation.kind === "lex-zip-pdf"
+      && representationPdfKey !== null
+    ) {
+      await env.BUCKET.put(representationPdfKey, representation.pdfBytes, {
+        httpMetadata: { contentType: "application/pdf" },
+        customMetadata: {
+          sourceSha256: sourceHash,
+          sourceUrl,
+          representationKind: representation.kind,
+          representationSourceUrl: representation.sourceUrl,
+          representationContainerSha256: representation.containerSha256,
+          representationPdfSha256: representation.pdfSha256,
+        },
+      });
+    }
+  }
   await env.BUCKET.put(normalizedObjectKey, normalizedJson, {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
     customMetadata: {
@@ -502,6 +698,14 @@ export async function ingestOfficialLexDocument(
       normalizedSha256: normalizedHash,
       versionSha256: versionHash,
       sourceUrl,
+      ...(representation === null ? {} : {
+        representationKind: representation.kind,
+        representationSourceUrl: representation.sourceUrl,
+        representationContainerSha256: representation.containerSha256,
+        representationPdfSha256: representation.pdfSha256,
+        ...(representationContainerKey ? { representationContainerKey } : {}),
+        ...(representationPdfKey ? { representationPdfKey } : {}),
+      }),
     },
   });
 
