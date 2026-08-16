@@ -71,6 +71,16 @@ function seedSparseChunks(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]):
 test("normalized sparse rows feed Qdrant and gate bounded legacy JSON compaction", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
+    const sparseIndexes = sqlite.prepare("PRAGMA index_list('legal_corpus_sparse_terms')")
+      .all() as Array<{ name: string }>;
+    assert.equal(
+      sparseIndexes.some((index) => index.name === "legal_corpus_sparse_chunk_idx"),
+      true,
+    );
+    assert.equal(
+      sparseIndexes.some((index) => index.name === "legal_corpus_sparse_version_idx"),
+      false,
+    );
     seedSparseChunks(sqlite);
     const loaded = await loadSparseTermEntriesByChunk(d1, ["chunk:0", "chunk:1"]);
     assert.deepEqual(loaded.get("chunk:0"), [{
