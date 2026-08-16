@@ -94,19 +94,19 @@ test("seed schedule is locked, idempotent, bounded and leaves a completed run", 
   assert.equal(scheduled.noRetryCalls(), 2);
 });
 
-test("empty discovery slots are reused without increasing the ten-request run budget", () => {
-  assert.equal(legalCorpusIngestionJobBudget([]), 8);
+test("empty discovery slots are reused without increasing the nine-request run budget", () => {
+  assert.equal(legalCorpusIngestionJobBudget([]), 7);
   assert.equal(legalCorpusIngestionJobBudget([
     { claimed: true, status: "completed" },
     { claimed: true, status: "completed" },
-  ]), 8);
+  ]), 7);
   assert.equal(legalCorpusIngestionJobBudget([
     { claimed: true, status: "completed" },
     { claimed: false, status: "empty" },
-  ]), 9);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "empty" }]), 10);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 8);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 8);
+  ]), 8);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "empty" }]), 9);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 7);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 7);
 });
 
 test("private dense services stay behind service bindings and staging-only flags", () => {
@@ -211,7 +211,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /runNextLegalCorpusQdrantBackfillBatch/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
-  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 8;/u);
+  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 7;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);
 });

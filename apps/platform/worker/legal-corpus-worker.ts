@@ -20,11 +20,12 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const DISCOVERY_PAGES_PER_RUN = 2;
-// Two catalogue pages plus eight ingestion fetches stay below the observed
-// five-minute cron window while the shared 20-second Lex host pacer remains
-// authoritative. A ninth job pushed real staging runs past the next tick and
-// halved effective throughput without increasing source politeness.
-const INGESTION_JOBS_PER_RUN = 8;
+// A real staging run with two catalogue pages plus eight ingestion fetches
+// lasted from 17:55:28.188 to 18:00:28.323 UTC and lost the next cron tick.
+// Seven ingestion jobs keep the shared 20-second Lex host pacer authoritative
+// while leaving enough margin for provider and D1 overhead. Losing one slot is
+// cheaper than periodically losing an entire scheduled invocation.
+const INGESTION_JOBS_PER_RUN = 7;
 // Dense activation happens only after the source queue is frozen. Four
 // 64-chunk batches cap one invocation at eight embedding calls while allowing
 // the complete current corpus to resume from D1 after a Worker restart.
@@ -34,8 +35,8 @@ export function legalCorpusIngestionJobBudget(
   discoveries: readonly { claimed: boolean; status: string }[],
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
-  // discovery does not grant extra source traffic. The maximum remains ten
-  // Lex fetch slots per invocation (2 discovery + 8 ingestion, or 0 + 10), so
+  // discovery does not grant extra source traffic. The maximum remains nine
+  // Lex fetch slots per invocation (2 discovery + 7 ingestion, or 0 + 9), so
   // the shared host pacer and previously measured five-minute bound stay
   // authoritative.
   if (!discoveries.some((result) => result.status === "empty")) return INGESTION_JOBS_PER_RUN;
