@@ -643,6 +643,46 @@ is exceeded, but the canonical-document, unique-provision and 44/44 checkpoint
 gates remain open. Dense backfill, freeze, Qdrant snapshot and the indexed
 314-scenario evaluation therefore remain gated and are not claimed.
 
+## Permanent Lex fetch failure classification remediation
+
+The scheduled staging run that started at 2026-08-16 16:55:45 UTC exposed a
+separate fetch-evidence regression. Five first-attempt `uz-Cyrl` jobs for
+canonical Lex pages `1633162`, `2826514`, `2830312`, `2842473` and `2869373`
+were dead-lettered as `LEGAL_SOURCE_UPSTREAM_UNAVAILABLE` without an HTTP
+status. The fetcher correctly distinguished retryable and non-retryable
+responses internally, but its typed error discarded the concrete response
+status. Corpus ingestion therefore could not distinguish a permanent 4xx gap
+from an unevidenced terminal upstream error.
+
+Commit `4ce13b9192e2b48b7ad3489b61b638635ed4f3a5` preserves the upstream HTTP
+status on the typed fetch error. A concrete non-retryable 4xx is now recorded
+as `technically_unavailable`; 408, 425, 429 and 5xx responses remain bounded
+retries. It also grants old, non-maxed `LEGAL_SOURCE_UPSTREAM_UNAVAILABLE`
+dead letters one bounded parser/fetcher-upgrade redrive so that the current
+Worker can collect the missing evidence. Tests prove both the 404 resolution
+path and 503 retry path. The focused fetch/ingestion suite passed 27/27,
+platform lint and type-check passed, the complete platform suite passed
+186/186, and the staging Worker dry-run passed at 3,649.65 KiB uncompressed /
+803.86 KiB gzip.
+
+Staging legal-corpus Worker version
+`2c0d76dd-430c-420e-bf54-185befbdc7cf` deployed that exact commit. Its first
+scheduled run started at 2026-08-16 17:15:46 UTC and completed at 17:19:53 UTC.
+All five jobs completed on attempt 2/5: four pages produced a current
+`uz-Cyrl` variant with two indexed chunks each, while `1633162` produced the
+specific safe result `LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE` and no variant
+or chunk. A sequential read-only global probe returned zero unresolved
+failures; the job ledger contained 3,077 completed, 15,185 queued, two running
+and no failed or dead-letter jobs at the sampled instant.
+
+The same post-remediation sample contained 1,010 canonical documents, 2,226
+language variants, 13,009 unique current provisions, 45,589 current
+provisions, 45,755 current/indexed chunks and 813 historical versions. All 44
+checkpoint rows exist, but the strict release formula marked only 10 complete:
+13 discovery rows were completed and 31 remained queued. The canonical,
+unique-provision and 44/44 gates therefore remain open. Freeze, dense backfill,
+Qdrant snapshot and the indexed 314-scenario evaluation are still not allowed.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
