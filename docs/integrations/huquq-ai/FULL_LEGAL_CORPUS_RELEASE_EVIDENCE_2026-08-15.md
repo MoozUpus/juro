@@ -683,6 +683,43 @@ checkpoint rows exist, but the strict release formula marked only 10 complete:
 unique-provision and 44/44 gates therefore remain open. Freeze, dense backfill,
 Qdrant snapshot and the indexed 314-scenario evaluation are still not allowed.
 
+## Stale ingestion recovery
+
+A sequential staging read at 2026-08-16 17:30 UTC found one historical
+revision job still marked `running` from 2026-08-15 18:24 UTC even though all
+subsequent corpus scheduler runs had finished. The ingestion schema has no job
+lease or heartbeat, and the claim path previously selected only `queued` and
+`retrying` rows. A Worker interruption could therefore strand a claimed job
+indefinitely without a failure record, contradicting the resumability gate.
+
+Commit `3716bd8211c1bcafe554c67bb7f4b56197b4adcf` adds conservative stale-run
+reconciliation before each ingestion claim. A `running` job is eligible only
+after 15 minutes, wider than the seven-minute scheduler lock and normal source
+timeouts. The update is guarded by the exact prior `updated_at` value so a
+concurrent fresh worker cannot be overwritten. A non-exhausted job returns to
+bounded retry with `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`; a 5/5 job becomes a
+terminal dead letter instead of looping. Focused ingestion/fetch regression
+tests passed 30/30, including stale recovery, fresh-job fencing and exhausted
+terminalization. Lint, type-check and the complete 186/186 platform suite
+passed. The staging Worker dry-run passed at 3,651.05 KiB uncompressed /
+804.14 KiB gzip.
+
+Staging legal-corpus Worker version
+`0a0599fc-6fe6-4cfc-97b3-799f64978254` deployed that exact code. Its first
+scheduled run started at 2026-08-16 17:40:28 UTC and completed at 17:45:23 UTC
+without an error code. It recovered historical revision job
+`legal-version:39a874a47b7175affc667218db1d`, recorded one bounded retryable
+timeout at attempt 1, reclaimed it as attempt 2/5 and completed it. The linked
+`lexuz-family:4542880` `uz-Latn` current variant had 36 indexed chunks. A
+sequential post-run read returned zero jobs older than the 15-minute running
+window and zero unresolved failures.
+
+Exact-head application CI passed the platform and website jobs, including the
+environment and licence gates, and the separate Qdrant snapshot gate passed.
+This recovery changes no production flag, Worker, database or DNS state. It
+does not relax the strict corpus thresholds; freeze and downstream evaluation
+remain gated on the final 44/44 corpus proof.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
