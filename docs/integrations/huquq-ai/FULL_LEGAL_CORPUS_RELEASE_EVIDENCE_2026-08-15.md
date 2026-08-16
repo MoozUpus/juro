@@ -746,6 +746,84 @@ that the tick was retained. Sequential post-run probes returned zero unresolved
 failures and zero stale running jobs. The change does not relax the host crawl
 delay, add concurrency or touch production state.
 
+## Locale-prefixed Lex archive remediation
+
+The staging run that started at 2026-08-16 18:50:28.191 UTC exposed two
+first-attempt `uz-Latn` dead letters for canonical Lex pages `6783170` and
+`6783216`. Both used `LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2`: the short HTML
+correctly stated that the document text was provided as a PDF, but the archive
+parser accepted only a root `/files/<id>.zip` link. A paced read-only browser
+inspection of the two official pages showed that Lex rendered the same
+allowlisted representation shape below its language prefix instead:
+`/uz/files/6783200.zip` and `/uz/files/6783246.zip`. The pages contained no
+alternative legal text representation. The inspection waited 20 seconds
+between the two official-page navigations and transmitted no JURO or user data.
+
+Commit `4d65de7252dd23a466b9a20cf6f35192a217e00c` accepts only the known Lex
+locale prefixes `ru`, `uz`, `uzc` and `en`, preserves the numeric ZIP-only and
+same-origin constraints, and canonicalizes every accepted link back to the
+immutable root `/files/<id>.zip` before the existing robots, pacing, size,
+content-type, ZIP-magic, archive-layout and PDF checks run. Unknown locale
+paths, query strings, fragments, third-party hosts and multiple different
+archives remain fail-closed. The same commit grants non-maxed
+`LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2` jobs one bounded parser-upgrade redrive;
+the redrive remains limited by the existing `max_attempts` ledger.
+
+The focused discovery and ingestion regression suite passed 24/24, including
+locale canonicalization, unknown-locale rejection and the complete automatic
+dead-letter recovery path. Platform lint and type-check passed, the complete
+platform suite passed 186/186 with its bounded build, and artifact validation
+passed. The isolated legal-corpus Worker dry-run measured 3,651.41 KiB
+uncompressed / 804.30 KiB gzip. Staging Worker version
+`85af1d7c-224a-448d-95c8-95447b5e4e3a` was created at
+2026-08-16 19:05:51.322 UTC from that exact commit; no production Worker,
+flag, database or DNS state changed.
+
+The first exact-version scheduled run started at 2026-08-16 19:10:28.306 UTC.
+It recovered both exact jobs from attempt 1 to attempt 2/5. The localized ZIPs
+were now found and fetched, proving the parser defect was removed. Both PDFs
+still lacked safely extractable legal text, so the jobs completed with the
+more specific safe result `LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE` at
+19:11:38.882 UTC and 19:12:25.041 UTC. Each new attempt is recorded as
+`technically_unavailable`; the earlier parser failure remains immutable but is
+marked retrying for audit history. A sequential read-only probe then returned
+zero unresolved failures. No watermark, empty text or navigation content was
+indexed merely to close the gate.
+
+Those two additional robots-paced archive fetches also exposed a scheduling
+boundary that was not visible in the normal one-request-per-job path. The
+`19:10Z` run finished at 19:15:44.686 UTC after 316,379 ms, so the `19:15Z`
+cron tick was not retained. Commit
+`f1508e607e190a75ff7dfb44b83be8d7d681ce7f` adds an authoritative 195,000 ms
+start cutoff to the existing nominal seven-job batch. A job already claimed
+is allowed to finish, but the Worker will not claim another ingestion job once
+the elapsed cutoff is reached. This preserves the shared 20-second Lex host
+pacer and avoids adding concurrency or aborting an in-flight official-source
+request.
+
+The focused scheduled-boundary suite passed 10/10, including the exact
+194,999/195,000 ms boundary and invalid scheduled-time fail-closed cases.
+Platform lint and type-check passed, the complete platform suite passed
+186/186 with its bounded build, and the isolated Worker dry-run measured
+3,652.00 KiB uncompressed / 804.43 KiB gzip. Staging Worker version
+`6f562a21-8a95-43d6-a81e-943168835612` was created at
+2026-08-16 19:23:40.438 UTC from the exact commit. No production Worker,
+feature flag, database or DNS state changed.
+
+The first exact-version run started at 19:25:28.341 UTC and completed
+successfully at 19:29:00.390 UTC in 212,048 ms. The next run then started on
+its scheduled `19:30:28Z` tick at 19:30:28.194 UTC, proving that the scheduler
+slot was retained on the real staging Worker. Sequential read-only probes
+returned zero terminal ingestion jobs, zero stale running jobs and zero
+unresolved failure records. The same sample contained 1,012 ready canonical
+documents, 2,304 current language variants, 13,119 unique current provisions,
+46,122 indexed current chunks and 894 historical versions. Eleven of 44
+category/language checkpoints met the strict release formula; 13 discovery
+rows were completed and `government/ru` was still running at page 456 with
+9,120 documents discovered. The canonical-document, unique-provision and
+44/44 gates therefore remain open; freeze, dense backfill, snapshot and the
+indexed 314-scenario evaluation are not claimed.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
