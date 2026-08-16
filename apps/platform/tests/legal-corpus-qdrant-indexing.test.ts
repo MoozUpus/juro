@@ -49,8 +49,12 @@ function seedVersion(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void
     id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at
   ) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
     "lexuz:42:ru:v2:p0:c0", "lexuz:42:ru:v2:p0", "lexuz:42:ru:v2", 0, 1,
-    "Official provision content", hash,
-    JSON.stringify([{ term: "article", termFrequency: 1, titleFrequency: 2, articleFrequency: 3 }]), now, now,
+    "Official provision content", hash, "[]", now, now,
+  );
+  sqlite.prepare(`INSERT INTO legal_corpus_sparse_terms (
+    term,chunk_id,document_id,version_id,language,term_frequency,title_frequency,article_frequency
+  ) VALUES (?,?,?,?,?,?,?,?)`).run(
+    "article", "lexuz:42:ru:v2:p0:c0", "lexuz:42", "lexuz:42:ru:v2", "ru", 1, 2, 3,
   );
 }
 
@@ -69,8 +73,12 @@ function seedSecondChunk(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): 
     id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,sparse_terms_json,indexed_at,created_at
   ) VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
     "lexuz:42:ru:v2:p1:c0", "lexuz:42:ru:v2:p1", "lexuz:42:ru:v2", 0, 1,
-    "Second official provision", hash,
-    JSON.stringify([{ term: "second", termFrequency: 1, titleFrequency: 1, articleFrequency: 1 }]), now, now,
+    "Second official provision", hash, "[]", now, now,
+  );
+  sqlite.prepare(`INSERT INTO legal_corpus_sparse_terms (
+    term,chunk_id,document_id,version_id,language,term_frequency,title_frequency,article_frequency
+  ) VALUES (?,?,?,?,?,?,?,?)`).run(
+    "second", "lexuz:42:ru:v2:p1:c0", "lexuz:42", "lexuz:42:ru:v2", "ru", 1, 1, 1,
   );
 }
 

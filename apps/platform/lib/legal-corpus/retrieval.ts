@@ -60,7 +60,7 @@ type SparseRow = LegalCorpusRetrievalItem & {
 };
 
 type SparseCandidateRow = SparseRow & {
-  sparseTermsJson: string;
+  sparseLength: number;
   matchedTermsJson: string;
   matchedTermCount: number;
 };
@@ -349,7 +349,10 @@ export async function retrieveLegalCorpus(input: {
       document.provider AS provider,
       document.scope AS scope,document.tenant_id AS tenantId,
       document.owner_user_id AS ownerUserId,document.matter_id AS matterId,
-      chunk.sparse_terms_json AS sparseTermsJson,
+      coalesce((SELECT sum(length_term.term_frequency
+          + length_term.title_frequency + length_term.article_frequency)
+        FROM legal_corpus_sparse_terms AS length_term
+        WHERE length_term.chunk_id=candidate.chunkId),1) AS sparseLength,
       candidate.matchedTermsJson AS matchedTermsJson,
       candidate.matchedTermCount AS matchedTermCount
     FROM candidate_chunks AS candidate
@@ -371,17 +374,7 @@ export async function retrieveLegalCorpus(input: {
   ).all<SparseCandidateRow>();
 
   const candidates = rows.results.filter((row) => scopeAllows(row, scope));
-  const lengths = candidates.map((row) => {
-    try {
-      const entries = JSON.parse(row.sparseTermsJson) as SparseMatchedTerm[];
-      return Math.max(1, entries.reduce((total, entry) => total
-        + Number(entry.termFrequency ?? 0)
-        + Number(entry.titleFrequency ?? 0)
-        + Number(entry.articleFrequency ?? 0), 0));
-    } catch {
-      return 1;
-    }
-  });
+  const lengths = candidates.map((row) => Math.max(1, Number(row.sparseLength ?? 1)));
   const averageLength = lengths.length > 0
     ? lengths.reduce((total, length) => total + length, 0) / lengths.length
     : 1;

@@ -380,7 +380,7 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
       (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,dense_vector_id,sparse_terms_json,indexed_at,created_at)
       VALUES (?,?,?,?,?,?,?,NULL,?,?,?) ON CONFLICT(provision_id,chunk_index) DO NOTHING`).bind(
       chunkId, provisionId, versionId, chunk.chunkIndex, chunk.totalChunks,
-      chunk.chunkText, await sha256Hex(chunk.chunkText), sparse, createdAt, createdAt,
+      chunk.chunkText, await sha256Hex(chunk.chunkText), "[]", createdAt, createdAt,
     ));
     statements.push(input.env.DB.prepare("DELETE FROM legal_corpus_sparse_terms WHERE chunk_id=?").bind(chunkId));
     statements.push(input.env.DB.prepare(`INSERT INTO legal_corpus_sparse_terms

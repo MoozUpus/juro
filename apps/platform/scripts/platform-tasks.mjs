@@ -148,6 +148,7 @@ const coreTestFiles = [
   "tests/legal-source-trust.test.ts",
   "tests/legal-corpus-worker-boundary.test.ts",
   "tests/legal-corpus-retrieval.test.ts",
+  "tests/legal-corpus-sparse-index.test.ts",
   "tests/legal-corpus-embeddings.test.ts",
   "tests/legal-corpus-qdrant.test.ts",
   "tests/legal-corpus-qdrant-indexing.test.ts",

@@ -98,6 +98,9 @@ test("sparse retrieval returns only the current, scope-authorized version", asyn
     assert.ok((sqlite.prepare(
       "SELECT COUNT(*) AS count FROM legal_corpus_sparse_terms",
     ).get() as { count: number }).count > 0);
+    assert.equal((sqlite.prepare(
+      "SELECT sparse_terms_json AS sparseTermsJson FROM legal_corpus_chunks LIMIT 1",
+    ).get() as { sparseTermsJson: string }).sparseTermsJson, "[]");
     assert.equal(assessLegalCorpusCoverage({ query: "статья 25", sources: results }), "good_coverage");
   } finally {
     sqlite.close();

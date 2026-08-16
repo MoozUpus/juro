@@ -13,6 +13,7 @@ import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
 import { createLegalCorpusQdrantSnapshot } from "../lib/legal-corpus/qdrant-snapshots";
 import { createPacedLexFetch } from "../lib/legal-corpus/lex-request-pacer";
 import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance";
+import { compactLegacySparseJsonBatch } from "../lib/legal-corpus/sparse-index";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
 export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
@@ -265,6 +266,9 @@ export async function handleLegalCorpusScheduled(
       }
     }
     const qdrantBackfills: Awaited<ReturnType<typeof runNextLegalCorpusQdrantBackfillBatch>>[] = [];
+    const compactedSparseJsonChunks = ingestionEnabled(env)
+      ? await compactLegacySparseJsonBatch(env.DB)
+      : 0;
     const ingestionClaimed = ingestions.some((result) => result.claimed);
     if (denseBackfillEnabled(env) && !ingestionClaimed) {
       for (let index = 0; index < QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN; index += 1) {
@@ -298,6 +302,7 @@ export async function handleLegalCorpusScheduled(
       ingestionJobs: ingestions.length,
       ingestionClaimed: ingestions.filter((result) => result.claimed).length,
       ingestionStartCutoffReached,
+      compactedSparseJsonChunks,
       qdrantBackfillBatches: qdrantBackfills.filter((result) => result.status === "indexed").length,
       qdrantBackfillChunks: qdrantBackfills.reduce((sum, result) => sum + result.chunkCount, 0),
       qdrantSnapshotStatus: qdrantSnapshot?.status ?? "not_attempted",

@@ -857,6 +857,7 @@ export async function ingestOfficialLexDocument(
       articleNumber: chunk.provision.articleNumber,
       title: chunk.provision.title,
     });
+    const sparseJson = sparseTermsJson(sparseEntries);
     provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_chunks
       (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,dense_vector_id,sparse_terms_json,indexed_at,created_at)
       VALUES (?,?,?,?,?,?,?,NULL,?,?,?)
@@ -864,7 +865,7 @@ export async function ingestOfficialLexDocument(
     `).bind(
       `${provisionId}:c${chunk.chunkIndex}`, provisionId, versionId, chunk.chunkIndex,
       chunk.totalChunks, chunk.text, await sha256(chunk.text),
-      sparseTermsJson(sparseEntries),
+      "[]",
       now, now,
     ));
     // The exportable inverted index is rebuildable from immutable chunks.
@@ -887,7 +888,7 @@ export async function ingestOfficialLexDocument(
         article_frequency=excluded.article_frequency
     `).bind(
       `${provisionId}:c${chunk.chunkIndex}`, documentId, versionId, currentDocument.language,
-      sparseTermsJson(sparseEntries),
+      sparseJson,
     ));
   }
   await runBatches(env.DB, provisionStatements);

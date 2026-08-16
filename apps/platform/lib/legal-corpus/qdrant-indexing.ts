@@ -16,6 +16,10 @@ import {
   type LegalCorpusQdrantSnapshotEnv,
 } from "./qdrant-snapshots";
 import { featureEnabled, type LegalCorpusFeatureFlag, type LegalCorpusLanguage } from "./trust";
+import {
+  loadSparseTermEntriesByChunk,
+  type SparseTermEntry,
+} from "./sparse-index";
 
 const BATCH_SIZE = 32;
 const MAX_VERSION_SYNC_CHUNKS = 16_000;
@@ -39,14 +43,6 @@ type ChunkRow = {
   status: "active" | "repealed" | "historical" | "unknown";
   articleNumber: string | null;
   contentText: string;
-  sparseTermsJson: string;
-};
-
-type SparseEntry = {
-  term: string;
-  termFrequency: number;
-  titleFrequency: number;
-  articleFrequency: number;
 };
 
 export type LegalCorpusQdrantSyncResult = {
@@ -77,14 +73,8 @@ type QdrantSyncOptions = QdrantSyncDependencies & {
   maxChunks?: number;
 };
 
-function sparseWeights(value: string): Array<{ term: string; weight: number }> {
-  let entries: SparseEntry[];
-  try {
-    entries = JSON.parse(value) as SparseEntry[];
-  } catch {
-    throw new TypeError("LEGAL_CORPUS_SPARSE_VECTOR_REJECTED");
-  }
-  if (!Array.isArray(entries) || entries.length > 512) {
+function sparseWeights(entries: readonly SparseTermEntry[]): Array<{ term: string; weight: number }> {
+  if (entries.length === 0 || entries.length > 512) {
     throw new TypeError("LEGAL_CORPUS_SPARSE_VECTOR_REJECTED");
   }
   return entries.map((entry) => ({
@@ -133,8 +123,7 @@ export async function syncLegalCorpusVersionToQdrant(
   const rows = await env.DB.prepare(`
     SELECT chunk.id AS chunkId,document.id AS documentId,variant.id AS variantId,
       version.id AS versionId,provision.language AS language,provision.status,
-      provision.article_number AS articleNumber,chunk.content_text AS contentText,
-      chunk.sparse_terms_json AS sparseTermsJson
+      provision.article_number AS articleNumber,chunk.content_text AS contentText
     FROM legal_corpus_chunks AS chunk
     INNER JOIN legal_corpus_provisions AS provision ON provision.id=chunk.provision_id
     INNER JOIN legal_corpus_versions AS version ON version.id=chunk.version_id
@@ -150,6 +139,10 @@ export async function syncLegalCorpusVersionToQdrant(
   let chunkCount = 0;
   for (let start = 0; start < rows.results.length; start += BATCH_SIZE) {
     const batch = rows.results.slice(start, start + BATCH_SIZE);
+    const sparseEntries = await loadSparseTermEntriesByChunk(
+      env.DB,
+      batch.map((row) => row.chunkId),
+    );
     const vectors = await embeddings.embed(
       batch.map((row) => row.contentText),
       { feature: "legal_corpus_indexing" },
@@ -166,7 +159,7 @@ export async function syncLegalCorpusVersionToQdrant(
       isCurrent: version.isCurrent === 1,
       articleNumber: row.articleNumber,
       dense: vectors[index]!,
-      sparse: await encodeQdrantSparseTerms(sparseWeights(row.sparseTermsJson)),
+      sparse: await encodeQdrantSparseTerms(sparseWeights(sparseEntries.get(row.chunkId) ?? [])),
     })));
     await client.upsert(points);
     await env.DB.batch(await Promise.all(points.map(async (point) => env.DB.prepare(`
