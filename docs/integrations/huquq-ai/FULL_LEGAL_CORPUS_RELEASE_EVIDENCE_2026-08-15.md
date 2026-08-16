@@ -878,6 +878,36 @@ to 331,318,967 bytes. Sequential post-run probes returned zero terminal jobs,
 zero stale running jobs, zero unresolved failures and 68 completed,
 technically-unavailable source outcomes retained for coverage accounting.
 
+Repository-wide query inspection found that the original secondary
+`legal_corpus_sparse_version_idx` on `(version_id, language, document_id)` had
+no runtime consumer. Sparse lookup uses the `(term, chunk_id)` primary key and
+bounded Qdrant export, replacement and cleanup use
+`legal_corpus_sparse_chunk_idx`. Retaining the third index across more than
+4.29 million sparse rows therefore added capacity and write amplification
+without serving a query path.
+
+Commit `144cf8db05853603beaddbbb9b89c45773b00941` adds migration
+`0135_drop_unused_legal_corpus_sparse_version_index.sql` and a schema
+regression that requires the primary key and chunk index while rejecting the
+unused version index. Migration/storage tests passed 61/61, platform lint and
+type-check passed, the full platform suite passed 186/186 and artifact
+validation passed. The staging scheduler completed its preceding run at
+21:18:48.122 UTC before the schema write began. Wrangler applied the single
+pending migration transactionally in 9,240.52 ms and reported no remaining
+migrations. A post-migration index probe returned only the required chunk
+index and SQLite primary-key index.
+
+The measured D1 size fell from 2,561,003,520 to 2,183,397,376 bytes, releasing
+377,606,144 bytes (about 14.7 percent) without removing a corpus row or search
+key. The next bounded scheduler invocation started normally at
+21:20:30.457 UTC and completed without an error at 21:23:50.091 UTC in
+199,634 ms. Its post-run D1 size was 2,181,365,760 bytes. Sequential probes
+returned zero terminal jobs, zero stale running jobs, zero unresolved
+failures and zero chunks missing normalized sparse data. Legacy JSON cleanup
+also continued normally, leaving 80,598 bounded legacy chunks and 322,360,728
+duplicate JSON bytes for subsequent runs. This is a staging-only capacity
+remediation; production migrations and state were not changed.
+
 The Cloudflare maximum used for this capacity gate is documented at
 <https://developers.cloudflare.com/d1/platform/limits/>. No production Worker,
 database, feature flag, DNS record or corpus state changed. This remediation
