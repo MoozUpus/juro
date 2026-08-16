@@ -33,6 +33,7 @@ test("Lex archive representation accepts one exact same-origin numeric ZIP", () 
   assert.deepEqual(discoverLexArchiveRepresentation(`
     <a href="https://evil.example/files/6783200.zip">outside</a>
     <a href="/files/6783200.zip">Ҳужжат матни PDF шаклда берилган.</a>
+    <a href="/uz/files/6783200.zip">localized duplicate</a>
     <a href="/files/not-a-number.zip">invalid</a>
     <a href="/files/6783200.zip?download=1">query</a>
   `), {
@@ -45,6 +46,21 @@ test("Lex archive representation accepts one exact same-origin numeric ZIP", () 
       <a href="/files/6783246.zip">two</a>
     `),
     /LEGAL_CORPUS_ATTACHMENT_CONFLICT/,
+  );
+  assert.deepEqual(
+    discoverLexArchiveRepresentation(
+      '<a href="/ru/files/6783200.zip">localized official PDF</a>',
+    ),
+    {
+      sourceUrl: "https://lex.uz/files/6783200.zip",
+      archiveId: "6783200",
+    },
+  );
+  assert.equal(
+    discoverLexArchiveRepresentation(
+      '<a href="/fr/files/6783200.zip">unknown locale</a>',
+    ),
+    null,
   );
 });
 

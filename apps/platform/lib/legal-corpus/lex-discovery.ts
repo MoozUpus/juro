@@ -291,8 +291,10 @@ export function discoverLexDocumentLinks(html: string, baseUrl = LEX_ORIGIN): Le
 
 /**
  * Finds the immutable ZIP representation linked by a canonical Lex document
- * page.  The page is source data, not an instruction: only one exact HTTPS
- * `/files/<number>.zip` URL on the Lex allowlist can leave this parser.
+ * page. The page is source data, not an instruction: only one exact HTTPS
+ * `/files/<number>.zip` URL on the Lex allowlist can leave this parser. Lex
+ * may render that link below a known locale prefix; those links are
+ * normalized to the immutable root path before fetching.
  */
 export function discoverLexArchiveRepresentation(
   html: string,
@@ -305,7 +307,7 @@ export function discoverLexArchiveRepresentation(
     if (!candidate) continue;
     const url = officialLexUrl(candidate, baseUrl);
     if (!url || url.search || url.hash) continue;
-    const archive = /^\/files\/(?<id>\d+)\.zip$/iu.exec(url.pathname);
+    const archive = /^\/(?:ru\/|uz\/|uzc\/|en\/)?files\/(?<id>\d+)\.zip$/iu.exec(url.pathname);
     if (!archive?.groups?.id) continue;
     const sourceUrl = `${LEX_ORIGIN}/files/${archive.groups.id}.zip`;
     representations.set(sourceUrl, { sourceUrl, archiveId: archive.groups.id });

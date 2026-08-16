@@ -54,6 +54,11 @@ const RECOVERABLE_DEAD_LETTER_CODES = [
   // those bounded jobs once so the current fetcher can classify an explicit
   // missing/restricted source as technically unavailable with evidence.
   "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+  // Earlier Workers accepted only the root `/files/<id>.zip` representation
+  // link. Lex also emits equivalent locale-prefixed links such as
+  // `/uz/files/<id>.zip`; re-read those bounded jobs after parser support is
+  // deployed instead of leaving accessible official PDFs in dead-letter.
+  "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2",
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
 const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";

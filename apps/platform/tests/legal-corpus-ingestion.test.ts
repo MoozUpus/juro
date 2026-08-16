@@ -74,12 +74,13 @@ function zipPdf(bytes: Uint8Array): Uint8Array {
   return zip.generate({ type: "uint8array", compression: "DEFLATE" });
 }
 
-function archiveBackedHtml(archiveId: string): string {
+function archiveBackedHtml(archiveId: string, localePrefix = ""): string {
+  const prefix = localePrefix ? `/${localePrefix}` : "";
   return `<!doctype html><html><body><main id="divCont">
     <div id="divBody">
       <div class="lx_elem ACT_TITLE">Судебный акт</div>
       <div class="lx_elem ACT_TEXT">Текст документа приведён в PDF.</div>
-      <a href="/files/${archiveId}.zip">Ҳужжат матни PDF шаклда берилган.</a>
+      <a href="${prefix}/files/${archiveId}.zip">Ҳужжат матни PDF шаклда берилган.</a>
     </div>
   </main></body></html>`;
 }
@@ -694,6 +695,57 @@ test("a first-attempt generic dead letter is automatically redriven and preserve
         retryable: number; retryState: string;
       };
     assert.deepEqual({ ...failure }, { retryable: 1, retryState: "retrying" });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a locale-prefixed Lex ZIP dead letter is redriven through the canonical archive URL", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/uz/docs/-6783216",
+      now,
+      correlationId: "localized-archive-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=1,last_error_code='LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,1,'terminal')`).run(
+      "localized-archive-dead-letter", queued.jobId, "lexuz:6783216",
+      "https://lex.uz/uz/docs/-6783216", "uz-Latn", now.toISOString(),
+      "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2", "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2",
+    );
+    const archive = zipPdf(await pdfBytes([
+      "OFFICIAL COURT ACT",
+      "Article 1 establishes the rights and duties of the parties under applicable law.",
+      "The court reviews the evidence and records a reasoned procedural decision.",
+      "Each party may submit documents, state objections, and use the appeal procedure.",
+    ]));
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchForArchive(archiveBackedHtml("6783246", "uz"), archive),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState
+      FROM legal_corpus_failures WHERE id='localized-archive-dead-letter'`).get() as {
+        retryable: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, { retryable: 1, retryState: "retrying" });
+    assert.equal(
+      [...bucket.objects.keys()].some((key) => key.endsWith(".zip")),
+      true,
+    );
   } finally {
     sqlite.close();
   }
