@@ -720,6 +720,32 @@ This recovery changes no production flag, Worker, database or DNS state. It
 does not relax the strict corpus thresholds; freeze and downstream evaluation
 remain gated on the final 44/44 corpus proof.
 
+## Cron-window throughput remediation
+
+The staging run started at 2026-08-16 17:55:28.188 UTC finished at
+18:00:28.323 UTC, a measured 300,135 ms. It crossed the following five-minute
+tick by 323 ms, so the distributed lock correctly rejected that overlapping
+invocation and no 18:00 scheduler row was created. This proved that the prior
+two-discovery plus eight-ingestion budget did not reliably fit the real
+provider and D1 overhead. Periodically losing an entire invocation reduced
+effective throughput despite the larger per-run count.
+
+Commit `39e1f1c855f27d498a7ccb638ae355ad2dbd9f31` reduces the base ingestion
+budget from eight to seven while retaining two discovery pages and the shared
+20-second Lex host pacer. Empty discovery capacity is still reused, but the
+maximum source-fetch budget is now nine rather than ten. The focused Worker
+boundary suite passed 9/9; lint, type-check and the full 186/186 platform suite
+passed; the staging Worker dry-run passed at 3,651.05 KiB uncompressed /
+804.14 KiB gzip.
+
+Staging Worker version `5c3ebb0b-cc3b-42b0-b82c-ef395ce2d455` deployed the
+exact code. Its first full exact-version run started at
+2026-08-16 18:10:28.362 UTC and finished at 18:15:14.191 UTC, a measured
+285,829 ms. The next scheduled invocation started at 18:15:28.187 UTC, proving
+that the tick was retained. Sequential post-run probes returned zero unresolved
+failures and zero stale running jobs. The change does not relax the host crawl
+delay, add concurrency or touch production state.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
