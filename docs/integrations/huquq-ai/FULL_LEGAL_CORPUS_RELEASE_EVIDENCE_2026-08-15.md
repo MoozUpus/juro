@@ -824,6 +824,66 @@ rows were completed and `government/ru` was still running at page 456 with
 44/44 gates therefore remain open; freeze, dense backfill, snapshot and the
 indexed 314-scenario evaluation are not claimed.
 
+## D1 sparse-storage capacity remediation
+
+A read-only `wrangler d1 info` probe at 2026-08-16 20:12 UTC reported a
+2,539,376,640-byte staging database. Cloudflare documents a 10 GB maximum per
+paid D1 database, so continuing to store every sparse vector twice was a
+material capacity risk before the bounded Lex catalogue could finish. At that
+sample the normalized `legal_corpus_sparse_terms` table contained 4,292,982
+rows. The same weights were also duplicated as JSON in every legacy chunk.
+The pre-deployment read at 20:39 UTC found 82,630 such chunks containing
+332,933,044 JSON bytes and zero chunks lacking a normalized sparse row.
+
+Commit `a7ca6a9a79a454ac8d1c51e9479756297de8c352` makes the normalized sparse
+table authoritative. New official and owner-material chunks store `[]` in the
+legacy JSON column while retaining the complete exportable term, title and
+article frequencies in `legal_corpus_sparse_terms`. BM25 document length is
+computed from those normalized rows, and the bounded Qdrant backfill loads the
+same rows rather than parsing chunk JSON. The change does not remove legal
+text, immutable versions, source metadata, exact quotes, R2 objects or sparse
+weights.
+
+Legacy cleanup is fail-closed and bounded to 256 chunks per scheduler run. A
+chunk is eligible only when its JSON is valid and its entry count, term and all
+three frequencies exactly match the normalized rows; absent, partial or
+mismatched data remains untouched. SQLite can retain released pages in its
+freelist, so the database file is not claimed to shrink immediately. The
+capacity benefit is that later corpus writes can reuse pages instead of
+continuing to grow the duplicate representation.
+
+The focused retrieval/Qdrant/storage suite passed 10/10, including partial and
+mismatched normalized-row rejection. The new storage regression passed in
+isolation, platform lint and type-check passed, the complete platform suite
+passed 186/186 with its bounded build, platform artifact validation passed,
+and the isolated legal-corpus dry-run measured 3,655.64 KiB uncompressed /
+805.20 KiB gzip.
+
+The application was deployed first so no request could depend on JSON while
+cleanup was active. Staging platform version
+`e2e4be14-ee0b-4c6e-b4b1-74729103000f` and staging legal-corpus Worker version
+`21525a48-9c94-4833-84c4-ce8383dcc259` contain the exact commit. The first
+exact-version corpus run started at 20:45:28.345 UTC and completed without an
+error at 20:49:01.035 UTC in 212,690 ms. It created 51 chunks; all 51 stored
+compact JSON and all 51 had normalized sparse rows. The immediately preceding
+old-version run had created 16 legacy JSON chunks. The post-run legacy count
+was 82,390 and 332,339,900 bytes, proving exactly 256 cleaned chunks from the
+bounded equation `82,630 + 16 - 82,390 = 256`; the missing-normalized count
+remained zero. The next scheduled invocation started on its retained
+20:50:28.189 UTC tick and completed without an error at 20:54:04.293 UTC in
+216,103 ms. That second run created 127 chunks; all 127 used compact JSON and
+all 127 had normalized sparse rows. It cleaned another exact 256 legacy rows,
+reducing the count from 82,390 to 82,134 and the JSON payload from 332,339,900
+to 331,318,967 bytes. Sequential post-run probes returned zero terminal jobs,
+zero stale running jobs, zero unresolved failures and 68 completed,
+technically-unavailable source outcomes retained for coverage accounting.
+
+The Cloudflare maximum used for this capacity gate is documented at
+<https://developers.cloudflare.com/d1/platform/limits/>. No production Worker,
+database, feature flag, DNS record or corpus state changed. This remediation
+does not close the corpus thresholds or authorize freeze, evaluation or
+rollout.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
