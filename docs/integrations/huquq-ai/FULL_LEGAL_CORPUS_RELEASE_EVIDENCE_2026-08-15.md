@@ -593,6 +593,56 @@ evidence contained seven retrying and 13 technically-unavailable rows, with no
 terminal state. This still fails the canonical-document, unique-provision and
 44/44 gates; dense retrieval and final 314-scenario evaluation remain gated.
 
+## Lex ZIP/PDF terminal-failure remediation
+
+On 2026-08-16 the sequential staging monitor found two new max-attempt
+dead-letter jobs for canonical Lex pages `6783170` and `6783216`. Both failed
+with `LEGAL_SOURCE_CONTENT_INSUFFICIENT` because the canonical HTML contains
+only the act requisites and an official `/files/<id>.zip` link. The two
+allowlisted archives (`6783200.zip` and `6783246.zip`) each contained one PDF.
+A bounded inspection performed after reading `robots.txt` and observing its
+20-second crawl delay found that the PDF text layer exposed only the repeated
+`PDF Anti-Copy` watermark: 161 characters over two pages and 242 characters
+over three pages. No legal text from either PDF was treated as extractable or
+indexed. The temporary inspection directory and both downloaded archives were
+removed after the diagnosis; no Lex corpus payload was committed to Git.
+
+Commit `f53bdf86f69b62d6358bfc3de3b45c89e317314a` adds a strict fallback for
+short canonical Lex pages. It accepts only one exact same-origin numeric
+`/files/<id>.zip` link, re-checks robots policy, uses the shared D1 host pacer,
+limits the archive to 20 MiB, validates content type plus exact ZIP magic,
+verifies archive structure, expansion, CRC and member magic, and permits only
+one PDF for this representation profile. Extractable PDFs are normalized and
+indexed while immutable HTML, archive, extracted PDF and normalized snapshots
+receive separate hashes in private R2. A known anti-copy overlay is removed
+from candidate text; a document with no meaningful text remaining is recorded
+as `LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE` instead of indexing the
+watermark. Old maxed `LEGAL_SOURCE_CONTENT_INSUFFICIENT` dead letters receive
+one parser-upgrade redrive; the error code necessarily changes after that
+attempt, so the mechanism cannot create an unbounded retry loop.
+
+Local verification passed the focused 31/31 discovery, fetch and ingestion
+regressions, platform lint, platform type-check, the complete 186/186 platform
+suite and its bounded development build. The legal-corpus Worker staging
+artifact also passed its dry-run at 3,648.65 KiB uncompressed / 803.56 KiB
+gzip. Staging corpus Worker version
+`4736a0ec-43b0-41b5-a414-6a6a69e46797` deployed the exact commit without
+changing the production Worker, DNS, the dense flag or crawl concurrency.
+
+The next scheduled staging run redrove both exact jobs once. Each finished at
+attempt 6/6 with job status `completed` and safe code
+`LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE`; all twelve immutable attempt
+records for those jobs now have `retry_state=technically_unavailable`. A
+sequential read-only global probe returned zero unresolved failure records and
+the job status summary contained no dead-letter rows. The post-remediation
+sample contained 992 canonical documents, 1,884 language variants, 12,032
+unique current provisions, 44,567 current provisions, 44,726 current/indexed
+chunks and 582 historical versions. Jobs were 2,488 completed, 12,814 queued
+and two running; checkpoints were 13 completed and 31 queued. The chunk floor
+is exceeded, but the canonical-document, unique-provision and 44/44 checkpoint
+gates remain open. Dense backfill, freeze, Qdrant snapshot and the indexed
+314-scenario evaluation therefore remain gated and are not claimed.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
