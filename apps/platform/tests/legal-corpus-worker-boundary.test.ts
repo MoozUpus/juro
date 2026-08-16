@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   handleLegalCorpusScheduled,
   legalCorpusIngestionJobBudget,
+  legalCorpusIngestionStartAllowed,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SEED_CRON,
 } from "../worker/legal-corpus-worker";
@@ -107,6 +108,15 @@ test("empty discovery slots are reused without increasing the nine-request run b
   assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "empty" }]), 9);
   assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 7);
   assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 7);
+});
+
+test("ingestion start fence leaves a bounded representation-fetch window", () => {
+  const scheduledTime = Date.UTC(2026, 7, 16, 19, 10, 28);
+  assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime), true);
+  assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 194_999), true);
+  assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 195_000), false);
+  assert.equal(legalCorpusIngestionStartAllowed(Number.NaN, scheduledTime), false);
+  assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, Number.POSITIVE_INFINITY), false);
 });
 
 test("private dense services stay behind service bindings and staging-only flags", () => {
@@ -212,6 +222,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
   assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 7;/u);
+  assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);
 });

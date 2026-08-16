@@ -26,6 +26,12 @@ const DISCOVERY_PAGES_PER_RUN = 2;
 // while leaving enough margin for provider and D1 overhead. Losing one slot is
 // cheaper than periodically losing an entire scheduled invocation.
 const INGESTION_JOBS_PER_RUN = 7;
+// A short canonical page may require one additional robots-checked, paced PDF
+// or ZIP representation fetch. Stop claiming new jobs after 3m15s from the
+// scheduled tick so one worst-case HTML + representation job can still finish
+// before the next five-minute invocation. The durable queue retains every job
+// not started in this window.
+const INGESTION_START_CUTOFF_MS = 195_000;
 // Dense activation happens only after the source queue is frozen. Four
 // 64-chunk batches cap one invocation at eight embedding calls while allowing
 // the complete current corpus to resume from D1 after a Worker restart.
@@ -35,13 +41,21 @@ export function legalCorpusIngestionJobBudget(
   discoveries: readonly { claimed: boolean; status: string }[],
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
-  // discovery does not grant extra source traffic. The maximum remains nine
-  // Lex fetch slots per invocation (2 discovery + 7 ingestion, or 0 + 9), so
-  // the shared host pacer and previously measured five-minute bound stay
-  // authoritative.
+  // discovery does not grant extra nominal source jobs. The nominal maximum
+  // remains nine (2 discovery + 7 ingestion, or 0 + 9); the elapsed-time
+  // start fence below is authoritative when a job discovers a secondary PDF
+  // or ZIP representation and therefore consumes an additional paced fetch.
   if (!discoveries.some((result) => result.status === "empty")) return INGESTION_JOBS_PER_RUN;
   const claimed = discoveries.filter((result) => result.claimed).length;
   return INGESTION_JOBS_PER_RUN + Math.max(0, DISCOVERY_PAGES_PER_RUN - claimed);
+}
+
+export function legalCorpusIngestionStartAllowed(
+  scheduledTime: number,
+  now: number,
+): boolean {
+  if (!Number.isFinite(scheduledTime) || !Number.isFinite(now)) return false;
+  return Math.max(0, now - scheduledTime) < INGESTION_START_CUTOFF_MS;
 }
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
@@ -229,6 +243,7 @@ export async function handleLegalCorpusScheduled(
     let catalog = { considered: 0, created: 0 };
     const discoveries: Awaited<ReturnType<typeof runNextLexCatalogDiscoveryPage>>[] = [];
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
+    let ingestionStartCutoffReached = false;
     if (ingestionEnabled(env)) {
       catalog = await seedLexCatalogDiscoveryCheckpoints(env);
       const wait = (delayMs: number) => scheduler.wait(delayMs);
@@ -240,6 +255,10 @@ export async function handleLegalCorpusScheduled(
       }
       const ingestionBudget = legalCorpusIngestionJobBudget(discoveries);
       for (let index = 0; index < ingestionBudget; index += 1) {
+        if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now())) {
+          ingestionStartCutoffReached = true;
+          break;
+        }
         const result = await runNextLegalCorpusIngestionJob(env, { wait, fetchImpl });
         ingestions.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
@@ -278,6 +297,7 @@ export async function handleLegalCorpusScheduled(
       checkpointsCreated: catalog.created,
       ingestionJobs: ingestions.length,
       ingestionClaimed: ingestions.filter((result) => result.claimed).length,
+      ingestionStartCutoffReached,
       qdrantBackfillBatches: qdrantBackfills.filter((result) => result.status === "indexed").length,
       qdrantBackfillChunks: qdrantBackfills.reduce((sum, result) => sum + result.chunkCount, 0),
       qdrantSnapshotStatus: qdrantSnapshot?.status ?? "not_attempted",
