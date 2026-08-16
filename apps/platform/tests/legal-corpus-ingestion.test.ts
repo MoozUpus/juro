@@ -348,6 +348,149 @@ test("a retryable Lex 5xx preserves its HTTP status and remains bounded retrying
   }
 });
 
+test("a stale running ingestion is recovered and completed idempotently", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/34567",
+      now,
+      correlationId: "stale-running-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='running',attempt_count=1,updated_at=? WHERE id=?`).run(
+      now.toISOString(), queued.jobId,
+    );
+    const workerNow = new Date(now.getTime() + 60 * 60_000);
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: workerNow,
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; errorCode: string | null;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      attemptCount: 2,
+      errorCode: null,
+    });
+    const failure = sqlite.prepare(`SELECT error_code AS errorCode,retryable,
+      retry_count AS retryCount,retry_state AS retryState
+      FROM legal_corpus_failures WHERE job_id=?`).get(queued.jobId) as {
+        errorCode: string; retryable: number; retryCount: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, {
+      errorCode: "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT",
+      retryable: 1,
+      retryCount: 1,
+      retryState: "retrying",
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a fresh running ingestion is never reclaimed by a neighboring invocation", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/34568",
+      now,
+      correlationId: "fresh-running-fence",
+    });
+    const workerNow = new Date(now.getTime() + 60 * 60_000);
+    const freshAt = new Date(workerNow.getTime() - 5 * 60_000).toISOString();
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='running',attempt_count=1,updated_at=? WHERE id=?`).run(
+      freshAt, queued.jobId,
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: workerNow,
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(run, {
+      claimed: false,
+      status: "empty",
+      jobId: null,
+      safeErrorCode: null,
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      updated_at AS updatedAt FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; updatedAt: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "running",
+      attemptCount: 1,
+      updatedAt: freshAt,
+    });
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_failures").get() as { count: number }).count),
+      0,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("an exhausted stale running ingestion is terminalized instead of looping", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/34569",
+      now,
+      correlationId: "stale-running-exhausted",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='running',attempt_count=5,max_attempts=5,updated_at=? WHERE id=?`).run(
+      now.toISOString(), queued.jobId,
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60 * 60_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(run, {
+      claimed: false,
+      status: "empty",
+      jobId: null,
+      safeErrorCode: null,
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "dead_letter",
+      attemptCount: 5,
+      errorCode: "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT",
+    });
+    const failure = sqlite.prepare(`SELECT error_code AS errorCode,retryable,
+      retry_count AS retryCount,retry_state AS retryState
+      FROM legal_corpus_failures WHERE job_id=?`).get(queued.jobId) as {
+        errorCode: string; retryable: number; retryCount: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, {
+      errorCode: "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT",
+      retryable: 0,
+      retryCount: 5,
+      retryState: "terminal",
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a newer current version closes only the prior validity interval", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

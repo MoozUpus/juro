@@ -56,6 +56,11 @@ const RECOVERABLE_DEAD_LETTER_CODES = [
   "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
+const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
+// A normal scheduled invocation is fenced by a seven-minute distributed lock
+// and its Lex requests have shorter individual timeouts. Keep a wider window
+// so a slow but live invocation is never reclaimed by the next cron tick.
+const STALE_RUNNING_AFTER_MS = 15 * 60_000;
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -459,6 +464,48 @@ async function recordFailure(input: {
     input.errorCode.slice(0, 120), input.errorCode.slice(0, 400),
     input.retryable ? 1 : 0, input.retryCount, input.retryState,
   ).run();
+}
+
+async function reconcileStaleRunningJob(
+  db: D1Database,
+  nowDate: Date,
+): Promise<void> {
+  const now = nowDate.toISOString();
+  const staleBefore = new Date(nowDate.getTime() - STALE_RUNNING_AFTER_MS).toISOString();
+  const stranded = await db.prepare(`SELECT id,attempt_count AS attemptCount,
+      max_attempts AS maxAttempts,updated_at AS updatedAt
+    FROM legal_corpus_ingestion_jobs
+    WHERE status='running' AND updated_at<=?
+    ORDER BY updated_at ASC,id ASC LIMIT 1
+  `).bind(staleBefore).first<{
+    id: string;
+    attemptCount: number;
+    maxAttempts: number;
+    updatedAt: string;
+  }>();
+  if (!stranded) return;
+  const exhausted = stranded.attemptCount >= stranded.maxAttempts;
+  const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
+    SET status=?,next_attempt_at=?,last_error_code=?,updated_at=?
+    WHERE id=? AND status='running' AND updated_at=?
+  `).bind(
+    exhausted ? "dead_letter" : "retrying",
+    exhausted ? null : now,
+    STALE_RUNNING_ERROR_CODE,
+    now,
+    stranded.id,
+    stranded.updatedAt,
+  ).run();
+  if (Number(updated.meta.changes ?? 0) !== 1) return;
+  await recordFailure({
+    db,
+    jobId: stranded.id,
+    now,
+    errorCode: STALE_RUNNING_ERROR_CODE,
+    retryable: !exhausted,
+    retryCount: stranded.attemptCount,
+    retryState: exhausted ? "terminal" : "retrying",
+  });
 }
 
 async function reconcileRecoverableDeadLetter(
@@ -964,6 +1011,7 @@ export async function runNextLegalCorpusIngestionJob(
   }
   const nowDate = input.now ?? new Date();
   const now = nowIso(nowDate);
+  await reconcileStaleRunningJob(env.DB, nowDate);
   await reconcileRecoverableDeadLetter(env.DB, now);
   const candidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
