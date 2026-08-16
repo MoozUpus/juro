@@ -33,6 +33,7 @@ export class LegalSourceFetchError extends Error {
   constructor(
     readonly code: LegalSourceFetchErrorCode,
     readonly retryable: boolean,
+    readonly httpStatus: number | null = null,
   ) {
     super(code);
     this.name = "LegalSourceFetchError";
@@ -322,7 +323,7 @@ async function fetchFollowingRedirects(
           || response.status === 425
           || response.status === 429
           || response.status >= 500;
-        throw new LegalSourceFetchError(options.unavailableCode, retryable);
+        throw new LegalSourceFetchError(options.unavailableCode, retryable, response.status);
       }
       return { response, finalUrl: currentUrl };
     }

@@ -49,6 +49,11 @@ const RETRYABLE_INTERNAL_ERROR_CODES = new Set([
 ]);
 const RECOVERABLE_DEAD_LETTER_CODES = [
   "LEGAL_CORPUS_INGESTION_FAILED",
+  // Older Workers did not preserve the upstream HTTP status and therefore
+  // dead-lettered permanent Lex 4xx responses on the first attempt. Re-read
+  // those bounded jobs once so the current fetcher can classify an explicit
+  // missing/restricted source as technically unavailable with evidence.
+  "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
 
@@ -286,7 +291,17 @@ function retryable(error: unknown): boolean {
 function technicallyUnavailable(error: unknown): boolean {
   return (error instanceof LegalSourceParserError
     && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE")
+    || (error instanceof LegalSourceFetchError
+      && error.code === "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE"
+      && !error.retryable
+      && error.httpStatus !== null
+      && error.httpStatus >= 400
+      && error.httpStatus < 500)
     || internalErrorCode(error) === "LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE";
+}
+
+function fetchHttpStatus(error: unknown): number | null {
+  return error instanceof LegalSourceFetchError ? error.httpStatus : null;
 }
 
 function retryAt(now: Date, attempt: number): string {
@@ -427,6 +442,7 @@ async function recordFailure(input: {
   sourceUrl?: string | null;
   language?: LegalCorpusLanguage | null;
   now: string;
+  httpStatus?: number | null;
   errorCode: string;
   retryable: boolean;
   retryCount: number;
@@ -435,10 +451,11 @@ async function recordFailure(input: {
   await input.db.prepare(`
     INSERT INTO legal_corpus_failures
       (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,safe_message,retryable,retry_count,retry_state)
-    VALUES (?,?,?,?,?,?,NULL,?,?,?, ?,?)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
   `).bind(
     crypto.randomUUID(), input.jobId ?? null, input.documentId ?? null,
     input.sourceUrl ?? null, input.language ?? null, input.now,
+    input.httpStatus ?? null,
     input.errorCode.slice(0, 120), input.errorCode.slice(0, 400),
     input.retryable ? 1 : 0, input.retryCount, input.retryState,
   ).run();
@@ -995,12 +1012,13 @@ export async function runNextLegalCorpusIngestionJob(
       await env.DB.prepare(`UPDATE legal_corpus_failures
         SET retryable=0,retry_state='technically_unavailable'
         WHERE job_id=? AND retry_state IN ('pending','retrying','terminal')
-          AND error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
-      `).bind(candidate.id).run();
+          AND (error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT' OR error_code=?)
+      `).bind(candidate.id, errorCode).run();
     }
     await recordFailure({
       db: env.DB, jobId: candidate.id, documentId: candidate.canonicalDocumentId,
       sourceUrl: candidate.sourceUrl, language: candidate.language, now, errorCode,
+      httpStatus: fetchHttpStatus(error),
       retryable: shouldRetry, retryCount: attempt,
       retryState: unavailable ? "technically_unavailable" : shouldRetry ? "retrying" : "terminal",
     });

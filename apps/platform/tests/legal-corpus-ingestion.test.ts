@@ -44,6 +44,18 @@ function fetchFor(html: string) {
   };
 }
 
+function fetchForStatus(status: number) {
+  return async (input: RequestInfo | URL): Promise<Response> => {
+    const url = String(input);
+    if (url.endsWith("/robots.txt")) {
+      return new Response("User-agent: *\nAllow: /\n", {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+    return new Response(null, { status });
+  };
+}
+
 async function pdfBytes(lines: string[]): Promise<Uint8Array> {
   const document = await PDFDocument.create();
   const font = await document.embedFont(StandardFonts.Helvetica);
@@ -241,6 +253,96 @@ test("a maxed short-page dead letter is re-read once and anti-copy-only PDF beco
       }>;
     assert.equal(failures.length, 2);
     assert.equal(failures.every((failure) => failure.retryState === "technically_unavailable"), true);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a legacy first-attempt Lex 4xx dead letter is re-read with HTTP evidence and resolved unavailable", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/2842473",
+      now,
+      correlationId: "legacy-upstream-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=1,max_attempts=5,
+        last_error_code='LEGAL_SOURCE_UPSTREAM_UNAVAILABLE'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,1,'terminal')`).run(
+      "legacy-upstream", queued.jobId, "lexuz:2842473",
+      "https://lex.uz/docs/2842473", "uz-Cyrl", now.toISOString(),
+      "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE", "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+    );
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchForStatus(404),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      attemptCount: 2,
+      errorCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+    });
+    const failures = sqlite.prepare(`SELECT http_status AS httpStatus,
+      retryable,retry_state AS retryState FROM legal_corpus_failures
+      WHERE job_id=? ORDER BY attempted_at,id`).all(queued.jobId) as Array<{
+        httpStatus: number | null; retryable: number; retryState: string;
+      }>;
+    assert.deepEqual(failures.map((failure) => ({ ...failure })), [
+      { httpStatus: null, retryable: 0, retryState: "technically_unavailable" },
+      { httpStatus: 404, retryable: 0, retryState: "technically_unavailable" },
+    ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a retryable Lex 5xx preserves its HTTP status and remains bounded retrying", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/2842474",
+      now,
+      correlationId: "retryable-upstream",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchForStatus(503),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "retrying",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+    });
+    const failure = sqlite.prepare(`SELECT http_status AS httpStatus,retryable,
+      retry_state AS retryState FROM legal_corpus_failures WHERE job_id=?`).get(queued.jobId) as {
+        httpStatus: number; retryable: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, {
+      httpStatus: 503,
+      retryable: 1,
+      retryState: "retrying",
+    });
   } finally {
     sqlite.close();
   }
