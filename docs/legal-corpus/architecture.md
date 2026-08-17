@@ -63,11 +63,19 @@ an ASP.NET `__doPostBack`. Each checkpoint therefore persists only the
 allowlisted catalog/language key, page number, bounded ViewState and next event
 target. A stale lease can be reclaimed; the next page must match the expected
 sequence before any discovered URL is queued. Raw catalog navigation is never
-presented to a model. Due retries retain priority; otherwise discovery advances
-the least-explored checkpoint page first, so one large category-language
-catalogue cannot starve the remaining official source families. This is a
-fairness rule only: it does not increase the request budget or bypass the
-shared Lex.uz host pacer.
+presented to a model.
+
+Due retries retain priority. While fewer than nine queued pagers have a valid
+public session, discovery advances the least-explored checkpoint page first, so
+one large category-language catalogue cannot starve the remaining official
+source families. At the nine-session cap, it renews the valid pager with the
+earliest expiry. With three catalog pages every four minutes, that bound refreshes
+each retained 15-minute ASP.NET session within twelve minutes. A legacy excess
+is trimmed by clearing only volatile navigation fields and returning that
+checkpoint to page zero; the immutable discovery ledger preserves already
+discovered official document identifiers, so the restart is idempotent. This is
+a fairness and session-safety control only: it does not increase the request
+budget, add parallel source traffic, or bypass the shared Lex.uz host pacer.
 
 Lex Uzbek Cyrillic is the unprefixed `/docs/:id` route; it is never silently
 transliterated as an official text. Query normalization may create
@@ -105,20 +113,24 @@ creates missing catalog checkpoints before claiming work, so a fresh environment
 does not depend on a manual admin form. Production retains its five-minute
 processing slot. The Worker then holds the single
 `legal-corpus-worker` D1 lease for the whole batch. A batch processes at most
-three catalog pages and six ingestion jobs sequentially. Every real Lex request,
+three catalog pages and five ingestion jobs sequentially. A normal batch
+therefore makes no more than eight bounded Lex.uz source requests; if catalog
+discovery has no eligible page, unused discovery capacity can be reclaimed by
+ingestion only within the same pace and start fence. Every real Lex request,
 including `robots.txt`, first claims a host-wide D1 time window; the observed
 `Crawl-delay` is cached for the Worker run and persisted for later runs. The
 seven-minute lease prevents the next staging processing cron from starting a
-second crawler while a paced batch is still active. Two of the six existing
-ingestion slots may select already-discovered `laws`, `oliy_majlis` or
-`president` catalogue jobs; every due retry remains globally first and the
-remaining four slots retain FIFO order. This bounded share brings primary
-legislation into the corpus earlier without starving other official categories
-or increasing crawl traffic. Across the two preferred slots, the target locale
-rotates deterministically through Uzbek Cyrillic, Russian, Uzbek Latin and
-English. A slot first selects its matching official locale; if that catalogue
-has no ready job in the target locale, it falls back only within the same
-preferred catalogue families before ordinary FIFO work is considered.
+second crawler while a paced batch is still active. The first four ingestion
+slots prefer already-discovered `court_acts`, `laws`, `court_practice`,
+`oliy_majlis` or `president` catalogue jobs while rotating exact source
+languages through Uzbek Cyrillic, Russian, Uzbek Latin and English. The fifth
+slot offers reserved capacity for version work; when that work is absent, each
+slot safely falls back through verified core-code work and FIFO. Due retries
+remain globally first. This bounded share brings primary legislation into the
+corpus earlier without starving other official categories or increasing crawl
+traffic. A preferred slot first selects its matching official locale; if that
+catalogue has no ready job in the target locale, it falls back only within the
+same preferred catalogue families before ordinary FIFO work is considered.
 
 The daily seed also creates maintenance jobs without performing network I/O.
 Daily work prioritizes stale codes and the Constitution while the normal
