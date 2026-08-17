@@ -146,7 +146,7 @@ test("expired lease rows are recorded as failed before a later corpus schedule c
   }
 });
 
-test("empty discovery slots are reused without exceeding the ten-request run budget", () => {
+test("empty discovery slots are reused without exceeding the ten-job source-work budget", () => {
   assert.equal(legalCorpusIngestionJobBudget([]), 7);
   assert.equal(legalCorpusIngestionJobBudget([
     { claimed: true, status: "completed" },

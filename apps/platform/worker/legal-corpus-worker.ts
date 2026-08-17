@@ -24,7 +24,7 @@ const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
 // Coverage completion is gated on every category-language checkpoint, so give
-// catalogue discovery three of the same ten paced request slots. This takes
+// catalogue discovery three of the same ten nominal source-work slots. This takes
 // one slot from document ingestion rather than increasing Lex.uz traffic.
 const DISCOVERY_PAGES_PER_RUN = 3;
 // The seven-job staging budget is still governed by the shared 20-second Lex
