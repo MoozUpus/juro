@@ -953,6 +953,13 @@
       "when": 1786933200000,
       "tag": "0135_drop_unused_legal_corpus_sparse_version_index",
       "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1786936800000,
+      "tag": "0136_legal_corpus_preferred_ingestion_lookup",
+      "breakpoints": true
     }
   ]
 }

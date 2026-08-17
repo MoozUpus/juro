@@ -21,6 +21,7 @@ import {
   discoverLexArchiveRepresentation,
   discoverLexRevisionHistory,
   lexLanguageFamilyId,
+  LEX_CORPUS_CATEGORIES,
   parseLexDocumentEffectivity,
   parseLexDocumentMetadata,
   parseLexDocumentUrl,
@@ -66,6 +67,7 @@ const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
 // and its Lex requests have shorter individual timeouts. Keep a wider window
 // so a slow but live invocation is never reclaimed by the next cron tick.
 const STALE_RUNNING_AFTER_MS = 15 * 60_000;
+const CATALOG_CATEGORY_KEYS = new Set<string>(LEX_CORPUS_CATEGORIES.map((category) => category.key));
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -133,6 +135,11 @@ export type LegalCorpusJobRunResult = {
   jobId: string | null;
   safeErrorCode: string | null;
 };
+
+function preferredCatalogCategories(input: readonly string[] | undefined): string[] {
+  if (!input) return [];
+  return [...new Set(input)].filter((category) => CATALOG_CATEGORY_KEYS.has(category));
+}
 
 function nowIso(now = new Date()): string {
   return now.toISOString();
@@ -1010,6 +1017,10 @@ export async function runNextLegalCorpusIngestionJob(
     wait?: (delayMs: number) => Promise<void>;
     fetchImpl?: FetchLike;
     afterIngest?: (result: LegalCorpusIngestionResult) => Promise<void>;
+    /** A bounded share may favour already-discovered, high-value official
+     * source families. Retries always retain global precedence, and callers
+     * keep ordinary FIFO slots so this cannot starve the rest of the corpus. */
+    preferredCatalogCategories?: readonly string[];
   } = {},
 ): Promise<LegalCorpusJobRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
@@ -1019,12 +1030,33 @@ export async function runNextLegalCorpusIngestionJob(
   const now = nowIso(nowDate);
   await reconcileStaleRunningJob(env.DB, nowDate);
   await reconcileRecoverableDeadLetter(env.DB, now);
-  const candidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+  const retryCandidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
-    WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
-    ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
-      coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
+    WHERE status='retrying' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+    ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
   `).bind(now).first<IngestionJob>();
+  const categories = preferredCatalogCategories(input.preferredCatalogCategories);
+  const preferredCandidate = retryCandidate || categories.length === 0
+    ? null
+    : await env.DB.prepare(`SELECT j.id,j.job_type AS jobType,j.source_url AS sourceUrl,j.language,
+        j.canonical_document_id AS canonicalDocumentId,j.attempt_count AS attemptCount,j.max_attempts AS maxAttempts
+      FROM legal_corpus_discovery_checkpoints cp
+      JOIN legal_corpus_discovery_documents dd ON dd.checkpoint_id=cp.id
+      JOIN legal_corpus_ingestion_jobs j ON j.canonical_document_id=dd.provider_source_id
+        AND j.language=dd.language
+      WHERE cp.category_key IN (${categories.map(() => "?").join(",")})
+        AND j.job_type='fetch' AND j.status='queued'
+        AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
+      ORDER BY j.created_at ASC,j.id ASC LIMIT 1
+    `).bind(...categories, now).first<IngestionJob>();
+  const fifoCandidate = retryCandidate || preferredCandidate
+    ? null
+    : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+      FROM legal_corpus_ingestion_jobs
+      WHERE status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+      ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
+    `).bind(now).first<IngestionJob>();
+  const candidate = retryCandidate ?? preferredCandidate ?? fifoCandidate;
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
     SET status='running',attempt_count=attempt_count+1,updated_at=?

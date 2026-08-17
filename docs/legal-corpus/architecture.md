@@ -13,7 +13,7 @@ inert until a separate server-side feature flag and infrastructure are approved.
 | Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; at most three robots-aware GET/POST pages per scheduler lease |
 | Lex metadata monitor | Discover bounded official RSS metadata | Existing robots-aware monitor, no source text stored |
 | Corpus job ledger | Idempotent queued/fetch/retry state | D1; identifiers and official URLs only |
-| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most six sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
+| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most six sequential jobs per dedicated corpus tick: two bounded primary-legislation preference slots, four FIFO slots and global retry-first; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
@@ -109,7 +109,12 @@ three catalog pages and six ingestion jobs sequentially. Every real Lex request,
 including `robots.txt`, first claims a host-wide D1 time window; the observed
 `Crawl-delay` is cached for the Worker run and persisted for later runs. The
 seven-minute lease prevents the next staging processing cron from starting a
-second crawler while a paced batch is still active.
+second crawler while a paced batch is still active. Two of the six existing
+ingestion slots may select already-discovered `laws`, `oliy_majlis` or
+`president` catalogue jobs; every due retry remains globally first and the
+remaining four slots retain FIFO order. This bounded share brings primary
+legislation into the corpus earlier without starving other official categories
+or increasing crawl traffic.
 
 The daily seed also creates maintenance jobs without performing network I/O.
 Daily work prioritizes stale codes and the Constitution while the normal

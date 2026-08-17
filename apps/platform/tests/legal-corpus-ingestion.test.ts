@@ -7,6 +7,7 @@ import {
   ingestOfficialLexDocument,
   runNextLegalCorpusIngestionJob,
 } from "../lib/legal-corpus/ingestion";
+import { seedLexCatalogDiscoveryCheckpoints } from "../lib/legal-corpus/lex-catalog-discovery";
 import { QdrantCorpusError } from "../lib/legal-corpus/qdrant";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -832,6 +833,79 @@ test("a due retry is claimed before the ordinary ingestion backlog", async () =>
     const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
       .get(queued.jobId) as { status: string };
     assert.equal(untouched.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a bounded preferred slot advances discovered primary legislation before FIFO backlog", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    await seedLexCatalogDiscoveryCheckpoints(env, now);
+    const backlog = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10003",
+      now,
+      correlationId: "ordinary-fifo-backlog",
+    });
+    const preferred = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10004",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "preferred-laws",
+    });
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      VALUES ('lex-catalog:laws:ru',?,'lexuz:10004','ru',?)`).run(
+      "https://lex.uz/ru/docs/10004", now.toISOString(),
+    );
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+      preferredCatalogCategories: ["laws"],
+    });
+    assert.equal(run.jobId, preferred.jobId);
+    assert.equal(run.status, "completed");
+    const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(backlog.jobId) as { status: string };
+    assert.equal(untouched.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a due retry remains ahead of a preferred catalogue candidate", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    await seedLexCatalogDiscoveryCheckpoints(env, now);
+    await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10005",
+      now,
+      correlationId: "preferred-laws-retry-order",
+    });
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      VALUES ('lex-catalog:laws:ru',?,'lexuz:10005','ru',?)`).run(
+      "https://lex.uz/ru/docs/10005", now.toISOString(),
+    );
+    const retry = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10006",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "global-due-retry",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='retrying',next_attempt_at=? WHERE id=?`).run(now.toISOString(), retry.jobId);
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+      preferredCatalogCategories: ["laws"],
+    });
+    assert.equal(run.jobId, retry.jobId);
+    assert.equal(run.status, "completed");
   } finally {
     sqlite.close();
   }
