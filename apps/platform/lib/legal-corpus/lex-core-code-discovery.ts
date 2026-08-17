@@ -4,6 +4,7 @@ import {
   discoverExactLexCoreCodeDocument,
   LEX_CORE_CODE_TARGETS,
   lexCoreCodeSearchUrl,
+  parseLexDocumentUrl,
   type LexCoreCodeTarget,
 } from "./lex-discovery";
 import { featureEnabled, type LegalCorpusFeatureFlag } from "./trust";
@@ -31,17 +32,77 @@ export type LexCoreCodeDiscoveryResult = {
   status: "disabled" | "all_settled" | "queued" | "not_found" | "failed";
   targetId: string | null;
   canonicalDocumentId: string | null;
+  priorityCanonicalDocumentIds: string[];
   queued: boolean;
   safeErrorCode: string | null;
 };
 
-function titleKey(value: string): string {
-  return value.toLocaleLowerCase("ru").replace(/[^\p{L}\p{N}]+/gu, " ").replace(/\s+/gu, " ").trim();
-}
+type CoreCodeTargetRow = {
+  targetId: string;
+  status: "queued" | "retrying" | "awaiting_ingestion" | "indexed" | "technically_unavailable";
+  sourceUrl: string | null;
+  canonicalDocumentId: string | null;
+  attemptCount: number;
+  nextAttemptAt: string | null;
+};
 
 function pickTarget(targets: readonly LexCoreCodeTarget[], now: Date): LexCoreCodeTarget {
   const slot = Math.floor(now.getTime() / (4 * 60_000));
   return targets[((slot % targets.length) + targets.length) % targets.length]!;
+}
+
+function coreCodeSeed(target: LexCoreCodeTarget) {
+  return LEX_CORE_CODE_SEEDS.find((seed) => seed.targetId === target.id) ?? null;
+}
+
+async function seedLexCoreCodeTargets(env: CoreCodeEnv, now: string): Promise<void> {
+  const statements: D1PreparedStatement[] = [];
+  for (const target of LEX_CORE_CODE_TARGETS) {
+    const seed = coreCodeSeed(target);
+    const parsed = seed ? parseLexDocumentUrl(seed.sourceUrl) : null;
+    statements.push(env.DB.prepare(`INSERT INTO legal_corpus_core_code_targets
+      (target_id,title_ru,status,source_url,canonical_document_id,attempt_count,next_attempt_at,last_error_code,resolved_at,created_at,updated_at)
+      VALUES (?,?,?, ?,?,0,NULL,NULL,NULL,?,?) ON CONFLICT(target_id) DO NOTHING`).bind(
+      target.id, target.titleRu, seed ? "awaiting_ingestion" : "queued",
+      seed?.sourceUrl ?? null, parsed?.canonicalDocumentId ?? null, now, now,
+    ));
+  }
+  await env.DB.batch(statements);
+}
+
+async function reconcileCoreCodeTargetStates(env: CoreCodeEnv, now: string): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(`UPDATE legal_corpus_core_code_targets AS target
+      SET status='indexed',resolved_at=COALESCE(resolved_at,?),next_attempt_at=NULL,
+        last_error_code=NULL,updated_at=?
+      WHERE status='awaiting_ingestion' AND source_url IS NOT NULL AND EXISTS (
+        SELECT 1 FROM legal_corpus_variants variant
+        JOIN legal_corpus_documents document ON document.id=variant.document_id
+        WHERE variant.source_url=target.source_url AND variant.is_official_language_version=1
+          AND document.availability_status='ready'
+      )`).bind(now, now),
+    env.DB.prepare(`UPDATE legal_corpus_core_code_targets AS target
+      SET status='technically_unavailable',resolved_at=COALESCE(resolved_at,?),next_attempt_at=NULL,
+        updated_at=?
+      WHERE status='awaiting_ingestion' AND source_url IS NOT NULL AND EXISTS (
+        SELECT 1 FROM legal_corpus_failures failure
+        WHERE failure.source_url=target.source_url AND failure.retry_state='technically_unavailable'
+      )`).bind(now, now),
+  ]);
+}
+
+async function coreCodeTargetRows(env: CoreCodeEnv): Promise<CoreCodeTargetRow[]> {
+  const rows = await env.DB.prepare(`SELECT target_id AS targetId,status,source_url AS sourceUrl,
+      canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,
+      next_attempt_at AS nextAttemptAt
+    FROM legal_corpus_core_code_targets`).all<CoreCodeTargetRow>();
+  return rows.results;
+}
+
+function priorityCanonicalDocumentIds(rows: readonly CoreCodeTargetRow[]): string[] {
+  return [...new Set(rows
+    .filter((row) => row.status === "awaiting_ingestion" && row.canonicalDocumentId)
+    .map((row) => row.canonicalDocumentId!))];
 }
 
 export async function seedLexCoreCodeJobs(
@@ -51,6 +112,7 @@ export async function seedLexCoreCodeJobs(
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
     return { considered: 0, queued: 0 };
   }
+  await seedLexCoreCodeTargets(env, (input.now ?? new Date()).toISOString());
   let queued = 0;
   for (const sourceUrl of LEX_CORE_CODE_SEED_URLS) {
     const result = await enqueueOfficialLexCorpusDocument(env, { sourceUrl, now: input.now });
@@ -70,26 +132,37 @@ export async function runNextLexCoreCodeDiscovery(
   input: { now?: Date; wait?: (delayMs: number) => Promise<void>; fetchImpl?: FetchLike } = {},
 ): Promise<LexCoreCodeDiscoveryResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
-    return { status: "disabled", targetId: null, canonicalDocumentId: null, queued: false, safeErrorCode: null };
-  }
-  const present = await env.DB.prepare(`SELECT DISTINCT title,source_url AS sourceUrl FROM legal_corpus_variants
-    WHERE is_official_language_version=1`).all<{ title: string | null; sourceUrl: string | null }>();
-  const presentTitles = new Set(present.results.map((row) => row.title ? titleKey(row.title) : "").filter(Boolean));
-  // Lex can keep the original Uzbek official document title in the reader
-  // metadata even for a `/ru/` page. A verified seeded canonical URL is
-  // therefore stronger evidence than a localized title string and prevents a
-  // completed code from permanently blocking the next exact-title lookup.
-  const presentSourceUrls = new Set(present.results.map((row) => row.sourceUrl));
-  const settledSeedTargetIds = new Set<string>(LEX_CORE_CODE_SEEDS
-    .filter((seed) => presentSourceUrls.has(seed.sourceUrl))
-    .map((seed) => seed.targetId));
-  const unresolved = LEX_CORE_CODE_TARGETS.filter((target) =>
-    !presentTitles.has(titleKey(target.titleRu)) && !settledSeedTargetIds.has(target.id));
-  if (unresolved.length === 0) {
-    return { status: "all_settled", targetId: null, canonicalDocumentId: null, queued: false, safeErrorCode: null };
+    return { status: "disabled", targetId: null, canonicalDocumentId: null, priorityCanonicalDocumentIds: [], queued: false, safeErrorCode: null };
   }
   const now = input.now ?? new Date();
+  const nowIso = now.toISOString();
+  await seedLexCoreCodeTargets(env, nowIso);
+  await reconcileCoreCodeTargetStates(env, nowIso);
+  const rows = await coreCodeTargetRows(env);
+  const priorities = priorityCanonicalDocumentIds(rows);
+  const byTargetId = new Map(rows.map((row) => [row.targetId, row]));
+  const unresolved = LEX_CORE_CODE_TARGETS.filter((target) => {
+    const row = byTargetId.get(target.id);
+    return row?.status === "queued"
+      || (row?.status === "retrying" && (row.nextAttemptAt === null || row.nextAttemptAt <= nowIso));
+  });
+  if (unresolved.length === 0) {
+    const hasUnsettledTarget = rows.some((row) => row.status === "queued"
+      || row.status === "retrying" || row.status === "awaiting_ingestion");
+    return {
+      // A retry can be deliberately paced into the future.  It is not a
+      // successful resolution and must not unlock generic catalogue crawling.
+      status: hasUnsettledTarget ? "queued" : "all_settled",
+      targetId: null,
+      canonicalDocumentId: priorities[0] ?? null,
+      priorityCanonicalDocumentIds: priorities,
+      queued: false,
+      safeErrorCode: null,
+    };
+  }
   const target = pickTarget(unresolved, now);
+  const targetRow = byTargetId.get(target.id);
+  if (!targetRow) throw new TypeError("LEX_CORE_CODE_TARGET_STATE_MISSING");
   try {
     const page = await fetchLexCatalogPage({
       searchUrl: lexCoreCodeSearchUrl(target),
@@ -98,17 +171,33 @@ export async function runNextLexCoreCodeDiscovery(
     });
     const document = discoverExactLexCoreCodeDocument(page.html, target, lexCoreCodeSearchUrl(target));
     if (!document) {
-      return { status: "not_found", targetId: target.id, canonicalDocumentId: null, queued: false, safeErrorCode: null };
+      const nextAttempt = new Date(now.getTime() + 60 * 60_000).toISOString();
+      await env.DB.prepare(`UPDATE legal_corpus_core_code_targets
+        SET status='retrying',attempt_count=MIN(attempt_count+1,12),next_attempt_at=?,
+          last_error_code='LEX_CORE_CODE_EXACT_TITLE_NOT_FOUND',updated_at=?
+        WHERE target_id=? AND status IN ('queued','retrying')`).bind(nextAttempt, nowIso, target.id).run();
+      return { status: "not_found", targetId: target.id, canonicalDocumentId: null, priorityCanonicalDocumentIds: priorities, queued: false, safeErrorCode: null };
     }
     const queued = await enqueueOfficialLexCorpusDocument(env, { sourceUrl: document.sourceUrl, now });
+    await env.DB.prepare(`UPDATE legal_corpus_core_code_targets
+      SET status='awaiting_ingestion',source_url=?,canonical_document_id=?,attempt_count=MIN(attempt_count+1,12),
+        next_attempt_at=NULL,last_error_code=NULL,updated_at=?
+      WHERE target_id=? AND status IN ('queued','retrying')`).bind(
+      document.sourceUrl, queued.canonicalDocumentId, nowIso, target.id,
+    ).run();
     return {
       status: "queued", targetId: target.id, canonicalDocumentId: queued.canonicalDocumentId,
+      priorityCanonicalDocumentIds: [...new Set([...priorities, queued.canonicalDocumentId])],
       queued: queued.created, safeErrorCode: null,
     };
   } catch (error) {
     const safeErrorCode = error instanceof Error && /^LEX_CATALOG_[A-Z_]+$/u.test(error.message)
       ? error.message
       : "LEX_CORE_CODE_DISCOVERY_FAILED";
-    return { status: "failed", targetId: target.id, canonicalDocumentId: null, queued: false, safeErrorCode };
+    const retryAt = new Date(now.getTime() + 15 * 60_000).toISOString();
+    await env.DB.prepare(`UPDATE legal_corpus_core_code_targets
+      SET status='retrying',attempt_count=MIN(attempt_count+1,12),next_attempt_at=?,last_error_code=?,updated_at=?
+      WHERE target_id=? AND status IN ('queued','retrying')`).bind(retryAt, safeErrorCode, nowIso, target.id).run();
+    return { status: "failed", targetId: target.id, canonicalDocumentId: null, priorityCanonicalDocumentIds: priorities, queued: false, safeErrorCode };
   }
 }

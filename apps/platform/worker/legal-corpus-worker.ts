@@ -299,7 +299,7 @@ export async function handleLegalCorpusScheduled(
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
     let coreCodeSeeds = { considered: 0, queued: 0 };
     let coreCode: Awaited<ReturnType<typeof runNextLexCoreCodeDiscovery>> = {
-      status: "disabled", targetId: null, canonicalDocumentId: null, queued: false, safeErrorCode: null,
+      status: "disabled", targetId: null, canonicalDocumentId: null, priorityCanonicalDocumentIds: [], queued: false, safeErrorCode: null,
     };
     let ingestionStartCutoffReached = false;
     // This local D1 reconciliation does not fetch a source. It removes only
@@ -323,7 +323,7 @@ export async function handleLegalCorpusScheduled(
       }
       const preferredCoreCodeIds = [...new Set([
         ...LEX_CORE_CODE_SEED_IDS,
-        ...(coreCode.canonicalDocumentId ? [coreCode.canonicalDocumentId] : []),
+        ...coreCode.priorityCanonicalDocumentIds,
       ])];
       const ingestionBudget = legalCorpusIngestionJobBudget(discoveries);
       for (let index = 0; index < ingestionBudget; index += 1) {
