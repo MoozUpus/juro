@@ -17,6 +17,9 @@ type CoreCodeEnv = LegalCorpusQueueEnv & Partial<Record<LegalCorpusFeatureFlag, 
  * fetched and validated before entering the corpus. */
 const LEX_CORE_CODE_SEEDS = [
   { targetId: "administrative_responsibility", sourceUrl: "https://lex.uz/ru/docs/97664" },
+  { targetId: "administrative_court_procedure", sourceUrl: "https://lex.uz/ru/docs/3527365" },
+  { targetId: "criminal", sourceUrl: "https://lex.uz/ru/docs/111457" },
+  { targetId: "criminal_procedure", sourceUrl: "https://lex.uz/ru/docs/111463" },
   { targetId: "family", sourceUrl: "https://lex.uz/ru/docs/104723" },
   { targetId: "civil", sourceUrl: "https://lex.uz/ru/docs/111189" },
   { targetId: "tax", sourceUrl: "https://lex.uz/ru/docs/4674902" },

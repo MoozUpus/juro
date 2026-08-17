@@ -41,7 +41,7 @@ test("core-code seed is idempotent and title discovery queues only the exact res
     assert.deepEqual(seeded, { considered: LEX_CORE_CODE_SEED_URLS.length, queued: LEX_CORE_CODE_SEED_URLS.length });
     assert.deepEqual(await seedLexCoreCodeJobs(env), { considered: LEX_CORE_CODE_SEED_URLS.length, queued: 0 });
 
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "air")!;
     const now = new Date(0);
     const discovered = await runNextLexCoreCodeDiscovery(env, {
       now,
@@ -136,7 +136,7 @@ test("a discovered code remains prioritized until its exact source is indexed", 
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "air")!;
     const now = new Date(0);
     const discovered = await runNextLexCoreCodeDiscovery(env, {
       now,
@@ -184,7 +184,7 @@ test("a paced core-code retry does not unlock generic catalogue discovery", asyn
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "air")!;
     const now = new Date(0);
     await runNextLexCoreCodeDiscovery(env, {
       now,
@@ -209,7 +209,7 @@ test("core-code discovery resumes the official pager before deferring a title", 
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "air")!;
     const first = await runNextLexCoreCodeDiscovery(env, {
       now: new Date(0),
       fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
