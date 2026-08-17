@@ -1156,6 +1156,31 @@ it does not claim the numeric corpus thresholds, full checkpoint coverage,
 snapshot/restore, Qdrant, indexed-evaluation, preview or production gates are
 complete.
 
+## Staging target-acquisition reallocation (2026-08-17)
+
+A read-only D1 sample for the scheduled interval `2026-08-17T11:32:14Z` to
+`11:36:14Z` recorded five completed `fetch` jobs after three catalogue
+discovery pages. This means the earlier nominal seven-job budget did not by
+itself prove seven completed document ingestions within the four-minute staging
+window: the shared 20-second Lex.uz pacing budget was first consumed by the
+three discovery requests.
+
+The follow-up staging-only implementation preserves sequential discovery, but
+allocates one catalogue page and up to seven document jobs per run. It permits
+at most eight primary Lex.uz requests for a normal run, or nine only when the
+single discovery page is already proved empty and its request slot is reused.
+The same D1-backed 20-second host pacer, 195,000 ms ingestion-start fence,
+seven-minute distributed lock and staging-only `*/4 * * * *` cron remain in
+force. It does not add parallel crawling, change a production binding or start
+production corpus ingestion.
+
+The boundary and ingestion suite (39 tests), TypeScript type check, lint and
+staging artifact validation passed before deployment. The measurable increase
+in completed documents remains an observation gate for the next completed
+staging runs; this change is not evidence that the 1,500-document,
+22,000-provision, 44/44 checkpoint, snapshot, Qdrant, evaluation, preview or
+production gates are complete.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

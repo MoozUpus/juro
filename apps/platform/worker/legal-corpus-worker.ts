@@ -23,16 +23,16 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
-// Coverage completion is gated on every category-language checkpoint, so give
-// catalogue discovery three of the same ten nominal source-work slots. This takes
-// one slot from document ingestion rather than increasing Lex.uz traffic.
-const DISCOVERY_PAGES_PER_RUN = 3;
-// The seven-job staging budget is still governed by the shared 20-second Lex
-// host pacer and the 195-second start fence below. 39 completed staging runs
-// on 2026-08-17 took 195.9s--214.5s with six jobs, leaving bounded time for
-// one additional ordinary fetch without overlapping the four-minute cron. A
-// slow representation fetch simply leaves the seventh job queued when the
-// start fence has passed.
+// This bounded staging configuration gives one catalogue page to resumable
+// discovery without consuming the paced Lex.uz slots that fetch already-
+// discovered documents need. Durable checkpoints preserve every remaining
+// page for later scheduled runs.
+const DISCOVERY_PAGES_PER_RUN = 1;
+// Seven sequential document jobs plus one catalogue request use at most eight
+// primary Lex.uz requests per four-minute run. The shared 20-second host pacer
+// and the 195-second start fence below remain authoritative; a document that
+// needs a secondary representation fetch can leave a later job queued rather
+// than overlap the next cron invocation.
 const INGESTION_JOBS_PER_RUN = 7;
 // Four of the seven existing ingestion slots may prefer the already discovered
 // article-rich official catalogues. Three slots remain FIFO and
@@ -69,7 +69,7 @@ export function legalCorpusIngestionJobBudget(
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
   // discovery does not grant extra nominal source jobs. The nominal maximum
-  // remains ten (3 discovery + 7 ingestion, or 0 + 10); the elapsed-time
+  // remains nine (1 discovery + 7 ingestion, or 1 empty discovery + 8); the elapsed-time
   // start fence below is authoritative when a job discovers a secondary PDF
   // or ZIP representation and therefore consumes an additional paced fetch.
   if (!discoveries.some((result) => result.status === "empty")) return INGESTION_JOBS_PER_RUN;
