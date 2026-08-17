@@ -1041,10 +1041,11 @@ export async function runNextLegalCorpusIngestionJob(
     : await env.DB.prepare(`SELECT j.id,j.job_type AS jobType,j.source_url AS sourceUrl,j.language,
         j.canonical_document_id AS canonicalDocumentId,j.attempt_count AS attemptCount,j.max_attempts AS maxAttempts
       FROM legal_corpus_discovery_checkpoints cp
-      JOIN legal_corpus_discovery_documents dd ON dd.checkpoint_id=cp.id
-      JOIN legal_corpus_ingestion_jobs j ON j.canonical_document_id=dd.provider_source_id
-        AND j.language=dd.language
-      WHERE cp.category_key IN (${categories.map(() => "?").join(",")})
+      CROSS JOIN legal_corpus_discovery_documents dd
+      CROSS JOIN legal_corpus_ingestion_jobs AS j INDEXED BY legal_corpus_ingestion_document_language_ready_idx
+      WHERE dd.checkpoint_id=cp.id
+        AND j.canonical_document_id=dd.provider_source_id AND j.language=dd.language
+        AND cp.category_key IN (${categories.map(() => "?").join(",")})
         AND j.job_type='fetch' AND j.status='queued'
         AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
       ORDER BY j.created_at ASC,j.id ASC LIMIT 1
