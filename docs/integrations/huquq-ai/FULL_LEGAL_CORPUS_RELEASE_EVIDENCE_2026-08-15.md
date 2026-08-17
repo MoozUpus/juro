@@ -983,6 +983,12 @@ does not constitute a corpus freeze or release approval: the count, 44/44
 coverage, dense/Qdrant, backup/restore, indexed evaluation and authenticated
 preview gates remain open.
 
+The owner raised JURO's effective release floor on 2026-08-17 from the audited
+Huquq AI reference of 1,283 canonical documents and 20,296 unique provisions
+to 1,500 canonical documents and 22,000 unique provisions. The historical
+figures above remain evidence of the earlier policy; all future release-gate
+evidence is evaluated against the higher JURO reserve.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

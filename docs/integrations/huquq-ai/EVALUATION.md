@@ -48,9 +48,10 @@ required for the Qdrant snapshot artifact. The gate also enforces recall,
 exactness, abstention, partial-answer, groundedness, latency, pricing and
 invalid/stale-source thresholds.
 
-Corpus size is fail-closed as well: the evidence must contain at least 1,283
-canonical documents, 20,296 unique provisions and 22,513 indexed chunks. These
-values are pinned to the audited Huquq AI commit and the owner's reserve floor;
+Corpus size is fail-closed as well: the evidence must contain at least 1,500
+canonical documents, 22,000 unique provisions and 22,513 indexed chunks. The
+Huquq AI reference is pinned to the audited commit; JURO's higher document and
+provision floor is the owner's explicit reserve policy.
 language completeness is not inferred from multiplication and is instead
 proved by the 44 independent checkpoints.
 

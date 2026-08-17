@@ -36,7 +36,7 @@
   zero failed/dead-letter jobs and 13 preserved technically-unavailable failure
   records representing four documents. Only 7/44 category/language checkpoints
   passed the full
-  release formula. This is below the 1,283 / 20,296 release floors and is not
+  release formula. This is below the 1,500 / 22,000 release floors and is not
   evidence that coverage is complete; exceeding the chunk minimum alone does
   not satisfy the gate.
 - The new source-card and full-article modal passed type-check, focused boundary

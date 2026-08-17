@@ -59,13 +59,13 @@ function validEvidence(): LegalCorpusReleaseEvidence {
         checkedAt: "2026-08-15T11:59:00.000Z",
       },
       totals: {
-        canonicalDocuments: 1_283,
+        canonicalDocuments: 1_500,
         languageVariants: 2_400,
-        uniqueProvisions: 20_296,
-        currentProvisions: 20_296,
+        uniqueProvisions: 22_000,
+        currentProvisions: 22_000,
         currentChunks: 22_513,
         indexedChunks: 22_513,
-        activeDocuments: 1_183,
+        activeDocuments: 1_400,
         repealedDocuments: 100,
         historicalVersions: 3_000,
         documentsFetchedToday: 50,
@@ -157,12 +157,12 @@ test("release gate resolves every discovered ID instead of trusting a lower expe
   assert.equal(verdict.passed, false);
 });
 
-test("release gate enforces the pinned Huquq AI and owner reserve corpus floor", () => {
+test("release gate enforces the higher owner reserve above the pinned Huquq AI corpus", () => {
   assert.deepEqual(LEGAL_CORPUS_BASELINE, {
     sourceRepository: "toxirerkinov70-commits/huquq-ai",
     sourceCommit: "1bce500c69b8213373d8ce0b40d56be7d83f6aec",
-    canonicalDocuments: 1_283,
-    uniqueProvisions: 20_296,
+    canonicalDocuments: 1_500,
+    uniqueProvisions: 22_000,
     indexedChunks: 22_513,
   });
   const evidence = validEvidence();

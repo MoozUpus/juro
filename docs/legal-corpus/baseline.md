@@ -15,8 +15,10 @@
 Huquq AI's README at the pinned commit publishes these **reference-only**
 counts: 1,283 canonical documents, 20,296 provisions and 22,513 chunks. The
 reference clone did not contain the underlying legal corpus, vectors or raw
-HTML, so none of that data is imported into JURO. These values are acceptance
-thresholds, not JURO metrics.
+HTML, so none of that data is imported into JURO. These values remain the
+audited Huquq AI reference floor, not JURO metrics. On 2026-08-17 the owner
+raised JURO's effective release floor to 1,500 canonical documents and 22,000
+unique provisions; the 22,513 indexed-chunk floor is unchanged.
 
 ## Verified JURO staging baseline
 

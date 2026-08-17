@@ -89,22 +89,23 @@ answer path.
 
 The release verifier also enforces the pinned corpus floor from
 `toxirerkinov70-commits/huquq-ai@1bce500c69b8213373d8ce0b40d56be7d83f6aec`:
-at least 1,283 canonical documents, 20,296 unique provisions and 22,513 indexed
+at least 1,500 canonical documents, 22,000 unique provisions and 22,513 indexed
 chunks. These are minimum acceptance counts, not reported JURO achievements;
 all 44 category/language checkpoints must still independently prove
 discovered/fetched/extracted/indexed-or-technically-unavailable completeness.
 
 The route-free `juro-legal-corpus-*` Worker owns corpus scheduling. Its
 `5 19 * * *` UTC seed slot runs five minutes after the existing bounded Lex
-metadata monitor. The five-minute processing slot also idempotently creates
-missing catalog checkpoints before claiming work, so a fresh environment does
-not depend on a manual admin form. It then holds the single
+metadata monitor. The staging-only four-minute processing slot also idempotently
+creates missing catalog checkpoints before claiming work, so a fresh environment
+does not depend on a manual admin form. Production retains its five-minute
+processing slot. The Worker then holds the single
 `legal-corpus-worker` D1 lease for the whole batch. A batch processes at most
-two catalog pages and eight ingestion jobs sequentially. Every real Lex request,
+three catalog pages and six ingestion jobs sequentially. Every real Lex request,
 including `robots.txt`, first claims a host-wide D1 time window; the observed
 `Crawl-delay` is cached for the Worker run and persisted for later runs. The
-seven-minute lease prevents the next five-minute cron from starting a second
-crawler while a paced batch is still active.
+seven-minute lease prevents the next staging processing cron from starting a
+second crawler while a paced batch is still active.
 
 The daily seed also creates maintenance jobs without performing network I/O.
 Daily work prioritizes stale codes and the Constitution while the normal

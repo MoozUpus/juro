@@ -15,16 +15,17 @@ export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
 /**
  * The release floor is the greater of the verified Huquq AI main-branch
  * corpus at the pinned source commit and the owner's explicit reserve floor.
- * Keep these values immutable and raise them when a later upstream audit finds
- * a larger corpus. Language variants are deliberately excluded from a numeric
- * floor because completeness is proved per discovered category/language
- * checkpoint instead of assuming that every act exists in four languages.
+ * Huquq AI's audited reference counts are 1,283 documents and 20,296
+ * provisions; the owner has raised JURO's reserve to 1,500 and 22,000.
+ * Language variants are deliberately excluded from a numeric floor because
+ * completeness is proved per discovered category/language checkpoint instead
+ * of assuming that every act exists in four languages.
  */
 export const LEGAL_CORPUS_BASELINE = Object.freeze({
   sourceRepository: "toxirerkinov70-commits/huquq-ai",
   sourceCommit: "1bce500c69b8213373d8ce0b40d56be7d83f6aec",
-  canonicalDocuments: 1_283,
-  uniqueProvisions: 20_296,
+  canonicalDocuments: 1_500,
+  uniqueProvisions: 22_000,
   indexedChunks: 22_513,
 });
 
