@@ -13,7 +13,7 @@ inert until a separate server-side feature flag and infrastructure are approved.
 | Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; at most three robots-aware GET/POST pages per scheduler lease |
 | Lex metadata monitor | Discover bounded official RSS metadata | Existing robots-aware monitor, no source text stored |
 | Corpus job ledger | Idempotent queued/fetch/retry state | D1; identifiers and official URLs only |
-| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most six sequential jobs per dedicated corpus tick: two bounded primary-legislation preference slots, four FIFO slots and global retry-first; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
+| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most three catalog pages and five sequential jobs per staging tick; four preferred-primary slots plus one version slot, global retry-first, shared D1 host pacing and robots delay; ambiguous metadata remains `null` |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
@@ -105,6 +105,33 @@ at least 1,500 canonical documents, 22,000 unique provisions and 22,513 indexed
 chunks. These are minimum acceptance counts, not reported JURO achievements;
 all 44 category/language checkpoints must still independently prove
 discovered/fetched/extracted/indexed-or-technically-unavailable completeness.
+
+The same verifier requires a fresh, machine-captured `wrangler d1 info --json`
+snapshot for the exact staging database. Its 8 GB release reserve leaves 20%
+below Cloudflare's documented 10 GB paid-D1 database limit for continuing
+bounded acquisition, immutable history and recovery. The snapshot is hashed
+into the final release evidence; an unauthorised remote `PRAGMA` probe, a
+manual size claim in release notes, or an older observation cannot satisfy the
+operational release procedure. Retain the command-emitted JSON next to the
+final evidence and capture it only immediately before the frozen evidence
+build:
+
+```powershell
+npm run capture:legal-corpus:d1-capacity -- `
+  --config wrangler.legal-corpus.jsonc `
+  --output artifacts/legal-corpus/staging-d1-capacity.json
+npm run build:legal-corpus:release-evidence -- `
+  --application-commit <40-char-sha> `
+  --corpus-snapshot-sha256 <64-char-sha> `
+  --dashboard <dashboard.json> `
+  --benchmark <benchmark.json> `
+  --human-review <review.json> `
+  --d1-capacity artifacts/legal-corpus/staging-d1-capacity.json `
+  --output artifacts/legal-corpus/release-evidence.json
+```
+
+This is a staging-only safety gate. It does not authorise production storage,
+feature flags, ingestion, a deployment, or a rollout.
 
 The route-free `juro-legal-corpus-*` Worker owns corpus scheduling. Its
 `5 19 * * *` UTC seed slot runs five minutes after the existing bounded Lex

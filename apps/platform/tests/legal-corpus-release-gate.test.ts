@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   LEGAL_CORPUS_BASELINE,
+  LEGAL_CORPUS_MAX_RELEASE_D1_DATABASE_BYTES,
   evaluateLegalCorpusReleaseEvidence,
   legalCorpusReleaseEvidenceSchema,
   type LegalCorpusReleaseEvidence,
@@ -15,7 +16,7 @@ const snapshot = "b".repeat(64);
 
 function validEvidence(): LegalCorpusReleaseEvidence {
   return legalCorpusReleaseEvidenceSchema.parse({
-    schemaVersion: 3,
+    schemaVersion: 4,
     environment: "staging",
     capturedAt: "2026-08-15T11:58:00.000Z",
     applicationCommit: commit,
@@ -34,6 +35,16 @@ function validEvidence(): LegalCorpusReleaseEvidence {
       correctCount: 314,
       exportedAt: "2026-08-14T12:06:38.000Z",
       verified: true,
+    },
+    d1Capacity: {
+      schemaVersion: 1,
+      environment: "staging",
+      databaseId: "bb716a96-b2fb-4823-90d6-6c228fed181a",
+      databaseName: "juro-staging",
+      observedAt: "2026-08-15T11:59:00.000Z",
+      databaseSizeBytes: 2_862_432_256,
+      source: "wrangler_d1_info",
+      fileSha256: "3".repeat(64),
     },
     dashboard: {
       environment: "staging",
@@ -140,6 +151,16 @@ test("release gate accepts only complete frozen staging evidence", () => {
   assert.equal(verdict.observed.checkpointCount, 44);
   assert.equal(verdict.observed.completeCheckpointCount, 44);
   assert.equal(verdict.observed.discoveredDocuments, 4_400);
+});
+
+test("release gate requires a fresh staging D1 capacity probe below the release reserve", () => {
+  const evidence = validEvidence();
+  evidence.d1Capacity.observedAt = "2026-08-14T11:59:00.000Z";
+  evidence.d1Capacity.databaseSizeBytes = LEGAL_CORPUS_MAX_RELEASE_D1_DATABASE_BYTES + 1;
+  const verdict = evaluateLegalCorpusReleaseEvidence(evidence, now);
+  assert.equal(verdict.passed, false);
+  assert.ok(verdict.failures.includes("D1_CAPACITY_EVIDENCE_STALE"));
+  assert.ok(verdict.failures.includes("D1_CAPACITY_LIMIT_FAILED"));
 });
 
 test("release gate resolves every discovered ID instead of trusting a lower expected count", () => {

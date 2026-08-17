@@ -10,6 +10,7 @@ import {
   LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION,
   evaluateLegalCorpusReleaseEvidence,
   legalCorpusBenchmarkEvidenceSchema,
+  legalCorpusD1CapacityInputSchema,
   legalCorpusDashboardEvidenceSchema,
   legalCorpusReleaseEvidenceSchema,
 } from "../lib/legal-corpus/release-gate";
@@ -36,10 +37,12 @@ async function main(): Promise<void> {
   const dashboardInput = await readJson(argument("--dashboard"));
   const benchmarkInput = await readJson(argument("--benchmark"));
   const humanReviewInput = await readJson(argument("--human-review"));
+  const d1CapacityInput = await readJson(argument("--d1-capacity"));
   const outputPath = resolve(argument("--output"));
 
   const dashboard = legalCorpusDashboardEvidenceSchema.parse(dashboardInput.parsed);
   const benchmark = legalCorpusBenchmarkEvidenceSchema.parse(benchmarkInput.parsed);
+  const d1Capacity = legalCorpusD1CapacityInputSchema.parse(d1CapacityInput.parsed);
   const humanEvidence = legalEvaluationHumanEvidenceSchema.parse(humanReviewInput.parsed);
   const humanFailures = await verifyLegalEvaluationHumanEvidence(humanEvidence);
   if (humanFailures.length > 0) {
@@ -72,6 +75,10 @@ async function main(): Promise<void> {
       exportedAt: humanEvidence.exportedAt,
       verified: true,
     },
+    d1Capacity: {
+      ...d1Capacity,
+      fileSha256: sha256(d1CapacityInput.raw),
+    },
     dashboard,
     benchmark,
   });
@@ -83,6 +90,8 @@ async function main(): Promise<void> {
     evaluationRunId: evidence.humanReview.evaluationRunId,
     reviewedScenarioCount: evidence.humanReview.recordCount,
     humanReviewFileSha256: evidence.humanReview.fileSha256,
+    d1CapacityFileSha256: evidence.d1Capacity.fileSha256,
+    d1DatabaseSizeBytes: evidence.d1Capacity.databaseSizeBytes,
     passed: verdict.passed,
     failures: verdict.failures,
   })}\n`);

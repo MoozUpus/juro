@@ -7,10 +7,19 @@ const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const commitSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const isoTimestampSchema = z.string().datetime({ offset: true });
 
-export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 3;
+export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 4;
 export const LEGAL_CORPUS_RELEASE_SCENARIO_COUNT = 314;
 export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
   LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length;
+export const LEGAL_CORPUS_STAGING_D1_DATABASE_NAME = "juro-staging";
+
+/**
+ * Cloudflare currently limits one paid D1 database to 10 GB. The release gate
+ * reserves 20% of that ceiling for an in-progress crawl, version history and
+ * operational recovery; it is not a claim about the account-wide allowance.
+ */
+export const LEGAL_CORPUS_MAX_D1_DATABASE_BYTES = 10_000_000_000;
+export const LEGAL_CORPUS_MAX_RELEASE_D1_DATABASE_BYTES = 8_000_000_000;
 
 /**
  * The release floor is the greater of the verified Huquq AI main-branch
@@ -50,6 +59,7 @@ export const LEGAL_CORPUS_RELEASE_THRESHOLDS = Object.freeze({
   p95CompleteAnswerMs: 30_000,
   maximumProviderCostUsd: 30,
   maximumEvidenceAgeMs: 24 * 60 * 60_000,
+  maximumD1DatabaseBytes: LEGAL_CORPUS_MAX_RELEASE_D1_DATABASE_BYTES,
 });
 
 export const legalCorpusFeatureFlagsEvidenceSchema = z.object({
@@ -156,6 +166,25 @@ export const legalCorpusHumanReviewBindingSchema = z.object({
   verified: z.literal(true),
 }).strict();
 
+/**
+ * The input is emitted by `capture-legal-corpus-d1-capacity.mjs`, which calls
+ * `wrangler d1 info --json` against staging. The final evidence adds a digest
+ * of that independent input file so reviewers can retain the exact probe.
+ */
+export const legalCorpusD1CapacityInputSchema = z.object({
+  schemaVersion: z.literal(1),
+  environment: z.literal("staging"),
+  databaseId: z.string().uuid(),
+  databaseName: z.literal(LEGAL_CORPUS_STAGING_D1_DATABASE_NAME),
+  observedAt: isoTimestampSchema,
+  databaseSizeBytes: z.number().int().nonnegative(),
+  source: z.literal("wrangler_d1_info"),
+}).strict();
+
+export const legalCorpusD1CapacityEvidenceSchema = legalCorpusD1CapacityInputSchema.extend({
+  fileSha256: sha256Schema,
+}).strict();
+
 export const legalCorpusDashboardEvidenceSchema = z.object({
   environment: z.literal("staging"),
   featureFlags: legalCorpusFeatureFlagsEvidenceSchema,
@@ -182,6 +211,7 @@ export const legalCorpusReleaseEvidenceSchema = z.object({
   applicationCommit: commitSchema,
   corpusSnapshotSha256: sha256Schema,
   humanReview: legalCorpusHumanReviewBindingSchema,
+  d1Capacity: legalCorpusD1CapacityEvidenceSchema,
   dashboard: legalCorpusDashboardEvidenceSchema,
   benchmark: legalCorpusBenchmarkEvidenceSchema,
 }).strict();
@@ -233,10 +263,18 @@ export function evaluateLegalCorpusReleaseEvidence(
   const coverage = evidence.dashboard.coverage;
   const benchmark = evidence.benchmark;
   const humanReview = evidence.humanReview;
+  const d1Capacity = evidence.d1Capacity;
 
   if (!fresh(evidence.capturedAt, now)) failures.push("EVIDENCE_STALE");
   if (!fresh(benchmark.generatedAt, now)) failures.push("BENCHMARK_STALE");
   if (!fresh(totals.lastSuccessfulUpdate, now)) failures.push("CORPUS_UPDATE_STALE");
+  if (!fresh(d1Capacity.observedAt, now)) failures.push("D1_CAPACITY_EVIDENCE_STALE");
+  if (d1Capacity.databaseName !== LEGAL_CORPUS_STAGING_D1_DATABASE_NAME) {
+    failures.push("D1_CAPACITY_DATABASE_MISMATCH");
+  }
+  if (d1Capacity.databaseSizeBytes > LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumD1DatabaseBytes) {
+    failures.push("D1_CAPACITY_LIMIT_FAILED");
+  }
   if (benchmark.applicationCommit !== evidence.applicationCommit) failures.push("BENCHMARK_COMMIT_MISMATCH");
   if (benchmark.corpusSnapshotSha256 !== evidence.corpusSnapshotSha256) failures.push("BENCHMARK_CORPUS_MISMATCH");
   if (humanReview.recordCount !== benchmark.reviewedScenarioCount
