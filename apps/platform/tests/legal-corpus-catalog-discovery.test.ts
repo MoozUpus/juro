@@ -371,3 +371,47 @@ test("catalog pager restarts safely when Lex rejects its source session", async 
     sqlite.close();
   }
 });
+
+test("completed checkpoints survive pager expiry and repair the legacy queued shape", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare("UPDATE legal_corpus_discovery_checkpoints SET status='completed' WHERE id NOT IN (?,?)")
+      .run("lex-catalog:laws:ru", "lex-catalog:president:ru");
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
+      status='completed',page_number=2,expected_document_count=2,discovered_document_count=2,
+      next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,
+      completed_at='2026-08-15T00:01:00.000Z',next_attempt_at=NULL
+      WHERE id='lex-catalog:laws:ru'`).run();
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
+      status='queued',page_number=0,expected_document_count=3,discovered_document_count=3,
+      next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,
+      completed_at='2026-08-15T00:01:00.000Z',next_attempt_at='2026-08-15T00:05:00.000Z'
+      WHERE id='lex-catalog:president:ru'`).run();
+
+    const result = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:20:00.000Z"),
+      wait: async () => undefined,
+      fetchImpl: async () => assert.fail("completed checkpoints must not fetch Lex again"),
+    });
+    assert.equal(result.status, "empty");
+    const completed = sqlite.prepare(`SELECT id,status,page_number AS pageNumber,next_attempt_at AS nextAttemptAt
+      FROM legal_corpus_discovery_checkpoints WHERE id IN (?,?) ORDER BY id`)
+      .all("lex-catalog:laws:ru", "lex-catalog:president:ru") as Array<{
+        id: string; status: string; pageNumber: number; nextAttemptAt: string | null;
+      }>;
+    assert.deepEqual(completed.map((checkpoint) => ({ ...checkpoint })), [
+      { id: "lex-catalog:laws:ru", status: "completed", pageNumber: 2, nextAttemptAt: null },
+      { id: "lex-catalog:president:ru", status: "completed", pageNumber: 0, nextAttemptAt: null },
+    ]);
+  } finally {
+    sqlite.close();
+  }
+});

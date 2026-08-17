@@ -422,14 +422,26 @@ export async function runNextLexCatalogDiscoveryPage(
   const nowDate = input.now ?? new Date();
   const now = nowDate.toISOString();
   const stale = new Date(nowDate.getTime() - 15 * 60_000).toISOString();
+  // A previous pager-expiry cleanup could reset a finished checkpoint to
+  // `queued` while retaining its immutable completion evidence. Repair only
+  // that exact legacy shape before claiming new work; it cannot mark a
+  // genuinely incomplete catalogue as complete because `completed_at` and a
+  // provable expected/discovered total are both required.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET status='completed',next_attempt_at=NULL,last_error_code=NULL,updated_at=?
+    WHERE status='queued' AND completed_at IS NOT NULL AND page_number=0
+      AND next_event_target IS NULL AND view_state IS NULL AND view_state_generator IS NULL
+      AND expected_document_count IS NOT NULL AND discovered_document_count>=expected_document_count`).bind(now).run();
   // ASP.NET pager state is only useful with the short-lived, public source
-  // session that produced it. A stale state is restarted from page one while
-  // retaining already-discovered document IDs for idempotent recovery.
+  // session that produced it. Only unfinished pages are restarted from page
+  // one; a completed checkpoint has no continuation to recover. Discovered
+  // document IDs stay in the idempotent ledger either way.
   await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
     SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
       source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
       next_attempt_at=?,last_error_code=NULL,updated_at=?
-    WHERE page_number>0 AND (source_session_cookie IS NULL OR source_session_expires_at IS NULL
+    WHERE status IN ('queued','retrying','running') AND page_number>0
+      AND (source_session_cookie IS NULL OR source_session_expires_at IS NULL
       OR source_session_expires_at<=?)`).bind(now, now, now).run();
   await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
     SET status='retrying',next_attempt_at=?,last_error_code='LEX_CATALOG_STALE_CLAIM',updated_at=?
