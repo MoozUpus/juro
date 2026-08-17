@@ -1057,6 +1057,46 @@ test("a preferred slot expands an unlinked official family before a known langua
   }
 });
 
+test("a preferred slot follows the configured legal catalogue order", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    await seedLexCatalogDiscoveryCheckpoints(env, now);
+    const lowerPriority = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10004",
+      now,
+      correlationId: "preferred-oliy-majlis",
+    });
+    const higherPriority = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10005",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "preferred-court-acts",
+    });
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      VALUES
+        ('lex-catalog:oliy_majlis:ru',?,'lexuz:10004','ru',?),
+        ('lex-catalog:court_acts:ru',?,'lexuz:10005','ru',?)`).run(
+      "https://lex.uz/ru/docs/10004", now.toISOString(),
+      "https://lex.uz/ru/docs/10005", now.toISOString(),
+    );
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+      preferredCatalogCategories: ["court_acts", "oliy_majlis"],
+      preferredCatalogLanguages: ["ru"],
+    });
+    assert.equal(run.jobId, higherPriority.jobId);
+    const deferred = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(lowerPriority.jobId) as { status: string };
+    assert.equal(deferred.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a bounded preferred slot selects its scheduled catalogue language before another official locale", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

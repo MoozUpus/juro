@@ -161,6 +161,7 @@ async function findPreferredCatalogJob(
   const languageClause = languages.length > 0
     ? `AND j.language IN (${languages.map(() => "?").join(",")})`
     : "";
+  const categoryPriority = `CASE cp.category_key ${categories.map((_, index) => `WHEN ? THEN ${index}`).join(" ")} ELSE ${categories.length} END`;
   return db.prepare(`SELECT j.id,j.job_type AS jobType,j.source_url AS sourceUrl,j.language,
       j.canonical_document_id AS canonicalDocumentId,j.attempt_count AS attemptCount,j.max_attempts AS maxAttempts
     FROM legal_corpus_discovery_checkpoints cp
@@ -178,8 +179,9 @@ async function findPreferredCatalogJob(
     -- bootstrap slots widen coverage instead of repeatedly consuming variants
     -- of a family that FIFO will still process for language completeness.
     ORDER BY CASE WHEN known_source.document_id IS NULL THEN 0 ELSE 1 END,
+      ${categoryPriority},
       j.created_at ASC,j.id ASC LIMIT 1
-  `).bind(...categories, ...languages, now).first<IngestionJob>();
+  `).bind(...categories, ...languages, now, ...categories).first<IngestionJob>();
 }
 
 function nowIso(now = new Date()): string {
