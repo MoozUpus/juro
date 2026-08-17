@@ -22,6 +22,11 @@ const LEX_CORE_CODE_SEEDS = [
   { targetId: "labor", sourceUrl: "https://lex.uz/ru/docs/6257291" },
 ] as const;
 
+// A title search can legitimately put the consolidated act behind amendments
+// and legislative proposals.  Resume only the site's own bounded pager state;
+// never broaden the query or follow arbitrary result links.
+const MAX_CORE_CODE_SEARCH_PAGES = 12;
+
 export const LEX_CORE_CODE_SEED_URLS = LEX_CORE_CODE_SEEDS.map((seed) => seed.sourceUrl);
 
 export const LEX_CORE_CODE_SEED_IDS = LEX_CORE_CODE_SEED_URLS.map((url) =>
@@ -44,6 +49,10 @@ type CoreCodeTargetRow = {
   canonicalDocumentId: string | null;
   attemptCount: number;
   nextAttemptAt: string | null;
+  pageNumber: number;
+  nextEventTarget: string | null;
+  viewState: string | null;
+  viewStateGenerator: string | null;
 };
 
 function pickTarget(targets: readonly LexCoreCodeTarget[], now: Date): LexCoreCodeTarget {
@@ -94,7 +103,9 @@ async function reconcileCoreCodeTargetStates(env: CoreCodeEnv, now: string): Pro
 async function coreCodeTargetRows(env: CoreCodeEnv): Promise<CoreCodeTargetRow[]> {
   const rows = await env.DB.prepare(`SELECT target_id AS targetId,status,source_url AS sourceUrl,
       canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,
-      next_attempt_at AS nextAttemptAt
+      next_attempt_at AS nextAttemptAt,page_number AS pageNumber,
+      next_event_target AS nextEventTarget,view_state AS viewState,
+      view_state_generator AS viewStateGenerator
     FROM legal_corpus_core_code_targets`).all<CoreCodeTargetRow>();
   return rows.results;
 }
@@ -103,6 +114,10 @@ function priorityCanonicalDocumentIds(rows: readonly CoreCodeTargetRow[]): strin
   return [...new Set(rows
     .filter((row) => row.status === "awaiting_ingestion" && row.canonicalDocumentId)
     .map((row) => row.canonicalDocumentId!))];
+}
+
+function canResumePager(row: CoreCodeTargetRow): boolean {
+  return row.pageNumber > 0 && Boolean(row.nextEventTarget && row.viewState);
 }
 
 export async function seedLexCoreCodeJobs(
@@ -160,20 +175,48 @@ export async function runNextLexCoreCodeDiscovery(
       safeErrorCode: null,
     };
   }
-  const target = pickTarget(unresolved, now);
+  // A code whose first result page did not contain the consolidated act must
+  // advance its verified ASP.NET pager before a fresh title query. This keeps
+  // the code-first phase finite and avoids allowing amendments to starve the
+  // current code merely because they occupy page one.
+  const paged = unresolved.filter((target) => {
+    const row = byTargetId.get(target.id);
+    return row ? canResumePager(row) : false;
+  });
+  const target = pickTarget(paged.length > 0 ? paged : unresolved, now);
   const targetRow = byTargetId.get(target.id);
   if (!targetRow) throw new TypeError("LEX_CORE_CODE_TARGET_STATE_MISSING");
   try {
     const page = await fetchLexCatalogPage({
       searchUrl: lexCoreCodeSearchUrl(target),
+      eventTarget: canResumePager(targetRow) ? targetRow.nextEventTarget : null,
+      viewState: canResumePager(targetRow) ? targetRow.viewState : null,
+      viewStateGenerator: canResumePager(targetRow) ? targetRow.viewStateGenerator : null,
       fetchImpl: input.fetchImpl,
       wait: input.wait,
     });
     const document = discoverExactLexCoreCodeDocument(page.html, target, lexCoreCodeSearchUrl(target));
     if (!document) {
+      const canAdvance = page.currentPage < MAX_CORE_CODE_SEARCH_PAGES
+        && Boolean(page.nextEventTarget && page.viewState);
+      if (canAdvance) {
+        await env.DB.prepare(`UPDATE legal_corpus_core_code_targets
+          SET status='retrying',attempt_count=MIN(attempt_count+1,12),page_number=?,
+            next_event_target=?,view_state=?,view_state_generator=?,next_attempt_at=?,
+            last_error_code=NULL,updated_at=?
+          WHERE target_id=? AND status IN ('queued','retrying')`).bind(
+          page.currentPage, page.nextEventTarget, page.viewState, page.viewStateGenerator,
+          nowIso, nowIso, target.id,
+        ).run();
+        return {
+          status: "queued", targetId: target.id, canonicalDocumentId: null,
+          priorityCanonicalDocumentIds: priorities, queued: false, safeErrorCode: null,
+        };
+      }
       const nextAttempt = new Date(now.getTime() + 60 * 60_000).toISOString();
       await env.DB.prepare(`UPDATE legal_corpus_core_code_targets
         SET status='retrying',attempt_count=MIN(attempt_count+1,12),next_attempt_at=?,
+          page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
           last_error_code='LEX_CORE_CODE_EXACT_TITLE_NOT_FOUND',updated_at=?
         WHERE target_id=? AND status IN ('queued','retrying')`).bind(nextAttempt, nowIso, target.id).run();
       return { status: "not_found", targetId: target.id, canonicalDocumentId: null, priorityCanonicalDocumentIds: priorities, queued: false, safeErrorCode: null };
@@ -181,6 +224,7 @@ export async function runNextLexCoreCodeDiscovery(
     const queued = await enqueueOfficialLexCorpusDocument(env, { sourceUrl: document.sourceUrl, now });
     await env.DB.prepare(`UPDATE legal_corpus_core_code_targets
       SET status='awaiting_ingestion',source_url=?,canonical_document_id=?,attempt_count=MIN(attempt_count+1,12),
+        page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
         next_attempt_at=NULL,last_error_code=NULL,updated_at=?
       WHERE target_id=? AND status IN ('queued','retrying')`).bind(
       document.sourceUrl, queued.canonicalDocumentId, nowIso, target.id,

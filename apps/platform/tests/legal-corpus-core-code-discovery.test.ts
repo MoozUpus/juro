@@ -174,3 +174,45 @@ test("a paced core-code retry does not unlock generic catalogue discovery", asyn
     sqlite.close();
   }
 });
+
+test("core-code discovery resumes the official pager before deferring a title", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
+    const first = await runNextLexCoreCodeDiscovery(env, {
+      now: new Date(4 * 60_000),
+      fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(init?.method === "POST"
+          ? '<a class="aspNetDisabled">2</a><a href="/ru/docs/888">' + target.titleRu + "</a>"
+          : '<input name="__VIEWSTATE" value="state-1"><a class="aspNetDisabled">1</a><a href="javascript:__doPostBack(\'pager2\',\'\')">2</a>', {
+          headers: { "content-type": "text/html" },
+        }),
+    });
+    assert.equal(first.status, "queued");
+    assert.equal(first.canonicalDocumentId, null);
+    const paged = sqlite.prepare(`SELECT status,page_number AS pageNumber,next_event_target AS nextEventTarget
+      FROM legal_corpus_core_code_targets WHERE target_id=?`).get(target.id) as {
+        status: string; pageNumber: number; nextEventTarget: string;
+      };
+    assert.deepEqual({ ...paged }, { status: "retrying", pageNumber: 1, nextEventTarget: "pager2" });
+
+    const second = await runNextLexCoreCodeDiscovery(env, {
+      now: new Date(8 * 60_000),
+      fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(init?.method === "POST"
+          ? '<a class="aspNetDisabled">2</a><a href="/ru/docs/888">' + target.titleRu + "</a>"
+          : "<main></main>", { headers: { "content-type": "text/html" } }),
+    });
+    assert.equal(second.canonicalDocumentId, "lexuz:888");
+    const awaiting = sqlite.prepare(`SELECT status,page_number AS pageNumber,next_event_target AS nextEventTarget
+      FROM legal_corpus_core_code_targets WHERE target_id=?`).get(target.id) as {
+        status: string; pageNumber: number; nextEventTarget: string | null;
+      };
+    assert.deepEqual({ ...awaiting }, { status: "awaiting_ingestion", pageNumber: 0, nextEventTarget: null });
+  } finally {
+    sqlite.close();
+  }
+});
