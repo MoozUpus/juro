@@ -1220,6 +1220,17 @@ lock, feature flags and production-disabled state are unchanged. A terminal
 staging run must confirm this ordering before it is treated as operational
 evidence.
 
+That confirmation completed on staging run `2026-08-17T12:12:15Z` to
+`12:15:46Z`: five current `fetch` jobs and one historical `version` job
+completed with no error code, while the final preferred fetch remained queued
+at the 195,000 ms start fence. The next four-minute cron remained available.
+The subsequent read-only corpus probe reported 1,504 canonical documents,
+15,854 unique current provisions, 54,042 indexed chunks, zero retrying,
+failed or dead-letter jobs and 19 of 44 completed checkpoints. It therefore
+proves the bounded ordering behavior and meets the requested document count,
+but does not meet the 22,000-provision or 44/44 coverage gates and authorizes
+none of the freeze, dense, snapshot, evaluation, preview or production work.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
