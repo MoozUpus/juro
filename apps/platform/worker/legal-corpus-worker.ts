@@ -35,13 +35,13 @@ const DISCOVERY_PAGES_PER_RUN = 1;
 // than overlap the next cron invocation.
 const INGESTION_JOBS_PER_RUN = 7;
 // Six of the seven existing ingestion slots may prefer already-discovered,
-// article-rich official catalogues. One explicitly reserved version slot keeps
-// historical work advancing; runNextLegalCorpusIngestionJob always claims a due retry first.
-// Staging evidence showed that the earlier four-slot share spent three slots
-// per run on the 1,826-item historical-version FIFO backlog, preventing the
-// new-document and current-provision target from advancing. This remains a
-// sequential, bounded prioritisation rather than a new crawl stream.
+// article-rich official catalogues. Place the explicitly reserved historical
+// version slot after four fetch slots, so secondary PDF/ZIP representations
+// cannot consistently consume the start window before versioning progresses.
+// Due retries remain globally first. This remains a sequential, bounded
+// prioritisation rather than a new crawl stream.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 6;
+const VERSION_INGESTION_SLOT_INDEX = 4;
 const PREFERRED_INGESTION_CATALOGUES = [
   "court_acts",
   "laws",
@@ -311,20 +311,23 @@ export async function handleLegalCorpusScheduled(
           ingestionStartCutoffReached = true;
           break;
         }
+        const reservedVersionSlot = index === VERSION_INGESTION_SLOT_INDEX;
+        const preferredCatalogSlot = index < INGESTION_JOBS_PER_RUN && !reservedVersionSlot;
+        const preferredSlotIndex = index < VERSION_INGESTION_SLOT_INDEX ? index : index - 1;
         const result = await runNextLegalCorpusIngestionJob(env, {
           wait,
           fetchImpl,
-          preferredCatalogCategories: index < PREFERRED_INGESTION_SLOTS_PER_RUN
+          preferredCatalogCategories: preferredCatalogSlot
             ? PREFERRED_INGESTION_CATALOGUES
             : undefined,
-          preferredCatalogLanguages: index < PREFERRED_INGESTION_SLOTS_PER_RUN
+          preferredCatalogLanguages: preferredCatalogSlot
             ? [PREFERRED_INGESTION_LANGUAGE_ROTATION[
               (Math.floor(controller.scheduledTime / (4 * 60_000))
-                * PREFERRED_INGESTION_SLOTS_PER_RUN + index)
+                * PREFERRED_INGESTION_SLOTS_PER_RUN + preferredSlotIndex)
               % PREFERRED_INGESTION_LANGUAGE_ROTATION.length
             ]]
             : undefined,
-          reservedQueuedJobType: index === PREFERRED_INGESTION_SLOTS_PER_RUN
+          reservedQueuedJobType: reservedVersionSlot
             ? "version"
             : undefined,
         });

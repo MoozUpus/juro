@@ -1200,6 +1200,26 @@ remove version handling, add a request source, increase concurrency, alter the
 a completed staging run with the new Worker version and cannot be used as
 evidence that any corpus or release gate is satisfied.
 
+## Staging historical-slot ordering correction (2026-08-17)
+
+The first run with an explicit version reservation, scheduled at
+`2026-08-17T12:04:15Z`, completed without an error at `12:07:38Z` and
+processed six current-document `fetch` jobs. It reached the 195,000 ms start
+fence before the final, seventh reservation slot, so no `version` job was
+claimed. The reservation mechanism was correct, but its final-slot ordering
+did not satisfy the intended bounded history-progress guarantee when an
+official source required additional representations.
+
+The follow-up staging-only correction places the reserved `version` claim
+after four preferred fetch claims and before the final two preferred claims.
+If a version job is not due, that one slot still falls back safely to ordinary
+FIFO work. The normal bounded budget remains six preferred fetch slots and one
+historical slot; an empty catalogue page can still yield only one extra FIFO
+slot. The 20-second host pacer, 195,000 ms fence, source allowlist, distributed
+lock, feature flags and production-disabled state are unchanged. A terminal
+staging run must confirm this ordering before it is treated as operational
+evidence.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
