@@ -240,6 +240,48 @@ test("catalog discovery interleaves untouched categories before draining later p
   }
 });
 
+test("a resumed pager with no due timestamp cannot starve untouched page-zero catalogues", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET status='completed'
+      WHERE id NOT IN ('lex-catalog:laws:ru','lex-catalog:president:ru')`).run();
+    // A successful resumed page clears next_attempt_at. If selection sorts by
+    // coalesce(next_attempt_at,created_at) before page_number, this oldest
+    // checkpoint will monopolise discovery ahead of the untouched president
+    // catalogue, whose durable wake-up timestamp was refreshed later.
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
+      page_number=4,next_event_target='pager',view_state='state',
+      view_state_generator='4CEDEDF5',source_session_cookie='ASP.NET_SessionId=activepager',
+      source_session_expires_at='2026-08-15T00:30:00.000Z',next_attempt_at=NULL,
+      updated_at='2026-08-15T00:10:00.000Z'
+      WHERE id='lex-catalog:laws:ru'`).run();
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
+      next_attempt_at='2026-08-15T00:05:00.000Z',updated_at='2026-08-15T00:05:00.000Z'
+      WHERE id='lex-catalog:president:ru'`).run();
+
+    const result = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:15:00.000Z"),
+      wait: async () => undefined,
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+          headers: { "content-type": "text/html" },
+        }),
+    });
+
+    assert.equal(result.checkpointId, "lex-catalog:president:ru");
+    assert.equal(result.status, "category_completed");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a truncated terminal page retries instead of claiming complete coverage", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
