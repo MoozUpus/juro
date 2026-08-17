@@ -84,6 +84,26 @@ test("catalog fetch rejects arbitrary URLs and honors robots crawl delay", async
   assert.equal(result.viewState, "state&one");
 });
 
+test("catalog fetch keeps only the public Lex pager session from multiple Set-Cookie headers", async () => {
+  const result = await fetchLexCatalogPage({
+    searchUrl: lexCatalogSearchUrl("laws", "ru"),
+    wait: async () => undefined,
+    fetchImpl: async (input) => {
+      if (String(input).endsWith("robots.txt")) {
+        return new Response(robots, { headers: { "content-type": "text/plain" } });
+      }
+      const response = new Response(catalogPage({ page: 1, count: 1, links: [], viewState: "state" }), {
+        headers: { "content-type": "text/html" },
+      });
+      Object.defineProperty(response.headers, "getSetCookie", {
+        value: () => ["anti_bot=opaque; path=/", "ASP.NET_SessionId=lexpager99; path=/; HttpOnly"],
+      });
+      return response;
+    },
+  });
+  assert.equal(result.sourceSessionCookie, "ASP.NET_SessionId=lexpager99");
+});
+
 test("temporary catalog access denial remains retryable and old terminal rows self-heal", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
