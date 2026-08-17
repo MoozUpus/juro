@@ -7,7 +7,18 @@ export type SparseTermEntry = {
 
 const MAX_SPARSE_TERMS_PER_CHUNK = 512;
 const DEFAULT_JSON_COMPACTION_BATCH = 256;
-const DEFAULT_COMPRESSED_BACKFILL_BATCH = 256;
+// A compressed backfill binds the selected IDs to five statements in a single
+// D1 transaction. Keep each statement's ID list conservative for the managed
+// runtime while preserving a meaningful amount of reusable sparse capacity per
+// scheduled lease.
+export const MAX_COMPRESSED_SPARSE_BACKFILL_CHUNKS = 64;
+const DEFAULT_COMPRESSED_BACKFILL_BATCH = MAX_COMPRESSED_SPARSE_BACKFILL_CHUNKS;
+
+export class LegalCorpusSparseIndexError extends Error {
+  constructor(readonly code: "LEGAL_CORPUS_SPARSE_BACKFILL_FAILED") {
+    super(code);
+  }
+}
 
 function countSparseTerms(value: string): Map<string, number> {
   const counts = new Map<string, number>();
@@ -222,7 +233,10 @@ export async function backfillCompressedSparseIndexBatch(
   maxChunks = DEFAULT_COMPRESSED_BACKFILL_BATCH,
 ): Promise<number> {
   if (await sparseStorageMode(db) !== "compressed") return 0;
-  const bounded = Math.max(1, Math.min(Math.trunc(maxChunks), 256));
+  const bounded = Math.max(1, Math.min(
+    Math.trunc(maxChunks),
+    MAX_COMPRESSED_SPARSE_BACKFILL_CHUNKS,
+  ));
   const candidates = await db.prepare(`SELECT chunk_id AS chunkId
     FROM legal_corpus_sparse_terms
     GROUP BY chunk_id
@@ -233,32 +247,37 @@ export async function backfillCompressedSparseIndexBatch(
   if (chunkIds.length === 0) return 0;
   const placeholders = chunkIds.map(() => "?").join(",");
   const statement = (sql: string) => db.prepare(sql).bind(...chunkIds);
-  const results = await db.batch([
-    statement(`INSERT INTO legal_corpus_sparse_chunk_keys (chunk_id)
-      SELECT chunk_id FROM legal_corpus_sparse_terms
-      WHERE chunk_id IN (${placeholders})
-      GROUP BY chunk_id
-      ON CONFLICT(chunk_id) DO NOTHING`),
-    statement(`INSERT INTO legal_corpus_sparse_term_dictionary (term)
-      SELECT term FROM legal_corpus_sparse_terms
-      WHERE chunk_id IN (${placeholders})
-      GROUP BY term
-      ON CONFLICT(term) DO NOTHING`),
-    statement(`INSERT INTO legal_corpus_sparse_postings
-      (term_id,chunk_key_id,term_frequency,title_frequency,article_frequency)
-      SELECT term.id,chunk_key.id,sparse.term_frequency,sparse.title_frequency,sparse.article_frequency
-      FROM legal_corpus_sparse_terms AS sparse
-      INNER JOIN legal_corpus_sparse_term_dictionary AS term ON term.term=sparse.term
-      INNER JOIN legal_corpus_sparse_chunk_keys AS chunk_key ON chunk_key.chunk_id=sparse.chunk_id
-      WHERE sparse.chunk_id IN (${placeholders})
-      ON CONFLICT(term_id,chunk_key_id) DO UPDATE SET
-        term_frequency=excluded.term_frequency,
-        title_frequency=excluded.title_frequency,
-        article_frequency=excluded.article_frequency`),
-    statement(`UPDATE legal_corpus_chunks SET sparse_terms_json='[]'
-      WHERE id IN (${placeholders})`),
-    statement(`DELETE FROM legal_corpus_sparse_terms WHERE chunk_id IN (${placeholders})`),
-  ]);
+  let results: D1Result<unknown>[];
+  try {
+    results = await db.batch([
+      statement(`INSERT INTO legal_corpus_sparse_chunk_keys (chunk_id)
+        SELECT chunk_id FROM legal_corpus_sparse_terms
+        WHERE chunk_id IN (${placeholders})
+        GROUP BY chunk_id
+        ON CONFLICT(chunk_id) DO NOTHING`),
+      statement(`INSERT INTO legal_corpus_sparse_term_dictionary (term)
+        SELECT term FROM legal_corpus_sparse_terms
+        WHERE chunk_id IN (${placeholders})
+        GROUP BY term
+        ON CONFLICT(term) DO NOTHING`),
+      statement(`INSERT INTO legal_corpus_sparse_postings
+        (term_id,chunk_key_id,term_frequency,title_frequency,article_frequency)
+        SELECT term.id,chunk_key.id,sparse.term_frequency,sparse.title_frequency,sparse.article_frequency
+        FROM legal_corpus_sparse_terms AS sparse
+        INNER JOIN legal_corpus_sparse_term_dictionary AS term ON term.term=sparse.term
+        INNER JOIN legal_corpus_sparse_chunk_keys AS chunk_key ON chunk_key.chunk_id=sparse.chunk_id
+        WHERE sparse.chunk_id IN (${placeholders})
+        ON CONFLICT(term_id,chunk_key_id) DO UPDATE SET
+          term_frequency=excluded.term_frequency,
+          title_frequency=excluded.title_frequency,
+          article_frequency=excluded.article_frequency`),
+      statement(`UPDATE legal_corpus_chunks SET sparse_terms_json='[]'
+        WHERE id IN (${placeholders})`),
+      statement(`DELETE FROM legal_corpus_sparse_terms WHERE chunk_id IN (${placeholders})`),
+    ]);
+  } catch {
+    throw new LegalCorpusSparseIndexError("LEGAL_CORPUS_SPARSE_BACKFILL_FAILED");
+  }
   if (Number(results[4]?.meta?.changes ?? 0) === 0) {
     throw new Error("LEGAL_CORPUS_SPARSE_BACKFILL_LOST_LEASE");
   }

@@ -22,6 +22,7 @@ import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance"
 import {
   backfillCompressedSparseIndexBatch,
   compactLegacySparseJsonBatch,
+  LegalCorpusSparseIndexError,
 } from "../lib/legal-corpus/sparse-index";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
@@ -443,9 +444,12 @@ export async function handleLegalCorpusScheduled(
       resolvedSourceConditionCount,
       errorCode,
     });
-  } catch {
+  } catch (error) {
+    const errorCode = error instanceof LegalCorpusSparseIndexError
+      ? error.code
+      : "LEGAL_CORPUS_WORKER_FAILED";
     try {
-      await finishRun(env, run, "failed", "LEGAL_CORPUS_WORKER_FAILED");
+      await finishRun(env, run, "failed", errorCode);
     } catch {
       log("error", {
         event: "legal_corpus.finish_failed",
@@ -457,7 +461,7 @@ export async function handleLegalCorpusScheduled(
       event: "legal_corpus.run_failed",
       environment: env.APP_ENV,
       cron: controller.cron,
-      errorCode: "LEGAL_CORPUS_WORKER_FAILED",
+      errorCode,
     });
   }
   controller.noRetry();

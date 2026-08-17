@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   backfillCompressedSparseIndexBatch,
   compactLegacySparseJsonBatch,
+  LegalCorpusSparseIndexError,
   loadSparseTermEntriesByChunk,
+  MAX_COMPRESSED_SPARSE_BACKFILL_CHUNKS,
   sparseStorageMode,
 } from "../lib/legal-corpus/sparse-index";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
@@ -116,6 +118,28 @@ test("compressed sparse backfill preserves Qdrant entries before removing legacy
       ["chunk:3", false],
       ["chunk:4", false],
     ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("compressed sparse backfill limits managed D1 bindings and reports only a safe failure code", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seedSparseChunks(sqlite);
+    const failing = {
+      prepare: d1.prepare.bind(d1),
+      batch: async () => { throw new Error("driver details must not reach logs"); },
+    } as unknown as D1Database;
+    await assert.rejects(
+      () => backfillCompressedSparseIndexBatch(failing, MAX_COMPRESSED_SPARSE_BACKFILL_CHUNKS + 1),
+      (error: unknown) => error instanceof LegalCorpusSparseIndexError
+        && error.code === "LEGAL_CORPUS_SPARSE_BACKFILL_FAILED",
+    );
+    const remainingLegacyRows = sqlite.prepare(
+      "SELECT count(*) AS count FROM legal_corpus_sparse_terms",
+    ).get() as { count: number };
+    assert.equal(remainingLegacyRows.count > 0, true);
   } finally {
     sqlite.close();
   }
