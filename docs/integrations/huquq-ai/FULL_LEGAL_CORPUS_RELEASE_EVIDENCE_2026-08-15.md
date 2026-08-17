@@ -989,6 +989,35 @@ to 1,500 canonical documents and 22,000 unique provisions. The historical
 figures above remain evidence of the earlier policy; all future release-gate
 evidence is evaluated against the higher JURO reserve.
 
+## Staging catalog fairness observation (2026-08-17)
+
+Commit `f674f6868ac3d4855ae10cf56394f06895dce958` changes only the durable
+catalogue-checkpoint selection order. A due retry remains first; ordinary work
+then selects the lowest persisted page number before category/language
+tie-breakers. The existing three-discovery-page plus six-ingestion-job budget,
+20-second shared Lex.uz host pacer, 195,000 ms start fence and seven-minute
+distributed lock are unchanged.
+
+The focused catalogue and Worker-boundary suite passed 19/19, TypeScript
+type-check passed, and the staging artifact dry-run was 3,656.34 KiB
+uncompressed / 805.49 KiB gzip. The exact staging-only Worker deployed as
+version `aae699bc-eefb-4ae4-b30e-a064efa9ab69`; it has only the retained
+`*/4 * * * *` processing and `5 19 * * *` seed triggers. Its first observed
+run completed at 06:56:14.222–06:59:31.884 UTC in 197.7 seconds without an
+error code. It advanced `government/uz-Latn` and `international/en` from page
+zero while retaining the partially discovered `government/uz-Cyrl` checkpoint
+at page 173, demonstrating interleaving rather than starvation. The probe
+returned zero terminal and zero stale ingestion jobs.
+
+The immediately preceding 06:48 UTC run recorded one
+`LEGAL_SOURCE_TIMEOUT`. Its bounded retry completed on attempt two; there were
+no due retries or terminal jobs in the subsequent read-only probe. This is an
+operational observation, not a statement that all sources are available.
+
+This change is staging-only and does not freeze the corpus, enable dense
+retrieval, approve an evaluation, alter production code/configuration/DNS, or
+authorize rollout.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
