@@ -271,6 +271,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /scheduled_locks/u);
   assert.match(corpusWorker, /const DISCOVERY_PAGES_PER_RUN = 1;/u);
   assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 7;/u);
+  assert.match(corpusWorker, /const PREFERRED_INGESTION_SLOTS_PER_RUN = 6;/u);
   assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);

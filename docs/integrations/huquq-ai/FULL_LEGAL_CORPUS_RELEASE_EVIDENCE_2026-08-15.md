@@ -1181,6 +1181,24 @@ staging runs; this change is not evidence that the 1,500-document,
 22,000-provision, 44/44 checkpoint, snapshot, Qdrant, evaluation, preview or
 production gates are complete.
 
+## Staging current-provision priority correction (2026-08-17)
+
+The first completed run of the one-discovery configuration, scheduled at
+`2026-08-17T11:48:14Z`, finished at `11:51:39Z` without an error or missed
+cron. Its seven completed jobs were four `fetch` jobs and three historical
+`version` jobs. A read-only queue probe at that point showed 22,976 queued
+`fetch` jobs and 1,826 queued `version` jobs. Thus, preserving three FIFO
+slots did not increase completed current-document fetches over the old
+configuration.
+
+The next staging-only adjustment reserves six of the existing seven sequential
+ingestion slots for the established high-provision catalogue preference and
+leaves one FIFO slot for historical-version work; due retries remain global
+first. It does not remove version handling, add a request source, increase
+concurrency, alter the 20-second host limit, or change production. Its benefit
+is explicitly pending a completed staging run with the new Worker version and
+cannot be used as evidence that any corpus or release gate is satisfied.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

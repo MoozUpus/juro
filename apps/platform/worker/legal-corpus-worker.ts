@@ -34,14 +34,14 @@ const DISCOVERY_PAGES_PER_RUN = 1;
 // needs a secondary representation fetch can leave a later job queued rather
 // than overlap the next cron invocation.
 const INGESTION_JOBS_PER_RUN = 7;
-// Four of the seven existing ingestion slots may prefer the already discovered
-// article-rich official catalogues. Three slots remain FIFO and
-// runNextLegalCorpusIngestionJob always claims a due retry first. Staging
-// evidence shows that court acts and laws carry materially more provisions
-// than the large government backlog, so this reduces time to the provision
-// release threshold without exceeding the Lex.uz crawl-delay or starving any
-// source family.
-const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
+// Six of the seven existing ingestion slots may prefer already-discovered,
+// article-rich official catalogues. One FIFO slot remains for durable version
+// work; runNextLegalCorpusIngestionJob always claims a due retry first.
+// Staging evidence showed that the earlier four-slot share spent three slots
+// per run on the 1,826-item historical-version FIFO backlog, preventing the
+// new-document and current-provision target from advancing. This remains a
+// sequential, bounded prioritisation rather than a new crawl stream.
+const PREFERRED_INGESTION_SLOTS_PER_RUN = 6;
 const PREFERRED_INGESTION_CATALOGUES = [
   "court_acts",
   "laws",
