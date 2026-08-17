@@ -14,12 +14,14 @@ type CoreCodeEnv = LegalCorpusQueueEnv & Partial<Record<LegalCorpusFeatureFlag, 
 /** Already verified as stable identifier hints by JURO's direct-live Lex
  * provider. They contain no copied legal text and are still independently
  * fetched and validated before entering the corpus. */
-export const LEX_CORE_CODE_SEED_URLS = [
-  "https://lex.uz/ru/docs/104723",
-  "https://lex.uz/ru/docs/111189",
-  "https://lex.uz/ru/docs/4674902",
-  "https://lex.uz/ru/docs/6257291",
+const LEX_CORE_CODE_SEEDS = [
+  { targetId: "family", sourceUrl: "https://lex.uz/ru/docs/104723" },
+  { targetId: "civil", sourceUrl: "https://lex.uz/ru/docs/111189" },
+  { targetId: "tax", sourceUrl: "https://lex.uz/ru/docs/4674902" },
+  { targetId: "labor", sourceUrl: "https://lex.uz/ru/docs/6257291" },
 ] as const;
+
+export const LEX_CORE_CODE_SEED_URLS = LEX_CORE_CODE_SEEDS.map((seed) => seed.sourceUrl);
 
 export const LEX_CORE_CODE_SEED_IDS = LEX_CORE_CODE_SEED_URLS.map((url) =>
   `lexuz:${/\/docs\/(\d+)$/u.exec(url)?.[1] ?? "invalid"}`,
@@ -70,10 +72,19 @@ export async function runNextLexCoreCodeDiscovery(
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
     return { status: "disabled", targetId: null, canonicalDocumentId: null, queued: false, safeErrorCode: null };
   }
-  const present = await env.DB.prepare(`SELECT DISTINCT title FROM legal_corpus_variants
-    WHERE is_official_language_version=1`).all<{ title: string | null }>();
+  const present = await env.DB.prepare(`SELECT DISTINCT title,source_url AS sourceUrl FROM legal_corpus_variants
+    WHERE is_official_language_version=1`).all<{ title: string | null; sourceUrl: string | null }>();
   const presentTitles = new Set(present.results.map((row) => row.title ? titleKey(row.title) : "").filter(Boolean));
-  const unresolved = LEX_CORE_CODE_TARGETS.filter((target) => !presentTitles.has(titleKey(target.titleRu)));
+  // Lex can keep the original Uzbek official document title in the reader
+  // metadata even for a `/ru/` page. A verified seeded canonical URL is
+  // therefore stronger evidence than a localized title string and prevents a
+  // completed code from permanently blocking the next exact-title lookup.
+  const presentSourceUrls = new Set(present.results.map((row) => row.sourceUrl));
+  const settledSeedTargetIds = new Set<string>(LEX_CORE_CODE_SEEDS
+    .filter((seed) => presentSourceUrls.has(seed.sourceUrl))
+    .map((seed) => seed.targetId));
+  const unresolved = LEX_CORE_CODE_TARGETS.filter((target) =>
+    !presentTitles.has(titleKey(target.titleRu)) && !settledSeedTargetIds.has(target.id));
   if (unresolved.length === 0) {
     return { status: "all_settled", targetId: null, canonicalDocumentId: null, queued: false, safeErrorCode: null };
   }

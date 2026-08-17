@@ -61,3 +61,43 @@ test("core-code seed is idempotent and title discovery queues only the exact res
     sqlite.close();
   }
 });
+
+test("a verified seed URL settles a code even when Lex reader metadata keeps an Uzbek title", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const env = {
+      DB: d1,
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    };
+    const timestamp = "2026-08-17T00:00:00.000Z";
+    for (const [index, sourceUrl] of LEX_CORE_CODE_SEED_URLS.entries()) {
+      const documentId = `seed-code-${index}`;
+      sqlite.prepare(`INSERT INTO legal_corpus_documents
+        (id,provider,jurisdiction,source_class,scope,visibility,canonical_url,title,short_title,
+          availability_status,trusted,verification_status,approval_required,created_at,updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        documentId, "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", "global", sourceUrl,
+        "ЎЗБЕКИСТОН РЕСПУБЛИКАСИНИНГ КОДЕКСИ", "Ўзбекистон Республикасининг кодекси",
+        "ready", 1, "official_source", 0, timestamp, timestamp,
+      );
+      sqlite.prepare(`INSERT INTO legal_corpus_variants
+        (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,
+          current_version_id,created_at,updated_at,title,short_title)
+        VALUES (?,?,?,1,NULL,?,?,NULL,?,?,?,?)`).run(
+        `${documentId}:ru`, documentId, "ru", sourceUrl, timestamp, timestamp, timestamp,
+        "ЎЗБЕКИСТОН РЕСПУБЛИКАСИНИНГ КОДЕКСИ", "Ўзбекистон Республикасининг кодекси",
+      );
+    }
+    const discovered = await runNextLexCoreCodeDiscovery(env, {
+      now: new Date(0),
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response("<main></main>", { headers: { "content-type": "text/html" } }),
+    });
+    assert.equal(discovered.status, "not_found");
+    assert.equal(["family", "civil", "tax", "labor"].includes(discovered.targetId ?? ""), false);
+  } finally {
+    sqlite.close();
+  }
+});
