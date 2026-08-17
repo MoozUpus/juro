@@ -35,8 +35,8 @@ const DISCOVERY_PAGES_PER_RUN = 1;
 // than overlap the next cron invocation.
 const INGESTION_JOBS_PER_RUN = 7;
 // Six of the seven existing ingestion slots may prefer already-discovered,
-// article-rich official catalogues. One FIFO slot remains for durable version
-// work; runNextLegalCorpusIngestionJob always claims a due retry first.
+// article-rich official catalogues. One explicitly reserved version slot keeps
+// historical work advancing; runNextLegalCorpusIngestionJob always claims a due retry first.
 // Staging evidence showed that the earlier four-slot share spent three slots
 // per run on the 1,826-item historical-version FIFO backlog, preventing the
 // new-document and current-provision target from advancing. This remains a
@@ -321,8 +321,11 @@ export async function handleLegalCorpusScheduled(
             ? [PREFERRED_INGESTION_LANGUAGE_ROTATION[
               (Math.floor(controller.scheduledTime / (4 * 60_000))
                 * PREFERRED_INGESTION_SLOTS_PER_RUN + index)
-                % PREFERRED_INGESTION_LANGUAGE_ROTATION.length
+              % PREFERRED_INGESTION_LANGUAGE_ROTATION.length
             ]]
+            : undefined,
+          reservedQueuedJobType: index === PREFERRED_INGESTION_SLOTS_PER_RUN
+            ? "version"
             : undefined,
         });
         ingestions.push(result);

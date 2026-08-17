@@ -1192,12 +1192,13 @@ slots did not increase completed current-document fetches over the old
 configuration.
 
 The next staging-only adjustment reserves six of the existing seven sequential
-ingestion slots for the established high-provision catalogue preference and
-leaves one FIFO slot for historical-version work; due retries remain global
-first. It does not remove version handling, add a request source, increase
-concurrency, alter the 20-second host limit, or change production. Its benefit
-is explicitly pending a completed staging run with the new Worker version and
-cannot be used as evidence that any corpus or release gate is satisfied.
+ingestion slots for the established high-provision catalogue preference and one
+explicitly selects the oldest queued historical `version` job, falling back to
+FIFO only when no version is due; due retries remain global first. It does not
+remove version handling, add a request source, increase concurrency, alter the
+20-second host limit, or change production. Its benefit is explicitly pending
+a completed staging run with the new Worker version and cannot be used as
+evidence that any corpus or release gate is satisfied.
 
 ## Fail-closed production state
 

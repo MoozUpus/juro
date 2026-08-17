@@ -1133,6 +1133,10 @@ export async function runNextLegalCorpusIngestionJob(
     wait?: (delayMs: number) => Promise<void>;
     fetchImpl?: FetchLike;
     afterIngest?: (result: LegalCorpusIngestionResult) => Promise<void>;
+    /** Reserves one bounded slot for a durable queued job type. A due retry
+     * still has global precedence, and an empty reservation falls back to
+     * ordinary FIFO work rather than leaving a paced source slot idle. */
+    reservedQueuedJobType?: IngestionJob["jobType"];
     /** A bounded share may favour already-discovered, high-value official
      * source families. Retries always retain global precedence, and callers
      * keep ordinary FIFO slots so this cannot starve the rest of the corpus. */
@@ -1154,22 +1158,30 @@ export async function runNextLegalCorpusIngestionJob(
     WHERE status='retrying' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
   `).bind(now).first<IngestionJob>();
+  const reservedCandidate = retryCandidate || !input.reservedQueuedJobType
+    ? null
+    : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
+        canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+      FROM legal_corpus_ingestion_jobs
+      WHERE status='queued' AND job_type=? AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+      ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
+    `).bind(input.reservedQueuedJobType, now).first<IngestionJob>();
   const categories = preferredCatalogCategories(input.preferredCatalogCategories);
   const languages = preferredCatalogLanguages(input.preferredCatalogLanguages);
-  const preferredCandidate = retryCandidate || categories.length === 0
+  const preferredCandidate = retryCandidate || reservedCandidate || categories.length === 0
     ? null
     : await findPreferredCatalogJob(env.DB, now, categories, languages)
       ?? (languages.length > 0
         ? await findPreferredCatalogJob(env.DB, now, categories, [])
         : null);
-  const fifoCandidate = retryCandidate || preferredCandidate
+  const fifoCandidate = retryCandidate || reservedCandidate || preferredCandidate
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
       FROM legal_corpus_ingestion_jobs
       WHERE status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
     `).bind(now).first<IngestionJob>();
-  const candidate = retryCandidate ?? preferredCandidate ?? fifoCandidate;
+  const candidate = retryCandidate ?? reservedCandidate ?? preferredCandidate ?? fifoCandidate;
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
     SET status='running',attempt_count=attempt_count+1,updated_at=?

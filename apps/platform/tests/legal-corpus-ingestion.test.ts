@@ -4,6 +4,7 @@ import { PDFDocument, StandardFonts } from "pdf-lib";
 import PizZip from "pizzip";
 import {
   enqueueOfficialLexCorpusDocument,
+  enqueueOfficialLexCorpusRevision,
   ingestOfficialLexDocument,
   reconcileLegalCorpusTitleUiNoise,
   runNextLegalCorpusIngestionJob,
@@ -1207,6 +1208,37 @@ test("a due retry remains ahead of a preferred catalogue candidate", async () =>
     });
     assert.equal(run.jobId, retry.jobId);
     assert.equal(run.status, "completed");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a reserved version slot advances history before older ordinary fetch work", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = { ...envFor(d1, bucket), LEGAL_CORPUS_HISTORICAL_ENABLED: "true" };
+    const backlog = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10005",
+      now,
+      correlationId: "ordinary-fetch-backlog",
+    });
+    const revision = await enqueueOfficialLexCorpusRevision(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10006?ONDATE=18.05.2022",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "reserved-history-slot",
+    });
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+      reservedQueuedJobType: "version",
+    });
+    assert.equal(run.jobId, revision.jobId);
+    assert.equal(run.status, "completed");
+    const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(backlog.jobId) as { status: string };
+    assert.equal(untouched.status, "queued");
   } finally {
     sqlite.close();
   }
