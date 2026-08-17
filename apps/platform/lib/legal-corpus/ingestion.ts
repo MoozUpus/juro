@@ -68,6 +68,7 @@ const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
 // so a slow but live invocation is never reclaimed by the next cron tick.
 const STALE_RUNNING_AFTER_MS = 15 * 60_000;
 const CATALOG_CATEGORY_KEYS = new Set<string>(LEX_CORPUS_CATEGORIES.map((category) => category.key));
+const CATALOG_LANGUAGE_KEYS = new Set<LegalCorpusLanguage>(["uz-Cyrl", "uz-Latn", "ru", "en"]);
 
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -139,6 +140,37 @@ export type LegalCorpusJobRunResult = {
 function preferredCatalogCategories(input: readonly string[] | undefined): string[] {
   if (!input) return [];
   return [...new Set(input)].filter((category) => CATALOG_CATEGORY_KEYS.has(category));
+}
+
+function preferredCatalogLanguages(input: readonly string[] | undefined): LegalCorpusLanguage[] {
+  if (!input) return [];
+  return [...new Set(input)].filter(
+    (language): language is LegalCorpusLanguage => CATALOG_LANGUAGE_KEYS.has(language as LegalCorpusLanguage),
+  );
+}
+
+async function findPreferredCatalogJob(
+  db: D1Database,
+  now: string,
+  categories: readonly string[],
+  languages: readonly LegalCorpusLanguage[],
+): Promise<IngestionJob | null> {
+  const languageClause = languages.length > 0
+    ? `AND j.language IN (${languages.map(() => "?").join(",")})`
+    : "";
+  return db.prepare(`SELECT j.id,j.job_type AS jobType,j.source_url AS sourceUrl,j.language,
+      j.canonical_document_id AS canonicalDocumentId,j.attempt_count AS attemptCount,j.max_attempts AS maxAttempts
+    FROM legal_corpus_discovery_checkpoints cp
+    CROSS JOIN legal_corpus_discovery_documents dd
+    CROSS JOIN legal_corpus_ingestion_jobs AS j INDEXED BY legal_corpus_ingestion_document_language_ready_idx
+    WHERE dd.checkpoint_id=cp.id
+      AND j.canonical_document_id=dd.provider_source_id AND j.language=dd.language
+      AND cp.category_key IN (${categories.map(() => "?").join(",")})
+      AND j.job_type='fetch' AND j.status='queued'
+      ${languageClause}
+      AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
+    ORDER BY j.created_at ASC,j.id ASC LIMIT 1
+  `).bind(...categories, ...languages, now).first<IngestionJob>();
 }
 
 function nowIso(now = new Date()): string {
@@ -1021,6 +1053,9 @@ export async function runNextLegalCorpusIngestionJob(
      * source families. Retries always retain global precedence, and callers
      * keep ordinary FIFO slots so this cannot starve the rest of the corpus. */
     preferredCatalogCategories?: readonly string[];
+    /** A deterministic preferred-language slot avoids consuming the whole
+     * bounded share with whichever official locale was catalogued first. */
+    preferredCatalogLanguages?: readonly LegalCorpusLanguage[];
   } = {},
 ): Promise<LegalCorpusJobRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
@@ -1036,20 +1071,13 @@ export async function runNextLegalCorpusIngestionJob(
     ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
   `).bind(now).first<IngestionJob>();
   const categories = preferredCatalogCategories(input.preferredCatalogCategories);
+  const languages = preferredCatalogLanguages(input.preferredCatalogLanguages);
   const preferredCandidate = retryCandidate || categories.length === 0
     ? null
-    : await env.DB.prepare(`SELECT j.id,j.job_type AS jobType,j.source_url AS sourceUrl,j.language,
-        j.canonical_document_id AS canonicalDocumentId,j.attempt_count AS attemptCount,j.max_attempts AS maxAttempts
-      FROM legal_corpus_discovery_checkpoints cp
-      CROSS JOIN legal_corpus_discovery_documents dd
-      CROSS JOIN legal_corpus_ingestion_jobs AS j INDEXED BY legal_corpus_ingestion_document_language_ready_idx
-      WHERE dd.checkpoint_id=cp.id
-        AND j.canonical_document_id=dd.provider_source_id AND j.language=dd.language
-        AND cp.category_key IN (${categories.map(() => "?").join(",")})
-        AND j.job_type='fetch' AND j.status='queued'
-        AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
-      ORDER BY j.created_at ASC,j.id ASC LIMIT 1
-    `).bind(...categories, now).first<IngestionJob>();
+    : await findPreferredCatalogJob(env.DB, now, categories, languages)
+      ?? (languages.length > 0
+        ? await findPreferredCatalogJob(env.DB, now, categories, [])
+        : null);
   const fifoCandidate = retryCandidate || preferredCandidate
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts

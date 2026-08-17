@@ -39,6 +39,7 @@ const INGESTION_JOBS_PER_RUN = 6;
 // categories that yield shorter acts or without increasing Lex.uz traffic.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 2;
 const PREFERRED_INGESTION_CATALOGUES = ["laws", "oliy_majlis", "president"] as const;
+const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // A short canonical page may require one additional robots-checked, paced PDF
 // or ZIP representation fetch. Stop claiming new jobs after 3m15s from the
 // scheduled tick so one worst-case HTML + representation job can still finish
@@ -286,6 +287,13 @@ export async function handleLegalCorpusScheduled(
           fetchImpl,
           preferredCatalogCategories: index < PREFERRED_INGESTION_SLOTS_PER_RUN
             ? PREFERRED_INGESTION_CATALOGUES
+            : undefined,
+          preferredCatalogLanguages: index < PREFERRED_INGESTION_SLOTS_PER_RUN
+            ? [PREFERRED_INGESTION_LANGUAGE_ROTATION[
+              (Math.floor(controller.scheduledTime / (4 * 60_000))
+                * PREFERRED_INGESTION_SLOTS_PER_RUN + index)
+                % PREFERRED_INGESTION_LANGUAGE_ROTATION.length
+            ]]
             : undefined,
         });
         ingestions.push(result);

@@ -875,6 +875,85 @@ test("a bounded preferred slot advances discovered primary legislation before FI
   }
 });
 
+test("a bounded preferred slot selects its scheduled catalogue language before another official locale", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    await seedLexCatalogDiscoveryCheckpoints(env, now);
+    const english = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/en/docs/10007",
+      now,
+      correlationId: "preferred-laws-en",
+    });
+    const russian = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10008",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "preferred-laws-ru",
+    });
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      VALUES
+        ('lex-catalog:laws:en',?,'lexuz:10007','en',?),
+        ('lex-catalog:laws:ru',?,'lexuz:10008','ru',?)`).run(
+      "https://lex.uz/en/docs/10007", now.toISOString(),
+      "https://lex.uz/ru/docs/10008", now.toISOString(),
+    );
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+      preferredCatalogCategories: ["laws"],
+      preferredCatalogLanguages: ["ru"],
+    });
+    assert.equal(run.jobId, russian.jobId);
+    assert.equal(run.status, "completed");
+    const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(english.jobId) as { status: string };
+    assert.equal(untouched.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a bounded preferred slot falls back to another official locale before ordinary FIFO work", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    await seedLexCatalogDiscoveryCheckpoints(env, now);
+    const backlog = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10009",
+      now,
+      correlationId: "ordinary-fifo-language-fallback",
+    });
+    const english = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/en/docs/10010",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "preferred-laws-language-fallback",
+    });
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      VALUES ('lex-catalog:laws:en',?,'lexuz:10010','en',?)`).run(
+      "https://lex.uz/en/docs/10010", now.toISOString(),
+    );
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+      preferredCatalogCategories: ["laws"],
+      preferredCatalogLanguages: ["uz-Cyrl"],
+    });
+    assert.equal(run.jobId, english.jobId);
+    assert.equal(run.status, "completed");
+    const untouched = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(backlog.jobId) as { status: string };
+    assert.equal(untouched.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a due retry remains ahead of a preferred catalogue candidate", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
