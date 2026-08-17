@@ -146,7 +146,7 @@ The application first detects the additive tables at runtime. Before the
 migration it continues to write and query the legacy exportable sparse table.
 Afterward it writes new chunks only to the compressed tables while retrieval
 and Qdrant loading read a union of both representations. The corpus Worker
-moves at most 256 legacy chunks in one D1 transaction after each bounded
+moves at most 64 legacy chunks in one D1 transaction after each bounded
 ingestion run: it inserts replacement dictionary/posting rows, clears only the
 non-authoritative duplicate JSON field, and deletes the legacy rows last. A
 failed transaction leaves the legacy posting readable. Release evidence must
