@@ -1,4 +1,5 @@
 import {
+  reconcileLegalCorpusTitleUiNoise,
   runNextLegalCorpusIngestionJob,
   seedLexCorpusJobsFromMetadata,
   type LegalCorpusIngestionEnv,
@@ -291,6 +292,10 @@ export async function handleLegalCorpusScheduled(
     const discoveries: Awaited<ReturnType<typeof runNextLexCatalogDiscoveryPage>>[] = [];
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
     let ingestionStartCutoffReached = false;
+    // This local D1 reconciliation does not fetch a source. It removes only
+    // known Lex reader-control labels that an older parser build could have
+    // stored inside a title, keeping source cards and sparse title boosts clean.
+    const titleRepairs = await reconcileLegalCorpusTitleUiNoise(env.DB);
     if (ingestionEnabled(env)) {
       catalog = await seedLexCatalogDiscoveryCheckpoints(env);
       const wait = (delayMs: number) => scheduler.wait(delayMs);
@@ -365,6 +370,8 @@ export async function handleLegalCorpusScheduled(
       qdrantBackfillBatches: qdrantBackfills.filter((result) => result.status === "indexed").length,
       qdrantBackfillChunks: qdrantBackfills.reduce((sum, result) => sum + result.chunkCount, 0),
       qdrantSnapshotStatus: qdrantSnapshot?.status ?? "not_attempted",
+      titleRepairsDocuments: titleRepairs.documents,
+      titleRepairsVariants: titleRepairs.variants,
       errorCode,
     });
   } catch {

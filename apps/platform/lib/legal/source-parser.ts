@@ -111,6 +111,24 @@ const SKIPPED_TAGS = new Set([
   "template",
 ]);
 const NESTED_LIST_TAGS = new Set(["ol", "ul"]);
+// Exact reader-control labels emitted by Lex.uz inside otherwise official
+// title elements. They are presentation chrome, never part of an act title.
+// Keep the plain strings exportable for the bounded corpus-title repair that
+// remediates only this known UI artefact in already stored staging records.
+export const LEGAL_SOURCE_UI_NOISE_MARKERS = [
+  "Предложения по документу",
+  "Прослушать аудио",
+  "Получить ссылку",
+  "Hujjatga taklif yuborish",
+  "Audioni tinglash",
+  "Hujjat elementidan havola olish",
+  "Ҳужжатга таклиф юбориш",
+  "Аудиони тинглаш",
+  "Ҳужжат элементидан ҳавола олиш",
+  "Suggestion to the document",
+  "Listen to audio",
+  "Get a link from a document element",
+] as const;
 const LEX_UI_NOISE_PATTERNS = [
   /Предложения по документу/giu,
   /Прослушать аудио/giu,
@@ -121,6 +139,9 @@ const LEX_UI_NOISE_PATTERNS = [
   /Ҳужжатга таклиф юбориш/giu,
   /Аудиони тинглаш/giu,
   /Ҳужжат элементидан ҳавола олиш/giu,
+  /Suggestion to the document/giu,
+  /Listen to audio/giu,
+  /Get a link from a document element/giu,
 ] as const;
 const LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS = [
   /Текст акта приводится на [^.\n]{2,80} языке/iu,

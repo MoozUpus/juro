@@ -6,8 +6,10 @@ import {
   fetchLegalSource,
 } from "../legal/source-fetch";
 import {
+  LEGAL_SOURCE_UI_NOISE_MARKERS,
   LegalSourceParserError,
   normalizeLegalSourceHtml,
+  removeLegalSourceUiNoise,
   type NormalizedLegalSourceSnapshot,
 } from "../legal/source-parser";
 import {
@@ -369,6 +371,68 @@ async function runBatches(db: D1Database, statements: D1PreparedStatement[]): Pr
   for (let offset = 0; offset < statements.length; offset += WRITE_BATCH_SIZE) {
     await db.batch(statements.slice(offset, offset + WRITE_BATCH_SIZE));
   }
+}
+
+type CorpusTitleRow = {
+  id: string;
+  title: string | null;
+};
+
+async function nextCorpusTitleRepairRows(
+  db: D1Database,
+  limit: number,
+): Promise<{ documents: CorpusTitleRow[]; variants: CorpusTitleRow[] }> {
+  // D1 rejected the former one-query disjunction over every multi-language
+  // marker. Probe one literal marker at a time, sequentially, and stop at the
+  // first bounded repair batch. This stays inexpensive, avoids wildcard/regex
+  // semantics, and cannot let a D1 query-planner limit stop corpus ingestion.
+  for (const marker of LEGAL_SOURCE_UI_NOISE_MARKERS) {
+    const documentRows = await db.prepare(`SELECT id,title FROM legal_corpus_documents
+      WHERE instr(title, ?) > 0 ORDER BY updated_at ASC LIMIT ?`)
+      .bind(marker, limit)
+      .all<CorpusTitleRow>();
+    const variantRows = await db.prepare(`SELECT id,title FROM legal_corpus_variants
+      WHERE title IS NOT NULL AND instr(title, ?) > 0 ORDER BY updated_at ASC LIMIT ?`)
+      .bind(marker, limit)
+      .all<CorpusTitleRow>();
+    if (documentRows.results.length > 0 || variantRows.results.length > 0) {
+      return { documents: documentRows.results, variants: variantRows.results };
+    }
+  }
+  return { documents: [], variants: [] };
+}
+
+/**
+ * Repairs only known Lex reader controls accidentally persisted in a title by
+ * older parser builds. This is deliberately text-only, bounded, and never
+ * changes legal body text, source URLs, version hashes, or retrieval scope.
+ */
+export async function reconcileLegalCorpusTitleUiNoise(
+  db: D1Database,
+  input: { now?: Date; limit?: number } = {},
+): Promise<{ documents: number; variants: number }> {
+  const now = (input.now ?? new Date()).toISOString();
+  const limit = Math.max(1, Math.min(100, Math.floor(input.limit ?? 24)));
+  const { documents: documentRows, variants: variantRows } = await nextCorpusTitleRepairRows(db, limit);
+  const documentStatements: D1PreparedStatement[] = [];
+  const variantStatements: D1PreparedStatement[] = [];
+  for (const row of documentRows) {
+    const title = removeLegalSourceUiNoise(row.title ?? "");
+    if (!title || title === row.title) continue;
+    documentStatements.push(db.prepare(`UPDATE legal_corpus_documents
+      SET title=?,short_title=?,updated_at=? WHERE id=? AND title=?`)
+      .bind(title, title.slice(0, 240), now, row.id, row.title));
+  }
+  for (const row of variantRows) {
+    const title = removeLegalSourceUiNoise(row.title ?? "");
+    if (!title || title === row.title) continue;
+    variantStatements.push(db.prepare(`UPDATE legal_corpus_variants
+      SET title=?,short_title=?,updated_at=? WHERE id=? AND title=?`)
+      .bind(title, title.slice(0, 240), now, row.id, row.title));
+  }
+  await runBatches(db, documentStatements);
+  await runBatches(db, variantStatements);
+  return { documents: documentStatements.length, variants: variantStatements.length };
 }
 
 async function existingVariant(

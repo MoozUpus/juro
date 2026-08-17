@@ -5,6 +5,7 @@ import PizZip from "pizzip";
 import {
   enqueueOfficialLexCorpusDocument,
   ingestOfficialLexDocument,
+  reconcileLegalCorpusTitleUiNoise,
   runNextLegalCorpusIngestionJob,
 } from "../lib/legal-corpus/ingestion";
 import { seedLexCatalogDiscoveryCheckpoints } from "../lib/legal-corpus/lex-catalog-discovery";
@@ -156,6 +157,45 @@ test("official Lex ingestion is article-first, immutable and idempotent", async 
       Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_versions").get() as { count: number }).count),
       1,
     );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("known Lex reader controls are repaired from stored corpus titles without touching legal text", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const storedAt = now.toISOString();
+  const noisyTitle = "Suggestion to the documentListen to audioGet a link from a document elementOn introducing amendments";
+  try {
+    sqlite.prepare(`INSERT INTO legal_corpus_documents
+      (id,provider,jurisdiction,source_class,scope,visibility,canonical_url,title,short_title,availability_status,trusted,verification_status,approval_required,created_at,updated_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "lexuz-family:title-repair", "lex_uz", "UZ", "OFFICIAL_LEGISLATION", "global", "global",
+      "https://lex.uz/en/docs/8288360", noisyTitle, noisyTitle.slice(0, 240), "ready", 1,
+      "official_source", 0, storedAt, storedAt,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_variants
+      (id,document_id,language,is_official_language_version,translation_type,source_url,last_verified_at,current_version_id,created_at,updated_at,title,short_title)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      "lexuz-family:title-repair:en", "lexuz-family:title-repair", "en", 1, null,
+      "https://lex.uz/en/docs/8288360", storedAt, null, storedAt, storedAt,
+      noisyTitle, noisyTitle.slice(0, 240),
+    );
+
+    const repaired = await reconcileLegalCorpusTitleUiNoise(d1, { now, limit: 4 });
+    assert.deepEqual(repaired, { documents: 1, variants: 1 });
+    const document = sqlite.prepare(`SELECT title,short_title AS shortTitle
+      FROM legal_corpus_documents WHERE id='lexuz-family:title-repair'`).get() as {
+        title: string; shortTitle: string;
+      };
+    const variant = sqlite.prepare(`SELECT title,short_title AS shortTitle
+      FROM legal_corpus_variants WHERE id='lexuz-family:title-repair:en'`).get() as {
+        title: string; shortTitle: string;
+      };
+    assert.equal(document.title, "On introducing amendments");
+    assert.equal(document.shortTitle, "On introducing amendments");
+    assert.equal(variant.title, "On introducing amendments");
+    assert.equal(variant.shortTitle, "On introducing amendments");
   } finally {
     sqlite.close();
   }

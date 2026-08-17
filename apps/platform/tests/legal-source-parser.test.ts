@@ -211,6 +211,28 @@ test("Lex parser strips Uzbek Cyrillic reader controls from the official title",
   assert.equal(snapshot.plainText.includes("Ҳужжат элементидан ҳавола олиш"), false);
 });
 
+test("Lex parser strips English reader controls from the official title", () => {
+  const snapshot = normalizeLegalSourceHtml({
+    html: `<html lang="en"><body><main><div id="divCont">
+      <div class="ACT_TITLE lx_elem"><div class="lx_elem2">Suggestion to the documentListen to audioGet a link from a document elementOn introducing amendments to the law</div></div>
+      <div class="ARTICLE_TITLE lx_elem">Article 1. General rule</div>
+      <div class="ACT_TEXT lx_elem">${"The official rule applies to the legal relationship described by this act. ".repeat(8)}</div>
+    </div></main></body></html>`,
+    reference: {
+      ...reference,
+      locale: "en",
+      canonicalId: "8288360",
+      canonicalUrl: "https://lex.uz/en/docs/8288360",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.documentTitle, "On introducing amendments to the law");
+  assert.equal(snapshot.plainText.includes("Suggestion to the document"), false);
+  assert.equal(snapshot.plainText.includes("Listen to audio"), false);
+  assert.equal(snapshot.plainText.includes("Get a link from a document element"), false);
+});
+
 test("Lex parser recognizes official Uzbek number-first modda headings", () => {
   const snapshot = normalizeLegalSourceHtml({
     html: `<html lang="uz"><body><main><h1>Mas’uliyati cheklangan jamiyatlar to‘g‘risida</h1><h2>11-modda. Jamiyatni ta’sis etish tartibi</h2><p>${"Jamiyatni ta’sis etish to‘g‘risidagi qaror va ta’sis hujjatlari qonun talablariga muvofiq bo‘lishi kerak. ".repeat(6)}</p></main></body></html>`,
