@@ -1012,6 +1012,51 @@ test("a bounded preferred slot advances discovered primary legislation before FI
   }
 });
 
+test("a preferred slot expands an unlinked official family before a known language alias", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    await seedLexCatalogDiscoveryCheckpoints(env, now);
+    await ingestOfficialLexDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10004",
+      now,
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    const knownAlias = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10004",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "known-laws-alias",
+    });
+    const unlinkedFamily = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10005",
+      now: new Date(now.getTime() + 2_000),
+      correlationId: "unlinked-laws-family",
+    });
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      VALUES
+        ('lex-catalog:laws:ru',?,'lexuz:10004','ru',?),
+        ('lex-catalog:laws:ru',?,'lexuz:10005','ru',?)`).run(
+      "https://lex.uz/ru/docs/10004", now.toISOString(),
+      "https://lex.uz/ru/docs/10005", now.toISOString(),
+    );
+
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 3_000),
+      fetchImpl: fetchFor(lexHtml()),
+      preferredCatalogCategories: ["laws"],
+      preferredCatalogLanguages: ["ru"],
+    });
+    assert.equal(run.jobId, unlinkedFamily.jobId);
+    const known = sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(knownAlias.jobId) as { status: string };
+    assert.equal(known.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a bounded preferred slot selects its scheduled catalogue language before another official locale", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
