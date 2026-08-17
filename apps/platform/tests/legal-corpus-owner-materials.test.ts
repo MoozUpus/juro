@@ -189,7 +189,8 @@ test("MFA-bound owner auto-trust reuses verified extraction and creates immutabl
     assert.equal(published.provisionCount, 2);
     assert.equal(published.chunkCount, 2);
     assert.equal((sqlite.prepare("SELECT provider FROM legal_corpus_documents").get() as { provider: string }).provider, "juro_owner");
-    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_sparse_terms").get() as { count: number }).count) > 0, true);
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_sparse_postings").get() as { count: number }).count) > 0, true);
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_sparse_terms").get() as { count: number }).count), 0);
     const publication = sqlite.prepare(`SELECT record_hash AS recordHash,actor_assignment_id AS assignmentId,
       actor_mfa_verified_at AS mfaAt,rights_confirmed AS rightsConfirmed,
       trust_mode AS trustMode FROM legal_corpus_owner_ingestions`).get() as {

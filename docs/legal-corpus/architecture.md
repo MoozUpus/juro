@@ -133,6 +133,27 @@ npm run build:legal-corpus:release-evidence -- `
 This is a staging-only safety gate. It does not authorise production storage,
 feature flags, ingestion, a deployment, or a rollout.
 
+### Sparse-index capacity transition
+
+Migration `0140_compressed_legal_corpus_sparse_postings` is additive and is
+staging-only until separately approved. It introduces a term dictionary and a
+numeric chunk-key dictionary, then stores BM25 frequencies as
+`(term_id, chunk_key_id)` postings. This removes repeated long Lex document,
+version, language and chunk identifiers from every posting without changing
+source text, citations, ranking weights or tenant filtering.
+
+The application first detects the additive tables at runtime. Before the
+migration it continues to write and query the legacy exportable sparse table.
+Afterward it writes new chunks only to the compressed tables while retrieval
+and Qdrant loading read a union of both representations. The corpus Worker
+moves at most 256 legacy chunks in one D1 transaction after each bounded
+ingestion run: it inserts replacement dictionary/posting rows, clears only the
+non-authoritative duplicate JSON field, and deletes the legacy rows last. A
+failed transaction leaves the legacy posting readable. Release evidence must
+include a fresh D1 capacity capture before applying this migration, during the
+backfill, and before the frozen corpus snapshot; capacity growth remains a
+hard stop rather than a reason to cap discovered official documents.
+
 The route-free `juro-legal-corpus-*` Worker owns corpus scheduling. Its
 `5 19 * * *` UTC seed slot runs five minutes after the existing bounded Lex
 metadata monitor. The staging-only four-minute processing slot also idempotently
@@ -250,6 +271,8 @@ staff retries and owner-material actions. There is intentionally no legal
 approval queue. A catalog row is marked complete only when every expected
 document is indexed or has an explicit `technically_unavailable` result.
 
-Production's D1 `migrations_pattern` includes `0121` and production-safe
-`0124–0128` while structurally excluding staging-only evidence migrations
-`0122–0123`. Staging retains the complete migration ledger.
+Production's D1 `migrations_pattern` in both platform and corpus Worker
+configs includes `0121` and production-safe `0124–0128` while structurally
+excluding staging-only evidence migrations `0122–0123` and every later
+corpus-only migration, including `0140`. Staging retains the complete
+migration ledger.

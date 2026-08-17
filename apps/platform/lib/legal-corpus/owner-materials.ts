@@ -2,7 +2,11 @@ import { loadCompletedOcrExtraction, OcrProcessingError } from "../document-anal
 import type { PlatformStaffAccess } from "../auth/staff-access";
 import { operationalEnvironment } from "../operations/operational-feature-flags";
 import { chunkLegalProvision, parseLegalProvisions } from "./provision-parser";
-import { buildSparseTermEntries, sparseTermsJson } from "./sparse-index";
+import {
+  buildSparseTermEntries,
+  sparseStorageMode,
+  sparseTermWriteStatements,
+} from "./sparse-index";
 import type { LegalCorpusLanguage } from "./trust";
 
 const MAX_PROVISIONS = 8_000;
@@ -355,6 +359,7 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
     ),
   ]);
 
+  const sparseMode = await sparseStorageMode(input.env.DB);
   const statements: D1PreparedStatement[] = [];
   for (const provision of provisions) {
     const provisionId = `${versionId}:p${provision.sequence}`;
@@ -371,30 +376,26 @@ export async function promoteCompletedAnalysisToOwnerCorpus(input: {
   for (const chunk of chunks) {
     const provisionId = `${versionId}:p${chunk.provision.sequence}`;
     const chunkId = `${provisionId}:c${chunk.chunkIndex}`;
-    const sparse = sparseTermsJson(buildSparseTermEntries({
+    const sparseEntries = buildSparseTermEntries({
       text: chunk.chunkText,
       articleNumber: chunk.provision.articleNumber,
       title: chunk.provision.title,
-    }));
+    });
     statements.push(input.env.DB.prepare(`INSERT INTO legal_corpus_chunks
       (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,dense_vector_id,sparse_terms_json,indexed_at,created_at)
       VALUES (?,?,?,?,?,?,?,NULL,?,?,?) ON CONFLICT(provision_id,chunk_index) DO NOTHING`).bind(
       chunkId, provisionId, versionId, chunk.chunkIndex, chunk.totalChunks,
       chunk.chunkText, await sha256Hex(chunk.chunkText), "[]", createdAt, createdAt,
     ));
-    statements.push(input.env.DB.prepare("DELETE FROM legal_corpus_sparse_terms WHERE chunk_id=?").bind(chunkId));
-    statements.push(input.env.DB.prepare(`INSERT INTO legal_corpus_sparse_terms
-      (term,chunk_id,document_id,version_id,language,term_frequency,title_frequency,article_frequency)
-      SELECT CAST(json_extract(value,'$.term') AS TEXT),?,?,?, ?,
-        CAST(json_extract(value,'$.termFrequency') AS INTEGER),
-        CAST(json_extract(value,'$.titleFrequency') AS INTEGER),
-        CAST(json_extract(value,'$.articleFrequency') AS INTEGER)
-      FROM json_each(?)
-      WHERE 1=1
-      ON CONFLICT(term,chunk_id) DO UPDATE SET term_frequency=excluded.term_frequency,
-        title_frequency=excluded.title_frequency,article_frequency=excluded.article_frequency`).bind(
-      chunkId, documentId, versionId, input.language, sparse,
-    ));
+    statements.push(...sparseTermWriteStatements({
+      db: input.env.DB,
+      mode: sparseMode,
+      chunkId,
+      entries: sparseEntries,
+      documentId,
+      versionId,
+      language: input.language,
+    }));
   }
   await runBatches(input.env.DB, statements);
 

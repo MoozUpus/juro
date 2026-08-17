@@ -298,6 +298,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /runNextLegalCorpusIngestionJob/u);
   assert.match(corpusWorker, /runNextLexCatalogDiscoveryPage/u);
   assert.match(corpusWorker, /runNextLegalCorpusQdrantBackfillBatch/u);
+  assert.match(corpusWorker, /backfillCompressedSparseIndexBatch/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
   assert.match(corpusWorker, /const DISCOVERY_PAGES_PER_RUN = 3;/u);
@@ -317,6 +318,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     routes?: unknown[];
     vars: Record<string, string>;
     triggers: { crons: string[] };
+    d1_databases: Array<{ migrations_dir: string; migrations_pattern?: string }>;
     r2_buckets: Array<{ binding: string; bucket_name: string }>;
     env: Record<string, {
       workers_dev: boolean;
@@ -324,6 +326,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
       routes?: unknown[];
       vars: Record<string, string>;
       triggers: { crons: string[] };
+      d1_databases: Array<{ migrations_dir: string; migrations_pattern?: string }>;
       r2_buckets: Array<{ binding: string; bucket_name: string }>;
     }>;
   };
@@ -349,6 +352,10 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     assert.equal(environment.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
     assert.equal(environment.vars.LEGAL_CORPUS_SHADOW_MODE, "false");
   }
+  assert.equal(
+    config.env.production.d1_databases[0]?.migrations_pattern,
+    "./drizzle/012[145-9]_*.sql",
+  );
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "true");
   assert.equal(config.env.staging.vars.LEGAL_CORPUS_LIVE_LEXUZ_ENABLED, "true");

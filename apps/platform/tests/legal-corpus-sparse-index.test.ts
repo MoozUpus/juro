@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  backfillCompressedSparseIndexBatch,
   compactLegacySparseJsonBatch,
   loadSparseTermEntriesByChunk,
+  sparseStorageMode,
 } from "../lib/legal-corpus/sparse-index";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -68,7 +70,7 @@ function seedSparseChunks(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]):
   );
 }
 
-test("normalized sparse rows feed Qdrant and gate bounded legacy JSON compaction", async () => {
+test("compressed sparse backfill preserves Qdrant entries before removing legacy postings", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const sparseIndexes = sqlite.prepare("PRAGMA index_list('legal_corpus_sparse_terms')")
@@ -81,6 +83,7 @@ test("normalized sparse rows feed Qdrant and gate bounded legacy JSON compaction
       sparseIndexes.some((index) => index.name === "legal_corpus_sparse_version_idx"),
       false,
     );
+    assert.equal(await sparseStorageMode(d1), "compressed");
     seedSparseChunks(sqlite);
     const loaded = await loadSparseTermEntriesByChunk(d1, ["chunk:0", "chunk:1"]);
     assert.deepEqual(loaded.get("chunk:0"), [{
@@ -91,7 +94,17 @@ test("normalized sparse rows feed Qdrant and gate bounded legacy JSON compaction
       /LEGAL_CORPUS_SPARSE_VECTOR_REJECTED/u,
     );
 
-    assert.equal(await compactLegacySparseJsonBatch(d1, 1), 1);
+    assert.equal(await backfillCompressedSparseIndexBatch(d1, 1), 1);
+    assert.equal((sqlite.prepare(`SELECT count(*) AS count FROM legal_corpus_sparse_terms
+      WHERE chunk_id='chunk:0'`).get() as { count: number }).count, 0);
+    const compressedCount = sqlite.prepare(
+      "SELECT count(*) AS count FROM legal_corpus_sparse_postings",
+    ).get() as { count: number };
+    assert.equal(compressedCount.count, 1);
+    assert.deepEqual((await loadSparseTermEntriesByChunk(d1, ["chunk:0"])).get("chunk:0"), [{
+      term: "term0", termFrequency: 1, titleFrequency: 0, articleFrequency: 0,
+    }]);
+
     assert.equal(await compactLegacySparseJsonBatch(d1, 1), 1);
     assert.equal(await compactLegacySparseJsonBatch(d1, 1), 0);
     const rows = sqlite.prepare(`SELECT id,sparse_terms_json AS sparseTermsJson

@@ -9,6 +9,7 @@ import {
   type LegalCorpusLanguage,
   type LegalCorpusSourceClass,
 } from "./trust";
+import { sparseStorageMode } from "./sparse-index";
 
 const RRF_K = 60;
 const MAX_QUERY_LENGTH = 3_000;
@@ -103,6 +104,42 @@ function scopeAllows(row: SparseRow, scope: LegalCorpusSearchScope): boolean {
     userId: scope.userId,
     matterId: scope.matterId,
   });
+}
+
+function sparseEntriesForTermsSql(
+  mode: "legacy" | "compressed",
+  placeholders: string,
+): string {
+  const legacy = `SELECT sparse.term AS term,sparse.chunk_id AS chunkId,
+    sparse.term_frequency AS termFrequency,sparse.title_frequency AS titleFrequency,
+    sparse.article_frequency AS articleFrequency
+    FROM legal_corpus_sparse_terms AS sparse
+    WHERE sparse.term IN (${placeholders})`;
+  if (mode === "legacy") return legacy;
+  return `${legacy}
+    UNION ALL
+    SELECT term.term AS term,chunk_key.chunk_id AS chunkId,
+      posting.term_frequency AS termFrequency,posting.title_frequency AS titleFrequency,
+      posting.article_frequency AS articleFrequency
+    FROM legal_corpus_sparse_term_dictionary AS term
+    INNER JOIN legal_corpus_sparse_postings AS posting ON posting.term_id=term.id
+    INNER JOIN legal_corpus_sparse_chunk_keys AS chunk_key ON chunk_key.id=posting.chunk_key_id
+    WHERE term.term IN (${placeholders})`;
+}
+
+function sparseEntriesForCandidateChunkSql(mode: "legacy" | "compressed"): string {
+  const legacy = `SELECT sparse.term_frequency AS termFrequency,
+    sparse.title_frequency AS titleFrequency,sparse.article_frequency AS articleFrequency
+    FROM legal_corpus_sparse_terms AS sparse
+    WHERE sparse.chunk_id=candidate.chunkId`;
+  if (mode === "legacy") return legacy;
+  return `${legacy}
+    UNION ALL
+    SELECT posting.term_frequency AS termFrequency,
+      posting.title_frequency AS titleFrequency,posting.article_frequency AS articleFrequency
+    FROM legal_corpus_sparse_chunk_keys AS chunk_key
+    INNER JOIN legal_corpus_sparse_postings AS posting ON posting.chunk_key_id=chunk_key.id
+    WHERE chunk_key.chunk_id=candidate.chunkId`;
 }
 
 /** Deterministic reciprocal-rank fusion that preserves a source only once. */
@@ -263,18 +300,22 @@ export async function retrieveLegalCorpus(input: {
   const terms = toSparseQueryTerms(variants.join(" "));
   if (terms.length === 0) return [];
   const termPlaceholders = terms.map(() => "?").join(",");
+  const sparseMode = await sparseStorageMode(input.db);
+  const sparseTermBindings = sparseMode === "compressed" ? [...terms, ...terms] : terms;
+  const sparseEntriesForTerms = sparseEntriesForTermsSql(sparseMode, termPlaceholders);
+  const sparseEntriesForCandidateChunk = sparseEntriesForCandidateChunkSql(sparseMode);
   const tenantId = scope.tenantId ?? null;
   const userId = scope.userId ?? null;
   const matterId = scope.matterId ?? null;
   const candidateLimit = Math.min(360, limit * 12);
 
   const termStats = await input.db.prepare(`
+    WITH sparse_entries AS (${sparseEntriesForTerms})
     SELECT term,COUNT(*) AS documentFrequency,
       (SELECT COUNT(*) FROM legal_corpus_chunks) AS corpusCount
-    FROM legal_corpus_sparse_terms
-    WHERE term IN (${termPlaceholders})
+    FROM sparse_entries
     GROUP BY term
-  `).bind(...terms).all<{
+  `).bind(...sparseTermBindings).all<{
     term: string;
     documentFrequency: number;
     corpusCount: number;
@@ -286,24 +327,24 @@ export async function retrieveLegalCorpus(input: {
   const corpusCount = Math.max(1, Number(termStats.results[0]?.corpusCount ?? 1));
 
   const rows = await input.db.prepare(`
-    WITH candidate_chunks AS (
-      SELECT sparse.chunk_id AS chunkId,
-        SUM(sparse.term_frequency + sparse.title_frequency * 4 + sparse.article_frequency * 8) AS rawScore,
+    WITH sparse_entries AS (${sparseEntriesForTerms}),
+    candidate_chunks AS (
+      SELECT sparse.chunkId AS chunkId,
+        SUM(sparse.termFrequency + sparse.titleFrequency * 4 + sparse.articleFrequency * 8) AS rawScore,
         COUNT(*) AS matchedTermCount,
         json_group_array(json_object(
           'term',sparse.term,
-          'termFrequency',sparse.term_frequency,
-          'titleFrequency',sparse.title_frequency,
-          'articleFrequency',sparse.article_frequency
+          'termFrequency',sparse.termFrequency,
+          'titleFrequency',sparse.titleFrequency,
+          'articleFrequency',sparse.articleFrequency
         )) AS matchedTermsJson
-      FROM legal_corpus_sparse_terms AS sparse
-      INNER JOIN legal_corpus_chunks AS candidate_chunk ON candidate_chunk.id=sparse.chunk_id
+      FROM sparse_entries AS sparse
+      INNER JOIN legal_corpus_chunks AS candidate_chunk ON candidate_chunk.id=sparse.chunkId
       INNER JOIN legal_corpus_provisions AS candidate_provision ON candidate_provision.id=candidate_chunk.provision_id
       INNER JOIN legal_corpus_versions AS candidate_version ON candidate_version.id=candidate_provision.version_id
       INNER JOIN legal_corpus_variants AS candidate_variant ON candidate_variant.id=candidate_provision.variant_id
       INNER JOIN legal_corpus_documents AS candidate_document ON candidate_document.id=candidate_provision.document_id
-      WHERE sparse.term IN (${termPlaceholders})
-        AND candidate_document.availability_status='ready'
+      WHERE candidate_document.availability_status='ready'
         AND (?=0 OR candidate_document.provider='lex_uz')
         AND (
           (? IS NULL AND candidate_variant.current_version_id=candidate_version.id
@@ -331,8 +372,8 @@ export async function retrieveLegalCorpus(input: {
             AND (candidate_document.tenant_id IS NULL OR candidate_document.tenant_id=?)
             AND (candidate_document.matter_id IS NULL OR candidate_document.matter_id=?))
         )
-      GROUP BY sparse.chunk_id
-      ORDER BY rawScore DESC,matchedTermCount DESC,sparse.chunk_id ASC
+      GROUP BY sparse.chunkId
+      ORDER BY rawScore DESC,matchedTermCount DESC,sparse.chunkId ASC
       LIMIT ?
     )
     SELECT candidate.chunkId AS chunkId,
@@ -349,10 +390,9 @@ export async function retrieveLegalCorpus(input: {
       document.provider AS provider,
       document.scope AS scope,document.tenant_id AS tenantId,
       document.owner_user_id AS ownerUserId,document.matter_id AS matterId,
-      coalesce((SELECT sum(length_term.term_frequency
-          + length_term.title_frequency + length_term.article_frequency)
-        FROM legal_corpus_sparse_terms AS length_term
-        WHERE length_term.chunk_id=candidate.chunkId),1) AS sparseLength,
+      coalesce((SELECT sum(length_term.termFrequency
+          + length_term.titleFrequency + length_term.articleFrequency)
+        FROM (${sparseEntriesForCandidateChunk}) AS length_term),1) AS sparseLength,
       candidate.matchedTermsJson AS matchedTermsJson,
       candidate.matchedTermCount AS matchedTermCount
     FROM candidate_chunks AS candidate
@@ -363,7 +403,7 @@ export async function retrieveLegalCorpus(input: {
     INNER JOIN legal_corpus_documents AS document ON document.id=provision.document_id
     ORDER BY candidate.rawScore DESC,candidate.matchedTermCount DESC,provision.sequence ASC
   `).bind(
-    ...terms,
+    ...sparseTermBindings,
     input.officialOnly ? 1 : 0,
     asOfDate, scope.includeHistorical ? 1 : 0,
     asOfDate, asOfDate, asOfDate,

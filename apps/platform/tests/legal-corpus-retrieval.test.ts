@@ -96,7 +96,7 @@ test("sparse retrieval returns only the current, scope-authorized version", asyn
     assert.equal(results[0]?.articleNumber, "25");
     assert.equal(results[0]?.documentTitle, "Закон о проверке");
     assert.ok((sqlite.prepare(
-      "SELECT COUNT(*) AS count FROM legal_corpus_sparse_terms",
+      "SELECT COUNT(*) AS count FROM legal_corpus_sparse_postings",
     ).get() as { count: number }).count > 0);
     assert.equal((sqlite.prepare(
       "SELECT sparse_terms_json AS sparseTermsJson FROM legal_corpus_chunks LIMIT 1",

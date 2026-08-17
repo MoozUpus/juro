@@ -981,6 +981,13 @@
       "when": 1786972200000,
       "tag": "0139_lex_pager_source_session",
       "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1786975800000,
+      "tag": "0140_compressed_legal_corpus_sparse_postings",
+      "breakpoints": true
     }
   ]
 }

@@ -41,7 +41,11 @@ import {
 import { diffCorpusProvisions, type CorpusProvisionSnapshot } from "./versioning";
 import { LegalCorpusEmbeddingError } from "./embeddings";
 import { QdrantCorpusError } from "./qdrant";
-import { buildSparseTermEntries, sparseTermsJson } from "./sparse-index";
+import {
+  buildSparseTermEntries,
+  sparseStorageMode,
+  sparseTermWriteStatements,
+} from "./sparse-index";
 
 const MAX_PROVISIONS_PER_VERSION = 8_000;
 const MAX_CHUNKS_PER_VERSION = 16_000;
@@ -991,6 +995,10 @@ export async function ingestOfficialLexDocument(
   ];
   await env.DB.batch(header);
 
+  // New Workers can run before the additive sparse migration. Resolve this
+  // once per source so a deployment and schema migration can be rolled out in
+  // either safe order without dropping a document's sparse evidence.
+  const sparseMode = await sparseStorageMode(env.DB);
   const provisionStatements: D1PreparedStatement[] = [];
   for (const provision of provisions) {
     const provisionId = `${versionId}:p${provision.sequence}`;
@@ -1013,39 +1021,26 @@ export async function ingestOfficialLexDocument(
       articleNumber: chunk.provision.articleNumber,
       title: chunk.provision.title,
     });
-    const sparseJson = sparseTermsJson(sparseEntries);
+    const chunkId = `${provisionId}:c${chunk.chunkIndex}`;
     provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_chunks
       (id,provision_id,version_id,chunk_index,total_chunks,content_text,content_sha256,dense_vector_id,sparse_terms_json,indexed_at,created_at)
       VALUES (?,?,?,?,?,?,?,NULL,?,?,?)
       ON CONFLICT(provision_id,chunk_index) DO NOTHING
     `).bind(
-      `${provisionId}:c${chunk.chunkIndex}`, provisionId, versionId, chunk.chunkIndex,
+      chunkId, provisionId, versionId, chunk.chunkIndex,
       chunk.totalChunks, chunk.text, await sha256(chunk.text),
       "[]",
       now, now,
     ));
-    // The exportable inverted index is rebuildable from immutable chunks.
-    // Delete-then-insert keeps a retry idempotent without mutating legal text.
-    provisionStatements.push(env.DB.prepare(
-      "DELETE FROM legal_corpus_sparse_terms WHERE chunk_id=?",
-    ).bind(`${provisionId}:c${chunk.chunkIndex}`));
-    provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_sparse_terms
-      (term,chunk_id,document_id,version_id,language,term_frequency,title_frequency,article_frequency)
-      SELECT
-        CAST(json_extract(value,'$.term') AS TEXT),?,?,?,?,
-        CAST(json_extract(value,'$.termFrequency') AS INTEGER),
-        CAST(json_extract(value,'$.titleFrequency') AS INTEGER),
-        CAST(json_extract(value,'$.articleFrequency') AS INTEGER)
-      FROM json_each(?)
-      WHERE 1=1
-      ON CONFLICT(term,chunk_id) DO UPDATE SET
-        term_frequency=excluded.term_frequency,
-        title_frequency=excluded.title_frequency,
-        article_frequency=excluded.article_frequency
-    `).bind(
-      `${provisionId}:c${chunk.chunkIndex}`, documentId, versionId, currentDocument.language,
-      sparseJson,
-    ));
+    provisionStatements.push(...sparseTermWriteStatements({
+      db: env.DB,
+      mode: sparseMode,
+      chunkId,
+      entries: sparseEntries,
+      documentId,
+      versionId,
+      language: currentDocument.language,
+    }));
   }
   await runBatches(env.DB, provisionStatements);
   if (!revision) {
