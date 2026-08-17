@@ -45,6 +45,11 @@ import { buildSparseTermEntries, sparseTermsJson } from "./sparse-index";
 
 const MAX_PROVISIONS_PER_VERSION = 8_000;
 const MAX_CHUNKS_PER_VERSION = 16_000;
+// Consolidated official codes can exceed the conservative 2 MiB live-lookup
+// limit (the largest verified staging code page was 7.24 MiB). Scheduled
+// ingestion processes one robots-checked source at a time, so permit a still
+// bounded 12 MiB document while retaining the stricter interactive default.
+const MAX_LEX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_LEX_REPRESENTATION_BYTES = 20 * 1024 * 1024;
 const WRITE_BATCH_SIZE = 90;
 const RETRYABLE_INTERNAL_ERROR_CODES = new Set([
@@ -62,6 +67,11 @@ const RECOVERABLE_DEAD_LETTER_CODES = [
   // `/uz/files/<id>.zip`; re-read those bounded jobs after parser support is
   // deployed instead of leaving accessible official PDFs in dead-letter.
   "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2",
+  // Previous scheduled workers used the 2 MiB live-lookup cap for every
+  // corpus page. Reclaim an affected official document once after the
+  // bounded ingestion-specific cap is deployed; do not turn this into an
+  // unbounded retry loop for genuinely oversized sources.
+  "LEGAL_SOURCE_TOO_LARGE",
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
 const LEGACY_CONTENT_INSUFFICIENT_V2 = "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2";
@@ -724,6 +734,7 @@ export async function ingestOfficialLexDocument(
     now: () => input.now ?? new Date(),
     wait: input.wait,
     fetchImpl: input.fetchImpl,
+    maxBytes: MAX_LEX_SOURCE_BYTES,
   });
   const sourceUrl = fetched.canonicalUrl;
   const sourceHash = fetched.contentSha256;

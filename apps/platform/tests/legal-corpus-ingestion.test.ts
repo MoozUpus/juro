@@ -35,7 +35,7 @@ function lexHtml(articleTwo = true): string {
   </main></body></html>`;
 }
 
-function fetchFor(html: string) {
+function fetchFor(html: string, declaredContentLength?: number) {
   return async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
     if (url.endsWith("/robots.txt")) {
@@ -43,7 +43,12 @@ function fetchFor(html: string) {
         headers: { "content-type": "text/plain; charset=utf-8" },
       });
     }
-    return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+    return new Response(html, {
+      headers: {
+        "content-type": "text/html; charset=utf-8",
+        ...(declaredContentLength === undefined ? {} : { "content-length": String(declaredContentLength) }),
+      },
+    });
   };
 }
 
@@ -734,6 +739,50 @@ test("a first-attempt generic dead letter is automatically redriven and preserve
     });
     const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState
       FROM legal_corpus_failures WHERE id='generic-dead-letter'`).get() as {
+        retryable: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, { retryable: 1, retryState: "retrying" });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a prior 2 MiB Lex code-page failure is reclaimed under the bounded ingestion cap", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/67894",
+      now,
+      correlationId: "larger-code-page-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=1,last_error_code='LEGAL_SOURCE_TOO_LARGE'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,1,'terminal')`).run(
+      "larger-code-page-dead-letter", queued.jobId, "lexuz:67894",
+      "https://lex.uz/ru/docs/67894", "ru", now.toISOString(),
+      "LEGAL_SOURCE_TOO_LARGE", "LEGAL_SOURCE_TOO_LARGE",
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      // A declared 2.5 MiB body was rejected by the former shared 2 MiB
+      // limit. The synthetic payload remains short so the test exercises the
+      // boundary without storing a legal corpus fixture in Git.
+      fetchImpl: fetchFor(lexHtml(), 2_500_000),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState
+      FROM legal_corpus_failures WHERE id='larger-code-page-dead-letter'`).get() as {
         retryable: number; retryState: string;
       };
     assert.deepEqual({ ...failure }, { retryable: 1, retryState: "retrying" });
