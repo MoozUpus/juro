@@ -189,9 +189,9 @@ test("private dense services stay behind service bindings and staging-only flags
   assert.match(production, /"LEGAL_CORPUS_DENSE_ENABLED": "false"/u);
 });
 
-test("process schedule self-seeds a fresh corpus without an admin action", async () => {
+test("process schedule self-seeds a fresh corpus and begins the code-first phase without an admin action", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
-  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 10));
+  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.now());
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const url = String(input);
@@ -219,14 +219,14 @@ test("process schedule self-seeds a fresh corpus without an admin action", async
   const checkpointCount = Number((sqlite.prepare(
     "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints",
   ).get() as { count: number }).count);
-  const completedCount = Number((sqlite.prepare(
-    "SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints WHERE status='completed'",
+  const codeSeedCount = Number((sqlite.prepare(
+    "SELECT count(*) AS count FROM legal_corpus_ingestion_jobs WHERE canonical_document_id IN ('lexuz:104723','lexuz:111189','lexuz:4674902','lexuz:6257291')",
   ).get() as { count: number }).count);
   const adminEventCount = Number((sqlite.prepare(
     "SELECT count(*) AS count FROM legal_corpus_admin_events",
   ).get() as { count: number }).count);
   assert.equal(checkpointCount, 44);
-  assert.equal(completedCount, 1);
+  assert.equal(codeSeedCount, 4);
   assert.equal(adminEventCount, 0);
   assert.equal(scheduled.noRetryCalls(), 1);
 });

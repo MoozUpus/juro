@@ -1336,3 +1336,31 @@ test("historical Lex revisions are queued newest-first and keep non-overlapping 
     sqlite.close();
   }
 });
+
+test("an exact core-code candidate is claimed before older ordinary FIFO work", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const ordinary = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/900001",
+      now,
+      correlationId: "ordinary-before-code",
+    });
+    const coreCode = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/104723",
+      now: new Date(now.getTime() + 1_000),
+      correlationId: "core-code-priority",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 2_000),
+      fetchImpl: fetchFor(lexHtml()),
+      preferredCanonicalDocumentIds: ["lexuz:104723"],
+    });
+    assert.equal(run.jobId, coreCode.jobId);
+    assert.equal((sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(ordinary.jobId) as { status: string }).status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});

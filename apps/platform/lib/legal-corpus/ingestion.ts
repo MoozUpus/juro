@@ -152,6 +152,27 @@ function preferredCatalogLanguages(input: readonly string[] | undefined): LegalC
   );
 }
 
+function preferredCanonicalDocumentIds(input: readonly string[] | undefined): string[] {
+  if (!input) return [];
+  return [...new Set(input)].filter((value) => /^lexuz:\d+$/u.test(value)).slice(0, 32);
+}
+
+async function findPreferredCanonicalDocumentJob(
+  db: D1Database,
+  now: string,
+  documentIds: readonly string[],
+): Promise<IngestionJob | null> {
+  if (documentIds.length === 0) return null;
+  const priority = `CASE canonical_document_id ${documentIds.map((_, index) => `WHEN ? THEN ${index}`).join(" ")} ELSE ${documentIds.length} END`;
+  return db.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
+      canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
+    FROM legal_corpus_ingestion_jobs
+    WHERE status='queued' AND canonical_document_id IN (${documentIds.map(() => "?").join(",")})
+      AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+    ORDER BY ${priority},coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
+  `).bind(...documentIds, now, ...documentIds).first<IngestionJob>();
+}
+
 async function findPreferredCatalogJob(
   db: D1Database,
   now: string,
@@ -1144,6 +1165,10 @@ export async function runNextLegalCorpusIngestionJob(
     /** A deterministic preferred-language slot avoids consuming the whole
      * bounded share with whichever official locale was catalogued first. */
     preferredCatalogLanguages?: readonly LegalCorpusLanguage[];
+    /** Exact official code candidates discovered by the bounded title search
+     * are taken before ordinary catalogue jobs. Due retries and an explicitly
+     * reserved version slot retain precedence. */
+    preferredCanonicalDocumentIds?: readonly string[];
   } = {},
 ): Promise<LegalCorpusJobRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
@@ -1166,22 +1191,26 @@ export async function runNextLegalCorpusIngestionJob(
       WHERE status='queued' AND job_type=? AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
     `).bind(input.reservedQueuedJobType, now).first<IngestionJob>();
+  const preferredDocumentIds = preferredCanonicalDocumentIds(input.preferredCanonicalDocumentIds);
+  const preferredCodeCandidate = retryCandidate || reservedCandidate || preferredDocumentIds.length === 0
+    ? null
+    : await findPreferredCanonicalDocumentJob(env.DB, now, preferredDocumentIds);
   const categories = preferredCatalogCategories(input.preferredCatalogCategories);
   const languages = preferredCatalogLanguages(input.preferredCatalogLanguages);
-  const preferredCandidate = retryCandidate || reservedCandidate || categories.length === 0
+  const preferredCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || categories.length === 0
     ? null
     : await findPreferredCatalogJob(env.DB, now, categories, languages)
       ?? (languages.length > 0
         ? await findPreferredCatalogJob(env.DB, now, categories, [])
         : null);
-  const fifoCandidate = retryCandidate || reservedCandidate || preferredCandidate
+  const fifoCandidate = retryCandidate || reservedCandidate || preferredCodeCandidate || preferredCandidate
     ? null
     : await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
       FROM legal_corpus_ingestion_jobs
       WHERE status='queued' AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       ORDER BY coalesce(next_attempt_at,created_at) ASC,created_at ASC LIMIT 1
     `).bind(now).first<IngestionJob>();
-  const candidate = retryCandidate ?? reservedCandidate ?? preferredCandidate ?? fifoCandidate;
+  const candidate = retryCandidate ?? reservedCandidate ?? preferredCodeCandidate ?? preferredCandidate ?? fifoCandidate;
   if (!candidate) return { claimed: false, status: "empty", jobId: null, safeErrorCode: null };
   const claimed = await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
     SET status='running',attempt_count=attempt_count+1,updated_at=?

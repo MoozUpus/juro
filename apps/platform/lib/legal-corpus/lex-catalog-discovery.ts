@@ -4,6 +4,7 @@ import {
   lexCatalogSearchUrl,
   LEX_CORPUS_CATEGORIES,
   LEX_CORPUS_LANGUAGES,
+  isLexCoreCodeSearchUrl,
   type LexCorpusCategoryKey,
   type LexDiscoveredDocument,
 } from "./lex-discovery";
@@ -36,6 +37,8 @@ type RobotsGroup = {
 };
 
 export type ParsedLexCatalogPage = {
+  /** Raw official HTML stays in-memory for exact title matching only. */
+  html: string;
   documents: LexDiscoveredDocument[];
   expectedDocumentCount: number | null;
   currentPage: number;
@@ -132,6 +135,7 @@ function pager(html: string): { currentPage: number; nextEventTarget: string | n
 export function parseLexCatalogPage(html: string, searchUrl: string): ParsedLexCatalogPage {
   const page = pager(html);
   return {
+    html,
     documents: discoverLexDocumentLinks(html, searchUrl),
     expectedDocumentCount: expectedDocumentCount(html),
     currentPage: page.currentPage,
@@ -268,7 +272,9 @@ export async function fetchLexCatalogPage(input: {
 }): Promise<ParsedLexCatalogPage> {
   const allowedUrls = new Set(LEX_CORPUS_CATEGORIES.flatMap((category) =>
     LEX_CORPUS_LANGUAGES.map((language) => lexCatalogSearchUrl(category.key, language.language))));
-  if (!allowedUrls.has(input.searchUrl)) throw new LexCatalogDiscoveryError("LEX_CATALOG_URL_REJECTED", false);
+  if (!allowedUrls.has(input.searchUrl) && !isLexCoreCodeSearchUrl(input.searchUrl)) {
+    throw new LexCatalogDiscoveryError("LEX_CATALOG_URL_REJECTED", false);
+  }
   const fetchImpl = input.fetchImpl ?? fetch;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   // Lex.uz currently rejects robots.txt with HTTP 406 when a narrow Accept

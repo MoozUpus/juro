@@ -3,12 +3,15 @@ import test from "node:test";
 
 import {
   discoverLexArchiveRepresentation,
+  discoverExactLexCoreCodeDocument,
   discoverLexDocumentLinks,
   discoverLexRevisionHistory,
   languageVariantsFromLinks,
   parseLexDocumentEffectivity,
   parseLexDocumentMetadata,
   parseLexDocumentUrl,
+  LEX_CORE_CODE_TARGETS,
+  lexCoreCodeSearchUrl,
 } from "../lib/legal-corpus/lex-discovery";
 import {
   chunkLegalProvision,
@@ -27,6 +30,22 @@ test("Lex discovery deduplicates canonical language variants and ignores off-ori
     { canonicalDocumentId: "lexuz:111189", language: "uz-Latn", sourceUrl: "https://lex.uz/uz/docs/-111189" },
   ]);
   assert.equal(languageVariantsFromLinks("lexuz:111189", links).length, 2);
+});
+
+test("core-code discovery accepts only an exact official code title, never an amendment", () => {
+  const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "family")!;
+  const html = [
+    '<a href="/ru/docs/111">О внесении изменений в Семейный кодекс Республики Узбекистан</a>',
+    '<a href="/ru/docs/222">Семейный кодекс Республики Узбекистан</a>',
+  ].join("\n");
+  assert.deepEqual(discoverExactLexCoreCodeDocument(html, target, lexCoreCodeSearchUrl(target)), {
+    canonicalDocumentId: "lexuz:222",
+    language: "ru",
+    sourceUrl: "https://lex.uz/ru/docs/222",
+  });
+  assert.equal(discoverExactLexCoreCodeDocument(
+    '<a href="/ru/docs/222">Семейный кодекс Республики Узбекистан (проект)</a>', target,
+  ), null);
 });
 
 test("Lex archive representation accepts one exact same-origin numeric ZIP", () => {

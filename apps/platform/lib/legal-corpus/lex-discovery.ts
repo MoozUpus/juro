@@ -51,6 +51,39 @@ export const LEX_CORPUS_LANGUAGES = [
   { language: "uz-Latn" as const, pathPrefix: "/uz", langId: "4" },
 ] as const;
 
+/**
+ * National consolidated codes are the highest-value starting point for a
+ * legal corpus.  These are title-search targets only: no legal text, source
+ * URL or status is asserted here.  Each eventual document URL is discovered
+ * from Lex.uz, then fetched and validated by the normal corpus pipeline.
+ *
+ * The list deliberately covers enacted national codes, not every amendment
+ * that happens to mention a code and not private/legal-practice documents.
+ */
+export const LEX_CORE_CODE_TARGETS = [
+  { id: "administrative_responsibility", titleRu: "Кодекс Республики Узбекистан об административной ответственности" },
+  { id: "administrative_court_procedure", titleRu: "Кодекс Республики Узбекистан об административном судопроизводстве" },
+  { id: "air", titleRu: "Воздушный кодекс Республики Узбекистан" },
+  { id: "budget", titleRu: "Бюджетный кодекс Республики Узбекистан" },
+  { id: "civil", titleRu: "Гражданский кодекс Республики Узбекистан" },
+  { id: "civil_procedure", titleRu: "Гражданский процессуальный кодекс Республики Узбекистан" },
+  { id: "criminal", titleRu: "Уголовный кодекс Республики Узбекистан" },
+  { id: "criminal_execution", titleRu: "Уголовно-исполнительный кодекс Республики Узбекистан" },
+  { id: "criminal_procedure", titleRu: "Уголовно-процессуальный кодекс Республики Узбекистан" },
+  { id: "customs", titleRu: "Таможенный кодекс Республики Узбекистан" },
+  { id: "economic_procedure", titleRu: "Экономический процессуальный кодекс Республики Узбекистан" },
+  { id: "electoral", titleRu: "Избирательный кодекс Республики Узбекистан" },
+  { id: "family", titleRu: "Семейный кодекс Республики Узбекистан" },
+  { id: "housing", titleRu: "Жилищный кодекс Республики Узбекистан" },
+  { id: "land", titleRu: "Земельный кодекс Республики Узбекистан" },
+  { id: "labor", titleRu: "Трудовой кодекс Республики Узбекистан" },
+  { id: "tax", titleRu: "Налоговый кодекс Республики Узбекистан" },
+  { id: "urban_planning", titleRu: "Градостроительный кодекс Республики Узбекистан" },
+  { id: "water", titleRu: "Водный кодекс Республики Узбекистан" },
+] as const;
+
+export type LexCoreCodeTarget = (typeof LEX_CORE_CODE_TARGETS)[number];
+
 const LEX_ORIGIN = "https://lex.uz";
 const DOCUMENT_PATH = /^\/(?:(?<locale>ru|uz|uzc|en)\/)?docs\/(?<id>-?\d+)(?:[/?#]|$)/iu;
 
@@ -266,6 +299,66 @@ export function lexCatalogSearchUrl(
   params.set("lang", locale.langId);
   const query = params.toString();
   return `${LEX_ORIGIN}${locale.pathPrefix}/search/${category.searchKind}${query ? `?${query}` : ""}`;
+}
+
+/** Builds only one of JURO's fixed code-title search URLs. */
+export function lexCoreCodeSearchUrl(target: LexCoreCodeTarget): string {
+  const known = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === target.id);
+  if (!known || known.titleRu !== target.titleRu) throw new TypeError("LEX_CORE_CODE_TARGET_REJECTED");
+  const url = new URL("/ru/search/all", LEX_ORIGIN);
+  url.searchParams.set("searchtitle", target.titleRu);
+  return url.href;
+}
+
+/** Accepts only the fixed title-search URLs generated above. */
+export function isLexCoreCodeSearchUrl(value: string): boolean {
+  try {
+    return LEX_CORE_CODE_TARGETS.some((target) => lexCoreCodeSearchUrl(target) === value);
+  } catch {
+    return false;
+  }
+}
+
+function plainSearchTitle(value: string): string {
+  return value
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&nbsp;|&#160;/giu, " ")
+    .replace(/&quot;|&#34;/giu, '"')
+    .replace(/&apos;|&#39;/giu, "'")
+    .replace(/&amp;|&#38;/giu, "&")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function normalizedSearchTitle(value: string): string {
+  return plainSearchTitle(value)
+    .toLocaleLowerCase("ru")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/**
+ * Keeps code ingestion exact: an amendment or a similarly named act cannot
+ * enter the priority path merely because it contains the word "кодекс".
+ */
+export function discoverExactLexCoreCodeDocument(
+  html: string,
+  target: LexCoreCodeTarget,
+  baseUrl = LEX_ORIGIN,
+): LexDiscoveredDocument | null {
+  const expectedTitle = normalizedSearchTitle(target.titleRu);
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
+  const hrefPattern = /\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/iu;
+  for (const match of html.matchAll(anchorPattern)) {
+    if (normalizedSearchTitle(match[2] ?? "") !== expectedTitle) continue;
+    const href = match[1]?.match(hrefPattern);
+    const raw = href?.[1] ?? href?.[2] ?? href?.[3];
+    if (!raw || raw.length > 2_000) continue;
+    const discovered = parseLexDocumentUrl(raw.replaceAll("&amp;", "&"), baseUrl);
+    if (discovered?.language === "ru") return discovered;
+  }
+  return null;
 }
 
 /**

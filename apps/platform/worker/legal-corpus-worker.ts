@@ -8,6 +8,11 @@ import {
   runNextLexCatalogDiscoveryPage,
   seedLexCatalogDiscoveryCheckpoints,
 } from "../lib/legal-corpus/lex-catalog-discovery";
+import {
+  LEX_CORE_CODE_SEED_IDS,
+  runNextLexCoreCodeDiscovery,
+  seedLexCoreCodeJobs,
+} from "../lib/legal-corpus/lex-core-code-discovery";
 import { featureEnabled } from "../lib/legal-corpus/trust";
 import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
@@ -23,10 +28,11 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
-// This bounded staging configuration gives one catalogue page to resumable
-// discovery without consuming the paced Lex.uz slots that fetch already-
-// discovered documents need. Durable checkpoints preserve every remaining
-// page for later scheduled runs.
+// This bounded staging configuration gives one source-discovery page to the
+// currently active discovery phase without consuming the paced Lex.uz slots
+// that fetch already-discovered documents need. Until all core codes have an
+// exact official title match, that page is a code-title lookup; afterwards it
+// resumes the durable broad catalogue checkpoint stream.
 const DISCOVERY_PAGES_PER_RUN = 1;
 // Seven sequential document jobs plus one catalogue request use at most eight
 // primary Lex.uz requests per four-minute run. The shared 20-second host pacer
@@ -291,6 +297,10 @@ export async function handleLegalCorpusScheduled(
     let catalog = { considered: 0, created: 0 };
     const discoveries: Awaited<ReturnType<typeof runNextLexCatalogDiscoveryPage>>[] = [];
     const ingestions: Awaited<ReturnType<typeof runNextLegalCorpusIngestionJob>>[] = [];
+    let coreCodeSeeds = { considered: 0, queued: 0 };
+    let coreCode: Awaited<ReturnType<typeof runNextLexCoreCodeDiscovery>> = {
+      status: "disabled", targetId: null, canonicalDocumentId: null, queued: false, safeErrorCode: null,
+    };
     let ingestionStartCutoffReached = false;
     // This local D1 reconciliation does not fetch a source. It removes only
     // known Lex reader-control labels that an older parser build could have
@@ -300,11 +310,21 @@ export async function handleLegalCorpusScheduled(
       catalog = await seedLexCatalogDiscoveryCheckpoints(env);
       const wait = (delayMs: number) => scheduler.wait(delayMs);
       const fetchImpl = createPacedLexFetch({ db: env.DB, wait });
-      for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
-        const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl });
-        discoveries.push(result);
-        if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
+      coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
+      coreCode = await runNextLexCoreCodeDiscovery(env, {
+        now: new Date(controller.scheduledTime), wait, fetchImpl,
+      });
+      if (coreCode.status === "all_settled") {
+        for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
+          const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl });
+          discoveries.push(result);
+          if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
+        }
       }
+      const preferredCoreCodeIds = [...new Set([
+        ...LEX_CORE_CODE_SEED_IDS,
+        ...(coreCode.canonicalDocumentId ? [coreCode.canonicalDocumentId] : []),
+      ])];
       const ingestionBudget = legalCorpusIngestionJobBudget(discoveries);
       for (let index = 0; index < ingestionBudget; index += 1) {
         if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now())) {
@@ -330,6 +350,7 @@ export async function handleLegalCorpusScheduled(
           reservedQueuedJobType: reservedVersionSlot
             ? "version"
             : undefined,
+          preferredCanonicalDocumentIds: preferredCoreCodeIds,
         });
         ingestions.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
@@ -354,10 +375,12 @@ export async function handleLegalCorpusScheduled(
       && qdrantBackfills[0]?.status === "empty"
       ? await createLegalCorpusQdrantSnapshot(env)
       : null;
-    const errorCode = discoveries.find((result) => result.safeErrorCode)?.safeErrorCode
+    const errorCode = coreCode.safeErrorCode
+      ?? discoveries.find((result) => result.safeErrorCode)?.safeErrorCode
       ?? ingestions.find((result) => result.safeErrorCode)?.safeErrorCode
       ?? null;
-    const failed = discoveries.some((result) => result.status === "failed")
+    const failed = coreCode.status === "failed"
+      || discoveries.some((result) => result.status === "failed")
       || ingestions.some((result) => result.status === "failed"
         || result.status === "halted_suspicious_change");
     await finishRun(env, run, failed ? "failed" : "completed", errorCode);
@@ -369,6 +392,11 @@ export async function handleLegalCorpusScheduled(
       discoveryClaimed: discoveries.filter((result) => result.claimed).length,
       checkpointsConsidered: catalog.considered,
       checkpointsCreated: catalog.created,
+      coreCodeSeedsConsidered: coreCodeSeeds.considered,
+      coreCodeSeedsQueued: coreCodeSeeds.queued,
+      coreCodeDiscoveryStatus: coreCode.status,
+      coreCodeTargetId: coreCode.targetId,
+      coreCodeCanonicalDocumentId: coreCode.canonicalDocumentId,
       ingestionJobs: ingestions.length,
       ingestionClaimed: ingestions.filter((result) => result.claimed).length,
       ingestionStartCutoffReached,
