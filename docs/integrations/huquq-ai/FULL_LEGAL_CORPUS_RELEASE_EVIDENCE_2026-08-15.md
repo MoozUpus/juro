@@ -1130,6 +1130,32 @@ zero retrying, failed or dead-letter ingestion jobs. This is staging progress,
 not a claim that the 1,500-document, 22,000-provision, full-checkpoint,
 snapshot, Qdrant, indexed-evaluation or preview gates are complete.
 
+## Staging bounded-throughput calibration (2026-08-17)
+
+Commit `1dba5f7af786275cd9948ed50fb1ca42e78367af` changes the staging
+ingestion budget from six to seven jobs while retaining three catalogue
+discovery pages. It does not create a parallel crawler: every Lex.uz request
+still atomically claims the D1-backed host window, whose observed robots
+`crawl_delay_ms` is 20,000. The 195,000 ms start fence remains authoritative;
+when a slow representation fetch consumes the available window, the seventh
+job is left queued rather than risking an overlapping worker.
+
+Before the adjustment, 39 completed staging runs from 08:00 UTC had a
+195,927 ms minimum, 202,464 ms average and 214,470 ms maximum duration; none
+reached 235,000 ms. The focused ingestion/Worker suite passed 39/39 after the
+change, along with TypeScript type-check, lint and the isolated staging
+artifact dry-run. The Worker deployed only to staging as
+`e5c7ef7b-e039-439a-9a36-aaee5c4a3243`.
+
+The first post-deploy run, 11:04:14.230–11:07:35.366 UTC, completed in
+201,136 ms with no error code, and the next scheduled run started normally.
+A subsequent read-only probe reported 1,417 canonical documents, 14,861
+unique provisions, 19 of 44 completed checkpoints and zero retrying, failed
+or dead-letter ingestion jobs. This validates the bounded throughput change;
+it does not claim the numeric corpus thresholds, full checkpoint coverage,
+snapshot/restore, Qdrant, indexed-evaluation, preview or production gates are
+complete.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
