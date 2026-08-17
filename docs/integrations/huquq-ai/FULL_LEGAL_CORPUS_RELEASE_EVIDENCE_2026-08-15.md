@@ -1057,6 +1057,34 @@ format (`strftime('%Y-%m-%dT%H:%M:%fZ','now')`) to match the stored D1
 timestamps. This corrects a diagnostic-only SQLite text-comparison mismatch;
 the Worker already uses JavaScript ISO timestamps for job selection.
 
+## Staging primary-language rotation (2026-08-17)
+
+Commit `9b12b67` keeps the two-slot primary-legislation share and its global
+retry precedence, but gives each preferred slot a deterministic target language
+rotating through Uzbek Cyrillic, Russian, Uzbek Latin and English. A preferred
+slot first performs the bounded checkpoint → discovery-record →
+`legal_corpus_ingestion_document_language_ready_idx` lookup for that language.
+If no ready job exists in that language, it falls back only to another official
+language in the same `laws`, `oliy_majlis` or `president` share; ordinary FIFO
+work remains after that fallback. The three discovery pages, six ingestion jobs,
+single Worker lease and robots-aware host pacer are unchanged.
+
+The focused catalog/discovery, ingestion and Worker-boundary suite passed
+41/41, including both the language-target and same-category fallback
+regressions. TypeScript type-check passed, and the isolated staging artifact
+dry-run was 3,659.51 KiB uncompressed / 806.39 KiB gzip. The exact Worker
+deployed only to staging as `24165585-1d4a-4837-ae30-983e1f428cc2`.
+
+Its 07:32:14.026–07:35:31.520 UTC process run completed without an error code.
+Read-only queue records show two completed preferred `laws/en` jobs,
+`lexuz:8245378` and `lexuz:8283229`, during that run. The first selected its
+scheduled English target; the second used the documented same-category fallback
+because no ready primary-catalogue job existed for its next target locale.
+At the subsequent probe there were no running, retrying, failed or dead-letter
+ingestion jobs (4,218 completed and 21,493 queued). This verifies scheduling
+behavior only; the 1,500-document, 22,000-provision, coverage, snapshot,
+evaluation and release gates remain open.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side

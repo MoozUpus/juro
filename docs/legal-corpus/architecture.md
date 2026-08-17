@@ -114,7 +114,11 @@ ingestion slots may select already-discovered `laws`, `oliy_majlis` or
 `president` catalogue jobs; every due retry remains globally first and the
 remaining four slots retain FIFO order. This bounded share brings primary
 legislation into the corpus earlier without starving other official categories
-or increasing crawl traffic.
+or increasing crawl traffic. Across the two preferred slots, the target locale
+rotates deterministically through Uzbek Cyrillic, Russian, Uzbek Latin and
+English. A slot first selects its matching official locale; if that catalogue
+has no ready job in the target locale, it falls back only within the same
+preferred catalogue families before ordinary FIFO work is considered.
 
 The daily seed also creates maintenance jobs without performing network I/O.
 Daily work prioritizes stale codes and the Constitution while the normal
