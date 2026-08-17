@@ -1085,6 +1085,15 @@ ingestion jobs (4,218 completed and 21,493 queued). This verifies scheduling
 behavior only; the 1,500-document, 22,000-provision, coverage, snapshot,
 evaluation and release gates remain open.
 
+The exact Draft PR head `bf8bd900daedb283e476cc009ab9527449ac6501` passed
+GitHub Actions platform and website validation in
+[run 32006702505](https://github.com/MoozUpus/juro/actions/runs/32006702505),
+and the independent D1 snapshot-restore check in
+[run 32006702507](https://github.com/MoozUpus/juro/actions/runs/32006702507).
+Those checks validate this bounded scheduling change; they do not substitute
+for the post-threshold snapshot, indexed evaluation, Qdrant and authenticated
+preview gates.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
