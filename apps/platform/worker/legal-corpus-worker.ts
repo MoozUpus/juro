@@ -34,14 +34,14 @@ const DISCOVERY_PAGES_PER_RUN = 3;
 // slot to discovery is cheaper than delaying category coverage for a large
 // already-queued ingestion backlog.
 const INGESTION_JOBS_PER_RUN = 6;
-// Three of the six existing ingestion slots may prefer the already discovered
-// article-rich official catalogues. The remaining three stay FIFO and
+// Four of the six existing ingestion slots may prefer the already discovered
+// article-rich official catalogues. Two slots remain FIFO and
 // runNextLegalCorpusIngestionJob always claims a due retry first. Staging
 // evidence shows that court acts and laws carry materially more provisions
 // than the large government backlog, so this reduces time to the provision
 // release threshold without increasing Lex.uz traffic or starving any source
 // family.
-const PREFERRED_INGESTION_SLOTS_PER_RUN = 3;
+const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const PREFERRED_INGESTION_CATALOGUES = [
   "court_acts",
   "laws",
