@@ -914,6 +914,55 @@ database, feature flag, DNS record or corpus state changed. This remediation
 does not close the corpus thresholds or authorize freeze, evaluation or
 rollout.
 
+## Staging-only four-minute cadence evidence
+
+After more than eight hours of post-cutoff staging runs remained between
+approximately 195 and 202 seconds, commit
+`5e6477b602f678b7f55663c3c89ba04b2e19bdb9` separated the staging process
+schedule from the production-safe default. Development and production retain
+`*/5 * * * *`; only the isolated staging legal-corpus Worker uses
+`*/4 * * * *`. The 195,000 ms ingestion-start fence, seven-minute distributed
+lock, seven-job ingestion budget and shared 20-second Lex host pacer are
+unchanged. The production corpus flags remain false, so this source change
+does not start or accelerate production ingestion.
+
+The focused Worker boundary suite passed 11/11, including a regression that
+rejects the staging cron in the production environment before D1 access.
+Platform lint and type-check passed, the complete platform suite passed
+186/186, platform artifact validation passed, and the isolated Worker dry-run
+measured 3,655.89 KiB uncompressed / 805.25 KiB gzip. Exact-head CI passed the
+platform job in 6m05s, the website job in 46s and the Qdrant snapshot-restore
+gate in 37s.
+
+Staging legal-corpus Worker version
+`f6d8a07f-1b06-4d79-b607-acd7d4398e68` deployed the exact commit and reported
+only the `*/4 * * * *` process trigger plus the unchanged daily seed trigger.
+After normal Cloudflare trigger propagation, four consecutive exact-version
+runs completed as follows:
+
+- 05:20:28.580–05:23:47.831 UTC: 199,251 ms;
+- 05:24:28.470–05:27:46.614 UTC: 198,144 ms;
+- 05:28:28.590–05:31:46.351 UTC: 197,761 ms;
+- 05:32:28.468–05:35:47.041 UTC: 198,573 ms.
+
+The fifth invocation started on the retained 05:36:28.589 UTC tick. Each
+completed run therefore released the lock 40–42 seconds before the next
+invocation, and no overlap or missed-tick rollback condition occurred. One
+independent read-only observation request returned a transient Cloudflare API
+7403 response; `wrangler whoami` and the immediate repeated query succeeded,
+and the durable scheduler rows show that ingestion itself was unaffected.
+The sequential post-run sample contained 1,092 canonical documents, 2,905
+language variants, 13,207 unique current provisions and 47,967 indexed current
+chunks. Fourteen discovery checkpoints were completed, one was actively
+running and the other 29 remained durably queued. The same sample returned
+zero terminal ingestion jobs, zero stale running jobs, zero unresolved
+failures and zero chunks missing normalized sparse data; bounded cleanup left
+55,510 legacy sparse JSON rows for later invocations. This cadence evidence
+improves bounded staging throughput only. The 1,283 canonical-document,
+20,296 unique-provision and 44/44 checkpoint gates remain open, so it does not
+authorize freeze/evaluation or change any production Worker, database,
+feature flag, route or DNS state.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
