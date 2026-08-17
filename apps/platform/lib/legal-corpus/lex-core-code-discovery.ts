@@ -21,6 +21,7 @@ const LEX_CORE_CODE_SEEDS = [
   { targetId: "budget", sourceUrl: "https://lex.uz/ru/docs/2304140" },
   { targetId: "civil_procedure", sourceUrl: "https://lex.uz/ru/docs/3517334" },
   { targetId: "criminal", sourceUrl: "https://lex.uz/ru/docs/111457" },
+  { targetId: "criminal_execution", sourceUrl: "https://lex.uz/ru/docs/163627" },
   { targetId: "criminal_procedure", sourceUrl: "https://lex.uz/ru/docs/111463" },
   { targetId: "family", sourceUrl: "https://lex.uz/ru/docs/104723" },
   { targetId: "civil", sourceUrl: "https://lex.uz/ru/docs/111189" },

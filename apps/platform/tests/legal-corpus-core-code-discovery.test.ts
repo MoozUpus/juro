@@ -70,7 +70,7 @@ test("a later verified source seed resolves an existing queued core-code target"
       LEGAL_CORPUS_ENABLED: "true",
       LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
     };
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_responsibility")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "criminal_execution")!;
     sqlite.prepare(`INSERT INTO legal_corpus_core_code_targets
       (target_id,title_ru,status,source_url,canonical_document_id,attempt_count,next_attempt_at,last_error_code,
         resolved_at,created_at,updated_at)
@@ -84,7 +84,7 @@ test("a later verified source seed resolves an existing queued core-code target"
         status: string; sourceUrl: string; canonicalDocumentId: string; nextAttemptAt: string | null; lastErrorCode: string | null;
       };
     assert.deepEqual({ ...state }, {
-      status: "awaiting_ingestion", sourceUrl: "https://lex.uz/ru/docs/97664", canonicalDocumentId: "lexuz:97664",
+      status: "awaiting_ingestion", sourceUrl: "https://lex.uz/ru/docs/163627", canonicalDocumentId: "lexuz:163627",
       nextAttemptAt: null, lastErrorCode: null,
     });
   } finally {
