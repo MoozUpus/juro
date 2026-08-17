@@ -1018,6 +1018,45 @@ This change is staging-only and does not freeze the corpus, enable dense
 retrieval, approve an evaluation, alter production code/configuration/DNS, or
 authorize rollout.
 
+## Staging primary-legislation queue share (2026-08-17)
+
+Commits `bf709d7a4b2780fe157aca2a5e1b2cb7a8de56c3` and
+`7c42763b2e90d7ebac087dee4753e42c4589bea1` add a bounded selection share for
+already catalogued `laws`, `oliy_majlis` and `president` sources. Due retries
+remain globally first; only the first two of the existing six ingestion slots
+can prefer those source families, while the remaining four preserve FIFO.
+This is queue ordering only: it does not add source requests, change the
+20-second host pacer, alter corpus content, or bypass retries and technical
+validation.
+
+Staging migration
+`0136_legal_corpus_preferred_ingestion_lookup.sql` added only the
+`legal_corpus_ingestion_document_language_ready_idx` lookup index. Wrangler
+reported the index migration complete in 39.75 ms and a follow-up migration
+ledger check reported no pending migrations. `EXPLAIN QUERY PLAN` confirmed
+the bounded checkpoint category index → discovery primary key → new job-index
+path; it did not scan the full ingestion backlog.
+
+The final code passed 31 focused ingestion/Worker tests, TypeScript type-check
+and the staging artifact dry-run (3,658.36 KiB uncompressed / 806.03 KiB gzip).
+The complete GitHub CI run
+[32005070514](https://github.com/MoozUpus/juro/actions/runs/32005070514) and
+its Qdrant snapshot gate passed for the exact final code commit.
+
+The staging Worker deployed as `abdabee2-6057-4f2a-8205-ec6f0e36c817`. Its
+observed 07:20:15.084–07:23:34.059 UTC process run completed without an error
+code. The first two completed preferred jobs were official `laws/en` sources
+with canonical IDs `lexuz:8276716` and `lexuz:8315385`, recorded at
+07:21:33.136 and 07:21:57.375 UTC. The subsequent read-only probe returned
+zero terminal and zero due-retry jobs. This proves the bounded share operates
+against actual staging queue records; it is not a claim that the release
+corpus thresholds or complete coverage have been reached.
+
+All manual read-only probes now compare queue timestamps using ISO-8601 UTC
+format (`strftime('%Y-%m-%dT%H:%M:%fZ','now')`) to match the stored D1
+timestamps. This corrects a diagnostic-only SQLite text-comparison mismatch;
+the Worker already uses JavaScript ISO timestamps for job selection.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
