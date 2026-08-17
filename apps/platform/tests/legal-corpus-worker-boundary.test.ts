@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   handleLegalCorpusScheduled,
+  legalCorpusActionableRunErrorCode,
   legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
   LEGAL_CORPUS_PROCESS_CRON,
@@ -179,6 +180,22 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 195_000), false);
   assert.equal(legalCorpusIngestionStartAllowed(Number.NaN, scheduledTime), false);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, Number.POSITIVE_INFINITY), false);
+});
+
+test("scheduled run errors exclude resolved technical source conditions but retain actionable retries", () => {
+  const resolved = legalCorpusActionableRunErrorCode({
+    coreCode: { status: "all_settled", safeErrorCode: null },
+    discoveries: [],
+    ingestions: [{ status: "completed", safeErrorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE" }],
+  });
+  assert.equal(resolved, null);
+
+  const retrying = legalCorpusActionableRunErrorCode({
+    coreCode: { status: "all_settled", safeErrorCode: null },
+    discoveries: [],
+    ingestions: [{ status: "retrying", safeErrorCode: "LEGAL_SOURCE_PRIMARY_CONTENT_MISSING" }],
+  });
+  assert.equal(retrying, "LEGAL_SOURCE_PRIMARY_CONTENT_MISSING");
 });
 
 test("private dense services stay behind service bindings and staging-only flags", () => {

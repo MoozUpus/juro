@@ -104,6 +104,22 @@ type ClaimedRun = {
   holderId: string;
 };
 
+type CorpusWorkResult = {
+  status: string;
+  safeErrorCode: string | null;
+};
+
+export function legalCorpusActionableRunErrorCode(input: {
+  coreCode: CorpusWorkResult;
+  discoveries: readonly CorpusWorkResult[];
+  ingestions: readonly CorpusWorkResult[];
+}): string | null {
+  return (input.coreCode.status === "failed" ? input.coreCode.safeErrorCode : null)
+    ?? input.discoveries.find((result) => result.status === "retrying" || result.status === "failed")?.safeErrorCode
+    ?? input.ingestions.find((result) => result.status !== "completed" && result.safeErrorCode !== null)?.safeErrorCode
+    ?? null;
+}
+
 function log(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -376,10 +392,17 @@ export async function handleLegalCorpusScheduled(
       && qdrantBackfills[0]?.status === "empty"
       ? await createLegalCorpusQdrantSnapshot(env)
       : null;
-    const errorCode = coreCode.safeErrorCode
-      ?? discoveries.find((result) => result.safeErrorCode)?.safeErrorCode
-      ?? ingestions.find((result) => result.safeErrorCode)?.safeErrorCode
-      ?? null;
+    // A completed ingestion can still carry a safe source-condition code when
+    // Lex has no official text representation. That condition is recorded in
+    // the per-document failure ledger as `technically_unavailable` and is
+    // included in coverage; it is not a failed scheduled run. Keep the run
+    // ledger's error_code for actionable retry/terminal conditions only, so
+    // operational status cannot falsely report a successful bounded crawl as
+    // failed merely because one unavailable representation was resolved.
+    const resolvedSourceConditionCount = ingestions.filter((result) =>
+      result.status === "completed" && result.safeErrorCode !== null,
+    ).length;
+    const errorCode = legalCorpusActionableRunErrorCode({ coreCode, discoveries, ingestions });
     const failed = coreCode.status === "failed"
       || discoveries.some((result) => result.status === "failed")
       || ingestions.some((result) => result.status === "failed"
@@ -407,6 +430,7 @@ export async function handleLegalCorpusScheduled(
       qdrantSnapshotStatus: qdrantSnapshot?.status ?? "not_attempted",
       titleRepairsDocuments: titleRepairs.documents,
       titleRepairsVariants: titleRepairs.variants,
+      resolvedSourceConditionCount,
       errorCode,
     });
   } catch {
