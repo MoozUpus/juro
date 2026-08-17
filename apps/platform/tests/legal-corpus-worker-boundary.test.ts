@@ -146,16 +146,30 @@ test("expired lease rows are recorded as failed before a later corpus schedule c
   }
 });
 
-test("the bounded acquisition phase preserves a discovery slot and reuses only an empty one", () => {
-  assert.equal(legalCorpusIngestionJobBudget([]), 7);
+test("the bounded acquisition phase prioritizes discovery and reuses only empty page capacity", () => {
+  assert.equal(legalCorpusIngestionJobBudget([]), 5);
   assert.equal(legalCorpusIngestionJobBudget([
     { claimed: true, status: "completed" },
-  ]), 7);
+  ]), 5);
   assert.equal(legalCorpusIngestionJobBudget([
     { claimed: false, status: "empty" },
   ]), 8);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 7);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 7);
+  assert.equal(legalCorpusIngestionJobBudget([
+    { claimed: true, status: "completed" },
+    { claimed: false, status: "empty" },
+  ]), 7);
+  assert.equal(legalCorpusIngestionJobBudget([
+    { claimed: true, status: "completed" },
+    { claimed: true, status: "completed" },
+    { claimed: false, status: "empty" },
+  ]), 6);
+  assert.equal(legalCorpusIngestionJobBudget([
+    { claimed: true, status: "completed" },
+    { claimed: true, status: "completed" },
+    { claimed: true, status: "completed" },
+  ]), 5);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 5);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 5);
 });
 
 test("ingestion start fence leaves a bounded representation-fetch window", () => {
@@ -269,9 +283,9 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /runNextLegalCorpusQdrantBackfillBatch/u);
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
-  assert.match(corpusWorker, /const DISCOVERY_PAGES_PER_RUN = 1;/u);
-  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 7;/u);
-  assert.match(corpusWorker, /const PREFERRED_INGESTION_SLOTS_PER_RUN = 6;/u);
+  assert.match(corpusWorker, /const DISCOVERY_PAGES_PER_RUN = 3;/u);
+  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 5;/u);
+  assert.match(corpusWorker, /const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;/u);
   assert.match(corpusWorker, /const VERSION_INGESTION_SLOT_INDEX = 4;/u);
   assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
