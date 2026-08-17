@@ -21,13 +21,17 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
-const DISCOVERY_PAGES_PER_RUN = 2;
-// A real staging run with two catalogue pages plus eight ingestion fetches
+// Coverage completion is gated on every category-language checkpoint, so give
+// catalogue discovery three of the same nine paced request slots. This takes
+// one slot from document ingestion rather than increasing Lex.uz traffic.
+const DISCOVERY_PAGES_PER_RUN = 3;
+// An earlier staging run with two catalogue pages plus eight ingestion fetches
 // lasted from 17:55:28.188 to 18:00:28.323 UTC and lost the next cron tick.
-// Seven ingestion jobs keep the shared 20-second Lex host pacer authoritative
-// while leaving enough margin for provider and D1 overhead. Losing one slot is
-// cheaper than periodically losing an entire scheduled invocation.
-const INGESTION_JOBS_PER_RUN = 7;
+// Six ingestion jobs keep the shared 20-second Lex host pacer authoritative
+// while leaving enough margin for provider and D1 overhead. Reallocating one
+// slot to discovery is cheaper than delaying category coverage for a large
+// already-queued ingestion backlog.
+const INGESTION_JOBS_PER_RUN = 6;
 // A short canonical page may require one additional robots-checked, paced PDF
 // or ZIP representation fetch. Stop claiming new jobs after 3m15s from the
 // scheduled tick so one worst-case HTML + representation job can still finish
@@ -47,7 +51,7 @@ export function legalCorpusIngestionJobBudget(
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
   // discovery does not grant extra nominal source jobs. The nominal maximum
-  // remains nine (2 discovery + 7 ingestion, or 0 + 9); the elapsed-time
+  // remains nine (3 discovery + 6 ingestion, or 0 + 9); the elapsed-time
   // start fence below is authoritative when a job discovers a secondary PDF
   // or ZIP representation and therefore consumes an additional paced fetch.
   if (!discoveries.some((result) => result.status === "empty")) return INGESTION_JOBS_PER_RUN;
