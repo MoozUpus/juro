@@ -16,6 +16,7 @@ import { scheduleLegalCorpusMaintenance } from "../lib/legal-corpus/maintenance"
 import { compactLegacySparseJsonBatch } from "../lib/legal-corpus/sparse-index";
 
 export const LEGAL_CORPUS_PROCESS_CRON = "*/5 * * * *";
+export const LEGAL_CORPUS_STAGING_PROCESS_CRON = "*/4 * * * *";
 export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 
 const LOCK_NAME = "legal-corpus-worker";
@@ -30,8 +31,11 @@ const INGESTION_JOBS_PER_RUN = 7;
 // A short canonical page may require one additional robots-checked, paced PDF
 // or ZIP representation fetch. Stop claiming new jobs after 3m15s from the
 // scheduled tick so one worst-case HTML + representation job can still finish
-// before the next five-minute invocation. The durable queue retains every job
-// not started in this window.
+// before the next staging invocation. More than eight hours of post-fence
+// staging evidence kept ordinary runs between 195s and 202s, leaving at least
+// 38s before the four-minute tick. A rare overrun remains fail-closed behind
+// the distributed lock. Production retains the five-minute cadence and the
+// durable queue retains every job not started in this window.
 const INGESTION_START_CUTOFF_MS = 195_000;
 // Dense activation happens only after the source queue is frozen. Four
 // 64-chunk batches cap one invocation at eight embedding calls while allowing
@@ -93,6 +97,12 @@ function denseBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
 
 function enabled(env: LegalCorpusWorkerEnv): boolean {
   return ingestionEnabled(env) || denseBackfillEnabled(env);
+}
+
+function processCron(env: LegalCorpusWorkerEnv): string {
+  return env.APP_ENV === "staging"
+    ? LEGAL_CORPUS_STAGING_PROCESS_CRON
+    : LEGAL_CORPUS_PROCESS_CRON;
 }
 
 async function claimRun(
@@ -172,7 +182,7 @@ export async function handleLegalCorpusScheduled(
   controller: ScheduledController,
   env: LegalCorpusWorkerEnv,
 ): Promise<void> {
-  if (controller.cron !== LEGAL_CORPUS_PROCESS_CRON && controller.cron !== LEGAL_CORPUS_SEED_CRON) {
+  if (controller.cron !== processCron(env) && controller.cron !== LEGAL_CORPUS_SEED_CRON) {
     log("error", {
       event: "legal_corpus.unknown_cron",
       environment: env.APP_ENV,

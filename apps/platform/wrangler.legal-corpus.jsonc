@@ -73,7 +73,7 @@
         "EMBEDDING_MODEL": "text-embedding-3-large"
       },
       "triggers": {
-        "crons": ["*/5 * * * *", "5 19 * * *"]
+        "crons": ["*/4 * * * *", "5 19 * * *"]
       },
       "d1_databases": [
         {

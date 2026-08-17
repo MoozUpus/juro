@@ -8,6 +8,7 @@ import {
   legalCorpusIngestionStartAllowed,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SEED_CRON,
+  LEGAL_CORPUS_STAGING_PROCESS_CRON,
 } from "../worker/legal-corpus-worker";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -27,7 +28,7 @@ function controller(cron: string, scheduledTime = Date.UTC(2026, 7, 15, 19, 5)) 
 
 test("corpus Worker is inert before both ingestion flags are enabled", async () => {
   let databaseCalls = 0;
-  const scheduled = controller(LEGAL_CORPUS_PROCESS_CRON);
+  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON);
   await handleLegalCorpusScheduled(scheduled.value, {
     APP_ENV: "staging",
     LEGAL_CORPUS_ENABLED: "false",
@@ -49,6 +50,25 @@ test("corpus Worker rejects unknown schedules before touching D1", async () => {
   const scheduled = controller("* * * * *");
   await handleLegalCorpusScheduled(scheduled.value, {
     APP_ENV: "staging",
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    DB: {
+      prepare() {
+        databaseCalls += 1;
+        throw new Error("DB must remain untouched");
+      },
+    } as unknown as D1Database,
+    BUCKET: {} as R2Bucket,
+  });
+  assert.equal(databaseCalls, 0);
+  assert.equal(scheduled.noRetryCalls(), 1);
+});
+
+test("staging cadence is not accepted by a production environment", async () => {
+  let databaseCalls = 0;
+  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON);
+  await handleLegalCorpusScheduled(scheduled.value, {
+    APP_ENV: "production",
     LEGAL_CORPUS_ENABLED: "true",
     LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
     DB: {
@@ -143,7 +163,7 @@ test("private dense services stay behind service bindings and staging-only flags
 
 test("process schedule self-seeds a fresh corpus without an admin action", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
-  const scheduled = controller(LEGAL_CORPUS_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 10));
+  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 10));
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (input) => {
     const url = String(input);
@@ -185,7 +205,7 @@ test("process schedule self-seeds a fresh corpus without an admin action", async
 
 test("frozen corpus keeps resumable dense backfill alive without restarting Lex ingestion", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
-  const scheduled = controller(LEGAL_CORPUS_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 15));
+  const scheduled = controller(LEGAL_CORPUS_STAGING_PROCESS_CRON, Date.UTC(2026, 7, 15, 19, 15));
   try {
     await handleLegalCorpusScheduled(scheduled.value, {
       APP_ENV: "staging",
@@ -251,9 +271,17 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     assert.equal(environment.preview_urls, false);
     assert.deepEqual(environment.routes ?? [], []);
     assert.equal(environment.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
-    assert.deepEqual(environment.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);
     assert.equal(environment.r2_buckets.some(({ binding }) => binding === "BACKUP_BUCKET"), true);
   }
+  assert.deepEqual(config.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);
+  assert.deepEqual(config.env.production.triggers.crons, [
+    LEGAL_CORPUS_PROCESS_CRON,
+    LEGAL_CORPUS_SEED_CRON,
+  ]);
+  assert.deepEqual(config.env.staging.triggers.crons, [
+    LEGAL_CORPUS_STAGING_PROCESS_CRON,
+    LEGAL_CORPUS_SEED_CRON,
+  ]);
   for (const environment of [config, config.env.production]) {
     assert.equal(environment.vars.LEGAL_CORPUS_ENABLED, "false");
     assert.equal(environment.vars.LEGAL_CORPUS_AUTO_INGEST_ENABLED, "false");
