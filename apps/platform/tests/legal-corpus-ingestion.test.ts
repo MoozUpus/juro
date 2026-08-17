@@ -1352,6 +1352,11 @@ test("an exact core-code candidate is claimed before older ordinary FIFO work", 
       now: new Date(now.getTime() + 1_000),
       correlationId: "core-code-priority",
     });
+    const coreCodeHistory = await enqueueOfficialLexCorpusRevision(env, {
+      sourceUrl: "https://lex.uz/ru/docs/104723?ONDATE=18.05.2022",
+      now: new Date(now.getTime() + 1_500),
+      correlationId: "core-code-history",
+    });
     const run = await runNextLegalCorpusIngestionJob(env, {
       now: new Date(now.getTime() + 2_000),
       fetchImpl: fetchFor(lexHtml()),
@@ -1360,6 +1365,8 @@ test("an exact core-code candidate is claimed before older ordinary FIFO work", 
     assert.equal(run.jobId, coreCode.jobId);
     assert.equal((sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
       .get(ordinary.jobId) as { status: string }).status, "queued");
+    assert.equal((sqlite.prepare("SELECT status FROM legal_corpus_ingestion_jobs WHERE id=?")
+      .get(coreCodeHistory.jobId) as { status: string }).status, "queued");
   } finally {
     sqlite.close();
   }

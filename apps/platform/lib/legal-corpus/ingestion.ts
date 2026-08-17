@@ -167,7 +167,8 @@ async function findPreferredCanonicalDocumentJob(
   return db.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,
       canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
-    WHERE status='queued' AND canonical_document_id IN (${documentIds.map(() => "?").join(",")})
+    WHERE status='queued' AND job_type='fetch'
+      AND canonical_document_id IN (${documentIds.map(() => "?").join(",")})
       AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY ${priority},coalesce(next_attempt_at,created_at) ASC,created_at ASC,id ASC LIMIT 1
   `).bind(...documentIds, now, ...documentIds).first<IngestionJob>();
