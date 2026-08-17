@@ -1094,6 +1094,42 @@ Those checks validate this bounded scheduling change; they do not substitute
 for the post-threshold snapshot, indexed evaluation, Qdrant and authenticated
 preview gates.
 
+## Staging provision-rich bootstrap refinement (2026-08-17)
+
+The preceding sections are historical evidence for the original two-slot
+implementation. Commits `9576ffd`, `84ff883` and `dd56741` supersede its
+selection policy for the still-incomplete staging build. Four of the six
+existing ingestion slots now prefer the provision-rich official catalogue
+order `court_acts`, `laws`, `court_practice`, `oliy_majlis`, `president`; two
+nominal slots remain FIFO, and a due retry remains globally first. The
+three-discovery-page budget, six-job cap, 20-second shared Lex.uz host pacer,
+195,000 ms start fence and distributed lock are unchanged.
+
+The preferred query first selects a source URL without an existing official
+language alias, then applies the catalogue order. This prevents a fetched
+language variant from consuming another bootstrap slot merely because the
+same canonical family appears in a different official locale. FIFO retains
+the already-linked language variants and historical source URLs, so the change
+does not discard multilingual or version history work.
+
+Focused ingestion and Worker-boundary regressions passed 39/39, including the
+unlinked-family and configured-catalogue-order cases. Type-check, lint and the
+isolated staging artifact dry-run passed. The exact Draft PR head `dd56741`
+passed platform and website validation in
+[run 32019340172](https://github.com/MoozUpus/juro/actions/runs/32019340172),
+and its independent snapshot-restore check passed in
+[run 32019340247](https://github.com/MoozUpus/juro/actions/runs/32019340247).
+
+The isolated staging Worker deployed as `9fc27a94-06b9-4b08-b422-43058ef46acd`.
+Its observed 10:16:14.214–10:19:39.448 UTC run completed four preferred
+`laws` jobs (Uzbek Cyrillic, Russian, Uzbek Latin and English) before a FIFO
+government job, with no error code. A subsequent read-only D1 probe after the
+10:28–10:31 UTC completed run reported 1,372 canonical documents, 14,241
+unique provisions, 51,116 indexed chunks, 18 of 44 completed checkpoints and
+zero retrying, failed or dead-letter ingestion jobs. This is staging progress,
+not a claim that the 1,500-document, 22,000-provision, full-checkpoint,
+snapshot, Qdrant, indexed-evaluation or preview gates are complete.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
