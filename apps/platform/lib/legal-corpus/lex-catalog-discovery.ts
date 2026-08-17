@@ -76,6 +76,14 @@ export type LexCatalogPageRunResult = {
   safeErrorCode: string | null;
 };
 
+// The staging worker advances three catalogue pages every four minutes. Nine
+// active ASP.NET pagers can therefore each receive another successful POST
+// within twelve minutes, safely inside Lex's fifteen-minute public session
+// lease. Letting more sessions accumulate causes old, large catalogues to
+// expire and re-read their first pages forever; keeping the pool bounded makes
+// all progress durable without exceeding the host request budget.
+export const MAX_ACTIVE_LEX_CATALOG_PAGERS = 9;
+
 function decodeHtml(value: string): string {
   return value
     .replace(/&#x([0-9a-f]+);/giu, (_match, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
@@ -446,14 +454,50 @@ export async function runNextLexCatalogDiscoveryPage(
   await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
     SET status='retrying',next_attempt_at=?,last_error_code='LEX_CATALOG_STALE_CLAIM',updated_at=?
     WHERE status='running' AND updated_at<?`).bind(now, now, stale).run();
-  const candidate = await env.DB.prepare(`SELECT id,category_key AS categoryKey,language,search_url AS searchUrl,
+  // A prior fairness pass may have opened more public pager sessions than the
+  // fixed request budget can refresh before Lex expires them. Retain the
+  // furthest/oldest leases and safely restart only the excess page-one work;
+  // the immutable discovery ledger prevents duplicate ingestion jobs.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
+      next_attempt_at=?,last_error_code=NULL,updated_at=?
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id FROM legal_corpus_discovery_checkpoints
+        WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+          AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+        ORDER BY page_number DESC,source_session_expires_at ASC,id
+        LIMIT -1 OFFSET ?
+      )
+    )`).bind(now, now, now, MAX_ACTIVE_LEX_CATALOG_PAGERS).run();
+  const candidate = await env.DB.prepare(`WITH active_pagers AS (
+      SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints
+      WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+        AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+    )
+    SELECT id,category_key AS categoryKey,language,search_url AS searchUrl,
       page_number AS pageNumber,expected_document_count AS expectedDocumentCount,
       next_event_target AS nextEventTarget,view_state AS viewState,
       view_state_generator AS viewStateGenerator,source_session_cookie AS sourceSessionCookie,
       source_session_expires_at AS sourceSessionExpiresAt,attempt_count AS attemptCount
-    FROM legal_corpus_discovery_checkpoints
+    FROM legal_corpus_discovery_checkpoints CROSS JOIN active_pagers
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
+      -- Once the bounded pool is full, renew an existing public pager before
+      -- opening another page-zero catalogue. The earliest lease is refreshed
+      -- first, yielding a deterministic round-robin within the 15-minute
+      -- source window; retrying checkpoints still retain global precedence.
+      CASE WHEN active_pagers.count>=?
+          AND status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+          AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+        THEN 0
+        WHEN active_pagers.count>=? THEN 1
+        ELSE 0 END,
+      CASE WHEN status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+          AND source_session_expires_at IS NOT NULL
+        THEN source_session_expires_at
+        ELSE NULL END,
       -- Do not let a large category-language catalogue starve every other
       -- official category. Once recoverable retries have precedence, advance
       -- the least-explored page across the durable checkpoint set *before*
@@ -466,7 +510,8 @@ export async function runNextLexCatalogDiscoveryPage(
       CASE status WHEN 'queued' THEN page_number ELSE 0 END,
       COALESCE(next_attempt_at,updated_at,created_at),
       attempt_count,category_key,language,id LIMIT 1`)
-    .bind(now).first<DiscoveryCheckpoint>();
+    .bind(now, now, MAX_ACTIVE_LEX_CATALOG_PAGERS, now, MAX_ACTIVE_LEX_CATALOG_PAGERS)
+    .first<DiscoveryCheckpoint>();
   if (!candidate) {
     return { claimed: false, status: "empty", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
   }
