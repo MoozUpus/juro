@@ -33,13 +33,21 @@ const DISCOVERY_PAGES_PER_RUN = 3;
 // slot to discovery is cheaper than delaying category coverage for a large
 // already-queued ingestion backlog.
 const INGESTION_JOBS_PER_RUN = 6;
-// Two of the six existing ingestion slots may prefer the primary legislative
-// catalogues once discovery has durably recorded them. The other four remain
-// FIFO and runNextLegalCorpusIngestionJob always claims a due retry first.
-// This advances the raised provision target without starving official source
-// categories that yield shorter acts or without increasing Lex.uz traffic.
-const PREFERRED_INGESTION_SLOTS_PER_RUN = 2;
-const PREFERRED_INGESTION_CATALOGUES = ["laws", "oliy_majlis", "president"] as const;
+// Three of the six existing ingestion slots may prefer the already discovered
+// article-rich official catalogues. The remaining three stay FIFO and
+// runNextLegalCorpusIngestionJob always claims a due retry first. Staging
+// evidence shows that court acts and laws carry materially more provisions
+// than the large government backlog, so this reduces time to the provision
+// release threshold without increasing Lex.uz traffic or starving any source
+// family.
+const PREFERRED_INGESTION_SLOTS_PER_RUN = 3;
+const PREFERRED_INGESTION_CATALOGUES = [
+  "court_acts",
+  "laws",
+  "court_practice",
+  "oliy_majlis",
+  "president",
+] as const;
 const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // A short canonical page may require one additional robots-checked, paced PDF
 // or ZIP representation fetch. Stop claiming new jobs after 3m15s from the
