@@ -963,6 +963,26 @@ improves bounded staging throughput only. The 1,283 canonical-document,
 authorize freeze/evaluation or change any production Worker, database,
 feature flag, route or DNS state.
 
+## Staging discovery-coverage rebalance (2026-08-17)
+
+Commit `f60fced` reallocates the existing per-run bounded request budget from
+two discovery pages plus seven ingestion jobs to three discovery pages plus six
+ingestion jobs. The nominal maximum remains nine paced source requests. The
+shared 20-second Lex.uz host pacer, 195,000 ms ingestion-start fence,
+seven-minute distributed lock and staging-only `*/4 * * * *` schedule are
+unchanged. This changes neither production code nor any production feature
+flag, route, DNS record or data source.
+
+The focused catalogue/discovery and Worker boundary suites passed 18/18 after
+the change. The isolated Worker dry-run passed at 3,655.89 KiB uncompressed /
+805.25 KiB gzip. Deployment of the exact staging-only Worker completed as
+version `61da29e5-a379-4049-a7c7-8840c9aa9aa5`, with only the `*/4 * * * *`
+process trigger and the unchanged daily seed trigger. The immediately preceding
+staging run completed normally at 06:12:28.594–06:15:46.749 UTC. This evidence
+does not constitute a corpus freeze or release approval: the count, 44/44
+coverage, dense/Qdrant, backup/restore, indexed evaluation and authenticated
+preview gates remain open.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
