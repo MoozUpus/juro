@@ -516,9 +516,14 @@ export async function runNextLexCatalogDiscoveryPage(
       || (page.nextEventTarget === null && (expected === null || discovered >= expected));
     const persistedExpected = completed ? (expected ?? discovered) : expected;
     const sessionCookie = page.sourceSessionCookie ?? candidate.sourceSessionCookie;
-    const sessionExpiry = page.sourceSessionCookie
+    // Lex does not reliably repeat Set-Cookie on every successful ASP.NET
+    // POST-back. A successful response using the existing public session is
+    // nevertheless proof that it remains valid, so renew the short lease on
+    // every page. Without this heartbeat a long category is reset to page one
+    // after 15 minutes despite its pager continuing to work.
+    const sessionExpiry = sessionCookie
       ? new Date(nowDate.getTime() + 15 * 60_000).toISOString()
-      : candidate.sourceSessionExpiresAt;
+      : null;
     await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
       status=?,page_number=?,expected_document_count=?,discovered_document_count=?,
       next_event_target=?,view_state=?,view_state_generator=?,attempt_count=0,

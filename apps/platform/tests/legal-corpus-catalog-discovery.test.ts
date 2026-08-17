@@ -332,6 +332,64 @@ test("checkpoint crawler resumes POST-back pagination and queues each source onc
   }
 });
 
+test("a successful pager POST renews the public session lease for long catalogues", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  let catalogRequests = 0;
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    await d1.prepare("UPDATE legal_corpus_discovery_checkpoints SET status='completed' WHERE id<>?")
+      .bind("lex-catalog:laws:ru").run();
+    const fetchImpl = async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith("robots.txt")) {
+        return new Response(robots, { headers: { "content-type": "text/plain" } });
+      }
+      catalogRequests += 1;
+      if (catalogRequests === 1) {
+        assert.equal(init?.method, "GET");
+        return new Response(catalogPage({
+          page: 1, count: 3, links: ["/ru/docs/100"], nextPage: 2,
+          nextTarget: "pager-two", viewState: "state-one",
+        }), { headers: { "content-type": "text/html", "set-cookie": "ASP.NET_SessionId=longpager; path=/; HttpOnly" } });
+      }
+      if (catalogRequests === 2) {
+        assert.equal(init?.method, "POST");
+        assert.match(String(init?.body), /__EVENTTARGET=pager-two/u);
+        assert.equal(new Headers(init?.headers).get("cookie"), "ASP.NET_SessionId=longpager");
+        return new Response(catalogPage({
+          page: 2, count: 3, links: ["/ru/docs/101"], nextPage: 3,
+          nextTarget: "pager-three", viewState: "state-two",
+        }), { headers: { "content-type": "text/html" } });
+      }
+      assert.equal(catalogRequests, 3);
+      assert.equal(init?.method, "POST");
+      assert.match(String(init?.body), /__EVENTTARGET=pager-three/u);
+      assert.equal(new Headers(init?.headers).get("cookie"), "ASP.NET_SessionId=longpager");
+      return new Response(catalogPage({
+        page: 3, count: 3, links: ["/ru/docs/102"], viewState: "state-three",
+      }), { headers: { "content-type": "text/html" } });
+    };
+    await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:00:00.000Z"), wait: async () => undefined, fetchImpl,
+    });
+    await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:14:00.000Z"), wait: async () => undefined, fetchImpl,
+    });
+    const third = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:16:00.000Z"), wait: async () => undefined, fetchImpl,
+    });
+    assert.equal(third.status, "category_completed");
+    assert.equal(third.pageNumber, 3);
+    assert.equal(catalogRequests, 3);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("catalog pager restarts safely when Lex rejects its source session", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
