@@ -21,6 +21,7 @@ export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 
 const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
+const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
 // Coverage completion is gated on every category-language checkpoint, so give
 // catalogue discovery three of the same nine paced request slots. This takes
 // one slot from document ingestion rather than increasing Lex.uz traffic.
@@ -122,6 +123,21 @@ async function claimRun(
   env: LegalCorpusWorkerEnv,
 ): Promise<ClaimedRun | null> {
   const now = new Date().toISOString();
+  const staleBefore = new Date(Date.parse(now) - SCHEDULED_RUN_STALE_AFTER_MS).toISOString();
+  // A deployment or runtime interruption can leave a durable `running` row
+  // behind after its holder lease has expired. Preserve that evidence as an
+  // explicit failed run before attempting the next slot; never overwrite a
+  // holder whose lock is still current.
+  await env.DB.prepare(`UPDATE scheduled_runs
+    SET status='failed',error_code='LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED',
+      finished_at=?,updated_at=?
+    WHERE schedule_name=? AND status='running' AND started_at<=?
+      AND NOT EXISTS (
+        SELECT 1 FROM scheduled_locks
+        WHERE name=? AND holder_id=scheduled_runs.holder_id AND expires_at>?
+      )`)
+    .bind(now, now, LOCK_NAME, staleBefore, LOCK_NAME, now)
+    .run();
   const scheduledFor = new Date(controller.scheduledTime).toISOString();
   const expiresAt = new Date(Date.parse(now) + LOCK_MS).toISOString();
   const holderId = crypto.randomUUID();

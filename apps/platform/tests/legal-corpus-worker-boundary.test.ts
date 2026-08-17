@@ -115,6 +115,37 @@ test("seed schedule is locked, idempotent, bounded and leaves a completed run", 
   assert.equal(scheduled.noRetryCalls(), 2);
 });
 
+test("expired lease rows are recorded as failed before a later corpus schedule claims its lock", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const scheduled = controller(LEGAL_CORPUS_SEED_CRON);
+  const staleAt = "2020-01-01T00:00:00.000Z";
+  sqlite.prepare(`INSERT INTO scheduled_runs
+    (id,schedule_name,cron,scheduled_for,idempotency_key,holder_id,status,error_code,
+      started_at,finished_at,created_at,updated_at)
+    VALUES (?,?,?,?,?,?, 'running',NULL,?,NULL,?,?)`).run(
+    "stale-legal-corpus-run", "legal-corpus-worker", LEGAL_CORPUS_STAGING_PROCESS_CRON,
+    staleAt, "legal-corpus-worker:stale", "stale-holder", staleAt, staleAt, staleAt,
+  );
+  try {
+    await handleLegalCorpusScheduled(scheduled.value, {
+      APP_ENV: "staging",
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+      DB: d1,
+      BUCKET: {} as R2Bucket,
+    });
+    const stale = sqlite.prepare(`SELECT status,error_code AS errorCode,finished_at AS finishedAt
+      FROM scheduled_runs WHERE id='stale-legal-corpus-run'`).get() as {
+        status: string; errorCode: string; finishedAt: string | null;
+      };
+    assert.equal(stale.status, "failed");
+    assert.equal(stale.errorCode, "LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED");
+    assert.match(stale.finishedAt ?? "", /^\d{4}-\d{2}-\d{2}T/u);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("empty discovery slots are reused without increasing the nine-request run budget", () => {
   assert.equal(legalCorpusIngestionJobBudget([]), 6);
   assert.equal(legalCorpusIngestionJobBudget([

@@ -807,6 +807,103 @@ test("an explicit official alternate-language notice resolves as technically una
   }
 });
 
+test("an official page without legal text or a supported representation resolves as technically unavailable", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/uz/docs/-8405608",
+      now,
+      correlationId: "official-text-unavailable-test",
+    });
+    const unavailableHtml = archiveBackedHtml("8405608", "uz")
+      .replace(/<a\b[^>]*>[\s\S]*?<\/a>/u, "");
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchFor(unavailableHtml),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE",
+    });
+    const job = sqlite.prepare(`SELECT status,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      errorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE",
+    });
+    const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState,error_code AS errorCode
+      FROM legal_corpus_failures WHERE job_id=?`).get(queued.jobId) as {
+        retryable: number; retryState: string; errorCode: string;
+      };
+    assert.deepEqual({ ...failure }, {
+      retryable: 0,
+      retryState: "technically_unavailable",
+      errorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE",
+    });
+    assert.equal(bucket.objects.size, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("an exhausted legacy no-text dead letter is reclassified once without extending its retry loop", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/uz/docs/-8405608",
+      now,
+      correlationId: "legacy-no-text-redrive-test",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=5,max_attempts=5,
+        last_error_code='LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,5,'terminal')`).run(
+      "legacy-no-text-dead-letter", queued.jobId, "lexuz:8405608",
+      "https://lex.uz/uz/docs/-8405608", "uz-Latn", now.toISOString(),
+      "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2", "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2",
+    );
+    const unavailableHtml = archiveBackedHtml("8405608", "uz")
+      .replace(/<a\b[^>]*>[\s\S]*?<\/a>/u, "");
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchFor(unavailableHtml),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE",
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,max_attempts AS maxAttempts,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; maxAttempts: number; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      attemptCount: 6,
+      maxAttempts: 6,
+      errorCode: "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE",
+    });
+    const terminalFailures = sqlite.prepare(`SELECT count(*) AS count FROM legal_corpus_failures
+      WHERE job_id=? AND retry_state='terminal'`).get(queued.jobId) as { count: number };
+    assert.equal(terminalFailures.count, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a due retry is claimed before the ordinary ingestion backlog", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

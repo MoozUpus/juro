@@ -62,6 +62,7 @@ const RECOVERABLE_DEAD_LETTER_CODES = [
   "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2",
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
+const LEGACY_CONTENT_INSUFFICIENT_V2 = "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2";
 const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
 // A normal scheduled invocation is fenced by a seven-minute distributed lock
 // and its Lex requests have shorter individual timeouts. Keep a wider window
@@ -254,7 +255,12 @@ async function normalizeOfficialLexSource(input: {
     };
   } else {
     const archive = discoverLexArchiveRepresentation(input.rawHtml, input.sourceUrl);
-    if (!archive) throw new TypeError("LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2");
+    // The HTML parser already proved the primary page does not contain a
+    // usable legal text. When Lex exposes neither its embedded PDF nor a
+    // supported ZIP/PDF representation, retrying cannot create official
+    // source material. Record that explicit source condition instead of
+    // exhausting the job retry budget and leaving an avoidable dead letter.
+    if (!archive) throw new TypeError("LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE");
     const fetched = await fetchLexArchiveRepresentation(
       input.sourceUrl,
       archive.sourceUrl,
@@ -346,7 +352,8 @@ function technicallyUnavailable(error: unknown): boolean {
       && error.httpStatus !== null
       && error.httpStatus >= 400
       && error.httpStatus < 500)
-    || internalErrorCode(error) === "LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE";
+    || internalErrorCode(error) === "LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE"
+    || internalErrorCode(error) === "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE";
 }
 
 function fetchHttpStatus(error: unknown): number | null {
@@ -563,9 +570,13 @@ async function reconcileRecoverableDeadLetter(
     WHERE status='dead_letter' AND (
       (attempt_count<max_attempts AND last_error_code IN (${placeholders}))
       OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
+      -- This was emitted before the parser distinguished a page with no
+      -- usable official text from a locale-prefixed archive. Re-read an
+      -- exhausted legacy row exactly once under the corrected classifier.
+      OR (last_error_code=? AND attempt_count>=max_attempts)
     )
     ORDER BY updated_at ASC,id ASC LIMIT 1
-  `).bind(...RECOVERABLE_DEAD_LETTER_CODES).first<{
+  `).bind(...RECOVERABLE_DEAD_LETTER_CODES, LEGACY_CONTENT_INSUFFICIENT_V2).first<{
     id: string;
     attemptCount: number;
     maxAttempts: number;
@@ -578,8 +589,9 @@ async function reconcileRecoverableDeadLetter(
       next_attempt_at=?,updated_at=?
     WHERE id=? AND status='dead_letter' AND (
       attempt_count<max_attempts OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
+      OR last_error_code=?
     )
-  `).bind(now, now, stranded.id).run();
+  `).bind(now, now, stranded.id, LEGACY_CONTENT_INSUFFICIENT_V2).run();
   if (Number(updated.meta.changes ?? 0) !== 1) return;
   await db.prepare(`UPDATE legal_corpus_failures
     SET retryable=1,retry_state='retrying'
