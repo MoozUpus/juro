@@ -24,23 +24,23 @@ const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
 // Coverage completion is gated on every category-language checkpoint, so give
-// catalogue discovery three of the same nine paced request slots. This takes
+// catalogue discovery three of the same ten paced request slots. This takes
 // one slot from document ingestion rather than increasing Lex.uz traffic.
 const DISCOVERY_PAGES_PER_RUN = 3;
-// An earlier staging run with two catalogue pages plus eight ingestion fetches
-// lasted from 17:55:28.188 to 18:00:28.323 UTC and lost the next cron tick.
-// Six ingestion jobs keep the shared 20-second Lex host pacer authoritative
-// while leaving enough margin for provider and D1 overhead. Reallocating one
-// slot to discovery is cheaper than delaying category coverage for a large
-// already-queued ingestion backlog.
-const INGESTION_JOBS_PER_RUN = 6;
-// Four of the six existing ingestion slots may prefer the already discovered
-// article-rich official catalogues. Two slots remain FIFO and
+// The seven-job staging budget is still governed by the shared 20-second Lex
+// host pacer and the 195-second start fence below. 39 completed staging runs
+// on 2026-08-17 took 195.9s--214.5s with six jobs, leaving bounded time for
+// one additional ordinary fetch without overlapping the four-minute cron. A
+// slow representation fetch simply leaves the seventh job queued when the
+// start fence has passed.
+const INGESTION_JOBS_PER_RUN = 7;
+// Four of the seven existing ingestion slots may prefer the already discovered
+// article-rich official catalogues. Three slots remain FIFO and
 // runNextLegalCorpusIngestionJob always claims a due retry first. Staging
 // evidence shows that court acts and laws carry materially more provisions
 // than the large government backlog, so this reduces time to the provision
-// release threshold without increasing Lex.uz traffic or starving any source
-// family.
+// release threshold without exceeding the Lex.uz crawl-delay or starving any
+// source family.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const PREFERRED_INGESTION_CATALOGUES = [
   "court_acts",
@@ -69,7 +69,7 @@ export function legalCorpusIngestionJobBudget(
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
   // discovery does not grant extra nominal source jobs. The nominal maximum
-  // remains nine (3 discovery + 6 ingestion, or 0 + 9); the elapsed-time
+  // remains ten (3 discovery + 7 ingestion, or 0 + 10); the elapsed-time
   // start fence below is authoritative when a job discovers a secondary PDF
   // or ZIP representation and therefore consumes an additional paced fetch.
   if (!discoveries.some((result) => result.status === "empty")) return INGESTION_JOBS_PER_RUN;

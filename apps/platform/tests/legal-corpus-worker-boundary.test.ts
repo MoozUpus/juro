@@ -146,25 +146,25 @@ test("expired lease rows are recorded as failed before a later corpus schedule c
   }
 });
 
-test("empty discovery slots are reused without increasing the nine-request run budget", () => {
-  assert.equal(legalCorpusIngestionJobBudget([]), 6);
+test("empty discovery slots are reused without exceeding the ten-request run budget", () => {
+  assert.equal(legalCorpusIngestionJobBudget([]), 7);
   assert.equal(legalCorpusIngestionJobBudget([
     { claimed: true, status: "completed" },
     { claimed: true, status: "completed" },
     { claimed: true, status: "completed" },
-  ]), 6);
-  assert.equal(legalCorpusIngestionJobBudget([
-    { claimed: true, status: "completed" },
-    { claimed: true, status: "completed" },
-    { claimed: false, status: "empty" },
   ]), 7);
   assert.equal(legalCorpusIngestionJobBudget([
     { claimed: true, status: "completed" },
+    { claimed: true, status: "completed" },
     { claimed: false, status: "empty" },
   ]), 8);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "empty" }]), 9);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 6);
-  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 6);
+  assert.equal(legalCorpusIngestionJobBudget([
+    { claimed: true, status: "completed" },
+    { claimed: false, status: "empty" },
+  ]), 9);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "empty" }]), 10);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 7);
+  assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 7);
 });
 
 test("ingestion start fence leaves a bounded representation-fetch window", () => {
@@ -279,7 +279,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /createPacedLexFetch/u);
   assert.match(corpusWorker, /scheduled_locks/u);
   assert.match(corpusWorker, /const DISCOVERY_PAGES_PER_RUN = 3;/u);
-  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 6;/u);
+  assert.match(corpusWorker, /const INGESTION_JOBS_PER_RUN = 7;/u);
   assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);
