@@ -16,6 +16,7 @@ type CoreCodeEnv = LegalCorpusQueueEnv & Partial<Record<LegalCorpusFeatureFlag, 
  * provider. They contain no copied legal text and are still independently
  * fetched and validated before entering the corpus. */
 const LEX_CORE_CODE_SEEDS = [
+  { targetId: "administrative_responsibility", sourceUrl: "https://lex.uz/ru/docs/97664" },
   { targetId: "family", sourceUrl: "https://lex.uz/ru/docs/104723" },
   { targetId: "civil", sourceUrl: "https://lex.uz/ru/docs/111189" },
   { targetId: "tax", sourceUrl: "https://lex.uz/ru/docs/4674902" },
@@ -73,7 +74,23 @@ async function seedLexCoreCodeTargets(env: CoreCodeEnv, now: string): Promise<vo
     const parsed = seed ? parseLexDocumentUrl(seed.sourceUrl) : null;
     statements.push(env.DB.prepare(`INSERT INTO legal_corpus_core_code_targets
       (target_id,title_ru,status,source_url,canonical_document_id,attempt_count,next_attempt_at,last_error_code,resolved_at,created_at,updated_at)
-      VALUES (?,?,?, ?,?,0,NULL,NULL,NULL,?,?) ON CONFLICT(target_id) DO NOTHING`).bind(
+      VALUES (?,?,?, ?,?,0,NULL,NULL,NULL,?,?) ON CONFLICT(target_id) DO UPDATE SET
+        source_url=CASE WHEN legal_corpus_core_code_targets.source_url IS NULL AND excluded.source_url IS NOT NULL
+          THEN excluded.source_url ELSE legal_corpus_core_code_targets.source_url END,
+        canonical_document_id=CASE WHEN legal_corpus_core_code_targets.canonical_document_id IS NULL
+          AND excluded.canonical_document_id IS NOT NULL THEN excluded.canonical_document_id
+          ELSE legal_corpus_core_code_targets.canonical_document_id END,
+        status=CASE WHEN legal_corpus_core_code_targets.source_url IS NULL AND excluded.source_url IS NOT NULL
+          AND legal_corpus_core_code_targets.status IN ('queued','retrying') THEN 'awaiting_ingestion'
+          ELSE legal_corpus_core_code_targets.status END,
+        next_attempt_at=CASE WHEN legal_corpus_core_code_targets.source_url IS NULL AND excluded.source_url IS NOT NULL
+          AND legal_corpus_core_code_targets.status IN ('queued','retrying') THEN NULL
+          ELSE legal_corpus_core_code_targets.next_attempt_at END,
+        last_error_code=CASE WHEN legal_corpus_core_code_targets.source_url IS NULL AND excluded.source_url IS NOT NULL
+          AND legal_corpus_core_code_targets.status IN ('queued','retrying') THEN NULL
+          ELSE legal_corpus_core_code_targets.last_error_code END,
+        updated_at=CASE WHEN legal_corpus_core_code_targets.source_url IS NULL AND excluded.source_url IS NOT NULL
+          THEN excluded.updated_at ELSE legal_corpus_core_code_targets.updated_at END`).bind(
       target.id, target.titleRu, seed ? "awaiting_ingestion" : "queued",
       seed?.sourceUrl ?? null, parsed?.canonicalDocumentId ?? null, now, now,
     ));

@@ -41,7 +41,7 @@ test("core-code seed is idempotent and title discovery queues only the exact res
     assert.deepEqual(seeded, { considered: LEX_CORE_CODE_SEED_URLS.length, queued: LEX_CORE_CODE_SEED_URLS.length });
     assert.deepEqual(await seedLexCoreCodeJobs(env), { considered: LEX_CORE_CODE_SEED_URLS.length, queued: 0 });
 
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_responsibility")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
     const now = new Date(0);
     const discovered = await runNextLexCoreCodeDiscovery(env, {
       now,
@@ -57,6 +57,36 @@ test("core-code seed is idempotent and title discovery queues only the exact res
     assert.equal(discovered.canonicalDocumentId, "lexuz:778");
     assert.equal(discovered.queued, true);
     assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_ingestion_jobs WHERE canonical_document_id='lexuz:777'").get() as { count: number }).count), 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a later verified source seed resolves an existing queued core-code target", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const env = {
+      DB: d1,
+      LEGAL_CORPUS_ENABLED: "true",
+      LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+    };
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_responsibility")!;
+    sqlite.prepare(`INSERT INTO legal_corpus_core_code_targets
+      (target_id,title_ru,status,source_url,canonical_document_id,attempt_count,next_attempt_at,last_error_code,
+        resolved_at,created_at,updated_at)
+      VALUES (?,?, 'queued',NULL,NULL,0,NULL,'LEX_CORE_CODE_EXACT_TITLE_NOT_FOUND',NULL,?,?)`).run(
+      target.id, target.titleRu, "2026-08-17T00:00:00.000Z", "2026-08-17T00:00:00.000Z",
+    );
+    await seedLexCoreCodeJobs(env, { now: new Date("2026-08-17T01:00:00.000Z") });
+    const state = sqlite.prepare(`SELECT status,source_url AS sourceUrl,canonical_document_id AS canonicalDocumentId,
+      next_attempt_at AS nextAttemptAt,last_error_code AS lastErrorCode
+      FROM legal_corpus_core_code_targets WHERE target_id=?`).get(target.id) as {
+        status: string; sourceUrl: string; canonicalDocumentId: string; nextAttemptAt: string | null; lastErrorCode: string | null;
+      };
+    assert.deepEqual({ ...state }, {
+      status: "awaiting_ingestion", sourceUrl: "https://lex.uz/ru/docs/97664", canonicalDocumentId: "lexuz:97664",
+      nextAttemptAt: null, lastErrorCode: null,
+    });
   } finally {
     sqlite.close();
   }
@@ -96,7 +126,7 @@ test("a verified seed URL settles a code even when Lex reader metadata keeps an 
         : new Response("<main></main>", { headers: { "content-type": "text/html" } }),
     });
     assert.equal(discovered.status, "not_found");
-    assert.equal(["family", "civil", "tax", "labor"].includes(discovered.targetId ?? ""), false);
+    assert.notEqual(discovered.targetId, "administrative_responsibility");
   } finally {
     sqlite.close();
   }
@@ -106,7 +136,7 @@ test("a discovered code remains prioritized until its exact source is indexed", 
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_responsibility")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
     const now = new Date(0);
     const discovered = await runNextLexCoreCodeDiscovery(env, {
       now,
@@ -154,7 +184,7 @@ test("a paced core-code retry does not unlock generic catalogue discovery", asyn
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
-    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_responsibility")!;
+    const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
     const now = new Date(0);
     await runNextLexCoreCodeDiscovery(env, {
       now,
@@ -181,7 +211,7 @@ test("core-code discovery resumes the official pager before deferring a title", 
     const env = { DB: d1, LEGAL_CORPUS_ENABLED: "true", LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true" };
     const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "administrative_court_procedure")!;
     const first = await runNextLexCoreCodeDiscovery(env, {
-      now: new Date(4 * 60_000),
+      now: new Date(0),
       fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
         : init?.method === "POST"
@@ -201,7 +231,7 @@ test("core-code discovery resumes the official pager before deferring a title", 
     assert.deepEqual({ ...paged }, { status: "retrying", pageNumber: 1, nextEventTarget: "pager2" });
 
     const second = await runNextLexCoreCodeDiscovery(env, {
-      now: new Date(8 * 60_000),
+      now: new Date(4 * 60_000),
       fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
         : init?.method === "POST"
