@@ -22,6 +22,7 @@ const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_VIEW_STATE = 256 * 1024;
 const MAX_CRAWL_DELAY_SECONDS = 60;
 const DEFAULT_TIMEOUT_MS = 12_000;
+const LEX_SESSION_COOKIE_PATTERN = /(?:^|,\s*)ASP\.NET_SessionId=([A-Za-z0-9]{8,128})(?:;|,|$)/iu;
 
 export class LexCatalogDiscoveryError extends Error {
   constructor(readonly code: string, readonly retryable: boolean) {
@@ -45,6 +46,9 @@ export type ParsedLexCatalogPage = {
   nextEventTarget: string | null;
   viewState: string | null;
   viewStateGenerator: string | null;
+  /** Short-lived Lex-issued state for a single public ASP.NET pager. It is
+   * never a JURO or user credential and is not exposed outside ingestion. */
+  sourceSessionCookie: string | null;
 };
 
 type DiscoveryCheckpoint = {
@@ -57,6 +61,8 @@ type DiscoveryCheckpoint = {
   nextEventTarget: string | null;
   viewState: string | null;
   viewStateGenerator: string | null;
+  sourceSessionCookie: string | null;
+  sourceSessionExpiresAt: string | null;
   attemptCount: number;
 };
 
@@ -79,6 +85,32 @@ function decodeHtml(value: string): string {
     .replaceAll("&#39;", "'")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">");
+}
+
+function lexSessionCookieFromHeader(value: string | null): string | null {
+  const sessionId = value ? LEX_SESSION_COOKIE_PATTERN.exec(value)?.[1] : null;
+  return sessionId ? `ASP.NET_SessionId=${sessionId}` : null;
+}
+
+function lexSessionCookieFromResponse(response: Response): string | null {
+  // Cloudflare's Headers exposes getSetCookie()/getAll() for worker
+  // subrequests, while the local standard Headers implementation exposes only
+  // get(). Prefer the lossless worker API because an origin may emit several
+  // Set-Cookie headers. This only extracts the single public Lex session id.
+  const headers = response.headers as Headers & {
+    getSetCookie?: () => string[];
+    getAll?: (name: string) => string[];
+  };
+  const values = headers.getSetCookie?.() ?? headers.getAll?.("Set-Cookie") ?? [];
+  for (const value of values) {
+    const cookie = lexSessionCookieFromHeader(value);
+    if (cookie) return cookie;
+  }
+  return lexSessionCookieFromHeader(response.headers.get("set-cookie"));
+}
+
+function validLexSessionCookie(value: string | null | undefined): string | null {
+  return value && /^ASP\.NET_SessionId=[A-Za-z0-9]{8,128}$/u.test(value) ? value : null;
 }
 
 function attribute(tag: string, name: string): string | null {
@@ -142,6 +174,7 @@ export function parseLexCatalogPage(html: string, searchUrl: string): ParsedLexC
     nextEventTarget: page.nextEventTarget,
     viewState: hiddenValue(html, "__VIEWSTATE"),
     viewStateGenerator: hiddenValue(html, "__VIEWSTATEGENERATOR"),
+    sourceSessionCookie: null,
   };
 }
 
@@ -266,6 +299,7 @@ export async function fetchLexCatalogPage(input: {
   eventTarget?: string | null;
   viewState?: string | null;
   viewStateGenerator?: string | null;
+  sourceSessionCookie?: string | null;
   fetchImpl?: FetchLike;
   wait?: (delayMs: number) => Promise<void>;
   timeoutMs?: number;
@@ -277,6 +311,10 @@ export async function fetchLexCatalogPage(input: {
   }
   const fetchImpl = input.fetchImpl ?? fetch;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const sourceSessionCookie = validLexSessionCookie(input.sourceSessionCookie);
+  if (input.sourceSessionCookie && !sourceSessionCookie) {
+    throw new LexCatalogDiscoveryError("LEX_CATALOG_SESSION_REJECTED", false);
+  }
   // Lex.uz currently rejects robots.txt with HTTP 406 when a narrow Accept
   // header is supplied, while the same public resource is available with the
   // ordinary wildcard request header. Keep the transparent crawler user agent
@@ -309,14 +347,20 @@ export async function fetchLexCatalogPage(input: {
   const response = await boundedFetch(fetchImpl, input.searchUrl, {
     method: postback ? "POST" : "GET",
     body,
-    headers: postback ? { "Content-Type": "application/x-www-form-urlencoded" } : undefined,
+    headers: postback ? {
+      "Content-Type": "application/x-www-form-urlencoded",
+      ...(sourceSessionCookie ? { Cookie: sourceSessionCookie } : {}),
+    } : undefined,
   }, timeoutMs);
   const mediaType = (response.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLocaleLowerCase();
   if (mediaType !== "text/html" && mediaType !== "application/xhtml+xml") {
     await response.body?.cancel();
     throw new LexCatalogDiscoveryError("LEX_CATALOG_CONTENT_TYPE_REJECTED", false);
   }
-  return parseLexCatalogPage(await readBoundedText(response, MAX_PAGE_BYTES), input.searchUrl);
+  return {
+    ...parseLexCatalogPage(await readBoundedText(response, MAX_PAGE_BYTES), input.searchUrl),
+    sourceSessionCookie: lexSessionCookieFromResponse(response),
+  };
 }
 
 function checkpointId(categoryKey: LexCorpusCategoryKey, language: LegalCorpusLanguage): string {
@@ -378,13 +422,23 @@ export async function runNextLexCatalogDiscoveryPage(
   const nowDate = input.now ?? new Date();
   const now = nowDate.toISOString();
   const stale = new Date(nowDate.getTime() - 15 * 60_000).toISOString();
+  // ASP.NET pager state is only useful with the short-lived, public source
+  // session that produced it. A stale state is restarted from page one while
+  // retaining already-discovered document IDs for idempotent recovery.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
+      next_attempt_at=?,last_error_code=NULL,updated_at=?
+    WHERE page_number>0 AND (source_session_cookie IS NULL OR source_session_expires_at IS NULL
+      OR source_session_expires_at<=?)`).bind(now, now, now).run();
   await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
     SET status='retrying',next_attempt_at=?,last_error_code='LEX_CATALOG_STALE_CLAIM',updated_at=?
     WHERE status='running' AND updated_at<?`).bind(now, now, stale).run();
   const candidate = await env.DB.prepare(`SELECT id,category_key AS categoryKey,language,search_url AS searchUrl,
       page_number AS pageNumber,expected_document_count AS expectedDocumentCount,
       next_event_target AS nextEventTarget,view_state AS viewState,
-      view_state_generator AS viewStateGenerator,attempt_count AS attemptCount
+      view_state_generator AS viewStateGenerator,source_session_cookie AS sourceSessionCookie,
+      source_session_expires_at AS sourceSessionExpiresAt,attempt_count AS attemptCount
     FROM legal_corpus_discovery_checkpoints
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
@@ -407,16 +461,19 @@ export async function runNextLexCatalogDiscoveryPage(
     return { claimed: false, status: "empty", checkpointId: candidate.id, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
   }
   const attempt = candidate.attemptCount + 1;
+  const resumePager = candidate.pageNumber > 0
+    && Boolean(candidate.nextEventTarget && candidate.viewState && candidate.sourceSessionCookie);
   try {
     const page = await fetchLexCatalogPage({
       searchUrl: candidate.searchUrl,
-      eventTarget: candidate.pageNumber > 0 ? candidate.nextEventTarget : null,
-      viewState: candidate.pageNumber > 0 ? candidate.viewState : null,
-      viewStateGenerator: candidate.pageNumber > 0 ? candidate.viewStateGenerator : null,
+      eventTarget: resumePager ? candidate.nextEventTarget : null,
+      viewState: resumePager ? candidate.viewState : null,
+      viewStateGenerator: resumePager ? candidate.viewStateGenerator : null,
+      sourceSessionCookie: resumePager ? candidate.sourceSessionCookie : null,
       fetchImpl: input.fetchImpl,
       wait: input.wait,
     });
-    const expectedPage = candidate.pageNumber + 1;
+    const expectedPage = resumePager ? candidate.pageNumber + 1 : 1;
     if (page.currentPage !== expectedPage) throw new LexCatalogDiscoveryError("LEX_CATALOG_PAGE_SEQUENCE_REJECTED", true);
     if (page.documents.some((document) => document.language !== candidate.language)) {
       throw new LexCatalogDiscoveryError("LEX_CATALOG_LANGUAGE_MISMATCH", false);
@@ -446,14 +503,20 @@ export async function runNextLexCatalogDiscoveryPage(
       || (expected !== null && discovered >= expected)
       || (page.nextEventTarget === null && (expected === null || discovered >= expected));
     const persistedExpected = completed ? (expected ?? discovered) : expected;
+    const sessionCookie = page.sourceSessionCookie ?? candidate.sourceSessionCookie;
+    const sessionExpiry = page.sourceSessionCookie
+      ? new Date(nowDate.getTime() + 15 * 60_000).toISOString()
+      : candidate.sourceSessionExpiresAt;
     await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
       status=?,page_number=?,expected_document_count=?,discovered_document_count=?,
       next_event_target=?,view_state=?,view_state_generator=?,attempt_count=0,
-      next_attempt_at=NULL,last_error_code=NULL,completed_at=?,updated_at=? WHERE id=?
+      source_session_cookie=?,source_session_expires_at=?,next_attempt_at=NULL,
+      last_error_code=NULL,completed_at=?,updated_at=? WHERE id=?
     `).bind(
       completed ? "completed" : "queued", page.currentPage, persistedExpected, discovered,
       completed ? null : page.nextEventTarget, completed ? null : page.viewState,
-      completed ? null : page.viewStateGenerator, completed ? now : null, now, candidate.id,
+      completed ? null : page.viewStateGenerator, completed ? null : sessionCookie,
+      completed ? null : sessionExpiry, completed ? now : null, now, candidate.id,
     ).run();
     return {
       claimed: true,
@@ -467,9 +530,24 @@ export async function runNextLexCatalogDiscoveryPage(
   } catch (error) {
     const code = error instanceof LexCatalogDiscoveryError ? error.code : "LEX_CATALOG_DISCOVERY_FAILED";
     const retryable = error instanceof LexCatalogDiscoveryError && error.retryable && attempt < 5;
+    // A Lex pager can be invalidated before its short-lived session expiry.
+    // Retrying the same stale view state would burn the bounded retry budget;
+    // restart the public catalogue from page one instead. Discovered URLs stay
+    // in their idempotent ledger, so this cannot duplicate ingestion work.
+    const resetPager = code === "LEX_CATALOG_PAGE_SEQUENCE_REJECTED";
     await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
-      status=?,next_attempt_at=?,last_error_code=?,updated_at=? WHERE id=?
-    `).bind(retryable ? "retrying" : "dead_letter", retryable ? retryAt(nowDate, attempt) : null, code, now, candidate.id).run();
+      status=?,page_number=CASE WHEN ? THEN 0 ELSE page_number END,
+      next_event_target=CASE WHEN ? THEN NULL ELSE next_event_target END,
+      view_state=CASE WHEN ? THEN NULL ELSE view_state END,
+      view_state_generator=CASE WHEN ? THEN NULL ELSE view_state_generator END,
+      source_session_cookie=CASE WHEN ? THEN NULL ELSE source_session_cookie END,
+      source_session_expires_at=CASE WHEN ? THEN NULL ELSE source_session_expires_at END,
+      next_attempt_at=?,last_error_code=?,updated_at=? WHERE id=?
+    `).bind(
+      retryable ? "retrying" : "dead_letter", Number(resetPager), Number(resetPager), Number(resetPager),
+      Number(resetPager), Number(resetPager), Number(resetPager),
+      retryable ? retryAt(nowDate, attempt) : null, code, now, candidate.id,
+    ).run();
     return {
       claimed: true,
       status: retryable ? "retrying" : "failed",

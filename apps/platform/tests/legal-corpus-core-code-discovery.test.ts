@@ -184,11 +184,13 @@ test("core-code discovery resumes the official pager before deferring a title", 
       now: new Date(4 * 60_000),
       fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
-        : new Response(init?.method === "POST"
-          ? '<a class="aspNetDisabled">2</a><a href="/ru/docs/888">' + target.titleRu + "</a>"
-          : '<input name="__VIEWSTATE" value="state-1"><a class="aspNetDisabled">1</a><a href="javascript:__doPostBack(\'pager2\',\'\')">2</a>', {
-          headers: { "content-type": "text/html" },
-        }),
+        : init?.method === "POST"
+          ? new Response('<a class="aspNetDisabled">2</a><a href="/ru/docs/888">' + target.titleRu + "</a>", {
+            headers: { "content-type": "text/html" },
+          })
+          : new Response('<input name="__VIEWSTATE" value="state-1"><a class="aspNetDisabled">1</a><a href="javascript:__doPostBack(\'pager2\',\'\')">2</a>', {
+            headers: { "content-type": "text/html", "set-cookie": "ASP.NET_SessionId=corepager1; path=/; HttpOnly" },
+          }),
     });
     assert.equal(first.status, "queued");
     assert.equal(first.canonicalDocumentId, null);
@@ -202,9 +204,14 @@ test("core-code discovery resumes the official pager before deferring a title", 
       now: new Date(8 * 60_000),
       fetchImpl: async (input, init) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
-        : new Response(init?.method === "POST"
-          ? '<a class="aspNetDisabled">2</a><a href="/ru/docs/888">' + target.titleRu + "</a>"
-          : "<main></main>", { headers: { "content-type": "text/html" } }),
+        : init?.method === "POST"
+          ? (() => {
+            assert.equal(new Headers(init.headers).get("cookie"), "ASP.NET_SessionId=corepager1");
+            return new Response('<a class="aspNetDisabled">2</a><a href="/ru/docs/888">' + target.titleRu + "</a>", {
+              headers: { "content-type": "text/html" },
+            });
+          })()
+          : new Response("<main></main>", { headers: { "content-type": "text/html" } }),
     });
     assert.equal(second.canonicalDocumentId, "lexuz:888");
     const awaiting = sqlite.prepare(`SELECT status,page_number AS pageNumber,next_event_target AS nextEventTarget
