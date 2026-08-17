@@ -181,6 +181,44 @@ test("a due retry is claimed before queued catalogues", async () => {
   }
 });
 
+test("catalog discovery interleaves untouched categories before draining later pages", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET status='completed'
+      WHERE id NOT IN ('lex-catalog:laws:ru','lex-catalog:president:ru')`).run();
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
+      SET page_number=2,next_event_target='pager',view_state='state',
+        view_state_generator='4CEDEDF5',updated_at='2026-08-15T00:01:00.000Z'
+      WHERE id='lex-catalog:laws:ru'`).run();
+
+    const result = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:02:00.000Z"),
+      wait: async () => undefined,
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+          headers: { "content-type": "text/html" },
+        }),
+    });
+
+    assert.equal(result.checkpointId, "lex-catalog:president:ru");
+    assert.equal(result.status, "category_completed");
+    const deferred = sqlite.prepare(`SELECT status,page_number AS pageNumber
+      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:laws:ru'`).get() as {
+      status: string; pageNumber: number;
+    };
+    assert.deepEqual({ ...deferred }, { status: "queued", pageNumber: 2 });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a truncated terminal page retries instead of claiming complete coverage", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {

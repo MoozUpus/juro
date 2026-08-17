@@ -382,7 +382,14 @@ export async function runNextLexCatalogDiscoveryPage(
     FROM legal_corpus_discovery_checkpoints
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
-      COALESCE(next_attempt_at,created_at),attempt_count,created_at,id LIMIT 1`)
+      COALESCE(next_attempt_at,created_at),
+      -- Do not let a large category-language catalogue starve every other
+      -- official category. Once recoverable retries have precedence, advance
+      -- the least-explored page across the durable checkpoint set. This keeps
+      -- the same request budget and resumable ASP.NET state while surfacing
+      -- all source families early enough for meaningful coverage monitoring.
+      CASE status WHEN 'queued' THEN page_number ELSE 0 END,
+      attempt_count,category_key,language,id LIMIT 1`)
     .bind(now).first<DiscoveryCheckpoint>();
   if (!candidate) {
     return { claimed: false, status: "empty", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };

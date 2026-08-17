@@ -10,10 +10,10 @@ inert until a separate server-side feature flag and infrastructure are approved.
 
 | Layer | Responsibility | Boundary |
 | --- | --- | --- |
-| Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; at most two robots-aware GET/POST pages per scheduler lease |
+| Lex catalog discovery | Resume 11 allowlisted catalog classes in 4 official language modes | 44 D1 checkpoints; at most three robots-aware GET/POST pages per scheduler lease |
 | Lex metadata monitor | Discover bounded official RSS metadata | Existing robots-aware monitor, no source text stored |
 | Corpus job ledger | Idempotent queued/fetch/retry state | D1; identifiers and official URLs only |
-| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most eight sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
+| Ingestion | Fetch official Lex variants, validate HTML, parse articles and conservative document requisites from Lex's official `docHeader` | At most six sequential jobs per dedicated corpus tick; shared D1 host pacing and robots delay respected; ambiguous metadata remains `null` |
 | Source storage | Immutable raw HTML and normalized snapshot | Private R2 only; no browser URL |
 | Legal registry | Documents, language variants, versions, provisions, chunks | D1 immutable version/provision rows |
 | Retrieval | Exportable D1 BM25 terms plus optional Qdrant dense+sparse candidates and RRF | Every vector ID is rehydrated from D1 under current-version/status/scope filters |
@@ -63,7 +63,11 @@ an ASP.NET `__doPostBack`. Each checkpoint therefore persists only the
 allowlisted catalog/language key, page number, bounded ViewState and next event
 target. A stale lease can be reclaimed; the next page must match the expected
 sequence before any discovered URL is queued. Raw catalog navigation is never
-presented to a model.
+presented to a model. Due retries retain priority; otherwise discovery advances
+the least-explored checkpoint page first, so one large category-language
+catalogue cannot starve the remaining official source families. This is a
+fairness rule only: it does not increase the request budget or bypass the
+shared Lex.uz host pacer.
 
 Lex Uzbek Cyrillic is the unprefixed `/docs/:id` route; it is never silently
 transliterated as an official text. Query normalization may create
