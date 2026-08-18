@@ -33,26 +33,26 @@ const LOCK_NAME = "legal-corpus-worker";
 const LOCK_MS = 7 * 60_000;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
 // Once all core codes are settled, four catalogue pages advance the durable
-// discovery checkpoints per staging tick. That replaces four document slots,
-// so the shared 20-second host pacer still permits at most eight normal
-// Lex.uz content requests per four-minute invocation. Until all core codes have an
+// discovery checkpoints per staging tick. The shared 20-second host pacer
+// permits ten sequential Lex.uz request windows per four-minute invocation
+// without increasing concurrency. Until all core codes have an
 // exact official title match, the catalogue phase remains paused in favour of
 // the bounded code-title lookup.
 const DISCOVERY_PAGES_PER_RUN = 4;
-// Four sequential document jobs plus the four catalogue pages above retain
-// the prior eight-content-request ceiling. `createPacedLexFetch` fetches
+// Five sequential document jobs plus the four catalogue pages above use ten
+// bounded source windows when a network robots policy is required. `createPacedLexFetch` fetches
 // robots.txt once per bounded Worker invocation, and its D1-backed host
 // limiter remains authoritative for every real Lex.uz request. The 195-second start fence remains
 // authoritative: a document requiring a second official representation simply
 // leaves a later durable job queued rather than overlapping the next tick.
-const INGESTION_JOBS_PER_RUN = 4;
-// Three of the four existing ingestion slots may prefer already-discovered,
-// article-rich official catalogues. Place the explicitly reserved historical
-// version slot after three fetch slots, so secondary PDF/ZIP representations
+const INGESTION_JOBS_PER_RUN = 5;
+// Four of the five ingestion slots may prefer already-discovered, article-rich
+// official catalogues. Place the explicitly reserved historical version slot
+// after three fetch slots, so secondary PDF/ZIP representations
 // cannot consistently consume the start window before versioning progresses.
 // Due retries remain globally first. This remains a sequential, bounded
 // prioritisation rather than a new crawl stream.
-const PREFERRED_INGESTION_SLOTS_PER_RUN = 3;
+const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
 const PREFERRED_INGESTION_CATALOGUES = [
   "court_acts",
@@ -82,8 +82,8 @@ export function legalCorpusIngestionJobBudget(
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
   // discovery does not grant extra nominal source jobs. The nominal maximum
-  // remains nine real Lex.uz requests (a network robots policy + 4 discovery
-  // + 4 ingestion, or a fresh five-minute robots policy + 4 discovery + 5
+  // remains ten real Lex.uz requests (a network robots policy + 4 discovery
+  // + 5 ingestion, or a fresh five-minute robots policy + 4 discovery + 6
   // ingestion). An earlier empty discovery page reclaims its capacity; the elapsed-time
   // start fence below is authoritative when a job discovers a secondary PDF
   // or ZIP representation and therefore consumes an additional paced fetch.
