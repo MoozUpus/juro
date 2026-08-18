@@ -413,6 +413,12 @@ function technicallyUnavailable(error: unknown): boolean {
       && error.httpStatus !== null
       && error.httpStatus >= 400
       && error.httpStatus < 500)
+    // A Lex page can link an attachment whose archive itself is corrupted.
+    // The primary HTML has already established this as the document's sole
+    // official representation, so retrying the same immutable invalid bytes
+    // cannot recover a legal text. Keep this concrete source condition in
+    // coverage instead of turning it into an actionable crawler dead letter.
+    || internalErrorCode(error) === "LEGAL_CORPUS_ATTACHMENT_INVALID"
     || internalErrorCode(error) === "LEGAL_CORPUS_ATTACHMENT_TEXT_UNAVAILABLE"
     || internalErrorCode(error) === "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE";
 }

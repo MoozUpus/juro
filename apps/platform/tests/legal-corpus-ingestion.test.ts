@@ -1074,6 +1074,53 @@ test("an official page without legal text or a supported representation resolves
   }
 });
 
+test("a corrupted official Lex ZIP representation resolves as technically unavailable", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/7533457",
+      now,
+      correlationId: "corrupt-archive-test",
+    });
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchForArchive(
+        archiveBackedHtml("7533457"),
+        // Pass the source transport's ZIP magic check, then fail structural
+        // archive validation exactly as a corrupted official attachment does.
+        Uint8Array.from([0x50, 0x4b, 0x03, 0x04]),
+      ),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_ATTACHMENT_INVALID",
+    });
+    const job = sqlite.prepare(`SELECT status,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      errorCode: "LEGAL_CORPUS_ATTACHMENT_INVALID",
+    });
+    const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState,error_code AS errorCode
+      FROM legal_corpus_failures WHERE job_id=?`).get(queued.jobId) as {
+        retryable: number; retryState: string; errorCode: string;
+      };
+    assert.deepEqual({ ...failure }, {
+      retryable: 0,
+      retryState: "technically_unavailable",
+      errorCode: "LEGAL_CORPUS_ATTACHMENT_INVALID",
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("an exhausted legacy no-text dead letter is reclassified once without extending its retry loop", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
