@@ -7,7 +7,7 @@ const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/u);
 const commitSchema = z.string().regex(/^[a-f0-9]{40}$/u);
 const isoTimestampSchema = z.string().datetime({ offset: true });
 
-export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 4;
+export const LEGAL_CORPUS_RELEASE_EVIDENCE_VERSION = 5;
 export const LEGAL_CORPUS_RELEASE_SCENARIO_COUNT = 314;
 export const LEGAL_CORPUS_RELEASE_EXPECTED_CHECKPOINTS =
   LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length;
@@ -59,6 +59,7 @@ export const LEGAL_CORPUS_RELEASE_THRESHOLDS = Object.freeze({
   p95CompleteAnswerMs: 30_000,
   maximumProviderCostUsd: 30,
   maximumEvidenceAgeMs: 24 * 60 * 60_000,
+  maximumHumanReviewMfaAgeMs: 15 * 60 * 1_000,
   maximumD1DatabaseBytes: LEGAL_CORPUS_MAX_RELEASE_D1_DATABASE_BYTES,
 });
 
@@ -162,6 +163,7 @@ export const legalCorpusHumanReviewBindingSchema = z.object({
   fileSha256: sha256Schema,
   recordCount: z.literal(LEGAL_CORPUS_RELEASE_SCENARIO_COUNT),
   correctCount: z.literal(LEGAL_CORPUS_RELEASE_SCENARIO_COUNT),
+  reviewerMfaVerifiedAt: isoTimestampSchema,
   exportedAt: isoTimestampSchema,
   verified: z.literal(true),
 }).strict();
@@ -236,12 +238,16 @@ export type LegalCorpusReleaseVerdict = {
   };
 };
 
-function fresh(value: string | null, now: Date): boolean {
+function fresh(
+  value: string | null,
+  now: Date,
+  maximumAgeMs = LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumEvidenceAgeMs,
+): boolean {
   if (!value) return false;
   const age = now.getTime() - Date.parse(value);
   return Number.isFinite(age)
     && age >= 0
-    && age <= LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumEvidenceAgeMs;
+    && age <= maximumAgeMs;
 }
 
 function minimum(
@@ -267,6 +273,12 @@ export function evaluateLegalCorpusReleaseEvidence(
 
   if (!fresh(evidence.capturedAt, now)) failures.push("EVIDENCE_STALE");
   if (!fresh(benchmark.generatedAt, now)) failures.push("BENCHMARK_STALE");
+  if (!fresh(humanReview.exportedAt, now)) failures.push("HUMAN_REVIEW_EVIDENCE_STALE");
+  if (!fresh(
+    humanReview.reviewerMfaVerifiedAt,
+    now,
+    LEGAL_CORPUS_RELEASE_THRESHOLDS.maximumHumanReviewMfaAgeMs,
+  )) failures.push("HUMAN_REVIEW_MFA_STALE");
   if (!fresh(totals.lastSuccessfulUpdate, now)) failures.push("CORPUS_UPDATE_STALE");
   if (!fresh(d1Capacity.observedAt, now)) failures.push("D1_CAPACITY_EVIDENCE_STALE");
   if (d1Capacity.databaseName !== LEGAL_CORPUS_STAGING_D1_DATABASE_NAME) {

@@ -52,6 +52,11 @@ async function main(): Promise<void> {
   if (correctCount !== humanEvidence.recordCount) {
     throw new TypeError("LEGAL_CORPUS_HUMAN_REVIEW_INCOMPLETE");
   }
+  const reviewerMfaVerifiedAt = humanEvidence.records[0]?.reviewerMfaVerifiedAt;
+  if (!reviewerMfaVerifiedAt || humanEvidence.records.some((record) =>
+    record.reviewerMfaVerifiedAt !== reviewerMfaVerifiedAt)) {
+    throw new TypeError("LEGAL_CORPUS_HUMAN_REVIEW_MFA_BINDING_INVALID");
+  }
 
   const capturedAt = new Date().toISOString();
   const evidence = legalCorpusReleaseEvidenceSchema.parse({
@@ -72,6 +77,7 @@ async function main(): Promise<void> {
       fileSha256: sha256(humanReviewInput.raw),
       recordCount: humanEvidence.recordCount,
       correctCount,
+      reviewerMfaVerifiedAt,
       exportedAt: humanEvidence.exportedAt,
       verified: true,
     },

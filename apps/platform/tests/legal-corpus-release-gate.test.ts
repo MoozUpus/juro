@@ -16,7 +16,7 @@ const snapshot = "b".repeat(64);
 
 function validEvidence(): LegalCorpusReleaseEvidence {
   return legalCorpusReleaseEvidenceSchema.parse({
-    schemaVersion: 4,
+    schemaVersion: 5,
     environment: "staging",
     capturedAt: "2026-08-15T11:58:00.000Z",
     applicationCommit: commit,
@@ -33,7 +33,8 @@ function validEvidence(): LegalCorpusReleaseEvidence {
       fileSha256: "1".repeat(64),
       recordCount: 314,
       correctCount: 314,
-      exportedAt: "2026-08-14T12:06:38.000Z",
+      reviewerMfaVerifiedAt: "2026-08-15T11:55:00.000Z",
+      exportedAt: "2026-08-15T11:57:00.000Z",
       verified: true,
     },
     d1Capacity: {
@@ -161,6 +162,16 @@ test("release gate requires a fresh staging D1 capacity probe below the release 
   assert.equal(verdict.passed, false);
   assert.ok(verdict.failures.includes("D1_CAPACITY_EVIDENCE_STALE"));
   assert.ok(verdict.failures.includes("D1_CAPACITY_LIMIT_FAILED"));
+});
+
+test("release gate requires a fresh MFA-bound human-review export", () => {
+  const evidence = validEvidence();
+  evidence.humanReview.reviewerMfaVerifiedAt = "2026-08-15T11:44:59.999Z";
+  evidence.humanReview.exportedAt = "2026-08-14T11:57:00.000Z";
+  const verdict = evaluateLegalCorpusReleaseEvidence(evidence, now);
+  assert.equal(verdict.passed, false);
+  assert.ok(verdict.failures.includes("HUMAN_REVIEW_MFA_STALE"));
+  assert.ok(verdict.failures.includes("HUMAN_REVIEW_EVIDENCE_STALE"));
 });
 
 test("release gate resolves every discovered ID instead of trusting a lower expected count", () => {
