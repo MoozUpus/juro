@@ -261,13 +261,57 @@ function robotsPolicy(robots: string, target: URL): { allowed: boolean; crawlDel
   };
 }
 
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  timeoutMs: number,
+): Promise<string> {
   const declared = response.headers.get("content-length");
   if (declared && /^\d+$/u.test(declared) && Number(declared) > maxBytes) {
     await response.body?.cancel();
     throw new LexCatalogDiscoveryError("LEX_CATALOG_RESPONSE_TOO_LARGE", false);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const reader = response.body?.getReader();
+  if (!reader) throw new LexCatalogDiscoveryError("LEX_CATALOG_ENCODING_REJECTED", false);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let completed = false;
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        reject(new Error("LEX_CATALOG_BODY_TIMEOUT"));
+      }, timeoutMs);
+    });
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), deadline]);
+      if (done) {
+        completed = true;
+        break;
+      }
+      total += value.byteLength;
+      if (total > maxBytes) throw new LexCatalogDiscoveryError("LEX_CATALOG_RESPONSE_TOO_LARGE", false);
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof LexCatalogDiscoveryError) throw error;
+    throw new LexCatalogDiscoveryError(
+      timedOut ? "LEX_CATALOG_TIMEOUT" : "LEX_CATALOG_UPSTREAM_UNAVAILABLE",
+      true,
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (completed) reader.releaseLock();
+    else void reader.cancel().catch(() => undefined);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   if (bytes.byteLength > maxBytes) throw new LexCatalogDiscoveryError("LEX_CATALOG_RESPONSE_TOO_LARGE", false);
   try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
   catch { throw new LexCatalogDiscoveryError("LEX_CATALOG_ENCODING_REJECTED", false); }
@@ -351,7 +395,10 @@ export async function fetchLexCatalogPage(input: {
     await robotsResponse.body?.cancel();
     throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_REJECTED", false);
   }
-  const policy = robotsPolicy(await readBoundedText(robotsResponse, MAX_ROBOTS_BYTES), new URL(input.searchUrl));
+  const policy = robotsPolicy(
+    await readBoundedText(robotsResponse, MAX_ROBOTS_BYTES, timeoutMs),
+    new URL(input.searchUrl),
+  );
   if (!policy.allowed) throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_DISALLOWED", false);
   if (policy.crawlDelaySeconds > MAX_CRAWL_DELAY_SECONDS) {
     throw new LexCatalogDiscoveryError("LEX_CATALOG_RATE_POLICY", false);
@@ -381,7 +428,7 @@ export async function fetchLexCatalogPage(input: {
     throw new LexCatalogDiscoveryError("LEX_CATALOG_CONTENT_TYPE_REJECTED", false);
   }
   return {
-    ...parseLexCatalogPage(await readBoundedText(response, MAX_PAGE_BYTES), input.searchUrl),
+    ...parseLexCatalogPage(await readBoundedText(response, MAX_PAGE_BYTES, timeoutMs), input.searchUrl),
     sourceSessionCookie: lexSessionCookieFromResponse(response),
   };
 }

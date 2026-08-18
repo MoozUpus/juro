@@ -106,6 +106,24 @@ test("catalog fetch delegates its crawl delay only to the D1-backed pacer", asyn
   assert.equal(result.currentPage, 1);
 });
 
+test("catalog body deadline turns a stalled public response into a retryable timeout", async () => {
+  const stalled = new ReadableStream<Uint8Array>({ start() {} });
+  await assert.rejects(
+    fetchLexCatalogPage({
+      searchUrl: lexCatalogSearchUrl("laws", "ru"),
+      timeoutMs: 5,
+      wait: async () => undefined,
+      fetchImpl: async (input) => String(input).endsWith("robots.txt")
+        ? new Response(robots, { headers: { "content-type": "text/plain" } })
+        : new Response(stalled, { headers: { "content-type": "text/html" } }),
+    }),
+    (error: unknown) => error instanceof Error
+      && error.message === "LEX_CATALOG_TIMEOUT"
+      && "retryable" in error
+      && (error as { retryable: boolean }).retryable,
+  );
+});
+
 test("catalog fetch keeps only the public Lex pager session from multiple Set-Cookie headers", async () => {
   const result = await fetchLexCatalogPage({
     searchUrl: lexCatalogSearchUrl("laws", "ru"),

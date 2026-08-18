@@ -19,6 +19,7 @@ const MAX_CRAWL_DELAY_MS = 60_000;
 const MAX_CLAIM_ATTEMPTS = 8;
 const MAX_ROBOTS_CACHE_BYTES = 128 * 1024;
 const PERSISTENT_ROBOTS_CACHE_MAX_AGE_MS = 5 * 60_000;
+const DEFAULT_ROBOTS_CACHE_READ_TIMEOUT_MS = 5_000;
 
 function requestUrl(input: RequestInfo | URL): URL {
   if (input instanceof Request) return new URL(input.url);
@@ -127,6 +128,63 @@ function cacheableRobotsText(body: Uint8Array): string | null {
   }
 }
 
+/**
+ * Caching robots.txt is an optimisation only. A source may send response
+ * headers but stall its body, so never let a clone held solely for the cache
+ * keep a bounded scheduled crawl alive. The caller still receives the
+ * original response and applies the authoritative robots policy itself.
+ */
+async function readRobotsCacheBytes(
+  response: Response,
+  timeoutMs: number,
+): Promise<Uint8Array | null> {
+  let clone: Response;
+  try {
+    clone = response.clone();
+  } catch {
+    return null;
+  }
+  const declared = clone.headers.get("content-length");
+  if (declared && /^\d+$/u.test(declared) && Number(declared) > MAX_ROBOTS_CACHE_BYTES) {
+    void clone.body?.cancel().catch(() => undefined);
+    return null;
+  }
+  const reader = clone.body?.getReader();
+  if (!reader) return null;
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let completed = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("LEGAL_SOURCE_ROBOTS_CACHE_TIMEOUT")), timeoutMs);
+    });
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), deadline]);
+      if (done) {
+        completed = true;
+        break;
+      }
+      total += value.byteLength;
+      if (total > MAX_ROBOTS_CACHE_BYTES) return null;
+      chunks.push(value);
+    }
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (completed) reader.releaseLock();
+    else void reader.cancel().catch(() => undefined);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 function freshPersistentRobotsCache(row: PersistentRobotsRow | null, now: Date): CachedResponse | null {
   if (!row?.robotsBody || !row.robotsBodyObservedAt) return null;
   const observedAt = Date.parse(row.robotsBodyObservedAt);
@@ -169,9 +227,15 @@ export function createPacedLexFetch(input: {
   fetchImpl?: FetchLike;
   now?: () => Date;
   stats?: PacedLexFetchStats;
+  /** Testing hook; production keeps cache reads short and non-blocking. */
+  robotsCacheReadTimeoutMs?: number;
 }): FetchLike {
   const fetchImpl = input.fetchImpl ?? fetch;
   const now = input.now ?? (() => new Date());
+  const robotsCacheReadTimeoutMs = input.robotsCacheReadTimeoutMs ?? DEFAULT_ROBOTS_CACHE_READ_TIMEOUT_MS;
+  if (!Number.isSafeInteger(robotsCacheReadTimeoutMs) || robotsCacheReadTimeoutMs < 1) {
+    throw new TypeError("LEGAL_SOURCE_PACER_ROBOTS_CACHE_TIMEOUT_INVALID");
+  }
   let robotsCache: CachedResponse | null = null;
 
   return async (requestInput, init) => {
@@ -199,10 +263,9 @@ export function createPacedLexFetch(input: {
     const response = await fetchImpl(requestInput, init);
     const contentType = (response.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLowerCase();
     if (isRobots && response.ok && contentType === "text/plain") {
-      const clone = response.clone();
-      const body = new Uint8Array(await clone.arrayBuffer());
-      const robotsBody = cacheableRobotsText(body);
-      if (robotsBody !== null) {
+      const body = await readRobotsCacheBytes(response, robotsCacheReadTimeoutMs);
+      const robotsBody = body ? cacheableRobotsText(body) : null;
+      if (body && robotsBody !== null) {
         robotsCache = {
           body,
           status: response.status,

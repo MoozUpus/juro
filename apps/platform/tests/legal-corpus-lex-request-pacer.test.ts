@@ -128,6 +128,32 @@ test("Lex request pacer reuses only a five-minute persisted public robots policy
   assert.equal(row.robotsBodyObservedAt, new Date(clock).toISOString());
 });
 
+test("a stalled robots clone cannot keep the paced worker fetch open", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    const pacedFetch = createPacedLexFetch({
+      db: d1,
+      wait: async () => undefined,
+      robotsCacheReadTimeoutMs: 5,
+      fetchImpl: async () => new Response(
+        new ReadableStream<Uint8Array>({ start() {} }),
+        { headers: { "content-type": "text/plain" } },
+      ),
+    });
+    const response = await Promise.race([
+      pacedFetch("https://lex.uz/robots.txt"),
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error("PACER_STALLED")), 250)),
+    ]);
+    assert.equal(response.status, 200);
+    await response.body?.cancel().catch(() => undefined);
+    const stored = sqlite.prepare(`SELECT robots_body AS robotsBody
+      FROM legal_source_host_rate_limits WHERE host='lex.uz'`).get() as { robotsBody: string | null };
+    assert.equal(stored.robotsBody, null);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("Lex request pacer rejects non-Lex network targets before fetch", async () => {
   const { d1 } = sqliteD1Fixture();
   let calls = 0;
