@@ -42,7 +42,7 @@ export default async function RootLayout({
 }>) {
   const requestHeaders = await headers();
   const requestPath = requestHeaders.get("x-juro-request-path") ?? "";
-  const locale = /^\/uz(?:\/|$)/.test(requestPath) ? "uz" : "ru";
+  const locale = /^\/uz(?:\/|$)/.test(requestPath) ? "uz" : /^\/en(?:\/|$)/.test(requestPath) ? "en" : "ru";
   return (
     <html lang={locale}>
       <body className={`${geistSans.variable} ${juroDisplay.variable}`}>

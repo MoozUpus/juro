@@ -53,6 +53,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       languages: {
         ru: "https://juro.uz/ru/video",
         uz: "https://juro.uz/uz/video",
+        en: "https://juro.uz/en/video",
         "x-default": "https://juro.uz/ru/video",
       },
     },
@@ -62,7 +63,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       url: canonical,
       siteName: "JURO",
       locale: locale === "ru" ? "ru_RU" : "uz_UZ",
-      alternateLocale: [locale === "ru" ? "uz_UZ" : "ru_RU"],
+      alternateLocale: locale === "ru" ? ["uz_UZ", "en_US"] : ["ru_RU", "en_US"],
       type: "website",
       images: [{ url: investorVideo.poster, width: 1920, height: 1080, alt: content.title }],
     },
