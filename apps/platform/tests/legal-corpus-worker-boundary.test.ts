@@ -12,6 +12,7 @@ import {
   LEGAL_CORPUS_SEED_CRON,
   LEGAL_CORPUS_STAGING_PROCESS_CRON,
 } from "../worker/legal-corpus-worker";
+import { LEX_CORPUS_CATEGORIES } from "../lib/legal-corpus/lex-discovery";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 function controller(cron: string, scheduledTime = Date.UTC(2026, 7, 15, 19, 5)) {
@@ -201,6 +202,13 @@ test("preferred catalogue order follows the laws, PKM, President, then public-au
     "technical",
     "international",
   ]);
+});
+
+test("every official Lex catalogue remains in the coverage priority", () => {
+  assert.deepEqual(
+    [...LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES].sort(),
+    LEX_CORPUS_CATEGORIES.map(({ key }) => key).sort(),
+  );
 });
 
 test("scheduled run errors exclude resolved technical source conditions but retain actionable retries", () => {
