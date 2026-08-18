@@ -21,7 +21,10 @@ const MAX_ROBOTS_BYTES = 128 * 1024;
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_VIEW_STATE = 256 * 1024;
 const MAX_CRAWL_DELAY_SECONDS = 60;
-const DEFAULT_TIMEOUT_MS = 12_000;
+// Lex publishes a 20-second crawl window. A shorter client deadline turns a
+// reachable, slow catalogue response into a needless retry; this remains a
+// response deadline, not an increase to request frequency or concurrency.
+export const DEFAULT_TIMEOUT_MS = 20_000;
 const LEX_SESSION_COOKIE_PATTERN = /(?:^|,\s*)ASP\.NET_SessionId=([A-Za-z0-9]{8,128})(?:;|,|$)/iu;
 
 export class LexCatalogDiscoveryError extends Error {

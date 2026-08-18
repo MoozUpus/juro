@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  DEFAULT_TIMEOUT_MS,
   MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING,
   fetchLexCatalogPage,
   runNextLexCatalogDiscoveryPage,
@@ -15,6 +16,10 @@ import {
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const robots = "User-agent: *\nAllow: /\nCrawl-delay: 20\n";
+
+test("catalog response deadline accommodates the published Lex crawl window", () => {
+  assert.equal(DEFAULT_TIMEOUT_MS, 20_000);
+});
 
 function catalogPage(input: {
   page: number;
