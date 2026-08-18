@@ -241,7 +241,7 @@ test("a due retry is claimed before queued catalogues", async () => {
   }
 });
 
-test("catalog discovery interleaves untouched categories before draining later pages", async () => {
+test("catalog discovery completes laws before a lower-priority President catalogue", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
     DB: d1,
@@ -263,24 +263,24 @@ test("catalog discovery interleaves untouched categories before draining later p
       wait: async () => undefined,
       fetchImpl: async (input) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
-        : new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+        : new Response(catalogPage({ page: 3, links: [], viewState: "state" }), {
           headers: { "content-type": "text/html" },
         }),
     });
 
-    assert.equal(result.checkpointId, "lex-catalog:president:ru");
+    assert.equal(result.checkpointId, "lex-catalog:laws:ru");
     assert.equal(result.status, "category_completed");
     const deferred = sqlite.prepare(`SELECT status,page_number AS pageNumber
-      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:laws:ru'`).get() as {
+      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:president:ru'`).get() as {
       status: string; pageNumber: number;
     };
-    assert.deepEqual({ ...deferred }, { status: "queued", pageNumber: 2 });
+    assert.deepEqual({ ...deferred }, { status: "queued", pageNumber: 0 });
   } finally {
     sqlite.close();
   }
 });
 
-test("a resumed pager with no due timestamp cannot starve untouched page-zero catalogues", async () => {
+test("a resumed higher-priority pager is retained ahead of a lower-priority page-zero catalogue", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
     DB: d1,
@@ -291,10 +291,8 @@ test("a resumed pager with no due timestamp cannot starve untouched page-zero ca
     await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
     sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET status='completed'
       WHERE id NOT IN ('lex-catalog:laws:ru','lex-catalog:president:ru')`).run();
-    // A successful resumed page clears next_attempt_at. If selection sorts by
-    // coalesce(next_attempt_at,created_at) before page_number, this oldest
-    // checkpoint will monopolise discovery ahead of the untouched president
-    // catalogue, whose durable wake-up timestamp was refreshed later.
+    // A successful resumed page clears next_attempt_at. The laws pager must
+    // nevertheless retain priority over the untouched President catalogue.
     sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
       page_number=4,next_event_target='pager',view_state='state',
       view_state_generator='4CEDEDF5',source_session_cookie='ASP.NET_SessionId=activepager',
@@ -310,19 +308,19 @@ test("a resumed pager with no due timestamp cannot starve untouched page-zero ca
       wait: async () => undefined,
       fetchImpl: async (input) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
-        : new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+        : new Response(catalogPage({ page: 5, links: [], viewState: "state" }), {
           headers: { "content-type": "text/html" },
         }),
     });
 
-    assert.equal(result.checkpointId, "lex-catalog:president:ru");
+    assert.equal(result.checkpointId, "lex-catalog:laws:ru");
     assert.equal(result.status, "category_completed");
   } finally {
     sqlite.close();
   }
 });
 
-test("bounded active pager pool renews a lease instead of opening an unsustainable session", async () => {
+test("higher-priority laws displace lower active pager sessions", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
     DB: d1,
@@ -357,9 +355,9 @@ test("bounded active pager pool renews a lease instead of opening an unsustainab
       source_session_expires_at='2026-08-15T00:25:00.000Z',next_attempt_at=NULL,
       updated_at='2026-08-15T00:01:00.000Z'
       WHERE id IN (${quoted})`).run(...activeIds);
-    // Keep the laws pager at the head of the deterministic lease-refresh
-    // queue. The untouched laws/uz-Latn page is due too, but must not create
-    // a thirteenth live session while the staging cap is already exceeded.
+    // The unfinished laws/uz-Latn checkpoint must take precedence over the
+    // lower-priority sessions even though the previous fairness scheduler had
+    // filled the pool with them.
     sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
       SET source_session_expires_at='2026-08-15T00:20:00.000Z'
       WHERE id='lex-catalog:laws:ru'`).run();
@@ -370,19 +368,25 @@ test("bounded active pager pool renews a lease instead of opening an unsustainab
       fetchImpl: async (input) => String(input).endsWith("robots.txt")
         ? new Response(robots, { headers: { "content-type": "text/plain" } })
         : new Response(catalogPage({
-          page: 3, links: [], nextPage: 4, nextTarget: "pager", viewState: "renewed",
+          page: 1, links: [], viewState: "new-laws-page",
         }), {
           headers: { "content-type": "text/html" },
         }),
     });
 
-    assert.equal(result.checkpointId, "lex-catalog:laws:ru");
-    assert.equal(result.pageNumber, 3);
+    assert.equal(result.checkpointId, "lex-catalog:laws:uz-Latn");
+    assert.equal(result.status, "category_completed");
     const activeCount = Number((sqlite.prepare(`SELECT count(*) AS count
       FROM legal_corpus_discovery_checkpoints
       WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
         AND source_session_expires_at IS NOT NULL`).get() as { count: number }).count);
-    assert.equal(activeCount, MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING);
+    assert.equal(activeCount, 2);
+    const displaced = sqlite.prepare(`SELECT page_number AS pageNumber,source_session_cookie AS sessionCookie
+      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:technical:ru'`).get() as {
+        pageNumber: number; sessionCookie: string | null;
+      };
+    assert.equal(displaced.pageNumber, 0);
+    assert.equal(displaced.sessionCookie, null);
   } finally {
     sqlite.close();
   }

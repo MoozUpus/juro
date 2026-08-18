@@ -3,6 +3,7 @@ import {
   discoverLexDocumentLinks,
   lexCatalogSearchUrl,
   LEX_CORPUS_CATEGORIES,
+  LEX_CORPUS_CATEGORY_PRIORITY,
   LEX_CORPUS_LANGUAGES,
   isLexCoreCodeSearchUrl,
   type LexCorpusCategoryKey,
@@ -96,6 +97,10 @@ function maxActiveLexCatalogPagers(env: DiscoveryEnv): number {
     ? MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING
     : MAX_ACTIVE_LEX_CATALOG_PAGERS_PRODUCTION;
 }
+
+const CHECKPOINT_CATEGORY_PRIORITY_SQL = `CASE category_key ${LEX_CORPUS_CATEGORY_PRIORITY
+  .map((category, index) => `WHEN '${category}' THEN ${index + 1}`)
+  .join(" ")} ELSE 99 END`;
 
 function decodeHtml(value: string): string {
   return value
@@ -517,10 +522,25 @@ export async function runNextLexCatalogDiscoveryPage(
   await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
     SET status='retrying',next_attempt_at=?,last_error_code='LEX_CATALOG_STALE_CLAIM',updated_at=?
     WHERE status='running' AND updated_at<?`).bind(now, now, stale).run();
+  // The initial corpus must follow the approved legal-source sequence. A
+  // lower-priority pager can always be reopened from its immutable discovery
+  // ledger, whereas retaining it would otherwise use a finite public session
+  // slot and delay an unfinished laws/PKM/President catalogue.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
+      next_attempt_at=?,last_error_code=NULL,updated_at=?
+    WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+      AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+      AND ${CHECKPOINT_CATEGORY_PRIORITY_SQL}>(
+        SELECT min(${CHECKPOINT_CATEGORY_PRIORITY_SQL})
+        FROM legal_corpus_discovery_checkpoints
+        WHERE status='queued'
+      )`).bind(now, now, now).run();
   // A prior fairness pass may have opened more public pager sessions than the
   // fixed request budget can refresh before Lex expires them. Retain the
-  // furthest/oldest leases and safely restart only the excess page-one work;
-  // the immutable discovery ledger prevents duplicate ingestion jobs.
+  // highest-priority leases and safely restart only excess page-one work; the
+  // immutable discovery ledger prevents duplicate ingestion jobs.
   await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
     SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
       source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
@@ -530,7 +550,7 @@ export async function runNextLexCatalogDiscoveryPage(
         SELECT id FROM legal_corpus_discovery_checkpoints
         WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
           AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
-        ORDER BY page_number DESC,source_session_expires_at ASC,id
+        ORDER BY ${CHECKPOINT_CATEGORY_PRIORITY_SQL},page_number ASC,source_session_expires_at ASC,id
         LIMIT -1 OFFSET ?
       )
     )`).bind(now, now, now, maxActivePagers).run();
@@ -547,10 +567,16 @@ export async function runNextLexCatalogDiscoveryPage(
     FROM legal_corpus_discovery_checkpoints CROSS JOIN active_pagers
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
     ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
+      ${CHECKPOINT_CATEGORY_PRIORITY_SQL},
+      -- Within the current highest-priority source family, advance the least
+      -- explored language page first. This keeps all official language
+      -- sessions renewable without opening a lower-priority catalogue.
+      CASE status WHEN 'queued' THEN page_number ELSE 0 END,
       -- Once the bounded pool is full, renew an existing public pager before
-      -- opening another page-zero catalogue. The earliest lease is refreshed
-      -- first, yielding a deterministic round-robin within the 15-minute
-      -- source window; retrying checkpoints still retain global precedence.
+      -- opening another page-zero catalogue in the same priority family. The
+      -- earliest lease is refreshed first, yielding a deterministic round-
+      -- robin within the 15-minute source window; retrying checkpoints retain
+      -- global precedence.
       CASE WHEN active_pagers.count>=?
           AND status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
           AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
@@ -561,16 +587,6 @@ export async function runNextLexCatalogDiscoveryPage(
           AND source_session_expires_at IS NOT NULL
         THEN source_session_expires_at
         ELSE NULL END,
-      -- Do not let a large category-language catalogue starve every other
-      -- official category. Once recoverable retries have precedence, advance
-      -- the least-explored page across the durable checkpoint set *before*
-      -- arrival time. A resumed pager deliberately clears next_attempt_at;
-      -- sorting it by created_at first would otherwise make the oldest large
-      -- catalogue monopolise each tick ahead of untouched page-zero sources.
-      -- This keeps the same request budget and resumable ASP.NET state while
-      -- surfacing all source families early enough for meaningful coverage
-      -- monitoring.
-      CASE status WHEN 'queued' THEN page_number ELSE 0 END,
       COALESCE(next_attempt_at,updated_at,created_at),
       attempt_count,category_key,language,id LIMIT 1`)
     .bind(now, now, maxActivePagers, now, maxActivePagers)

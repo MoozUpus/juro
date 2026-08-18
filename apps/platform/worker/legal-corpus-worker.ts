@@ -8,6 +8,7 @@ import {
   runNextLexCatalogDiscoveryPage,
   seedLexCatalogDiscoveryCheckpoints,
 } from "../lib/legal-corpus/lex-catalog-discovery";
+import { LEX_CORPUS_CATEGORY_PRIORITY } from "../lib/legal-corpus/lex-discovery";
 import {
   LEX_CORE_CODE_SEED_IDS,
   runNextLexCoreCodeDiscovery,
@@ -62,19 +63,7 @@ const INGESTION_JOBS_PER_RUN = 5;
 // crawl stream.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
-export const LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES = [
-  "laws",
-  "government",
-  "president",
-  "oliy_majlis",
-  "ministries",
-  "local_authorities",
-  "central_election_commission",
-  "court_acts",
-  "court_practice",
-  "technical",
-  "international",
-] as const;
+export const LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES = LEX_CORPUS_CATEGORY_PRIORITY;
 const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // A short canonical page may require one additional robots-checked, paced PDF
 // or ZIP representation fetch. Stop claiming new jobs after 3m15s from the

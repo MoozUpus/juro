@@ -44,6 +44,25 @@ export const LEX_CORPUS_CATEGORIES = [
 
 export type LexCorpusCategoryKey = (typeof LEX_CORPUS_CATEGORIES)[number]["key"];
 
+/**
+ * Owner-approved ingestion order. Keep discovery and document fetches on this
+ * one list so lower-value technical or international catalogues cannot occupy
+ * the bounded Lex session pool before laws, Cabinet acts and President acts.
+ */
+export const LEX_CORPUS_CATEGORY_PRIORITY = [
+  "laws",
+  "government",
+  "president",
+  "oliy_majlis",
+  "ministries",
+  "local_authorities",
+  "central_election_commission",
+  "court_acts",
+  "court_practice",
+  "technical",
+  "international",
+] as const satisfies readonly LexCorpusCategoryKey[];
+
 export const LEX_CORPUS_LANGUAGES = [
   { language: "ru" as const, pathPrefix: "/ru", langId: "1" },
   { language: "en" as const, pathPrefix: "/en", langId: "2" },
