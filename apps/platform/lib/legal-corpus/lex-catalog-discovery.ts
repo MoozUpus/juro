@@ -101,6 +101,12 @@ function maxActiveLexCatalogPagers(env: DiscoveryEnv): number {
 const CHECKPOINT_CATEGORY_PRIORITY_SQL = `CASE category_key ${LEX_CORPUS_CATEGORY_PRIORITY
   .map((category, index) => `WHEN '${category}' THEN ${index + 1}`)
   .join(" ")} ELSE 99 END`;
+const HIGHER_CHECKPOINT_CATEGORY_PRIORITY_SQL = `CASE higher.category_key ${LEX_CORPUS_CATEGORY_PRIORITY
+  .map((category, index) => `WHEN '${category}' THEN ${index + 1}`)
+  .join(" ")} ELSE 99 END`;
+const ACTIVE_CHECKPOINT_CATEGORY_PRIORITY_SQL = `CASE legal_corpus_discovery_checkpoints.category_key ${LEX_CORPUS_CATEGORY_PRIORITY
+  .map((category, index) => `WHEN '${category}' THEN ${index + 1}`)
+  .join(" ")} ELSE 99 END`;
 
 function decodeHtml(value: string): string {
   return value
@@ -566,6 +572,21 @@ export async function runNextLexCatalogDiscoveryPage(
       source_session_expires_at AS sourceSessionExpiresAt,attempt_count AS attemptCount
     FROM legal_corpus_discovery_checkpoints CROSS JOIN active_pagers
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
+      -- A retry backoff in an unfinished higher-priority source family must
+      -- not open President or lower catalogues ahead of laws/PKM. Waiting for
+      -- the bounded retry preserves the approved source sequence; it neither
+      -- adds a request nor loses the durable checkpoint.
+      AND (
+        -- An already-due retry is durable recovery work and keeps the
+        -- existing global retry precedence. The strict category barrier is
+        -- for opening new queued catalogues while a higher family backs off.
+        status='retrying'
+        OR NOT EXISTS (
+          SELECT 1 FROM legal_corpus_discovery_checkpoints AS higher
+          WHERE higher.status<>'completed'
+            AND ${HIGHER_CHECKPOINT_CATEGORY_PRIORITY_SQL}<${ACTIVE_CHECKPOINT_CATEGORY_PRIORITY_SQL}
+        )
+      )
     ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
       ${CHECKPOINT_CATEGORY_PRIORITY_SQL},
       -- Within the current highest-priority source family, advance the least

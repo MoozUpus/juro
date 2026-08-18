@@ -280,6 +280,47 @@ test("catalog discovery completes laws before a lower-priority President catalog
   }
 });
 
+test("a higher-priority retry backoff does not open a lower-priority catalogue", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET status='completed'
+      WHERE id NOT IN ('lex-catalog:government:ru','lex-catalog:president:ru')`).run();
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
+      status='retrying',attempt_count=1,next_attempt_at='2026-08-15T00:10:00.000Z',
+      last_error_code='LEX_CATALOG_TIMEOUT',updated_at='2026-08-15T00:01:00.000Z'
+      WHERE id='lex-catalog:government:ru'`).run();
+
+    const result = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:02:00.000Z"),
+      wait: async () => undefined,
+      fetchImpl: async () => {
+        throw new Error("lower-priority catalogue must not be fetched during higher-priority backoff");
+      },
+    });
+
+    assert.deepEqual(result, {
+      claimed: false,
+      status: "empty",
+      checkpointId: null,
+      pageNumber: null,
+      discoveredOnPage: 0,
+      queuedOnPage: 0,
+      safeErrorCode: null,
+    });
+    const president = sqlite.prepare(`SELECT status FROM legal_corpus_discovery_checkpoints
+      WHERE id='lex-catalog:president:ru'`).get() as { status: string };
+    assert.equal(president.status, "queued");
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a resumed higher-priority pager is retained ahead of a lower-priority page-zero catalogue", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
