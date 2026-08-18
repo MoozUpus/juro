@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  MAX_ACTIVE_LEX_CATALOG_PAGERS,
+  MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING,
   fetchLexCatalogPage,
   runNextLexCatalogDiscoveryPage,
   seedLexCatalogDiscoveryCheckpoints,
@@ -287,6 +287,7 @@ test("bounded active pager pool renews a lease instead of opening an unsustainab
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {
     DB: d1,
+    APP_ENV: "staging" as const,
     LEGAL_CORPUS_ENABLED: "true",
     LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
   };
@@ -301,13 +302,16 @@ test("bounded active pager pool renews a lease instead of opening an unsustainab
     "lex-catalog:court_practice:ru",
     "lex-catalog:oliy_majlis:ru",
     "lex-catalog:central_election_commission:ru",
+    "lex-catalog:technical:ru",
+    "lex-catalog:laws:en",
+    "lex-catalog:president:en",
   ];
   try {
-    assert.equal(activeIds.length, MAX_ACTIVE_LEX_CATALOG_PAGERS + 1);
+    assert.equal(activeIds.length, MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING + 1);
     await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
     const quoted = activeIds.map(() => "?").join(",");
     sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET status='completed'
-      WHERE id NOT IN (${quoted},'lex-catalog:president:en')`).run(...activeIds);
+      WHERE id NOT IN (${quoted},'lex-catalog:laws:uz-Latn')`).run(...activeIds);
     sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
       page_number=2,next_event_target='pager',view_state='state',
       view_state_generator='4CEDEDF5',source_session_cookie='ASP.NET_SessionId=boundedpager',
@@ -315,8 +319,8 @@ test("bounded active pager pool renews a lease instead of opening an unsustainab
       updated_at='2026-08-15T00:01:00.000Z'
       WHERE id IN (${quoted})`).run(...activeIds);
     // Keep the laws pager at the head of the deterministic lease-refresh
-    // queue. The untouched president/en page is due too, but must not create
-    // an eleventh live session while the cap is already exceeded.
+    // queue. The untouched laws/uz-Latn page is due too, but must not create
+    // a thirteenth live session while the staging cap is already exceeded.
     sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
       SET source_session_expires_at='2026-08-15T00:20:00.000Z'
       WHERE id='lex-catalog:laws:ru'`).run();
@@ -339,7 +343,7 @@ test("bounded active pager pool renews a lease instead of opening an unsustainab
       FROM legal_corpus_discovery_checkpoints
       WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
         AND source_session_expires_at IS NOT NULL`).get() as { count: number }).count);
-    assert.equal(activeCount, MAX_ACTIVE_LEX_CATALOG_PAGERS);
+    assert.equal(activeCount, MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING);
   } finally {
     sqlite.close();
   }

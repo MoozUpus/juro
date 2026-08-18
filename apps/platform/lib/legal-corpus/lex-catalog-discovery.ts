@@ -76,13 +76,23 @@ export type LexCatalogPageRunResult = {
   safeErrorCode: string | null;
 };
 
-// The staging worker advances three catalogue pages every four minutes. Nine
+// The staging worker advances four catalogue pages every four minutes. Twelve
 // active ASP.NET pagers can therefore each receive another successful POST
 // within twelve minutes, safely inside Lex's fifteen-minute public session
-// lease. Letting more sessions accumulate causes old, large catalogues to
-// expire and re-read their first pages forever; keeping the pool bounded makes
-// all progress durable without exceeding the host request budget.
-export const MAX_ACTIVE_LEX_CATALOG_PAGERS = 9;
+// lease. The production schedule is five minutes and stays disabled; retain a
+// smaller future-safe pool there so a later explicit activation still renews
+// each session before the public lease boundary. Letting more sessions
+// accumulate causes old, large catalogues to expire and re-read their first
+// pages forever; keeping the pool bounded makes all progress durable without
+// exceeding the host request budget.
+export const MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING = 12;
+export const MAX_ACTIVE_LEX_CATALOG_PAGERS_PRODUCTION = 8;
+
+function maxActiveLexCatalogPagers(env: DiscoveryEnv): number {
+  return env.APP_ENV === "staging"
+    ? MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING
+    : MAX_ACTIVE_LEX_CATALOG_PAGERS_PRODUCTION;
+}
 
 function decodeHtml(value: string): string {
   return value
@@ -430,6 +440,7 @@ export async function runNextLexCatalogDiscoveryPage(
   const nowDate = input.now ?? new Date();
   const now = nowDate.toISOString();
   const stale = new Date(nowDate.getTime() - 15 * 60_000).toISOString();
+  const maxActivePagers = maxActiveLexCatalogPagers(env);
   // A previous pager-expiry cleanup could reset a finished checkpoint to
   // `queued` while retaining its immutable completion evidence. Repair only
   // that exact legacy shape before claiming new work; it cannot mark a
@@ -470,7 +481,7 @@ export async function runNextLexCatalogDiscoveryPage(
         ORDER BY page_number DESC,source_session_expires_at ASC,id
         LIMIT -1 OFFSET ?
       )
-    )`).bind(now, now, now, MAX_ACTIVE_LEX_CATALOG_PAGERS).run();
+    )`).bind(now, now, now, maxActivePagers).run();
   const candidate = await env.DB.prepare(`WITH active_pagers AS (
       SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints
       WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
@@ -510,7 +521,7 @@ export async function runNextLexCatalogDiscoveryPage(
       CASE status WHEN 'queued' THEN page_number ELSE 0 END,
       COALESCE(next_attempt_at,updated_at,created_at),
       attempt_count,category_key,language,id LIMIT 1`)
-    .bind(now, now, MAX_ACTIVE_LEX_CATALOG_PAGERS, now, MAX_ACTIVE_LEX_CATALOG_PAGERS)
+    .bind(now, now, maxActivePagers, now, maxActivePagers)
     .first<DiscoveryCheckpoint>();
   if (!candidate) {
     return { claimed: false, status: "empty", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
