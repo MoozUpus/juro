@@ -1338,12 +1338,17 @@ test("a preferred slot expands an unlinked official family before a known langua
   }
 });
 
-test("a preferred slot follows the configured legal catalogue order", async () => {
+test("a preferred slot keeps the configured legal catalogue order ahead of source-family novelty", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
   try {
     const env = envFor(d1, bucket);
     await seedLexCatalogDiscoveryCheckpoints(env, now);
+    await ingestOfficialLexDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/10005",
+      now,
+      fetchImpl: fetchFor(lexHtml()),
+    });
     const lowerPriority = await enqueueOfficialLexCorpusDocument(env, {
       sourceUrl: "https://lex.uz/ru/docs/10004",
       now,

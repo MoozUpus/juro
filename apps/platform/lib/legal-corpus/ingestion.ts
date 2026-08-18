@@ -223,12 +223,13 @@ async function findPreferredCatalogJob(
       AND j.job_type='fetch' AND j.status='queued'
       ${languageClause}
       AND (j.next_attempt_at IS NULL OR j.next_attempt_at<=?)
-    -- A fetched official page links all advertised language URLs into one
-    -- canonical family. Prefer a source URL not linked yet so the bounded
-    -- bootstrap slots widen coverage instead of repeatedly consuming variants
-    -- of a family that FIFO will still process for language completeness.
-    ORDER BY CASE WHEN known_source.document_id IS NULL THEN 0 ELSE 1 END,
-      ${categoryPriority},
+    -- The approved legal-source sequence is the primary ordering. A fetched
+    -- official page links all advertised language URLs into one canonical
+    -- family, so source novelty is only a tie-breaker within the same source
+    -- category. It must not allow a lower-priority catalogue to overtake
+    -- queued legislation merely because the latter already has a linked alias.
+    ORDER BY ${categoryPriority},
+      CASE WHEN known_source.document_id IS NULL THEN 0 ELSE 1 END,
       j.created_at ASC,j.id ASC LIMIT 1
   `).bind(...categories, ...languages, now, ...categories).first<IngestionJob>();
 }
