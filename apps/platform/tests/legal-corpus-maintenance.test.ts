@@ -54,13 +54,15 @@ test("daily refresh queues only stale priority legislation and is idempotent", a
   }
 });
 
-test("weekly maintenance queues stale variants and safely reopens completed catalog checkpoints", async () => {
+test("weekly maintenance queues stale variants and reopens catalog checkpoints after the bootstrap drains", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
     insertVariant(sqlite, { id: "2001", title: "Постановление", type: "Постановление", verifiedAt: "2026-08-01T00:00:00.000Z" });
     const now = new Date("2026-08-16T19:05:00.000Z"); // 2026-08-17, Monday in Tashkent.
     await seedLexCatalogDiscoveryCheckpoints(env(d1), new Date("2026-08-01T00:00:00.000Z"));
     const checkpoint = sqlite.prepare("SELECT id FROM legal_corpus_discovery_checkpoints LIMIT 1").get() as { id: string };
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
+      SET status='completed',completed_at='2026-08-17T01:00:00.000Z',updated_at='2026-08-17T01:00:00.000Z'`).run();
     sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
       SET status='completed',completed_at='2026-08-01T01:00:00.000Z',updated_at='2026-08-01T01:00:00.000Z'
       WHERE id=?`).run(checkpoint.id);
@@ -79,6 +81,41 @@ test("weekly maintenance queues stale variants and safely reopens completed cata
     assert.equal(reset.pageNumber, 0);
     assert.equal(reset.completedAt, null);
     assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_discovery_documents WHERE checkpoint_id=?").get(checkpoint.id) as { count: number }).count), 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("weekly maintenance preserves completed checkpoint coverage while bootstrap fetches remain", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    insertVariant(sqlite, { id: "2102", title: "Постановление", type: "Постановление", verifiedAt: "2026-08-01T00:00:00.000Z" });
+    const now = new Date("2026-08-16T19:05:00.000Z"); // 2026-08-17, Monday in Tashkent.
+    await seedLexCatalogDiscoveryCheckpoints(env(d1), new Date("2026-08-01T00:00:00.000Z"));
+    const checkpoint = sqlite.prepare("SELECT id FROM legal_corpus_discovery_checkpoints LIMIT 1").get() as { id: string };
+    sqlite.prepare(`UPDATE legal_corpus_discovery_checkpoints
+      SET status='completed',completed_at='2026-08-01T01:00:00.000Z',updated_at='2026-08-01T01:00:00.000Z'
+      WHERE id=?`).run(checkpoint.id);
+    sqlite.prepare(`INSERT INTO legal_corpus_discovery_documents
+      (checkpoint_id,source_url,provider_source_id,language,discovered_at)
+      SELECT id,'https://lex.uz/ru/docs/2101','2101',language,'2026-08-01T01:00:00.000Z'
+      FROM legal_corpus_discovery_checkpoints WHERE id=?`).run(checkpoint.id);
+    sqlite.prepare(`INSERT INTO legal_corpus_ingestion_jobs
+      (id,job_type,status,provider,canonical_document_id,variant_id,source_url,language,idempotency_key,
+       attempt_count,max_attempts,next_attempt_at,last_error_code,correlation_id,created_at,updated_at)
+      VALUES ('bootstrap-fetch','fetch','queued','lex_uz','lexuz:2101',NULL,'https://lex.uz/ru/docs/2101','ru',
+        'bootstrap-fetch-key',0,5,NULL,NULL,'bootstrap-test','2026-08-01T01:00:00.000Z','2026-08-01T01:00:00.000Z')`).run();
+
+    const result = await scheduleLegalCorpusMaintenance(env(d1), { now });
+    assert.equal(result.weeklyQueued, 1);
+    assert.equal(result.catalogCheckpointsReset, 0);
+    const preserved = sqlite.prepare(`SELECT status,page_number AS pageNumber,completed_at AS completedAt
+      FROM legal_corpus_discovery_checkpoints WHERE id=?`).get(checkpoint.id) as {
+      status: string; pageNumber: number; completedAt: string | null;
+    };
+    assert.equal(preserved.status, "completed");
+    assert.equal(preserved.completedAt, "2026-08-01T01:00:00.000Z");
+    assert.equal(Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_discovery_documents WHERE checkpoint_id=?").get(checkpoint.id) as { count: number }).count), 1);
   } finally {
     sqlite.close();
   }

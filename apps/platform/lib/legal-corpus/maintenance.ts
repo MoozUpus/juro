@@ -104,6 +104,26 @@ async function resetCompletedCatalogCheckpoints(
 }
 
 /**
+ * Discovery checkpoint rows are the coverage ledger for the initial corpus
+ * build. Do not recycle them while discovery or its durable fetch work is
+ * still outstanding: deleting those rows would make the release gate
+ * unverifiable even though the crawl is still progressing normally.
+ */
+async function initialCorpusBootstrapPending(env: LegalCorpusQueueEnv): Promise<boolean> {
+  const row = await env.DB.prepare(`SELECT CASE WHEN
+      EXISTS(
+        SELECT 1 FROM legal_corpus_discovery_checkpoints
+        WHERE status<>'completed'
+      )
+      OR EXISTS(
+        SELECT 1 FROM legal_corpus_ingestion_jobs
+        WHERE job_type='fetch' AND status IN ('queued','running','retrying')
+      )
+    THEN 1 ELSE 0 END AS pending`).first<{ pending: number | string }>();
+  return Number(row?.pending ?? 0) === 1;
+}
+
+/**
  * Creates only durable queue entries. Network access remains exclusively in
  * the separately locked process cron, so daily/weekly/monthly maintenance can
  * never start a second crawler or bypass the shared Lex host pacer.
@@ -136,7 +156,7 @@ export async function scheduleLegalCorpusMaintenance(
   const weeklyQueued = weekly
     ? await enqueueRefresh(env, { cadence: "weekly", now, localDate: local.date })
     : 0;
-  const catalogCheckpointsReset = weekly
+  const catalogCheckpointsReset = weekly && !(await initialCorpusBootstrapPending(env))
     ? await resetCompletedCatalogCheckpoints(env, now)
     : 0;
   const dailyQueued = await enqueueRefresh(env, { cadence: "daily", now, localDate: local.date });
