@@ -7,6 +7,7 @@ import {
   legalCorpusActionableRunErrorCode,
   legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
+  LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SEED_CRON,
   LEGAL_CORPUS_STAGING_PROCESS_CRON,
@@ -184,6 +185,22 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 195_000), false);
   assert.equal(legalCorpusIngestionStartAllowed(Number.NaN, scheduledTime), false);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, Number.POSITIVE_INFINITY), false);
+});
+
+test("preferred catalogue order follows the PKM, President, then public-authority policy", () => {
+  assert.deepEqual(LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES, [
+    "government",
+    "president",
+    "oliy_majlis",
+    "ministries",
+    "local_authorities",
+    "central_election_commission",
+    "court_acts",
+    "court_practice",
+    "laws",
+    "technical",
+    "international",
+  ]);
 });
 
 test("scheduled run errors exclude resolved technical source conditions but retain actionable retries", () => {

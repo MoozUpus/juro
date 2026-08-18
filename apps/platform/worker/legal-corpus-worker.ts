@@ -46,20 +46,33 @@ const DISCOVERY_PAGES_PER_RUN = 4;
 // authoritative: a document requiring a second official representation simply
 // leaves a later durable job queued rather than overlapping the next tick.
 const INGESTION_JOBS_PER_RUN = 5;
-// Four of the five ingestion slots may prefer already-discovered, article-rich
-// official catalogues. Place the explicitly reserved historical version slot
-// after three fetch slots, so secondary PDF/ZIP representations
-// cannot consistently consume the start window before versioning progresses.
-// Due retries remain globally first. This remains a sequential, bounded
-// prioritisation rather than a new crawl stream.
+// Four of the five ingestion slots may prefer already-discovered official
+// catalogues. The order is the current operational legal-source policy:
+// Cabinet of Ministers acts (ПКМ) first; then the President catalogue, which
+// is the official source family for both presidential resolutions (ПП) and
+// decrees (УП); then acts of the other public authorities. Lex does not expose
+// a trustworthy PP/UP discriminator before a document header is fetched, so
+// the Worker must not invent one from a URL or source order.
+//
+// Place the explicitly reserved historical version slot after three fetch
+// slots, so secondary PDF/ZIP representations cannot consistently consume the
+// start window before versioning progresses. Due retries remain globally
+// first. This remains a sequential, bounded prioritisation rather than a new
+// crawl stream.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
-const PREFERRED_INGESTION_CATALOGUES = [
-  "court_acts",
-  "laws",
-  "court_practice",
-  "oliy_majlis",
+export const LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES = [
+  "government",
   "president",
+  "oliy_majlis",
+  "ministries",
+  "local_authorities",
+  "central_election_commission",
+  "court_acts",
+  "court_practice",
+  "laws",
+  "technical",
+  "international",
 ] as const;
 const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // A short canonical page may require one additional robots-checked, paced PDF
@@ -367,7 +380,7 @@ export async function handleLegalCorpusScheduled(
           wait,
           fetchImpl,
           preferredCatalogCategories: preferredCatalogSlot
-            ? PREFERRED_INGESTION_CATALOGUES
+            ? LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES
             : undefined,
           preferredCatalogLanguages: preferredCatalogSlot
             ? [PREFERRED_INGESTION_LANGUAGE_ROTATION[
