@@ -77,6 +77,10 @@ const RECOVERABLE_DEAD_LETTER_CODES = [
   // bounded ingestion-specific cap is deployed; do not turn this into an
   // unbounded retry loop for genuinely oversized sources.
   "LEGAL_SOURCE_TOO_LARGE",
+  // A corrupt official ZIP is a concrete unavailable source condition. This
+  // entry recovers only legacy rows that were dead-lettered before the
+  // classifier recorded that condition as resolved coverage.
+  "LEGAL_CORPUS_ATTACHMENT_INVALID",
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
 const LEGACY_CONTENT_INSUFFICIENT_V2 = "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2";

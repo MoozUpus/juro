@@ -1121,6 +1121,58 @@ test("a corrupted official Lex ZIP representation resolves as technically unavai
   }
 });
 
+test("a legacy corrupt Lex ZIP dead letter is reclassified without extending its retry loop", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/7533457",
+      now,
+      correlationId: "legacy-corrupt-archive-test",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=1,last_error_code='LEGAL_CORPUS_ATTACHMENT_INVALID'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,1,'terminal')`).run(
+      "legacy-corrupt-archive-dead-letter", queued.jobId, "lexuz:7533457",
+      "https://lex.uz/docs/7533457", "uz-Cyrl", now.toISOString(),
+      "LEGAL_CORPUS_ATTACHMENT_INVALID", "LEGAL_CORPUS_ATTACHMENT_INVALID",
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchForArchive(
+        archiveBackedHtml("7533457"),
+        Uint8Array.from([0x50, 0x4b, 0x03, 0x04]),
+      ),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_CORPUS_ATTACHMENT_INVALID",
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,max_attempts AS maxAttempts,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; maxAttempts: number; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      attemptCount: 2,
+      maxAttempts: 5,
+      errorCode: "LEGAL_CORPUS_ATTACHMENT_INVALID",
+    });
+    const terminalFailures = sqlite.prepare(`SELECT count(*) AS count FROM legal_corpus_failures
+      WHERE job_id=? AND retry_state='terminal'`).get(queued.jobId) as { count: number };
+    assert.equal(terminalFailures.count, 0);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("an exhausted legacy no-text dead letter is reclassified once without extending its retry loop", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
