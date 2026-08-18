@@ -78,16 +78,19 @@ const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
 
 export function legalCorpusIngestionJobBudget(
   discoveries: readonly { claimed: boolean; status: string }[],
+  input: { persistentRobotsPolicy?: boolean } = {},
 ): number {
   // Reuse only catalogue slots that were proved empty. A failed/disabled
   // discovery does not grant extra nominal source jobs. The nominal maximum
-  // remains nine (4 discovery + 4 ingestion, or an earlier empty discovery
-  // page plus reclaimed ingestion capacity); the elapsed-time
+  // remains nine real Lex.uz requests (a network robots policy + 4 discovery
+  // + 4 ingestion, or a fresh five-minute robots policy + 4 discovery + 5
+  // ingestion). An earlier empty discovery page reclaims its capacity; the elapsed-time
   // start fence below is authoritative when a job discovers a secondary PDF
   // or ZIP representation and therefore consumes an additional paced fetch.
-  if (!discoveries.some((result) => result.status === "empty")) return INGESTION_JOBS_PER_RUN;
+  const nominalIngestionJobs = INGESTION_JOBS_PER_RUN + (input.persistentRobotsPolicy ? 1 : 0);
+  if (!discoveries.some((result) => result.status === "empty")) return nominalIngestionJobs;
   const claimed = discoveries.filter((result) => result.claimed).length;
-  return INGESTION_JOBS_PER_RUN + Math.max(0, DISCOVERY_PAGES_PER_RUN - claimed);
+  return nominalIngestionJobs + Math.max(0, DISCOVERY_PAGES_PER_RUN - claimed);
 }
 
 export function legalCorpusIngestionStartAllowed(
@@ -332,14 +335,15 @@ export async function handleLegalCorpusScheduled(
     if (ingestionEnabled(env)) {
       catalog = await seedLexCatalogDiscoveryCheckpoints(env);
       const wait = (delayMs: number) => scheduler.wait(delayMs);
-      const fetchImpl = createPacedLexFetch({ db: env.DB, wait });
+      const pacerStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
+      const fetchImpl = createPacedLexFetch({ db: env.DB, wait, stats: pacerStats });
       coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
       coreCode = await runNextLexCoreCodeDiscovery(env, {
-        now: new Date(controller.scheduledTime), wait, fetchImpl,
+        now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
       });
       if (coreCode.status === "all_settled") {
         for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
-          const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl });
+          const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl, pacingAlreadyApplied: true });
           discoveries.push(result);
           if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
         }
@@ -348,7 +352,9 @@ export async function handleLegalCorpusScheduled(
         ...LEX_CORE_CODE_SEED_IDS,
         ...coreCode.priorityCanonicalDocumentIds,
       ])];
-      const ingestionBudget = legalCorpusIngestionJobBudget(discoveries);
+      const ingestionBudget = legalCorpusIngestionJobBudget(discoveries, {
+        persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
+      });
       for (let index = 0; index < ingestionBudget; index += 1) {
         if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now())) {
           ingestionStartCutoffReached = true;

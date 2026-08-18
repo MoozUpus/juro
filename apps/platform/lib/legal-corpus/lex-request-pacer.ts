@@ -9,9 +9,16 @@ type RateLimitRow = {
   nextAllowedAt: string;
 };
 
+type PersistentRobotsRow = {
+  robotsBody: string | null;
+  robotsBodyObservedAt: string | null;
+};
+
 const LEX_HOST = "lex.uz";
 const MAX_CRAWL_DELAY_MS = 60_000;
 const MAX_CLAIM_ATTEMPTS = 8;
+const MAX_ROBOTS_CACHE_BYTES = 128 * 1024;
+const PERSISTENT_ROBOTS_CACHE_MAX_AGE_MS = 5 * 60_000;
 
 function requestUrl(input: RequestInfo | URL): URL {
   if (input instanceof Request) return new URL(input.url);
@@ -75,6 +82,7 @@ async function claimRequestWindow(input: {
 async function recordRobotsDelay(input: {
   db: D1Database;
   delayMs: number;
+  robotsBody: string;
   now: () => Date;
 }): Promise<void> {
   const row = await input.db.prepare(`SELECT crawl_delay_ms AS crawlDelayMs,
@@ -89,8 +97,10 @@ async function recordRobotsDelay(input: {
     : row.nextAllowedAt;
   const nextAllowedAt = observedNext > row.nextAllowedAt ? observedNext : row.nextAllowedAt;
   await input.db.prepare(`UPDATE legal_source_host_rate_limits
-    SET crawl_delay_ms=?,next_allowed_at=?,robots_observed_at=?,updated_at=?
-    WHERE host=?`).bind(boundedDelay, nextAllowedAt, now, now, LEX_HOST).run();
+    SET crawl_delay_ms=?,next_allowed_at=?,robots_observed_at=?,robots_body=?,
+      robots_body_observed_at=?,updated_at=? WHERE host=?`).bind(
+    boundedDelay, nextAllowedAt, now, input.robotsBody, now, now, LEX_HOST,
+  ).run();
 }
 
 type CachedResponse = {
@@ -108,17 +118,57 @@ function responseFromCache(cached: CachedResponse): Response {
   });
 }
 
+function cacheableRobotsText(body: Uint8Array): string | null {
+  if (body.byteLength === 0 || body.byteLength > MAX_ROBOTS_CACHE_BYTES) return null;
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(body);
+  } catch {
+    return null;
+  }
+}
+
+function freshPersistentRobotsCache(row: PersistentRobotsRow | null, now: Date): CachedResponse | null {
+  if (!row?.robotsBody || !row.robotsBodyObservedAt) return null;
+  const observedAt = Date.parse(row.robotsBodyObservedAt);
+  const age = now.getTime() - observedAt;
+  if (!Number.isFinite(observedAt) || age < 0 || age > PERSISTENT_ROBOTS_CACHE_MAX_AGE_MS) return null;
+  const body = new TextEncoder().encode(row.robotsBody);
+  if (body.byteLength === 0 || body.byteLength > MAX_ROBOTS_CACHE_BYTES) return null;
+  return {
+    body,
+    status: 200,
+    statusText: "OK",
+    headers: new Headers({ "content-type": "text/plain; charset=utf-8" }),
+  };
+}
+
+async function loadPersistentRobotsCache(db: D1Database, now: Date): Promise<CachedResponse | null> {
+  const row = await db.prepare(`SELECT robots_body AS robotsBody,
+      robots_body_observed_at AS robotsBodyObservedAt
+    FROM legal_source_host_rate_limits WHERE host=? LIMIT 1`)
+    .bind(LEX_HOST).first<PersistentRobotsRow>();
+  return freshPersistentRobotsCache(row, now);
+}
+
+export type PacedLexFetchStats = {
+  robotsNetworkRequests: number;
+  persistentRobotsCacheHits: number;
+};
+
 /**
  * Returns one fetch function for a bounded Worker run. Every real Lex.uz
  * request claims a D1-backed host window. robots.txt is fetched once per run,
- * then replayed from memory so a ten-document batch still makes only one
- * policy request. The parsed crawl delay is persisted for the next invocation.
+ * then replayed from memory. A successfully parsed public policy may be
+ * replayed by the immediately following run for at most five minutes; it is
+ * still parsed and enforced by the caller before every source request. The
+ * parsed crawl delay is persisted for the next invocation.
  */
 export function createPacedLexFetch(input: {
   db: D1Database;
   wait: (delayMs: number) => Promise<void>;
   fetchImpl?: FetchLike;
   now?: () => Date;
+  stats?: PacedLexFetchStats;
 }): FetchLike {
   const fetchImpl = input.fetchImpl ?? fetch;
   const now = input.now ?? (() => new Date());
@@ -135,20 +185,33 @@ export function createPacedLexFetch(input: {
       && url.pathname === "/robots.txt"
       && url.search === "";
     if (isRobots && robotsCache) return responseFromCache(robotsCache);
+    if (isRobots) {
+      const persisted = await loadPersistentRobotsCache(input.db, now());
+      if (persisted) {
+        robotsCache = persisted;
+        if (input.stats) input.stats.persistentRobotsCacheHits += 1;
+        return responseFromCache(persisted);
+      }
+    }
 
     await claimRequestWindow({ db: input.db, wait: input.wait, now });
+    if (isRobots && input.stats) input.stats.robotsNetworkRequests += 1;
     const response = await fetchImpl(requestInput, init);
-    if (isRobots && response.ok) {
+    const contentType = (response.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLowerCase();
+    if (isRobots && response.ok && contentType === "text/plain") {
       const clone = response.clone();
       const body = new Uint8Array(await clone.arrayBuffer());
-      robotsCache = {
-        body,
-        status: response.status,
-        statusText: response.statusText,
-        headers: new Headers(response.headers),
-      };
-      const delayMs = observedCrawlDelayMs(new TextDecoder().decode(body));
-      if (delayMs !== null) await recordRobotsDelay({ db: input.db, delayMs, now });
+      const robotsBody = cacheableRobotsText(body);
+      if (robotsBody !== null) {
+        robotsCache = {
+          body,
+          status: response.status,
+          statusText: response.statusText,
+          headers: new Headers(response.headers),
+        };
+        const delayMs = observedCrawlDelayMs(robotsBody);
+        if (delayMs !== null) await recordRobotsDelay({ db: input.db, delayMs, robotsBody, now });
+      }
     }
     return response;
   };

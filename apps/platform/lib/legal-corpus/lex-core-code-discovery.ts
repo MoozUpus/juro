@@ -180,7 +180,7 @@ export async function seedLexCoreCodeJobs(
  */
 export async function runNextLexCoreCodeDiscovery(
   env: CoreCodeEnv,
-  input: { now?: Date; wait?: (delayMs: number) => Promise<void>; fetchImpl?: FetchLike } = {},
+  input: { now?: Date; wait?: (delayMs: number) => Promise<void>; fetchImpl?: FetchLike; pacingAlreadyApplied?: boolean } = {},
 ): Promise<LexCoreCodeDiscoveryResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
     return { status: "disabled", targetId: null, canonicalDocumentId: null, priorityCanonicalDocumentIds: [], queued: false, safeErrorCode: null };
@@ -233,6 +233,7 @@ export async function runNextLexCoreCodeDiscovery(
       sourceSessionCookie: resumePager ? targetRow.sourceSessionCookie : null,
       fetchImpl: input.fetchImpl,
       wait: input.wait,
+      pacingAlreadyApplied: input.pacingAlreadyApplied,
     });
     if (resumePager && page.currentPage !== targetRow.pageNumber + 1) {
       await env.DB.prepare(`UPDATE legal_corpus_core_code_targets

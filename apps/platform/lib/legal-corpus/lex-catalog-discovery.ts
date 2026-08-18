@@ -320,6 +320,8 @@ export async function fetchLexCatalogPage(input: {
   sourceSessionCookie?: string | null;
   fetchImpl?: FetchLike;
   wait?: (delayMs: number) => Promise<void>;
+  /** Set only when `fetchImpl` is the D1-backed Lex pacer. */
+  pacingAlreadyApplied?: boolean;
   timeoutMs?: number;
 }): Promise<ParsedLexCatalogPage> {
   const allowedUrls = new Set(LEX_CORPUS_CATEGORIES.flatMap((category) =>
@@ -351,7 +353,7 @@ export async function fetchLexCatalogPage(input: {
   if (policy.crawlDelaySeconds > MAX_CRAWL_DELAY_SECONDS) {
     throw new LexCatalogDiscoveryError("LEX_CATALOG_RATE_POLICY", false);
   }
-  if (policy.crawlDelaySeconds > 0) {
+  if (policy.crawlDelaySeconds > 0 && !input.pacingAlreadyApplied) {
     if (!input.wait) throw new LexCatalogDiscoveryError("LEX_CATALOG_CRAWL_WINDOW_REQUIRED", true);
     await input.wait(Math.ceil(policy.crawlDelaySeconds * 1_000));
   }
@@ -432,7 +434,7 @@ function retryAt(now: Date, attempt: number): string {
 
 export async function runNextLexCatalogDiscoveryPage(
   env: DiscoveryEnv,
-  input: { now?: Date; fetchImpl?: FetchLike; wait?: (delayMs: number) => Promise<void> } = {},
+  input: { now?: Date; fetchImpl?: FetchLike; wait?: (delayMs: number) => Promise<void>; pacingAlreadyApplied?: boolean } = {},
 ): Promise<LexCatalogPageRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
     return { claimed: false, status: "disabled", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
@@ -544,6 +546,7 @@ export async function runNextLexCatalogDiscoveryPage(
       sourceSessionCookie: resumePager ? candidate.sourceSessionCookie : null,
       fetchImpl: input.fetchImpl,
       wait: input.wait,
+      pacingAlreadyApplied: input.pacingAlreadyApplied,
     });
     const expectedPage = resumePager ? candidate.pageNumber + 1 : 1;
     if (page.currentPage !== expectedPage) throw new LexCatalogDiscoveryError("LEX_CATALOG_PAGE_SEQUENCE_REJECTED", true);

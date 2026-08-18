@@ -60,6 +60,74 @@ test("Lex request pacer caches robots and spaces every real request by its obser
   assert.equal(row.nextAllowedAt, "2026-08-15T08:01:00.000Z");
 });
 
+test("Lex request pacer reuses only a five-minute persisted public robots policy", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const startedAt = Date.parse("2026-08-15T08:00:00.000Z");
+  let clock = startedAt;
+  const networkCalls: Array<{ url: string; at: number }> = [];
+  const source = async (input: RequestInfo | URL) => {
+    const url = String(input);
+    networkCalls.push({ url, at: clock });
+    if (url.endsWith("/robots.txt")) {
+      return new Response("User-agent: *\nAllow: /\nCrawl-delay: 20\n", {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
+    }
+    return new Response("<html></html>", { headers: { "content-type": "text/html" } });
+  };
+  const firstStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
+  const first = createPacedLexFetch({
+    db: d1,
+    now: () => new Date(clock),
+    wait: async (delayMs) => { clock += delayMs; },
+    fetchImpl: source,
+    stats: firstStats,
+  });
+  await first("https://lex.uz/robots.txt");
+  assert.deepEqual(firstStats, { robotsNetworkRequests: 1, persistentRobotsCacheHits: 0 });
+
+  clock = startedAt + 4 * 60_000;
+  const secondStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
+  const second = createPacedLexFetch({
+    db: d1,
+    now: () => new Date(clock),
+    wait: async (delayMs) => { clock += delayMs; },
+    fetchImpl: source,
+    stats: secondStats,
+  });
+  const cachedRobots = await second("https://lex.uz/robots.txt");
+  assert.match(await cachedRobots.text(), /Crawl-delay: 20/u);
+  await second("https://lex.uz/ru/docs/-1");
+  assert.deepEqual(secondStats, { robotsNetworkRequests: 0, persistentRobotsCacheHits: 1 });
+
+  clock = startedAt + 5 * 60_000 + 1;
+  const thirdStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
+  const third = createPacedLexFetch({
+    db: d1,
+    now: () => new Date(clock),
+    wait: async (delayMs) => { clock += delayMs; },
+    fetchImpl: source,
+    stats: thirdStats,
+  });
+  await third("https://lex.uz/robots.txt");
+
+  assert.deepEqual(networkCalls.map((call) => call.url), [
+    "https://lex.uz/robots.txt",
+    "https://lex.uz/ru/docs/-1",
+    "https://lex.uz/robots.txt",
+  ]);
+  assert.deepEqual(secondStats, { robotsNetworkRequests: 0, persistentRobotsCacheHits: 1 });
+  assert.deepEqual(thirdStats, { robotsNetworkRequests: 1, persistentRobotsCacheHits: 0 });
+  const row = sqlite.prepare(`SELECT robots_body AS robotsBody,
+      robots_body_observed_at AS robotsBodyObservedAt
+    FROM legal_source_host_rate_limits WHERE host='lex.uz'`).get() as {
+      robotsBody: string;
+      robotsBodyObservedAt: string;
+    };
+  assert.match(row.robotsBody, /User-agent/u);
+  assert.equal(row.robotsBodyObservedAt, new Date(clock).toISOString());
+});
+
 test("Lex request pacer rejects non-Lex network targets before fetch", async () => {
   const { d1 } = sqliteD1Fixture();
   let calls = 0;

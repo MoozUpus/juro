@@ -85,6 +85,22 @@ test("catalog fetch rejects arbitrary URLs and honors robots crawl delay", async
   assert.equal(result.viewState, "state&one");
 });
 
+test("catalog fetch delegates its crawl delay only to the D1-backed pacer", async () => {
+  const waits: number[] = [];
+  const result = await fetchLexCatalogPage({
+    searchUrl: lexCatalogSearchUrl("laws", "ru"),
+    pacingAlreadyApplied: true,
+    wait: async (delay) => { waits.push(delay); },
+    fetchImpl: async (input) => String(input).endsWith("robots.txt")
+      ? new Response(robots, { headers: { "content-type": "text/plain" } })
+      : new Response(catalogPage({ page: 1, links: [], viewState: "state" }), {
+        headers: { "content-type": "text/html" },
+      }),
+  });
+  assert.deepEqual(waits, []);
+  assert.equal(result.currentPage, 1);
+});
+
 test("catalog fetch keeps only the public Lex pager session from multiple Set-Cookie headers", async () => {
   const result = await fetchLexCatalogPage({
     searchUrl: lexCatalogSearchUrl("laws", "ru"),
