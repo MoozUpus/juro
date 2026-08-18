@@ -1291,3 +1291,33 @@ reverted, use the recorded Time-Travel bookmark through the controlled D1
 restore procedure. Do not delete migration-ledger entries or immutable audit
 data. Corpus flags are already disabled, so no traffic cutover is required for
 the data-plane rollback.
+
+## Lex response-body deadline correction (2026-08-18)
+
+The staging run that began at `2026-08-18T09:20:27.986Z` was recorded as
+`failed` at `09:28:28.005Z` with
+`LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED`. The following scheduled invocation
+claimed the lock normally, so no second crawler overlapped it. The durable
+run record is retained as an incident; it is not presented as a successful
+coverage result.
+
+Commit `a4ca3fd` identifies an unbounded response-body read in two catalogue
+paths: the optional cloned `robots.txt` body used only for persistence, and
+the public Lex catalogue body. It adds bounded stream reads, cancels the
+non-authoritative cache clone on deadline, and maps a catalogue-body expiry to
+the existing retryable `LEX_CATALOG_TIMEOUT` state. This leaves the original
+response, source allowlist, 20-second D1-backed host pacing, sequential
+crawl, retry queue, distributed lock and all production flags unchanged.
+
+The focused boundary suite passed 34/34 before the correction was committed;
+after the strict nullable fix, the direct catalogue/pacer suite passed 21/21.
+Type-check, lint and the staging Worker dry-run passed. The staging-only
+Worker was then deployed as `64d7c43c-4fd6-4a5b-8e12-eba3250b75ba`. It is not
+production evidence. Its first real post-deploy invocation ran from
+`2026-08-18T09:40:28.191Z` to `09:43:50.242Z` (202.051 seconds), completed
+without an error code, and released the lock before the next cron started at
+`09:44:27.983Z`. The subsequent run was therefore distinct rather than
+overlapping; no new `LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED` record appeared.
+This closes the bounded-body-read incident only. It does not establish 44/44
+coverage, a frozen corpus, dense retrieval, a Qdrant snapshot, the indexed
+314-scenario evaluation, preview approval or production rollout.
