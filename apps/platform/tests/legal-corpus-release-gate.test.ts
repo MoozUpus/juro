@@ -249,6 +249,32 @@ test("release gate rejects snapshot drift, unresolved failures and metric regres
   ]) assert.ok(verdict.failures.includes(code), code);
 });
 
+test("release gate rejects a benchmark that does not exercise the full official hybrid path", () => {
+  const evidence = validEvidence() as unknown as {
+    benchmark: {
+      identicalSourcePackets: boolean;
+      officialOnly: boolean;
+      denseEnabled: boolean;
+      sparseEnabled: boolean;
+      rrfEnabled: boolean;
+    };
+  };
+  evidence.benchmark.identicalSourcePackets = false;
+  evidence.benchmark.officialOnly = false;
+  evidence.benchmark.denseEnabled = false;
+  evidence.benchmark.sparseEnabled = false;
+  evidence.benchmark.rrfEnabled = false;
+  const verdict = evaluateLegalCorpusReleaseEvidence(evidence as LegalCorpusReleaseEvidence, now);
+  for (const code of [
+    "BENCHMARK_SOURCE_PACKETS_MISMATCH",
+    "BENCHMARK_NON_OFFICIAL_SOURCE",
+    "BENCHMARK_DENSE_RETRIEVAL_DISABLED",
+    "BENCHMARK_SPARSE_RETRIEVAL_DISABLED",
+    "BENCHMARK_RRF_DISABLED",
+  ]) assert.ok(verdict.failures.includes(code), code);
+  assert.equal(verdict.passed, false);
+});
+
 test("release gate rejects incomplete or drifted Qdrant snapshot evidence", () => {
   const evidence = validEvidence();
   evidence.benchmark.qdrantCurrentPointCount -= 1;

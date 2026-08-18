@@ -277,6 +277,15 @@ export function evaluateLegalCorpusReleaseEvidence(
   }
   if (benchmark.applicationCommit !== evidence.applicationCommit) failures.push("BENCHMARK_COMMIT_MISMATCH");
   if (benchmark.corpusSnapshotSha256 !== evidence.corpusSnapshotSha256) failures.push("BENCHMARK_CORPUS_MISMATCH");
+  // A benchmark is release evidence only when both retrieval paths evaluated
+  // the same validated official packet. Otherwise good metrics could hide a
+  // dense/sparse/RRF regression or comparisons made against different legal
+  // contexts.
+  if (!benchmark.identicalSourcePackets) failures.push("BENCHMARK_SOURCE_PACKETS_MISMATCH");
+  if (!benchmark.officialOnly) failures.push("BENCHMARK_NON_OFFICIAL_SOURCE");
+  if (!benchmark.denseEnabled) failures.push("BENCHMARK_DENSE_RETRIEVAL_DISABLED");
+  if (!benchmark.sparseEnabled) failures.push("BENCHMARK_SPARSE_RETRIEVAL_DISABLED");
+  if (!benchmark.rrfEnabled) failures.push("BENCHMARK_RRF_DISABLED");
   if (humanReview.recordCount !== benchmark.reviewedScenarioCount
     || humanReview.correctCount !== benchmark.scenarioCount) {
     failures.push("HUMAN_REVIEW_SCENARIO_MISMATCH");
