@@ -187,8 +187,9 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, Number.POSITIVE_INFINITY), false);
 });
 
-test("preferred catalogue order follows the PKM, President, then public-authority policy", () => {
+test("preferred catalogue order follows the laws, PKM, President, then public-authority policy", () => {
   assert.deepEqual(LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES, [
+    "laws",
     "government",
     "president",
     "oliy_majlis",
@@ -197,7 +198,6 @@ test("preferred catalogue order follows the PKM, President, then public-authorit
     "central_election_commission",
     "court_acts",
     "court_practice",
-    "laws",
     "technical",
     "international",
   ]);
