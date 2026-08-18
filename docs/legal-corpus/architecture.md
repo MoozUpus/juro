@@ -271,6 +271,14 @@ staff retries and owner-material actions. There is intentionally no legal
 approval queue. A catalog row is marked complete only when every expected
 document is indexed or has an explicit `technically_unavailable` result.
 
+For scheduled ingestion, the official HTML fetch has a hard 12 MiB byte
+ceiling. A former terminal `LEGAL_SOURCE_PARSE_TOO_COMPLEX` or
+`LEGAL_SOURCE_TOO_LARGE` row receives one deployment-corrective recheck. The
+former may use an official Lex PDF/ZIP representation; a source which still
+exceeds the byte ceiling is retained as `technically_unavailable` with its URL,
+attempt history and error code. This preserves an auditable coverage gap without
+unbounded Worker memory or retry loops.
+
 Production's D1 `migrations_pattern` in both platform and corpus Worker
 configs includes `0121` and production-safe `0124–0128` while structurally
 excluding staging-only evidence migrations `0122–0123` and every later

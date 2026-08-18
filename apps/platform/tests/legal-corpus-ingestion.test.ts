@@ -93,6 +93,15 @@ function archiveBackedHtml(archiveId: string, localePrefix = ""): string {
   </main></body></html>`;
 }
 
+function parseComplexArchiveBackedHtml(archiveId: string): string {
+  // This deliberately trips the parser's node budget while retaining only a
+  // synthetic archive link; no official legal corpus fixture is stored in Git.
+  return `<!doctype html><html><body><main id="divCont">
+    <a href="/files/${archiveId}.zip">Official PDF</a>
+    ${"<span>bounded parser fixture</span>".repeat(50_100)}
+  </main></body></html>`;
+}
+
 function fetchForArchive(html: string, archive: Uint8Array) {
   return async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
@@ -786,6 +795,129 @@ test("a prior 2 MiB Lex code-page failure is reclaimed under the bounded ingesti
         retryable: number; retryState: string;
       };
     assert.deepEqual({ ...failure }, { retryable: 1, retryState: "retrying" });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a maxed parser-complex Lex row is re-read once through its official archive", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/uz/docs/-7959569",
+      now,
+      correlationId: "parser-complex-upgrade-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=5,max_attempts=5,
+        last_error_code='LEGAL_SOURCE_PARSE_TOO_COMPLEX'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,5,'terminal')`).run(
+      "parser-complex-dead-letter", queued.jobId, "lexuz:7959569",
+      "https://lex.uz/uz/docs/-7959569", "uz-Latn", now.toISOString(),
+      "LEGAL_SOURCE_PARSE_TOO_COMPLEX", "LEGAL_SOURCE_PARSE_TOO_COMPLEX",
+    );
+    const archive = zipPdf(await pdfBytes([
+      "OFFICIAL LEGAL ACT",
+      "Article 1 establishes the rights and duties of the parties under applicable law.",
+      "The authorized court reviews the evidence and records a reasoned decision.",
+      "Each party may submit documents, state objections, and use the appeal procedure.",
+      "The decision must identify the facts, applicable provisions, and procedural result.",
+      "This official text remains linked to the canonical Lex document and its source date.",
+    ]));
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: fetchForArchive(parseComplexArchiveBackedHtml("7959569"), archive),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      max_attempts AS maxAttempts,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; maxAttempts: number; errorCode: string | null;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      attemptCount: 6,
+      maxAttempts: 6,
+      errorCode: null,
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a maxed oversized Lex row receives one bounded recheck then records technical unavailability", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/docs/7955865",
+      now,
+      correlationId: "oversized-source-upgrade-redrive",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='dead_letter',attempt_count=5,max_attempts=5,
+        last_error_code='LEGAL_SOURCE_TOO_LARGE'
+      WHERE id=?`).run(queued.jobId);
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,5,'terminal')`).run(
+      "oversized-source-dead-letter", queued.jobId, "lexuz:7955865",
+      "https://lex.uz/docs/7955865", "uz-Cyrl", now.toISOString(),
+      "LEGAL_SOURCE_TOO_LARGE", "LEGAL_SOURCE_TOO_LARGE",
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      // Content-Length is rejected before body consumption by the bounded
+      // fetcher, preserving the Worker memory guard.
+      fetchImpl: fetchFor(lexHtml(), 13 * 1024 * 1024),
+    });
+    assert.deepEqual(run, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: "LEGAL_SOURCE_TOO_LARGE",
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      max_attempts AS maxAttempts,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; maxAttempts: number; errorCode: string;
+      };
+    assert.deepEqual({ ...job }, {
+      status: "completed",
+      attemptCount: 6,
+      maxAttempts: 6,
+      errorCode: "LEGAL_SOURCE_TOO_LARGE",
+    });
+    const failures = sqlite.prepare(`SELECT retryable,retry_state AS retryState
+      FROM legal_corpus_failures WHERE job_id=? ORDER BY attempted_at,id`).all(queued.jobId) as Array<{
+        retryable: number; retryState: string;
+      }>;
+    assert.equal(failures.length, 2);
+    assert.equal(failures.every((failure) => failure.retryable === 0
+      && failure.retryState === "technically_unavailable"), true);
+    const next = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 120_000),
+      fetchImpl: fetchFor(lexHtml()),
+    });
+    assert.deepEqual(next, {
+      claimed: false,
+      status: "empty",
+      jobId: null,
+      safeErrorCode: null,
+    });
   } finally {
     sqlite.close();
   }

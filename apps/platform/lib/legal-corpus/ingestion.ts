@@ -55,6 +55,7 @@ const MAX_CHUNKS_PER_VERSION = 16_000;
 // bounded 12 MiB document while retaining the stricter interactive default.
 const MAX_LEX_SOURCE_BYTES = 12 * 1024 * 1024;
 const MAX_LEX_REPRESENTATION_BYTES = 20 * 1024 * 1024;
+const INITIAL_INGESTION_MAX_ATTEMPTS = 5;
 const WRITE_BATCH_SIZE = 90;
 const RETRYABLE_INTERNAL_ERROR_CODES = new Set([
   "LEGAL_CORPUS_LANGUAGE_FAMILY_CONFLICT",
@@ -79,6 +80,14 @@ const RECOVERABLE_DEAD_LETTER_CODES = [
   ...RETRYABLE_INTERNAL_ERROR_CODES,
 ] as const;
 const LEGACY_CONTENT_INSUFFICIENT_V2 = "LEGAL_CORPUS_CONTENT_INSUFFICIENT_V2";
+// A processor upgrade can make an otherwise reachable official source
+// processable (for example, by falling back to Lex's official PDF/ZIP
+// representation). Re-read an exhausted row once, and only from the initial
+// retry budget: a second exhaustion remains terminal or explicitly unavailable.
+const ONE_TIME_BOUNDED_RECOVERY_CODES = [
+  "LEGAL_SOURCE_PARSE_TOO_COMPLEX",
+  "LEGAL_SOURCE_TOO_LARGE",
+] as const;
 const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
 // A normal scheduled invocation is fenced by a seven-minute distributed lock
 // and its Lex requests have shorter individual timeouts. Keep a wider window
@@ -277,7 +286,8 @@ async function normalizeOfficialLexSource(input: {
     };
   } catch (error) {
     if (!(error instanceof LegalSourceParserError)
-      || error.code !== "LEGAL_SOURCE_CONTENT_INSUFFICIENT") throw error;
+      || (error.code !== "LEGAL_SOURCE_CONTENT_INSUFFICIENT"
+        && error.code !== "LEGAL_SOURCE_PARSE_TOO_COMPLEX")) throw error;
   }
 
   let representation: CorpusRepresentation;
@@ -392,6 +402,11 @@ function retryable(error: unknown): boolean {
 function technicallyUnavailable(error: unknown): boolean {
   return (error instanceof LegalSourceParserError
     && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE")
+    // The scheduled processor has a deliberate, bounded source-size ceiling.
+    // After its one deployment redrive, retaining a concrete unavailable state
+    // is safer and more truthful than retrying an oversized official page forever.
+    || (error instanceof LegalSourceFetchError
+      && error.code === "LEGAL_SOURCE_TOO_LARGE")
     || (error instanceof LegalSourceFetchError
       && error.code === "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE"
       && !error.retryable
@@ -672,6 +687,7 @@ async function reconcileRecoverableDeadLetter(
   now: string,
 ): Promise<void> {
   const placeholders = RECOVERABLE_DEAD_LETTER_CODES.map(() => "?").join(",");
+  const boundedRecoveryPlaceholders = ONE_TIME_BOUNDED_RECOVERY_CODES.map(() => "?").join(",");
   const stranded = await db.prepare(`SELECT id,attempt_count AS attemptCount,
       max_attempts AS maxAttempts,last_error_code AS lastErrorCode
     FROM legal_corpus_ingestion_jobs
@@ -682,9 +698,18 @@ async function reconcileRecoverableDeadLetter(
       -- usable official text from a locale-prefixed archive. Re-read an
       -- exhausted legacy row exactly once under the corrected classifier.
       OR (last_error_code=? AND attempt_count>=max_attempts)
+      -- Re-read parser/size dead letters exactly once after a bounded parser
+      -- upgrade. Do not revive rows already given that additional attempt.
+      OR (last_error_code IN (${boundedRecoveryPlaceholders})
+        AND attempt_count>=max_attempts AND max_attempts=?)
     )
     ORDER BY updated_at ASC,id ASC LIMIT 1
-  `).bind(...RECOVERABLE_DEAD_LETTER_CODES, LEGACY_CONTENT_INSUFFICIENT_V2).first<{
+  `).bind(
+    ...RECOVERABLE_DEAD_LETTER_CODES,
+    LEGACY_CONTENT_INSUFFICIENT_V2,
+    ...ONE_TIME_BOUNDED_RECOVERY_CODES,
+    INITIAL_INGESTION_MAX_ATTEMPTS,
+  ).first<{
     id: string;
     attemptCount: number;
     maxAttempts: number;
@@ -698,15 +723,29 @@ async function reconcileRecoverableDeadLetter(
     WHERE id=? AND status='dead_letter' AND (
       attempt_count<max_attempts OR last_error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
       OR last_error_code=?
+      OR (last_error_code IN (${boundedRecoveryPlaceholders})
+        AND attempt_count>=max_attempts AND max_attempts=?)
     )
-  `).bind(now, now, stranded.id, LEGACY_CONTENT_INSUFFICIENT_V2).run();
+  `).bind(
+    now,
+    now,
+    stranded.id,
+    LEGACY_CONTENT_INSUFFICIENT_V2,
+    ...ONE_TIME_BOUNDED_RECOVERY_CODES,
+    INITIAL_INGESTION_MAX_ATTEMPTS,
+  ).run();
   if (Number(updated.meta.changes ?? 0) !== 1) return;
   await db.prepare(`UPDATE legal_corpus_failures
     SET retryable=1,retry_state='retrying'
     WHERE job_id=? AND retry_state='terminal'
       AND (error_code IN (${placeholders})
-        OR error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT')
-  `).bind(stranded.id, ...RECOVERABLE_DEAD_LETTER_CODES).run();
+        OR error_code='LEGAL_SOURCE_CONTENT_INSUFFICIENT'
+        OR error_code IN (${boundedRecoveryPlaceholders}))
+  `).bind(
+    stranded.id,
+    ...RECOVERABLE_DEAD_LETTER_CODES,
+    ...ONE_TIME_BOUNDED_RECOVERY_CODES,
+  ).run();
 }
 
 /**
