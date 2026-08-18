@@ -1231,6 +1231,37 @@ proves the bounded ordering behavior and meets the requested document count,
 but does not meet the 22,000-provision or 44/44 coverage gates and authorizes
 none of the freeze, dense, snapshot, evaluation, preview or production work.
 
+## Staging ten-window throughput calibration (2026-08-18)
+
+Commit `0c4eb5d` uses one additional **sequential** ingestion slot while
+catalogue discovery remains at four pages per staging run. The maximum is now
+ten paced Lex.uz request windows per four-minute invocation: either a network
+`robots.txt` request, four catalogue pages and five ingestion jobs, or a fresh
+persisted public robots policy, four catalogue pages and six ingestion jobs.
+The D1-backed host pacer remains the only authority for each request window;
+the observed Lex `Crawl-delay` is still 20 seconds. This does not introduce
+parallel crawling, a second source, a bypass of robots policy, or a production
+flag change.
+
+The 195,000 ms ingestion-start fence and seven-minute distributed lock remain
+in force. A post-deploy staging run from `2026-08-18T08:52:28.205Z` to
+`2026-08-18T08:55:55.861Z` completed without an error and the next cron began
+at `2026-08-18T08:56:27.984Z`, leaving a 32-second gap rather than overlapping
+workers. Subsequent read-only D1 probes recorded completed ingestion jobs
+advancing from 6,025 to 6,036 with zero active checkpoint, terminal or
+dead-letter failures. Temporary upstream timeouts remain in the immutable run
+ledger only when they were recovered by the bounded retry path; they are not
+recorded as completed coverage or hidden as success.
+
+Before deployment, the focused corpus suite passed 39/39, along with
+TypeScript type-check, lint and the staging artifact dry-run. The complete
+Draft PR #43 CI then passed, including Cloudflare environment matrix,
+dependency audit, licence policy and Qdrant snapshot-restore. The staging-only
+Worker version is `5bb31f51-8bac-4c3c-b6a2-18cc365545b0`. This calibration is
+operational evidence only: it does **not** establish 44/44 coverage, an empty
+ingestion queue, a frozen corpus, Qdrant backfill/snapshot, indexed evaluation,
+preview or a production rollout.
+
 ## Fail-closed production state
 
 The deployed platform and isolated corpus Worker both report these server-side
