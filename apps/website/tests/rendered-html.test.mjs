@@ -32,6 +32,7 @@ test("renders the production landing with localized canonical metadata and real 
     assert.equal(response.headers.get("x-frame-options"), "DENY");
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
     assert.match(response.headers.get("content-security-policy") ?? "", /default-src/);
+    assert.match(response.headers.get("content-security-policy") ?? "", /img-src 'self' data: blob: https:\/\/app\.juro\.uz/);
     assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
     const html = await response.text();
     assert.match(html, new RegExp(`<link rel="canonical" href="https://juro\\.uz/${locale}"`));
