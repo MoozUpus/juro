@@ -525,6 +525,57 @@ test("checkpoint crawler resumes POST-back pagination and queues each source onc
   }
 });
 
+test("catalog discovery completes an undeclared empty pager tail without advancing forever", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  let catalogRequests = 0;
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    await d1.prepare("UPDATE legal_corpus_discovery_checkpoints SET status='completed' WHERE id<>?")
+      .bind("lex-catalog:laws:ru").run();
+    const fetchImpl = async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("robots.txt")) {
+        return new Response(robots, { headers: { "content-type": "text/plain" } });
+      }
+      catalogRequests += 1;
+      if (catalogRequests === 1) {
+        return new Response(catalogPage({
+          page: 1, links: ["/ru/docs/100"], nextPage: 2,
+          nextTarget: "pager-two", viewState: "state-one",
+        }), { headers: { "content-type": "text/html", "set-cookie": "ASP.NET_SessionId=emptytail; path=/; HttpOnly" } });
+      }
+      assert.equal(catalogRequests, 2);
+      return new Response(catalogPage({
+        page: 2, links: [], nextPage: 3, nextTarget: "pager-three", viewState: "state-two",
+      }), { headers: { "content-type": "text/html" } });
+    };
+
+    const first = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:01:00.000Z"), fetchImpl, wait: async () => undefined,
+    });
+    assert.equal(first.status, "page_completed");
+    const second = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:02:00.000Z"), fetchImpl, wait: async () => undefined,
+    });
+    assert.equal(second.status, "category_completed");
+    assert.equal(second.pageNumber, 2);
+    const checkpoint = sqlite.prepare(`SELECT status,page_number AS pageNumber,
+      expected_document_count AS expected,discovered_document_count AS discovered
+      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:laws:ru'`).get() as {
+        status: string; pageNumber: number; expected: number | null; discovered: number;
+      };
+    assert.deepEqual({ ...checkpoint }, { status: "completed", pageNumber: 2, expected: 1, discovered: 1 });
+    const jobs = sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_ingestion_jobs").get() as { count: number };
+    assert.equal(Number(jobs.count), 1);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a successful pager POST renews the public session lease for long catalogues", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {

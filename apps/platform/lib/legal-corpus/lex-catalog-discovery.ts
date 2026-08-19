@@ -661,9 +661,21 @@ export async function runNextLexCatalogDiscoveryPage(
     if (page.nextEventTarget === null && expected !== null && discovered < expected) {
       throw new LexCatalogDiscoveryError("LEX_CATALOG_INCOMPLETE_RESULT_SET", true);
     }
+    // Some catalogue routes have no declared total and retain a numeric
+    // post-back control after the final result page.  Once a resumed pager
+    // actually returns an empty page, its immutable discovery ledger is the
+    // complete observable source set.  Continuing would advance the durable
+    // page number forever without adding an official URL.  Do not apply this
+    // fallback to the initial page or to catalogues with a declared total:
+    // those cases remain subject to the stricter completeness checks above.
+    const reachedUndeclaredEmptyTail = resumePager
+      && page.documents.length === 0
+      && expected === null
+      && discovered > 0;
     const completed = expected === 0
       || (expected !== null && discovered >= expected)
-      || (page.nextEventTarget === null && (expected === null || discovered >= expected));
+      || (page.nextEventTarget === null && (expected === null || discovered >= expected))
+      || reachedUndeclaredEmptyTail;
     const persistedExpected = completed ? (expected ?? discovered) : expected;
     const sessionCookie = page.sourceSessionCookie ?? candidate.sourceSessionCookie;
     // Lex does not reliably repeat Set-Cookie on every successful ASP.NET
