@@ -192,9 +192,9 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
 
 test("version debt reuses only existing sequential slots while retaining priority fetch capacity", () => {
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 499 }), [3]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 500 }), [2, 3, 4, 5, 6, 7, 8]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 5, queuedVersionJobs: 500 }), [2, 3, 4]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 2, queuedVersionJobs: 500 }), []);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 500 }), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 5, queuedVersionJobs: 500 }), [1, 2, 3, 4]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 2, queuedVersionJobs: 500 }), [1]);
 });
 
 test("preferred catalogue order follows the laws, PKM, President, then public-authority policy", () => {
