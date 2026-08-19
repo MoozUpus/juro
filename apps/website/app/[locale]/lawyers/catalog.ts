@@ -38,6 +38,47 @@ export function publicPhotoUrl(value: string | null): string | null {
   return value.startsWith("/") ? `${platformOrigin()}${value}` : value;
 }
 
+/**
+ * Marketplace profiles are published by the platform in their source language.
+ * Keep filtering on the original values, but render controlled taxonomy and the
+ * currently published profile fields in English on the English public route.
+ * Unknown future values intentionally fall back to the source text instead of
+ * being machine-translated as legal or professional information.
+ */
+const englishProfileText: Record<string, string> = {
+  "Банковское и финансовое право": "Banking and finance law",
+  "Финтех": "Fintech",
+  "Подготовка документов": "Document preparation",
+  "Русский": "Russian",
+  "Узбекский": "Uzbek",
+  "Английский": "English",
+  "Ташкент": "Tashkent",
+  "По договорённости после оценки задачи": "By agreement after the task is assessed",
+  "Юрист и специалист по подготовке документов. Работает с банковским и финансовым правом, финтехом, санкционными и комплаенс-вопросами.": "Lawyer and document-preparation specialist. Works with banking and finance law, fintech, sanctions and compliance matters.",
+  "Ташкентский государственный юридический университет, LL.B., 2020–2024": "Tashkent State University of Law, LL.B., 2020–2024",
+  "Чат": "Chat",
+  "Телефон": "Phone",
+};
+
+export function localizePublicLawyerText(value: string, locale: "ru" | "uz" | "en") {
+  return locale === "en" ? englishProfileText[value] || value : value;
+}
+
+export function localizePublicLawyer(lawyer: PublicLawyer, locale: "ru" | "uz" | "en"): PublicLawyer {
+  if (locale !== "en") return lawyer;
+  return {
+    ...lawyer,
+    specialties: lawyer.specialties.map((value) => localizePublicLawyerText(value, locale)),
+    languages: lawyer.languages.map((value) => localizePublicLawyerText(value, locale)),
+    city: lawyer.city ? localizePublicLawyerText(lawyer.city, locale) : null,
+    region: lawyer.region ? localizePublicLawyerText(lawyer.region, locale) : null,
+    priceDescription: lawyer.priceDescription ? localizePublicLawyerText(lawyer.priceDescription, locale) : null,
+    bio: lawyer.bio ? localizePublicLawyerText(lawyer.bio, locale) : null,
+    education: lawyer.education ? localizePublicLawyerText(lawyer.education, locale) : null,
+    consultationFormats: lawyer.consultationFormats.map((value) => localizePublicLawyerText(value, locale)),
+  };
+}
+
 export async function getPublicLawyers() {
   try {
     const response = await fetch(`${platformOrigin()}/api/public/lawyers`, { cache: "no-store", headers: { accept: "application/json" } });

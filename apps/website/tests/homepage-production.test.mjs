@@ -15,6 +15,8 @@ const laptopStyles = fs.readFileSync("app/components/public/juro-laptop.module.c
 const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
+const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
+const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
 
 test("selected JURO direction is the only public homepage implementation", () => {
   assert.match(rootPage, /CinematicLandingPage language="ru"/);
@@ -132,4 +134,12 @@ test("brand mark crops the baked-in miniature label and keeps one intentional wo
   assert.match(chrome, /brandStyles\.wordmark\}>JURO/);
   assert.match(fs.readFileSync("app\/components\/public\/brand-lockup.module.css", "utf8"), /\.markFrame[\s\S]*?overflow: hidden/);
   assert.match(fs.readFileSync("app\/components\/public\/brand-lockup.module.css", "utf8"), /\.wordmark[\s\S]*?font-size: 1\.38rem/);
+});
+
+test("English marketplace presentation localizes published taxonomy and tolerates missing external photos", () => {
+  assert.match(lawyerCatalog, /Banking and finance law/);
+  assert.match(lawyerCatalog, /Tashkent State University of Law/);
+  assert.match(lawyerCatalog, /Unknown future values intentionally fall back/);
+  assert.match(lawyerAvatar, /onError=\{\(\) => setFailed\(true\)\}/);
+  assert.match(lawyerAvatar, /if \(!src \|\| failed\)/);
 });

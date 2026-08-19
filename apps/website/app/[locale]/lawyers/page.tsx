@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import type { PublicLanguage } from "../../../content/types";
 import { SiteFooter, SiteHeader } from "../../components/public/SiteChrome";
 import { LawyerCard } from "./LawyerCard";
-import { getPublicLawyers } from "./catalog";
+import { getPublicLawyers, localizePublicLawyer, localizePublicLawyerText } from "./catalog";
 import styles from "./lawyers.module.css";
 
 export const dynamic = "force-dynamic";
@@ -51,13 +51,13 @@ export default async function LawyersPage({ params, searchParams }: Props) {
       <section className={styles.catalogue} aria-labelledby="catalogue-heading"><h2 id="catalogue-heading" className={styles.srOnly}>{t.catalogue}</h2>
         <form className={styles.filters} method="get" aria-label={t.filters}>
           <label>{t.search}<input name="q" defaultValue={term} maxLength={160} placeholder={t.searchHint} /></label>
-          <label>{t.specialty}<select name="specialty" defaultValue={specialty}><option value="">{t.all}</option>{specialties.map((item) => <option key={item}>{item}</option>)}</select></label>
-          <label>{t.language}<select name="language" defaultValue={language}><option value="">{t.any}</option>{languages.map((item) => <option key={item}>{item}</option>)}</select></label>
+          <label>{t.specialty}<select name="specialty" defaultValue={specialty}><option value="">{t.all}</option>{specialties.map((item) => <option key={item} value={item}>{localizePublicLawyerText(item, locale)}</option>)}</select></label>
+          <label>{t.language}<select name="language" defaultValue={language}><option value="">{t.any}</option>{languages.map((item) => <option key={item} value={item}>{localizePublicLawyerText(item, locale)}</option>)}</select></label>
           <label>{t.availability}<select name="availability" defaultValue={availability}><option value="">{t.any}</option><option value="available">{t.available}</option><option value="limited">{t.limited}</option></select></label>
           <label>{t.experience}<select name="experience" defaultValue={minExperience ? String(minExperience) : ""}><option value="">{t.any}</option><option value="3">3+</option><option value="5">5+</option><option value="10">10+</option></select></label>
           <button type="submit">{t.show}</button>
         </form>
-        {!available ? <p className={styles.notice} role="status">{t.unavailable}</p> : <><p className={styles.count}>{t.count}: {results.length}</p><div className={styles.grid}>{approved.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} locale={locale} />)}</div>{pending.length > 0 && <section className={styles.pendingSection} aria-labelledby="pending-heading"><h2 id="pending-heading">{t.pendingHeading}</h2><p>{t.pendingLead}</p><div className={styles.grid}>{pending.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={lawyer} locale={locale} />)}</div></section>}{results.length === 0 && <section className={styles.empty}><h2>{t.emptyHeading}</h2><p>{t.emptyLead}</p></section>}</>}
+        {!available ? <p className={styles.notice} role="status">{t.unavailable}</p> : <><p className={styles.count}>{t.count}: {results.length}</p><div className={styles.grid}>{approved.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={localizePublicLawyer(lawyer, locale)} locale={locale} />)}</div>{pending.length > 0 && <section className={styles.pendingSection} aria-labelledby="pending-heading"><h2 id="pending-heading">{t.pendingHeading}</h2><p>{t.pendingLead}</p><div className={styles.grid}>{pending.map((lawyer) => <LawyerCard key={lawyer.id} lawyer={localizePublicLawyer(lawyer, locale)} locale={locale} />)}</div></section>}{results.length === 0 && <section className={styles.empty}><h2>{t.emptyHeading}</h2><p>{t.emptyLead}</p></section>}</>}
       </section>
     </main>
     <SiteFooter locale={locale} />
