@@ -8,6 +8,7 @@ import {
   legalCorpusCoverageBootstrapTarget,
   legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
+  legalCorpusVersionSlotIndexes,
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SEED_CRON,
@@ -187,6 +188,13 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 195_000), false);
   assert.equal(legalCorpusIngestionStartAllowed(Number.NaN, scheduledTime), false);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, Number.POSITIVE_INFINITY), false);
+});
+
+test("version debt reuses only existing sequential slots while retaining priority fetch capacity", () => {
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 499 }), [3]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 500 }), [2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 5, queuedVersionJobs: 500 }), [2, 3, 4]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 2, queuedVersionJobs: 500 }), []);
 });
 
 test("preferred catalogue order follows the laws, PKM, President, then public-authority policy", () => {

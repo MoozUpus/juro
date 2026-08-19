@@ -60,13 +60,18 @@ const INGESTION_JOBS_PER_RUN = 5;
 // before a document header is fetched, so the Worker must not invent one from
 // a URL or source order.
 //
-// Place the explicitly reserved historical version slot after three fetch
-// slots, so secondary PDF/ZIP representations cannot consistently consume the
-// start window before versioning progresses. Due retries remain globally
-// first. This remains a sequential, bounded prioritisation rather than a new
-// crawl stream.
+// Place the ordinary reserved historical version slot after three fetch slots,
+// so secondary PDF/ZIP representations cannot consistently consume the start
+// window before versioning progresses. When durable historical work has grown
+// beyond a bounded debt threshold, retain two priority fetch slots and spend
+// the remaining already-authorised sequential windows on versions. This is
+// back-pressure, not a new crawl stream: the shared 20-second host pacer and
+// start fence still govern every source request.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
+const VERSION_CATCHUP_QUEUE_THRESHOLD = 500;
+const VERSION_CATCHUP_MINIMUM_FETCH_SLOTS = 2;
+const VERSION_CATCHUP_MAX_SLOTS = 7;
 export const LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES = LEX_CORPUS_CATEGORY_PRIORITY;
 const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // A short canonical page may require one additional robots-checked, paced PDF
@@ -171,6 +176,41 @@ export function legalCorpusIngestionJobBudget(
   if (!discoveries.some((result) => result.status === "empty")) return nominalIngestionJobs;
   const claimed = discoveries.filter((result) => result.claimed).length;
   return nominalIngestionJobs + Math.max(0, DISCOVERY_PAGES_PER_RUN - claimed);
+}
+
+/**
+ * Keep historical revision discovery finite. A fetched current document can
+ * enqueue many official ONDATE revisions, so a single reserved version slot
+ * cannot drain the queue once catalogue discovery has reached broad coverage.
+ * This chooses only slots in the existing sequential batch; it never widens
+ * the request budget, shortens the host delay, or starts parallel work.
+ */
+export function legalCorpusVersionSlotIndexes(input: {
+  ingestionBudget: number;
+  queuedVersionJobs: number;
+}): number[] {
+  const ingestionBudget = Math.max(0, Math.floor(input.ingestionBudget));
+  const queuedVersionJobs = Math.max(0, Math.floor(input.queuedVersionJobs));
+  if (ingestionBudget === 0) return [];
+  if (queuedVersionJobs < VERSION_CATCHUP_QUEUE_THRESHOLD
+    || ingestionBudget <= VERSION_CATCHUP_MINIMUM_FETCH_SLOTS) {
+    return VERSION_INGESTION_SLOT_INDEX < ingestionBudget ? [VERSION_INGESTION_SLOT_INDEX] : [];
+  }
+  const catchupSlots = Math.min(
+    VERSION_CATCHUP_MAX_SLOTS,
+    Math.max(1, ingestionBudget - VERSION_CATCHUP_MINIMUM_FETCH_SLOTS),
+  );
+  return Array.from(
+    { length: catchupSlots },
+    (_unused, index) => ingestionBudget - catchupSlots + index,
+  );
+}
+
+async function queuedLegalCorpusVersionJobs(db: D1Database): Promise<number> {
+  const row = await db.prepare(`SELECT count(*) AS count
+    FROM legal_corpus_ingestion_jobs
+    WHERE job_type='version' AND status IN ('queued','retrying')`).first<{ count: number }>();
+  return Math.max(0, Number(row?.count) || 0);
 }
 
 export function legalCorpusIngestionStartAllowed(
@@ -438,15 +478,19 @@ export async function handleLegalCorpusScheduled(
       const ingestionBudget = legalCorpusIngestionJobBudget(discoveries, {
         persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
       });
+      const versionSlotIndexes = legalCorpusVersionSlotIndexes({
+        ingestionBudget,
+        queuedVersionJobs: await queuedLegalCorpusVersionJobs(env.DB),
+      });
       for (let index = 0; index < ingestionBudget; index += 1) {
         if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now())) {
           ingestionStartCutoffReached = true;
           break;
         }
-        const reservedVersionSlot = index === VERSION_INGESTION_SLOT_INDEX;
+        const reservedVersionSlot = versionSlotIndexes.includes(index);
         const coverageBootstrapSlot = index === 0 && coverageBootstrapTarget !== null;
         const preferredCatalogSlot = index < INGESTION_JOBS_PER_RUN && !reservedVersionSlot;
-        const preferredSlotIndex = index < VERSION_INGESTION_SLOT_INDEX ? index : index - 1;
+        const preferredSlotIndex = index - versionSlotIndexes.filter((slot) => slot < index).length;
         const result = await runNextLegalCorpusIngestionJob(env, {
           wait,
           fetchImpl,
