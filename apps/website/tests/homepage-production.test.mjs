@@ -14,6 +14,7 @@ const decisionStyles = fs.readFileSync("app/components/public/juro-decision.modu
 const laptopStyles = fs.readFileSync("app/components/public/juro-laptop.module.css", "utf8");
 const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
+const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
@@ -150,6 +151,10 @@ test("footer publishes the requested contact details and reveal states stay insi
   for (const value of ["Ташкент, Узбекистан", "+998974022292", "admin@juro.uz"]) assert.match(chrome, new RegExp(value.replaceAll("+", "\\+")));
   assert.match(chrome, /mailto:admin@juro\.uz/);
   assert.match(chrome, /tel:\+998974022292/);
+  assert.match(chrome, /footerRailStyles\.brandCta/);
+  assert.match(footerRailStyles, /grid-template-columns: repeat\(3, max-content\)/);
+  assert.match(footerRailStyles, /@media \(max-width: 620px\)/);
+  assert.match(motionDirector, /footerVisible/);
   assert.doesNotMatch(motionStyles, /translate3d\(-48px|translate3d\(48px, 0, 0\)/);
 });
 

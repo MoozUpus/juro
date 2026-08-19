@@ -7,6 +7,7 @@ import { type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import type { PublicLanguage } from "../../../content/types";
 import brandStyles from "./brand-lockup.module.css";
 import footerContactStyles from "./footer-contact.module.css";
+import footerRailStyles from "./footer-rail.module.css";
 import styles from "./site-chrome.module.css";
 
 type Locale = PublicLanguage;
@@ -199,25 +200,26 @@ export function SiteFooter({ locale }: { locale: Locale }) {
     [t.lawyers, `/${locale}/lawyers`],
   ] as const;
   return (
-    <footer className={styles.footer}>
-      <div className={styles.footerTop}>
-        <div className={styles.footerBrand}>
+    <footer className={`${styles.footer} ${footerRailStyles.footer}`}>
+      <div className={`${styles.footerTop} ${footerRailStyles.top}`}>
+        <div className={`${styles.footerBrand} ${footerRailStyles.brand}`}>
           <Link aria-label="JURO" className={brandStyles.footerLogo} href={`/${locale}`}>
             <span className={brandStyles.footerMarkFrame}><Image alt="" className={brandStyles.footerMark} height={1024} src="/juro-mark-light.png" unoptimized width={1024} /></span>
             <span>JURO</span>
           </Link>
           <p>{t.description}</p>
+          <a className={footerRailStyles.brandCta} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={16} /></a>
         </div>
-        <div className={styles.footerColumn}><strong>{t.productLabel}</strong>{productLinks.map(([label, href]) => href.startsWith("/") ? <Link href={href} key={href}>{label}</Link> : <a href={href} key={href}>{label}</a>)}</div>
-        <div className={styles.footerColumn}><strong>{t.companyLabel}</strong><Link href={`/${locale}/trust`}>Trust Center</Link><Link href={`/${locale}/video`}>{t.video}</Link><Link href={`/${locale}/knowledge/contract-review-preparation`}>{t.knowledge}</Link></div>
-        <div className={styles.footerColumn}><strong>{t.legalLabel}</strong><Link href={`/${locale}/legal`}>{t.legal}</Link><Link href={`/${locale}/privacy-policy`}>{t.privacy}</Link><Link href={`/${locale}/terms`}>{t.terms}</Link><Link href={`/${locale}/personal-data-processing`}>{t.data}</Link><Link href={`/${locale}/ai-rules`}>{t.aiRules}</Link></div>
+        <div className={`${styles.footerColumn} ${footerRailStyles.column}`}><strong>{t.productLabel}</strong>{productLinks.map(([label, href]) => href.startsWith("/") ? <Link href={href} key={href}>{label}</Link> : <a href={href} key={href}>{label}</a>)}</div>
+        <div className={`${styles.footerColumn} ${footerRailStyles.column}`}><strong>{t.companyLabel}</strong><Link href={`/${locale}/trust`}>Trust Center</Link><Link href={`/${locale}/video`}>{t.video}</Link><Link href={`/${locale}/knowledge/contract-review-preparation`}>{t.knowledge}</Link></div>
+        <div className={`${styles.footerColumn} ${footerRailStyles.column}`}><strong>{t.legalLabel}</strong><Link href={`/${locale}/legal`}>{t.legal}</Link><Link href={`/${locale}/privacy-policy`}>{t.privacy}</Link><Link href={`/${locale}/terms`}>{t.terms}</Link><Link href={`/${locale}/personal-data-processing`}>{t.data}</Link><Link href={`/${locale}/ai-rules`}>{t.aiRules}</Link></div>
       </div>
-      <address aria-label={t.contacts} className={footerContactStyles.contacts}>
+      <address aria-label={t.contacts} className={`${footerContactStyles.contacts} ${footerRailStyles.contacts}`}>
         <span><MapPin aria-hidden="true" size={16} />{t.address}</span>
         <a href="tel:+998974022292"><Phone aria-hidden="true" size={16} />+998974022292</a>
         <a href="mailto:admin@juro.uz"><Mail aria-hidden="true" size={16} />admin@juro.uz</a>
       </address>
-      <div className={`${styles.footerBottom} ${footerContactStyles.bottom}`}><span>© {year} JURO</span><p>{t.note}</p><span className={styles.footerLanguages}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={`/${target}`} key={target}>{languageLabels[target]}</Link>)}</span></div>
+      <div className={`${styles.footerBottom} ${footerContactStyles.bottom} ${footerRailStyles.bottom}`}><span>© {year} JURO</span><p>{t.note}</p><span className={styles.footerLanguages}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={`/${target}`} key={target}>{languageLabels[target]}</Link>)}</span></div>
     </footer>
   );
 }
