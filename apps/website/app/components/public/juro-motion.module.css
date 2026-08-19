@@ -37,7 +37,14 @@
   right: 1.15rem;
   top: 50%;
   transform: translateY(-50%);
+  transition: opacity 180ms ease, visibility 180ms step-end;
   z-index: 72;
+}
+
+.motionRoot[data-footer-visible="true"] .chapterNav {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
 }
 
 .chapterNav a {
