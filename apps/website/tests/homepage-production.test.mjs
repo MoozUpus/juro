@@ -15,6 +15,7 @@ const laptopStyles = fs.readFileSync("app/components/public/juro-laptop.module.c
 const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
 const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
+const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-targets.module.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
@@ -76,6 +77,9 @@ test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
   assert.match(chromeStyles, /safe-area-inset-bottom/);
   assert.match(chromeStyles, /safe-area-inset-left/);
   assert.match(chromeStyles, /safe-area-inset-right/);
+  assert.match(chrome, /headerTouchStyles\.language/);
+  assert.match(headerTouchStyles, /min-height: 44px/);
+  assert.match(headerTouchStyles, /aria-current="page"/);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {

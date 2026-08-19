@@ -1,0 +1,23 @@
+.login {
+  align-items: center;
+  display: inline-flex;
+  min-height: 44px;
+}
+
+.language {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 44px;
+  padding-block: 0;
+}
+
+@media (max-width: 620px) {
+  .language:not([aria-current="page"]) {
+    display: none;
+  }
+
+  .language {
+    min-width: 44px;
+  }
+}
