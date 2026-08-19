@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import test from "node:test";
 
 async function createWorker() {
@@ -9,6 +10,11 @@ async function createWorker() {
 
 const runtime = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
 const context = { waitUntil() {}, passThroughOnException() {} };
+const legalStyles = fs.readFileSync("app/[locale]/legal/legal.module.css", "utf8");
+
+test("mobile legal document titles can wrap without widening the page", () => {
+  assert.match(legalStyles, /\.documentHero h1\{font-size:clamp\(39px,10\.5vw,41px\);overflow-wrap:anywhere\}/);
+});
 
 test("renders the production landing with localized canonical metadata and real actions", async () => {
   const worker = await createWorker();
