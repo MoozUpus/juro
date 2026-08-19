@@ -11,6 +11,7 @@ const motionDirector = fs.readFileSync("app/components/public/JuroMotionDirector
 const motionStyles = fs.readFileSync("app/components/public/juro-motion.module.css", "utf8");
 const editorialStyles = fs.readFileSync("app/components/public/juro-editorial.module.css", "utf8");
 const decisionStyles = fs.readFileSync("app/components/public/juro-decision.module.css", "utf8");
+const scenarioStyles = fs.readFileSync("app/components/public/scenario-process.module.css", "utf8");
 const laptopStyles = fs.readFileSync("app/components/public/juro-laptop.module.css", "utf8");
 const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
@@ -148,7 +149,12 @@ test("hero demonstrates a short, anonymised question-to-action decision flow", (
   assert.match(homepage, /\[t\.hero\.facts, t\.hero\.risk, t\.hero\.source, t\.hero\.action\]/);
   assert.match(homepage, /activeScenario\.facts[\s\S]*?activeScenario\.risk[\s\S]*?activeScenario\.source[\s\S]*?activeScenario\.action/);
   assert.match(homepage, /Обезличенный пример/);
-  assert.match(fs.readFileSync("app\/components\/public\/scenario-process.module.css", "utf8"), /prefers-reduced-motion/);
+  assert.match(scenarioStyles, /prefers-reduced-motion/);
+});
+
+test("mobile product labels retain a readable minimum visual scale", () => {
+  assert.match(homepageStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.7rem/);
+  assert.match(scenarioStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.7rem/);
 });
 
 test("footer publishes the requested contact details and reveal states stay inside the viewport", () => {

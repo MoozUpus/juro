@@ -74,6 +74,13 @@
   }
 }
 
+@media (max-width: 720px) {
+  .heading > span:last-child,
+  .flow li {
+    font-size: .7rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flow li,
   .output article {
