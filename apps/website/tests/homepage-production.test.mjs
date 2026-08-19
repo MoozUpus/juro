@@ -98,7 +98,10 @@ test("trust and resource gateways use an editorial hierarchy", () => {
 
 test("start pathways retain direct-linking and responsive decision states", () => {
   assert.match(homepage, /hashchange/);
-  assert.match(homepage, /scrollIntoView/);
+  assert.match(homepage, /navigateToSection/);
+  assert.match(homepage, /history\.pushState/);
+  assert.match(homepage, /popstate/);
+  assert.match(homepage, /window\.scrollTo/);
   assert.match(homepage, /decodeURIComponent/);
   assert.match(homepage, /decisionStyles\.accessPlans/);
   assert.match(homepage, /data-featured=\{index === 1/);
@@ -110,7 +113,7 @@ test("laptop layouts prevent large headline and product-grid clipping", () => {
   assert.match(homepage, /laptopStyles\.heroGrid/);
   assert.match(homepage, /laptopStyles\.heroProduct/);
   assert.match(homepage, /laptopStyles\.transitionSection/);
-  assert.match(laptopStyles, /@media \(max-width: 1420px\)/);
+  assert.match(laptopStyles, /@media \(max-width: 1100px\)/);
   assert.match(laptopStyles, /grid-template-columns: minmax\(0, 1fr\)/);
   assert.match(laptopStyles, /min-width: 0/);
 });

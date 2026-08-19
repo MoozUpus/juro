@@ -495,24 +495,24 @@
 }
 
 @keyframes hero-label-in {
-  from { letter-spacing: .3em; opacity: 0; transform: translateY(10px); }
+  from { letter-spacing: .22em; opacity: .94; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes hero-line-in {
-  0% { clip-path: inset(0 0 100%); opacity: 0; transform: translateY(34px) skewY(2deg); }
-  70% { clip-path: inset(0); opacity: 1; transform: translateY(-2px) skewY(0); }
+  0% { clip-path: inset(0); opacity: .94; transform: translateY(8px) skewY(.45deg); }
+  70% { clip-path: inset(0); opacity: 1; transform: translateY(-1px) skewY(0); }
   100% { clip-path: inset(0); opacity: 1; transform: translateY(0); }
 }
 
 @keyframes hero-support-in {
-  from { opacity: 0; transform: translateY(18px); }
+  from { opacity: .94; transform: translateY(7px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes product-stage-in {
-  0% { clip-path: inset(0 0 100% 0 round 20px); opacity: 0; transform: perspective(1400px) rotateY(-5deg) translate3d(46px, 36px, 0) scale(.96); }
-  72% { clip-path: inset(0 round 20px); opacity: 1; transform: perspective(1400px) rotateY(-.7deg) translate3d(-3px, -2px, 0) scale(1.005); }
+  0% { clip-path: inset(0 round 20px); opacity: .94; transform: perspective(1400px) rotateY(-2.2deg) translate3d(14px, 12px, 0) scale(.99); }
+  72% { clip-path: inset(0 round 20px); opacity: 1; transform: perspective(1400px) rotateY(-.7deg) translate3d(-2px, -1px, 0) scale(1.002); }
   100% { clip-path: inset(0 round 20px); opacity: 1; }
 }
 

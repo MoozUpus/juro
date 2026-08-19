@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Menu, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import type { PublicLanguage } from "../../../content/types";
 import brandStyles from "./brand-lockup.module.css";
 import styles from "./site-chrome.module.css";
@@ -79,7 +79,7 @@ const copy = {
 const languageLabels: Record<Locale, string> = { ru: "RU", uz: "UZ", en: "EN" };
 const languages: Locale[] = ["ru", "uz", "en"];
 
-export function SiteHeader({ locale, tone = "light", languageHref }: { locale: Locale; tone?: "light" | "dark"; languageHref?: string }) {
+export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavigation }: { locale: Locale; tone?: "light" | "dark"; languageHref?: string; onSectionNavigation?: (event: MouseEvent<HTMLAnchorElement>) => void }) {
   const t = copy[locale];
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -133,10 +133,10 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
   }, [open]);
 
   const nav = [
-    [t.product, `/${locale}#product`],
-    [t.people, `/${locale}#audiences`],
+    [t.product, onSectionNavigation ? "#product" : `/${locale}#product`],
+    [t.people, onSectionNavigation ? "#audiences" : `/${locale}#audiences`],
     [t.trust, `/${locale}/trust`],
-    [t.resources, `/${locale}#resources`],
+    [t.resources, onSectionNavigation ? "#resources" : `/${locale}#resources`],
   ] as const;
 
   return (
@@ -148,7 +148,7 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
           <span className={brandStyles.wordmark}>JURO</span>
         </Link>
         <nav aria-label={t.nav} className={styles.desktopNav}>
-          {nav.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
+          {nav.map(([label, href]) => onSectionNavigation && href.startsWith("#") ? <a href={href} key={href} onClick={onSectionNavigation}>{label}</a> : <Link href={href} key={href}>{label}</Link>)}
         </nav>
         <div className={styles.actions}>
           <div aria-label="Language" className={styles.languageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} className={styles.language} href={localeHref(target)} key={target}>{languageLabels[target]}</Link>)}</div>
@@ -169,7 +169,7 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
               <button aria-label={t.close} className={styles.closeButton} onClick={() => setOpen(false)} type="button"><X aria-hidden="true" size={22} /></button>
             </div>
             <nav>
-              {nav.map(([label, href], index) => <Link href={href} key={href} onClick={() => setOpen(false)}><span>0{index + 1}</span>{label}<ArrowRight aria-hidden="true" size={18} /></Link>)}
+              {nav.map(([label, href], index) => onSectionNavigation && href.startsWith("#") ? <a href={href} key={href} onClick={(event) => { onSectionNavigation(event); setOpen(false); }}><span>0{index + 1}</span>{label}<ArrowRight aria-hidden="true" size={18} /></a> : <Link href={href} key={href} onClick={() => setOpen(false)}><span>0{index + 1}</span>{label}<ArrowRight aria-hidden="true" size={18} /></Link>)}
               <Link href={`/${locale}/lawyers`} onClick={() => setOpen(false)}><span>05</span>{t.lawyers}<ArrowRight aria-hidden="true" size={18} /></Link>
               <Link href={`/${locale}/video`} onClick={() => setOpen(false)}><span>06</span>{t.video}<ArrowRight aria-hidden="true" size={18} /></Link>
               <Link href={`/${locale}/legal`} onClick={() => setOpen(false)}><span>07</span>{t.legal}<ArrowRight aria-hidden="true" size={18} /></Link>
