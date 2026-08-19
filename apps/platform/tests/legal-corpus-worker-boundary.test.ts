@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   handleLegalCorpusScheduled,
   legalCorpusActionableRunErrorCode,
+  legalCorpusCoverageBootstrapTarget,
   legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
@@ -202,6 +203,21 @@ test("preferred catalogue order follows the laws, PKM, President, then public-au
     "technical",
     "international",
   ]);
+});
+
+test("coverage bootstrap gives one existing slot to the earliest queued category/language with no current document", () => {
+  assert.deepEqual(legalCorpusCoverageBootstrapTarget([
+    { categoryKey: "laws", language: "uz-Cyrl", currentDocuments: 4, queuedDocuments: 20 },
+    { categoryKey: "government", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 9 },
+    { categoryKey: "ministries", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 8 },
+  ]), { categoryKey: "government", language: "uz-Cyrl" });
+  assert.deepEqual(legalCorpusCoverageBootstrapTarget([
+    { categoryKey: "government", language: "uz-Cyrl", currentDocuments: 0, queuedDocuments: 0 },
+    { categoryKey: "ministries", language: "ru", currentDocuments: 0, queuedDocuments: 2 },
+  ]), { categoryKey: "ministries", language: "ru" });
+  assert.equal(legalCorpusCoverageBootstrapTarget([
+    { categoryKey: "unknown", language: "ru", currentDocuments: 0, queuedDocuments: 10 },
+  ]), null);
 });
 
 test("every official Lex catalogue remains in the coverage priority", () => {

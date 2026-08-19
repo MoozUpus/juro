@@ -8,13 +8,17 @@ import {
   runNextLexCatalogDiscoveryPage,
   seedLexCatalogDiscoveryCheckpoints,
 } from "../lib/legal-corpus/lex-catalog-discovery";
-import { LEX_CORPUS_CATEGORY_PRIORITY } from "../lib/legal-corpus/lex-discovery";
+import {
+  LEX_CORPUS_CATEGORY_PRIORITY,
+  LEX_CORPUS_LANGUAGES,
+  type LexCorpusCategoryKey,
+} from "../lib/legal-corpus/lex-discovery";
 import {
   LEX_CORE_CODE_SEED_IDS,
   runNextLexCoreCodeDiscovery,
   seedLexCoreCodeJobs,
 } from "../lib/legal-corpus/lex-core-code-discovery";
-import { featureEnabled } from "../lib/legal-corpus/trust";
+import { featureEnabled, type LegalCorpusLanguage } from "../lib/legal-corpus/trust";
 import { runNextLegalCorpusQdrantBackfillBatch } from "../lib/legal-corpus/qdrant-indexing";
 import type { QdrantCorpusEnv } from "../lib/legal-corpus/qdrant";
 import { createLegalCorpusQdrantSnapshot } from "../lib/legal-corpus/qdrant-snapshots";
@@ -78,6 +82,79 @@ const INGESTION_START_CUTOFF_MS = 195_000;
 // 64-chunk batches cap one invocation at eight embedding calls while allowing
 // the complete current corpus to resume from D1 after a Worker restart.
 const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;
+
+type CorpusCoverageBootstrapRow = {
+  categoryKey: string;
+  language: string;
+  currentDocuments: number;
+  queuedDocuments: number;
+};
+
+export type LegalCorpusCoverageBootstrapTarget = {
+  categoryKey: LexCorpusCategoryKey;
+  language: LegalCorpusLanguage;
+};
+
+const legalCorpusLanguagesInBootstrapOrder = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
+
+/**
+ * The ordinary preference is intentionally laws -> Cabinet -> President ->
+ * other authorities. Once discovery has settled, an unrepresented
+ * category/language receives one existing sequential slot so a high-volume
+ * catalogue cannot consume every bounded run forever. This never marks a
+ * checkpoint complete or suppresses its remaining durable jobs.
+ */
+export function legalCorpusCoverageBootstrapTarget(
+  rows: readonly CorpusCoverageBootstrapRow[],
+): LegalCorpusCoverageBootstrapTarget | null {
+  const currentDocuments = new Map<string, number>();
+  const queuedDocuments = new Map<string, number>();
+  for (const row of rows) {
+    if (!LEX_CORPUS_CATEGORY_PRIORITY.includes(row.categoryKey as LexCorpusCategoryKey)) continue;
+    if (!LEX_CORPUS_LANGUAGES.some(({ language }) => language === row.language)) continue;
+    const key = `${row.categoryKey}:${row.language}`;
+    currentDocuments.set(key, Math.max(0, Number(row.currentDocuments) || 0));
+    queuedDocuments.set(key, Math.max(0, Number(row.queuedDocuments) || 0));
+  }
+  for (const categoryKey of LEX_CORPUS_CATEGORY_PRIORITY) {
+    for (const language of legalCorpusLanguagesInBootstrapOrder) {
+      const key = `${categoryKey}:${language}`;
+      if ((currentDocuments.get(key) ?? 0) === 0 && (queuedDocuments.get(key) ?? 0) > 0) {
+        return { categoryKey, language };
+      }
+    }
+  }
+  return null;
+}
+
+async function nextLegalCorpusCoverageBootstrapTarget(
+  db: D1Database,
+): Promise<LegalCorpusCoverageBootstrapTarget | null> {
+  // One aggregate D1 read replaces per-category probing. It examines only
+  // metadata and identifiers; the actual document remains behind the normal
+  // host pacer and parser.
+  const rows = await db.prepare(`SELECT cp.category_key AS categoryKey,cp.language,
+      count(DISTINCT CASE WHEN job.status IN ('queued','retrying') THEN job.id END) AS queuedDocuments,
+      count(DISTINCT variant.document_id) AS currentDocuments
+    FROM legal_corpus_discovery_checkpoints cp
+    LEFT JOIN legal_corpus_discovery_documents discovery ON discovery.checkpoint_id=cp.id
+    LEFT JOIN legal_corpus_ingestion_jobs job
+      ON job.canonical_document_id=discovery.provider_source_id
+      AND job.language=discovery.language AND job.job_type='fetch'
+    LEFT JOIN legal_corpus_source_aliases alias ON alias.source_url=discovery.source_url
+    LEFT JOIN legal_corpus_variants variant
+      ON variant.document_id=alias.document_id AND variant.language=discovery.language
+      AND variant.current_version_id IS NOT NULL
+    WHERE cp.status='completed'
+    GROUP BY cp.category_key,cp.language`).all<CorpusCoverageBootstrapRow>();
+  // Do not turn a partial discovery state into a coverage policy. Ordinary
+  // priority remains authoritative until every catalogue/language checkpoint
+  // has independently reached its real end.
+  if (rows.results.length !== LEX_CORPUS_CATEGORY_PRIORITY.length * LEX_CORPUS_LANGUAGES.length) {
+    return null;
+  }
+  return legalCorpusCoverageBootstrapTarget(rows.results);
+}
 
 export function legalCorpusIngestionJobBudget(
   discoveries: readonly { claimed: boolean; status: string }[],
@@ -355,6 +432,9 @@ export async function handleLegalCorpusScheduled(
         ...LEX_CORE_CODE_SEED_IDS,
         ...coreCode.priorityCanonicalDocumentIds,
       ])];
+      const coverageBootstrapTarget = coreCode.status === "all_settled"
+        ? await nextLegalCorpusCoverageBootstrapTarget(env.DB)
+        : null;
       const ingestionBudget = legalCorpusIngestionJobBudget(discoveries, {
         persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
       });
@@ -364,21 +444,26 @@ export async function handleLegalCorpusScheduled(
           break;
         }
         const reservedVersionSlot = index === VERSION_INGESTION_SLOT_INDEX;
+        const coverageBootstrapSlot = index === 0 && coverageBootstrapTarget !== null;
         const preferredCatalogSlot = index < INGESTION_JOBS_PER_RUN && !reservedVersionSlot;
         const preferredSlotIndex = index < VERSION_INGESTION_SLOT_INDEX ? index : index - 1;
         const result = await runNextLegalCorpusIngestionJob(env, {
           wait,
           fetchImpl,
-          preferredCatalogCategories: preferredCatalogSlot
-            ? LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES
-            : undefined,
-          preferredCatalogLanguages: preferredCatalogSlot
-            ? [PREFERRED_INGESTION_LANGUAGE_ROTATION[
-              (Math.floor(controller.scheduledTime / (4 * 60_000))
-                * PREFERRED_INGESTION_SLOTS_PER_RUN + preferredSlotIndex)
-              % PREFERRED_INGESTION_LANGUAGE_ROTATION.length
-            ]]
-            : undefined,
+          preferredCatalogCategories: coverageBootstrapSlot
+            ? [coverageBootstrapTarget.categoryKey]
+            : preferredCatalogSlot
+              ? LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES
+              : undefined,
+          preferredCatalogLanguages: coverageBootstrapSlot
+            ? [coverageBootstrapTarget.language]
+            : preferredCatalogSlot
+              ? [PREFERRED_INGESTION_LANGUAGE_ROTATION[
+                (Math.floor(controller.scheduledTime / (4 * 60_000))
+                  * PREFERRED_INGESTION_SLOTS_PER_RUN + preferredSlotIndex)
+                % PREFERRED_INGESTION_LANGUAGE_ROTATION.length
+              ]]
+              : undefined,
           reservedQueuedJobType: reservedVersionSlot
             ? "version"
             : undefined,
