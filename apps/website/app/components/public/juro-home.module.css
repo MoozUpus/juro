@@ -4,3 +4,29 @@
 @media(hover:hover) and (pointer:fine){.audienceList a:hover,.investorPanel a:hover,.handoffCopy a:hover,.accessPlans a:hover{gap:.8rem}.findingPanel>a:hover{background:var(--gold-400)}}
 @media(prefers-reduced-motion:reduce){.buttonGold,.buttonGhost,.documentMarker,.resourcesSection a,.resourcesSection a svg,.transitionRail svg,.faqSection summary i{transition-duration:.01ms}.heroAtmosphere{display:none}}
 @media(prefers-contrast:more){.heroLead,.heroNote,.sectionIntro>p:last-child,.documentIntro>p:last-child,.continuityCopy>p:last-child,.handoffCopy>p,.trustSection header>p:last-child{color:currentColor}.page a,.page button{outline-offset:3px}}
+
+@media (max-width: 720px) {
+  .sceneTop,
+  .sceneTop small,
+  .caseInput span,
+  .outputLabel,
+  .caseOutput article small,
+  .audienceList article > span,
+  .investorPanel > span,
+  .audienceList li,
+  .findingPanel > span,
+  .clauseTabs button,
+  .clauseTabs button small,
+  .continuityVisual li span,
+  .dossier > div,
+  .dossier p i,
+  .trustGrid article > span,
+  .resourcesSection a > span,
+  .resourcesSection a > small,
+  .accessPlans article > span,
+  .accessPlans article > small,
+  .faqSection summary span,
+  .heroProof li {
+    font-size: .7rem;
+  }
+}
