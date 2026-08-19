@@ -576,6 +576,69 @@ test("catalog discovery completes an undeclared empty pager tail without advanci
   }
 });
 
+test("catalog discovery completes only after two undeclared duplicate-only pager pages", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const env = {
+    DB: d1,
+    LEGAL_CORPUS_ENABLED: "true",
+    LEGAL_CORPUS_AUTO_INGEST_ENABLED: "true",
+  };
+  let catalogRequests = 0;
+  try {
+    await seedLexCatalogDiscoveryCheckpoints(env, new Date("2026-08-15T00:00:00.000Z"));
+    await d1.prepare("UPDATE legal_corpus_discovery_checkpoints SET status='completed' WHERE id<>?")
+      .bind("lex-catalog:laws:ru").run();
+    const fetchImpl = async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("robots.txt")) {
+        return new Response(robots, { headers: { "content-type": "text/plain" } });
+      }
+      catalogRequests += 1;
+      const page = catalogRequests;
+      return new Response(catalogPage({
+        page,
+        links: ["/ru/docs/100"],
+        nextPage: page + 1,
+        nextTarget: `pager-${page + 1}`,
+        viewState: `state-${page}`,
+      }), { headers: {
+        "content-type": "text/html",
+        ...(page === 1 ? { "set-cookie": "ASP.NET_SessionId=duplicatetail; path=/; HttpOnly" } : {}),
+      } });
+    };
+
+    const first = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:01:00.000Z"), fetchImpl, wait: async () => undefined,
+    });
+    assert.equal(first.status, "page_completed");
+    const firstDuplicate = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:02:00.000Z"), fetchImpl, wait: async () => undefined,
+    });
+    assert.equal(firstDuplicate.status, "page_completed");
+    const intermediate = sqlite.prepare(`SELECT status,page_number AS pageNumber,
+      expected_document_count AS expected,discovered_document_count AS discovered,last_error_code AS lastErrorCode
+      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:laws:ru'`).get() as {
+        status: string; pageNumber: number; expected: number | null; discovered: number; lastErrorCode: string | null;
+      };
+    assert.deepEqual({ ...intermediate }, {
+      status: "queued", pageNumber: 2, expected: null, discovered: 1, lastErrorCode: "LEX_CATALOG_DUPLICATE_PAGE",
+    });
+    const secondDuplicate = await runNextLexCatalogDiscoveryPage(env, {
+      now: new Date("2026-08-15T00:03:00.000Z"), fetchImpl, wait: async () => undefined,
+    });
+    assert.equal(secondDuplicate.status, "category_completed");
+    const completed = sqlite.prepare(`SELECT status,page_number AS pageNumber,
+      expected_document_count AS expected,discovered_document_count AS discovered,last_error_code AS lastErrorCode
+      FROM legal_corpus_discovery_checkpoints WHERE id='lex-catalog:laws:ru'`).get() as {
+        status: string; pageNumber: number; expected: number | null; discovered: number; lastErrorCode: string | null;
+      };
+    assert.deepEqual({ ...completed }, {
+      status: "completed", pageNumber: 3, expected: 1, discovered: 1, lastErrorCode: null,
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a successful pager POST renews the public session lease for long catalogues", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const env = {

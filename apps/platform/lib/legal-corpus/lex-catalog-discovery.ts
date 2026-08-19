@@ -68,6 +68,7 @@ type DiscoveryCheckpoint = {
   sourceSessionCookie: string | null;
   sourceSessionExpiresAt: string | null;
   attemptCount: number;
+  lastErrorCode: string | null;
 };
 
 export type LexCatalogPageRunResult = {
@@ -569,7 +570,8 @@ export async function runNextLexCatalogDiscoveryPage(
       page_number AS pageNumber,expected_document_count AS expectedDocumentCount,
       next_event_target AS nextEventTarget,view_state AS viewState,
       view_state_generator AS viewStateGenerator,source_session_cookie AS sourceSessionCookie,
-      source_session_expires_at AS sourceSessionExpiresAt,attempt_count AS attemptCount
+      source_session_expires_at AS sourceSessionExpiresAt,attempt_count AS attemptCount,
+      last_error_code AS lastErrorCode
     FROM legal_corpus_discovery_checkpoints CROSS JOIN active_pagers
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
       -- A retry backoff in an unfinished higher-priority source family must
@@ -644,7 +646,11 @@ export async function runNextLexCatalogDiscoveryPage(
       (checkpoint_id,source_url,provider_source_id,language,discovered_at)
       VALUES (?,?,?,?,?) ON CONFLICT(checkpoint_id,source_url) DO NOTHING
     `).bind(candidate.id, document.sourceUrl, document.canonicalDocumentId, document.language, now));
-    if (inserts.length > 0) await env.DB.batch(inserts);
+    const insertResults = inserts.length > 0 ? await env.DB.batch(inserts) : [];
+    const newlyDiscovered = insertResults.reduce(
+      (total, result) => total + Number(result.meta.changes ?? 0),
+      0,
+    );
     let queued = 0;
     for (const document of page.documents) {
       const result = await enqueueOfficialLexCorpusDocument(env as LegalCorpusQueueEnv, {
@@ -672,10 +678,22 @@ export async function runNextLexCatalogDiscoveryPage(
       && page.documents.length === 0
       && expected === null
       && discovered > 0;
+    // A one-off duplicate-only page may be a transient source-session quirk,
+    // so preserve the pager for one more official response.  Two successive
+    // resumed pages containing only URLs already in the immutable ledger are
+    // a durable pagination loop, not evidence of additional documents.
+    const duplicateUndeclaredLedgerPage = resumePager
+      && page.documents.length > 0
+      && expected === null
+      && discovered > 0
+      && newlyDiscovered === 0;
+    const reachedRepeatedUndeclaredLedgerTail = duplicateUndeclaredLedgerPage
+      && candidate.lastErrorCode === "LEX_CATALOG_DUPLICATE_PAGE";
     const completed = expected === 0
       || (expected !== null && discovered >= expected)
       || (page.nextEventTarget === null && (expected === null || discovered >= expected))
-      || reachedUndeclaredEmptyTail;
+      || reachedUndeclaredEmptyTail
+      || reachedRepeatedUndeclaredLedgerTail;
     const persistedExpected = completed ? (expected ?? discovered) : expected;
     const sessionCookie = page.sourceSessionCookie ?? candidate.sourceSessionCookie;
     // Lex does not reliably repeat Set-Cookie on every successful ASP.NET
@@ -690,12 +708,14 @@ export async function runNextLexCatalogDiscoveryPage(
       status=?,page_number=?,expected_document_count=?,discovered_document_count=?,
       next_event_target=?,view_state=?,view_state_generator=?,attempt_count=0,
       source_session_cookie=?,source_session_expires_at=?,next_attempt_at=NULL,
-      last_error_code=NULL,completed_at=?,updated_at=? WHERE id=?
+      last_error_code=?,completed_at=?,updated_at=? WHERE id=?
     `).bind(
       completed ? "completed" : "queued", page.currentPage, persistedExpected, discovered,
       completed ? null : page.nextEventTarget, completed ? null : page.viewState,
       completed ? null : page.viewStateGenerator, completed ? null : sessionCookie,
-      completed ? null : sessionExpiry, completed ? now : null, now, candidate.id,
+      completed ? null : sessionExpiry,
+      completed ? null : (duplicateUndeclaredLedgerPage ? "LEX_CATALOG_DUPLICATE_PAGE" : null),
+      completed ? now : null, now, candidate.id,
     ).run();
     return {
       claimed: true,
