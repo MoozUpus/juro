@@ -11,9 +11,16 @@ async function createWorker() {
 const runtime = { ASSETS: { fetch: async () => new Response("Not found", { status: 404 }) } };
 const context = { waitUntil() {}, passThroughOnException() {} };
 const legalStyles = fs.readFileSync("app/[locale]/legal/legal.module.css", "utf8");
+const trustStyles = fs.readFileSync("app/[locale]/trust/trust.module.css", "utf8");
 
 test("mobile legal document titles can wrap without widening the page", () => {
   assert.match(legalStyles, /\.documentHero h1\{font-size:clamp\(39px,10\.5vw,41px\);overflow-wrap:anywhere\}/);
+});
+
+test("Trust Center keeps narrow mobile grids and Uzbek headings inside the viewport", () => {
+  assert.match(trustStyles, /\.hero\{grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(trustStyles, /\.details\{gap:3rem;grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(trustStyles, /\.details header h2,\.details article h3\{overflow-wrap:anywhere\}/);
 });
 
 test("renders the production landing with localized canonical metadata and real actions", async () => {
