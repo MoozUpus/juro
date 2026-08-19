@@ -1,8 +1,8 @@
-import Image from "next/image";
 import Link from "next/link";
 import type { PublicLawyer } from "./catalog";
 import type { PublicLanguage } from "../../../content/types";
 import { publicPhotoUrl } from "./catalog";
+import { LawyerAvatar } from "./LawyerAvatar";
 import styles from "./lawyers.module.css";
 
 export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: PublicLanguage }) {
@@ -15,7 +15,7 @@ export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: P
   const photo = publicPhotoUrl(lawyer.profilePhotoUrl);
   return <article className={styles.card} data-pending={pending || undefined}>
     <div className={styles.cardHead}>
-      {photo ? <Image className={styles.photo} src={photo} alt="" width={64} height={64} unoptimized /> : <span className={styles.initials} aria-hidden="true">{lawyer.displayName.slice(0, 1)}</span>}
+      <LawyerAvatar className={styles.photo} fallbackClassName={styles.initials} initials={lawyer.displayName.slice(0, 1)} size={64} src={photo} />
       <div><h2>{lawyer.displayName}</h2><p>{lawyer.firmName || t.independent}</p></div>
     </div>
     <div className={styles.badges}>
