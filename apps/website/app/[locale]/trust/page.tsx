@@ -2,19 +2,19 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { experience } from "../../../content/experience";
-import type { Language } from "../../../content/types";
+import type { PublicLanguage } from "../../../content/types";
 import { SiteFooter, SiteHeader } from "../../components/public/SiteChrome";
 import { legalConfig } from "../../legal-config";
 import styles from "./trust.module.css";
 
 type Props = { params: Promise<{ locale: string }> };
 
-function parseLocale(value: string): Language | null {
-  return value === "ru" || value === "uz" ? value : null;
+function parseLocale(value: string): PublicLanguage | null {
+  return value === "ru" || value === "uz" || value === "en" ? value : null;
 }
 
 export function generateStaticParams() {
-  return [{ locale: "ru" }, { locale: "uz" }];
+  return [{ locale: "ru" }, { locale: "uz" }, { locale: "en" }];
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -22,10 +22,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const locale = parseLocale(rawLocale);
   if (!locale) return {};
   const ru = locale === "ru";
-  const title = ru ? "Trust Center — безопасность и данные JURO" : "Trust Center — JURO xavfsizligi va ma’lumotlari";
-  const description = ru
-    ? "Проверяемая информация о доступе, документах, хранении, удалении, AI-провайдерах и политиках JURO."
-    : "JUROdagi kirish, hujjatlar, saqlash, o‘chirish, AI-provayderlar va siyosatlar haqida tekshiriladigan ma’lumot.";
+  const title = locale === "en" ? "Trust Center — JURO security and data" : ru ? "Trust Center — безопасность и данные JURO" : "Trust Center — JURO xavfsizligi va ma’lumotlari";
+  const description = locale === "en"
+    ? "Verifiable information about access, documents, retention, deletion, AI providers and JURO policies."
+    : ru ? "Проверяемая информация о доступе, документах, хранении, удалении, AI-провайдерах и политиках JURO."
+      : "JUROdagi kirish, hujjatlar, saqlash, o‘chirish, AI-provayderlar va siyosatlar haqida tekshiriladigan ma’lumot.";
   return {
     title,
     description,
@@ -34,6 +35,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       languages: {
         ru: "https://juro.uz/ru/trust",
         uz: "https://juro.uz/uz/trust",
+        en: "https://juro.uz/en/trust",
         "x-default": "https://juro.uz/ru/trust",
       },
     },
@@ -48,10 +50,33 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
+function EnglishTrustPage() {
+  const sections = [
+    ["Documents and work data", "Personal cases and documents are private work objects and are not included in public pages or the sitemap. This public page does not accept real files; work begins after entering a protected account.", "Confirmed by the public-site structure"],
+    ["Employee and participant access", "Users manage invitations and select what they share. Access to private objects must be checked on the server by session, role and participant permissions. An internal list of staff with administrative access requires separate publication by the operator.", "Mechanism confirmed; internal list is being clarified"],
+    ["Retention and deletion", "The period depends on the data type, account state and mandatory requirements. A user can initiate a request through an available in-app channel. JURO does not claim one universal retention period before a schedule is approved.", "Process described; exact periods are being clarified"],
+    ["Temporary links", "Private files should not be published at permanent public URLs. Temporary links and their lifetime are used where implemented; archiving a separately saved signed PDF makes an active link invalid.", "Confirmed by the product process"],
+    ["AI providers and subprocessors", "The final list of production providers, processing regions and subprocessors will be published after the architecture and contractual terms are approved. Until then, JURO does not make unverified claims about data localisation or training models on documents.", "Being clarified before production launch"],
+    ["Encryption, logging and standards", "JURO does not claim certifications, specific encryption algorithms or standards compliance without technical evidence. Verified information will be added with its last-checked date.", "Not claimed without confirmation"],
+  ] as const;
+  return <div className={styles.page} lang="en">
+    <SiteHeader languageHref="/ru/trust" locale="en" />
+    <main id="main-content">
+      <section className={styles.hero}><div className={styles.heroCopy}><div className={styles.breadcrumbs}><Link href="/en">JURO</Link><span>/</span><span>Trust Center</span></div><span className={styles.eyebrow}>TRUST CENTER</span><h1>Security, data and transparency</h1><p>JURO separates verified product facts from information that is still being clarified.</p><small>Last public review: 9 August 2026</small></div><aside className={styles.heroIndex} aria-label="Data-control map"><span>DATA FLOW</span><ol><li><b>01</b><strong>Public website</strong><small>no file upload</small></li><li><b>02</b><strong>Protected account</strong><small>session and permissions</small></li><li><b>03</b><strong>Professional handoff</strong><small>only with confirmation</small></li></ol></aside></section>
+      <section className={styles.architecture} aria-labelledby="trust-flow-title"><header><span>HOW DATA MOVES</span><h2 id="trust-flow-title">The user remains in control at every transition</h2><p>The public website does not upload anything. Work on a question or document begins in a protected account, and handing context to a professional requires a separate action.</p></header><ol><li><span>01</span><strong>Public website</strong><p>Explore JURO without real files or personal case data.</p></li><li><span>02</span><strong>Protected account</strong><p>Session, role and permissions determine access.</p></li><li><span>03</span><strong>Work object</strong><p>A question, case and document remain private.</p></li><li><span>04</span><strong>Professional handoff</strong><p>Only selected context, with separate confirmation.</p></li></ol></section>
+      <section className={styles.details}><header><span>DETAILS</span><h2>What is confirmed and what is still being clarified</h2></header><div>{sections.map(([title, body, state]) => <article key={title}><span>{state}</span><h3>{title}</h3><p>{body}</p></article>)}</div></section>
+      <section className={styles.policies}><h2>Policies and rules</h2><div><Link href="/en/legal">Legal Centre</Link><Link href="/en/terms">Terms of use</Link><Link href="/en/privacy-policy">Privacy policy</Link><Link href="/en/personal-data-processing">Personal data processing</Link><Link href="/en/cookies">Cookies</Link><Link href="/en/ai-rules">AI rules</Link></div></section>
+      <section className={styles.contact}><h2>Question about security or data?</h2><p>For privacy and data-processing questions, use JURO’s published contact.</p><a href={`mailto:${legalConfig.contacts.privacyEmail}`}>Contact us about data</a></section>
+    </main>
+    <SiteFooter locale="en" />
+  </div>;
+}
+
 export default async function TrustPage({ params }: Props) {
   const { locale: rawLocale } = await params;
   const locale = parseLocale(rawLocale);
   if (!locale) notFound();
+  if (locale === "en") return <EnglishTrustPage />;
   const ru = locale === "ru";
   const summary = experience[locale].trust;
 

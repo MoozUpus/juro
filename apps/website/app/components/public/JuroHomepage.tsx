@@ -19,7 +19,8 @@ import {
 import { type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ru } from "../../../content/ru";
 import { uz } from "../../../content/uz";
-import type { Language } from "../../../content/types";
+import { en } from "../../../content/en";
+import type { PublicLanguage } from "../../../content/types";
 import { SiteFooter, SiteHeader } from "./SiteChrome";
 import { JuroMotionDirector } from "./JuroMotionDirector";
 import styles from "./juro-home.module.css";
@@ -204,16 +205,57 @@ const copy = {
   },
 } as const;
 
-export function JuroHomepage({ language }: { language: Language }) {
-  const t = copy[language];
-  const content = language === "ru" ? ru : uz;
+const englishCopy = {
+  hero: {
+    eyebrow: "JURO · Legal guidance in your pocket",
+    titleA: "Tell us",
+    titleB: "what happened.",
+    titleC: "Get a clear next step.",
+    lead: "JURO turns a question, contract or deadline under Uzbekistan law into understandable facts, risks and a plan — with the option to involve a legal professional.",
+    primary: "Explore your situation",
+    secondary: "See JURO in action",
+    note: "You can explore the first scenario without charge. Do not upload case materials on this public page.",
+    scene: "A live model of the outcome",
+    input: "Your situation",
+    output: "JURO decision map",
+    facts: "Verified facts",
+    source: "Legal basis",
+    risk: "Risk and deadline",
+    action: "Next step",
+  },
+  scenarios: [
+    { tab: "Salary", question: "My employer has delayed my salary for a second month. What should I do?", facts: "Pay date, employment agreement, accruals", source: "Employment law · official source", risk: "Keep evidence and check the deadline for an application", action: "Record the debt → prepare an application" },
+    { tab: "Contract", question: "The lease agreement does not clearly say when the deposit is returned.", facts: "Lease term, deposit amount, grounds for withholding", source: "Civil and contract law", risk: "The wording allows a disputed withholding", action: "Clarify the deadline and exhaustive grounds for withholding" },
+    { tab: "Business", question: "A supplier missed a deadline. How can we act without losing our position?", facts: "Agreement, specification, deadline, correspondence", source: "Deal terms + applicable law", risk: "Pre-claim procedure and notice deadlines", action: "Collect evidence → prepare a claim" },
+  ],
+  proof: ["Law of Uzbekistan", "Russian, Uzbek and English public site", "AI + legal professional"],
+  chapters: [["Journey", "product"], ["Document", "analysis"], ["Case", "case-flow"], ["Professional", "lawyer-handoff"], ["Trust", "trust"]],
+  transition: { eyebrow: "NOT ANOTHER AI CHAT", title: "Legal clarity does not end with an answer", lead: "In JURO, each result continues the previous one. Facts, documents, deadlines and decisions stay connected to one case.", items: [["01", "Understand", "Separate facts from assumptions"], ["02", "Verify", "See the source and level of risk"], ["03", "Prepare", "Get a plan or document"], ["04", "Continue", "Hand approved context to a legal professional"]] },
+  audience: { eyebrow: "FOUR PERSPECTIVES", title: "One product. Different reasons to trust it.", investor: "For partners and investors", investorBody: "AI, documents, cases and a professional network are designed as one infrastructure — not disconnected features.", investorCta: "Watch the presentation" },
+  document: { eyebrow: "DOCUMENT INTELLIGENCE", title: "Not just highlighting a clause. Explaining what it changes.", lead: "JURO connects specific wording to a risk, consequence and improved draft. The user sees a reason, not an abstract score.", file: "Lease agreement · example", current: "Current wording", finding: "What was found", revision: "Suggested wording", label: "Choose a clause", clauses: [["Deposit", "The deposit may be withheld by the landlord at its discretion.", "There is no exhaustive list of grounds or requirement to substantiate damage.", "The deposit may be withheld only for documented debt or damage, together with a written calculation."], ["Price change", "The rent may be changed unilaterally at any time.", "There is no notice period or limit on the amount of the change.", "A change is permitted no more than once a year with written notice at least 30 days in advance."], ["Termination", "The termination procedure is determined by an additional agreement of the parties.", "The key exit mechanism is deferred and gives neither party a predictable outcome.", "Either party may terminate the agreement by giving 30 calendar days' written notice."]], cta: "Review a document" },
+  continuity: { eyebrow: "ONE CONTINUOUS CASE", title: "Context is not lost between tools", lead: "Legal work rarely ends with a single message. JURO preserves the logic of a task from the first question to a document and a professional.", steps: ["Situation", "Facts", "Sources", "Risks", "Plan", "Document", "Professional"], cardTitle: "Case: return of a deposit", cardBody: "3 facts verified · 1 risk requires action", next: "Next step", nextBody: "Clarify the wording of clause 4.2 and send it to the other party" },
+  handoff: { eyebrow: "AI + HUMAN", title: "A professional joins a prepared case, not an empty chat", lead: "You choose which facts, documents and conclusions to share. The professional sees a structured question and can continue from the right place.", dossier: "Handoff dossier", ready: "Context prepared", items: ["Brief timeline", "Verified facts", "Documents and risks", "Chosen next step"], cta: "Browse legal professionals" },
+  trust: { eyebrow: "TRUST WITHOUT SLOGANS", title: "Verifiable mechanics instead of a promise that everything is safe", lead: "JURO separates what is confirmed from what is still being clarified. That is more honest — and more useful when deciding whether to trust a service.", verified: "Confirmed", policy: "Described in policy", cta: "Open Trust Center", legal: "Legal Centre" },
+  resources: { eyebrow: "GET TO KNOW JURO", title: "Your public JURO starting points", items: [["Video", "2:42", "Watch JURO’s product and approach", "video"], ["Professionals", "Catalogue", "Meet available legal professionals", "lawyers"], ["Trust Center", "Facts", "Review how data is handled", "trust"], ["Legal Centre", "RU · UZ", "Read published legal originals", "legal"]] },
+  access: { eyebrow: "START WITH CLARITY", title: "Understand the value first. Then choose a format.", plans: [["For yourself", "Start without charge", "Explore a personal situation, documents and a clear plan", "Get started"], ["For business", "Terms before confirmation", "Contracts, roles, deadlines and one shared work history", "Create a business workspace"], ["For legal teams", "Tailored format", "Research, documents, review and audit", "Discuss your needs"]], note: "Professional legal services and additional services are agreed separately before confirmation." },
+  faqTitle: "Questions worth asking before you start",
+  finalTitle: "A legal question should not stay just a question",
+  finalBody: "Describe the situation. JURO helps turn it into facts, risks and a clear next step.",
+  finalPrimary: "Get started",
+  finalSecondary: "Watch the video",
+} as const;
+
+export function JuroHomepage({ language }: { language: PublicLanguage }) {
+  const t = language === "en" ? englishCopy : copy[language];
+  const content = language === "ru" ? ru : language === "uz" ? uz : en;
+  const platformLocale = language === "en" ? "ru" : language;
   const [scenario, setScenario] = useState(0);
   const [clause, setClause] = useState(0);
   const scenarioInteracted = useRef(false);
   const clauseInteracted = useRef(false);
   const activeScenario = t.scenarios[scenario];
   const activeClause = t.document.clauses[clause];
-  const register = `https://app.juro.uz/register?lang=${language}&accountType=individual`;
+  const register = `https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`;
 
   useEffect(() => {
     const scrollToHash = () => {
@@ -283,7 +325,7 @@ export function JuroHomepage({ language }: { language: Language }) {
     <div className={`${styles.page} ${motionStyles.motionRoot}`} data-juro-motion-root lang={language}>
       <JuroMotionDirector />
       <SiteHeader locale={language} tone="dark" />
-      <nav aria-label={language === "ru" ? "Разделы истории JURO" : "JURO hikoyasi bo‘limlari"} className={motionStyles.chapterNav}>
+      <nav aria-label={language === "ru" ? "Разделы истории JURO" : language === "uz" ? "JURO hikoyasi bo‘limlari" : "JURO story sections"} className={motionStyles.chapterNav}>
         {t.chapters.map(([label, id], index) => <a data-chapter-link href={`#${id}`} key={id}><span>0{index + 1}</span><strong>{label}</strong></a>)}
       </nav>
       <main id="main-content">
@@ -303,7 +345,7 @@ export function JuroHomepage({ language }: { language: Language }) {
             </div>
             <div className={`${styles.heroProduct} ${motionStyles.heroProductMotion} ${laptopStyles.heroProduct}`} data-motion-product>
               <div className={styles.sceneTop}><span><CircleDot aria-hidden="true" size={14} />{t.hero.scene}</span><small>01 — 04</small></div>
-              <div aria-label={language === "ru" ? "Примеры юридических ситуаций" : "Yuridik vaziyatlar misollari"} className={styles.scenarioTabs} role="tablist">
+              <div aria-label={language === "ru" ? "Примеры юридических ситуаций" : language === "uz" ? "Yuridik vaziyatlar misollari" : "Examples of legal situations"} className={styles.scenarioTabs} role="tablist">
                 {t.scenarios.map((item, index) => <button aria-controls="scenario-panel" aria-selected={scenario === index} id={`scenario-tab-${index}`} key={item.tab} onClick={() => selectScenario(index)} onKeyDown={(event) => moveTab(event, index, t.scenarios.length, "scenario-tab", selectScenario)} role="tab" tabIndex={scenario === index ? 0 : -1} type="button">{item.tab}</button>)}
               </div>
               <div aria-labelledby={`scenario-tab-${scenario}`} aria-live="polite" className={`${styles.caseMap} ${motionStyles.caseMapMotion}`} id="scenario-panel" key={scenario} role="tabpanel">
@@ -352,7 +394,7 @@ export function JuroHomepage({ language }: { language: Language }) {
                 <small>{t.document.finding}</small><strong>{activeClause[2]}</strong>
                 <small>{t.document.revision}</small><blockquote>{activeClause[3]}</blockquote>
               </div>
-              <a href={`https://app.juro.uz/${language}/individual/document-analysis`}>{t.document.cta}<ArrowRight aria-hidden="true" size={17} /></a>
+              <a href={`https://app.juro.uz/${platformLocale}/individual/document-analysis`}>{t.document.cta}<ArrowRight aria-hidden="true" size={17} /></a>
             </div>
           </div>
         </section>
@@ -380,7 +422,7 @@ export function JuroHomepage({ language }: { language: Language }) {
 
         <section className={`${styles.resourcesSection} ${editorialStyles.resourcesSection}`} id="resources">
           <header data-reveal><p className={styles.eyebrowDark}>{t.resources.eyebrow}</p><h2>{t.resources.title}</h2></header>
-          <div className={editorialStyles.resourceGrid}>{t.resources.items.map(([title, meta, body, path], index) => <Link className={`${motionStyles.resourceMotion} ${editorialStyles.resourceItem}`} data-primary={index === 0 || undefined} data-reveal href={`/${language}/${path}`} key={path}><span>0{index + 1}</span><small>{meta}</small><h3>{title}</h3><p>{body}</p>{index === 0 ? <div className={editorialStyles.watchSignal}><Play aria-hidden="true" size={15} />{language === "ru" ? "Смотреть обзор" : "Sharhni ko‘rish"}</div> : null}<ArrowDownRight aria-hidden="true" size={22} /></Link>)}</div>
+          <div className={editorialStyles.resourceGrid}>{t.resources.items.map(([title, meta, body, path], index) => <Link className={`${motionStyles.resourceMotion} ${editorialStyles.resourceItem}`} data-primary={index === 0 || undefined} data-reveal href={`/${language}/${path}`} key={path}><span>0{index + 1}</span><small>{meta}</small><h3>{title}</h3><p>{body}</p>{index === 0 ? <div className={editorialStyles.watchSignal}><Play aria-hidden="true" size={15} />{language === "ru" ? "Смотреть обзор" : language === "uz" ? "Sharhni ko‘rish" : "Watch overview"}</div> : null}<ArrowDownRight aria-hidden="true" size={22} /></Link>)}</div>
         </section>
 
         <section className={`${styles.accessSection} ${decisionStyles.accessSection}`} id="pricing">
@@ -396,7 +438,7 @@ export function JuroHomepage({ language }: { language: Language }) {
 
         <section className={`${styles.finalSection} ${motionStyles.finalMotion}`} data-reveal="mask" id="start">
           <div aria-hidden="true" className={styles.finalLine}><i /><i /><i /></div>
-          <p className={styles.eyebrowLight}>JURO · {language === "ru" ? "ЮРИСТ В КАРМАНЕ" : "CHO‘NTAGINGIZDAGI YURIST"}</p>
+          <p className={styles.eyebrowLight}>JURO · {language === "ru" ? "ЮРИСТ В КАРМАНЕ" : language === "uz" ? "CHO‘NTAGINGIZDAGI YURIST" : "LEGAL GUIDANCE IN YOUR POCKET"}</p>
           <h2>{t.finalTitle}</h2><p>{t.finalBody}</p>
           <div><a className={styles.buttonGold} href={register}>{t.finalPrimary}<ArrowRight aria-hidden="true" size={18} /></a><Link className={styles.buttonGhost} href={`/${language}/video`}><Play aria-hidden="true" size={16} />{t.finalSecondary}</Link></div>
         </section>

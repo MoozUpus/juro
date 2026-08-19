@@ -4,10 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Menu, X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
+import type { PublicLanguage } from "../../../content/types";
 import brandStyles from "./brand-lockup.module.css";
 import styles from "./site-chrome.module.css";
 
-type Locale = "ru" | "uz";
+type Locale = PublicLanguage;
 
 const copy = {
   ru: {
@@ -70,7 +71,13 @@ const copy = {
     contact: "Bog‘lanish",
     note: "AI ishni tayyorlashga yordam beradi, ammo majburiy professional yordamni almashtirmaydi.",
   },
+  en: {
+    nav: "Main navigation", product: "Product", people: "Who it is for", trust: "Trust", resources: "Resources", lawyers: "Professionals", video: "Video", legal: "Legal Centre", signIn: "Sign in", start: "Start with JURO", open: "Open menu", close: "Close menu", skip: "Skip to main content", productLabel: "Product", companyLabel: "JURO", legalLabel: "Legal information", description: "A legal situation becomes a verifiable plan, a document and a clear next step.", ai: "AI legal assistant", document: "Document review", plan: "Action plan", business: "For business", knowledge: "Knowledge base", privacy: "Privacy", terms: "Terms of use", data: "Personal data", aiRules: "AI rules", contact: "Contact us", note: "AI helps prepare legal work, but does not replace required professional advice.",
+  },
 } as const;
+
+const languageLabels: Record<Locale, string> = { ru: "RU", uz: "UZ", en: "EN" };
+const languages: Locale[] = ["ru", "uz", "en"];
 
 export function SiteHeader({ locale, tone = "light", languageHref }: { locale: Locale; tone?: "light" | "dark"; languageHref?: string }) {
   const t = copy[locale];
@@ -79,8 +86,9 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const otherLocale = locale === "ru" ? "uz" : "ru";
-  const localeHref = languageHref ?? `/${otherLocale}`;
+  const platformLocale = locale === "en" ? "ru" : locale;
+  const localizedSuffix = languageHref?.replace(/^\/(?:ru|uz|en)(?=\/|$)/, "") ?? "";
+  const localeHref = (target: Locale) => `/${target}${localizedSuffix}`;
 
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 18);
@@ -143,9 +151,9 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
           {nav.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
         </nav>
         <div className={styles.actions}>
-          <Link aria-label={locale === "ru" ? "O‘zbekcha" : "Русский"} className={styles.language} href={localeHref}>{otherLocale.toUpperCase()}</Link>
-          <a className={styles.login} href={`https://app.juro.uz/${locale}/auth/login`}>{t.signIn}</a>
-          <a className={styles.primary} href={`https://app.juro.uz/register?lang=${locale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
+          <div aria-label="Language" className={styles.languageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} className={styles.language} href={localeHref(target)} key={target}>{languageLabels[target]}</Link>)}</div>
+          <a className={styles.login} href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
+          <a className={styles.primary} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
           <button aria-controls={panelId} aria-expanded={open} aria-label={t.open} className={styles.menuButton} onClick={() => setOpen(true)} ref={triggerRef} type="button"><Menu aria-hidden="true" size={22} /></button>
         </div>
       </div>
@@ -167,8 +175,8 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
               <Link href={`/${locale}/legal`} onClick={() => setOpen(false)}><span>07</span>{t.legal}<ArrowRight aria-hidden="true" size={18} /></Link>
             </nav>
             <div className={styles.mobileActions}>
-              <Link href={localeHref} onClick={() => setOpen(false)}>{locale === "ru" ? "O‘zbekcha" : "Русский"}</Link>
-              <a href={`https://app.juro.uz/register?lang=${locale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
+              <div aria-label="Language" className={styles.mobileLanguageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={localeHref(target)} key={target} onClick={() => setOpen(false)}>{languageLabels[target]}</Link>)}</div>
+              <a href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
             </div>
           </div>
         </div>
@@ -179,11 +187,12 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
 
 export function SiteFooter({ locale }: { locale: Locale }) {
   const t = copy[locale];
+  const platformLocale = locale === "en" ? "ru" : locale;
   const year = new Date().getFullYear();
   const productLinks = [
-    [t.ai, `https://app.juro.uz/${locale}/individual/ai-lawyer/new`],
-    [t.document, `https://app.juro.uz/${locale}/individual/document-analysis`],
-    [t.plan, `https://app.juro.uz/${locale}/individual/cases`],
+    [t.ai, `https://app.juro.uz/${platformLocale}/individual/ai-lawyer/new`],
+    [t.document, `https://app.juro.uz/${platformLocale}/individual/document-analysis`],
+    [t.plan, `https://app.juro.uz/${platformLocale}/individual/cases`],
     [t.lawyers, `/${locale}/lawyers`],
   ] as const;
   return (
@@ -200,7 +209,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
         <div className={styles.footerColumn}><strong>{t.companyLabel}</strong><Link href={`/${locale}/trust`}>Trust Center</Link><Link href={`/${locale}/video`}>{t.video}</Link><Link href={`/${locale}/knowledge/contract-review-preparation`}>{t.knowledge}</Link><a href="mailto:muzaffarbekmurodoff@gmail.com">{t.contact}</a></div>
         <div className={styles.footerColumn}><strong>{t.legalLabel}</strong><Link href={`/${locale}/legal`}>{t.legal}</Link><Link href={`/${locale}/privacy-policy`}>{t.privacy}</Link><Link href={`/${locale}/terms`}>{t.terms}</Link><Link href={`/${locale}/personal-data-processing`}>{t.data}</Link><Link href={`/${locale}/ai-rules`}>{t.aiRules}</Link></div>
       </div>
-      <div className={styles.footerBottom}><span>© {year} JURO</span><p>{t.note}</p><Link href={`/${locale === "ru" ? "uz" : "ru"}`}>{locale === "ru" ? "O‘zbekcha" : "Русский"}</Link></div>
+      <div className={styles.footerBottom}><span>© {year} JURO</span><p>{t.note}</p><span className={styles.footerLanguages}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={`/${target}`} key={target}>{languageLabels[target]}</Link>)}</span></div>
     </footer>
   );
 }
