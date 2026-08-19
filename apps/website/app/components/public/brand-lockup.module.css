@@ -15,8 +15,8 @@
 .mark.mark {
   height: auto;
   max-width: none;
-  transform: translate(-7px, -1px);
-  width: 58px;
+  transform: translate(-10px, -9px);
+  width: 64px;
 }
 
 .wordmark {
@@ -43,8 +43,8 @@
 .mobileMark.mobileMark {
   height: auto;
   max-width: none;
-  transform: translate(-6px, -1px);
-  width: 52px;
+  transform: translate(-8px, -8px);
+  width: 56px;
 }
 
 .mobileBrand span {
@@ -72,8 +72,8 @@
 .footerMark.footerMark {
   height: auto;
   max-width: none;
-  transform: translate(-8px, -1px);
-  width: 66px;
+  transform: translate(-11px, -10px);
+  width: 72px;
 }
 
 .footerLogo span {
@@ -95,8 +95,8 @@
   }
 
   .mark.mark {
-    transform: translate(-6px, -1px);
-    width: 53px;
+    transform: translate(-9px, -8px);
+    width: 58px;
   }
 
   .wordmark {

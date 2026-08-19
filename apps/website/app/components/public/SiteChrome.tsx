@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Menu, X } from "lucide-react";
+import { ArrowRight, Mail, MapPin, Menu, Phone, X } from "lucide-react";
 import { type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import type { PublicLanguage } from "../../../content/types";
 import brandStyles from "./brand-lockup.module.css";
+import footerContactStyles from "./footer-contact.module.css";
 import styles from "./site-chrome.module.css";
 
 type Locale = PublicLanguage;
@@ -38,7 +39,8 @@ const copy = {
     terms: "Условия использования",
     data: "Персональные данные",
     aiRules: "Правила AI",
-    contact: "Связаться",
+    contacts: "Контакты",
+    address: "Ташкент, Узбекистан",
     note: "AI помогает подготовить работу, но не заменяет обязательную профессиональную помощь.",
   },
   uz: {
@@ -68,11 +70,12 @@ const copy = {
     terms: "Foydalanish shartlari",
     data: "Shaxsiy ma’lumotlar",
     aiRules: "AI qoidalari",
-    contact: "Bog‘lanish",
+    contacts: "Aloqa",
+    address: "Toshkent, O‘zbekiston",
     note: "AI ishni tayyorlashga yordam beradi, ammo majburiy professional yordamni almashtirmaydi.",
   },
   en: {
-    nav: "Main navigation", product: "Product", people: "Who it is for", trust: "Trust", resources: "Resources", lawyers: "Professionals", video: "Video", legal: "Legal Centre", signIn: "Sign in", start: "Start with JURO", open: "Open menu", close: "Close menu", skip: "Skip to main content", productLabel: "Product", companyLabel: "JURO", legalLabel: "Legal information", description: "A legal situation becomes a verifiable plan, a document and a clear next step.", ai: "AI legal assistant", document: "Document review", plan: "Action plan", business: "For business", knowledge: "Knowledge base", privacy: "Privacy", terms: "Terms of use", data: "Personal data", aiRules: "AI rules", contact: "Contact us", note: "AI helps prepare legal work, but does not replace required professional advice.",
+    nav: "Main navigation", product: "Product", people: "Who it is for", trust: "Trust", resources: "Resources", lawyers: "Professionals", video: "Video", legal: "Legal Centre", signIn: "Sign in", start: "Start with JURO", open: "Open menu", close: "Close menu", skip: "Skip to main content", productLabel: "Product", companyLabel: "JURO", legalLabel: "Legal information", description: "A legal situation becomes a verifiable plan, a document and a clear next step.", ai: "AI legal assistant", document: "Document review", plan: "Action plan", business: "For business", knowledge: "Knowledge base", privacy: "Privacy", terms: "Terms of use", data: "Personal data", aiRules: "AI rules", contacts: "Contact", address: "Tashkent, Uzbekistan", note: "AI helps prepare legal work, but does not replace required professional advice.",
   },
 } as const;
 
@@ -144,7 +147,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
       <a className={styles.skipLink} href="#main-content">{t.skip}</a>
       <div className={styles.headerInner}>
         <Link aria-label="JURO" className={`${styles.logo} ${brandStyles.logo}`} href={`/${locale}`}>
-          <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={313} priority src={tone === "dark" && !scrolled ? "/juro-logo-light.avif" : "/juro-logo-primary.avif"} unoptimized width={320} /></span>
+          <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={1024} priority src={tone === "dark" && !scrolled ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1024} /></span>
           <span className={brandStyles.wordmark}>JURO</span>
         </Link>
         <nav aria-label={t.nav} className={styles.desktopNav}>
@@ -163,7 +166,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
           <div aria-label={t.nav} aria-modal="true" className={styles.mobilePanel} id={panelId} ref={panelRef} role="dialog">
             <div className={styles.mobileTop}>
               <div className={brandStyles.mobileBrand}>
-                <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={313} src="/juro-logo-primary.avif" unoptimized width={320} /></span>
+                <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={1024} src="/juro-mark.png" unoptimized width={1024} /></span>
                 <span>JURO</span>
               </div>
               <button aria-label={t.close} className={styles.closeButton} onClick={() => setOpen(false)} type="button"><X aria-hidden="true" size={22} /></button>
@@ -200,16 +203,21 @@ export function SiteFooter({ locale }: { locale: Locale }) {
       <div className={styles.footerTop}>
         <div className={styles.footerBrand}>
           <Link aria-label="JURO" className={brandStyles.footerLogo} href={`/${locale}`}>
-            <span className={brandStyles.footerMarkFrame}><Image alt="" className={brandStyles.footerMark} height={313} src="/juro-logo-light.avif" unoptimized width={320} /></span>
+            <span className={brandStyles.footerMarkFrame}><Image alt="" className={brandStyles.footerMark} height={1024} src="/juro-mark-light.png" unoptimized width={1024} /></span>
             <span>JURO</span>
           </Link>
           <p>{t.description}</p>
         </div>
         <div className={styles.footerColumn}><strong>{t.productLabel}</strong>{productLinks.map(([label, href]) => href.startsWith("/") ? <Link href={href} key={href}>{label}</Link> : <a href={href} key={href}>{label}</a>)}</div>
-        <div className={styles.footerColumn}><strong>{t.companyLabel}</strong><Link href={`/${locale}/trust`}>Trust Center</Link><Link href={`/${locale}/video`}>{t.video}</Link><Link href={`/${locale}/knowledge/contract-review-preparation`}>{t.knowledge}</Link><a href="mailto:muzaffarbekmurodoff@gmail.com">{t.contact}</a></div>
+        <div className={styles.footerColumn}><strong>{t.companyLabel}</strong><Link href={`/${locale}/trust`}>Trust Center</Link><Link href={`/${locale}/video`}>{t.video}</Link><Link href={`/${locale}/knowledge/contract-review-preparation`}>{t.knowledge}</Link></div>
         <div className={styles.footerColumn}><strong>{t.legalLabel}</strong><Link href={`/${locale}/legal`}>{t.legal}</Link><Link href={`/${locale}/privacy-policy`}>{t.privacy}</Link><Link href={`/${locale}/terms`}>{t.terms}</Link><Link href={`/${locale}/personal-data-processing`}>{t.data}</Link><Link href={`/${locale}/ai-rules`}>{t.aiRules}</Link></div>
       </div>
-      <div className={styles.footerBottom}><span>© {year} JURO</span><p>{t.note}</p><span className={styles.footerLanguages}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={`/${target}`} key={target}>{languageLabels[target]}</Link>)}</span></div>
+      <address aria-label={t.contacts} className={footerContactStyles.contacts}>
+        <span><MapPin aria-hidden="true" size={16} />{t.address}</span>
+        <a href="tel:+998974022292"><Phone aria-hidden="true" size={16} />+998974022292</a>
+        <a href="mailto:admin@juro.uz"><Mail aria-hidden="true" size={16} />admin@juro.uz</a>
+      </address>
+      <div className={`${styles.footerBottom} ${footerContactStyles.bottom}`}><span>© {year} JURO</span><p>{t.note}</p><span className={styles.footerLanguages}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={`/${target}`} key={target}>{languageLabels[target]}</Link>)}</span></div>
     </footer>
   );
 }
