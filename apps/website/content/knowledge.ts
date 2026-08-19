@@ -1,4 +1,4 @@
-import type { Language } from "./types";
+import type { PublicLanguage } from "./types";
 
 export const knowledgeSlugs = [
   "contract-review-preparation",
@@ -23,7 +23,7 @@ export type KnowledgeArticle = {
   disclaimer: string;
 };
 
-export const knowledgeArticles: Record<Language, Record<KnowledgeSlug, KnowledgeArticle>> = {
+export const knowledgeArticles: Record<PublicLanguage, Record<KnowledgeSlug, KnowledgeArticle>> = {
   ru: {
     "contract-review-preparation": {
       title: "Как подготовиться к проверке договора",
@@ -198,6 +198,62 @@ export const knowledgeArticles: Record<Language, Record<KnowledgeSlug, Knowledge
         },
       ],
       disclaimer: "Ro‘yxat to‘liq emas. Hujjat oqibatlariga shubha bo‘lsa, imzolash yoki yuborishdan oldin individual maslahat olish xavfsizroq.",
+    },
+  },
+  en: {
+    "contract-review-preparation": {
+      title: "How to prepare for a contract review",
+      description: "A practical checklist of materials and questions that helps make a contract review faster and more precise.",
+      category: "Contracts",
+      author: "JURO Editorial Team",
+      reviewer: "JURO Legal Editorial Team",
+      updatedAt: "26 July 2026",
+      currentAsOf: "26 July 2026",
+      sources: [{ title: "LexUZ — National database of legislation of the Republic of Uzbekistan", url: "https://lex.uz/" }],
+      relatedTool: { label: "Review a document in JURO", path: "/document-review" },
+      intro: "A contract review does not begin by searching for ‘risky words’; it begins by understanding the deal. The fuller the context, the easier it is to compare the text with the actual agreement and spot omissions.",
+      sections: [
+        { heading: "Collect the complete set", paragraphs: ["Use the latest version of the contract and every document it refers to. Annexes, specifications, terms of reference and correspondence can change the meaning of obligations as much as the main text."], points: ["the latest editable version and PDF copy", "annexes, specifications and schedules", "material correspondence and commercial proposal", "an earlier version with comments, if available"] },
+        { heading: "Record the purpose and boundaries", paragraphs: ["Briefly state what each party must do, by when and for what amount. Separately mark terms without which the deal loses its value for you."], points: ["subject matter and expected outcome", "price, currency and payment procedure", "deadlines and acceptance criteria", "liability and termination procedure"] },
+        { heading: "Prepare a list of questions", paragraphs: ["Frame questions through consequences: what happens if there is a delay, who pays additional costs, and whether work can be assigned to a third party. This turns a review into a clear negotiation plan."] },
+      ],
+      disclaimer: "This material is informational and does not replace individual legal advice. A significant, urgent or disputed transaction should be reviewed by a qualified legal professional.",
+    },
+    "facts-for-action-plan": {
+      title: "What facts are needed for an action plan",
+      description: "How to separate confirmed circumstances from assumptions and build a verifiable timeline.",
+      category: "Action plans",
+      author: "JURO Editorial Team",
+      reviewer: "JURO Legal Editorial Team",
+      updatedAt: "26 July 2026",
+      currentAsOf: "26 July 2026",
+      sources: [{ title: "LexUZ — National database of legislation of the Republic of Uzbekistan", url: "https://lex.uz/" }],
+      relatedTool: { label: "Prepare an action plan in JURO", path: "/action-plan" },
+      intro: "A good plan relies on facts that can be verified. An assumption can also matter, but it should be marked as unconfirmed and turned into a separate question or task.",
+      sections: [
+        { heading: "Start with the timeline", paragraphs: ["List events by date: what happened, who took part and which document confirms it. If the precise date is unknown, state a range instead of turning a guess into a fact."], points: ["date or period", "people involved", "action or inaction", "related document, message or payment"] },
+        { heading: "Separate facts from positions", paragraphs: ["‘The counterparty breached the contract’ is an assessment. ‘Payment was due on 5 July’ and ‘payment had not arrived by 12 July’ are verifiable circumstances from which conclusions can be drawn."] },
+        { heading: "Check deadlines and gaps", paragraphs: ["Collect known deadlines, actions already taken and missing information separately. Uncertainty should be visible in the plan, not hidden inside a confident statement."], points: ["what needs to happen immediately", "what depends on the other party’s response", "which document must be obtained", "when a live professional is needed"] },
+      ],
+      disclaimer: "An automatically prepared plan does not guarantee a legal outcome. The user must check the facts, deadlines and applicability of every step.",
+    },
+    "when-lawyer-review-is-needed": {
+      title: "When a document needs a legal professional’s review",
+      description: "Signals that automated review is not enough and professional analysis is needed.",
+      category: "Legal review",
+      author: "JURO Editorial Team",
+      reviewer: "JURO Legal Editorial Team",
+      updatedAt: "26 July 2026",
+      currentAsOf: "26 July 2026",
+      sources: [{ title: "LexUZ — National database of legislation of the Republic of Uzbekistan", url: "https://lex.uz/" }],
+      relatedTool: { label: "Hand a document to a legal professional", path: "/consultations" },
+      intro: "AI and structured templates are useful for an initial review, but they do not replace professional judgment where an error can cause material loss or irreversible consequences.",
+      sections: [
+        { heading: "A high cost of error", paragraphs: ["A live professional’s review is particularly important for real estate, investments, major obligations, security, guarantees, intellectual property and corporate control."] },
+        { heading: "Dispute, urgency or unequal terms", paragraphs: ["Bring in a professional if a dispute has started, a deadline is expiring, the other party refuses to discuss terms, or the document contains unusual restrictions and material penalties."], points: ["a claim or court procedure is under way", "there is a short procedural or contractual deadline", "the text is governed by another country’s law", "multiple documents contradict one another"] },
+        { heading: "How to prepare the handoff", paragraphs: ["Give the professional not only the file, but also a short purpose, confirmed facts, deadlines, disputed clauses and questions. The consultation can then begin with analysis rather than rebuilding the context."] },
+      ],
+      disclaimer: "This list is not exhaustive. If you are unsure about a document’s consequences, it is safer to obtain individual advice before signing or sending it.",
     },
   },
 };

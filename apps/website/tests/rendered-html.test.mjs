@@ -37,6 +37,19 @@ test("renders the production landing with localized canonical metadata and real 
   }
 });
 
+test("renders the complete English public landing and routes product actions to an available product locale", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(new Request("http://localhost/en", { headers: { accept: "text/html" } }), runtime, context);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /<link rel="canonical" href="https:\/\/juro\.uz\/en"/);
+  assert.match(html, /Tell us/);
+  assert.match(html, /Get a clear next step/);
+  assert.match(html, /https:\/\/app\.juro\.uz\/register\?lang=ru&amp;accountType=individual/);
+  for (const route of ["/en/video", "/en/lawyers", "/en/legal", "/en/trust"]) assert.match(html, new RegExp(`href="${route}"`));
+});
+
 test("removed landing test routes return not found", async () => {
   const worker = await createWorker();
   for (const route of ["/landing-test", "/lending-test"]) {
@@ -68,10 +81,10 @@ test("serves all RU and UZ legal pages without authentication", async () => {
   }
 });
 
-test("serves all knowledge articles in both languages", async () => {
+test("serves all knowledge articles in every public language", async () => {
   const worker = await createWorker();
   const slugs = ["contract-review-preparation", "facts-for-action-plan", "when-lawyer-review-is-needed"];
-  for (const locale of ["ru", "uz"]) for (const slug of slugs) {
+  for (const locale of ["ru", "uz", "en"]) for (const slug of slugs) {
     const route = `/${locale}/knowledge/${slug}`;
     const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(response.status, 200, route);
@@ -82,9 +95,9 @@ test("serves all knowledge articles in both languages", async () => {
   }
 });
 
-test("serves the bilingual Trust Center with canonical metadata", async () => {
+test("serves the Trust Center in every public language", async () => {
   const worker = await createWorker();
-  for (const locale of ["ru", "uz"]) {
+  for (const locale of ["ru", "uz", "en"]) {
     const route = `/${locale}/trust`;
     const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(response.status, 200, route);
@@ -123,7 +136,7 @@ test("serves the English investor video from its dedicated public route", async 
 
 test("every discoverable internal public link resolves", async () => {
   const worker = await createWorker();
-  const queue = ["/ru", "/uz"];
+  const queue = ["/ru", "/uz", "/en"];
   const visited = new Set();
 
   while (queue.length > 0) {
@@ -144,7 +157,7 @@ test("every discoverable internal public link resolves", async () => {
       const raw = match[1].replaceAll("&amp;", "&");
       if (!raw.startsWith("/")) continue;
       const url = new URL(raw, "http://localhost");
-      if (!url.pathname.startsWith("/ru") && !url.pathname.startsWith("/uz")) continue;
+      if (!url.pathname.startsWith("/ru") && !url.pathname.startsWith("/uz") && !url.pathname.startsWith("/en")) continue;
       if (!visited.has(url.pathname)) queue.push(url.pathname);
     }
   }
@@ -152,9 +165,22 @@ test("every discoverable internal public link resolves", async () => {
   assert.ok(visited.size >= 50, `Expected a full public graph, visited ${visited.size} routes`);
 });
 
+test("serves an English legal guide for every published document without claiming a legal translation", async () => {
+  const worker = await createWorker();
+  const slugs = ["legal-information", "user-agreement", "public-offer", "privacy-policy", "personal-data-processing-policy", "personal-data-consent", "cross-border-ai-consent", "cookie-policy", "payments-subscriptions-refunds", "ai-use-policy", "marketplace-client-rules", "lawyer-platform-terms", "document-storage-rules", "electronic-communications-consent", "marketing-consent", "acceptable-use-policy", "complaints-disputes", "data-subject-request-form"];
+  for (const slug of slugs) {
+    const response = await worker.fetch(new Request(`http://localhost/en/legal/${slug}`, { headers: { accept: "text/html" } }), runtime, context);
+    assert.equal(response.status, 200, slug);
+    const html = await response.text();
+    assert.match(html, /not an English legal translation/i, slug);
+    assert.match(html, new RegExp(`href="/ru/legal/${slug}"`), slug);
+    assert.match(html, new RegExp(`href="/uz/legal/${slug}"`), slug);
+  }
+});
+
 test("renders the correct document language on each public lawyer catalogue locale", async () => {
   const worker = await createWorker();
-  for (const locale of ["ru", "uz"]) {
+  for (const locale of ["ru", "uz", "en"]) {
     const response = await worker.fetch(
       new Request(`http://localhost/${locale}/lawyers`, { headers: { accept: "text/html" } }),
       runtime,

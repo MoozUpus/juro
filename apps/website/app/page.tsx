@@ -10,6 +10,7 @@ export const metadata: Metadata = {
     languages: {
       ru: "https://juro.uz/ru",
       uz: "https://juro.uz/uz",
+      en: "https://juro.uz/en",
       "x-default": "https://juro.uz/ru",
     },
   },
@@ -19,7 +20,7 @@ export const metadata: Metadata = {
     url: "https://juro.uz/ru",
     siteName: "JURO",
     locale: "ru_RU",
-    alternateLocale: ["uz_UZ"],
+    alternateLocale: ["uz_UZ", "en_US"],
     type: "website",
     images: [{ url: "/juro-og.png", width: 1681, height: 909, alt: "JURO — AI и живой юрист в одном пространстве" }],
   },
