@@ -28,6 +28,7 @@ import motionStyles from "./juro-motion.module.css";
 import editorialStyles from "./juro-editorial.module.css";
 import decisionStyles from "./juro-decision.module.css";
 import laptopStyles from "./juro-laptop.module.css";
+import processStyles from "./scenario-process.module.css";
 
 const copy = {
   ru: {
@@ -47,6 +48,7 @@ const copy = {
       source: "Правовое основание",
       risk: "Риск и срок",
       action: "Следующий шаг",
+      example: "Обезличенный пример",
     },
     scenarios: [
       {
@@ -181,6 +183,7 @@ const copy = {
       source: "Huquqiy asos",
       risk: "Xavf va muddat",
       action: "Keyingi qadam",
+      example: "Shaxssizlashtirilgan misol",
     },
     scenarios: [
       { tab: "Maosh", question: "Ish beruvchi ikkinchi oy maoshni kechiktiryapti. Nima qilay?", facts: "To‘lov sanasi, mehnat shartnomasi, hisob-kitob", source: "Mehnat huquqi · rasmiy manba", risk: "Dalillarni saqlash va murojaat muddatini tekshirish kerak", action: "Qarzni qayd etish → murojaat tayyorlash" },
@@ -222,6 +225,7 @@ const englishCopy = {
     source: "Legal basis",
     risk: "Risk and deadline",
     action: "Next step",
+    example: "An anonymised example",
   },
   scenarios: [
     { tab: "Salary", question: "My employer has delayed my salary for a second month. What should I do?", facts: "Pay date, employment agreement, accruals", source: "Employment law · official source", risk: "Keep evidence and check the deadline for an application", action: "Record the debt → prepare an application" },
@@ -250,10 +254,12 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
   const content = language === "ru" ? ru : language === "uz" ? uz : en;
   const platformLocale = language === "en" ? "ru" : language;
   const [scenario, setScenario] = useState(0);
+  const [processStep, setProcessStep] = useState(0);
   const [clause, setClause] = useState(0);
   const scenarioInteracted = useRef(false);
   const clauseInteracted = useRef(false);
   const activeScenario = t.scenarios[scenario];
+  const processLabels = [t.hero.facts, t.hero.risk, t.hero.source, t.hero.action];
   const activeClause = t.document.clauses[clause];
   const register = `https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`;
 
@@ -301,11 +307,20 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => {
       if (!scenarioInteracted.current && !document.hidden) {
+        setProcessStep(0);
         setScenario((current) => (current + 1) % t.scenarios.length);
       }
     }, 5200);
     return () => window.clearInterval(timer);
   }, [t.scenarios.length]);
+
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setProcessStep((current) => (current + 1) % processLabels.length);
+    }, 1300);
+    return () => window.clearInterval(timer);
+  }, [processLabels.length]);
 
   useEffect(() => {
     const updateClause = (event: Event) => {
@@ -319,6 +334,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
 
   const selectScenario = (index: number) => {
     scenarioInteracted.current = true;
+    setProcessStep(0);
     setScenario(index);
   };
 
@@ -372,15 +388,16 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
               <div aria-label={language === "ru" ? "Примеры юридических ситуаций" : language === "uz" ? "Yuridik vaziyatlar misollari" : "Examples of legal situations"} className={styles.scenarioTabs} role="tablist">
                 {t.scenarios.map((item, index) => <button aria-controls="scenario-panel" aria-selected={scenario === index} id={`scenario-tab-${index}`} key={item.tab} onClick={() => selectScenario(index)} onKeyDown={(event) => moveTab(event, index, t.scenarios.length, "scenario-tab", selectScenario)} role="tab" tabIndex={scenario === index ? 0 : -1} type="button">{item.tab}</button>)}
               </div>
-              <div aria-labelledby={`scenario-tab-${scenario}`} aria-live="polite" className={`${styles.caseMap} ${motionStyles.caseMapMotion}`} id="scenario-panel" key={scenario} role="tabpanel">
+              <div aria-labelledby={`scenario-tab-${scenario}`} className={`${styles.caseMap} ${motionStyles.caseMapMotion}`} id="scenario-panel" key={scenario} role="tabpanel">
                 <div className={`${styles.caseInput} ${motionStyles.caseInputMotion}`}><span>{t.hero.input}</span><p>{activeScenario.question}</p></div>
                 <div aria-hidden="true" className={`${styles.caseThread} ${motionStyles.caseThreadMotion}`}><i /><i /><i /><i /></div>
-                <div className={`${styles.caseOutput} ${motionStyles.caseOutputMotion}`}>
-                  <span className={styles.outputLabel}>{t.hero.output}</span>
-                  <article><Fingerprint aria-hidden="true" size={18} /><div><small>{t.hero.facts}</small><strong>{activeScenario.facts}</strong></div></article>
-                  <article><Scale aria-hidden="true" size={18} /><div><small>{t.hero.source}</small><strong>{activeScenario.source}</strong></div></article>
-                  <article><Clock3 aria-hidden="true" size={18} /><div><small>{t.hero.risk}</small><strong>{activeScenario.risk}</strong></div></article>
-                  <article className={styles.actionResult}><ArrowDownRight aria-hidden="true" size={18} /><div><small>{t.hero.action}</small><strong>{activeScenario.action}</strong></div></article>
+                <div className={`${styles.caseOutput} ${motionStyles.caseOutputMotion} ${processStyles.output}`}>
+                  <div className={processStyles.heading}><span className={styles.outputLabel}>{t.hero.output}</span><span>{t.hero.example}</span></div>
+                  <ol aria-label={t.hero.example} className={processStyles.flow}>{processLabels.map((label, index) => <li data-current={processStep === index || undefined} key={label}>{label}</li>)}</ol>
+                  <article data-complete={processStep > 0 || undefined} data-current={processStep === 0 || undefined}><Fingerprint aria-hidden="true" size={18} /><div><small>{t.hero.facts}</small><strong>{activeScenario.facts}</strong></div></article>
+                  <article data-complete={processStep > 1 || undefined} data-current={processStep === 1 || undefined}><Clock3 aria-hidden="true" size={18} /><div><small>{t.hero.risk}</small><strong>{activeScenario.risk}</strong></div></article>
+                  <article data-complete={processStep > 2 || undefined} data-current={processStep === 2 || undefined}><Scale aria-hidden="true" size={18} /><div><small>{t.hero.source}</small><strong>{activeScenario.source}</strong></div></article>
+                  <article className={styles.actionResult} data-current={processStep === 3 || undefined}><ArrowDownRight aria-hidden="true" size={18} /><div><small>{t.hero.action}</small><strong>{activeScenario.action}</strong></div></article>
                 </div>
               </div>
             </div>

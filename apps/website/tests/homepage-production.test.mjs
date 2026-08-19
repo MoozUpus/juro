@@ -48,7 +48,6 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.match(homepage, /onKeyDown=\{\(event\) => moveTab/);
   assert.match(homepage, /role="tabpanel"/);
   assert.match(homepage, /tabIndex=\{scenario === index \? 0 : -1\}/);
-  assert.match(homepage, /aria-live="polite"/);
   assert.match(chrome, /aria-modal="true"/);
   assert.match(chrome, /event\.key === "Escape"/);
   assert.match(chrome, /trigger\?\.focus\(\)/);
@@ -127,13 +126,31 @@ test("laptop layouts prevent large headline and product-grid clipping", () => {
   assert.match(laptopStyles, /min-width: 0/);
 });
 
-test("brand mark crops the baked-in miniature label and keeps one intentional wordmark", () => {
+test("brand mark uses a dedicated symbol asset and keeps one intentional wordmark", () => {
   assert.match(chrome, /brandStyles\.markFrame/);
   assert.match(chrome, /brandStyles\.mobileMarkFrame/);
   assert.match(chrome, /brandStyles\.footerMarkFrame/);
   assert.match(chrome, /brandStyles\.wordmark\}>JURO/);
+  assert.match(chrome, /juro-mark-light\.png/);
+  assert.match(chrome, /juro-mark\.png/);
+  assert.doesNotMatch(chrome, /juro-logo-light\.avif|juro-logo-primary\.avif/);
   assert.match(fs.readFileSync("app\/components\/public\/brand-lockup.module.css", "utf8"), /\.markFrame[\s\S]*?overflow: hidden/);
   assert.match(fs.readFileSync("app\/components\/public\/brand-lockup.module.css", "utf8"), /\.wordmark[\s\S]*?font-size: 1\.38rem/);
+});
+
+test("hero demonstrates a short, anonymised question-to-action decision flow", () => {
+  assert.match(homepage, /const \[processStep, setProcessStep\]/);
+  assert.match(homepage, /\[t\.hero\.facts, t\.hero\.risk, t\.hero\.source, t\.hero\.action\]/);
+  assert.match(homepage, /activeScenario\.facts[\s\S]*?activeScenario\.risk[\s\S]*?activeScenario\.source[\s\S]*?activeScenario\.action/);
+  assert.match(homepage, /Обезличенный пример/);
+  assert.match(fs.readFileSync("app\/components\/public\/scenario-process.module.css", "utf8"), /prefers-reduced-motion/);
+});
+
+test("footer publishes the requested contact details and reveal states stay inside the viewport", () => {
+  for (const value of ["Ташкент, Узбекистан", "+998974022292", "admin@juro.uz"]) assert.match(chrome, new RegExp(value.replaceAll("+", "\\+")));
+  assert.match(chrome, /mailto:admin@juro\.uz/);
+  assert.match(chrome, /tel:\+998974022292/);
+  assert.doesNotMatch(motionStyles, /translate3d\(-48px|translate3d\(48px, 0, 0\)/);
 });
 
 test("English marketplace presentation localizes published taxonomy and tolerates missing external photos", () => {
