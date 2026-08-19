@@ -56,8 +56,6 @@ const primaryNav = [
 
 const documentNav = [
   ["documents", Files, "Мои документы", "Mening hujjatlarim"],
-  ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"],
-  ["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"],
   ["document-review?mode=compare", Files, "Сравнить версии", "Versiyalarni solishtirish"],
 ] as const;
 
@@ -126,7 +124,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
     if (moreHasActiveRoute) setMoreOpen(true);
   }, [moreHasActiveRoute]);
   useEffect(() => {
-    const query = window.matchMedia("(max-width: 800px)");
+    const query = window.matchMedia("(max-width: 900px)");
     const sync = () => setMobile(query.matches);
     sync();
     query.addEventListener("change", sync);

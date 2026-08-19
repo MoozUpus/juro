@@ -11,6 +11,7 @@ import { localize, type BuilderLanguage } from "../../../lib/document-builder/re
 import { builderNavigationPaths, type BuilderNavigationPaths } from "../../../lib/platform/builder-paths";
 
 const LANGUAGE_KEY = "juro-builder-language";
+const TEMPLATE_PAGE_SIZE = 12;
 
 export function LanguageToggle({ language, onChange }: { language: BuilderLanguage; onChange: (language: BuilderLanguage) => void }) {
   return <div className="dbt-language-toggle" role="group" aria-label="Til / Язык">
@@ -45,7 +46,7 @@ export function DocumentLibraryClient({ categories, documents, activeCategory, s
   const [language, setLanguage] = useState<BuilderLanguage>(paths.locale ?? "ru");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<"all" | "verified" | "beta">("all");
-  const [limit, setLimit] = useState(48);
+  const [limit, setLimit] = useState(TEMPLATE_PAGE_SIZE);
   useEffect(() => { if (paths.locale) setLanguage(paths.locale); }, [paths.locale]);
   const changeLanguage = (next: BuilderLanguage) => {
     setLanguage(next);
@@ -76,8 +77,8 @@ export function DocumentLibraryClient({ categories, documents, activeCategory, s
       return <Link href={paths.category(category.slug)} key={category.slug}><span>{category.code}</span><div><h2>{localize(category.title, language)}</h2><p>{localize(category.description, language)}</p><small>{count} {language === "uz" ? "shablon" : "шаблонов"}</small></div><ArrowRight size={20}/></Link>;
     })}</nav>}
     {activeCategory && <div className="dbt-library-breadcrumb"><Link href={paths.library}>{language === "uz" ? "Barcha toifalar" : "Все категории"}</Link><span>/</span><b>{localize(activeCategory.title, language)}</b></div>}
-    <div className="dbt-library-tools"><label><Search size={18}/><input value={search} onChange={(event) => { setSearch(event.target.value); setLimit(48); }} placeholder={language === "uz" ? "Nomi yoki kodi bo‘yicha qidirish" : "Поиск по названию или коду"}/></label><select value={status} onChange={(event) => { setStatus(event.target.value as typeof status); setLimit(48); }} aria-label={language === "uz" ? "Holat" : "Статус"}><option value="all">{language === "uz" ? "Barcha holatlar" : "Все статусы"}</option><option value="verified">{language === "uz" ? "Tekshirilgan" : "Проверены"}</option><option value="beta">{language === "uz" ? "Beta · tekshiruvda" : "Бета · на проверке"}</option></select></div>
+    <div className="dbt-library-tools"><label><Search size={18}/><input value={search} onChange={(event) => { setSearch(event.target.value); setLimit(TEMPLATE_PAGE_SIZE); }} placeholder={language === "uz" ? "Nomi yoki kodi bo‘yicha qidirish" : "Поиск по названию или коду"}/></label><select value={status} onChange={(event) => { setStatus(event.target.value as typeof status); setLimit(TEMPLATE_PAGE_SIZE); }} aria-label={language === "uz" ? "Holat" : "Статус"}><option value="all">{language === "uz" ? "Barcha holatlar" : "Все статусы"}</option><option value="verified">{language === "uz" ? "Tekshirilgan" : "Проверены"}</option><option value="beta">{language === "uz" ? "Beta · tekshiruvda" : "Бета · на проверке"}</option></select></div>
     {activeCategory && publishedCount > 0 && <section className="dbt-popular-section"><h2>{language === "uz" ? "Mashhur hujjatlar" : "Популярные документы"}</h2><div className="dbt-template-grid">{filtered.filter((document) => document.popular).map((document) => <TemplateCard document={document} language={language} paths={paths} key={`popular-${document.code}`}/>)}</div></section>}
-    <section className="dbt-all-templates"><div className="dbt-section-heading"><h2>{activeCategory ? (language === "uz" ? "Barcha hujjatlar" : "Все документы") : (language === "uz" ? "Reyestr" : "Реестр")}</h2><span>{filtered.length}</span></div><div className="dbt-template-grid">{visible.map((document) => <TemplateCard document={document} language={language} paths={paths} key={document.code}/>)}</div>{visible.length < filtered.length && <button type="button" className="dbt-load-more" onClick={() => setLimit((current) => current + 48)}>{language === "uz" ? "Yana ko‘rsatish" : "Показать ещё"}</button>}{filtered.length === 0 && <div className="dbt-library-empty">{language === "uz" ? "So‘rov bo‘yicha hujjatlar topilmadi." : "По вашему запросу документы не найдены."}</div>}</section>
+    <section className="dbt-all-templates"><div className="dbt-section-heading"><h2>{activeCategory ? (language === "uz" ? "Barcha hujjatlar" : "Все документы") : (language === "uz" ? "Reyestr" : "Реестр")}</h2><span aria-live="polite">{visible.length} / {filtered.length}</span></div><div className="dbt-template-grid">{visible.map((document) => <TemplateCard document={document} language={language} paths={paths} key={document.code}/>)}</div>{visible.length < filtered.length && <button type="button" className="dbt-load-more" onClick={() => setLimit((current) => current + TEMPLATE_PAGE_SIZE)}>{language === "uz" ? `Yana ${Math.min(TEMPLATE_PAGE_SIZE, filtered.length - visible.length)} ta ko‘rsatish` : `Показать ещё ${Math.min(TEMPLATE_PAGE_SIZE, filtered.length - visible.length)}`}</button>}{filtered.length === 0 && <div className="dbt-library-empty">{language === "uz" ? "So‘rov bo‘yicha hujjatlar topilmadi." : "По вашему запросу документы не найдены."}</div>}</section>
   </div>;
 }
