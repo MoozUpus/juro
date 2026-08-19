@@ -164,6 +164,7 @@ test("footer publishes the requested contact details and reveal states stay insi
   assert.match(chrome, /footerRailStyles\.brandCta/);
   assert.match(footerRailStyles, /grid-template-columns: repeat\(3, max-content\)/);
   assert.match(footerRailStyles, /@media \(max-width: 620px\)/);
+  assert.match(footerRailStyles, /safe-area-inset-top/);
   assert.match(motionDirector, /footerVisible/);
   assert.doesNotMatch(motionStyles, /translate3d\(-48px|translate3d\(48px, 0, 0\)/);
 });

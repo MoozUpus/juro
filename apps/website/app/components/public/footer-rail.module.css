@@ -1,7 +1,7 @@
 .footer.footer {
   isolation: isolate;
   overflow: clip;
-  padding-block: clamp(3.25rem, 5.5vw, 5.4rem) 1.35rem;
+  padding-block: max(clamp(3.25rem, 5.5vw, 5.4rem), 6rem) 1.35rem;
   position: relative;
 }
 
@@ -110,7 +110,7 @@
 
 @media (max-width: 620px) {
   .footer.footer {
-    padding-block: 3.25rem 1.25rem;
+    padding-block: calc(70px + env(safe-area-inset-top, 0px) + 1rem) 1.25rem;
   }
 
   .top.top {
