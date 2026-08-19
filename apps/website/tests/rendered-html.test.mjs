@@ -58,6 +58,23 @@ test("removed landing test routes return not found", async () => {
   }
 });
 
+test("not-found state keeps the visitor in the requested public language", async () => {
+  const worker = await createWorker();
+  const expectations = {
+    ru: ["Неверный адрес не должен обрывать путь", 'href="/ru"'],
+    uz: ["Noto‘g‘ri manzil yo‘lingizni to‘xtatmasin", 'href="/uz"'],
+    en: ["A wrong route should not stop the right next step", 'href="/en"'],
+  };
+  for (const [locale, [message, href]] of Object.entries(expectations)) {
+    const response = await worker.fetch(new Request(`http://localhost/${locale}/missing-route`, { headers: { accept: "text/html" } }), runtime, context);
+    assert.equal(response.status, 404, locale);
+    const html = await response.text();
+    assert.match(html, new RegExp(`<html lang="${locale}"`), locale);
+    assert.match(html, new RegExp(message), locale);
+    assert.match(html, new RegExp(href), locale);
+  }
+});
+
 test("serves all RU and UZ legal pages without authentication", async () => {
   const worker = await createWorker();
   const routes = {

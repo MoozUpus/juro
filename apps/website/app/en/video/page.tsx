@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { englishInvestorVideo } from "../../investor-video";
 import { SiteFooter, SiteHeader } from "../../components/public/SiteChrome";
 import styles from "../../[locale]/video/video.module.css";

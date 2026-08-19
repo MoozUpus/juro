@@ -16,7 +16,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { ru } from "../../../content/ru";
 import { uz } from "../../../content/uz";
 import { en } from "../../../content/en";
@@ -257,20 +257,44 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
   const activeClause = t.document.clauses[clause];
   const register = `https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`;
 
+  const scrollToSection = (targetId: string) => {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    const top = target.getBoundingClientRect().top + window.scrollY - 88;
+    const root = document.documentElement;
+    const previousScrollBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = "auto";
+    window.scrollTo({ top: Math.max(0, top), behavior: "auto" });
+    root.style.scrollBehavior = previousScrollBehavior;
+  };
+
+  const navigateToSection = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const rawHash = event.currentTarget.hash.slice(1);
+    if (!rawHash) return;
+    let targetId: string;
+    try { targetId = decodeURIComponent(rawHash); } catch { return; }
+    if (!document.getElementById(targetId)) return;
+    event.preventDefault();
+    if (window.location.hash !== `#${rawHash}`) window.history.pushState(null, "", `#${rawHash}`);
+    scrollToSection(targetId);
+  };
+
   useEffect(() => {
     const scrollToHash = () => {
       const hash = window.location.hash.slice(1);
       if (!hash) return;
       let targetId: string;
       try { targetId = decodeURIComponent(hash); } catch { return; }
-      const target = document.getElementById(targetId);
-      if (!target) return;
-      const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      requestAnimationFrame(() => target.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "start" }));
+      scrollToSection(targetId);
     };
     scrollToHash();
     window.addEventListener("hashchange", scrollToHash);
-    return () => window.removeEventListener("hashchange", scrollToHash);
+    window.addEventListener("popstate", scrollToHash);
+    return () => {
+      window.removeEventListener("hashchange", scrollToHash);
+      window.removeEventListener("popstate", scrollToHash);
+    };
   }, []);
 
   useEffect(() => {
@@ -324,9 +348,9 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
   return (
     <div className={`${styles.page} ${motionStyles.motionRoot}`} data-juro-motion-root lang={language}>
       <JuroMotionDirector />
-      <SiteHeader locale={language} tone="dark" />
+      <SiteHeader locale={language} onSectionNavigation={navigateToSection} tone="dark" />
       <nav aria-label={language === "ru" ? "Разделы истории JURO" : language === "uz" ? "JURO hikoyasi bo‘limlari" : "JURO story sections"} className={motionStyles.chapterNav}>
-        {t.chapters.map(([label, id], index) => <a data-chapter-link href={`#${id}`} key={id}><span>0{index + 1}</span><strong>{label}</strong></a>)}
+        {t.chapters.map(([label, id], index) => <a data-chapter-link href={`#${id}`} key={id} onClick={navigateToSection}><span>0{index + 1}</span><strong>{label}</strong></a>)}
       </nav>
       <main id="main-content">
         <section className={`${styles.hero} ${motionStyles.heroMotion}`} data-motion-hero>
@@ -338,7 +362,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
               <p className={styles.heroLead}>{t.hero.lead}</p>
               <div className={styles.heroActions}>
                 <a className={styles.buttonGold} href={register}>{t.hero.primary}<ArrowRight aria-hidden="true" size={18} /></a>
-                <a className={styles.buttonGhost} href="#product"><Play aria-hidden="true" size={16} />{t.hero.secondary}</a>
+                <a className={styles.buttonGhost} href="#product" onClick={navigateToSection}><Play aria-hidden="true" size={16} />{t.hero.secondary}</a>
               </div>
               <p className={styles.heroNote}>{t.hero.note}</p>
               <ul className={styles.heroProof}>{t.proof.map((item) => <li key={item}><Check aria-hidden="true" size={14} />{item}</li>)}</ul>

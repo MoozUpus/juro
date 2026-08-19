@@ -21,7 +21,7 @@ html {
 }
 
 body {
-  min-width: 320px;
+  min-width: 0;
   margin: 0;
   background: #f8f6f2;
   color: #102333;
