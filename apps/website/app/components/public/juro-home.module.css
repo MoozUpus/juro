@@ -6,6 +6,9 @@
 @media(prefers-contrast:more){.heroLead,.heroNote,.sectionIntro>p:last-child,.documentIntro>p:last-child,.continuityCopy>p:last-child,.handoffCopy>p,.trustSection header>p:last-child{color:currentColor}.page a,.page button{outline-offset:3px}}
 
 @media (max-width: 720px) {
+  .eyebrow,
+  .eyebrowLight,
+  .eyebrowDark,
   .sceneTop,
   .sceneTop small,
   .caseInput span,
@@ -15,9 +18,12 @@
   .investorPanel > span,
   .audienceList li,
   .findingPanel > span,
+  .findingContent small,
   .clauseTabs button,
   .clauseTabs button small,
   .continuityVisual li span,
+  .caseCard small,
+  .nextCard span,
   .dossier > div,
   .dossier p i,
   .trustGrid article > span,
