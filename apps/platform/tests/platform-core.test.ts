@@ -69,10 +69,11 @@ test("lawyer professional profile accepts only bounded self-declared directory d
     readFile(new URL("../drizzle/0058_innocent_ben_grimm.sql", import.meta.url), "utf8"),
   ]);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
-  for (const environment of [undefined, "development", "production", "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
+  assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "development", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
+  for (const environment of [undefined, "production", "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "false", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true" }), false);
-  assert.match(route, /account_type='lawyer'/); assert.match(route, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_reapproval_requested/); assert.match(route, /meta\.changes/); assert.match(route, /WHERE EXISTS/);
+  assert.match(route, /account_type='lawyer'/); assert.match(route, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_draft_saved/); assert.match(route, /meta\.changes/); assert.match(route, /WHERE EXISTS/);
   assert.match(client, /Статус адвоката «подтверждён» нельзя установить самостоятельно/);
   for (const filter of ["specialtyFilter", "languageFilter", "minimumExperience", "minimumRating", "availabilityFilter", "advocateFilter", "firmFilter"]) assert.match(handoffClient, new RegExp(filter));
   assert.match(migration, /lawyer_profiles_directory_values_insert/); assert.match(migration, /lawyer_profiles_directory_filter_idx/);
@@ -268,7 +269,7 @@ test("OTP hashes are deterministic and do not expose the code", async () => {
 
 test("session cookies are HttpOnly, secure and revocable", async () => {
   const source=await readFile(new URL("../lib/auth/session.ts",import.meta.url),"utf8");
-  assert.match(source,/HttpOnly/);assert.match(source,/Secure/);assert.match(source,/SameSite=Lax/);assert.match(source,/Max-Age=0/);assert.doesNotMatch(source,/Domain=/);
+  assert.match(source,/HttpOnly/);assert.match(source,/Secure/);assert.match(source,/SameSite=Lax/);assert.match(source,/Max-Age=0/);assert.match(source,/domain\?: string/);
 });
 
 test("application shell refreshes due local sessions through the protected periodic-rotation route", async () => {
@@ -298,7 +299,7 @@ test("application shell refreshes due local sessions through the protected perio
   assert.match(route, /rotatePeriodicSessionToken/);
   assert.match(
     route,
-    /sessionCookieUntil\(result\.token, result\.expiresAt, now\)/,
+    /sessionCookieUntil\([\s\S]*?result\.token,[\s\S]*?result\.expiresAt,[\s\S]*?now,[\s\S]*?sharedAuthCookieDomain/,
   );
   assert.match(route, /jsonNoStore/);
   assert.match(shell, /useSessionRefresh\(locale\)/);
@@ -363,9 +364,9 @@ test("OTP, MFA, and logout writes require the application CSRF contract", async 
   assert.match(verifyRoute, /rememberMe: body\.rememberMe/);
   assert.match(
     verifyRoute,
-    /sessionCookie\(session\.token, body\.rememberMe\)/,
+    /sessionCookie\(session\.token, body\.rememberMe, sharedAuthCookieDomain/,
   );
-  assert.match(verifyMfaRoute, /sessionCookie\(result\.session\.token, rememberMe\)/);
+  assert.match(verifyMfaRoute, /sessionCookie\(result\.session\.token, rememberMe, sharedAuthCookieDomain/);
   assert.match(verifyRoute, /deviceContinuityCookie\(session\.deviceContinuityToken\)/);
   assert.match(verifyMfaRoute, /deviceContinuityCookie\(result\.session\.deviceContinuityToken\)/);
 });
@@ -467,6 +468,7 @@ test("canonical identity expand stays disabled and public projections omit prote
   );
   assert.match(session, /return \{\s*sessionId:/);
   assert.doesNotMatch(storage, /\.\.\.existing/);
+  assert.match(storage, /!existing\.onboardingCompletedAt/);
   assert.doesNotMatch(profile, /profile:\s*profile\.results/);
   assert.doesNotMatch(team, /members:\s*members\.results/);
   assert.doesNotMatch(team, /invitations:\s*invitations\.results/);
@@ -1074,7 +1076,7 @@ test("monitoring keeps delivery disabled until a fresh Lex metadata run is avail
     readFile(new URL("../app/_platform/PlatformShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/MonitoringClient.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(shell, /\["monitoring", Scale, "Мониторинг законодательства", "Qonunchilik monitoringi"\]/);
+  assert.match(shell, /\[\s*"monitoring",\s*Scale,\s*"Мониторинг законодательства",\s*"Qonunchilik monitoringi",?\s*\]/);
   assert.match(shell, /key: "help", ru: "Помощь", uz: "Yordam"/);
   assert.match(client, /normalizeMonitoringAudience\(accountType\)/);
   assert.match(client, /normalizeMonitoringAudience\(body\.preference\.audience\)/);
@@ -1094,7 +1096,7 @@ test("JURO motion tokens are bounded and the dashboard route is static", async (
   assert.ok(globals.includes("cubic-bezier(.16,1,.3,1)"));
   assert.ok(globals.includes("cubic-bezier(.2,.8,.2,1)"));
   assert.match(globals, /prefers-reduced-motion:\s*reduce/);
-  assert.match(dashboard, /golden-route/);
+  assert.doesNotMatch(dashboard, /golden-route/);
   assert.doesNotMatch(dashboard, /stroke-dashoffset/);
   assert.doesNotMatch(dashboard, /golden-route[^}]*animation/);
   assert.doesNotMatch(dashboard, /infinite|parallax|perspective/);
@@ -1121,7 +1123,7 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shellComponent, /\["document-review", FileCheck2/);
   assert.match(shellComponent, /\["cases", BriefcaseBusiness/);
   assert.match(shellComponent, /\["documents", Files/);
-  assert.match(shellComponent, /const toolGroups = \[/);
+  assert.match(shellComponent, /const toolGroups = lawyer\s*\?\s*\(\[/);
   assert.match(shellComponent, /"Все инструменты"/);
   assert.match(shellComponent, /href=\{`\$\{base\}\/profile`\}/);
   assert.match(shellComponent, /useSearchParams/);
@@ -1138,8 +1140,8 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(aiClient, /href=\{aiLocation\(new URLSearchParams\(\{ conversationId: item\.id \}\)\)\}/);
   assert.match(aiClient, /router\.replace\(aiLocation\(nextParams\), \{ scroll: false \}\)/);
   assert.doesNotMatch(shellComponent, /MoreHorizontal/);
-  assert.match(dashboard, /max-width:820px/);
-  assert.match(dashboard, /max-width:460px/);
+  assert.match(dashboard, /max-width:\s*820px/);
+  assert.match(dashboard, /max-width:\s*460px/);
   assert.match(comparison, /max-width:820px/);
   assert.match(comparison, /max-width:560px/);
   assert.match(comparison, /prefers-reduced-motion:reduce/);
@@ -1307,7 +1309,8 @@ test("lawyer consultation surface uses assigned requests and the guarded conflic
     readFile(new URL("../app/_platform/ModuleContent.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(moduleContent, /accountType===\"lawyer\" \? <LawyerRequestsClient/);
+  assert.match(moduleContent, /accountType === "lawyer" && module === "consultations"/);
+  assert.match(moduleContent, /<LawyerHubClient locale=\{locale\}/);
   assert.match(client, /lawyer-requests\/assigned/);
   assert.match(client, /conflict-check/);
   assert.match(client, /decision, locale/);

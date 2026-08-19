@@ -69,7 +69,7 @@
 .hero h1 {
   max-width: 16ch;
   margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-ui);
   font-size: clamp(2.7rem, 4.4vw, 4.6rem);
   font-weight: 500;
   letter-spacing: -0.055em;

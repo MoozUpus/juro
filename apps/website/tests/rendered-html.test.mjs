@@ -56,7 +56,7 @@ test("renders the complete English public landing and routes product actions to 
   const response = await worker.fetch(new Request("http://localhost/en", { headers: { accept: "text/html" } }), runtime, context);
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<html lang="en">/);
+  assert.match(html, /<html\b[^>]*\blang="en"/);
   assert.match(html, /<link rel="canonical" href="https:\/\/juro\.uz\/en"/);
   assert.match(html, /Tell us/);
   assert.match(html, /Get a clear next step/);
@@ -83,7 +83,7 @@ test("not-found state keeps the visitor in the requested public language", async
     const response = await worker.fetch(new Request(`http://localhost/${locale}/missing-route`, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(response.status, 404, locale);
     const html = await response.text();
-    assert.match(html, new RegExp(`<html lang="${locale}"`), locale);
+    assert.match(html, new RegExp(`<html\\b[^>]*\\blang="${locale}"`), locale);
     assert.match(html, new RegExp(message), locale);
     assert.match(html, new RegExp(href), locale);
   }
@@ -158,7 +158,7 @@ test("serves the English investor video from its dedicated public route", async 
   const response = await worker.fetch(new Request("http://localhost/en/video", { headers: { accept: "text/html" } }), runtime, context);
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<html lang="en">/);
+  assert.match(html, /<html\b[^>]*\blang="en"/);
   assert.match(html, /https:\/\/juro\.uz\/en\/video/);
   assert.match(html, /https:\/\/pub-28041c6b6dff4877a700421e6cd2c986\.r2\.dev\/investor\/juro-investor-presentation-en-v1\.mp4/);
   assert.match(html, /autoplay/i);
@@ -219,7 +219,7 @@ test("renders the correct document language on each public lawyer catalogue loca
     );
     assert.equal(response.status, 200, locale);
     const html = await response.text();
-    assert.match(html, new RegExp(`<html lang="${locale}"`), locale);
+    assert.match(html, new RegExp(`<html\\b[^>]*\\blang="${locale}"`), locale);
     assert.match(html, new RegExp(`https://juro\\.uz/${locale}/lawyers`), locale);
   }
 });

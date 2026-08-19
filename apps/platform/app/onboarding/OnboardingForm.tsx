@@ -20,6 +20,7 @@ import type {
   AccountPersona,
   OnboardingGoal,
 } from "../../lib/platform/onboarding";
+import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
 
 type Locale = "ru" | "uz";
 
@@ -96,7 +97,7 @@ export function OnboardingForm({
   const [middleName, setMiddleName] = useState(initialMiddleName);
   const [phone, setPhone] = useState(initialPhone);
   const [primaryGoal, setPrimaryGoal] = useState<OnboardingGoal>(
-    "legal_answer",
+    initialAccountPersona === "lawyer" ? "professional_work" : "legal_answer",
   );
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -145,6 +146,7 @@ export function OnboardingForm({
   return (
     <main className="onboarding-page" lang={locale}>
       <section className="onboarding-card">
+        <div className="onboarding-theme"><ThemeSwitcher locale={locale} compact persistAccount={false} /></div>
         <div className="onboarding-copy">
           <span>JURO · 01/01</span>
           <h1>
@@ -194,7 +196,7 @@ export function OnboardingForm({
           </fieldset>
           <fieldset>
             <legend>{ru ? "Тип профиля" : "Profil turi"}</legend>
-            <div className="onboarding-segments onboarding-personas">
+            {initialAccountPersona === "lawyer" ? <div className="onboarding-fixed-persona"><Scale />{ru ? "Профессиональный кабинет юриста" : "Yuristning professional kabineti"}</div> : <div className="onboarding-segments onboarding-personas">
               {personaOptions.map(([id, ruLabel, uzLabel, Icon]) => (
                 <button
                   type="button"
@@ -207,7 +209,7 @@ export function OnboardingForm({
                   <span>{ru ? ruLabel : uzLabel}</span>
                 </button>
               ))}
-            </div>
+            </div>}
           </fieldset>
           <div className="onboarding-row">
             <label>

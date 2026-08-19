@@ -72,6 +72,7 @@ export const userProfiles = sqliteTable(
     organizationRole: text("organization_role"),
     primaryGoal: text("primary_goal"),
     timezone: text("timezone").notNull().default("Asia/Tashkent"),
+    themePreference: text("theme_preference").notNull().default("system"),
     defaultWorkspaceId: text("default_workspace_id").references(() => workspaces.id, { onDelete: "set null" }),
     onboardingCompletedAt: text("onboarding_completed_at"),
     lifecycleStatus: text("lifecycle_status").notNull().default("active"),
@@ -1529,6 +1530,34 @@ export const lawyerProfiles = sqliteTable("lawyer_profiles", {
   id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), displayName: text("display_name").notNull(), specialtiesJson: text("specialties_json").notNull().default("[]"), languagesJson: text("languages_json").notNull().default("[]"), status: text("status").notNull().default("pending"), marketplaceStatus: text("marketplace_status").notNull().default("profile_incomplete"), publicApprovedAt: text("public_approved_at"), juroApprovalStatus: text("juro_approval_status").notNull().default("not_approved"), juroApprovedAt: text("juro_approved_at"), juroApprovedByUserId: text("juro_approved_by_user_id"), topLawyerStatus: text("top_lawyer_status").notNull().default("not_featured"), topLawyerCriteria: text("top_lawyer_criteria"), topLawyerAt: text("top_lawyer_at"), experienceYears: integer("experience_years"), priceDescription: text("price_description"), availabilityStatus: text("availability_status").notNull().default("unknown"), nextAvailableAt: text("next_available_at"), advocateStatus: text("advocate_status").notNull().default("not_declared"), firmName: text("firm_name"), bio: text("bio"), profileRevision: integer("profile_revision").notNull().default(1), city: text("city"), region: text("region"), education: text("education"), consultationFormatsJson: text("consultation_formats_json").notNull().default("[]"), profilePhotoKey: text("profile_photo_key"), profilePhotoMime: text("profile_photo_mime"), profilePhotoSha256: text("profile_photo_sha256"), profilePhotoSizeBytes: integer("profile_photo_size_bytes"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("lawyer_profiles_user_uidx").on(table.userId), index("lawyer_profiles_status_idx").on(table.status, table.updatedAt), index("lawyer_profiles_trust_designations_idx").on(table.juroApprovalStatus, table.topLawyerStatus, table.marketplaceStatus)]);
 
+export const lawyerAvailabilityRules = sqliteTable("lawyer_availability_rules", {
+  id: text("id").primaryKey(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  weekday: integer("weekday").notNull(),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  timezone: text("timezone").notNull().default("Asia/Tashkent"),
+  status: text("status").notNull().default("active"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("lawyer_availability_rules_slot_uidx").on(table.lawyerProfileId, table.weekday, table.startsAt, table.endsAt),
+  index("lawyer_availability_rules_profile_idx").on(table.lawyerProfileId, table.status, table.weekday),
+  check("lawyer_availability_rules_weekday_check", sql`${table.weekday} BETWEEN 1 AND 7`),
+  check("lawyer_availability_rules_time_check", sql`${table.startsAt} < ${table.endsAt}`),
+]);
+
+export const lawyerUnavailabilityPeriods = sqliteTable("lawyer_unavailability_periods", {
+  id: text("id").primaryKey(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  reason: text("reason"),
+  ...timestamps,
+}, (table) => [
+  index("lawyer_unavailability_periods_profile_idx").on(table.lawyerProfileId, table.startsAt, table.endsAt),
+  check("lawyer_unavailability_periods_time_check", sql`${table.startsAt} < ${table.endsAt}`),
+]);
+
 export const lawyerProfileTrustDesignations = sqliteTable("lawyer_profile_trust_designations", {
   id: text("id").primaryKey(), lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }), moderatorUserId: text("moderator_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }), designation: text("designation").notNull(), decision: text("decision").notNull(), reason: text("reason").notNull(), criteria: text("criteria"), createdAt: text("created_at").notNull(),
 }, (table) => [index("lawyer_profile_trust_designations_profile_idx").on(table.lawyerProfileId, table.createdAt)]);
@@ -1555,6 +1584,27 @@ export const lawyerProfileLifecycleEvents = sqliteTable("lawyer_profile_lifecycl
 export const lawyerRequests = sqliteTable("lawyer_requests", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").references(() => lawyerProfiles.id, { onDelete: "set null" }), status: text("status").notNull().default("requested"), anonymizedSummary: text("anonymized_summary").notNull(), requestedScopeJson: text("requested_scope_json").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [index("lawyer_requests_workspace_idx").on(table.workspaceId, table.updatedAt), index("lawyer_requests_lawyer_idx").on(table.lawyerProfileId, table.status)]);
+
+export const lawyerConsultations = sqliteTable("lawyer_consultations", {
+  id: text("id").primaryKey(),
+  lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  clientUserId: text("client_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  timezone: text("timezone").notNull().default("Asia/Tashkent"),
+  format: text("format").notNull().default("video"),
+  status: text("status").notNull().default("proposed"),
+  internalNote: text("internal_note"),
+  resultNote: text("result_note"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("lawyer_consultations_request_uidx").on(table.lawyerRequestId),
+  index("lawyer_consultations_lawyer_time_idx").on(table.lawyerProfileId, table.startsAt, table.status),
+  index("lawyer_consultations_client_time_idx").on(table.clientUserId, table.startsAt, table.status),
+  check("lawyer_consultations_time_check", sql`${table.startsAt} < ${table.endsAt}`),
+]);
 
 export const conflictChecks = sqliteTable("conflict_checks", {
   id: text("id").primaryKey(), lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }), status: text("status").notNull().default("pending"), reviewedAt: text("reviewed_at"), reviewedByUserId: text("reviewed_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }), createdAt: text("created_at").notNull(),

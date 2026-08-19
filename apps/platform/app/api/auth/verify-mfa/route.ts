@@ -15,6 +15,7 @@ import {
   clearMfaChallengeCookie,
   deviceContinuityCookie,
   sessionCookie,
+  sharedAuthCookieDomain,
 } from "../../../../lib/auth/session";
 import { authRequestSecurityContext } from "../../../../lib/auth/request-security-evidence";
 import {
@@ -81,12 +82,15 @@ export const POST = withApiErrors(async function POST(request: Request) {
     const accountType = isPersonalAccountType(result.accountType)
       ? result.accountType
       : "individual";
+    const requestHostname = new URL(request.url).hostname;
     const redirectTo = result.onboardingCompletedAt
-      ? `/${userLocale}/${accountType}/dashboard`
+      ? requestHostname.toLowerCase() === "lawyer.juro.uz" && accountType === "lawyer"
+        ? `/${userLocale}/dashboard`
+        : `/${userLocale}/${accountType}/dashboard`
       : `/${userLocale}/onboarding`;
     return jsonNoStore({ ok: true, redirectTo }, 200, [
       clearMfaChallengeCookie(),
-      sessionCookie(result.session.token, rememberMe),
+      sessionCookie(result.session.token, rememberMe, sharedAuthCookieDomain(requestHostname)),
       ...(result.session.deviceContinuityToken
         ? [deviceContinuityCookie(result.session.deviceContinuityToken)]
         : []),

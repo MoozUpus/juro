@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default async function LocalizedLogin({ params, searchParams }: {
   params: Promise<{ locale: string }>;
-  searchParams: Promise<{ reauth?: string; returnTo?: string }>;
+  searchParams: Promise<{ reauth?: string; returnTo?: string; accountType?: string }>;
 }) {
   const [{ locale }, query] = await Promise.all([params, searchParams]);
   if (!isLocale(locale)) notFound();
@@ -15,5 +15,6 @@ export default async function LocalizedLogin({ params, searchParams }: {
     locale={locale}
     returnTo={query.returnTo}
     reauth={query.reauth === "1"}
+    accountType={query.accountType}
   />;
 }

@@ -69,9 +69,12 @@ export async function getOrCreateUserProfile(user: ChatGPTUser): Promise<UserPro
         id_document_type AS idDocumentType,
         id_document_number AS idDocumentNumber,
         id_issued_by AS idIssuedBy,id_issue_date AS idIssueDate,
-        pinfl,registered_address AS registeredAddress
+        pinfl,registered_address AS registeredAddress,
+        onboarding_completed_at AS onboardingCompletedAt
        FROM user_profiles WHERE id=? LIMIT 1`,
-    ).bind(existingId).first<UserProfile & UserIdentityRow>()
+    ).bind(existingId).first<UserProfile & UserIdentityRow & {
+      onboardingCompletedAt: string | null;
+    }>()
     : null;
   if (existing) {
     const identity = await resolveUserIdentity(identityContext, existing);
@@ -88,7 +91,13 @@ export async function getOrCreateUserProfile(user: ChatGPTUser): Promise<UserPro
       registeredAddress: existing.registeredAddress,
       phone: identity.phone,
     };
-    if (user.fullName && user.fullName !== existing.fullName) {
+    // Once onboarding is complete, the name entered in JURO is canonical.
+    // Refreshing an auth session must not replace it with the provider label.
+    if (
+      !existing.onboardingCompletedAt
+      && user.fullName
+      && user.fullName !== existing.fullName
+    ) {
       await db.prepare("UPDATE user_profiles SET full_name = ?, updated_at = ? WHERE id = ?")
         .bind(user.fullName, isoNow(), existing.id).run();
       await ensureDefaultWorkspace(existing.id);

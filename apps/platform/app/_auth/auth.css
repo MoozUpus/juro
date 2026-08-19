@@ -7,6 +7,7 @@
 }
 
 .auth-brand {
+  position: relative;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -14,6 +15,22 @@
   overflow: hidden;
   background: #0b1830;
   color: #fff;
+}
+
+.auth-brand[data-product="lawyer"] {
+  background: linear-gradient(145deg, #061827, #123f61);
+}
+
+.auth-brand[data-product="lawyer"]::after {
+  position: absolute;
+  right: -8rem;
+  bottom: -11rem;
+  width: 30rem;
+  height: 30rem;
+  border: 1px solid rgba(215, 181, 111, .14);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
 }
 
 .auth-brand img {
@@ -40,7 +57,7 @@
 
 .auth-brand h1 {
   margin: 24px 0;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--sans);
   font-size: clamp(42px, 5vw, 76px);
   font-weight: 600;
   letter-spacing: -.055em;
@@ -65,7 +82,8 @@
   padding: clamp(24px, 4vw, 54px);
   border: 1px solid #e4dccb;
   border-radius: 28px;
-  background: #fff;
+  background: var(--surface-raised);
+  color: var(--text-primary);
   box-shadow: 0 22px 70px rgba(19, 36, 69, .09);
 }
 
@@ -77,6 +95,12 @@
   align-items: center;
   gap: 5px;
   color: #53627a;
+}
+
+.auth-theme {
+  position: absolute;
+  top: 22px;
+  left: 28px;
 }
 
 .auth-language > svg {
@@ -130,7 +154,7 @@
 
 .auth-card h2 {
   margin: 0 0 8px;
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--sans);
   font-size: clamp(26px, 3vw, 38px);
   letter-spacing: -.04em;
 }

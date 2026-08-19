@@ -5,6 +5,7 @@ import { publicDocumentUrlImportEnabled } from "../../lib/document-analysis/publ
 import { runtimeEnv } from "../../lib/document-builder/storage/runtime";
 import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformPath, type AccountType, type PlatformLocale, type PlatformModule } from "../../lib/platform/routing";
 import { ModuleContent } from "./ModuleContent";
+import { safeDisplayName } from "../../lib/platform/display-name";
 
 type AccountModuleRouteInput = {
   locale: string;
@@ -32,7 +33,7 @@ export async function renderAccountModuleRoute({ locale, accountType, module }: 
       locale={locale}
       accountType={accountType}
       module={module}
-      userName={user.fullName ?? user.displayName}
+      userName={safeDisplayName(user.fullName ?? user.displayName)}
       publicUrlImportEnabled={publicUrlImportEnabled}
     />
   );
@@ -49,7 +50,7 @@ export async function renderBusinessModuleRoute({ locale, workspaceId, module }:
       locale={typedLocale}
       accountType="business"
       module={module}
-      userName={user.fullName ?? user.displayName}
+      userName={safeDisplayName(user.fullName ?? user.displayName)}
       workspaceId={workspaceId}
       publicUrlImportEnabled={publicUrlImportEnabled}
     />

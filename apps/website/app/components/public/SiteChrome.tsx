@@ -10,6 +10,7 @@ import footerContactStyles from "./footer-contact.module.css";
 import footerRailStyles from "./footer-rail.module.css";
 import headerTouchStyles from "./header-touch-targets.module.css";
 import styles from "./site-chrome.module.css";
+import { PublicThemeSwitcher } from "./ThemeSwitcher";
 
 type Locale = PublicLanguage;
 
@@ -156,6 +157,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
           {nav.map(([label, href]) => onSectionNavigation && href.startsWith("#") ? <a href={href} key={href} onClick={onSectionNavigation}>{label}</a> : <Link href={href} key={href}>{label}</Link>)}
         </nav>
         <div className={styles.actions}>
+          <PublicThemeSwitcher locale={locale} />
           <div aria-label="Language" className={`${styles.languageSet} ${headerTouchStyles.languageSet}`}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} className={`${styles.language} ${headerTouchStyles.language}`} href={localeHref(target)} key={target}>{languageLabels[target]}</Link>)}</div>
           <a className={`${styles.login} ${headerTouchStyles.login}`} href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
           <a className={styles.primary} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
@@ -180,6 +182,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
               <Link href={`/${locale}/legal`} onClick={() => setOpen(false)}><span>07</span>{t.legal}<ArrowRight aria-hidden="true" size={18} /></Link>
             </nav>
             <div className={styles.mobileActions}>
+              <PublicThemeSwitcher locale={locale} />
               <div aria-label="Language" className={styles.mobileLanguageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={localeHref(target)} key={target} onClick={() => setOpen(false)}>{languageLabels[target]}</Link>)}</div>
               <a href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
             </div>

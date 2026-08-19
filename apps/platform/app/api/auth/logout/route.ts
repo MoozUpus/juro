@@ -27,6 +27,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
   }
   const headers = new Headers({ "cache-control": "private, no-store" });
   headers.append("set-cookie", clearSessionCookie());
+  const sharedDomain = new URL(request.url).hostname.toLowerCase().endsWith(".juro.uz") ? ".juro.uz" : undefined;
+  if (sharedDomain) headers.append("set-cookie", clearSessionCookie(sharedDomain));
   headers.append("set-cookie", clearMfaChallengeCookie());
   return new Response(null, { status: 204, headers });
 });

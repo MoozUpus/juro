@@ -194,7 +194,9 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LAWYER_PROFILE_DIRECTORY_ENABLED,
-      environment === "staging" || environment === "production" ? "true" : "false",
+      environment === "development" || environment === "staging" || environment === "production"
+        ? "true"
+        : "false",
     );
     assert.equal(
       config.vars.GUEST_AI_ENABLED,
@@ -501,6 +503,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
   assert.deepEqual(source.env.staging.routes, []);
   assert.deepEqual(source.env.production.routes, [
     { pattern: "app.juro.uz", zone_name: "juro.uz", custom_domain: true },
+    { pattern: "lawyer.juro.uz", zone_name: "juro.uz", custom_domain: true },
     { pattern: "admin.juro.uz", zone_name: "juro.uz", custom_domain: true },
     { pattern: "status.juro.uz", zone_name: "juro.uz", custom_domain: true },
   ]);

@@ -37,7 +37,7 @@
     "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
     "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
     "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
-    "LAWYER_PROFILE_DIRECTORY_ENABLED": "false",
+    "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
     "IDENTITY_PROTECTION_MODE": "legacy",
     "JOB_SCHEMA_VERSION": "1",
     "EMBEDDING_MODEL": "text-embedding-3-large",
@@ -497,6 +497,11 @@
       "routes": [
         {
           "pattern": "app.juro.uz",
+          "zone_name": "juro.uz",
+          "custom_domain": true
+        },
+        {
+          "pattern": "lawyer.juro.uz",
           "zone_name": "juro.uz",
           "custom_domain": true
         },
