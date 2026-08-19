@@ -69,6 +69,13 @@ test("public chrome exposes every primary public destination in both locales", (
   assert.doesNotMatch(sitemap, /prototype/);
 });
 
+test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
+  assert.match(chromeStyles, /safe-area-inset-top/);
+  assert.match(chromeStyles, /safe-area-inset-bottom/);
+  assert.match(chromeStyles, /safe-area-inset-left/);
+  assert.match(chromeStyles, /safe-area-inset-right/);
+});
+
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {
   assert.match(homepage, /jurobek-point\.webp/);
   assert.match(homepage, /unoptimized/);
