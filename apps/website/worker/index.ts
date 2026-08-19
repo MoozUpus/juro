@@ -27,7 +27,7 @@ function withSecurityHeaders(response: Response, requestUrl: URL): Response {
   headers.set("X-Frame-Options", "DENY");
   headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://app.juro.uz; img-src 'self' data: blob: https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; media-src 'self' https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; upgrade-insecure-requests",
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self' https://app.juro.uz; img-src 'self' data: blob: https://app.juro.uz https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; media-src 'self' https://pub-28041c6b6dff4877a700421e6cd2c986.r2.dev; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; upgrade-insecure-requests",
   );
   if (requestUrl.protocol === "https:") {
     headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
