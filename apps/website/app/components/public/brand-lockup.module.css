@@ -64,6 +64,7 @@
 
 .footerMarkFrame {
   display: block;
+  flex: 0 0 auto;
   height: 50px;
   overflow: hidden;
   width: 50px;
