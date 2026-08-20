@@ -19,13 +19,16 @@ export async function AuthPage({
   locale,
   accountType,
   returnTo,
+  reauth = false,
 }: {
   mode: "login" | "register";
   locale: AuthLocale;
   accountType?: string;
   returnTo?: string;
+  reauth?: boolean;
 }) {
-  if (await getChatGPTUser()) redirect("/");
+  const authenticated = await getChatGPTUser();
+  if (authenticated && !(mode === "login" && reauth)) redirect("/");
   const env = runtimeEnv();
   return (
     <AuthForm

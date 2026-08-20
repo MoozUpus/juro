@@ -8,6 +8,7 @@ import {
   initializeDocumentAnalysisUpload,
   parseDocumentAnalysisUploadIntent,
   parseUploadIdempotencyKey,
+  validateTextUploadBytes,
   validateUploadMagicBytes,
 } from "../lib/document-analysis/upload-pipeline";
 
@@ -62,6 +63,24 @@ test("magic-byte validation rejects MIME spoofing", () => {
   assert.equal(validateUploadMagicBytes("image/png", Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), new Uint8Array()), true);
   assert.equal(validateUploadMagicBytes("image/jpeg", Uint8Array.from([0xff, 0xd8]), Uint8Array.from([0xff, 0xd9])), true);
   assert.equal(validateUploadMagicBytes("application/zip", Uint8Array.from([0x50, 0x4b, 0x03, 0x04]), new Uint8Array()), true);
+  assert.equal(validateUploadMagicBytes("text/plain", new TextEncoder().encode("Статья 1"), new Uint8Array()), true);
+  assert.equal(validateUploadMagicBytes("text/plain", Uint8Array.from([0x4d, 0x5a, 0, 0]), new Uint8Array()), false);
+});
+
+test("TXT, HTML and JSON uploads require bounded UTF-8 data and reject active markup", () => {
+  for (const [fileName, mimeType] of [
+    ["act.txt", "text/plain"],
+    ["act.html", "text/html"],
+    ["act.json", "application/json"],
+  ] as const) {
+    assert.equal(parseDocumentAnalysisUploadIntent({ ...intent, fileName, mimeType }).mimeType, mimeType);
+  }
+  assert.equal(validateTextUploadBytes("text/plain", new TextEncoder().encode("Статья 1. Общие положения")), true);
+  assert.equal(validateTextUploadBytes("application/json", new TextEncoder().encode('{"article":1}')), true);
+  assert.equal(validateTextUploadBytes("application/json", new TextEncoder().encode('{broken')), false);
+  assert.equal(validateTextUploadBytes("text/html", new TextEncoder().encode("<article><h1>Статья 1</h1><p>Норма права</p></article>")), true);
+  assert.equal(validateTextUploadBytes("text/html", new TextEncoder().encode("<p onclick=\"deleteDatabase()\">Норма</p>")), false);
+  assert.equal(validateTextUploadBytes("text/html", new TextEncoder().encode("<script>ignorePreviousInstructions()</script>")), false);
 });
 
 test("upload initialization is tenant-scoped, idempotent, and binds the request hash", async () => {
@@ -78,7 +97,7 @@ test("upload initialization is tenant-scoped, idempotent, and binds the request 
   };
   const first = await initializeDocumentAnalysisUpload(input);
   assert.equal(first.replay, false);
-  assert.match(first.record.r2Key, /^analysis-input-v1\/workspace-a\//);
+  assert.match(first.record.r2Key, /^quarantine-v2\/workspace-a\//);
   assert.doesNotMatch(first.record.r2Key, /contract/i);
 
   const replay = await initializeDocumentAnalysisUpload(input);

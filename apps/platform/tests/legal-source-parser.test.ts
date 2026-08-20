@@ -82,6 +82,21 @@ test("parser deterministically extracts semantic legal blocks and excludes chrom
   assert.deepEqual(normalizedLegalSourceSnapshotSchema.parse(first), first);
 });
 
+test("parser preserves the official English Lex locale", () => {
+  const snapshot = normalizeLegalSourceHtml({
+    html: legalHtml().replace('lang="ru"', 'lang="en"'),
+    reference: {
+      ...reference,
+      locale: "en",
+      canonicalUrl: "https://lex.uz/en/docs/42",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.source.locale, "en");
+  assert.deepEqual(normalizedLegalSourceSnapshotSchema.parse(snapshot), snapshot);
+});
+
 test("parser chooses the largest primary candidate without falling back to body", () => {
   const snapshot = normalizeLegalSourceHtml({
     html: `<html><body>
@@ -174,6 +189,50 @@ test("Lex parser strips reader controls and preserves article structure", () => 
   assert.equal(snapshot.blocks.some((block) => block.semanticRole === "article"), true);
 });
 
+test("Lex parser strips Uzbek Cyrillic reader controls from the official title", () => {
+  const snapshot = normalizeLegalSourceHtml({
+    html: `<html lang="uz-Cyrl"><body><main><div id="divCont">
+      <div class="ACT_TITLE lx_elem"><div class="lx_elem2">Ҳужжатга таклиф юборишАудиони тинглашҲужжат элементидан ҳавола олишЎзбекистон Республикасининг сайлов тўғрисидаги қонуни</div></div>
+      <div class="ACT_ARTICLE lx_elem">1-модда. Умумий қоидалар</div>
+      <div class="ACT_TEXT lx_elem">${"Сайлов ҳуқуқи қонун ҳужжатларига мувофиқ амалга оширилади. ".repeat(8)}</div>
+    </div></main></body></html>`,
+    reference: {
+      ...reference,
+      locale: "uzc",
+      canonicalId: "7349022",
+      canonicalUrl: "https://lex.uz/docs/7349022",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.documentTitle, "Ўзбекистон Республикасининг сайлов тўғрисидаги қонуни");
+  assert.equal(snapshot.plainText.includes("Ҳужжатга таклиф юбориш"), false);
+  assert.equal(snapshot.plainText.includes("Аудиони тинглаш"), false);
+  assert.equal(snapshot.plainText.includes("Ҳужжат элементидан ҳавола олиш"), false);
+});
+
+test("Lex parser strips English reader controls from the official title", () => {
+  const snapshot = normalizeLegalSourceHtml({
+    html: `<html lang="en"><body><main><div id="divCont">
+      <div class="ACT_TITLE lx_elem"><div class="lx_elem2">Suggestion to the documentListen to audioGet a link from a document elementOn introducing amendments to the law</div></div>
+      <div class="ARTICLE_TITLE lx_elem">Article 1. General rule</div>
+      <div class="ACT_TEXT lx_elem">${"The official rule applies to the legal relationship described by this act. ".repeat(8)}</div>
+    </div></main></body></html>`,
+    reference: {
+      ...reference,
+      locale: "en",
+      canonicalId: "8288360",
+      canonicalUrl: "https://lex.uz/en/docs/8288360",
+    },
+    rawContentSha256,
+  });
+
+  assert.equal(snapshot.documentTitle, "On introducing amendments to the law");
+  assert.equal(snapshot.plainText.includes("Suggestion to the document"), false);
+  assert.equal(snapshot.plainText.includes("Listen to audio"), false);
+  assert.equal(snapshot.plainText.includes("Get a link from a document element"), false);
+});
+
 test("Lex parser recognizes official Uzbek number-first modda headings", () => {
   const snapshot = normalizeLegalSourceHtml({
     html: `<html lang="uz"><body><main><h1>Mas’uliyati cheklangan jamiyatlar to‘g‘risida</h1><h2>11-modda. Jamiyatni ta’sis etish tartibi</h2><p>${"Jamiyatni ta’sis etish to‘g‘risidagi qaror va ta’sis hujjatlari qonun talablariga muvofiq bo‘lishi kerak. ".repeat(6)}</p></main></body></html>`,
@@ -242,5 +301,23 @@ test("parser rejects a primary container without enough legal content", () => {
     (error: unknown) =>
       error instanceof LegalSourceParserError
       && error.code === "LEGAL_SOURCE_CONTENT_INSUFFICIENT",
+  );
+});
+
+test("parser distinguishes an explicit Lex alternate-language notice from a broken document", () => {
+  assert.throws(
+    () => normalizeLegalSourceHtml({
+      html: `<html><body><main id="divCont">
+        <div id="divBody">
+          <div class="ACT_TITLE lx_elem">Постановление Пленума</div>
+          <div class="ACT_TEXT lx_elem">Настоящее постановление утратило силу.</div>
+        </div>
+        <div class="COMMENT_FOR_WARNING">Текст акта приводится на узбекском языке.</div>
+      </main></body></html>`,
+      reference,
+      rawContentSha256,
+    }),
+    (error: unknown) => error instanceof LegalSourceParserError
+      && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
   );
 });

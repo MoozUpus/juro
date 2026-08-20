@@ -3,7 +3,9 @@ import {
   discoverLexDocumentLinks,
   lexCatalogSearchUrl,
   LEX_CORPUS_CATEGORIES,
+  LEX_CORPUS_CATEGORY_PRIORITY,
   LEX_CORPUS_LANGUAGES,
+  isLexCoreCodeSearchUrl,
   type LexCorpusCategoryKey,
   type LexDiscoveredDocument,
 } from "./lex-discovery";
@@ -20,7 +22,11 @@ const MAX_ROBOTS_BYTES = 128 * 1024;
 const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_VIEW_STATE = 256 * 1024;
 const MAX_CRAWL_DELAY_SECONDS = 60;
-const DEFAULT_TIMEOUT_MS = 12_000;
+// Lex publishes a 20-second crawl window. A shorter client deadline turns a
+// reachable, slow catalogue response into a needless retry; this remains a
+// response deadline, not an increase to request frequency or concurrency.
+export const DEFAULT_TIMEOUT_MS = 20_000;
+const LEX_SESSION_COOKIE_PATTERN = /(?:^|,\s*)ASP\.NET_SessionId=([A-Za-z0-9]{8,128})(?:;|,|$)/iu;
 
 export class LexCatalogDiscoveryError extends Error {
   constructor(readonly code: string, readonly retryable: boolean) {
@@ -36,12 +42,17 @@ type RobotsGroup = {
 };
 
 export type ParsedLexCatalogPage = {
+  /** Raw official HTML stays in-memory for exact title matching only. */
+  html: string;
   documents: LexDiscoveredDocument[];
   expectedDocumentCount: number | null;
   currentPage: number;
   nextEventTarget: string | null;
   viewState: string | null;
   viewStateGenerator: string | null;
+  /** Short-lived Lex-issued state for a single public ASP.NET pager. It is
+   * never a JURO or user credential and is not exposed outside ingestion. */
+  sourceSessionCookie: string | null;
 };
 
 type DiscoveryCheckpoint = {
@@ -54,7 +65,10 @@ type DiscoveryCheckpoint = {
   nextEventTarget: string | null;
   viewState: string | null;
   viewStateGenerator: string | null;
+  sourceSessionCookie: string | null;
+  sourceSessionExpiresAt: string | null;
   attemptCount: number;
+  lastErrorCode: string | null;
 };
 
 export type LexCatalogPageRunResult = {
@@ -67,6 +81,34 @@ export type LexCatalogPageRunResult = {
   safeErrorCode: string | null;
 };
 
+// The staging worker advances four catalogue pages every four minutes. Twelve
+// active ASP.NET pagers can therefore each receive another successful POST
+// within twelve minutes, safely inside Lex's fifteen-minute public session
+// lease. The production schedule is five minutes and stays disabled; retain a
+// smaller future-safe pool there so a later explicit activation still renews
+// each session before the public lease boundary. Letting more sessions
+// accumulate causes old, large catalogues to expire and re-read their first
+// pages forever; keeping the pool bounded makes all progress durable without
+// exceeding the host request budget.
+export const MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING = 12;
+export const MAX_ACTIVE_LEX_CATALOG_PAGERS_PRODUCTION = 8;
+
+function maxActiveLexCatalogPagers(env: DiscoveryEnv): number {
+  return env.APP_ENV === "staging"
+    ? MAX_ACTIVE_LEX_CATALOG_PAGERS_STAGING
+    : MAX_ACTIVE_LEX_CATALOG_PAGERS_PRODUCTION;
+}
+
+const CHECKPOINT_CATEGORY_PRIORITY_SQL = `CASE category_key ${LEX_CORPUS_CATEGORY_PRIORITY
+  .map((category, index) => `WHEN '${category}' THEN ${index + 1}`)
+  .join(" ")} ELSE 99 END`;
+const HIGHER_CHECKPOINT_CATEGORY_PRIORITY_SQL = `CASE higher.category_key ${LEX_CORPUS_CATEGORY_PRIORITY
+  .map((category, index) => `WHEN '${category}' THEN ${index + 1}`)
+  .join(" ")} ELSE 99 END`;
+const ACTIVE_CHECKPOINT_CATEGORY_PRIORITY_SQL = `CASE legal_corpus_discovery_checkpoints.category_key ${LEX_CORPUS_CATEGORY_PRIORITY
+  .map((category, index) => `WHEN '${category}' THEN ${index + 1}`)
+  .join(" ")} ELSE 99 END`;
+
 function decodeHtml(value: string): string {
   return value
     .replace(/&#x([0-9a-f]+);/giu, (_match, hex: string) => String.fromCodePoint(Number.parseInt(hex, 16)))
@@ -76,6 +118,32 @@ function decodeHtml(value: string): string {
     .replaceAll("&#39;", "'")
     .replaceAll("&lt;", "<")
     .replaceAll("&gt;", ">");
+}
+
+function lexSessionCookieFromHeader(value: string | null): string | null {
+  const sessionId = value ? LEX_SESSION_COOKIE_PATTERN.exec(value)?.[1] : null;
+  return sessionId ? `ASP.NET_SessionId=${sessionId}` : null;
+}
+
+function lexSessionCookieFromResponse(response: Response): string | null {
+  // Cloudflare's Headers exposes getSetCookie()/getAll() for worker
+  // subrequests, while the local standard Headers implementation exposes only
+  // get(). Prefer the lossless worker API because an origin may emit several
+  // Set-Cookie headers. This only extracts the single public Lex session id.
+  const headers = response.headers as Headers & {
+    getSetCookie?: () => string[];
+    getAll?: (name: string) => string[];
+  };
+  const values = headers.getSetCookie?.() ?? headers.getAll?.("Set-Cookie") ?? [];
+  for (const value of values) {
+    const cookie = lexSessionCookieFromHeader(value);
+    if (cookie) return cookie;
+  }
+  return lexSessionCookieFromHeader(response.headers.get("set-cookie"));
+}
+
+function validLexSessionCookie(value: string | null | undefined): string | null {
+  return value && /^ASP\.NET_SessionId=[A-Za-z0-9]{8,128}$/u.test(value) ? value : null;
 }
 
 function attribute(tag: string, name: string): string | null {
@@ -132,12 +200,14 @@ function pager(html: string): { currentPage: number; nextEventTarget: string | n
 export function parseLexCatalogPage(html: string, searchUrl: string): ParsedLexCatalogPage {
   const page = pager(html);
   return {
+    html,
     documents: discoverLexDocumentLinks(html, searchUrl),
     expectedDocumentCount: expectedDocumentCount(html),
     currentPage: page.currentPage,
     nextEventTarget: page.nextEventTarget,
     viewState: hiddenValue(html, "__VIEWSTATE"),
     viewStateGenerator: hiddenValue(html, "__VIEWSTATEGENERATOR"),
+    sourceSessionCookie: null,
   };
 }
 
@@ -203,13 +273,57 @@ function robotsPolicy(robots: string, target: URL): { allowed: boolean; crawlDel
   };
 }
 
-async function readBoundedText(response: Response, maxBytes: number): Promise<string> {
+async function readBoundedText(
+  response: Response,
+  maxBytes: number,
+  timeoutMs: number,
+): Promise<string> {
   const declared = response.headers.get("content-length");
   if (declared && /^\d+$/u.test(declared) && Number(declared) > maxBytes) {
     await response.body?.cancel();
     throw new LexCatalogDiscoveryError("LEX_CATALOG_RESPONSE_TOO_LARGE", false);
   }
-  const bytes = new Uint8Array(await response.arrayBuffer());
+  const reader = response.body?.getReader();
+  if (!reader) throw new LexCatalogDiscoveryError("LEX_CATALOG_ENCODING_REJECTED", false);
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let completed = false;
+  let timedOut = false;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        timedOut = true;
+        reject(new Error("LEX_CATALOG_BODY_TIMEOUT"));
+      }, timeoutMs);
+    });
+    while (true) {
+      const { done, value } = await Promise.race([reader.read(), deadline]);
+      if (done) {
+        completed = true;
+        break;
+      }
+      total += value.byteLength;
+      if (total > maxBytes) throw new LexCatalogDiscoveryError("LEX_CATALOG_RESPONSE_TOO_LARGE", false);
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof LexCatalogDiscoveryError) throw error;
+    throw new LexCatalogDiscoveryError(
+      timedOut ? "LEX_CATALOG_TIMEOUT" : "LEX_CATALOG_UPSTREAM_UNAVAILABLE",
+      true,
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+    if (completed) reader.releaseLock();
+    else void reader.cancel().catch(() => undefined);
+  }
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
   if (bytes.byteLength > maxBytes) throw new LexCatalogDiscoveryError("LEX_CATALOG_RESPONSE_TOO_LARGE", false);
   try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
   catch { throw new LexCatalogDiscoveryError("LEX_CATALOG_ENCODING_REJECTED", false); }
@@ -241,7 +355,8 @@ async function boundedFetch(
       await response.body?.cancel();
       throw new LexCatalogDiscoveryError(
         "LEX_CATALOG_UPSTREAM_UNAVAILABLE",
-        response.status === 408 || response.status === 425 || response.status === 429 || response.status >= 500,
+        response.status === 403 || response.status === 408 || response.status === 425
+          || response.status === 429 || response.status >= 500,
       );
     }
     return response;
@@ -261,27 +376,46 @@ export async function fetchLexCatalogPage(input: {
   eventTarget?: string | null;
   viewState?: string | null;
   viewStateGenerator?: string | null;
+  sourceSessionCookie?: string | null;
   fetchImpl?: FetchLike;
   wait?: (delayMs: number) => Promise<void>;
+  /** Set only when `fetchImpl` is the D1-backed Lex pacer. */
+  pacingAlreadyApplied?: boolean;
   timeoutMs?: number;
 }): Promise<ParsedLexCatalogPage> {
   const allowedUrls = new Set(LEX_CORPUS_CATEGORIES.flatMap((category) =>
     LEX_CORPUS_LANGUAGES.map((language) => lexCatalogSearchUrl(category.key, language.language))));
-  if (!allowedUrls.has(input.searchUrl)) throw new LexCatalogDiscoveryError("LEX_CATALOG_URL_REJECTED", false);
+  if (!allowedUrls.has(input.searchUrl) && !isLexCoreCodeSearchUrl(input.searchUrl)) {
+    throw new LexCatalogDiscoveryError("LEX_CATALOG_URL_REJECTED", false);
+  }
   const fetchImpl = input.fetchImpl ?? fetch;
   const timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const robotsResponse = await boundedFetch(fetchImpl, ROBOTS_URL, { method: "GET" }, timeoutMs);
+  const sourceSessionCookie = validLexSessionCookie(input.sourceSessionCookie);
+  if (input.sourceSessionCookie && !sourceSessionCookie) {
+    throw new LexCatalogDiscoveryError("LEX_CATALOG_SESSION_REJECTED", false);
+  }
+  // Lex.uz currently rejects robots.txt with HTTP 406 when a narrow Accept
+  // header is supplied, while the same public resource is available with the
+  // ordinary wildcard request header. Keep the transparent crawler user agent
+  // and override only content negotiation for this text resource.
+  const robotsResponse = await boundedFetch(fetchImpl, ROBOTS_URL, {
+    method: "GET",
+    headers: { Accept: "*/*" },
+  }, timeoutMs);
   const robotsType = (robotsResponse.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLocaleLowerCase();
   if (robotsType !== "text/plain") {
     await robotsResponse.body?.cancel();
     throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_REJECTED", false);
   }
-  const policy = robotsPolicy(await readBoundedText(robotsResponse, MAX_ROBOTS_BYTES), new URL(input.searchUrl));
+  const policy = robotsPolicy(
+    await readBoundedText(robotsResponse, MAX_ROBOTS_BYTES, timeoutMs),
+    new URL(input.searchUrl),
+  );
   if (!policy.allowed) throw new LexCatalogDiscoveryError("LEX_CATALOG_ROBOTS_DISALLOWED", false);
   if (policy.crawlDelaySeconds > MAX_CRAWL_DELAY_SECONDS) {
     throw new LexCatalogDiscoveryError("LEX_CATALOG_RATE_POLICY", false);
   }
-  if (policy.crawlDelaySeconds > 0) {
+  if (policy.crawlDelaySeconds > 0 && !input.pacingAlreadyApplied) {
     if (!input.wait) throw new LexCatalogDiscoveryError("LEX_CATALOG_CRAWL_WINDOW_REQUIRED", true);
     await input.wait(Math.ceil(policy.crawlDelaySeconds * 1_000));
   }
@@ -295,14 +429,20 @@ export async function fetchLexCatalogPage(input: {
   const response = await boundedFetch(fetchImpl, input.searchUrl, {
     method: postback ? "POST" : "GET",
     body,
-    headers: postback ? { "Content-Type": "application/x-www-form-urlencoded" } : undefined,
+    headers: postback ? {
+      "Content-Type": "application/x-www-form-urlencoded",
+      ...(sourceSessionCookie ? { Cookie: sourceSessionCookie } : {}),
+    } : undefined,
   }, timeoutMs);
   const mediaType = (response.headers.get("content-type") ?? "").split(";", 1)[0]?.trim().toLocaleLowerCase();
   if (mediaType !== "text/html" && mediaType !== "application/xhtml+xml") {
     await response.body?.cancel();
     throw new LexCatalogDiscoveryError("LEX_CATALOG_CONTENT_TYPE_REJECTED", false);
   }
-  return parseLexCatalogPage(await readBoundedText(response, MAX_PAGE_BYTES), input.searchUrl);
+  return {
+    ...parseLexCatalogPage(await readBoundedText(response, MAX_PAGE_BYTES, timeoutMs), input.searchUrl),
+    sourceSessionCookie: lexSessionCookieFromResponse(response),
+  };
 }
 
 function checkpointId(categoryKey: LexCorpusCategoryKey, language: LegalCorpusLanguage): string {
@@ -331,6 +471,22 @@ export async function seedLexCatalogDiscoveryCheckpoints(
       if (Number(result.meta.changes ?? 0) === 1) created += 1;
     }
   }
+  // A catalog edge can temporarily refuse Cloudflare egress while the same
+  // allowlisted URL remains reachable elsewhere. Older Worker versions
+  // classified such a 403 as terminal. Recover only that bounded error and
+  // retain the attempt counter so five consecutive failures still stop.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET status='retrying',next_attempt_at=?,updated_at=?
+    WHERE status='dead_letter' AND last_error_code='LEX_CATALOG_UPSTREAM_UNAVAILABLE'
+      AND attempt_count<5`).bind(timestamp, timestamp).run();
+  // Lex does not expose a total on every catalogue route. Once pagination has
+  // ended, the deduplicated discovery ledger is the authoritative expected
+  // set. Persist it so coverage can prove indexed + unavailable = discovered
+  // instead of leaving a terminal checkpoint permanently unverifiable.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET expected_document_count=discovered_document_count,updated_at=?
+    WHERE status='completed' AND expected_document_count IS NULL
+      AND next_event_target IS NULL`).bind(timestamp).run();
   return { considered: LEX_CORPUS_CATEGORIES.length * LEX_CORPUS_LANGUAGES.length, created };
 }
 
@@ -340,7 +496,7 @@ function retryAt(now: Date, attempt: number): string {
 
 export async function runNextLexCatalogDiscoveryPage(
   env: DiscoveryEnv,
-  input: { now?: Date; fetchImpl?: FetchLike; wait?: (delayMs: number) => Promise<void> } = {},
+  input: { now?: Date; fetchImpl?: FetchLike; wait?: (delayMs: number) => Promise<void>; pacingAlreadyApplied?: boolean } = {},
 ): Promise<LexCatalogPageRunResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED") || !featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) {
     return { claimed: false, status: "disabled", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
@@ -348,16 +504,116 @@ export async function runNextLexCatalogDiscoveryPage(
   const nowDate = input.now ?? new Date();
   const now = nowDate.toISOString();
   const stale = new Date(nowDate.getTime() - 15 * 60_000).toISOString();
+  const maxActivePagers = maxActiveLexCatalogPagers(env);
+  // A previous pager-expiry cleanup could reset a finished checkpoint to
+  // `queued` while retaining its immutable completion evidence. Repair only
+  // that exact legacy shape before claiming new work; it cannot mark a
+  // genuinely incomplete catalogue as complete because `completed_at` and a
+  // provable expected/discovered total are both required.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET status='completed',next_attempt_at=NULL,last_error_code=NULL,updated_at=?
+    WHERE status='queued' AND completed_at IS NOT NULL AND page_number=0
+      AND next_event_target IS NULL AND view_state IS NULL AND view_state_generator IS NULL
+      AND expected_document_count IS NOT NULL AND discovered_document_count>=expected_document_count`).bind(now).run();
+  // ASP.NET pager state is only useful with the short-lived, public source
+  // session that produced it. Only unfinished pages are restarted from page
+  // one; a completed checkpoint has no continuation to recover. Discovered
+  // document IDs stay in the idempotent ledger either way.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
+      next_attempt_at=?,last_error_code=NULL,updated_at=?
+    WHERE status IN ('queued','retrying','running') AND page_number>0
+      AND (source_session_cookie IS NULL OR source_session_expires_at IS NULL
+      OR source_session_expires_at<=?)`).bind(now, now, now).run();
   await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
     SET status='retrying',next_attempt_at=?,last_error_code='LEX_CATALOG_STALE_CLAIM',updated_at=?
     WHERE status='running' AND updated_at<?`).bind(now, now, stale).run();
-  const candidate = await env.DB.prepare(`SELECT id,category_key AS categoryKey,language,search_url AS searchUrl,
+  // The initial corpus must follow the approved legal-source sequence. A
+  // lower-priority pager can always be reopened from its immutable discovery
+  // ledger, whereas retaining it would otherwise use a finite public session
+  // slot and delay an unfinished laws/PKM/President catalogue.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
+      next_attempt_at=?,last_error_code=NULL,updated_at=?
+    WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+      AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+      AND ${CHECKPOINT_CATEGORY_PRIORITY_SQL}>(
+        SELECT min(${CHECKPOINT_CATEGORY_PRIORITY_SQL})
+        FROM legal_corpus_discovery_checkpoints
+        WHERE status='queued'
+      )`).bind(now, now, now).run();
+  // A prior fairness pass may have opened more public pager sessions than the
+  // fixed request budget can refresh before Lex expires them. Retain the
+  // highest-priority leases and safely restart only excess page-one work; the
+  // immutable discovery ledger prevents duplicate ingestion jobs.
+  await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints
+    SET page_number=0,next_event_target=NULL,view_state=NULL,view_state_generator=NULL,
+      source_session_cookie=NULL,source_session_expires_at=NULL,status='queued',
+      next_attempt_at=?,last_error_code=NULL,updated_at=?
+    WHERE id IN (
+      SELECT id FROM (
+        SELECT id FROM legal_corpus_discovery_checkpoints
+        WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+          AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+        ORDER BY ${CHECKPOINT_CATEGORY_PRIORITY_SQL},page_number ASC,source_session_expires_at ASC,id
+        LIMIT -1 OFFSET ?
+      )
+    )`).bind(now, now, now, maxActivePagers).run();
+  const candidate = await env.DB.prepare(`WITH active_pagers AS (
+      SELECT count(*) AS count FROM legal_corpus_discovery_checkpoints
+      WHERE status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+        AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+    )
+    SELECT id,category_key AS categoryKey,language,search_url AS searchUrl,
       page_number AS pageNumber,expected_document_count AS expectedDocumentCount,
       next_event_target AS nextEventTarget,view_state AS viewState,
-      view_state_generator AS viewStateGenerator,attempt_count AS attemptCount
-    FROM legal_corpus_discovery_checkpoints
+      view_state_generator AS viewStateGenerator,source_session_cookie AS sourceSessionCookie,
+      source_session_expires_at AS sourceSessionExpiresAt,attempt_count AS attemptCount,
+      last_error_code AS lastErrorCode
+    FROM legal_corpus_discovery_checkpoints CROSS JOIN active_pagers
     WHERE status IN ('queued','retrying') AND (next_attempt_at IS NULL OR next_attempt_at<=?)
-    ORDER BY created_at,id LIMIT 1`).bind(now).first<DiscoveryCheckpoint>();
+      -- A retry backoff in an unfinished higher-priority source family must
+      -- not open President or lower catalogues ahead of laws/PKM. Waiting for
+      -- the bounded retry preserves the approved source sequence; it neither
+      -- adds a request nor loses the durable checkpoint.
+      AND (
+        -- An already-due retry is durable recovery work and keeps the
+        -- existing global retry precedence. The strict category barrier is
+        -- for opening new queued catalogues while a higher family backs off.
+        status='retrying'
+        OR NOT EXISTS (
+          SELECT 1 FROM legal_corpus_discovery_checkpoints AS higher
+          WHERE higher.status<>'completed'
+            AND ${HIGHER_CHECKPOINT_CATEGORY_PRIORITY_SQL}<${ACTIVE_CHECKPOINT_CATEGORY_PRIORITY_SQL}
+        )
+      )
+    ORDER BY CASE status WHEN 'retrying' THEN 0 ELSE 1 END,
+      ${CHECKPOINT_CATEGORY_PRIORITY_SQL},
+      -- Within the current highest-priority source family, advance the least
+      -- explored language page first. This keeps all official language
+      -- sessions renewable without opening a lower-priority catalogue.
+      CASE status WHEN 'queued' THEN page_number ELSE 0 END,
+      -- Once the bounded pool is full, renew an existing public pager before
+      -- opening another page-zero catalogue in the same priority family. The
+      -- earliest lease is refreshed first, yielding a deterministic round-
+      -- robin within the 15-minute source window; retrying checkpoints retain
+      -- global precedence.
+      CASE WHEN active_pagers.count>=?
+          AND status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+          AND source_session_expires_at IS NOT NULL AND source_session_expires_at>?
+        THEN 0
+        WHEN active_pagers.count>=? THEN 1
+        ELSE 0 END,
+      CASE WHEN status='queued' AND page_number>0 AND source_session_cookie IS NOT NULL
+          AND source_session_expires_at IS NOT NULL
+        THEN source_session_expires_at
+        ELSE NULL END,
+      COALESCE(next_attempt_at,updated_at,created_at),
+      attempt_count,category_key,language,id LIMIT 1`)
+    .bind(now, now, maxActivePagers, now, maxActivePagers)
+    .first<DiscoveryCheckpoint>();
   if (!candidate) {
     return { claimed: false, status: "empty", checkpointId: null, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
   }
@@ -368,16 +624,20 @@ export async function runNextLexCatalogDiscoveryPage(
     return { claimed: false, status: "empty", checkpointId: candidate.id, pageNumber: null, discoveredOnPage: 0, queuedOnPage: 0, safeErrorCode: null };
   }
   const attempt = candidate.attemptCount + 1;
+  const resumePager = candidate.pageNumber > 0
+    && Boolean(candidate.nextEventTarget && candidate.viewState && candidate.sourceSessionCookie);
   try {
     const page = await fetchLexCatalogPage({
       searchUrl: candidate.searchUrl,
-      eventTarget: candidate.pageNumber > 0 ? candidate.nextEventTarget : null,
-      viewState: candidate.pageNumber > 0 ? candidate.viewState : null,
-      viewStateGenerator: candidate.pageNumber > 0 ? candidate.viewStateGenerator : null,
+      eventTarget: resumePager ? candidate.nextEventTarget : null,
+      viewState: resumePager ? candidate.viewState : null,
+      viewStateGenerator: resumePager ? candidate.viewStateGenerator : null,
+      sourceSessionCookie: resumePager ? candidate.sourceSessionCookie : null,
       fetchImpl: input.fetchImpl,
       wait: input.wait,
+      pacingAlreadyApplied: input.pacingAlreadyApplied,
     });
-    const expectedPage = candidate.pageNumber + 1;
+    const expectedPage = resumePager ? candidate.pageNumber + 1 : 1;
     if (page.currentPage !== expectedPage) throw new LexCatalogDiscoveryError("LEX_CATALOG_PAGE_SEQUENCE_REJECTED", true);
     if (page.documents.some((document) => document.language !== candidate.language)) {
       throw new LexCatalogDiscoveryError("LEX_CATALOG_LANGUAGE_MISMATCH", false);
@@ -386,7 +646,11 @@ export async function runNextLexCatalogDiscoveryPage(
       (checkpoint_id,source_url,provider_source_id,language,discovered_at)
       VALUES (?,?,?,?,?) ON CONFLICT(checkpoint_id,source_url) DO NOTHING
     `).bind(candidate.id, document.sourceUrl, document.canonicalDocumentId, document.language, now));
-    if (inserts.length > 0) await env.DB.batch(inserts);
+    const insertResults = inserts.length > 0 ? await env.DB.batch(inserts) : [];
+    const newlyDiscovered = insertResults.reduce(
+      (total, result) => total + Number(result.meta.changes ?? 0),
+      0,
+    );
     let queued = 0;
     for (const document of page.documents) {
       const result = await enqueueOfficialLexCorpusDocument(env as LegalCorpusQueueEnv, {
@@ -400,18 +664,58 @@ export async function runNextLexCatalogDiscoveryPage(
       .bind(candidate.id).first<{ count: number }>();
     const discovered = Number(countRow?.count ?? 0);
     const expected = page.expectedDocumentCount ?? candidate.expectedDocumentCount;
+    if (page.nextEventTarget === null && expected !== null && discovered < expected) {
+      throw new LexCatalogDiscoveryError("LEX_CATALOG_INCOMPLETE_RESULT_SET", true);
+    }
+    // Some catalogue routes have no declared total and retain a numeric
+    // post-back control after the final result page.  Once a resumed pager
+    // actually returns an empty page, its immutable discovery ledger is the
+    // complete observable source set.  Continuing would advance the durable
+    // page number forever without adding an official URL.  Do not apply this
+    // fallback to the initial page or to catalogues with a declared total:
+    // those cases remain subject to the stricter completeness checks above.
+    const reachedUndeclaredEmptyTail = resumePager
+      && page.documents.length === 0
+      && expected === null
+      && discovered > 0;
+    // A one-off duplicate-only page may be a transient source-session quirk,
+    // so preserve the pager for one more official response.  Two successive
+    // resumed pages containing only URLs already in the immutable ledger are
+    // a durable pagination loop, not evidence of additional documents.
+    const duplicateUndeclaredLedgerPage = resumePager
+      && page.documents.length > 0
+      && expected === null
+      && discovered > 0
+      && newlyDiscovered === 0;
+    const reachedRepeatedUndeclaredLedgerTail = duplicateUndeclaredLedgerPage
+      && candidate.lastErrorCode === "LEX_CATALOG_DUPLICATE_PAGE";
     const completed = expected === 0
       || (expected !== null && discovered >= expected)
-      || (page.documents.length === 0 && page.nextEventTarget === null)
-      || (page.nextEventTarget === null && (expected === null || discovered >= expected));
+      || (page.nextEventTarget === null && (expected === null || discovered >= expected))
+      || reachedUndeclaredEmptyTail
+      || reachedRepeatedUndeclaredLedgerTail;
+    const persistedExpected = completed ? (expected ?? discovered) : expected;
+    const sessionCookie = page.sourceSessionCookie ?? candidate.sourceSessionCookie;
+    // Lex does not reliably repeat Set-Cookie on every successful ASP.NET
+    // POST-back. A successful response using the existing public session is
+    // nevertheless proof that it remains valid, so renew the short lease on
+    // every page. Without this heartbeat a long category is reset to page one
+    // after 15 minutes despite its pager continuing to work.
+    const sessionExpiry = sessionCookie
+      ? new Date(nowDate.getTime() + 15 * 60_000).toISOString()
+      : null;
     await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
       status=?,page_number=?,expected_document_count=?,discovered_document_count=?,
       next_event_target=?,view_state=?,view_state_generator=?,attempt_count=0,
-      next_attempt_at=NULL,last_error_code=NULL,completed_at=?,updated_at=? WHERE id=?
+      source_session_cookie=?,source_session_expires_at=?,next_attempt_at=NULL,
+      last_error_code=?,completed_at=?,updated_at=? WHERE id=?
     `).bind(
-      completed ? "completed" : "queued", page.currentPage, expected, discovered,
+      completed ? "completed" : "queued", page.currentPage, persistedExpected, discovered,
       completed ? null : page.nextEventTarget, completed ? null : page.viewState,
-      completed ? null : page.viewStateGenerator, completed ? now : null, now, candidate.id,
+      completed ? null : page.viewStateGenerator, completed ? null : sessionCookie,
+      completed ? null : sessionExpiry,
+      completed ? null : (duplicateUndeclaredLedgerPage ? "LEX_CATALOG_DUPLICATE_PAGE" : null),
+      completed ? now : null, now, candidate.id,
     ).run();
     return {
       claimed: true,
@@ -425,9 +729,24 @@ export async function runNextLexCatalogDiscoveryPage(
   } catch (error) {
     const code = error instanceof LexCatalogDiscoveryError ? error.code : "LEX_CATALOG_DISCOVERY_FAILED";
     const retryable = error instanceof LexCatalogDiscoveryError && error.retryable && attempt < 5;
+    // A Lex pager can be invalidated before its short-lived session expiry.
+    // Retrying the same stale view state would burn the bounded retry budget;
+    // restart the public catalogue from page one instead. Discovered URLs stay
+    // in their idempotent ledger, so this cannot duplicate ingestion work.
+    const resetPager = code === "LEX_CATALOG_PAGE_SEQUENCE_REJECTED";
     await env.DB.prepare(`UPDATE legal_corpus_discovery_checkpoints SET
-      status=?,next_attempt_at=?,last_error_code=?,updated_at=? WHERE id=?
-    `).bind(retryable ? "retrying" : "dead_letter", retryable ? retryAt(nowDate, attempt) : null, code, now, candidate.id).run();
+      status=?,page_number=CASE WHEN ? THEN 0 ELSE page_number END,
+      next_event_target=CASE WHEN ? THEN NULL ELSE next_event_target END,
+      view_state=CASE WHEN ? THEN NULL ELSE view_state END,
+      view_state_generator=CASE WHEN ? THEN NULL ELSE view_state_generator END,
+      source_session_cookie=CASE WHEN ? THEN NULL ELSE source_session_cookie END,
+      source_session_expires_at=CASE WHEN ? THEN NULL ELSE source_session_expires_at END,
+      next_attempt_at=?,last_error_code=?,updated_at=? WHERE id=?
+    `).bind(
+      retryable ? "retrying" : "dead_letter", Number(resetPager), Number(resetPager), Number(resetPager),
+      Number(resetPager), Number(resetPager), Number(resetPager),
+      retryable ? retryAt(nowDate, attempt) : null, code, now, candidate.id,
+    ).run();
     return {
       claimed: true,
       status: retryable ? "retrying" : "failed",

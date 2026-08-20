@@ -398,10 +398,12 @@ test("restricted lawyer lifecycle is append-only, blocks work, and restores only
 });
 
 test("admin handoff route requires same-origin write protection and current MFA", async () => {
-  const [route, launchPage, accessPage, migration, internal, adminWorker, reviewService, platformWorker, platformConfig, adminConfig] = await Promise.all([
+  const [route, launchPage, accessPage, authPage, localizedLogin, migration, internal, adminWorker, reviewService, platformWorker, platformConfig, adminConfig] = await Promise.all([
     readFile(new URL("../app/api/platform/admin/handoff/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/[locale]/admin/console/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/_staff/AdminConsoleAccess.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_auth/AuthPage.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/[locale]/auth/login/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../drizzle/0109_admin_domain_handoff_sessions.sql", import.meta.url), "utf8"),
     readFile(new URL("../lib/auth/admin-internal-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../../admin/src/worker.ts", import.meta.url), "utf8"),
@@ -420,7 +422,9 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(launchPage, /runtime\.APP_ENV === "production"/u);
   assert.doesNotMatch(launchPage, /catch\s*\{\s*notFound\(\)/u);
   assert.match(accessPage, /15 минут/u);
-  assert.match(accessPage, /auth\/login\?returnTo=/u);
+  assert.match(accessPage, /auth\/login\?reauth=1&returnTo=/u);
+  assert.match(authPage, /authenticated && !\(mode === "login" && reauth\)/u);
+  assert.match(localizedLogin, /reauth=\{query\.reauth === "1"\}/u);
   assert.match(accessPage, /environment === "production" \? "JURO · ADMIN" : "JURO · STAGING ADMIN"/u);
   assert.match(migration, /admin_handoff_tickets/u);
   assert.match(migration, /admin_domain_sessions/u);

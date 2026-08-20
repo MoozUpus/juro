@@ -26,21 +26,27 @@ test("indexed Lex provider returns the uniform source contract and stays preferr
       now: new Date("2026-08-14T00:00:00.000Z"),
       fetchImpl: async (input) => String(input).endsWith("robots.txt")
         ? new Response("User-agent: *\nAllow: /", { headers: { "content-type": "text/plain" } })
-        : new Response(`<!doctype html><main id="divCont">
+        : new Response(`<!doctype html><main><div class="docHeader">
+            <div class="docHeader__item-label">Закон Республики Узбекистан, от 01.01.2020 г. № ЗРУ-11111</div>
             <div>Дата вступления в силу</div><div>01.01.2020</div>
+          </div><div class="docBody-container"><div id="divCont">
             <div class="lx_elem ACT_TITLE">Закон об обращениях</div>
             <div class="lx_elem ARTICLE">Статья 7. Право на обращение</div>
             <div class="lx_elem">${paragraph}</div>
-          </main>`, { headers: { "content-type": "text/html" } }),
+          </div></div></main>`, { headers: { "content-type": "text/html" } }),
     });
     const indexed = await new LexUzIndexedProvider(d1).search({ query: "статья 7 право на обращение" });
     assert.equal(indexed.length, 1);
+    assert.equal(indexed[0]?.document_type, "Закон");
+    assert.equal(indexed[0]?.document_number, "ЗРУ-11111");
+    assert.equal(indexed[0]?.adopting_authority, null);
     assert.deepEqual(
       Object.keys(indexed[0] ?? {}).sort(),
       [
-        "article_number", "article_title", "confidence", "content_hash", "document_id",
-        "document_title", "document_type", "exact_quote", "fetched_at", "jurisdiction",
-        "language", "provider", "source_id", "source_url", "status", "valid_from", "valid_to", "version_date",
+        "adopting_authority", "article_number", "article_title", "confidence", "content_hash",
+        "document_id", "document_number", "document_title", "document_type", "exact_quote",
+        "fetched_at", "jurisdiction", "language", "provider", "source_class", "source_id",
+        "source_url", "status", "valid_from", "valid_to", "version_date",
       ],
     );
     const resolved = await resolveLegalSources({

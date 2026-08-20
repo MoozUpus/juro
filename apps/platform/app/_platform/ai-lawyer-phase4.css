@@ -1762,3 +1762,143 @@
     transition: none;
   }
 }
+
+/* The AI workspace owns its theme so the rest of the authenticated platform
+   keeps its existing visual contract. The dark palette preserves JURO navy and
+   gold while keeping source text and interactive controls at AA contrast. */
+.ai-workspace.ai-theme-dark {
+  color-scheme: dark;
+  background: #061a29;
+  color: #edf2f5;
+}
+
+.ai-theme-dark .ai-dialog { background: #071d2c; }
+
+.ai-theme-dark .ai-conversations,
+.ai-theme-dark .ai-context,
+.ai-theme-dark .ai-dialog > header,
+.ai-theme-dark .ai-composer {
+  border-color: #294657;
+  background: #0b2537;
+  color: #edf2f5;
+}
+
+.ai-theme-dark .ai-answer,
+.ai-theme-dark .ai-plan-card,
+.ai-theme-dark .ai-document-prefill,
+.ai-theme-dark .ai-feedback,
+.ai-theme-dark .ai-result-block,
+.ai-theme-dark .ai-preliminary,
+.ai-theme-dark .ai-source-card,
+.ai-theme-dark .ai-date-popover,
+.ai-theme-dark .ai-conversation-delete-confirm {
+  border-color: #315064;
+  background: #102c3e;
+  color: #edf2f5;
+  box-shadow: none;
+}
+
+.ai-theme-dark :is(.ai-dialog, .ai-conversations, .ai-context, .ai-answer, .ai-plan-card, .ai-document-prefill, .ai-feedback, .ai-source-card) :is(h1, h2, h3, strong, label) {
+  color: #f4f7f9;
+}
+
+.ai-theme-dark :is(.ai-dialog header p, .ai-start p, .ai-answer p, .ai-answer li, .ai-context section > p, .ai-plan-card header p, .ai-plan-card li span, .ai-document-prefill-note, .ai-feedback p, .ai-source-card-body small, .ai-source-bookmark label, .ai-source-bookmark output, .ai-conversations small) {
+  color: #b7c5ce;
+}
+
+.ai-theme-dark :is(.ai-start h2, .ai-answer h2, .ai-answer h3, .ai-context h2, .ai-conversations > header, .ai-context > header, .ai-conversations > div a) {
+  color: #edf2f5;
+}
+
+.ai-theme-dark :is(.ai-composer textarea, .ai-composer-mode button, .ai-segmented button, .ai-date-trigger, .ai-date-grid > button, .ai-date-popover > footer button, .ai-source-actions button, .ai-source-actions a, .ai-source-bookmark select, .ai-source-bookmark textarea, .ai-document-prefill input, .ai-document-prefill textarea, .ai-feedback textarea) {
+  border-color: #3b5a6e;
+  background: #0b2233;
+  color: #edf2f5;
+}
+
+.ai-theme-dark :is(.ai-composer-mode button[aria-pressed="true"], .ai-segmented button[aria-pressed="true"], .ai-branch-history a[aria-current="page"]) {
+  border-color: #caa55d;
+  background: #3a301d;
+  color: #fff3d8;
+}
+
+.ai-theme-dark :is(.ai-conversations > div a:hover, .ai-conversations > div button:hover, .ai-composer-mode button:not(:disabled):hover) {
+  background: #17384b;
+}
+
+.ai-theme-dark .ai-conversation-list a {
+  border-color: #315064;
+  background: #102c3e;
+  color: #edf2f5;
+  box-shadow: none;
+}
+
+.ai-theme-dark .ai-conversation-list strong { color: #edf2f5; }
+.ai-theme-dark .ai-conversation-list small { color: #b7c5ce; }
+.ai-theme-dark .ai-conversation-list a[aria-current="page"] {
+  border-color: #caa55d;
+  background: linear-gradient(135deg, #17384b, #302a1d);
+  box-shadow: inset 3px 0 #be974f;
+}
+.ai-theme-dark .ai-conversation-marker {
+  background: #0b2233;
+  box-shadow: 0 0 0 .2rem #263646;
+}
+.ai-theme-dark .ai-conversation-delete { color: #b7c5ce; }
+.ai-theme-dark .ai-conversation-delete[aria-expanded="true"] {
+  border-color: #9f5b55;
+  background: #402522;
+  color: #ffd7d2;
+}
+.ai-theme-dark .ai-conversation-delete-confirm span { color: #ffd7d2; }
+.ai-theme-dark .ai-conversation-delete-confirm button:not(.is-danger) {
+  border-color: #3b5a6e;
+  background: #0b2233;
+  color: #edf2f5;
+}
+
+.ai-theme-dark .ai-cautions,
+.ai-theme-dark .ai-unavailable,
+.ai-theme-dark .ai-source-modal-warning,
+.ai-theme-dark .ai-document-sensitive-consent {
+  border-color: #7e693d;
+  background: #352d1f;
+  color: #f2dfb7;
+}
+
+.ai-theme-dark .ai-error {
+  background: #402522;
+  color: #ffd7d2;
+}
+
+.ai-theme-dark .ai-source-bookmark { border-color: #315064; }
+.ai-theme-dark .ai-evidence q { color: #d4dee4; }
+.ai-theme-dark .ai-source-card-body em,
+.ai-theme-dark .ai-source-bookmark summary { color: #e6c985; }
+
+.ai-theme-dark .ai-source-modal {
+  border-color: #476174;
+  background: #0d283a;
+  color: #edf2f5;
+}
+
+.ai-theme-dark .ai-source-modal > header {
+  border-color: #315064;
+  background: #041a2a;
+}
+
+.ai-theme-dark .ai-source-modal-heading span { color: #e6c985; }
+.ai-theme-dark .ai-source-modal-heading small,
+.ai-theme-dark .ai-source-modal dt { color: #b7c5ce; }
+.ai-theme-dark .ai-source-modal dl div { background: #17384b; }
+.ai-theme-dark .ai-source-modal-text {
+  border-color: #3b5a6e;
+  background: #081f30;
+  color: #edf2f5;
+}
+
+.ai-theme-dark .ai-source-modal > footer a { background: #be974f; color: #061a29; }
+
+@media (max-width: 560px) {
+  .ai-theme-control span { display: none; }
+}

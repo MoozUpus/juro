@@ -178,6 +178,20 @@ test("Builder Markdown snapshot enters the same structured analysis pipeline", a
   assert.equal(result.detectedLanguage, "ru");
 });
 
+test("TXT, passive HTML and JSON enter the same non-executing extraction pipeline", async () => {
+  const fixtures = [
+    { fileName: "act.txt", mimeType: "text/plain", value: "Статья 1. Настоящая норма применяется ко всем гражданам Республики Узбекистан." },
+    { fileName: "act.html", mimeType: "text/html", value: "<article><h1>Статья 2</h1><p>Настоящая норма применяется ко всем организациям.</p><script>never visible</script></article>" },
+    { fileName: "act.json", mimeType: "application/json", value: JSON.stringify({ article: "3", text: "Настоящая норма регулирует юридические отношения сторон." }) },
+  ];
+  for (const fixture of fixtures) {
+    const bytes = new TextEncoder().encode(fixture.value);
+    const result = await extractDocument({ ...fixture, bytes, sizeBytes: bytes.byteLength });
+    assert.ok(result.sections.length >= 1);
+    assert.doesNotMatch(result.text, /never visible/u);
+  }
+});
+
 test("PDF and DOCX use the same structured comparison pipeline", async () => {
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);

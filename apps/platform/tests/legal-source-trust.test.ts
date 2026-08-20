@@ -399,6 +399,38 @@ test("stale and unavailable legal databases cannot retain confirmed conclusions"
   assert.deepEqual(unavailable.sources, []);
 });
 
+test("unavailable law does not erase exact facts from a trusted private document", () => {
+  const privateFacts = legalResult();
+  privateFacts.answer = "В договоре указан срок оплаты до 10 числа.";
+  privateFacts.confirmedFindings = [{
+    title: "Срок в документе",
+    explanation: "Оплата указана до 10 числа.",
+    sourceIds: ["private_1"],
+  }];
+  privateFacts.sources = [{
+    ...privateFacts.sources[0]!,
+    sourceId: "private_1",
+    actTitle: "Договор аренды.md",
+    actIdentifier: null,
+    article: null,
+    originalUrl: `juro-private://document/ud_${"f".repeat(61)}`,
+    sourceClass: "USER_TRUSTED_PRIVATE",
+    documentType: "uploaded_document",
+  }];
+  const preserved = enforceLegalDatabaseFreshness(privateFacts, {
+    status: "unavailable",
+    asOf: "unavailable",
+    ageDays: null,
+    maxAgeDays: 7,
+  }, { locale: "ru", answerMode: "detailed", reasoningMode: "fast" });
+
+  assert.equal(preserved.responseKind, "answer");
+  assert.equal(preserved.confirmedFindings.length, 1);
+  assert.equal(preserved.deadlines.length, 0);
+  assert.equal(preserved.suggestLawyer, true);
+  assert.match(preserved.assumptions[0]?.impact ?? "", /не является официальным источником/iu);
+});
+
 test("document analysis removes legal-compliance claims when corpus freshness is unavailable", () => {
   const analysis = documentAnalysisResultSchema.parse({
     documentType: "Договор",

@@ -1,10 +1,13 @@
 # Staging release evidence — 2026-08-14
 
-Status: **PARTIAL — technical staging evaluation completed; release gate is not approved**.
+Status: **COMPLETE for the canonical 314-scenario direct-source evaluation; the
+separate indexed-corpus release gate remains open**.
 
 This record distinguishes observed staging evidence from remaining release
-controls. It does not claim production readiness or replace the reviewer's own
-legal judgment.
+controls. Its initial technical run was partial; the later sections record the
+fresh-MFA reviewer attestation, 314 immutable per-scenario records and the
+subsequent Worker-only rollout. It does not pass the newer indexed-corpus gate
+or replace the reviewer's own legal judgment.
 
 ## Deployed revision
 

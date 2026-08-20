@@ -33,6 +33,7 @@ export class LegalSourceFetchError extends Error {
   constructor(
     readonly code: LegalSourceFetchErrorCode,
     readonly retryable: boolean,
+    readonly httpStatus: number | null = null,
   ) {
     super(code);
     this.name = "LegalSourceFetchError";
@@ -59,6 +60,15 @@ export type FetchedLegalSource = LegalSourceReference & {
 };
 
 export type FetchedLexPdfRepresentation = LegalSourceReference & {
+  bytes: Uint8Array;
+  contentSha256: string;
+  contentType: string;
+  representationUrl: string;
+  fetchedAt: string;
+  robotsUrl: string;
+};
+
+export type FetchedLexArchiveRepresentation = LegalSourceReference & {
   bytes: Uint8Array;
   contentSha256: string;
   contentType: string;
@@ -106,6 +116,7 @@ const SOURCE_USER_AGENT =
 const SOURCE_USER_AGENT_TOKEN = "juro-legalsourcesync";
 const DEFAULT_TIMEOUT_MS = 10_000;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
+const DEFAULT_ARCHIVE_MAX_BYTES = 20 * 1024 * 1024;
 const ROBOTS_MAX_BYTES = 128 * 1024;
 const DEFAULT_MAX_REDIRECTS = 2;
 const MAX_ROBOTS_CRAWL_DELAY_SECONDS = 60;
@@ -312,7 +323,7 @@ async function fetchFollowingRedirects(
           || response.status === 425
           || response.status === 429
           || response.status >= 500;
-        throw new LegalSourceFetchError(options.unavailableCode, retryable);
+        throw new LegalSourceFetchError(options.unavailableCode, retryable, response.status);
       }
       return { response, finalUrl: currentUrl };
     }
@@ -558,7 +569,7 @@ export async function fetchLegalSource(
     fetchImpl,
     timeoutMs,
     maxRedirects,
-    accept: "text/plain, */*;q=0.1",
+    accept: "*/*",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
       return candidate.protocol === "https:"
@@ -709,7 +720,7 @@ export async function fetchLexPdfRepresentation(
     fetchImpl,
     timeoutMs,
     maxRedirects,
-    accept: "text/plain, */*;q=0.1",
+    accept: "*/*",
     unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
     validateUrl(candidate) {
       return candidate.protocol === "https:"
@@ -786,6 +797,151 @@ export async function fetchLexPdfRepresentation(
     bytes,
     contentSha256: await sha256(bytes),
     contentType: contentType.raw || "application/pdf",
+    representationUrl: contentResult.finalUrl.href,
+    fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
+    robotsUrl: robotsResult.finalUrl.href,
+  };
+}
+
+/**
+ * Fetches a ZIP representation that was discovered on the already-fetched
+ * canonical Lex page.  The linked URL is never model-generated: it must be an
+ * exact same-origin `/files/<number>.zip` path and every redirect is pinned to
+ * that same immutable path.  ZIP structure is validated by the caller before
+ * any member is extracted.
+ */
+export async function fetchLexArchiveRepresentation(
+  canonicalUrl: string,
+  representationValue: string,
+  options: Pick<
+    FetchOptions,
+    "fetchImpl" | "now" | "timeoutMs" | "maxBytes" | "maxRedirects" | "wait"
+  >,
+): Promise<FetchedLexArchiveRepresentation> {
+  const reference = classifyLegalSourceUrl(canonicalUrl);
+  if (reference.sourceKind !== "lex") {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
+  }
+  let representationUrl: URL;
+  try {
+    representationUrl = new URL(representationValue);
+  } catch {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
+  }
+  const archivePath = /^\/files\/\d+\.zip$/iu;
+  if (
+    representationUrl.protocol !== "https:"
+    || representationUrl.hostname.toLowerCase() !== reference.host
+    || representationUrl.port !== ""
+    || representationUrl.username !== ""
+    || representationUrl.password !== ""
+    || representationUrl.search !== ""
+    || representationUrl.hash !== ""
+    || !archivePath.test(representationUrl.pathname)
+  ) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxBytes = options.maxBytes ?? DEFAULT_ARCHIVE_MAX_BYTES;
+  const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+  if (
+    timeoutMs < 1 || maxBytes < 1 || maxRedirects < 0
+    || !Number.isSafeInteger(timeoutMs)
+    || !Number.isSafeInteger(maxBytes)
+    || !Number.isSafeInteger(maxRedirects)
+  ) {
+    throw new TypeError("Invalid Lex archive fetch limits.");
+  }
+
+  const robotsInitialUrl = new URL(`https://${reference.host}/robots.txt`);
+  const robotsResult = await fetchFollowingRedirects(robotsInitialUrl, {
+    fetchImpl,
+    timeoutMs,
+    maxRedirects,
+    accept: "*/*",
+    unavailableCode: "LEGAL_SOURCE_ROBOTS_UNAVAILABLE",
+    validateUrl(candidate) {
+      return candidate.protocol === "https:"
+        && candidate.port === ""
+        && candidate.username === ""
+        && candidate.password === ""
+        && sourceHostKind(candidate.hostname) === "lex"
+        && candidate.pathname === "/robots.txt"
+        && candidate.search === ""
+        && candidate.hash === "";
+    },
+  });
+  const robotsType = responseContentType(robotsResult.response);
+  if (
+    robotsType.mediaType !== "text/plain"
+    || (robotsType.charset && !["utf-8", "utf8"].includes(robotsType.charset))
+  ) {
+    await cancelBody(robotsResult.response);
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_UNAVAILABLE", false);
+  }
+  const robotsBytes = await readBoundedBytes(
+    robotsResult.response,
+    ROBOTS_MAX_BYTES,
+    timeoutMs,
+  );
+  const robots = robotsAllows(parseRobots(decodeUtf8(robotsBytes)), representationUrl);
+  if (!robots.allowed) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_DISALLOWED", false);
+  }
+  if (robots.crawlDelay > MAX_ROBOTS_CRAWL_DELAY_SECONDS) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_ROBOTS_RATE_POLICY", false);
+  }
+  if (robots.crawlDelay > 0) {
+    if (!options.wait) {
+      throw new LegalSourceFetchError("LEGAL_SOURCE_CRAWL_WINDOW_REQUIRED", true);
+    }
+    await options.wait(Math.ceil(robots.crawlDelay * 1_000));
+  }
+
+  const expectedPath = representationUrl.pathname;
+  const contentResult = await fetchFollowingRedirects(representationUrl, {
+    fetchImpl,
+    timeoutMs,
+    maxRedirects,
+    accept: "application/zip,application/octet-stream",
+    unavailableCode: "LEGAL_SOURCE_UPSTREAM_UNAVAILABLE",
+    validateUrl(candidate) {
+      return candidate.protocol === "https:"
+        && candidate.port === ""
+        && candidate.username === ""
+        && candidate.password === ""
+        && sourceHostKind(candidate.hostname) === "lex"
+        && candidate.pathname === expectedPath
+        && candidate.search === ""
+        && candidate.hash === "";
+    },
+  });
+  const contentType = responseContentType(contentResult.response);
+  if (![
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/octet-stream",
+  ].includes(contentType.mediaType)) {
+    await cancelBody(contentResult.response);
+    throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
+  }
+  const bytes = await readBoundedBytes(contentResult.response, maxBytes, timeoutMs);
+  const zipMagic = bytes.byteLength >= 4
+    && bytes[0] === 0x50
+    && bytes[1] === 0x4b
+    && ((bytes[2] === 0x03 && bytes[3] === 0x04)
+      || (bytes[2] === 0x05 && bytes[3] === 0x06)
+      || (bytes[2] === 0x07 && bytes[3] === 0x08));
+  if (!zipMagic) {
+    throw new LegalSourceFetchError("LEGAL_SOURCE_CONTENT_TYPE_REJECTED", false);
+  }
+  return {
+    ...reference,
+    bytes,
+    contentSha256: await sha256(bytes),
+    contentType: contentType.raw || "application/zip",
     representationUrl: contentResult.finalUrl.href,
     fetchedAt: (options.now ?? (() => new Date()))().toISOString(),
     robotsUrl: robotsResult.finalUrl.href,

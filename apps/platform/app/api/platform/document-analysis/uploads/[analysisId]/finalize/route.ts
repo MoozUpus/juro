@@ -1,10 +1,11 @@
 import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../../../lib/document-builder/auth/api";
-import { requireD1, requireR2, runtimeEnv } from "../../../../../../../lib/document-builder/storage/runtime";
+import { requireD1, requireQuarantineR2, runtimeEnv } from "../../../../../../../lib/document-builder/storage/runtime";
 import { ArchiveInspectionError, verifyArchiveBytes, type ArchiveInspection } from "../../../../../../../lib/document-analysis/archive-inspector";
 import {
   arrayBufferHex,
   documentAnalysisUploadForUser,
   DocumentAnalysisUploadError,
+  validateTextUploadBytes,
   validateUploadMagicBytes,
 } from "../../../../../../../lib/document-analysis/upload-pipeline";
 import { workspaceForUser } from "../../../../../../../lib/platform/workspace";
@@ -39,12 +40,12 @@ export const POST = withApiErrors(async function POST(
       key: "document_analysis_upload",
     });
     const record = await documentAnalysisUploadForUser(db, analysisId, workspace.id, user.id);
-    if (record.status === "ready") return analysisQueuedResponse(record, true);
+    if (record.status === "quarantined") return malwareScanQueuedResponse(record, true);
     if (record.status !== "uploaded") {
       return response({ code: "UPLOAD_STATE_CONFLICT", error: "Сначала завершите загрузку файла." }, 409);
     }
 
-    const bucket = requireR2();
+    const bucket = requireQuarantineR2();
     const object = await bucket.head(record.r2Key);
     if (!object || object.size !== record.sizeBytes || arrayBufferHex(object.checksums.sha256) !== record.sha256) {
       await rejectFile(db, bucket, record, workspace.id, user.id, "UPLOAD_INTEGRITY_FAILED");
@@ -84,8 +85,20 @@ export const POST = withApiErrors(async function POST(
         }, 422);
       }
     }
+    if (record.mimeType === "text/plain" || record.mimeType === "text/html" || record.mimeType === "application/json") {
+      const textObject = await bucket.get(record.r2Key);
+      if (!textObject || !("body" in textObject)
+        || !validateTextUploadBytes(record.mimeType, new Uint8Array(await textObject.arrayBuffer()))) {
+        await rejectFile(db, bucket, record, workspace.id, user.id, "CONTENT_VALIDATION_FAILED");
+        return response({
+          code: "FILE_UNSAFE",
+          reason: "CONTENT_VALIDATION_FAILED",
+          error: "Текстовый файл повреждён либо содержит активный HTML-контент.",
+        }, 422);
+      }
+    }
 
-    return queueDirectAnalysis(db, record, workspace.id, user.id, new Date().toISOString(), archiveInspection);
+    return queueMalwareScan(db, record, workspace.id, user.id, new Date().toISOString(), archiveInspection);
   } catch (error) {
     if (error instanceof OperationalFeatureError) {
       return response({
@@ -125,7 +138,7 @@ async function rejectFile(
   ]);
 }
 
-async function queueDirectAnalysis(
+async function queueMalwareScan(
   db: D1Database,
   record: Awaited<ReturnType<typeof documentAnalysisUploadForUser>>,
   workspaceId: string,
@@ -133,23 +146,23 @@ async function queueDirectAnalysis(
   now: string,
   archiveInspection: ArchiveInspection | null,
 ): Promise<Response> {
-  const jobId = `analysis-direct:${record.analysisId}`;
+  const jobId = `malware-scan:${record.analysisId}`;
   await db.batch([
     db.prepare(
-      "UPDATE document_files SET kind='analysis_safe',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_uploaded'",
+      "UPDATE document_files SET kind='analysis_quarantined',updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND kind='analysis_uploaded'",
     ).bind(now, record.fileId, workspaceId, userId),
     db.prepare(
-      "UPDATE document_analyses SET status='ready',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='uploaded'",
+      "UPDATE document_analyses SET status='quarantined',error_code=NULL,updated_at=? WHERE id=? AND workspace_id=? AND owner_user_id=? AND status='uploaded'",
     ).bind(now, record.analysisId, workspaceId, userId),
     db.prepare(`INSERT OR IGNORE INTO job_outbox
       (id,queue_binding,job_type,schema_version,idempotency_key,subject_id,workspace_id,
        correlation_id,enqueued_at,available_at,status,dispatch_attempts,created_at,updated_at)
-      VALUES (?,'DOCUMENT_ANALYSIS_QUEUE','document.analyze',1,?,?,?, ?,?,?,'pending',0,?,?)`).bind(
+      VALUES (?,'MALWARE_SCAN_QUEUE','malware.scan',1,?,?,?, ?,?,?,'pending',0,?,?)`).bind(
       jobId,
       `${jobId}:${record.sha256.slice(0, 16)}`,
       record.analysisId,
       workspaceId,
-      `direct-upload:${record.analysisId}`,
+      `upload-quarantine:${record.analysisId}`,
       now,
       now,
       now,
@@ -157,7 +170,7 @@ async function queueDirectAnalysis(
     ),
     db.prepare(`INSERT INTO workspace_audit_events
       (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at)
-      VALUES (?,?,?,'document_analysis',?,'upload_direct_analysis_queued',?,?)`).bind(
+      VALUES (?,?,?,'document_analysis',?,'upload_malware_scan_queued',?,?)`).bind(
       crypto.randomUUID(),
       workspaceId,
       userId,
@@ -172,29 +185,30 @@ async function queueDirectAnalysis(
         archiveFileCount: archiveInspection?.fileCount ?? null,
         archiveUncompressedBytes: archiveInspection?.uncompressedBytes ?? null,
         sourceSha256: record.sha256,
+        quarantine: true,
       }),
       now,
     ),
   ]);
-  return analysisQueuedResponse({ ...record, status: "ready" }, false);
+  return malwareScanQueuedResponse({ ...record, status: "quarantined" }, false);
 }
 
-function analysisQueuedResponse(
+function malwareScanQueuedResponse(
   record: Awaited<ReturnType<typeof documentAnalysisUploadForUser>>,
   replay: boolean,
 ) {
   return response({
-    code: "ANALYSIS_QUEUED",
+    code: "FILE_SCAN_QUEUED",
     analysis: {
       id: record.analysisId,
       fileId: record.fileId,
       fileName: record.fileName,
       mimeType: record.mimeType,
       sizeBytes: record.sizeBytes,
-      status: "ready",
+      status: "quarantined",
       errorCode: null,
     },
     replay,
-    message: "Файл проверен на целостность и формат и сразу передан в очередь анализа.",
+    message: "Файл проверен на целостность и формат и передан в изолированную очередь malware scan.",
   }, 202);
 }

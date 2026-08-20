@@ -13,7 +13,7 @@ test("legacy document review POST cannot buffer a file or invoke an AI provider"
   assert.doesNotMatch(route, /request\.formData\(|arrayBuffer\(|callOpenAiJson|callAnthropic/);
 });
 
-test("secure upload routes enforce streaming, checksum, tenant, and direct-analysis boundaries", () => {
+test("secure upload routes enforce streaming, checksum, tenant, quarantine, and malware-scan boundaries", () => {
   const init = source("app/api/platform/document-analysis/uploads/route.ts");
   const upload = source("app/api/platform/document-analysis/uploads/[analysisId]/route.ts");
   const finalize = source("app/api/platform/document-analysis/uploads/[analysisId]/finalize/route.ts");
@@ -29,12 +29,15 @@ test("secure upload routes enforce streaming, checksum, tenant, and direct-analy
   assert.match(finalize, /validateUploadMagicBytes/);
   assert.match(finalize, /await verifyArchiveBytes\(/);
   assert.doesNotMatch(finalize, /inspectArchiveBytes\(/);
-  assert.match(finalize, /analysis_safe/);
-  assert.match(finalize, /ANALYSIS_QUEUED/);
+  assert.match(finalize, /analysis_quarantined/);
+  assert.match(finalize, /FILE_SCAN_QUEUED/);
   assert.match(finalize, /INSERT OR IGNORE INTO job_outbox/);
-  assert.match(pipeline, /analysis-input-v1/);
-  assert.match(finalize, /requireR2\(\)/);
-  assert.doesNotMatch(`${init}\n${upload}\n${finalize}`, /requireQuarantineR2|quarantined|MALWARE_SCAN|quarantine-bypass/);
+  assert.match(pipeline, /quarantine-v2/);
+  assert.match(upload, /requireQuarantineR2\(\)/);
+  assert.match(finalize, /requireQuarantineR2\(\)/);
+  assert.match(finalize, /MALWARE_SCAN_QUEUE/);
+  assert.match(finalize, /malware\.scan/);
+  assert.doesNotMatch(`${upload}\n${finalize}`, /quarantine-bypass|analysis-direct|upload_direct_analysis_queued/);
   assert.doesNotMatch(`${upload}\n${finalize}`, /callOpenAiJson|callAnthropic/);
 });
 
@@ -154,6 +157,7 @@ test("AI and document processors revalidate provider citations before persistenc
   const provider = source("lib/document-analysis/provider.ts");
   assert.match(provider, /untrustedDocument\.documentText/);
   assert.match(processor, /originalUrl: source\.officialUrl/);
+  assert.match(processor, /publishPendingOwnerCorpusUpload\(scopedEnv, analysisId\)/);
   assert.match(
     processor,
     /setAnalysisState\(env\.DB, row, "failed", "DOCUMENT_ANALYSIS_INVALID_OUTPUT"\)/,

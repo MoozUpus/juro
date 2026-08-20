@@ -15,8 +15,10 @@
 Huquq AI's README at the pinned commit publishes these **reference-only**
 counts: 1,283 canonical documents, 20,296 provisions and 22,513 chunks. The
 reference clone did not contain the underlying legal corpus, vectors or raw
-HTML, so none of that data is imported into JURO. These values are acceptance
-thresholds, not JURO metrics.
+HTML, so none of that data is imported into JURO. These values remain the
+audited Huquq AI reference floor, not JURO metrics. On 2026-08-17 the owner
+raised JURO's effective release floor to 1,500 canonical documents and 22,000
+unique provisions; the 22,513 indexed-chunk floor is unchanged.
 
 ## Verified JURO staging baseline
 
@@ -37,9 +39,19 @@ be used to claim source coverage, recall, or corpus-size parity. On 2026-08-15,
 migrations `0124_full_legal_corpus.sql`,
 `0125_lex_catalog_discovery.sql`, and the export-safety correction
 `0126_exportable_legal_corpus_sparse_index.sql` were applied to **staging
-only** after pre-migration backup/restore verification. All new staging corpus
-registries remain empty and all corpus feature flags remain disabled.
-Production has not received these migrations.
+only** after pre-migration backup/restore verification. Migration
+`0127_legal_corpus_admin_control.sql` was then applied to staging with its own
+pre/post full-export restore and private-R2 readback gate. Migration
+`0128_owner_corpus_publications.sql` was then applied under the same gate.
+
+After the branch CI and staging browser smoke passed, production-safe migrations
+`0124–0128` were applied to production. Staging-only evidence migrations
+`0122–0123` remained excluded. Both environments have verified pre/post
+isolated restores and private-R2 readback evidence. All new corpus registries
+were empty and all corpus feature flags were disabled at the foundation release;
+no crawl or corpus traffic cutover was started by that release. The following
+approved phase enables bounded acquisition in staging only. Production remains
+disabled and direct Lex remains its visible answer path.
 
 ## Verified public catalog shape
 
@@ -70,6 +82,11 @@ language.
 - Existing direct Lex retrieval remains the production fallback. It does not
   create permanent corpus records and therefore remains the source of truth
   until the separate corpus rollout gate is passed.
+- Heavy corpus discovery and ingestion have been removed from the ordinary
+  application scheduler. A route-free dedicated Worker now owns the bounded
+  seed/process crons, a shared D1 lease and an idempotent scheduled-run ledger.
+  Development and production remain `false`; staging alone enables bounded
+  acquisition and shadow mode after the release verifier and backup gates.
 
 ## Data rights and operational boundary
 

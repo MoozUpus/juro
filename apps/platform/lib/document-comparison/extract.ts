@@ -1,4 +1,5 @@
 import PizZip from "pizzip";
+import { parse, type DefaultTreeAdapterTypes } from "parse5";
 import { extractText, getDocumentProxy } from "unpdf";
 import {
   ComparisonProcessingError,
@@ -121,6 +122,45 @@ function extractDocxText(bytes: Uint8Array): string {
   }
 }
 
+function decodeUtf8Text(bytes: Uint8Array, label: string): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    throw new ComparisonProcessingError("CORRUPT_FILE", `${label} повреждён или не является UTF-8.`);
+  }
+}
+
+function extractHtmlText(bytes: Uint8Array): string {
+  const html = decodeUtf8Text(bytes, "HTML-файл");
+  const document = parse(html);
+  const blocks = new Set(["address", "article", "aside", "blockquote", "br", "dd", "div", "dl", "dt", "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hr", "li", "main", "nav", "ol", "p", "pre", "section", "table", "td", "th", "tr", "ul"]);
+  const ignored = new Set(["script", "style", "noscript", "template", "iframe", "object", "embed", "svg"]);
+  const parts: string[] = [];
+  const visit = (node: DefaultTreeAdapterTypes.Node): void => {
+    if (node.nodeName === "#text") {
+      parts.push((node as DefaultTreeAdapterTypes.TextNode).value);
+      return;
+    }
+    if (!("childNodes" in node)) return;
+    const tagName = "tagName" in node ? String(node.tagName).toLocaleLowerCase() : "";
+    if (ignored.has(tagName)) return;
+    if (blocks.has(tagName)) parts.push("\n");
+    for (const child of node.childNodes) visit(child);
+    if (blocks.has(tagName)) parts.push("\n");
+  };
+  visit(document);
+  return normalizeText(parts.join(" "));
+}
+
+function extractJsonText(bytes: Uint8Array): string {
+  const source = decodeUtf8Text(bytes, "JSON-файл");
+  try {
+    return normalizeText(JSON.stringify(JSON.parse(source), null, 2));
+  } catch {
+    throw new ComparisonProcessingError("CORRUPT_FILE", "JSON-файл содержит недопустимую структуру.");
+  }
+}
+
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -187,6 +227,12 @@ export async function extractDocument(input: {
     } catch {
       throw new ComparisonProcessingError("CORRUPT_FILE", "Текстовый снимок документа повреждён.");
     }
+  } else if (input.mimeType === "text/plain") {
+    text = normalizeText(decodeUtf8Text(input.bytes, "Текстовый файл"));
+  } else if (input.mimeType === "text/html") {
+    text = extractHtmlText(input.bytes);
+  } else if (input.mimeType === "application/json") {
+    text = extractJsonText(input.bytes);
   } else if (input.mimeType === "image/jpeg" || input.mimeType === "image/png") {
     throw new ComparisonProcessingError(
       "OCR_REQUIRED",

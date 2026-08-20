@@ -16,7 +16,7 @@ This is a clean TypeScript/Cloudflare adaptation. JURO does not vendor the upstr
 | License | Pass | Root `LICENSE` is MIT and names Toxir Erkinov, 2026. |
 | Secrets | Pass | Repository scan of tracked files found no private keys, provider tokens or committed dotenv secrets. Runtime/config examples were not copied. |
 | Dependencies | Pass with limitation | All direct pins in `requirements.txt` were checked with `pip-audit --no-deps`; no known vulnerability was reported for a pinned direct dependency. Full transitive resolution did not finish within the audit window, so no upstream Python dependency is adopted into JURO. |
-| Security design | Selective adoption only | Upstream arbitrary application/runtime, auth, billing, SQLite, Qdrant, Gemini, Docker, local corpus and crawler persistence are excluded. JURO retains its own auth, tenant isolation, idempotency, provider cost controls, SSRF/robots checks and Cloudflare runtime. |
+| Security design | Selective adoption only | Upstream arbitrary application/runtime, auth, billing, SQLite auth, Qdrant Docker deployment, Gemini, local corpus and crawler persistence are excluded. JURO retains its own auth, tenant isolation, idempotency, provider cost controls, SSRF/robots checks and Cloudflare runtime. |
 | Code quality | Pass for selected concepts | Intent, rewrite, retrieval/rerank, grounding and test patterns are small and independently testable. They were reimplemented against strict schemas and fail-closed boundaries. |
 | Data provenance | Excluded | No upstream corpus, JSONL, Markdown, screenshots or evaluation answers are copied. JURO evaluation cases contain only prompts and expected Lex metadata. |
 
@@ -36,7 +36,7 @@ This is a clean TypeScript/Cloudflare adaptation. JURO does not vendor the upstr
 | Agent tools | `lib/ai/legal-agent-tools.ts` | Adopted with JURO boundary | `tests/legal-agent-tools.test.ts` | Six typed tools; only canonical HTTPS Lex fetch; plan/template outputs require user confirmation and do not mutate. |
 | Streaming progress and compact sources | Existing AI route plus `AiLawyerClient.tsx` | Adopted | `tests/ai-chat-slo-contract.test.ts` | Source-free progress events precede only a validated final answer; cards show metadata, never raw excerpts. |
 | Hard questions and grounding tests | `evaluation/legal-evaluation-corpus.ts` | Adopted and expanded | `tests/legal-evaluation-corpus.test.ts`, `tests/legal-chat-release-gate.test.ts` | 314 unique RU/UZ cases cover domains, false citations/articles, injection, follow-up, UI noise, provider retry/failure and source unavailability. |
-| Qdrant, dense/sparse vectors, RRF, embeddings | None | Excluded | `tests/live-lex-runtime-boundary.test.ts` | Conflicts with direct-live Lex policy and text-retention prohibition. |
+| Qdrant dense/sparse behaviour, RRF, embeddings | `lib/legal-corpus/{qdrant,qdrant-indexing,embeddings,retrieval}.ts` | Reimplemented, disabled | `tests/legal-corpus-{qdrant,qdrant-indexing,embeddings,retrieval}.test.ts` | Server-only TypeScript adapter; upstream Python/Docker is not copied. Every ID is D1-rehydrated; activation awaits benchmark/private infrastructure. |
 | Local Lex corpus, Markdown/raw HTML history | None | Excluded | parser/retrieval boundary tests | Full legal text exists only in current request memory. |
 | Gemini adapter | None | Excluded | provider routing tests | JURO policy permits only OpenAI primary/retry and Anthropic fallback. |
 | FastAPI/Python, Docker, auth, billing, SQLite, frontend | None | Excluded | repository boundary and build | JURO keeps its existing Next.js/Cloudflare/auth/billing architecture. |
@@ -44,7 +44,9 @@ This is a clean TypeScript/Cloudflare adaptation. JURO does not vendor the upstr
 
 ## JURO architecture after adoption
 
-`intent/rewrite/plan → direct Lex search → candidate canonical URLs → secure server fetch → clean/structure → quality/rank → temporary source spans → OpenAI primary → one OpenAI retry → Anthropic fallback on the same packets → claim/span validation → persistence of metadata only → final SSE answer and compact cards`
+The existing direct-live path remains unchanged while all corpus flags are off.
+The disabled indexed candidate path is `D1 BM25 + Qdrant dense/sparse → RRF → D1
+version/scope rehydration → exact-span packet → grounded generation/citation validation`.
 
 OpenAI Web Search is discovery-only after direct retrieval misses. It is restricted to `lex.uz` and `www.lex.uz`; every returned URL goes back through JURO's canonical URL, HTTPS, SSRF, redirects, robots, content-type, parser and quality gates. Advice.uz discovery and fetch are permanently disabled before network access even if an obsolete flag says otherwise.
 

@@ -112,6 +112,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
     && bindings.BUCKET
     && bindings.OPENAI_API_KEY
     && bindings.APP_ENV
+    && bindings.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST === "true"
     ? await searchUserDocuments({
         APP_ENV: bindings.APP_ENV,
         DB: db,

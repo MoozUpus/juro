@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { access, mkdir, readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { access, mkdir, stat } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
+import { createInterface } from "node:readline";
 import { DatabaseSync } from "node:sqlite";
 
 function parseArgs(argv) {
@@ -22,10 +24,6 @@ function parseArgs(argv) {
   return result;
 }
 
-function sha256(value) {
-  return createHash("sha256").update(value).digest("hex");
-}
-
 const options = parseArgs(process.argv.slice(2));
 const inputPath = resolve(options.input);
 const outputPath = resolve(options.output);
@@ -36,19 +34,63 @@ try {
   if (error?.code !== "ENOENT") throw error;
 }
 
-const exportSql = await readFile(inputPath, "utf8");
-if (!/CREATE TABLE(?: IF NOT EXISTS)? [`"]?d1_migrations[`"]?/.test(exportSql)) {
-  throw new Error("Full export does not contain the D1 migration ledger.");
-}
-if (!/INSERT INTO/.test(exportSql)) {
-  throw new Error("Full export contains no data rows.");
-}
-
 await mkdir(dirname(outputPath), { recursive: true });
 const db = new DatabaseSync(outputPath);
 try {
   db.exec("PRAGMA foreign_keys=OFF");
-  db.exec(exportSql);
+  db.exec("BEGIN IMMEDIATE");
+
+  const inputStat = await stat(inputPath);
+  const digest = createHash("sha256");
+  const input = createReadStream(inputPath);
+  input.on("data", (chunk) => digest.update(chunk));
+  const lines = createInterface({ input, crlfDelay: Infinity });
+  let statementLines = [];
+  let batch = [];
+  let batchBytes = 0;
+  let hasMigrationLedger = false;
+  let hasDataRows = false;
+  let statementCount = 0;
+
+  const executeBatch = () => {
+    if (batch.length === 0) return;
+    db.exec(batch.join("\n"));
+    batch = [];
+    batchBytes = 0;
+  };
+
+  for await (const line of lines) {
+    statementLines.push(line);
+    const firstLine = statementLines[0]?.trimStart() ?? "";
+    const isTrigger = /^CREATE\s+TRIGGER\b/i.test(firstLine);
+    const isComplete = isTrigger
+      ? /\bEND;\s*$/i.test(line.trim())
+      : /;\s*$/.test(line);
+    if (!isComplete) continue;
+
+    const statement = statementLines.join("\n");
+    statementLines = [];
+    hasMigrationLedger ||= /CREATE\s+TABLE(?:\s+IF\s+NOT\s+EXISTS)?\s+[`"]?d1_migrations[`"]?/i.test(
+      statement,
+    );
+    hasDataRows ||= /^INSERT\s+INTO\b/i.test(statement.trimStart());
+    batch.push(statement);
+    batchBytes += Buffer.byteLength(statement) + 1;
+    statementCount += 1;
+    if (batchBytes >= 8 * 1024 * 1024) executeBatch();
+  }
+  if (statementLines.some((line) => line.trim().length > 0)) {
+    throw new Error("Full export ends with an incomplete SQL statement.");
+  }
+  executeBatch();
+  db.exec("COMMIT");
+
+  if (!hasMigrationLedger) {
+    throw new Error("Full export does not contain the D1 migration ledger.");
+  }
+  if (!hasDataRows) {
+    throw new Error("Full export contains no data rows.");
+  }
   db.exec("PRAGMA foreign_keys=ON");
 
   const quickCheck = db.prepare("PRAGMA quick_check").all();
@@ -69,9 +111,10 @@ try {
 
   console.log(JSON.stringify({
     ok: true,
-    inputBytes: Buffer.byteLength(exportSql),
+    inputBytes: inputStat.size,
     outputBytes: outputStat.size,
-    sha256: sha256(exportSql),
+    sha256: digest.digest("hex"),
+    statementCount,
     tableCount: topology.table_count,
     indexCount: topology.index_count,
     triggerCount: topology.trigger_count,

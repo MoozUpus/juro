@@ -8,7 +8,7 @@ async function source(relativePath: string): Promise<string> {
 
 test("SSE keeps source verification content-free and reserves preliminary output for a grounded claim", async () => {
   const route = await source("../app/api/platform/ai/route.ts");
-  const retrieval = route.indexOf("const retrieval = await liveLexRetrieval;");
+  const retrieval = route.indexOf("const [retrieval, privateDocuments] = await Promise.all([liveLexRetrieval, privateDocumentRetrieval]);");
   const sourceVerified = route.indexOf('await emitProgress({ stage: "source_verified" });');
   const memory = route.indexOf("const { memoryEncryption, memories } = await memoryContext;");
   const groundedPreliminary = route.indexOf("onGroundedPreliminary: async (preliminary)");
@@ -19,6 +19,7 @@ test("SSE keeps source verification content-free and reserves preliminary output
   assert.ok(groundedPreliminary > memory);
   assert.match(route, /AI_INTERACTIVE_FINALIZATION_RESERVE_MS/);
   assert.match(route, /retrieveCorpusAwareLegalSources/);
+  assert.match(route, /retrieveTrustedUserDocumentSources/);
   assert.match(route, /retrieval\.sourceValidationStatus !== "validated"/);
   assert.match(route, /freshness\.status !== "fresh"/);
   assert.match(route, /let preliminaryAtMs: number \| null = null/);
