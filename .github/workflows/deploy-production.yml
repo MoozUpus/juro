@@ -45,6 +45,11 @@ jobs:
           platform=false
           admin=false
 
+          # Treat renames as a deletion plus an addition so moving a file out
+          # of one deployable app still selects that app for deployment.
+          changed_files="$RUNNER_TEMP/production-changed-files"
+          git diff --name-only --no-renames -z "$BASE_SHA" "$MERGE_SHA" > "$changed_files"
+
           while IFS= read -r -d '' file; do
             case "$file" in
               apps/website/*)
@@ -65,9 +70,7 @@ jobs:
                 admin=true
                 ;;
             esac
-          # Treat renames as a deletion plus an addition so moving a file out
-          # of one deployable app still selects that app for deployment.
-          done < <(git diff --name-only --no-renames -z "$BASE_SHA" "$MERGE_SHA")
+          done < "$changed_files"
 
           {
             echo "website=$website"
