@@ -1394,3 +1394,22 @@ version jobs and 7,083 live/manual jobs; terminal jobs, terminal failures and
 dead letters remained zero. This confirms the scheduler continues to release
 its lock cleanly across consecutive runs. The queue is still active, so no
 snapshot or post-ingestion gate is claimed.
+
+## Recovered transient revision retry (2026-08-20)
+
+The staging invocation started at `2026-08-20T11:04:53.112Z` completed at
+`2026-08-20T11:11:11.141Z` with the run-level code
+`LEGAL_CORPUS_INGESTION_FAILED`. Read-only inspection found one retryable
+revision fetch for `lexuz:111189` at
+`https://lex.uz/uz/docs/-111189?ONDATE=21.04.2022` at
+`2026-08-20T11:09:19.592Z`. The job had `retry_count=1`, `retry_state=retrying`
+and no HTTP status; it subsequently succeeded at
+`2026-08-20T11:10:27.243Z` with `attempt_count=2`, `status=completed` and no
+`last_error_code`. The immutable failure row remains marked `retrying` as
+historical evidence, while the job-aware unresolved probe is
+`unresolved_retrying=0` and `unresolved_terminal=0`.
+
+This is a recovered transient, not a terminal ingestion failure. No code
+change or retry-policy change was made. The final queue probe still showed
+zero terminal jobs, terminal failures and dead letters; the ingestion queue
+remains active and the freeze gate stays open.
