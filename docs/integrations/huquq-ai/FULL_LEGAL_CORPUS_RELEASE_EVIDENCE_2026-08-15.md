@@ -1348,3 +1348,30 @@ terminal jobs/failures/dead letters, 38,310 queued fetch jobs, 6,280 queued
 version jobs, and 7,131 live/manual queued jobs. The release gate therefore
 remains open: the corpus is not yet frozen and the indexed evaluation, Qdrant
 benchmark/restore, D1 backup/restore and rollout gates have not run.
+
+## Staging ingestion window correction (2026-08-20)
+
+The staging-only Worker was updated in commit `9fc6e15` and deployed as
+version `e2356805-f9ed-404a-9d1b-5d7c93c37f82`. Production keeps the 195-second
+ingestion start fence. Staging uses a bounded twelve-minute start fence under
+the fifteen-minute scheduler lease, leaving time for final D1 reconciliation
+and lock release. The single sequential Lex.uz stream, robots policy and
+20-second host pacer are unchanged; no parallel crawl or production flag was
+introduced.
+
+The first invocation that started after this deployment began at
+`2026-08-20T10:20:53.294Z` and completed at `2026-08-20T10:33:33.290Z` with
+`status=completed` and `error_code=NULL` (12 minutes 39.996 seconds). It
+completed eight queued version jobs and released the scheduler lease without
+another `LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED` record. This is the first
+post-deploy proof that the longer bounded staging window is effective; it is
+not a claim that the corpus is frozen or release-ready.
+
+The same read-only D1 probe recorded 3,575 canonical documents, 62,075 unique
+current provisions and 151,499 indexed current chunks; all 44 discovery
+checkpoints were completed with zero checkpoint errors; terminal jobs,
+terminal failures and dead letters remained zero. Queued jobs remained
+38,310 fetch and 6,258 version, with 7,110 live/manual queued jobs. The
+release gate therefore remains open: ingestion is still active, and snapshot,
+indexed 314-scenario evaluation, Qdrant benchmark/restore, D1 backup/restore,
+preview and rollout gates have not run.
