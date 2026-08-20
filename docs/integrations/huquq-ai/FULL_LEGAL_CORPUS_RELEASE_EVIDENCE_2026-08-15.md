@@ -1484,3 +1484,20 @@ queued version jobs; `6,975` live/manual queued jobs). Corpus totals remained
 The freeze gate therefore remains open: snapshot, indexed 314-scenario
 evaluation, Qdrant benchmark/restore, D1 backup/restore, preview and rollout
 are not claimed. Production remains untouched.
+
+## Post-recovery clean staging run (2026-08-20)
+
+The next scheduled invocation started at `2026-08-20T13:04:45.510Z` and
+completed at `2026-08-20T13:18:41.306Z` with `status=completed`,
+`error_code=NULL` and a duration of 835 seconds. The post-run read-only D1
+probe found no running, retrying, failed or dead-letter ingestion jobs;
+`terminal_or_dead_letter_jobs=0`, `active_jobs_with_errors=0`,
+`unresolved_retrying=0` and `unresolved_technical=0`.
+
+The queue probe recorded 38,310 queued fetch jobs and 6,117 queued version
+jobs, with 6,969 live/manual queued jobs. Corpus totals remained 3,575
+canonical documents, 62,075 unique current provisions and 151,499 indexed
+current chunks; all 44 discovery checkpoints remained completed. The queue is
+still active, so the ingestion freeze gate and all downstream snapshot,
+evaluation, backup/restore and rollout gates remain open. Production remains
+untouched.
