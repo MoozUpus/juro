@@ -15,6 +15,7 @@
     "validate:artifact": "bash scripts/validate-artifact.sh",
     "lint": "bash scripts/sites-env.sh -- eslint . --ignore-pattern dist --ignore-pattern .next",
     "type-check": "bash scripts/sites-env.sh -- tsc --noEmit",
+    "license:check": "node ../../scripts/check-dependency-licenses.mjs .",
     "db:generate": "bash scripts/sites-env.sh -- drizzle-kit generate"
   },
   "dependencies": {
