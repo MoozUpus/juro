@@ -9,7 +9,19 @@ test("display names accept human RU and UZ names", () => {
 });
 
 test("display names reject technical and misleading identifiers", () => {
-  for (const value of ["test", "qwerty", "user@example.com", "https://example.com", "11111", "ААААА", "<script>"]) {
+  for (const value of [
+    "test",
+    "qwerty",
+    "user@example.com",
+    "https://example.com",
+    "11111",
+    "ААААА",
+    "<script>",
+    "Client QA JURO",
+    "JURO Local Developer",
+    "Demo Client",
+    "Пользователь Тест",
+  ]) {
     assert.equal(safeDisplayName(value), "");
   }
 });

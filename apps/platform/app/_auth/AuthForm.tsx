@@ -291,9 +291,9 @@ export function AuthForm({
             </div>
           </header>
           {developmentAuthEnabled
-            ? <Link className="auth-submit" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}</Link>
+            ? <a className="auth-submit" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}</a>
             : platformAuthEnabled
-            ? <Link className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Продолжить защищённый вход" : "Himoyalangan kirishni davom ettirish"}</Link>
+            ? <a className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Продолжить защищённый вход" : "Himoyalangan kirishni davom ettirish"}</a>
             : <p className="auth-error" role="status">{ru ? "Владелец проекта должен подключить Resend и Cloudflare Turnstile через защищённое хранилище." : "Loyiha egasi Resend va Cloudflare Turnstile xizmatlarini himoyalangan saqlash orqali ulashi kerak."}</p>}
         </section>
       </main>
@@ -472,12 +472,12 @@ export function AuthForm({
             : <>{ru ? "Нет аккаунта?" : "Hisob yo‘qmi?"} <Link href={`/${locale}/auth/register?accountType=${accountType}`}>{ru ? "Создать" : "Yaratish"}</Link></>}
         </div>
         {developmentAuthEnabled
-          ? <Link className="auth-siwc" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}>
+          ? <a className="auth-siwc" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}>
               {ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}
-            </Link>
-          : platformAuthEnabled && <Link className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
+            </a>
+          : platformAuthEnabled && <a className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
               {ru ? "Войти через защищённую учётную запись" : "Himoyalangan hisob orqali kirish"}
-            </Link>}
+            </a>}
       </section>
     </main>
   );

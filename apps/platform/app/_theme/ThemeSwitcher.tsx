@@ -18,6 +18,16 @@ const options = [
 
 const THEME_CHANGE_EVENT = "juro-theme-change";
 
+function readThemeInteractionRevision() {
+  if (typeof document === "undefined") return "";
+  return document.documentElement.dataset.themeInteractionRevision ?? "";
+}
+
+function markThemeInteraction() {
+  const current = Number.parseInt(readThemeInteractionRevision(), 10);
+  document.documentElement.dataset.themeInteractionRevision = String(Number.isSafeInteger(current) ? current + 1 : 1);
+}
+
 function readThemeMode(): ThemeMode {
   if (typeof document === "undefined") return "system";
   const value = document.documentElement.dataset.themeMode;
@@ -58,10 +68,11 @@ export function ThemeSwitcher({ locale, compact = false, persistAccount = true }
   useEffect(() => {
     if (!persistAccount) return;
     const controller = new AbortController();
+    const startedRevision = readThemeInteractionRevision();
     fetch("/api/platform/theme", { cache: "no-store", signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<{ theme?: unknown }> : null)
       .then((body) => {
-        if (!body || !isThemeMode(body.theme)) return;
+        if (!body || !isThemeMode(body.theme) || readThemeInteractionRevision() !== startedRevision) return;
         writePreference(body.theme);
         applyTheme(body.theme);
         announceThemeMode();
@@ -79,6 +90,7 @@ export function ThemeSwitcher({ locale, compact = false, persistAccount = true }
   }, [mode]);
 
   async function select(next: ThemeMode) {
+    markThemeInteraction();
     writePreference(next);
     applyTheme(next);
     announceThemeMode();
