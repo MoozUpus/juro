@@ -1457,3 +1457,30 @@ These consecutive clean runs confirm that the staging lease and bounded
 sequential ingestion path continue to recover and drain the revision queue.
 The queue is still active, so the freeze gate and all post-ingestion gates
 remain open. Production remains untouched.
+
+## Scheduler lease expiry and recovered stale job (2026-08-20)
+
+The scheduled invocation that started at `2026-08-20T12:32:53.111Z` exceeded
+the fifteen-minute scheduler lease and was reconciled at
+`2026-08-20T12:48:45.510Z` as `status=failed` with
+`error_code=LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED`. This is scheduler evidence,
+not a terminal ingestion result. The next bounded invocation started at
+`2026-08-20T12:48:45.510Z` and completed at `2026-08-20T13:00:55.594Z` with
+`status=completed` and `error_code=NULL` (730 seconds).
+
+During that recovery, the stale version job
+`legal-version:8984a7940432fff1cd5f46b49095` for the official Lex revision
+`https://lex.uz/docs/111189?ONDATE=18.01.1999` was requeued with
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`, then completed successfully on attempt
+2. The final job-aware probe recorded zero terminal/dead-letter jobs, zero
+active jobs with error codes, `unresolved_retrying=0` and
+`unresolved_technical=0`; no manual D1 mutation was used and no code change
+was justified by this recovered transient.
+
+The post-run queue remained active (`38,310` queued fetch jobs and `6,122`
+queued version jobs; `6,975` live/manual queued jobs). Corpus totals remained
+`3,575` canonical documents, `62,075` unique current provisions and
+`151,499` indexed current chunks, with 44/44 discovery checkpoints completed.
+The freeze gate therefore remains open: snapshot, indexed 314-scenario
+evaluation, Qdrant benchmark/restore, D1 backup/restore, preview and rollout
+are not claimed. Production remains untouched.
