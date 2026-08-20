@@ -64,3 +64,12 @@ test("the account theme API scopes shared cookies only to JURO application hosts
   assert.match(route, /function GET\(request: Request\)/);
   assert.doesNotMatch(route, /SameSite=Lax; Domain=\.juro\.uz; Secure/);
 });
+
+test("the account theme API scopes shared cookies only to JURO application hosts", () => {
+  const route = source("app/api/platform/theme/route.ts");
+
+  assert.match(route, /sharedAuthCookieDomain\(requestUrl\.hostname\)/);
+  assert.match(route, /requestUrl\.protocol === "https:"/);
+  assert.match(route, /function GET\(request: Request\)/);
+  assert.doesNotMatch(route, /SameSite=Lax; Domain=\.juro\.uz; Secure/);
+});
