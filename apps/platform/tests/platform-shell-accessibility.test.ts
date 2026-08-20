@@ -56,6 +56,10 @@ test("platform theme is applied before hydration and remains user-controlled", a
 
   assert.match(layout, /localStorage\.getItem\("juro-theme"\)/);
   assert.match(layout, /juro_theme=\(light\|dark\)/);
+  assert.ok(
+    layout.indexOf("document.cookie.match") < layout.indexOf('localStorage.getItem("juro-theme")'),
+    "the shared cross-subdomain cookie must win over stale per-domain storage",
+  );
   assert.match(layout, /prefers-color-scheme: dark/);
   assert.match(layout, /document\.documentElement\.dataset\.theme=t/);
   assert.match(shell, /className="platform-theme-toggle"/);

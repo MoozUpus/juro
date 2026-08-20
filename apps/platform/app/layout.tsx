@@ -49,7 +49,7 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){var s="";try{s=localStorage.getItem("juro-theme")||""}catch(e){}if(s!=="light"&&s!=="dark"){var m=document.cookie.match(/(?:^|; )juro_theme=(light|dark)/);s=m?m[1]:""}var t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t})();` }} />
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var m=document.cookie.match(/(?:^|; )juro_theme=(light|dark)/);var s=m?m[1]:"";if(s!=="light"&&s!=="dark"){try{s=localStorage.getItem("juro-theme")||""}catch(e){}}var t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t})();` }} />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

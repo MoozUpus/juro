@@ -87,6 +87,10 @@ test("public chrome exposes every primary public destination in all three locale
 test("public theme control is localized, persistent and applied before hydration", () => {
   assert.match(rootLayout, /localStorage\.getItem\("juro-theme"\)/);
   assert.match(rootLayout, /juro_theme=\(light\|dark\)/);
+  assert.ok(
+    rootLayout.indexOf("document.cookie.match") < rootLayout.indexOf('localStorage.getItem("juro-theme")'),
+    "the shared cross-subdomain cookie must win over stale per-domain storage",
+  );
   assert.match(rootLayout, /prefers-color-scheme: dark/);
   assert.match(rootLayout, /document\.documentElement\.dataset\.theme=t/);
   assert.match(chrome, /localStorage\.setItem\("juro-theme", next\)/);
