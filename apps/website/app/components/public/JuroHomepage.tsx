@@ -366,7 +366,7 @@ export function JuroHomepage({ language }: { language: PublicLanguage }) {
   };
 
   return (
-    <div className={`${styles.page} ${motionStyles.motionRoot}`} data-juro-motion-root lang={language}>
+    <div className={`${styles.page} ${motionStyles.motionRoot} juro-public-theme`} data-juro-motion-root lang={language}>
       <JuroMotionDirector />
       <SiteHeader locale={language} onSectionNavigation={navigateToSection} tone="dark" />
       <nav aria-label={language === "ru" ? "Разделы истории JURO" : language === "uz" ? "JURO hikoyasi bo‘limlari" : "JURO story sections"} className={motionStyles.chapterNav}>

@@ -15,6 +15,9 @@ const scenarioStyles = fs.readFileSync("app/components/public/scenario-process.m
 const laptopStyles = fs.readFileSync("app/components/public/juro-laptop.module.css", "utf8");
 const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
+const siteThemeStyles = fs.readFileSync("app/components/public/site-theme.module.css", "utf8");
+const rootLayout = fs.readFileSync("app/layout.tsx", "utf8");
+const globalStyles = fs.readFileSync("app/globals.css", "utf8");
 const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
 const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-targets.module.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
@@ -79,6 +82,25 @@ test("public chrome exposes every primary public destination in all three locale
   assert.match(chrome, /app\.juro\.uz/);
   assert.match(sitemap, /\/lawyers/);
   assert.doesNotMatch(sitemap, /prototype/);
+});
+
+test("public theme control is localized, persistent and applied before hydration", () => {
+  assert.match(rootLayout, /localStorage\.getItem\("juro-theme"\)/);
+  assert.match(rootLayout, /juro_theme=\(light\|dark\)/);
+  assert.ok(
+    rootLayout.indexOf("document.cookie.match") < rootLayout.indexOf('localStorage.getItem("juro-theme")'),
+    "the shared cross-subdomain cookie must win over stale per-domain storage",
+  );
+  assert.match(rootLayout, /prefers-color-scheme: dark/);
+  assert.match(rootLayout, /document\.documentElement\.dataset\.theme=t/);
+  assert.match(chrome, /localStorage\.setItem\("juro-theme", next\)/);
+  assert.match(chrome, /Включить тёмную тему/);
+  assert.match(chrome, /Qorong‘i mavzuni yoqish/);
+  assert.match(chrome, /Use dark theme/);
+  assert.match(chrome, /aria-pressed=\{theme === "dark"\}/);
+  assert.match(siteThemeStyles, /min-height: 48px/);
+  assert.match(siteThemeStyles, /prefers-reduced-motion:reduce/);
+  assert.match(globalStyles, /html\[data-theme="dark"\] \.juro-public-theme/);
 });
 
 test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
@@ -242,8 +264,8 @@ test("brand lockups use standalone marks and one intentional wordmark", () => {
   assert.match(chrome, /brandStyles\.markFrame/);
   assert.match(chrome, /brandStyles\.mobileMarkFrame/);
   assert.match(chrome, /brandStyles\.footerMarkFrame/);
-  assert.match(chrome, /src=\{tone === "dark" && !scrolled \? "\/juro-mark-light\.png" : "\/juro-mark\.png"\}/);
-  assert.match(chrome, /src="\/juro-mark\.png"/);
+  assert.match(chrome, /theme === "dark" \|\| \(tone === "dark" && !scrolled\)/);
+  assert.match(chrome, /theme === "dark" \? "\/juro-mark-light\.png" : "\/juro-mark\.png"/);
   assert.match(chrome, /src="\/juro-mark-light\.png"/);
   assert.match(chrome, /brandStyles\.wordmark\}>JURO/);
   assert.match(chrome, /juro-mark-light\.png/);

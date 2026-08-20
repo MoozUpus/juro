@@ -26,6 +26,8 @@ import {
   CreditCard,
   Scale,
   ShieldCheck,
+  Moon,
+  Sun,
   UserRound,
   UsersRound,
   X,
@@ -86,6 +88,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   const [mobile, setMobile] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const [switchingWorkspace, setSwitchingWorkspace] = useState(false);
   const [workspaceError, setWorkspaceError] = useState("");
   const sidebarRef = useRef<HTMLElement>(null);
@@ -119,6 +122,28 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
   const moreHasActiveRoute = toolGroups.some((group) => group.items.some(([slug]) => documentRouteIsActive(slug)));
   useEffect(() => {
     setCollapsed(localStorage.getItem("juro-sidebar-collapsed") === "1");
+    const current = document.documentElement.dataset.theme;
+    setTheme(current === "dark" ? "dark" : "light");
+  }, []);
+  useEffect(() => {
+    const syncTheme = (event: Event) => {
+      const next = (event as CustomEvent<"light" | "dark">).detail;
+      if (next === "light" || next === "dark") setTheme(next);
+    };
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = () => {
+      if (localStorage.getItem("juro-theme") || /(?:^|; )juro_theme=(?:light|dark)/.test(document.cookie)) return;
+      const next = systemTheme.matches ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      document.documentElement.style.colorScheme = next;
+      setTheme(next);
+    };
+    window.addEventListener("juro-theme-change", syncTheme);
+    systemTheme.addEventListener("change", syncSystemTheme);
+    return () => {
+      window.removeEventListener("juro-theme-change", syncTheme);
+      systemTheme.removeEventListener("change", syncSystemTheme);
+    };
   }, []);
   useEffect(() => {
     if (moreHasActiveRoute) setMoreOpen(true);
@@ -176,6 +201,16 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
     setCollapsed(next);
     localStorage.setItem("juro-sidebar-collapsed", next ? "1" : "0");
   };
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    document.documentElement.style.colorScheme = next;
+    localStorage.setItem("juro-theme", next);
+    const sharedDomain = location.hostname === "juro.uz" || location.hostname.endsWith(".juro.uz") ? "; Domain=.juro.uz" : "";
+    document.cookie = `juro_theme=${next}; Path=/; Max-Age=31536000; SameSite=Lax${sharedDomain}`;
+    setTheme(next);
+    window.dispatchEvent(new CustomEvent("juro-theme-change", { detail: next }));
+  };
   const closeMobileMenu = () => {
     setOpen(false);
     window.requestAnimationFrame(() => openButtonRef.current?.focus());
@@ -230,14 +265,18 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
       </div>
       {workspaceError && <p className="platform-workspace-error" role="alert">{workspaceError}</p>}
       <nav>
-        <div className="platform-nav-group">
+        <section className="platform-golden-toc" aria-label={locale === "ru" ? "Золотое оглавление JURO" : "JURO oltin mundarijasi"}>
+          <header><span>JURO</span><strong>{locale === "ru" ? "Золотое оглавление" : "Oltin mundarija"}</strong></header>
+          <ol className="platform-nav-group">
           {primaryNav.map(([slug, Icon, ru, uz]) => {
             const href=`${base}/${slug}`;
             const active=routeIsActive(slug);
             const label=locale === "ru" ? ru : uz;
-            return <Link key={slug} className={active?"active":""} aria-current={active ? "page" : undefined} href={href} onClick={()=>setOpen(false)} title={collapsed ? label : undefined}><Icon/><span>{label}</span></Link>;
+            const step = primaryNav.findIndex(([itemSlug]) => itemSlug === slug) + 1;
+            return <li key={slug}><Link className={active?"active":""} aria-current={active ? "page" : undefined} href={href} onClick={()=>setOpen(false)} title={collapsed ? label : undefined}><small aria-hidden="true">{String(step).padStart(2, "0")}</small><Icon/><span>{label}</span></Link></li>;
           })}
-        </div>
+          </ol>
+        </section>
         <details className="platform-nav-more" open={moreOpen} onToggle={(event) => setMoreOpen(event.currentTarget.open)}>
           <summary title={collapsed ? (locale === "ru" ? "Все инструменты" : "Barcha vositalar") : undefined}>
             <Ellipsis/><span>{locale === "ru" ? "Все инструменты" : "Barcha vositalar"}</span><ChevronDown className="platform-nav-more-chevron" aria-hidden="true"/>
@@ -261,7 +300,7 @@ export function PlatformShell({ locale, accountType, userName, activeWorkspaceId
       </button>
     </aside>
     {open && <button type="button" className="platform-backdrop" aria-label={locale === "ru" ? "Закрыть меню" : "Menyuni yopish"} onClick={closeMobileMenu}/>}
-    <div className="platform-main"><header className="platform-topbar"><div><small>{locale === "ru" ? "JURO · защищённое пространство" : "JURO · himoyalangan makon"}</small><strong>{userName}</strong></div><div><GlobalSearch locale={locale} accountType={accountType}/><button onClick={switchLanguage} aria-label={locale === "ru" ? "Переключить на узбекский" : "Rus tiliga o‘tish"}><Languages/>{locale.toUpperCase()}</button><Link href={`${base}/profile`} aria-label={locale === "ru" ? "Профиль" : "Profil"}><UserRound/></Link><LogoutButton locale={locale} label={locale === "ru" ? "Выйти" : "Chiqish"}/></div></header><main className="platform-content" id="main-content" tabIndex={-1}>{children}</main>
+    <div className="platform-main"><header className="platform-topbar"><div><small>{locale === "ru" ? "JURO · защищённое пространство" : "JURO · himoyalangan makon"}</small><strong>{userName}</strong></div><div><GlobalSearch locale={locale} accountType={accountType}/><button className="platform-theme-toggle" onClick={toggleTheme} aria-label={theme === "dark" ? (locale === "ru" ? "Включить светлую тему" : "Yorug‘ mavzuni yoqish") : (locale === "ru" ? "Включить тёмную тему" : "Qorong‘i mavzuni yoqish")} aria-pressed={theme === "dark"} title={theme === "dark" ? (locale === "ru" ? "Светлая тема" : "Yorug‘ mavzu") : (locale === "ru" ? "Тёмная тема" : "Qorong‘i mavzu")}>{theme === "dark" ? <Sun/> : <Moon/>}<span>{theme === "dark" ? (locale === "ru" ? "Светлая" : "Yorug‘") : (locale === "ru" ? "Тёмная" : "Qorong‘i")}</span></button><button onClick={switchLanguage} aria-label={locale === "ru" ? "Переключить на узбекский" : "Rus tiliga o‘tish"}><Languages/>{locale.toUpperCase()}</button><Link href={`${base}/profile`} aria-label={locale === "ru" ? "Профиль" : "Profil"}><UserRound/></Link><LogoutButton locale={locale} label={locale === "ru" ? "Выйти" : "Chiqish"}/></div></header><main className="platform-content" id="main-content" tabIndex={-1}>{children}</main>
       <nav className="platform-mobile-nav" aria-label={locale === "ru" ? "Мобильная навигация" : "Mobil navigatsiya"}>
         {[
           ["ai-chat", Bot, locale === "ru" ? "AI" : "AI"],

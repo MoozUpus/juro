@@ -1,8 +1,10 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./theme.css";
 import "./invite/invite.css";
 import "./legal/legal.css";
+import { GlobalThemeControl } from "./_platform/GlobalThemeControl";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,6 +29,14 @@ export const metadata: Metadata = {
   },
 };
 
+export const viewport: Viewport = {
+  colorScheme: "light dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f2e9" },
+    { media: "(prefers-color-scheme: dark)", color: "#071a2e" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -38,10 +48,14 @@ export default function RootLayout({
   // pre-hydration attribute difference rather than masking descendant errors.
   return (
     <html lang="ru" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var m=document.cookie.match(/(?:^|; )juro_theme=(light|dark)/);var s=m?m[1]:"";if(s!=="light"&&s!=="dark"){try{s=localStorage.getItem("juro-theme")||""}catch(e){}}var t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t})();` }} />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <script dangerouslySetInnerHTML={{ __html: `(function(){var m=location.pathname.match(/^\\/(ru|uz)(?:\\/|$)/);var q=new URLSearchParams(location.search).get("lang");document.documentElement.lang=m?m[1]:(q==="uz"?"uz":"ru");})();` }} />
+        <GlobalThemeControl />
         {children}
       </body>
     </html>

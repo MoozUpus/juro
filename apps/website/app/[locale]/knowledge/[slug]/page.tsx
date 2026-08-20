@@ -74,7 +74,7 @@ export default async function KnowledgeArticlePage({ params }: Props) {
   };
 
   return (
-    <div className={styles.page} lang={parsed.locale}>
+    <div className={`${styles.page} juro-public-theme`} lang={parsed.locale}>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(articleSchema) }} />
       <SiteHeader languageHref={`/ru/knowledge/${parsed.slug}`} locale={parsed.locale} />
       <main id="main-content">

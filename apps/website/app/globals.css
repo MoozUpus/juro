@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
   --font-ui: var(--font-geist-sans), Inter, Manrope, "Segoe UI", Arial, sans-serif;
   --font-display: var(--font-juro-display), Georgia, "Times New Roman", serif;
   --juro-navy-950: #061827;
@@ -9,6 +9,151 @@
   --juro-gold-500: #be974f;
   --juro-warm-50: #fbfaf7;
   --juro-focus: #d7b56f;
+  --juro-page: #f8f6f2;
+  --juro-surface: #ffffff;
+  --juro-surface-soft: #f2eee6;
+  --juro-ink: #102333;
+  --juro-muted: #5d6e7b;
+  --juro-line: rgba(16, 40, 64, .14);
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --juro-page: #071521;
+  --juro-surface: #0d2535;
+  --juro-surface-soft: #102c3e;
+  --juro-ink: #edf2f5;
+  --juro-muted: #afbec8;
+  --juro-line: rgba(177, 202, 217, .18);
+}
+
+html[data-theme="dark"] .juro-site-header {
+  --header-fg: #f5f7f8;
+  --header-line: rgba(225, 236, 242, .2);
+  color: var(--header-fg);
+}
+
+html[data-theme="dark"] .juro-site-header[data-scrolled] {
+  background: rgba(7, 21, 33, .9);
+  border-color: rgba(225, 236, 242, .14);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .2);
+  color: #f5f7f8;
+}
+
+html[data-theme="dark"] .juro-site-mobile-panel {
+  background: #0a1f2e;
+  color: #edf2f5;
+}
+
+html[data-theme="dark"] .juro-site-mobile-panel :is(a,button) { color: #edf2f5; }
+html[data-theme="dark"] .juro-site-mobile-panel nav a { border-color: rgba(225,236,242,.14); }
+
+html[data-theme="dark"] .juro-public-theme {
+  --navy: #0b2942;
+  --navy-950: #061827;
+  --navy-800: #102f4b;
+  --paper: #071521;
+  --ink: #edf2f5;
+  --muted: #afbec8;
+  --line: rgba(177,202,217,.18);
+  --warm-50: #071521;
+  --warm-100: #0a1f2e;
+  --warm-200: #183849;
+  background: var(--juro-page);
+  color: var(--juro-ink);
+}
+
+html[data-theme="dark"] .juro-public-theme main > :is(section,article),
+html[data-theme="dark"] .juro-public-theme main > div > section {
+  border-color: var(--juro-line);
+  background-color: var(--juro-page);
+  color: var(--juro-ink);
+}
+
+html[data-theme="dark"] .juro-public-theme main :is(section,article,aside,form,details),
+html[data-theme="dark"] .juro-public-theme main :is(input,textarea,select) {
+  border-color: var(--juro-line);
+}
+
+html[data-theme="dark"] .juro-public-theme main :is(section,article) > article,
+html[data-theme="dark"] .juro-public-theme main :is(section,article) > div > article,
+html[data-theme="dark"] .juro-public-theme main :is(form,aside),
+html[data-theme="dark"] .juro-public-theme main [class*="Card"],
+html[data-theme="dark"] .juro-public-theme main [class*="card"],
+html[data-theme="dark"] .juro-public-theme main [class*="Panel"],
+html[data-theme="dark"] .juro-public-theme main [class*="filters"],
+html[data-theme="dark"] .juro-public-theme main [class*="tableWrap"],
+html[data-theme="dark"] .juro-public-theme main [class*="mobileToc"] {
+  border-color: var(--juro-line);
+  background-color: var(--juro-surface);
+  color: var(--juro-ink);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .juro-public-theme main :is(input,textarea,select),
+html[data-theme="dark"] .juro-public-theme main [class*="Toolbar"],
+html[data-theme="dark"] .juro-public-theme main [class*="toolbar"],
+html[data-theme="dark"] .juro-public-theme main [class*="Visual"],
+html[data-theme="dark"] .juro-public-theme main [class*="visual"] {
+  border-color: var(--juro-line);
+  background-color: var(--juro-surface-soft);
+  color: var(--juro-ink);
+}
+
+html[data-theme="dark"] .juro-public-theme main :is(h1,h2,h3,h4) {
+  color: #f2f5f7;
+}
+
+html[data-theme="dark"] .juro-public-theme main :is(article,section) strong,
+html[data-theme="dark"] .juro-public-theme main a:not([class*="primary"]):not([class*="Cta"]) {
+  color: #edf2f5;
+}
+
+html[data-theme="dark"] .juro-public-theme main :is(p,li,dd) {
+  border-color: var(--juro-line);
+  color: var(--juro-muted);
+}
+
+html[data-theme="dark"] .juro-public-theme main :is(a,button,summary) {
+  border-color: var(--juro-line);
+}
+
+html[data-theme="dark"] .juro-public-theme main :is([class*="eyebrow"],[class*="category"],[class*="Index"] span,[class*="breadcrumbs"] a) {
+  color: #d7b56f;
+}
+
+html[data-theme="dark"] .juro-public-theme main [class*="Notice"],
+html[data-theme="dark"] .juro-public-theme main [class*="notice"],
+html[data-theme="dark"] .juro-public-theme main [class*="disclaimer"] {
+  border-color: rgba(215,181,111,.34);
+  background-color: #352d1f;
+  color: #f2dfb7;
+}
+
+html[data-theme="dark"] .juro-public-theme main [class*="metadata"] span {
+  background: var(--juro-surface-soft);
+  color: var(--juro-muted);
+}
+
+html[data-theme="dark"] .juro-public-theme main [class*="documentCanvas"],
+html[data-theme="dark"] .juro-public-theme main [class*="dossier"] {
+  background: #e9e3d7;
+  color: #102840;
+}
+
+html[data-theme="dark"] .juro-public-theme main [class*="documentCanvas"] :is(p,strong),
+html[data-theme="dark"] .juro-public-theme main [class*="dossier"] :is(p,strong) {
+  color: #102840;
+}
+
+html[data-theme="dark"] .juro-public-theme :is(button,a,input,textarea,select,summary) {
+  transition-property: background-color,border-color,color,box-shadow,transform;
+  transition-duration: 160ms;
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="dark"] .juro-site-header[data-scrolled] { background: #071521; }
 }
 
 * {
@@ -17,17 +162,22 @@
 
 html {
   scroll-behavior: smooth;
-  background: #f8f6f2;
+  background: var(--juro-page);
 }
 
 body {
   min-width: 0;
   margin: 0;
-  background: #f8f6f2;
-  color: #102333;
+  background: var(--juro-page);
+  color: var(--juro-ink);
   font-family: var(--font-ui);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+html,
+body {
+  transition: background-color 180ms ease, color 180ms ease;
 }
 
 button,
@@ -75,5 +225,10 @@ summary {
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+
+  html,
+  body {
+    transition: none;
   }
 }

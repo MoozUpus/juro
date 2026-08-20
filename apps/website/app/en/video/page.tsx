@@ -35,7 +35,7 @@ export const metadata: Metadata = {
 
 export default function EnglishInvestorVideoPage() {
   return (
-    <div className={styles.page} lang="en">
+    <div className={`${styles.page} juro-public-theme`} lang="en">
       <SiteHeader languageHref="/ru/video" locale="en" tone="dark" />
       <main id="main-content">
         <section className={styles.hero}>

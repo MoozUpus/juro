@@ -23,7 +23,7 @@ export const metadata: Metadata = {
 };
 
 export default function EnglishLegalCenter() {
-  return <div className={styles.page} lang="en">
+  return <div className={`${styles.page} juro-public-theme`} lang="en">
     <SiteHeader languageHref="/ru/legal" locale="en" />
     <main id="main-content"><section className={styles.hero}><p className={styles.eyebrow}>JURO · LEGAL CENTRE</p><h1>Find the published legal documents</h1><p>English navigation and document summaries are provided for orientation. The published Russian and Uzbek originals are the available legal texts; no English legal translation is represented here.</p><aside className={styles.previewNotice}><strong>Source-language originals</strong><span>Choose a document to see its scope and open the Russian or Uzbek published original.</span></aside></section>
       <section className={styles.catalogue} aria-label="Legal document catalogue">{legalGroups.map((group) => { const groupText = groupCopy[group.id]; return <section className={styles.group} key={group.id}><header><p>{groupText.title}</p><span>{groupText.description}</span></header><div className={styles.cards}>{group.documents.map((slug) => { const document = getLegalDocument("ru", slug); if (!document) return null; return <Link className={styles.card} href={`/en/legal/${slug}`} key={slug}><small>Version {document.version} · RU / UZ original</small><strong>{documentLabels[slug] ?? slug}</strong><span>Open the English guide and the published original-language documents.</span><b>View document <i aria-hidden="true">→</i></b></Link>; })}</div></section>; })}</section>

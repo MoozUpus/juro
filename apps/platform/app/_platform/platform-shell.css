@@ -101,3 +101,35 @@
   .platform-mobile-nav a.active{color:var(--p-navy);font-weight:800}
   .platform-mobile-nav a.active svg{color:#9a7026}
 }
+
+/* The four primary destinations form JURO's navigational table of contents.
+   It is an index, not a progress tracker: only the current route is marked. */
+.platform-golden-toc{margin:2px 0 5px;padding:11px 0 12px;border-block:1px solid rgba(215,181,111,.18)}
+.platform-golden-toc>header{display:flex;align-items:baseline;gap:7px;padding:0 12px 10px;color:#f2dba8;white-space:nowrap}
+.platform-golden-toc>header span{font-size:9px;font-weight:900;letter-spacing:.18em}
+.platform-golden-toc>header strong{font-size:11px;font-weight:780;letter-spacing:.04em}
+.platform-nav-group{position:relative;margin:0;padding:0;list-style:none}
+.platform-nav-group:before{position:absolute;inset-block:8px;inset-inline-start:26px;width:1px;background:linear-gradient(transparent,rgba(215,181,111,.42) 12%,rgba(215,181,111,.42) 88%,transparent);content:""}
+.platform-nav-group li{position:relative}
+.platform-nav-group li a{display:grid!important;grid-template-columns:22px 19px minmax(0,1fr);gap:8px!important}
+.platform-nav-group li a small{position:relative;z-index:1;color:#d7b56f;font-size:9px;font-weight:850;font-variant-numeric:tabular-nums;letter-spacing:.04em}
+.platform-nav-group li a small:after{position:absolute;inset:50% auto auto 100%;width:5px;height:5px;border:1px solid #c79d4e;border-radius:50%;background:var(--p-navy);content:"";transform:translate(1px,-50%)}
+.platform-nav-group li a.active small{color:#fff1cf}
+.platform-nav-group li a.active small:after{background:#d7b56f;box-shadow:0 0 0 4px rgba(215,181,111,.12)}
+.platform-shell.is-collapsed .platform-golden-toc>header,.platform-shell.is-collapsed .platform-nav-group li a small{position:absolute;width:1px;height:1px;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+.platform-shell.is-collapsed .platform-golden-toc{padding-block:7px}
+.platform-shell.is-collapsed .platform-nav-group:before{display:none}
+.platform-shell.is-collapsed .platform-nav-group li a{display:flex!important;justify-content:center;padding:0}
+.platform-theme-toggle span{font-size:12px}
+.platform-theme-toggle:active{transform:scale(.97)}
+
+@media(max-width:1120px){.platform-theme-toggle span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}}
+@media(max-width:900px){
+  .platform-shell.is-collapsed .platform-golden-toc>header,.platform-shell.is-collapsed .platform-nav-group li a small{position:static;width:auto;height:auto;margin:0;overflow:visible;clip:auto;white-space:normal}
+  .platform-shell.is-collapsed .platform-golden-toc{padding-block:11px 12px}
+  .platform-shell.is-collapsed .platform-nav-group:before{display:block}
+  .platform-shell.is-collapsed .platform-nav-group li a{display:grid!important;justify-content:initial;padding:0 12px}
+}
+@media(max-width:520px){.platform-topbar .platform-theme-toggle{display:flex}.platform-topbar>div:last-child>button:not(.platform-theme-toggle){display:none}}
+@media(hover:hover) and (pointer:fine){.platform-theme-toggle:hover{border-color:rgba(199,157,78,.65)}}
+@media(prefers-reduced-motion:reduce){.platform-theme-toggle{transition:none}}
