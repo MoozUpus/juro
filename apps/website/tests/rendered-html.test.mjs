@@ -109,6 +109,18 @@ test("serves the public investor video in both languages with muted autoplay", a
   }
 });
 
+test("serves the English investor video from its dedicated public route", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(new Request("http://localhost/en/video", { headers: { accept: "text/html" } }), runtime, context);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /https:\/\/juro\.uz\/en\/video/);
+  assert.match(html, /https:\/\/pub-28041c6b6dff4877a700421e6cd2c986\.r2\.dev\/investor\/juro-investor-presentation-en-v1\.mp4/);
+  assert.match(html, /autoplay/i);
+  assert.match(html, /muted/);
+});
+
 test("every discoverable internal public link resolves", async () => {
   const worker = await createWorker();
   const queue = ["/ru", "/uz"];

@@ -7,6 +7,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: "https://juro.uz/ru", lastModified: updated, changeFrequency: "weekly", priority: 1 },
     { url: "https://juro.uz/uz", lastModified: updated, changeFrequency: "weekly", priority: 1 },
+    { url: "https://juro.uz/en/video", lastModified: updated, changeFrequency: "monthly", priority: 0.7 },
     ...(["ru", "uz"] as const).flatMap((locale) => [
       {
         url: `https://juro.uz/${locale}/trust`,
