@@ -1438,3 +1438,22 @@ The release gate is still intentionally open because the source/revision
 queue is not frozen. Snapshot creation, indexed 314-scenario evaluation,
 Qdrant benchmark/restore, D1 backup/restore, preview and rollout are not
 claimed by this run. Production remains untouched.
+
+## Consecutive healthy staging runs (2026-08-20)
+
+The subsequent scheduled invocation started at `2026-08-20T11:28:53.111Z`
+and completed at `2026-08-20T11:35:20.786Z` with `status=completed` and
+`error_code=NULL`. The following invocation started at
+`2026-08-20T11:36:53.112Z` and completed at `2026-08-20T11:43:22.031Z`,
+also with `status=completed` and `error_code=NULL`. The queue probe after
+the latter recorded 38,310 queued fetch jobs and 6,187 queued version jobs;
+live/manual queued jobs were 7,039. 44/44 discovery checkpoints remained
+completed, with zero terminal jobs, terminal failures, dead letters,
+unresolved retrying jobs or unresolved terminal jobs. Corpus totals remained
+3,575 canonical documents, 62,075 unique current provisions and 151,499
+indexed current chunks.
+
+These consecutive clean runs confirm that the staging lease and bounded
+sequential ingestion path continue to recover and drain the revision queue.
+The queue is still active, so the freeze gate and all post-ingestion gates
+remain open. Production remains untouched.
