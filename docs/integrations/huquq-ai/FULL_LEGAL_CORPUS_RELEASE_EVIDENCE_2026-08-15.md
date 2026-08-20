@@ -1321,3 +1321,30 @@ overlapping; no new `LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED` record appeared.
 This closes the bounded-body-read incident only. It does not establish 44/44
 coverage, a frozen corpus, dense retrieval, a Qdrant snapshot, the indexed
 314-scenario evaluation, preview approval or production rollout.
+
+## Scheduler lease correction (2026-08-20)
+
+The staging run started at `2026-08-20T09:28:43.199Z` and finished at
+`09:36:43.201Z` with `LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED`. Its duration was
+eight minutes, while the Worker lease was seven minutes. The run had no
+terminal ingestion job or failure; the scheduler lease alone expired while
+bounded D1/index maintenance was still completing. This was retained as a
+failed run and is not counted as successful coverage.
+
+Commit `e68c0c5` changes the dedicated Worker lease to fifteen minutes and
+keeps stale-run cleanup tied to that same durable lock. The start fence,
+single sequential crawler, 20-second Lex.uz host pacer, queue boundaries and
+all production-disabled flags are unchanged. The boundary suite passed 18/18,
+platform type-check and lint passed, and the staging Worker dry-run passed.
+The staging-only Worker was deployed as version
+`f5a8164f-08b9-431b-91ad-7305405f4e87`.
+
+The first post-deploy run started at `2026-08-20T09:44:43.383Z` and completed
+at `09:50:03.710Z` with `status=completed` and `error_code=NULL`. No new lease
+failure appeared. The following read-only D1 probe recorded 3,575 canonical
+documents, 62,075 unique current provisions, 151,499 indexed current chunks,
+44/44 completed discovery checkpoints with zero checkpoint errors, zero
+terminal jobs/failures/dead letters, 38,310 queued fetch jobs, 6,280 queued
+version jobs, and 7,131 live/manual queued jobs. The release gate therefore
+remains open: the corpus is not yet frozen and the indexed evaluation, Qdrant
+benchmark/restore, D1 backup/restore and rollout gates have not run.
