@@ -65,7 +65,9 @@ jobs:
                 admin=true
                 ;;
             esac
-          done < <(git diff --name-only -z "$BASE_SHA" "$MERGE_SHA")
+          # Treat renames as a deletion plus an addition so moving a file out
+          # of one deployable app still selects that app for deployment.
+          done < <(git diff --name-only --no-renames -z "$BASE_SHA" "$MERGE_SHA")
 
           {
             echo "website=$website"
