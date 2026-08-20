@@ -995,6 +995,20 @@
       "when": 1787040901000,
       "tag": "0141_lex_robots_policy_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1787044501000,
+      "tag": "0142_legal_ecosystem_foundation",
+      "breakpoints": true
+    },
+    {
+      "idx": 143,
+      "version": "7",
+      "when": 1787048101000,
+      "tag": "0143_lawyer_workspace_operations",
+      "breakpoints": true
     }
   ]
 }

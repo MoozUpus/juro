@@ -9,6 +9,7 @@ import { LawyerPhoneContact } from "./LawyerPhoneContact";
 import { LawyerReviewForm } from "./LawyerReviewForm";
 import { ClientServiceProposals } from "./MarketplaceServiceProposalFlow";
 import { LawyerConsultationPanel } from "./LawyerConsultationPanel";
+import { LawyerDocumentRequests } from "./LawyerDocumentRequests";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { WorkspaceEntitlements } from "../../lib/billing/entitlements";
 import type { AccountType, PlatformLocale } from "../../lib/platform/routing";
@@ -568,6 +569,7 @@ export function LawyerHandoffClient({
                     locale={locale}
                     role="client"
                   />
+                  <LawyerDocumentRequests requestId={item.id} locale={locale} role="client" />
                   <ClientServiceProposals
                     locale={locale}
                     accountType={accountType}

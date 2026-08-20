@@ -1,0 +1,140 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import test from "node:test";
+import {
+  activeLawyerWorkspaceParticipant,
+  hasActiveLawyerDocumentGrant,
+} from "../lib/platform/lawyer-workspace-access";
+import { sqliteD1Fixture } from "./helpers/sqlite-d1";
+
+const now = "2026-08-20T12:00:00.000Z";
+
+test("lawyer workspace operations resolve only active, approved handoff participants", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    assert.deepEqual(await activeLawyerWorkspaceParticipant(d1, "lawyer-ops", "request-ops", now), {
+      requestId: "request-ops",
+      workspaceId: "workspace-owner-ops",
+      caseId: "case-ops",
+      clientUserId: "owner-ops",
+      lawyerProfileId: "profile-ops",
+      lawyerUserId: "lawyer-ops",
+      role: "lawyer",
+    });
+    assert.equal((await activeLawyerWorkspaceParticipant(d1, "owner-ops", "request-ops", now))?.role, "client");
+    assert.equal(await activeLawyerWorkspaceParticipant(d1, "outsider-ops", "request-ops", now), null);
+    assert.equal(await hasActiveLawyerDocumentGrant(d1, {
+      caseId: "case-ops",
+      workspaceId: "workspace-owner-ops",
+      ownerUserId: "owner-ops",
+      lawyerUserId: "lawyer-ops",
+      now,
+    }), true);
+    assert.equal(await hasActiveLawyerDocumentGrant(d1, {
+      caseId: "case-ops",
+      workspaceId: "workspace-other-ops",
+      ownerUserId: "owner-ops",
+      lawyerUserId: "lawyer-ops",
+      now,
+    }), false);
+    sqlite.prepare("UPDATE lawyer_access_grants SET revoked_at=? WHERE id='grant-ops'").run(now);
+    assert.equal(await activeLawyerWorkspaceParticipant(d1, "lawyer-ops", "request-ops", now), null);
+    sqlite.prepare("UPDATE lawyer_access_grants SET revoked_at=NULL,expires_at='2026-08-19T12:00:00.000Z' WHERE id='grant-ops'").run();
+    assert.equal(await hasActiveLawyerDocumentGrant(d1, { caseId: "case-ops", workspaceId: "workspace-owner-ops", ownerUserId: "owner-ops", lawyerUserId: "lawyer-ops", now }), false);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("0143 keeps task comments immutable and document requests terminal", () => {
+  const { sqlite } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    sqlite.prepare(`INSERT INTO tasks
+      (id,workspace_id,case_id,owner_user_id,title,status,created_at,updated_at)
+      VALUES ('task-ops','workspace-owner-ops','case-ops','lawyer-ops','Review evidence','planned',?,?)`).run(now, now);
+    sqlite.prepare(`INSERT INTO lawyer_task_comments
+      (id,task_id,author_user_id,body,created_at,updated_at)
+      VALUES ('comment-ops','task-ops','lawyer-ops','Client-safe note',?,?)`).run(now, now);
+    assert.throws(() => sqlite.prepare("UPDATE lawyer_task_comments SET body='changed' WHERE id='comment-ops'").run(), /immutable/u);
+    assert.throws(() => sqlite.prepare("DELETE FROM lawyer_task_comments WHERE id='comment-ops'").run(), /append-only/u);
+    sqlite.prepare(`INSERT INTO lawyer_document_requests
+      (id,lawyer_request_id,workspace_id,case_id,lawyer_user_id,client_user_id,title,description,status,created_at,updated_at)
+      VALUES ('document-request-ops','request-ops','workspace-owner-ops','case-ops','lawyer-ops','owner-ops','Bank statement','Provide the latest statement','requested',?,?)`).run(now, now);
+    sqlite.prepare("UPDATE lawyer_document_requests SET status='cancelled',updated_at=? WHERE id='document-request-ops'").run(now);
+    assert.throws(() => sqlite.prepare("UPDATE lawyer_document_requests SET status='requested' WHERE id='document-request-ops'").run(), /terminal/u);
+    assert.throws(() => sqlite.prepare("DELETE FROM lawyer_document_requests WHERE id='document-request-ops'").run(), /append-only/u);
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("lawyer task and document request routes stay CSRF, grant, tenant and audit scoped", () => {
+  const taskRoute = readFileSync(new URL("../app/api/platform/lawyer-tasks/route.ts", import.meta.url), "utf8");
+  const documentRoute = readFileSync(new URL("../app/api/platform/lawyer-document-requests/route.ts", import.meta.url), "utf8");
+  const workspaceRoute = readFileSync(new URL("../app/api/platform/lawyer-workspace/route.ts", import.meta.url), "utf8");
+  const caseTasksRoute = readFileSync(new URL("../app/api/platform/cases/[caseId]/tasks/route.ts", import.meta.url), "utf8");
+  const permissions = readFileSync(new URL("../lib/document-builder/permissions/index.ts", import.meta.url), "utf8");
+  for (const route of [taskRoute, documentRoute]) {
+    assert.match(route, /assertSafeWrite\(request\)/u);
+    assert.match(route, /activeLawyerWorkspaceParticipant/u);
+    assert.match(route, /workspace_audit_events/u);
+    assert.match(route, /case_events/u);
+  }
+  assert.match(taskRoute, /owner_user_id=\?/u);
+  assert.match(taskRoute, /plan_step_id IS NULL/u);
+  assert.match(taskRoute, /lawyer_task_comments/u);
+  assert.match(documentRoute, /owner_user_id=\? AND workspace_id=\? AND case_id=\?/u);
+  assert.match(documentRoute, /status='provided'/u);
+  assert.match(workspaceRoute, /CASE WHEN t\.owner_user_id=\? AND t\.plan_step_id IS NULL/u);
+  assert.match(workspaceRoute, /lawyer_task_comments/u);
+  assert.match(workspaceRoute, /SELECT DISTINCT c\.id/u);
+  assert.match(caseTasksRoute, /JOIN tasks t ON t\.id=c\.task_id AND t\.case_id=\? AND t\.workspace_id=\?/u);
+  assert.match(caseTasksRoute, /comments: commentsByTask/u);
+  assert.match(permissions, /hasActiveLawyerDocumentGrant/u);
+  assert.match(permissions, /ROLE_PERMISSIONS\["legal-reviewer"\]/u);
+});
+
+test("lawyer workspace UI exposes real task actions, document requests and document review links", () => {
+  const workspace = readFileSync(new URL("../app/_platform/LawyerWorkspaceClient.tsx", import.meta.url), "utf8");
+  const documentRequests = readFileSync(new URL("../app/_platform/LawyerDocumentRequests.tsx", import.meta.url), "utf8");
+  const assigned = readFileSync(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8");
+  const client = readFileSync(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8");
+  const clientCase = readFileSync(new URL("../app/_platform/CaseWorkspaceClient.tsx", import.meta.url), "utf8");
+  assert.match(workspace, /action: "create"/u);
+  assert.match(workspace, /action: "update"/u);
+  assert.match(workspace, /action: "comment"/u);
+  assert.match(workspace, /documents\/\$\{encodeURIComponent\(item\.id\)\}/u);
+  assert.match(documentRequests, /action: "request"/u);
+  assert.match(documentRequests, /action: "provide"/u);
+  assert.match(documentRequests, /action: "cancel"/u);
+  assert.match(assigned, /role="lawyer"/u);
+  assert.match(client, /role="client"/u);
+  assert.match(workspace, /type="datetime-local"/u);
+  assert.match(clientCase, /case-workspace-task-comments/u);
+  assert.match(clientCase, /comment\.authorName/u);
+  assert.doesNotMatch(workspace, /demo(?:Client|Task|Matter)|fake(?:Client|Task|Matter)/iu);
+});
+
+function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
+  for (const id of ["owner-ops", "lawyer-ops", "outsider-ops"]) {
+    sqlite.prepare("INSERT INTO user_profiles(id,email,created_at,updated_at) VALUES (?,?,?,?)").run(id, `${id}@example.invalid`, now, now);
+  }
+  for (const id of ["workspace-owner-ops", "workspace-lawyer-ops", "workspace-other-ops"]) {
+    sqlite.prepare("INSERT INTO workspaces(id,type,name,created_at,updated_at) VALUES (?,'individual',?,?,?)").run(id, id, now, now);
+  }
+  sqlite.prepare(`INSERT INTO cases
+    (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,current_revision,created_at,updated_at)
+    VALUES ('case-ops','workspace-owner-ops','owner-ops','individual','ru','Case','contracts','open',1,?,?)`).run(now, now);
+  sqlite.prepare(`INSERT INTO lawyer_profiles
+    (id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,public_approved_at,created_at,updated_at)
+    VALUES ('profile-ops','lawyer-ops','Lawyer','[]','["ru"]','public_approved','public_approved',?,?,?)`).run(now, now, now);
+  sqlite.prepare(`INSERT INTO lawyer_requests
+    (id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at)
+    VALUES ('request-ops','workspace-owner-ops','case-ops','owner-ops','profile-ops','access_granted','Anonymized summary','{}',?,?)`).run(now, now);
+  sqlite.prepare(`INSERT INTO lawyer_access_grants
+    (id,lawyer_request_id,case_id,lawyer_user_id,granted_by_user_id,created_at)
+    VALUES ('grant-ops','request-ops','case-ops','lawyer-ops','owner-ops',?)`).run(now);
+}

@@ -13,6 +13,7 @@ import { LawyerPhoneContact } from "./LawyerPhoneContact";
 import { LawyerReviewReplyForm } from "./LawyerReviewReplyForm";
 import { LawyerServiceProposalForm } from "./MarketplaceServiceProposalFlow";
 import { LawyerConsultationPanel } from "./LawyerConsultationPanel";
+import { LawyerDocumentRequests } from "./LawyerDocumentRequests";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
@@ -269,6 +270,7 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                     locale={locale}
                     role="lawyer"
                   />
+                  <LawyerDocumentRequests requestId={item.id} locale={locale} role="lawyer" />
                   <LawyerPhoneContact requestId={item.id} locale={locale} />
                   {item.caseId && (
                     <LawyerServiceProposalForm

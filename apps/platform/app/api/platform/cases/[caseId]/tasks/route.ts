@@ -21,12 +21,28 @@ export const GET = withApiErrors(async function GET(
   const user = await requireApiUser();
   const { caseId } = await params;
   const workspace = await workspaceForUser(user);
-  const rows = await requireD1().prepare(
-    "SELECT t.id,t.plan_step_id AS planStepId,t.title,t.description,t.status,t.source_date AS sourceDate,t.due_at AS dueAt,t.safe_due_at AS safeDueAt,t.calculation_method AS calculationMethod,t.deadline_type AS deadlineType,t.legal_basis AS legalBasis,t.deadline_confidence AS deadlineConfidence,t.deadline_evidence_json AS deadlineEvidenceJson,t.completed_at AS completedAt FROM tasks t WHERE t.case_id=? AND t.workspace_id=? ORDER BY t.due_at IS NULL,t.due_at,t.created_at",
-  ).bind(caseId, workspace.id).all();
+  const db = requireD1();
+  const [rows, comments] = await Promise.all([
+    db.prepare(
+      "SELECT t.id,t.plan_step_id AS planStepId,t.title,t.description,t.status,t.source_date AS sourceDate,t.due_at AS dueAt,t.safe_due_at AS safeDueAt,t.calculation_method AS calculationMethod,t.deadline_type AS deadlineType,t.legal_basis AS legalBasis,t.deadline_confidence AS deadlineConfidence,t.deadline_evidence_json AS deadlineEvidenceJson,t.completed_at AS completedAt FROM tasks t WHERE t.case_id=? AND t.workspace_id=? ORDER BY t.due_at IS NULL,t.due_at,t.created_at",
+    ).bind(caseId, workspace.id).all(),
+    db.prepare(
+      `SELECT c.id,c.task_id AS taskId,c.body,c.created_at AS createdAt,u.full_name AS authorName
+       FROM lawyer_task_comments c
+       JOIN tasks t ON t.id=c.task_id AND t.case_id=? AND t.workspace_id=?
+       JOIN user_profiles u ON u.id=c.author_user_id
+       ORDER BY c.created_at ASC`,
+    ).bind(caseId, workspace.id).all(),
+  ]);
+  const commentsByTask = new Map<string, Array<Record<string, unknown>>>();
+  for (const comment of comments.results as Array<Record<string, unknown>>) {
+    const taskId = String(comment.taskId);
+    commentsByTask.set(taskId, [...(commentsByTask.get(taskId) ?? []), comment]);
+  }
   return response({
     tasks: (rows.results as Array<Record<string, unknown>>).map((row) => ({
       ...row,
+      comments: commentsByTask.get(String(row.id)) ?? [],
       deadlineEvidence: row.deadlineEvidenceJson
         ? parseJson(String(row.deadlineEvidenceJson), null)
         : null,

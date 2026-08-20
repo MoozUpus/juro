@@ -7,6 +7,7 @@ import {
   isAcceptedDocumentCollaborator,
   isActiveWorkspaceDocumentOwner,
 } from "./collaboration-policy";
+import { hasActiveLawyerDocumentGrant } from "../../platform/lawyer-workspace-access";
 
 const ALL_PERMISSIONS: readonly DocumentPermission[] = [
   "view_document", "edit_assigned_fields", "edit_all_fields", "add_comment", "reply_comment", "resolve_comment",
@@ -35,6 +36,7 @@ interface DocumentRow {
   templateVersion?: string | null;
   ownerUserId: string;
   workspaceId: string | null;
+  caseId: string | null;
   language: string;
   participantMode: string;
   actingSide: string | null;
@@ -92,7 +94,7 @@ function mapDocument(row: DocumentRow): DocumentRecord & { ownerUserId: string }
 export async function getDocumentAccess(documentId: string, userId: string): Promise<DocumentAccess | null> {
   const db = requireD1();
   const row = await db.prepare(
-    `SELECT d.id, d.owner_user_id AS ownerUserId, d.workspace_id AS workspaceId,
+    `SELECT d.id, d.owner_user_id AS ownerUserId, d.workspace_id AS workspaceId, d.case_id AS caseId,
       d.template_id AS templateId, d.template_code AS templateCode,
       d.template_version AS templateVersion, d.language, d.participant_mode AS participantMode,
       d.acting_side AS actingSide, d.title, d.category, d.status, d.lender_name AS lenderName,
@@ -123,18 +125,36 @@ export async function getDocumentAccess(documentId: string, userId: string): Pro
   const collaborator = await db.prepare(
     "SELECT role, permission_set_json AS permissionSetJson, invitation_status AS invitationStatus, can_view AS canView, can_download AS canDownload, status FROM document_collaborators WHERE document_id = ? AND user_id = ? LIMIT 1",
   ).bind(documentId, userId).first<{ role: string; permissionSetJson: string | null; invitationStatus: string; canView: number; canDownload: number; status: string }>();
-  if (!collaborator || !isAcceptedDocumentCollaborator(collaborator)) return null;
-  const participantRole = collaborator.role in ROLE_PERMISSIONS ? collaborator.role as ParticipantRole : "counterparty";
-  const explicit = parseJson<DocumentPermission[]>(collaborator.permissionSetJson, []);
-  const permissions = explicit.length ? explicit.filter((permission) => ALL_PERMISSIONS.includes(permission)) : ROLE_PERMISSIONS[participantRole];
+  if (collaborator && isAcceptedDocumentCollaborator(collaborator)) {
+    const participantRole = collaborator.role in ROLE_PERMISSIONS ? collaborator.role as ParticipantRole : "counterparty";
+    const explicit = parseJson<DocumentPermission[]>(collaborator.permissionSetJson, []);
+    const permissions = explicit.length ? explicit.filter((permission) => ALL_PERMISSIONS.includes(permission)) : ROLE_PERMISSIONS[participantRole];
+    return {
+      document: mapDocument(row),
+      workspaceId: row.workspaceId,
+      role: "collaborator",
+      participantRole,
+      permissions,
+      canView: Boolean(collaborator.canView) && permissions.includes("view_document"),
+      canDownload: Boolean(collaborator.canDownload) && permissions.includes("download_document"),
+    };
+  }
+  if (!row.caseId || !row.workspaceId) return null;
+  if (!await hasActiveLawyerDocumentGrant(db, {
+    caseId: row.caseId,
+    workspaceId: row.workspaceId,
+    ownerUserId: row.ownerUserId,
+    lawyerUserId: userId,
+  })) return null;
+  const permissions = ROLE_PERMISSIONS["legal-reviewer"];
   return {
     document: mapDocument(row),
     workspaceId: row.workspaceId,
     role: "collaborator",
-    participantRole,
+    participantRole: "legal-reviewer",
     permissions,
-    canView: Boolean(collaborator.canView) && permissions.includes("view_document"),
-    canDownload: Boolean(collaborator.canDownload) && permissions.includes("download_document"),
+    canView: true,
+    canDownload: false,
   };
 }
 

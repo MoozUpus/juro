@@ -4,7 +4,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { BriefcaseBusiness, CalendarClock, CheckCircle2, CircleAlert, Clock3, FileText, LoaderCircle, MessageSquareText, Plus, Save, Trash2, UserRound, UsersRound } from "lucide-react";
+import { BriefcaseBusiness, CalendarClock, CheckCircle2, CircleAlert, Clock3, FileText, LoaderCircle, MessageSquareText, Plus, Save, Send, Trash2, UserRound, UsersRound } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
 import { usePlatformBasePath } from "./PlatformRouteContext";
@@ -12,12 +12,14 @@ import { LawyerRequestsClient } from "./LawyerRequestsClient";
 
 type LawyerProfileSummary = { id: string; displayName: string; status: string; marketplaceStatus: string; availabilityStatus: string; nextAvailableAt: string | null; profileRevision: number };
 type RequestItem = { id: string; status: string; anonymizedSummary: string; createdAt: string; updatedAt: string; caseId: string | null; caseTitle: string | null; legalArea: string | null; clientName: string | null; hasAccess: number };
-type Matter = { id: string; title: string; status: string; legalArea: string | null; updatedAt: string; clientName: string | null; requestId: string };
+type Matter = { id: string; title: string; description: string | null; status: string; legalArea: string | null; nextDeadlineAt: string | null; updatedAt: string; clientName: string | null; requestId: string };
 type Message = { id: string; requestId: string; authorRole: string; body: string; createdAt: string };
-type DocumentItem = { id: string; title: string; category: string; status: string; updatedAt: string; caseId: string };
-type TaskItem = { id: string; title: string; status: string; dueAt: string | null; caseId: string; updatedAt: string };
+type DocumentItem = { id: string; title: string; category: string; status: string; updatedAt: string; caseId: string; requestId: string };
+type TaskItem = { id: string; title: string; description: string | null; status: string; dueAt: string | null; caseId: string; updatedAt: string; requestId: string; isEditable: number };
+type TaskComment = { id: string; taskId: string; body: string; createdAt: string; authorName: string | null };
+type CaseEvent = { id: string; caseId: string; eventType: string; createdAt: string };
 type Consultation = { id: string; requestId: string; caseId: string; startsAt: string; endsAt: string; timezone: string; format: string; status: string; internalNote: string | null; resultNote: string | null };
-export type LawyerWorkspaceData = { profile: LawyerProfileSummary | null; operational: boolean; requests: RequestItem[]; matters: Matter[]; messages: Message[]; documents: DocumentItem[]; tasks: TaskItem[]; consultations: Consultation[] };
+export type LawyerWorkspaceData = { profile: LawyerProfileSummary | null; operational: boolean; requests: RequestItem[]; matters: Matter[]; messages: Message[]; documents: DocumentItem[]; tasks: TaskItem[]; taskComments: TaskComment[]; consultations: Consultation[]; caseEvents: CaseEvent[] };
 
 export function useLawyerWorkspace() {
   const [data, setData] = useState<LawyerWorkspaceData | null>(null);
@@ -86,7 +88,7 @@ export function LawyerHubClient({ locale }: { locale: PlatformLocale }) {
 function LawyerRecordsClient({ locale, view }: { locale: PlatformLocale; view: string }) {
   const ru = locale === "ru";
   const base = usePlatformBasePath();
-  const { data, loading, error } = useLawyerWorkspace();
+  const { data, loading, error, referenceTime, reload } = useLawyerWorkspace();
   const definitions: Record<string, { title: string; description: string; icon: typeof UserRound }> = {
     clients: { title: ru ? "Клиенты" : "Mijozlar", description: ru ? "Только клиенты, которые явно предоставили доступ к делу." : "Faqat ishga aniq ruxsat bergan mijozlar.", icon: UsersRound },
     matters: { title: ru ? "Дела" : "Ishlar", description: ru ? "Дела в пределах действующих разрешений клиента." : "Mijozning amaldagi ruxsatlari doirasidagi ishlar.", icon: BriefcaseBusiness },
@@ -97,14 +99,53 @@ function LawyerRecordsClient({ locale, view }: { locale: PlatformLocale; view: s
   const definition = definitions[view] ?? definitions.matters;
   const Icon = definition.icon;
   const clients = useMemo(() => Array.from(new Map((data?.matters ?? []).filter((item) => item.clientName).map((item) => [item.clientName, item])).values()), [data?.matters]);
+  if (view === "tasks") return <LawyerTaskRecords locale={locale} data={data} loading={loading} error={error} referenceTime={referenceTime} reload={reload} />;
   return <section className="lawyer-workspace lawyer-records"><header className="lawyer-records-header"><Icon /><div><small>JURO · {ru ? "кабинет юриста" : "yurist kabineti"}</small><h1>{definition.title}</h1><p>{definition.description}</p></div></header>{error && <p className="lawyer-workspace-error" role="alert">{error}</p>}{loading && !data ? <div className="lawyer-workspace-loading"><LoaderCircle className="spin" /></div> : <div className="lawyer-record-list">
     {view === "clients" && clients.map((item) => <article key={item.clientName}><UserRound /><div><strong>{item.clientName}</strong><small>{item.legalArea || (ru ? "Область не указана" : "Yo‘nalish ko‘rsatilmagan")}</small></div><span>{(data?.matters ?? []).filter((matter) => matter.clientName === item.clientName).length} {ru ? "дел" : "ish"}</span></article>)}
-    {view === "matters" && data?.matters.map((item) => <article key={item.id}><BriefcaseBusiness /><div><strong>{item.title}</strong><small>{item.clientName || "—"} · {item.legalArea || item.status}</small></div><span>{item.status}</span></article>)}
+    {view === "matters" && data?.matters.map((item) => { const messages = data.messages.filter((message) => message.requestId === item.requestId); const documents = data.documents.filter((document) => document.caseId === item.id); const tasks = data.tasks.filter((task) => task.caseId === item.id); const consultations = data.consultations.filter((consultation) => consultation.caseId === item.id); const events = data.caseEvents.filter((event) => event.caseId === item.id).slice(0, 8); return <details className="lawyer-matter-card" key={item.id}><summary><BriefcaseBusiness /><span><strong>{item.title}</strong><small>{item.clientName || "—"} · {item.legalArea || item.status}</small></span><em>{item.status}</em></summary><div className="lawyer-matter-details"><p>{item.description || (ru ? "Описание дела не заполнено." : "Ish tavsifi kiritilmagan.")}</p><dl><div><dt>{ru ? "Консультации" : "Maslahatlar"}</dt><dd>{consultations.length}</dd></div><div><dt>{ru ? "Сообщения" : "Xabarlar"}</dt><dd>{messages.length}</dd></div><div><dt>{ru ? "Документы" : "Hujjatlar"}</dt><dd>{documents.length}</dd></div><div><dt>{ru ? "Задачи" : "Vazifalar"}</dt><dd>{tasks.length}</dd></div></dl>{item.nextDeadlineAt && <p><strong>{ru ? "Ближайший срок: " : "Yaqin muddat: "}</strong>{formatDate(item.nextDeadlineAt, ru)}</p>}<section><h2>{ru ? "Последние события" : "So‘nggi voqealar"}</h2>{events.length ? <ol>{events.map((event) => <li key={event.id}><span>{caseEventLabel(event.eventType, ru)}</span><time>{formatDate(event.createdAt, ru)}</time></li>)}</ol> : <p>{ru ? "Событий пока нет." : "Voqealar hozircha yo‘q."}</p>}</section><nav aria-label={ru ? "Следующие действия по делу" : "Ish bo‘yicha keyingi harakatlar"}><Link href={`${base}/consultations?view=requests#request-${item.requestId}`}>{ru ? "Открыть заявку и сообщения" : "So‘rov va xabarlarni ochish"}</Link><Link href={`${base}/consultations?view=tasks`}>{ru ? "Управлять задачами" : "Vazifalarni boshqarish"}</Link></nav></div></details>; })}
     {view === "messages" && data?.messages.map((item) => <Link href={`${base}/consultations?view=requests#request-${item.requestId}`} key={item.id}><MessageSquareText /><div><strong>{item.authorRole === "lawyer" ? (ru ? "Вы" : "Siz") : (ru ? "Клиент" : "Mijoz")}</strong><small>{item.body}</small></div><time>{formatDate(item.createdAt, ru)}</time></Link>)}
-    {view === "documents" && data?.documents.map((item) => <article key={item.id}><FileText /><div><strong>{item.title}</strong><small>{item.category} · {item.status}</small></div><time>{formatDate(item.updatedAt, ru)}</time></article>)}
-    {view === "tasks" && data?.tasks.map((item) => <article key={item.id}><CheckCircle2 /><div><strong>{item.title}</strong><small>{item.status}</small></div><time>{item.dueAt ? formatDate(item.dueAt, ru) : "—"}</time></article>)}
-    {data && ((view === "clients" && !clients.length) || (view === "matters" && !data.matters.length) || (view === "messages" && !data.messages.length) || (view === "documents" && !data.documents.length) || (view === "tasks" && !data.tasks.length)) && <Empty text={ru ? "Реальных записей пока нет." : "Hozircha haqiqiy yozuvlar yo‘q."} />}
+    {view === "documents" && data?.documents.map((item) => <Link href={`${base}/documents/${encodeURIComponent(item.id)}`} key={item.id}><FileText /><div><strong>{item.title}</strong><small>{item.category} · {item.status}</small></div><time>{formatDate(item.updatedAt, ru)}</time></Link>)}
+    {data && ((view === "clients" && !clients.length) || (view === "matters" && !data.matters.length) || (view === "messages" && !data.messages.length) || (view === "documents" && !data.documents.length)) && <Empty text={ru ? "Реальных записей пока нет." : "Hozircha haqiqiy yozuvlar yo‘q."} />}
   </div>}</section>;
+}
+
+function LawyerTaskRecords({ locale, data, loading, error, referenceTime, reload }: { locale: PlatformLocale; data: LawyerWorkspaceData | null; loading: boolean; error: string; referenceTime: number; reload: () => Promise<void> }) {
+  const ru = locale === "ru";
+  const [caseFilter, setCaseFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueAt, setDueAt] = useState("");
+  const [comments, setComments] = useState<Record<string, string>>({});
+  const [taskDueDates, setTaskDueDates] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState("");
+  const [localError, setLocalError] = useState("");
+  const [notice, setNotice] = useState("");
+  const selectedMatter = data?.matters.find((matter) => matter.id === caseFilter) ?? data?.matters[0] ?? null;
+  const visible = (data?.tasks ?? []).filter((task) => (!caseFilter || task.caseId === caseFilter) && (!statusFilter || (statusFilter === "overdue" ? Boolean(task.dueAt && Date.parse(task.dueAt) < referenceTime && !["completed", "cancelled"].includes(task.status)) : task.status === statusFilter)));
+
+  async function mutate(payload: Record<string, unknown>, actionId: string) {
+    setBusyId(actionId); setLocalError(""); setNotice("");
+    try {
+      const response = await fetch("/api/platform/lawyer-tasks", { method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ locale, ...payload }) });
+      const body = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(body.error || "LAWYER_TASK_ACTION_FAILED");
+      await reload();
+      setNotice(ru ? "Задачи дела обновлены." : "Ish vazifalari yangilandi.");
+    } finally { setBusyId(""); }
+  }
+
+  async function create(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault(); if (!selectedMatter) return;
+    try { await mutate({ action: "create", requestId: selectedMatter.requestId, title, description: description.trim() || undefined, dueAt: dueAt ? new Date(dueAt).toISOString() : undefined }, "new"); setTitle(""); setDescription(""); setDueAt(""); }
+    catch (value) { setLocalError(value instanceof Error ? value.message : String(value)); }
+  }
+
+  return <section className="lawyer-workspace lawyer-records lawyer-task-workspace"><header className="lawyer-records-header"><CheckCircle2 /><div><small>JURO · {ru ? "задачи" : "vazifalar"}</small><h1>{ru ? "Задачи по делам" : "Ish vazifalari"}</h1><p>{ru ? "Создавайте задачи только в делах с действующим разрешением клиента; изменения и комментарии фиксируются в аудите." : "Faqat mijozning amaldagi ruxsati bor ishlarda vazifa yarating; o‘zgarish va izohlar auditda qayd etiladi."}</p></div></header>{(error || localError) && <p className="lawyer-workspace-error" role="alert">{error || localError}</p>}{notice && <p className="lawyer-workspace-notice" role="status">{notice}</p>}{loading && !data ? <div className="lawyer-workspace-loading"><LoaderCircle className="spin" /></div> : <>
+    <form className="lawyer-task-create" onSubmit={(event) => void create(event)}><header><Plus /><div><h2>{ru ? "Новая задача" : "Yangi vazifa"}</h2><p>{ru ? "Задача будет связана с выбранным клиентом и делом." : "Vazifa tanlangan mijoz va ish bilan bog‘lanadi."}</p></div></header><label>{ru ? "Дело" : "Ish"}<select value={selectedMatter?.id || ""} onChange={(event) => setCaseFilter(event.target.value)} disabled={!data?.matters.length}>{data?.matters.map((matter) => <option value={matter.id} key={matter.id}>{matter.clientName ? `${matter.clientName} · ` : ""}{matter.title}</option>)}</select></label><label>{ru ? "Название" : "Nomi"}<input required minLength={2} maxLength={240} value={title} onChange={(event) => setTitle(event.target.value)} /></label><label>{ru ? "Описание" : "Tavsif"}<textarea maxLength={2_000} value={description} onChange={(event) => setDescription(event.target.value)} /></label><label>{ru ? "Срок" : "Muddat"}<input type="datetime-local" value={dueAt} onChange={(event) => setDueAt(event.target.value)} /></label><button disabled={!selectedMatter || busyId === "new" || title.trim().length < 2}>{busyId === "new" ? <LoaderCircle className="spin" /> : <Plus />}{ru ? "Создать задачу" : "Vazifa yaratish"}</button></form>
+    <div className="lawyer-task-filters"><label>{ru ? "Фильтр по делу" : "Ish filtri"}<select value={caseFilter} onChange={(event) => setCaseFilter(event.target.value)}><option value="">{ru ? "Все разрешённые дела" : "Barcha ruxsatli ishlar"}</option>{data?.matters.map((matter) => <option value={matter.id} key={matter.id}>{matter.title}</option>)}</select></label><label>{ru ? "Статус" : "Holat"}<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">{ru ? "Все" : "Barchasi"}</option><option value="planned">{ru ? "Запланировано" : "Rejalashtirilgan"}</option><option value="in_progress">{ru ? "В работе" : "Jarayonda"}</option><option value="waiting_information">{ru ? "Ожидает информации" : "Ma’lumot kutilmoqda"}</option><option value="completed">{ru ? "Завершено" : "Yakunlangan"}</option><option value="overdue">{ru ? "Просрочено" : "Muddati o‘tgan"}</option></select></label></div>
+    <div className="lawyer-task-list">{visible.map((task) => { const matter = data?.matters.find((item) => item.id === task.caseId); const taskComments = data?.taskComments.filter((comment) => comment.taskId === task.id) ?? []; const overdue = Boolean(task.dueAt && Date.parse(task.dueAt) < referenceTime && !["completed", "cancelled"].includes(task.status)); const editableDueAt = taskDueDates[task.id] ?? (task.dueAt ? toLocalDateTime(task.dueAt) : ""); return <article key={task.id} data-overdue={overdue ? "true" : "false"}><header><CheckCircle2 /><div><strong>{task.title}</strong><small>{matter?.clientName || "—"} · {matter?.title || task.caseId}</small></div><span>{overdue ? (ru ? "Просрочено" : "Muddati o‘tgan") : taskStatusLabel(task.status, ru)}</span></header>{task.description && <p>{task.description}</p>}<div className="lawyer-task-meta">{task.isEditable ? <label>{ru ? "Срок" : "Muddat"}<input type="datetime-local" value={editableDueAt} disabled={busyId === `due-${task.id}` || ["completed", "cancelled"].includes(task.status)} onChange={(event) => setTaskDueDates((current) => ({ ...current, [task.id]: event.target.value }))} onBlur={(event) => { const nextDueAt = event.target.value; const currentDueAt = task.dueAt ? toLocalDateTime(task.dueAt) : ""; if (nextDueAt === currentDueAt) return; void mutate({ action: "update", requestId: task.requestId, taskId: task.id, status: task.status, dueAt: nextDueAt ? new Date(nextDueAt).toISOString() : null }, `due-${task.id}`).catch((value) => setLocalError(value instanceof Error ? value.message : String(value))); }} /></label> : task.dueAt && <time>{formatDate(task.dueAt, ru)}</time>}{task.isEditable ? <select aria-label={ru ? "Статус задачи" : "Vazifa holati"} value={task.status} disabled={busyId === task.id || ["completed", "cancelled"].includes(task.status)} onChange={(event) => void mutate({ action: "update", requestId: task.requestId, taskId: task.id, status: event.target.value }, task.id).catch((value) => setLocalError(value instanceof Error ? value.message : String(value)))}>{task.status === "overdue" && <option value="overdue" disabled>{ru ? "Просрочено" : "Muddati o‘tgan"}</option>}<option value="planned">{ru ? "Запланировано" : "Rejalashtirilgan"}</option><option value="in_progress">{ru ? "В работе" : "Jarayonda"}</option><option value="waiting_information">{ru ? "Ожидает информации" : "Ma’lumot kutilmoqda"}</option><option value="waiting_counterparty">{ru ? "Ожидает другую сторону" : "Qarshi tomon kutilmoqda"}</option><option value="completed">{ru ? "Завершено" : "Yakunlangan"}</option><option value="cancelled">{ru ? "Отменено" : "Bekor qilingan"}</option></select> : <small>{ru ? "Задача плана клиента доступна только для комментария." : "Mijoz rejasidagi vazifa faqat izoh uchun ochiq."}</small>}</div>{taskComments.length > 0 && <ol className="lawyer-task-comments">{taskComments.map((comment) => <li key={comment.id}><MessageSquareText /><div><strong>{comment.authorName || (ru ? "Юрист" : "Yurist")}</strong><p>{comment.body}</p><time>{formatDate(comment.createdAt, ru)}</time></div></li>)}</ol>}<form className="lawyer-task-comment" onSubmit={(event) => { event.preventDefault(); const body = comments[task.id]?.trim(); if (!body) return; void mutate({ action: "comment", requestId: task.requestId, taskId: task.id, body }, `comment-${task.id}`).then(() => setComments((current) => ({ ...current, [task.id]: "" }))).catch((value) => setLocalError(value instanceof Error ? value.message : String(value))); }}><label className="sr-only" htmlFor={`task-comment-${task.id}`}>{ru ? "Комментарий к задаче" : "Vazifa izohi"}</label><textarea id={`task-comment-${task.id}`} maxLength={2_000} value={comments[task.id] || ""} onChange={(event) => setComments((current) => ({ ...current, [task.id]: event.target.value }))} placeholder={ru ? "Добавить комментарий…" : "Izoh qo‘shish…"} /><button aria-label={ru ? "Отправить комментарий" : "Izohni yuborish"} disabled={!comments[task.id]?.trim() || busyId === `comment-${task.id}`} >{busyId === `comment-${task.id}` ? <LoaderCircle className="spin" /> : <Send />}</button></form></article>; })}{data && !visible.length && <Empty text={ru ? "Задач по выбранным фильтрам нет." : "Tanlangan filtrlar bo‘yicha vazifa yo‘q."} />}</div>
+  </>}</section>;
 }
 
 type ScheduleRule = { id?: string; weekday: number; startsAt: string; endsAt: string; status: "active" | "paused" };
@@ -193,6 +234,33 @@ export function LawyerScheduleClient({ locale }: { locale: PlatformLocale }) {
 }
 
 function Empty({ text }: { text: string }) { return <div className="lawyer-record-empty"><CheckCircle2 /><p>{text}</p></div>; }
+function taskStatusLabel(status: string, ru: boolean) {
+  const labels: Record<string, [string, string]> = {
+    planned: ["Запланировано", "Rejalashtirilgan"],
+    in_progress: ["В работе", "Jarayonda"],
+    waiting_information: ["Ожидает информации", "Ma’lumot kutilmoqda"],
+    waiting_counterparty: ["Ожидает другую сторону", "Qarshi tomon kutilmoqda"],
+    completed: ["Завершено", "Yakunlangan"],
+    cancelled: ["Отменено", "Bekor qilingan"],
+  };
+  return labels[status]?.[ru ? 0 : 1] || (ru ? "Статус задачи" : "Vazifa holati");
+}
+function caseEventLabel(eventType: string, ru: boolean) {
+  const labels: Record<string, [string, string]> = {
+    case_created: ["Дело создано", "Ish yaratildi"],
+    action_plan_created: ["Создан план действий", "Harakatlar rejasi yaratildi"],
+    tasks_created: ["Задачи добавлены из плана", "Rejadan vazifalar qo‘shildi"],
+    lawyer_access_granted: ["Юристу предоставлен доступ", "Yuristga ruxsat berildi"],
+    lawyer_access_revoked: ["Доступ юриста отозван", "Yurist ruxsati bekor qilindi"],
+    lawyer_task_created: ["Юрист добавил задачу", "Yurist vazifa qo‘shdi"],
+    lawyer_task_updated: ["Юрист обновил задачу", "Yurist vazifani yangiladi"],
+    lawyer_task_comment_added: ["Юрист добавил комментарий", "Yurist izoh qo‘shdi"],
+    lawyer_document_requested: ["Юрист запросил документ", "Yurist hujjat so‘radi"],
+    lawyer_document_provided: ["Клиент предоставил документ", "Mijoz hujjat taqdim etdi"],
+    lawyer_document_request_cancelled: ["Запрос документа отменён", "Hujjat so‘rovi bekor qilindi"],
+  };
+  return labels[eventType]?.[ru ? 0 : 1] || (ru ? "Обновление дела" : "Ish yangilanishi");
+}
 function formatDate(value: string, ru: boolean) { return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Tashkent" }).format(new Date(value)); }
 function toLocalDateTime(value: string) { const date = new Date(value); return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16); }
 function nextLocalHour() { const date = new Date(Date.now() + 60 * 60_000); date.setMinutes(0, 0, 0); return toLocalDateTime(date.toISOString()); }

@@ -28,12 +28,12 @@ export const GET = withApiErrors(async function GET() {
     nextAvailableAt: string | null;
     profileRevision: number;
   }>();
-  if (!profile) return response({ profile: null, operational: false, requests: [], matters: [], messages: [], documents: [], tasks: [], consultations: [] });
+  if (!profile) return response({ profile: null, operational: false, requests: [], matters: [], messages: [], documents: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
 
   const operational = profile.status === "public_approved" && profile.marketplaceStatus === "public_approved";
-  if (!operational) return response({ profile, operational, requests: [], matters: [], messages: [], documents: [], tasks: [], consultations: [] });
+  if (!operational) return response({ profile, operational, requests: [], matters: [], messages: [], documents: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
   const now = new Date().toISOString();
-  const [requests, matters, messages, documents, tasks, consultations] = await Promise.all([
+  const [requests, matters, messages, documents, tasks, taskComments, consultations, caseEvents] = await Promise.all([
     db.prepare(
       `SELECT r.id,r.status,r.anonymized_summary AS anonymizedSummary,r.created_at AS createdAt,r.updated_at AS updatedAt,
         CASE WHEN g.id IS NOT NULL THEN cs.id END AS caseId,
@@ -49,7 +49,8 @@ export const GET = withApiErrors(async function GET() {
        WHERE r.lawyer_profile_id=? ORDER BY r.updated_at DESC LIMIT 100`,
     ).bind(user.id, now, profile.id).all(),
     db.prepare(
-      `SELECT DISTINCT cs.id,cs.title,cs.status,cs.legal_area AS legalArea,cs.updated_at AS updatedAt,
+      `SELECT DISTINCT cs.id,cs.title,cs.description,cs.status,cs.legal_area AS legalArea,
+        cs.next_deadline_at AS nextDeadlineAt,cs.updated_at AS updatedAt,
         u.full_name AS clientName,r.id AS requestId
        FROM lawyer_access_grants g
        JOIN lawyer_requests r ON r.id=g.lawyer_request_id AND r.lawyer_profile_id=?
@@ -67,24 +68,43 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY m.created_at DESC LIMIT 50`,
     ).bind(profile.id, user.id, now).all(),
     db.prepare(
-      `SELECT DISTINCT d.id,d.title,d.category,d.status,d.updated_at AS updatedAt,d.case_id AS caseId
+      `SELECT DISTINCT d.id,d.title,d.category,d.status,d.updated_at AS updatedAt,d.case_id AS caseId,r.id AS requestId
        FROM documents d JOIN lawyer_access_grants g ON g.case_id=d.case_id
        JOIN lawyer_requests r ON r.id=g.lawyer_request_id AND r.lawyer_profile_id=?
        WHERE g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
        ORDER BY d.updated_at DESC LIMIT 100`,
     ).bind(profile.id, user.id, now).all(),
     db.prepare(
-      `SELECT DISTINCT t.id,t.title,t.status,t.due_at AS dueAt,t.case_id AS caseId,t.updated_at AS updatedAt
+      `SELECT DISTINCT t.id,t.title,t.description,t.status,t.due_at AS dueAt,t.case_id AS caseId,
+        t.updated_at AS updatedAt,r.id AS requestId,
+        CASE WHEN t.owner_user_id=? AND t.plan_step_id IS NULL THEN 1 ELSE 0 END AS isEditable
        FROM tasks t JOIN lawyer_access_grants g ON g.case_id=t.case_id
        JOIN lawyer_requests r ON r.id=g.lawyer_request_id AND r.lawyer_profile_id=?
        WHERE g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
        ORDER BY COALESCE(t.due_at,t.updated_at) ASC LIMIT 100`,
+    ).bind(user.id, profile.id, user.id, now).all(),
+    db.prepare(
+      `SELECT DISTINCT c.id,c.task_id AS taskId,c.body,c.created_at AS createdAt,u.full_name AS authorName
+       FROM lawyer_task_comments c
+       JOIN tasks t ON t.id=c.task_id
+       JOIN lawyer_access_grants g ON g.case_id=t.case_id
+       JOIN lawyer_requests r ON r.id=g.lawyer_request_id AND r.lawyer_profile_id=?
+       JOIN user_profiles u ON u.id=c.author_user_id
+       WHERE g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
+       ORDER BY c.created_at ASC LIMIT 300`,
     ).bind(profile.id, user.id, now).all(),
     db.prepare(
       `SELECT id,lawyer_request_id AS requestId,case_id AS caseId,starts_at AS startsAt,ends_at AS endsAt,
         timezone,format,status,internal_note AS internalNote,result_note AS resultNote
        FROM lawyer_consultations WHERE lawyer_profile_id=? ORDER BY starts_at ASC LIMIT 100`,
     ).bind(profile.id).all(),
+    db.prepare(
+      `SELECT DISTINCT e.id,e.case_id AS caseId,e.event_type AS eventType,e.created_at AS createdAt
+       FROM case_events e JOIN lawyer_access_grants g ON g.case_id=e.case_id
+       JOIN lawyer_requests r ON r.id=g.lawyer_request_id AND r.lawyer_profile_id=?
+       WHERE g.lawyer_user_id=? AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
+       ORDER BY e.created_at DESC LIMIT 300`,
+    ).bind(profile.id, user.id, now).all(),
   ]);
   return response({
     profile,
@@ -94,6 +114,8 @@ export const GET = withApiErrors(async function GET() {
     messages: messages.results,
     documents: documents.results,
     tasks: tasks.results,
+    taskComments: taskComments.results,
     consultations: consultations.results,
+    caseEvents: caseEvents.results,
   });
 });
