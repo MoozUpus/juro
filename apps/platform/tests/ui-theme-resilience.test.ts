@@ -38,3 +38,12 @@ test("a delayed account theme response cannot override a newer user choice", () 
   assert.match(switcher, /readThemeInteractionRevision\(\) !== startedRevision/);
   assert.match(switcher, /async function select\(next: ThemeMode\)\s*\{\s*markThemeInteraction\(\)/);
 });
+
+test("the account theme API scopes shared cookies only to JURO application hosts", () => {
+  const route = source("app/api/platform/theme/route.ts");
+
+  assert.match(route, /sharedAuthCookieDomain\(requestUrl\.hostname\)/);
+  assert.match(route, /requestUrl\.protocol === "https:"/);
+  assert.match(route, /function GET\(request: Request\)/);
+  assert.doesNotMatch(route, /SameSite=Lax; Domain=\.juro\.uz; Secure/);
+});
