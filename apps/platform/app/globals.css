@@ -187,8 +187,8 @@ select {
 }
 
 .theme-switcher button {
-  min-width: 34px;
-  height: 34px;
+  min-width: 44px;
+  height: 44px;
   padding: 0 10px;
   display: inline-flex;
   align-items: center;
@@ -214,7 +214,7 @@ select {
 }
 
 .theme-switcher.is-compact button {
-  width: 34px;
+  width: 44px;
   padding: 0;
 }
 

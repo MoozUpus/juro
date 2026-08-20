@@ -29,6 +29,13 @@ test("authentication surfaces inherit semantic light and dark theme tokens", () 
   assert.match(auth, /\.auth-unavailable\s*\{[^}]*padding-right:\s*0/s);
 });
 
+test("compact theme controls retain a 44px touch target", () => {
+  const globals = source("app/globals.css");
+
+  assert.match(globals, /\.theme-switcher button\s*\{[^}]*min-width:\s*44px;[^}]*height:\s*44px;/s);
+  assert.match(globals, /\.theme-switcher\.is-compact button\s*\{[^}]*width:\s*44px;/s);
+});
+
 test("a delayed account theme response cannot override a newer user choice", () => {
   const switcher = source("app/_theme/ThemeSwitcher.tsx");
 
