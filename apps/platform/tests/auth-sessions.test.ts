@@ -27,6 +27,7 @@ import { rotatePeriodicSessionToken } from "../lib/auth/session-rotation";
 import {
   sessionCookie,
   sessionCookieUntil,
+  sharedAuthCookieDomain,
 } from "../lib/auth/session-persistence";
 
 
@@ -844,6 +845,11 @@ test("remember-me keeps cookie and persisted absolute expiry aligned", async () 
     }
 
     assert.match(sessionCookie("token"), /(?:^|; )Max-Age=86400(?:;|$)/);
+    assert.match(sessionCookie("token", false, ".juro.uz"), /Domain=\.juro\.uz/u);
+    assert.equal(sharedAuthCookieDomain("app.juro.uz"), ".juro.uz");
+    assert.equal(sharedAuthCookieDomain("lawyer.juro.uz"), ".juro.uz");
+    assert.equal(sharedAuthCookieDomain("app.staging.juro.uz"), undefined);
+    assert.equal(sharedAuthCookieDomain("localhost"), undefined);
     assert.match(
       sessionCookieUntil(
         "rotated-token",

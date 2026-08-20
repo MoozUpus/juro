@@ -14,7 +14,7 @@ export {
   MFA_CHALLENGE_COOKIE,
   SESSION_COOKIE,
 } from "./session-token";
-export { sessionCookie, sessionCookieUntil } from "./session-persistence";
+export { sessionCookie, sessionCookieUntil, sharedAuthCookieDomain } from "./session-persistence";
 
 export type SessionUser = {
   email: string;
@@ -55,8 +55,8 @@ export async function getSessionUser(request?: Request): Promise<SessionUser | n
   }
 }
 
-export function clearSessionCookie(): string {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+export function clearSessionCookie(domain?: string): string {
+  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${domain ? `; Domain=${domain}` : ""}`;
 }
 
 export function deviceContinuityCookie(

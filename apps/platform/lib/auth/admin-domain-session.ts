@@ -9,6 +9,8 @@ export type AdminDomainRole = "super_admin" | "lawyer_moderator";
 export type AdminDomainPrincipal = {
   sessionId: string;
   userId: string;
+  sourceSessionId: string;
+  sourceMfaVerifiedAt: string;
   roles: AdminDomainRole[];
   expiresAt: string;
 };
@@ -186,7 +188,7 @@ export async function requireAdminDomainSession(
   const nowIso = iso(now);
   const row = await db.prepare(
     `SELECT id,staff_user_id AS userId,source_session_id AS sourceSessionId,
-       expires_at AS expiresAt
+       source_mfa_verified_at AS sourceMfaVerifiedAt,expires_at AS expiresAt
      FROM admin_domain_sessions
      WHERE token_hash=? AND environment=? AND revoked_at IS NULL AND expires_at>?
      LIMIT 1`,
@@ -194,6 +196,7 @@ export async function requireAdminDomainSession(
     id: string;
     userId: string;
     sourceSessionId: string;
+    sourceMfaVerifiedAt: string;
     expiresAt: string;
   }>();
   if (!row) throw new AdminDomainSessionError("SESSION_DENIED");
@@ -204,7 +207,14 @@ export async function requireAdminDomainSession(
      WHERE id=? AND revoked_at IS NULL AND expires_at>?`,
   ).bind(nowIso, row.id, nowIso).run();
   if (Number(touched.meta.changes ?? 0) !== 1) throw new AdminDomainSessionError("SESSION_DENIED");
-  return { sessionId: row.id, userId: row.userId, roles, expiresAt: row.expiresAt };
+  return {
+    sessionId: row.id,
+    userId: row.userId,
+    sourceSessionId: row.sourceSessionId,
+    sourceMfaVerifiedAt: row.sourceMfaVerifiedAt,
+    roles,
+    expiresAt: row.expiresAt,
+  };
 }
 
 /**
@@ -237,7 +247,7 @@ export async function revokeAdminDomainSession(
 
 export function adminRoleAllows(
   roles: readonly AdminDomainRole[],
-  capability: "dashboard.view" | "lawyer.profiles.moderate" | "lawyer.profiles.block" | "lawyer.reviews.moderate",
+  capability: "dashboard.view" | "lawyer.profiles.moderate" | "lawyer.profiles.block" | "lawyer.reviews.moderate" | "legal.corpus.manage",
 ): boolean {
   return roles.includes("super_admin") || (
     (capability === "lawyer.profiles.moderate" || capability === "lawyer.reviews.moderate")

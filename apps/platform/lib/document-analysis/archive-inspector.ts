@@ -10,7 +10,7 @@ const MAX_UNCOMPRESSED_BYTES = 200 * 1024 * 1024;
 const MAX_EXPANSION_RATIO = 100;
 const DEFAULT_VERIFICATION_TIMEOUT_MS = 15_000;
 
-const supportedPackageExtensions = new Set(["pdf", "docx", "jpg", "jpeg", "png"]);
+const supportedPackageExtensions = new Set(["pdf", "docx", "jpg", "jpeg", "png", "txt", "html", "htm", "json"]);
 const nestedArchiveExtensions = new Set(["zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "xz", "docm", "xlsm"]);
 
 export type ArchiveInspection = {

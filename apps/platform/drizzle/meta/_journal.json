@@ -890,6 +890,111 @@
       "when": 1786818000000,
       "tag": "0126_exportable_legal_corpus_sparse_index",
       "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1786821600000,
+      "tag": "0127_legal_corpus_admin_control",
+      "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1786908000000,
+      "tag": "0128_owner_corpus_publications",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1786911600000,
+      "tag": "0129_owner_corpus_auto_trust",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1786915200000,
+      "tag": "0130_legal_corpus_variant_titles",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1786918800000,
+      "tag": "0131_legal_corpus_version_intervals",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1786922400000,
+      "tag": "0132_lex_source_rate_limit",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1786926000000,
+      "tag": "0133_owner_corpus_upload_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1786929600000,
+      "tag": "0134_owner_corpus_delayed_publication",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1786933200000,
+      "tag": "0135_drop_unused_legal_corpus_sparse_version_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 136,
+      "version": "7",
+      "when": 1786936800000,
+      "tag": "0136_legal_corpus_preferred_ingestion_lookup",
+      "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1786940400000,
+      "tag": "0137_lex_core_code_targets",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1786971000000,
+      "tag": "0138_lex_core_code_pager",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1786972200000,
+      "tag": "0139_lex_pager_source_session",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1786975800000,
+      "tag": "0140_compressed_legal_corpus_sparse_postings",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1787040901000,
+      "tag": "0141_lex_robots_policy_cache",
+      "breakpoints": true
     }
   ]
 }

@@ -34,6 +34,7 @@ const roleCapabilities: Readonly<
     "staff.roles.manage",
     "staff.security.audit",
     "staff.operations.manage",
+    "legal.sources.publish",
     "knowledge.base.manage",
     "ai.settings.manage",
   ]),

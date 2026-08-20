@@ -16,6 +16,18 @@ export type LexDocumentEffectivity = {
   validTo: string | null;
 };
 
+export type LexDocumentMetadata = {
+  documentType: string | null;
+  documentNumber: string | null;
+  adoptingAuthority: string | null;
+  adoptionDate: string | null;
+};
+
+export type LexArchiveRepresentation = {
+  sourceUrl: string;
+  archiveId: string;
+};
+
 export const LEX_CORPUS_CATEGORIES = [
   { key: "laws", searchKind: "nat", query: "sort_id=3975&form_id=3968" },
   { key: "oliy_majlis", searchKind: "oliy", query: "" },
@@ -38,6 +50,39 @@ export const LEX_CORPUS_LANGUAGES = [
   { language: "uz-Cyrl" as const, pathPrefix: "", langId: "3" },
   { language: "uz-Latn" as const, pathPrefix: "/uz", langId: "4" },
 ] as const;
+
+/**
+ * National consolidated codes are the highest-value starting point for a
+ * legal corpus.  These are title-search targets only: no legal text, source
+ * URL or status is asserted here.  Each eventual document URL is discovered
+ * from Lex.uz, then fetched and validated by the normal corpus pipeline.
+ *
+ * The list deliberately covers enacted national codes, not every amendment
+ * that happens to mention a code and not private/legal-practice documents.
+ */
+export const LEX_CORE_CODE_TARGETS = [
+  { id: "administrative_responsibility", titleRu: "Кодекс Республики Узбекистан об административной ответственности" },
+  { id: "administrative_court_procedure", titleRu: "Кодекс Республики Узбекистан об административном судопроизводстве" },
+  { id: "air", titleRu: "Воздушный кодекс Республики Узбекистан" },
+  { id: "budget", titleRu: "Бюджетный кодекс Республики Узбекистан" },
+  { id: "civil", titleRu: "Гражданский кодекс Республики Узбекистан" },
+  { id: "civil_procedure", titleRu: "Гражданский процессуальный кодекс Республики Узбекистан" },
+  { id: "criminal", titleRu: "Уголовный кодекс Республики Узбекистан" },
+  { id: "criminal_execution", titleRu: "Уголовно-исполнительный кодекс Республики Узбекистан" },
+  { id: "criminal_procedure", titleRu: "Уголовно-процессуальный кодекс Республики Узбекистан" },
+  { id: "customs", titleRu: "Таможенный кодекс Республики Узбекистан" },
+  { id: "economic_procedure", titleRu: "Экономический процессуальный кодекс Республики Узбекистан" },
+  { id: "electoral", titleRu: "Избирательный кодекс Республики Узбекистан" },
+  { id: "family", titleRu: "Семейный кодекс Республики Узбекистан" },
+  { id: "housing", titleRu: "Жилищный кодекс Республики Узбекистан" },
+  { id: "land", titleRu: "Земельный кодекс Республики Узбекистан" },
+  { id: "labor", titleRu: "Трудовой кодекс Республики Узбекистан" },
+  { id: "tax", titleRu: "Налоговый кодекс Республики Узбекистан" },
+  { id: "urban_planning", titleRu: "Градостроительный кодекс Республики Узбекистан" },
+  { id: "water", titleRu: "Водный кодекс Республики Узбекистан" },
+] as const;
+
+export type LexCoreCodeTarget = (typeof LEX_CORE_CODE_TARGETS)[number];
 
 const LEX_ORIGIN = "https://lex.uz";
 const DOCUMENT_PATH = /^\/(?:(?<locale>ru|uz|uzc|en)\/)?docs\/(?<id>-?\d+)(?:[/?#]|$)/iu;
@@ -152,10 +197,22 @@ function dateAfter(text: string, labels: readonly string[]): string | null {
   return null;
 }
 
+function effectivityMetadataHtml(html: string): string {
+  const header = /<div\b[^>]*class\s*=\s*["'][^"']*\bdocHeader\b[^"']*["'][^>]*>/iu.exec(html);
+  if (header?.index === undefined) return html;
+  const suffix = html.slice(header.index);
+  const boundary = /<div\b[^>]*class\s*=\s*["'][^"']*\bdocBody-container\b[^"']*["'][^>]*>/iu.exec(suffix);
+  return boundary?.index === undefined ? suffix : suffix.slice(0, boundary.index);
+}
+
 /** Extracts document-level effectivity only from visible official page text.
  * It deliberately does not infer a legal date from fetch time. */
 export function parseLexDocumentEffectivity(html: string): LexDocumentEffectivity {
-  const text = visibleText(html);
+  // Legal text frequently repeals a different act. Only Lex's document
+  // metadata header may determine whether the current source itself is in
+  // force; otherwise a clause such as "the previous decision is repealed"
+  // would poison the current version status.
+  const text = visibleText(effectivityMetadataHtml(html));
   const validFrom = dateAfter(text, [
     "Дата вступления в силу", "Кучга кириш санаси", "Kuchga kirish sanasi", "Effective date",
   ]);
@@ -169,6 +226,35 @@ export function parseLexDocumentEffectivity(html: string): LexDocumentEffectivit
     status: repealed ? "repealed" : notYetEffective || !validFrom ? "unknown" : "active",
     validFrom,
     validTo,
+  };
+}
+
+const DOCUMENT_TYPE_PATTERN = /(?<!\p{L})(?:конституционный\s+закон|закон|кодекс|указ|постановление|распоряжение|приказ|решение|низом|қонун|кодекс|фармон|қарор|буйруқ|qonun|kodeks|farmon|qaror|buyruq|decision|decree|resolution|order|law|code)(?!\p{L})/iu;
+const AUTHORITY_PATTERN = /(?:президент|кабинет\s+министров|министерств|комитет|комисси|верховн\p{L}*\s+суд|сенат|законодательн\p{L}*\s+палат|prezident|vazirlar\s+mahkamasi|vazirlik|qo['‘’]?mita|komissiya|oliy\s+sud|senat|qonunchilik\s+palatasi|президент|вазирлар\s+маҳкамаси|вазирлик|қўмита|комиссия|олий\s+суд|сенат|қонунчилик\s+палатаси|president|cabinet|ministry|committee|commission|supreme\s+court|senate|legislative\s+chamber)/iu;
+
+/** Reads the official document-card label from Lex's own metadata header.
+ * Missing or ambiguous fields stay null; neither fetch time nor body text is
+ * used to invent document requisites. */
+export function parseLexDocumentMetadata(html: string): LexDocumentMetadata {
+  const text = visibleText(effectivityMetadataHtml(html));
+  const numbered = /^(?<descriptor>.{2,600}?)(?:,|\s)+(?:от|dated|санали|даги|dagi)?\s*(?<date>\d{2}\.\d{2}\.\d{4})(?:\s*(?:г\.|й\.|y\.)?)?\s*(?:№|N(?:o\.?|º)?)\s*(?<number>[\p{L}\d][\p{L}\d./\-–—]*)/iu.exec(text);
+  if (!numbered?.groups) {
+    return { documentType: null, documentNumber: null, adoptingAuthority: null, adoptionDate: null };
+  }
+  const descriptor = numbered.groups.descriptor.replace(/\s+/gu, " ").trim();
+  const typeMatch = DOCUMENT_TYPE_PATTERN.exec(descriptor);
+  const documentType = typeMatch?.[0]?.replace(/\s+/gu, " ").trim() ?? null;
+  const remainder = documentType
+    ? `${descriptor.slice(0, typeMatch?.index ?? 0)} ${descriptor.slice((typeMatch?.index ?? 0) + (typeMatch?.[0].length ?? 0))}`
+      .replace(/^[\s,.:;–—-]+|[\s,.:;–—-]+$/gu, "")
+      .replace(/\s+/gu, " ")
+      .trim()
+    : "";
+  return {
+    documentType,
+    documentNumber: numbered.groups.number.trim(),
+    adoptingAuthority: remainder && AUTHORITY_PATTERN.test(remainder) ? remainder : null,
+    adoptionDate: lexDateToIso(numbered.groups.date),
   };
 }
 
@@ -215,6 +301,66 @@ export function lexCatalogSearchUrl(
   return `${LEX_ORIGIN}${locale.pathPrefix}/search/${category.searchKind}${query ? `?${query}` : ""}`;
 }
 
+/** Builds only one of JURO's fixed code-title search URLs. */
+export function lexCoreCodeSearchUrl(target: LexCoreCodeTarget): string {
+  const known = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === target.id);
+  if (!known || known.titleRu !== target.titleRu) throw new TypeError("LEX_CORE_CODE_TARGET_REJECTED");
+  const url = new URL("/ru/search/all", LEX_ORIGIN);
+  url.searchParams.set("searchtitle", target.titleRu);
+  return url.href;
+}
+
+/** Accepts only the fixed title-search URLs generated above. */
+export function isLexCoreCodeSearchUrl(value: string): boolean {
+  try {
+    return LEX_CORE_CODE_TARGETS.some((target) => lexCoreCodeSearchUrl(target) === value);
+  } catch {
+    return false;
+  }
+}
+
+function plainSearchTitle(value: string): string {
+  return value
+    .replace(/<[^>]*>/gu, " ")
+    .replace(/&nbsp;|&#160;/giu, " ")
+    .replace(/&quot;|&#34;/giu, '"')
+    .replace(/&apos;|&#39;/giu, "'")
+    .replace(/&amp;|&#38;/giu, "&")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+function normalizedSearchTitle(value: string): string {
+  return plainSearchTitle(value)
+    .toLocaleLowerCase("ru")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+}
+
+/**
+ * Keeps code ingestion exact: an amendment or a similarly named act cannot
+ * enter the priority path merely because it contains the word "кодекс".
+ */
+export function discoverExactLexCoreCodeDocument(
+  html: string,
+  target: LexCoreCodeTarget,
+  baseUrl = LEX_ORIGIN,
+): LexDiscoveredDocument | null {
+  const expectedTitle = normalizedSearchTitle(target.titleRu);
+  const anchorPattern = /<a\b([^>]*)>([\s\S]*?)<\/a>/giu;
+  const hrefPattern = /\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/iu;
+  for (const match of html.matchAll(anchorPattern)) {
+    if (normalizedSearchTitle(match[2] ?? "") !== expectedTitle) continue;
+    const href = match[1]?.match(hrefPattern);
+    const raw = href?.[1] ?? href?.[2] ?? href?.[3];
+    if (!raw || raw.length > 2_000) continue;
+    const discovered = parseLexDocumentUrl(raw.replaceAll("&amp;", "&"), baseUrl);
+    if (discovered?.language === "ru") return discovered;
+  }
+  return null;
+}
+
 /**
  * Parses only Lex document links. Navigation, JavaScript and third-party URLs
  * are ignored, so discovery cannot treat untrusted page chrome as source data.
@@ -234,6 +380,35 @@ export function discoverLexDocumentLinks(html: string, baseUrl = LEX_ORIGIN): Le
     result.push(parsed);
   }
   return result;
+}
+
+/**
+ * Finds the immutable ZIP representation linked by a canonical Lex document
+ * page. The page is source data, not an instruction: only one exact HTTPS
+ * `/files/<number>.zip` URL on the Lex allowlist can leave this parser. Lex
+ * may render that link below a known locale prefix; those links are
+ * normalized to the immutable root path before fetching.
+ */
+export function discoverLexArchiveRepresentation(
+  html: string,
+  baseUrl = LEX_ORIGIN,
+): LexArchiveRepresentation | null {
+  const representations = new Map<string, LexArchiveRepresentation>();
+  const href = /\bhref\s*=\s*(?:"([^"]+)"|'([^']+)'|([^\s>]+))/giu;
+  for (const match of html.matchAll(href)) {
+    const candidate = (match[1] ?? match[2] ?? match[3])?.replaceAll("&amp;", "&");
+    if (!candidate) continue;
+    const url = officialLexUrl(candidate, baseUrl);
+    if (!url || url.search || url.hash) continue;
+    const archive = /^\/(?:ru\/|uz\/|uzc\/|en\/)?files\/(?<id>\d+)\.zip$/iu.exec(url.pathname);
+    if (!archive?.groups?.id) continue;
+    const sourceUrl = `${LEX_ORIGIN}/files/${archive.groups.id}.zip`;
+    representations.set(sourceUrl, { sourceUrl, archiveId: archive.groups.id });
+  }
+  if (representations.size > 1) {
+    throw new TypeError("LEGAL_CORPUS_ATTACHMENT_CONFLICT");
+  }
+  return [...representations.values()][0] ?? null;
 }
 
 export function languageVariantsFromLinks(

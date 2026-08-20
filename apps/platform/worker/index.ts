@@ -19,8 +19,14 @@ import {
   isStagingLegalEvaluationQueue,
 } from "./staging-legal-evaluation-queue";
 import { handleInternalAdminRequest } from "../lib/auth/admin-internal-api";
+import {
+  handleLegalCorpusEmbeddingServiceRequest,
+  handleLegalCorpusQdrantServiceRequest,
+  LegalCorpusQdrantContainer,
+} from "./legal-corpus-private-services";
+import { lawyerHostTarget } from "./lawyer-host-router";
 
-export { MalwareScannerContainer };
+export { MalwareScannerContainer, LegalCorpusQdrantContainer };
 
 type FrameworkEnv = PlatformJobEnv & {
   AI?: Ai;
@@ -53,6 +59,9 @@ type FrameworkEnv = PlatformJobEnv & {
   ADMIN_INTERNAL_TOKEN?: string;
   ADMIN_CONSOLE_TOKEN?: string;
   ADMIN_CONSOLE?: Fetcher;
+  QDRANT_CONTAINER?: DurableObjectNamespace<LegalCorpusQdrantContainer>;
+  QDRANT_API_KEY?: string;
+  QDRANT_COLLECTION?: string;
 };
 
 type SupportedImageOutputFormat =
@@ -97,6 +106,12 @@ const worker = {
     if (url.hostname === "malware-scanner.internal") {
       return handleMalwareScannerServiceRequest(request, env);
     }
+    if (url.hostname === "qdrant.internal") {
+      return handleLegalCorpusQdrantServiceRequest(request, env);
+    }
+    if (url.hostname === "embeddings.internal") {
+      return handleLegalCorpusEmbeddingServiceRequest(request, env);
+    }
     // Keep the existing custom domain on the production platform Worker while
     // moving the admin UI and its host-only session cookie into the isolated
     // juro-admin Worker. Internal admin API calls return through the juro
@@ -112,6 +127,22 @@ const worker = {
     const isStatusHost = Boolean(configuredStatusHostname && url.hostname.toLowerCase() === configuredStatusHostname);
     let routedRequest = request;
     let routedUrl = url;
+
+    const hostname = url.hostname.toLowerCase();
+    const isLawyerHost = hostname === "lawyer.juro.uz" || hostname === "lawyer.staging.juro.uz";
+    const lawyerPassthrough = url.pathname.startsWith("/_next/")
+      || url.pathname.startsWith("/api/")
+      || url.pathname.startsWith("/legal/")
+      || /\.(?:avif|css|gif|ico|jpe?g|js|json|png|svg|webp|woff2?)$/u.test(url.pathname)
+      || ["/favicon.ico", "/icon.png", "/apple-touch-icon.png", "/signin-with-chatgpt", "/signout-with-chatgpt", "/callback"].includes(url.pathname);
+    if (isLawyerHost && !lawyerPassthrough) {
+      const target = lawyerHostTarget(url);
+      if (!target) return withSecurityHeaders(new Response("Not Found", { status: 404 }), url);
+      const headers = new Headers(request.headers);
+      headers.set("x-juro-lawyer-host", "1");
+      routedUrl = target;
+      routedRequest = new Request(target, { method: request.method, headers, body: request.body, redirect: request.redirect });
+    }
 
     if (isStatusHost) {
       const isStatusAsset = url.pathname.startsWith("/_next/")

@@ -1,23 +1,19 @@
 import type { Metadata, Viewport } from "next";
-import { Cormorant_Garamond, Geist } from "next/font/google";
+import { Manrope } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const juroDisplay = Cormorant_Garamond({
-  variable: "--font-juro-display",
+const manrope = Manrope({
+  variable: "--font-manrope",
   subsets: ["cyrillic", "latin"],
-  weight: ["400", "500", "600"],
   display: "swap",
 });
 
+const themeBootstrap = `(function(){try{var c=document.cookie.match(/(?:^|; )juro_theme=(system|light|dark)(?:;|$)/);var l=localStorage.getItem("juro-theme");var m=c?c[1]:(l==="light"||l==="dark"||l==="system"?l:"system");var d=m==="system"?(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"):m;document.documentElement.dataset.theme=d;document.documentElement.dataset.themeMode=m;document.documentElement.style.colorScheme=d;}catch(e){document.documentElement.dataset.theme="light";document.documentElement.dataset.themeMode="system";}})();`;
+
 export const viewport: Viewport = {
   themeColor: "#061827",
-  colorScheme: "light",
+  colorScheme: "light dark",
 };
 
 export const metadata: Metadata = {
@@ -44,8 +40,9 @@ export default async function RootLayout({
   const requestPath = requestHeaders.get("x-juro-request-path") ?? "";
   const locale = /^\/uz(?:\/|$)/.test(requestPath) ? "uz" : /^\/en(?:\/|$)/.test(requestPath) ? "en" : "ru";
   return (
-    <html lang={locale}>
-      <body className={`${geistSans.variable} ${juroDisplay.variable}`}>
+    <html className={manrope.variable} lang={locale} suppressHydrationWarning>
+      <body>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         {children}
       </body>
     </html>

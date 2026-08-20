@@ -77,6 +77,7 @@ test("feature-off chat retrieval preserves the existing direct Lex path", async 
     assert.equal(calls, 1);
     assert.equal(result.sourceAccessMode, "direct");
     assert.equal(result.sources[0]?.verificationState, "direct_validated");
+    assert.equal(result.coverageStatus, "good_coverage");
   } finally {
     sqlite.close();
   }
@@ -113,6 +114,7 @@ test("indexed corpus is preferred and emits a verified exact-span packet", async
     });
     assert.equal(result.sourceAccessMode, "approved_package");
     assert.equal(result.sourceValidationStatus, "validated");
+    assert.equal(result.coverageStatus, "good_coverage");
     assert.equal(result.sources[0]?.verificationState, "verified");
     assert.equal(result.sources[0]?.spans?.[0]?.textSha256, result.sources[0]?.contentSha256);
   } finally {
@@ -138,6 +140,7 @@ test("historical chat retrieval never substitutes a current live page", async ()
     assert.equal(liveCalls, 0);
     assert.equal(result.sources.length, 0);
     assert.equal(result.sourceAccessMode, "approved_package");
+    assert.equal(result.coverageStatus, "no_coverage");
   } finally {
     sqlite.close();
   }

@@ -10,6 +10,9 @@ export const DOCUMENT_ANALYSIS_MAX_FILES = 20;
  * continuation path when they exceed the inline extraction boundary.
  */
 export const DOCUMENT_ANALYSIS_INLINE_ZIP_BYTE_LIMIT = 20 * 1024 * 1024;
+export const DOCUMENT_ANALYSIS_TEXT_BYTE_LIMIT = 20 * 1024 * 1024;
+
+const textMimeTypes = new Set(["text/plain", "text/html", "application/json"]);
 
 const allowedMimeTypes = new Map<string, readonly string[]>([
   ["application/pdf", ["pdf"]],
@@ -17,6 +20,9 @@ const allowedMimeTypes = new Map<string, readonly string[]>([
   ["image/jpeg", ["jpg", "jpeg"]],
   ["image/png", ["png"]],
   ["application/zip", ["zip"]],
+  ["text/plain", ["txt"]],
+  ["text/html", ["html", "htm"]],
+  ["application/json", ["json"]],
 ]);
 
 export const documentAnalysisUploadIntentSchema = z.object({
@@ -91,6 +97,15 @@ export function parseDocumentAnalysisUploadIntent(value: unknown): DocumentAnaly
       parsed.data.locale === "ru"
         ? "ZIP-пакеты свыше 20 МБ пока не принимаются: потоковое безопасное извлечение ещё не подключено. Разделите пакет на части до 20 МБ."
         : "20 MB dan katta ZIP-paketlar hozircha qabul qilinmaydi: oqimli xavfsiz ajratish hali ulanmagan. Paketni 20 MB gacha bo‘lgan qismlarga ajrating.",
+      422,
+    );
+  }
+  if (textMimeTypes.has(parsed.data.mimeType) && parsed.data.sizeBytes > DOCUMENT_ANALYSIS_TEXT_BYTE_LIMIT) {
+    throw new DocumentAnalysisUploadError(
+      "DOCUMENT_ANALYSIS_CAPACITY_UNAVAILABLE",
+      parsed.data.locale === "ru"
+        ? "Текстовые, HTML и JSON-файлы должны быть не больше 20 МБ."
+        : "TXT, HTML va JSON fayllari 20 MB dan katta bo‘lmasligi kerak.",
       422,
     );
   }
@@ -171,7 +186,9 @@ export async function initializeDocumentAnalysisUpload(input: {
     return { record: await documentAnalysisUploadForUser(input.db, existing.resultRef, input.workspaceId, input.userId), replay: true };
   }
 
-  const r2Key = `analysis-input-v1/${input.workspaceId}/${analysisId}/${fileId}`;
+  // Every untrusted upload starts in the isolated quarantine bucket. The
+  // malware-scanner is the only component allowed to promote it to BUCKET.
+  const r2Key = `quarantine-v2/${input.workspaceId}/${analysisId}/${fileId}`;
   try {
     await input.db.batch([
       input.db.prepare(
@@ -300,7 +317,42 @@ export function validateUploadMagicBytes(
   if (mimeType === "application/zip" || mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     return prefix[0] === 0x50 && prefix[1] === 0x4b && [0x03, 0x05, 0x07].includes(prefix[2]) && [0x04, 0x06, 0x08].includes(prefix[3]);
   }
+  if (textMimeTypes.has(mimeType)) {
+    if (prefix.some((byte) => byte === 0)) return false;
+    return !prefix.some((byte) => byte < 0x09 || (byte > 0x0d && byte < 0x20));
+  }
   return false;
+}
+
+export function validateTextUploadBytes(mimeType: string, bytes: Uint8Array): boolean {
+  if (!textMimeTypes.has(mimeType) || bytes.byteLength === 0 || bytes.byteLength > DOCUMENT_ANALYSIS_TEXT_BYTE_LIMIT) return false;
+  let text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return false;
+  }
+  if (text.includes("\0")) return false;
+  const controls = [...text].filter((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 0x20 && character !== "\n" && character !== "\r" && character !== "\t";
+  }).length;
+  if (controls > Math.max(2, Math.floor(text.length / 1_000))) return false;
+  if (mimeType === "application/json") {
+    try {
+      JSON.parse(text);
+    } catch {
+      return false;
+    }
+  }
+  if (mimeType === "text/html") {
+    // HTML is accepted only as untrusted source data. Active constructs are
+    // rejected before malware scanning; the extractor never executes markup.
+    if (/<\s*(?:script|iframe|object|embed|applet|meta\b[^>]*http-equiv)\b/iu.test(text)
+      || /\bon[a-z]+\s*=/iu.test(text)
+      || /(?:javascript|data)\s*:/iu.test(text)) return false;
+  }
+  return true;
 }
 
 export function arrayBufferHex(value: ArrayBuffer | undefined): string | null {

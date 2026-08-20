@@ -18,6 +18,7 @@ import {
 } from "../../lib/platform/routing";
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { PlatformShell } from "./PlatformShell";
+import { safeDisplayName } from "../../lib/platform/display-name";
 
 export async function WorkspaceShellLayout({
   children,
@@ -84,7 +85,7 @@ export async function WorkspaceShellLayout({
     <PlatformShell
       locale={locale}
       accountType={accountType}
-      userName={user.fullName ?? user.displayName}
+      userName={safeDisplayName(user.fullName ?? user.displayName)}
       activeWorkspaceId={activeWorkspace.id}
       workspaces={availableWorkspaces}
     >

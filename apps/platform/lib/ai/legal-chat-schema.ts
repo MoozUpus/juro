@@ -21,7 +21,7 @@ export const legalRiskSchema = z.object({
   sourceIds: sourceIdList,
 }).strict();
 
-export const legalSourceRefSchema = z.object({
+const legalSourceRefModelSchema = z.object({
   sourceId: z.string().min(1).max(160),
   actTitle: z.string().min(1).max(500),
   actIdentifier: z.string().max(240).nullable(),
@@ -31,6 +31,28 @@ export const legalSourceRefSchema = z.object({
   status: z.enum(["current", "historical", "repealed", "pending_effect", "unconfirmed"]),
   effectiveDate: z.string().max(64).nullable(),
   verifiedAt: z.string().max(64),
+}).strict();
+
+/**
+ * These fields are attached from the validated corpus packet by JURO. They are
+ * deliberately absent from the provider schema so the model cannot invent
+ * document metadata, provenance, language, or live/indexed state.
+ */
+export const legalSourceRefSchema = legalSourceRefModelSchema.extend({
+  documentType: z.string().max(160).nullable().optional(),
+  documentNumber: z.string().max(240).nullable().optional(),
+  adoptingAuthority: z.string().max(500).nullable().optional(),
+  sourceClass: z.enum([
+    "OFFICIAL_LEGISLATION",
+    "OFFICIAL_GOVERNMENT_GUIDANCE",
+    "OWNER_TRUSTED_GLOBAL",
+    "TENANT_TRUSTED_PRIVATE",
+    "USER_TRUSTED_PRIVATE",
+    "DERIVED_TRANSLATION",
+    "SECONDARY_REFERENCE",
+  ]).optional(),
+  language: z.enum(["uz-Latn", "uz-Cyrl", "ru", "en"]).optional(),
+  sourceOrigin: z.enum(["indexed", "live"]).optional(),
 }).strict();
 
 export const requiredDocumentSchema = z.object({
@@ -91,6 +113,7 @@ export const legalChatResponseSchema = z.object({
   sourceAccessMode: z.enum(["direct", "approved_package"]).optional(),
   sourcesRetrievedAt: z.string().max(64).nullable().optional(),
   sourceValidationStatus: z.enum(["validated", "unavailable"]).optional(),
+  coverageStatus: z.enum(["good_coverage", "partial_coverage", "weak_coverage", "no_coverage"]).optional(),
 }).strict();
 
 export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
@@ -101,11 +124,14 @@ export type LegalChatResponse = z.infer<typeof legalChatResponseSchema>;
  * OpenAI Structured Outputs requires every property in an object schema to be
  * listed as required, whereas these three fields must remain server-owned.
  */
-export const legalChatModelResponseSchema = legalChatResponseSchema.omit({
-  sourceAccessMode: true,
-  sourcesRetrievedAt: true,
-  sourceValidationStatus: true,
-});
+export const legalChatModelResponseSchema = legalChatResponseSchema
+  .omit({
+    sourceAccessMode: true,
+    sourcesRetrievedAt: true,
+    sourceValidationStatus: true,
+    coverageStatus: true,
+  })
+  .extend({ sources: z.array(legalSourceRefModelSchema).max(12) });
 
 export const legalChatJsonSchema = z.toJSONSchema(legalChatModelResponseSchema, {
   target: "draft-7",
@@ -169,6 +195,26 @@ export function enforceLegalDatabaseFreshness(
   },
 ): LegalChatResponse {
   if (freshness.status === "unavailable") {
+    const privateFactsOnly = result.sources.length > 0
+      && result.sources.every((source) => source.sourceClass === "USER_TRUSTED_PRIVATE");
+    if (privateFactsOnly) {
+      const warning = options.locale === "ru"
+        ? "Факты ниже подтверждены только содержанием вашего документа. Достаточная норма в правовой базе JURO не найдена; документ не является официальным источником законодательства."
+        : "Quyidagi faktlar faqat sizning hujjatingiz mazmuni bilan tasdiqlangan. JURO huquqiy bazasida yetarli norma topilmadi; hujjat qonunchilikning rasmiy manbasi emas.";
+      return {
+        ...result,
+        assumptions: [{
+          statement: options.locale === "ru"
+            ? "Правовое основание требует отдельной проверки"
+            : "Huquqiy asos alohida tekshirilishi kerak",
+          impact: warning,
+        }, ...result.assumptions].slice(0, 16),
+        deadlines: [],
+        successOutlook: null,
+        suggestLawyer: true,
+        legalDatabaseAsOf: freshness.asOf,
+      };
+    }
     return forceClarificationWithoutVerifiedSources(result, {
       ...options,
       legalDatabaseAsOf: freshness.asOf,

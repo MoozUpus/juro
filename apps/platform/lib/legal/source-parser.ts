@@ -16,6 +16,7 @@ import type {
 export const LEGAL_SOURCE_PARSER_ERROR_CODES = [
   "LEGAL_SOURCE_PRIMARY_CONTENT_MISSING",
   "LEGAL_SOURCE_CONTENT_INSUFFICIENT",
+  "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
   "LEGAL_SOURCE_PARSE_TOO_COMPLEX",
 ] as const;
 
@@ -60,10 +61,12 @@ export const normalizedLegalSourceSnapshotSchema = z.object({
   }).strict(),
   source: z.object({
     sourceKind: z.enum(["lex", "advice"]),
-    // `uzc` is Lex.uz's official Uzbek Cyrillic route.  It is represented as
+    // `uzc` is Lex.uz's official Uzbek Cyrillic route. It is represented as
     // `uz-Cyrl` in the new corpus, but retained here to preserve exact source
     // identity and never pass a transliteration off as the official text.
-    locale: z.enum(["ru", "uz", "uzc"]),
+    // English is also an official Lex route and must survive normalization so
+    // the multilingual ingestion worker does not dead-letter valid `/en/docs`.
+    locale: z.enum(["ru", "uz", "uzc", "en"]),
     canonicalId: z.string().min(1),
     canonicalUrl: z.url(),
     rawContentSha256: z.string().regex(/^[0-9a-f]{64}$/),
@@ -108,6 +111,24 @@ const SKIPPED_TAGS = new Set([
   "template",
 ]);
 const NESTED_LIST_TAGS = new Set(["ol", "ul"]);
+// Exact reader-control labels emitted by Lex.uz inside otherwise official
+// title elements. They are presentation chrome, never part of an act title.
+// Keep the plain strings exportable for the bounded corpus-title repair that
+// remediates only this known UI artefact in already stored staging records.
+export const LEGAL_SOURCE_UI_NOISE_MARKERS = [
+  "Предложения по документу",
+  "Прослушать аудио",
+  "Получить ссылку",
+  "Hujjatga taklif yuborish",
+  "Audioni tinglash",
+  "Hujjat elementidan havola olish",
+  "Ҳужжатга таклиф юбориш",
+  "Аудиони тинглаш",
+  "Ҳужжат элементидан ҳавола олиш",
+  "Suggestion to the document",
+  "Listen to audio",
+  "Get a link from a document element",
+] as const;
 const LEX_UI_NOISE_PATTERNS = [
   /Предложения по документу/giu,
   /Прослушать аудио/giu,
@@ -115,6 +136,18 @@ const LEX_UI_NOISE_PATTERNS = [
   /Hujjatga taklif yuborish/giu,
   /Audioni tinglash/giu,
   /Hujjat elementidan havola olish/giu,
+  /Ҳужжатга таклиф юбориш/giu,
+  /Аудиони тинглаш/giu,
+  /Ҳужжат элементидан ҳавола олиш/giu,
+  /Suggestion to the document/giu,
+  /Listen to audio/giu,
+  /Get a link from a document element/giu,
+] as const;
+const LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS = [
+  /Текст акта приводится на [^.\n]{2,80} языке/iu,
+  /Hujjat matni [^.\n]{2,80} tilida (?:berilgan|keltirilgan)/iu,
+  /Ҳужжат матни [^.\n]{2,80} тилида (?:берилган|келтирилган)/iu,
+  /The text of (?:this|the) act is (?:available|provided) in [^.\n]{2,80}/iu,
 ] as const;
 const LEX_UI_CLASS_PATTERN = /(?:^|[-_])(?:audio|button|comment|control|footer|menu|navigation|proposal|share|toolbar)(?:$|[-_])/iu;
 const MAX_NODES = 50_000;
@@ -198,6 +231,16 @@ function collectText(
     if (node.tagName === "br") return "\n";
   }
   return node.childNodes.map((child) => collectText(child, options)).join("");
+}
+
+function collectVisiblePageText(node: Node): string {
+  if (isTextNode(node)) return node.value;
+  if (!isElement(node) && !("childNodes" in node)) return "";
+  if (isElement(node)) {
+    if (SKIPPED_TAGS.has(node.tagName) || isHidden(node)) return "";
+    if (node.tagName === "br") return "\n";
+  }
+  return node.childNodes.map((child) => collectVisiblePageText(child)).join("");
 }
 
 function walkElements(
@@ -468,6 +511,15 @@ export function normalizeLegalSourceHtml(input: {
   const blocks = collectBlocks(primary, input.reference.sourceKind);
   const plainText = blocks.map((block) => block.text).join("\n\n");
   if (blocks.length === 0 || plainText.length < 200) {
+    // Lex places the authoritative "text is in another language" warning in
+    // a sibling of #divBody on some legacy acts. Inspect the parsed document
+    // only for this fixed notice after the selected legal body is proven too
+    // short; no surrounding page chrome is admitted to the normalized text.
+    const sourceText = normalizeText(collectVisiblePageText(document));
+    if (input.reference.sourceKind === "lex"
+      && LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS.some((pattern) => pattern.test(sourceText))) {
+      throw new LegalSourceParserError("LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE");
+    }
     throw new LegalSourceParserError("LEGAL_SOURCE_CONTENT_INSUFFICIENT");
   }
   if (plainText.length > MAX_PLAIN_TEXT) {

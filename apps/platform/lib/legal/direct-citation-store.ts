@@ -1,4 +1,5 @@
 import type { LegalSourceContext } from "../ai/provider";
+import { parsePrivateDocumentLocator } from "../document-analysis/private-document-locator";
 
 type ReturnedCitation = {
   sourceId: string;
@@ -37,7 +38,7 @@ export function legalCitationStatements(input: {
   const seen = new Set<string>();
   return input.citations.flatMap((citation) => {
     const source = contexts.get(citation.sourceId);
-    const validated = input.sourceAccessMode === "direct"
+    const validatedLex = input.sourceAccessMode === "direct"
       ? source?.verificationState === "direct_validated"
       : source?.verificationState === "verified";
     const officialLex = (() => {
@@ -46,7 +47,20 @@ export function legalCitationStatements(input: {
         return url.protocol === "https:" && (url.hostname === "lex.uz" || url.hostname === "www.lex.uz");
       } catch { return false; }
     })();
-    if (!source || source.sourceType !== "lex" || !officialLex || !validated || seen.has(source.officialUrl)) return [];
+    const trustedPrivate = source?.sourceType === "internal"
+      && source.sourceClass === "USER_TRUSTED_PRIVATE"
+      && source.verificationState === "user_supplied"
+      && source.status === "user_supplied"
+      && parsePrivateDocumentLocator(source.officialUrl) !== null
+      && source.sourceQuality?.passed === true;
+    const accepted = source
+      && citation.originalUrl === source.officialUrl
+      && ((source.sourceType === "lex" && officialLex && validatedLex) || trustedPrivate);
+    if (!accepted || seen.has(source.officialUrl)) return [];
+    const candidateExcerpt = citation.excerpt;
+    const exactExcerpt = candidateExcerpt && source.spans?.some((span) => span.text.startsWith(candidateExcerpt))
+      ? candidateExcerpt.slice(0, 1_200)
+      : null;
     seen.add(source.officialUrl);
     return [input.db.prepare(
       `INSERT INTO legal_source_references (
@@ -69,7 +83,7 @@ export function legalCitationStatements(input: {
       citation.actTitle.slice(0, 500),
       citation.actIdentifier,
       citation.article,
-      null,
+      exactExcerpt,
       citation.status,
       citation.effectiveDate,
       source.lastCheckedAt,

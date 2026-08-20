@@ -13,6 +13,12 @@
     "build:production": "node scripts/platform-tasks.mjs build --environment production",
     "deploy:staging": "node scripts/deploy-staging.mjs",
     "deploy:production": "node scripts/deploy-production.mjs",
+    "deploy:legal-corpus:staging": "wrangler deploy --config wrangler.legal-corpus.jsonc --env staging",
+    "validate:legal-corpus:artifact": "wrangler deploy --dry-run --config wrangler.legal-corpus.jsonc --env staging --outdir dist/legal-corpus-worker",
+    "validate:legal-corpus:qdrant-gate": "tsx scripts/verify-qdrant-snapshot-gate.ts",
+    "validate:legal-corpus:release": "tsx scripts/validate-legal-corpus-release.ts",
+    "capture:legal-corpus:d1-capacity": "node scripts/capture-legal-corpus-d1-capacity.mjs",
+    "build:legal-corpus:release-evidence": "tsx scripts/build-legal-corpus-release-evidence.ts",
     "start": "node scripts/platform-tasks.mjs start",
     "test": "node scripts/platform-tasks.mjs test",
     "test:rendered": "node scripts/platform-tasks.mjs test-rendered",
@@ -24,6 +30,7 @@
     "evaluate:legal:validate-agent": "tsx scripts/validate-staging-legal-evaluation-agent.ts",
     "evaluate:legal:build-agent": "tsx scripts/build-staging-legal-agent-artifacts.ts",
     "evaluate:legal:prepare-agent-review": "tsx scripts/prepare-staging-legal-agent-review-draft.ts",
+    "evaluate:legal:corpus-release": "tsx scripts/validate-legal-corpus-release.ts",
     "evaluate:documents:materialize": "tsx scripts/materialize-document-evaluation.ts",
     "evaluate:documents:validate": "tsx scripts/validate-document-evaluation.ts",
     "verify:d1-backup": "node scripts/verify-d1-full-export-restore.mjs",
@@ -37,6 +44,7 @@
     "test:cloudflare": "node scripts/platform-tasks.mjs test-cloudflare",
     "lint": "node scripts/platform-tasks.mjs lint",
     "type-check": "node scripts/platform-tasks.mjs type-check",
+    "license:check": "node ../../scripts/check-dependency-licenses.mjs .",
     "db:generate": "node scripts/platform-tasks.mjs db-generate"
   },
   "dependencies": {

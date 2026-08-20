@@ -452,6 +452,11 @@ if (requestedEnvironment === "production") {
       custom_domain: true,
     },
     {
+      pattern: "lawyer.juro.uz",
+      zone_name: "juro.uz",
+      custom_domain: true,
+    },
+    {
       pattern: "admin.juro.uz",
       zone_name: "juro.uz",
       custom_domain: true,
@@ -461,7 +466,7 @@ if (requestedEnvironment === "production") {
       zone_name: "juro.uz",
       custom_domain: true,
     },
-  ], "production must keep app.juro.uz, admin.juro.uz, and status.juro.uz attached directly to Worker juro");
+  ], "production must keep app.juro.uz, lawyer.juro.uz, admin.juro.uz, and status.juro.uz attached directly to Worker juro");
   assert.equal(artifact.workers_dev, false, "production artifact must disable workers.dev exposure");
   assert.equal(artifact.preview_urls, false, "production artifact must disable version preview URLs");
   assert.deepEqual(

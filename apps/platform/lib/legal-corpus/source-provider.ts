@@ -6,7 +6,11 @@ import {
   type LegalCorpusRetrievalItem,
   type LegalCorpusSearchScope,
 } from "./retrieval";
-import { featureEnabled, type LegalCorpusFeatureFlag } from "./trust";
+import {
+  featureEnabled,
+  type LegalCorpusFeatureFlag,
+  type LegalCorpusSourceClass,
+} from "./trust";
 
 export type LegalSourceProviderResult = {
   source_id: string;
@@ -15,6 +19,9 @@ export type LegalSourceProviderResult = {
   document_id: string;
   document_title: string;
   document_type: string;
+  document_number: string | null;
+  adopting_authority: string | null;
+  source_class: LegalCorpusSourceClass;
   article_number: string;
   article_title: string;
   language: "uz-Latn" | "uz-Cyrl" | "ru" | "en";
@@ -50,6 +57,9 @@ function indexedSource(item: LegalCorpusRetrievalItem): LegalSourceProviderResul
     document_id: item.documentId,
     document_title: item.documentTitle,
     document_type: item.documentType ?? "legal_act",
+    document_number: item.documentNumber,
+    adopting_authority: item.adoptingAuthority,
+    source_class: item.sourceClass,
     article_number: item.articleNumber ?? "",
     article_title: item.articleTitle ?? "",
     language: item.language,
@@ -68,7 +78,10 @@ function indexedSource(item: LegalCorpusRetrievalItem): LegalSourceProviderResul
 export class LexUzIndexedProvider implements LegalSourceProvider {
   readonly id = "lex_uz_indexed" as const;
 
-  constructor(private readonly db: D1Database) {}
+  constructor(
+    private readonly db: D1Database,
+    private readonly denseSearch?: (query: string, limit: number) => Promise<Array<{ chunkId: string; score: number }>>,
+  ) {}
 
   async search(request: LegalSourceProviderRequest): Promise<LegalSourceProviderResult[]> {
     const results = await retrieveLegalCorpus({
@@ -77,6 +90,7 @@ export class LexUzIndexedProvider implements LegalSourceProvider {
       scope: request.scope,
       limit: request.limit,
       officialOnly: true,
+      denseSearch: this.denseSearch,
     });
     return results.map(indexedSource).filter((source): source is LegalSourceProviderResult => Boolean(source));
   }
@@ -111,6 +125,9 @@ export class LexUzLiveProvider implements LegalSourceProvider {
       document_id: source.actIdentifier ?? source.id,
       document_title: source.actTitle,
       document_type: "legal_act",
+      document_number: source.actIdentifier,
+      adopting_authority: null,
+      source_class: "OFFICIAL_LEGISLATION",
       article_number: source.article ?? "",
       article_title: "",
       language: corpusLanguage(source.locale),
@@ -161,6 +178,9 @@ export async function resolveLegalSources(input: {
       documentId: source.document_id,
       documentTitle: source.document_title,
       documentType: source.document_type,
+      documentNumber: source.document_number,
+      adoptingAuthority: source.adopting_authority,
+      sourceClass: source.source_class,
       articleNumber: source.article_number || null,
       articleTitle: source.article_title || null,
       exactQuote: source.exact_quote,

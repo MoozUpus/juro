@@ -1,16 +1,24 @@
-import { assertSafeWrite, requireApiUser, withApiErrors } from "../../../../../lib/document-builder/auth/api";
+import {
+  assertSafeWrite,
+  requireApiUser,
+  withApiErrors,
+} from "../../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../../lib/document-builder/storage/runtime";
 import {
   clearDeviceContinuityCookie,
   clearSessionCookie,
 } from "../../../../../lib/auth/session";
+import { sharedAuthCookieDomain } from "../../../../../lib/auth/session-persistence";
 import {
   localSessionFromCookie,
   revokeSessions,
 } from "../../../../../lib/auth/session-management";
 
 function response(body: unknown, status = 200, headers?: HeadersInit) {
-  return Response.json(body, { status, headers: { "cache-control": "private, no-store", ...headers } });
+  return Response.json(body, {
+    status,
+    headers: { "cache-control": "private, no-store", ...headers },
+  });
 }
 
 export const GET = withApiErrors(async function GET(request: Request) {
@@ -22,8 +30,9 @@ export const GET = withApiErrors(async function GET(request: Request) {
     request.headers.get("cookie"),
     { touch: false },
   );
-  const sessions = await db.prepare(
-    `SELECT
+  const sessions = await db
+    .prepare(
+      `SELECT
        s.id,s.created_at AS createdAt,s.authenticated_at AS authenticatedAt,
        s.last_seen_at AS lastSeenAt,s.expires_at AS expiresAt,
        s.idle_expires_at AS idleExpiresAt,s.auth_method AS authMethod,
@@ -48,7 +57,9 @@ export const GET = withApiErrors(async function GET(request: Request) {
        ))
      ORDER BY isCurrent DESC,s.last_seen_at DESC
      LIMIT 50`,
-  ).bind(current?.sessionId ?? "", user.id, now, now).all();
+    )
+    .bind(current?.sessionId ?? "", user.id, now, now)
+    .all();
   return response({
     sessions: sessions.results,
     currentSessionId: current?.userId === user.id ? current.sessionId : null,
@@ -63,10 +74,13 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
   const url = new URL(request.url);
   const scope = url.searchParams.get("scope") ?? "all";
   if (scope !== "all" && scope !== "others") {
-    return response({
-      code: "INVALID_SCOPE",
-      error: "Неизвестная область завершения сессий.",
-    }, 400);
+    return response(
+      {
+        code: "INVALID_SCOPE",
+        error: "Неизвестная область завершения сессий.",
+      },
+      400,
+    );
   }
   const db = requireD1();
   const current = await localSessionFromCookie(
@@ -75,10 +89,13 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
     { touch: false },
   );
   if (scope === "others" && (!current || current.userId !== user.id)) {
-    return response({
-      code: "LOCAL_SESSION_REQUIRED",
-      error: "Для этого действия нужна текущая JURO email-сессия.",
-    }, 409);
+    return response(
+      {
+        code: "LOCAL_SESSION_REQUIRED",
+        error: "Для этого действия нужна текущая JURO email-сессия.",
+      },
+      409,
+    );
   }
   const revoked = await revokeSessions(db, {
     userId: user.id,
@@ -88,8 +105,13 @@ export const DELETE = withApiErrors(async function DELETE(request: Request) {
   if (scope === "all") {
     const headers = new Headers({ "cache-control": "private, no-store" });
     headers.append("set-cookie", clearSessionCookie());
+    const domain = sharedAuthCookieDomain(url.hostname);
+    if (domain) headers.append("set-cookie", clearSessionCookie(domain));
     headers.append("set-cookie", clearDeviceContinuityCookie());
-    return Response.json({ ok: true, scope, revoked }, { status: 200, headers });
+    return Response.json(
+      { ok: true, scope, revoked },
+      { status: 200, headers },
+    );
   }
   return response({ ok: true, scope, revoked });
 });
