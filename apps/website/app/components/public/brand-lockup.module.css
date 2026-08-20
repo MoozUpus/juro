@@ -5,19 +5,18 @@
 }
 
 .markFrame {
-  display: grid;
+  display: block;
   height: 44px;
-  place-items: center;
+  overflow: hidden;
   position: relative;
   width: 44px;
 }
 
 .mark.mark {
-  height: 48px;
+  height: auto;
   max-width: none;
-  object-fit: contain;
-  transform: none;
-  width: 48px;
+  transform: translate(-10px, -9px);
+  width: 64px;
 }
 
 .wordmark {
@@ -35,18 +34,17 @@
 }
 
 .mobileMarkFrame {
-  display: grid;
+  display: block;
   height: 39px;
-  place-items: center;
+  overflow: hidden;
   width: 39px;
 }
 
 .mobileMark.mobileMark {
-  height: 43px;
+  height: auto;
   max-width: none;
-  object-fit: contain;
-  transform: none;
-  width: 43px;
+  transform: translate(-8px, -8px);
+  width: 56px;
 }
 
 .mobileBrand span {
@@ -65,19 +63,18 @@
 }
 
 .footerMarkFrame {
-  display: grid;
+  display: block;
   flex: 0 0 auto;
-  height: 58px;
-  place-items: center;
-  width: 58px;
+  height: 50px;
+  overflow: hidden;
+  width: 50px;
 }
 
 .footerMark.footerMark {
-  height: 62px;
+  height: auto;
   max-width: none;
-  object-fit: contain;
-  transform: none;
-  width: 62px;
+  transform: translate(-11px, -10px);
+  width: 72px;
 }
 
 .footerLogo span {
@@ -99,9 +96,8 @@
   }
 
   .mark.mark {
-    height: 44px;
-    transform: none;
-    width: 44px;
+    transform: translate(-9px, -8px);
+    width: 58px;
   }
 
   .wordmark {

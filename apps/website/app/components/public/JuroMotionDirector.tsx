@@ -22,6 +22,7 @@ export function JuroMotionDirector() {
     const documentStory = root.querySelector<HTMLElement>("[data-document-story]");
     const handoff = root.querySelector<HTMLElement>("[data-handoff-story]");
     const hero = root.querySelector<HTMLElement>("[data-motion-hero]");
+    const footer = root.querySelector<HTMLElement>("footer");
 
     if (reduceMotion) {
       reveals.forEach((node) => { node.dataset.revealState = "visible"; });
@@ -71,6 +72,7 @@ export function JuroMotionDirector() {
       const pageRange = Math.max(1, document.documentElement.scrollHeight - viewport);
       root.style.setProperty("--page-progress", String(clamp(window.scrollY / pageRange)));
       root.style.setProperty("--hero-scroll", String(clamp(window.scrollY / (viewport * 0.9))));
+      root.dataset.footerVisible = footer && footer.getBoundingClientRect().top < viewport * .92 ? "true" : "false";
 
       reveals.forEach((node) => {
         if (node.dataset.revealState !== "visible" && node.getBoundingClientRect().top < viewport * .96) {
@@ -158,6 +160,7 @@ export function JuroMotionDirector() {
       cancelAnimationFrame(pointerFrame);
       cancelAnimationFrame(scrollFrame);
       delete root.dataset.motionReady;
+      delete root.dataset.footerVisible;
     };
   }, []);
 

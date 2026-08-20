@@ -93,3 +93,13 @@
 @media(max-width:820px){.dashboard-command{padding:22px 14px 96px;gap:34px}.dashboard-command,.dashboard-command-hero,.dashboard-command-intro,.dashboard-command-form,.golden-route{min-width:0;max-width:100%}.dashboard-command-hero{padding:26px 18px;border-radius:18px}.dashboard-command-intro>h1{font-size:clamp(36px,10vw,50px)}.dashboard-command-form{width:100%;grid-template-columns:minmax(0,1fr) 48px}.dashboard-command-form>svg{display:none}.dashboard-command-form textarea{width:100%;min-width:0;grid-column:1;grid-row:1}.dashboard-start{width:48px;min-width:48px;padding:0;grid-column:2;grid-row:1}.dashboard-start span{display:none}.dashboard-attach{grid-column:1;grid-row:2;justify-self:start}.dashboard-file-chip,.dashboard-upload-consent,.dashboard-upload-status,.dashboard-upload-progress{grid-column:1/-1}.golden-route{padding:20px 12px}.golden-route-heading{padding:0 8px}.dashboard-continuation-grid{grid-template-columns:1fr}.dashboard-quick-grid{display:flex;overflow-x:auto;scroll-snap-type:x proximity;padding:2px 2px 10px}.dashboard-quick-grid>a{min-width:min(82vw,330px);scroll-snap-align:start}.dashboard-work-list>a{grid-template-columns:auto minmax(0,1fr) auto}.dashboard-work-list>a>svg:last-child{display:none}}
 @media(max-width:460px){.dashboard-command-hero{padding:22px 14px}.dashboard-command-context{font-size:12px}.dashboard-command-intro>p{font-size:14px}.dashboard-command-intro>h1{font-size:36px}.dashboard-command-form textarea{font-size:15px}.golden-route-heading{display:block}.golden-route-heading>p{margin-top:6px;text-align:left}.golden-route-track{margin:28px 0 20px}.golden-route-step>span{width:36px;height:36px}.golden-route-step strong{font-size:11px}.golden-route-track svg{height:45px}.dashboard-work-list>a time{display:none}.dashboard-section-title-row{gap:8px}.dashboard-section-title-row>button{width:40px;padding:0}.dashboard-section-title-row>button span{display:none}}
 @media(prefers-reduced-motion:reduce){.dashboard-quick-grid>a,.dashboard-work-list>a>svg:last-child,.dashboard-section-title-row>button{transition-duration:120ms}}
+
+/* The shell removes 272px from the usable canvas. Four balanced actions fit
+   at wide desktop sizes; laptop widths switch the hero before its textarea
+   and route preview become cramped. */
+.dashboard-quick-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+@media(max-width:1380px){
+  .dashboard-command-hero{grid-template-columns:1fr;min-height:0}
+  .golden-route{min-height:250px}
+  .dashboard-quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}

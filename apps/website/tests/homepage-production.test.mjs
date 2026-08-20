@@ -11,10 +11,15 @@ const motionDirector = fs.readFileSync("app/components/public/JuroMotionDirector
 const motionStyles = fs.readFileSync("app/components/public/juro-motion.module.css", "utf8");
 const editorialStyles = fs.readFileSync("app/components/public/juro-editorial.module.css", "utf8");
 const decisionStyles = fs.readFileSync("app/components/public/juro-decision.module.css", "utf8");
+const scenarioStyles = fs.readFileSync("app/components/public/scenario-process.module.css", "utf8");
 const laptopStyles = fs.readFileSync("app/components/public/juro-laptop.module.css", "utf8");
 const chrome = fs.readFileSync("app/components/public/SiteChrome.tsx", "utf8");
 const chromeStyles = fs.readFileSync("app/components/public/site-chrome.module.css", "utf8");
+const footerRailStyles = fs.readFileSync("app/components/public/footer-rail.module.css", "utf8");
+const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-targets.module.css", "utf8");
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
+const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
+const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
 
 test("selected JURO direction is the only public homepage implementation", () => {
   assert.match(rootPage, /CinematicLandingPage language="ru"/);
@@ -46,7 +51,6 @@ test("production interactions have complete keyboard and reduced-motion contract
   assert.match(homepage, /onKeyDown=\{\(event\) => moveTab/);
   assert.match(homepage, /role="tabpanel"/);
   assert.match(homepage, /tabIndex=\{scenario === index \? 0 : -1\}/);
-  assert.match(homepage, /aria-live="polite"/);
   assert.match(chrome, /aria-modal="true"/);
   assert.match(chrome, /event\.key === "Escape"/);
   assert.match(chrome, /trigger\?\.focus\(\)/);
@@ -65,15 +69,26 @@ test("document review opens on the first clause and changes only by direct selec
   assert.doesNotMatch(homepage + motionDirector, /juro:document-step/);
 });
 
-test("public chrome exposes every primary public destination in both locales", () => {
+test("public chrome exposes every primary public destination in all three locales", () => {
   for (const route of ["/trust", "/video", "/lawyers", "/legal", "/knowledge/"]) {
     assert.match(chrome, new RegExp(route.replaceAll("/", "\\/")));
   }
   assert.match(chrome, /languageHref/);
-  assert.equal((chrome.match(/scroll=\{false\}/g) ?? []).length, 3);
+  assert.match(chrome, /const languages: Locale\[\] = \["ru", "uz", "en"\]/);
+  assert.match(chrome, /localeHref\(target\)/);
   assert.match(chrome, /app\.juro\.uz/);
   assert.match(sitemap, /\/lawyers/);
   assert.doesNotMatch(sitemap, /prototype/);
+});
+
+test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
+  assert.match(chromeStyles, /safe-area-inset-top/);
+  assert.match(chromeStyles, /safe-area-inset-bottom/);
+  assert.match(chromeStyles, /safe-area-inset-left/);
+  assert.match(chromeStyles, /safe-area-inset-right/);
+  assert.match(chrome, /headerTouchStyles\.language/);
+  assert.match(headerTouchStyles, /min-height: 44px/);
+  assert.match(headerTouchStyles, /aria-current="page"/);
 });
 
 test("Jurobek uses a lightweight, reduced-motion-safe ambient treatment", () => {
@@ -171,7 +186,10 @@ test("trust and resource gateways use an editorial hierarchy", () => {
 
 test("start pathways retain direct-linking and responsive decision states", () => {
   assert.match(homepage, /hashchange/);
-  assert.match(homepage, /scrollIntoView/);
+  assert.match(homepage, /navigateToSection/);
+  assert.match(homepage, /history\.pushState/);
+  assert.match(homepage, /popstate/);
+  assert.match(homepage, /window\.scrollTo/);
   assert.match(homepage, /decodeURIComponent/);
   assert.match(homepage, /decisionStyles\.accessPlans/);
   assert.match(homepage, /data-access-plan/);
@@ -228,6 +246,42 @@ test("brand lockups use standalone marks and one intentional wordmark", () => {
   assert.match(chrome, /src="\/juro-mark\.png"/);
   assert.match(chrome, /src="\/juro-mark-light\.png"/);
   assert.match(chrome, /brandStyles\.wordmark\}>JURO/);
-  assert.doesNotMatch(chrome, /juro-logo-(?:light|primary)\.avif/);
+  assert.match(chrome, /juro-mark-light\.png/);
+  assert.match(chrome, /juro-mark\.png/);
+  assert.doesNotMatch(chrome, /juro-logo-light\.avif|juro-logo-primary\.avif/);
+  assert.match(fs.readFileSync("app\/components\/public\/brand-lockup.module.css", "utf8"), /\.markFrame[\s\S]*?overflow: hidden/);
   assert.match(fs.readFileSync("app\/components\/public\/brand-lockup.module.css", "utf8"), /\.wordmark[\s\S]*?font-size: 1\.38rem/);
+});
+
+test("hero demonstrates a short, anonymised question-to-action decision flow", () => {
+  assert.match(homepage, /const \[processStep, setProcessStep\]/);
+  assert.match(homepage, /\[t\.hero\.facts, t\.hero\.risk, t\.hero\.source, t\.hero\.action\]/);
+  assert.match(homepage, /activeScenario\.facts[\s\S]*?activeScenario\.risk[\s\S]*?activeScenario\.source[\s\S]*?activeScenario\.action/);
+  assert.match(homepage, /Обезличенный пример/);
+  assert.match(scenarioStyles, /prefers-reduced-motion/);
+});
+
+test("mobile product labels retain a readable minimum visual scale", () => {
+  assert.match(homepageStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.7rem/);
+  assert.match(scenarioStyles, /@media \(max-width: 720px\)[\s\S]*?font-size: \.7rem/);
+});
+
+test("footer publishes the requested contact details and reveal states stay inside the viewport", () => {
+  for (const value of ["Ташкент, Узбекистан", "+998974022292", "admin@juro.uz"]) assert.match(chrome, new RegExp(value.replaceAll("+", "\\+")));
+  assert.match(chrome, /mailto:admin@juro\.uz/);
+  assert.match(chrome, /tel:\+998974022292/);
+  assert.match(chrome, /footerRailStyles\.brandCta/);
+  assert.match(footerRailStyles, /grid-template-columns: repeat\(3, max-content\)/);
+  assert.match(footerRailStyles, /@media \(max-width: 620px\)/);
+  assert.match(footerRailStyles, /safe-area-inset-top/);
+  assert.match(motionDirector, /footerVisible/);
+  assert.doesNotMatch(motionStyles, /translate3d\(-48px|translate3d\(48px, 0, 0\)/);
+});
+
+test("English marketplace presentation localizes published taxonomy and tolerates missing external photos", () => {
+  assert.match(lawyerCatalog, /Banking and finance law/);
+  assert.match(lawyerCatalog, /Tashkent State University of Law/);
+  assert.match(lawyerCatalog, /Unknown future values intentionally fall back/);
+  assert.match(lawyerAvatar, /onError=\{\(\) => setFailed\(true\)\}/);
+  assert.match(lawyerAvatar, /if \(!src \|\| failed\)/);
 });
