@@ -1,7 +1,10 @@
 name: Deploy production
 
 on:
-  pull_request:
+  # Use the base-repository context so a merged PR can deploy even when its
+  # source was a fork or Dependabot. No PR code or secret-bearing job runs
+  # before GitHub records the PR as merged.
+  pull_request_target:
     branches:
       - main
     types:
