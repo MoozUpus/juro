@@ -1375,3 +1375,13 @@ terminal failures and dead letters remained zero. Queued jobs remained
 release gate therefore remains open: ingestion is still active, and snapshot,
 indexed 314-scenario evaluation, Qdrant benchmark/restore, D1 backup/restore,
 preview and rollout gates have not run.
+
+The next post-correction staging invocation started at
+`2026-08-20T10:36:53.112Z` and completed at `2026-08-20T10:48:09.179Z` with
+`status=completed` and `error_code=NULL` (11 minutes 15.067 seconds). It
+completed nine queued version jobs and again released the fifteen-minute
+lease without a scheduler-expiry record or terminal ingestion failure. The
+following read-only probe showed 38,310 queued fetch jobs, 6,249 queued
+version jobs and 7,101 live/manual queued jobs; terminal jobs, terminal
+failures and dead letters remained zero. This confirms the bounded staging
+run remains healthy while the queue drains; it does not close the freeze gate.
