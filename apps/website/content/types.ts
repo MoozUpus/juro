@@ -1,4 +1,7 @@
 export type Language = "ru" | "uz";
+/** Languages available on the public JURO website. The signed-in product is
+ * currently available in Russian and Uzbek only. */
+export type PublicLanguage = Language | "en";
 export type FeatureCopy = {
   title: string;
   body: string;

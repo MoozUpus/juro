@@ -8,5 +8,5 @@
 .metadata button:focus-visible{outline:3px solid #b48536;outline-offset:3px}
 .documentContent{max-width:760px}
 .documentContent p,.documentContent li{color:#334956}
-@media(max-width:760px){.hero{padding-top:112px}.document{padding-top:96px}.hero h1{font-size:clamp(42px,12vw,58px)}}
+@media(max-width:760px){.hero{padding-top:112px}.document{padding-top:96px}.hero h1{font-size:clamp(42px,12vw,58px)}.documentHero h1{font-size:clamp(39px,10.5vw,41px);overflow-wrap:anywhere}}
 @media print{.page{background:#fff!important}.page>header,.page>footer,.header,.footer,.previewNotice,.contactPanel,.related,.mobileToc{display:none!important}.document{max-width:none;padding:0}.breadcrumb{margin-bottom:24px}.documentHero h1{font-size:34pt}.documentLayout{display:block;margin-top:30px}.toc{display:none}.documentContent{max-width:none}.documentContent section{break-inside:avoid}.documentContent p,.documentContent li{font-size:11pt}.tableWrap{overflow:visible}.metadata button{display:none}}

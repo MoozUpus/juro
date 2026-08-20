@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { englishInvestorVideo } from "../../investor-video";
+import { SiteFooter, SiteHeader } from "../../components/public/SiteChrome";
 import styles from "../../[locale]/video/video.module.css";
 
 const canonical = "https://juro.uz/en/video";
@@ -36,12 +36,7 @@ export const metadata: Metadata = {
 export default function EnglishInvestorVideoPage() {
   return (
     <div className={styles.page} lang="en">
-      <header className={styles.header}>
-        <Link aria-label="JURO video presentation" className={styles.brand} href="/ru/video">
-          JURO <small>VIDEO PRESENTATION</small>
-        </Link>
-        <Link className={styles.languageLink} href="/ru/video">РУССКИЙ</Link>
-      </header>
+      <SiteHeader languageHref="/ru/video" locale="en" tone="dark" />
       <main id="main-content">
         <section className={styles.hero}>
           <p>JURO VIDEO PRESENTATION</p>
@@ -57,6 +52,7 @@ export default function EnglishInvestorVideoPage() {
           <p>The video starts automatically without sound. Turn it on in the player controls when you are ready.</p>
         </section>
       </main>
+      <SiteFooter locale="en" />
     </div>
   );
 }
