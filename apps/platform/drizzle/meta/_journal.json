@@ -1009,6 +1009,13 @@
       "when": 1787048101000,
       "tag": "0143_lawyer_workspace_operations",
       "breakpoints": true
+    },
+    {
+      "idx": 144,
+      "version": "7",
+      "when": 1787051701000,
+      "tag": "0144_lawyer_communications",
+      "breakpoints": true
     }
   ]
 }

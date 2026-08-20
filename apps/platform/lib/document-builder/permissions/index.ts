@@ -8,6 +8,7 @@ import {
   isActiveWorkspaceDocumentOwner,
 } from "./collaboration-policy";
 import { hasActiveLawyerDocumentGrant } from "../../platform/lawyer-workspace-access";
+import { lawyerMessageAttachmentRecipientRole } from "../../platform/lawyer-workspace-access";
 
 const ALL_PERMISSIONS: readonly DocumentPermission[] = [
   "view_document", "edit_assigned_fields", "edit_all_fields", "add_comment", "reply_comment", "resolve_comment",
@@ -137,6 +138,24 @@ export async function getDocumentAccess(documentId: string, userId: string): Pro
       permissions,
       canView: Boolean(collaborator.canView) && permissions.includes("view_document"),
       canDownload: Boolean(collaborator.canDownload) && permissions.includes("download_document"),
+    };
+  }
+  const attachmentRecipientRole = await lawyerMessageAttachmentRecipientRole(db, {
+    documentId: row.id,
+    recipientUserId: userId,
+  });
+  if (attachmentRecipientRole) {
+    const permissions: readonly DocumentPermission[] = attachmentRecipientRole === "client"
+      ? ["view_document", "download_document"]
+      : ROLE_PERMISSIONS["legal-reviewer"];
+    return {
+      document: mapDocument(row),
+      workspaceId: row.workspaceId,
+      role: "collaborator",
+      participantRole: attachmentRecipientRole === "client" ? "viewer" : "legal-reviewer",
+      permissions,
+      canView: true,
+      canDownload: permissions.includes("download_document"),
     };
   }
   if (!row.caseId || !row.workspaceId) return null;

@@ -1557,10 +1557,10 @@ test("lawyer request messages require active participant access and are workspac
     readFile(new URL("../drizzle/0053_dashing_eddie_brock.sql", import.meta.url), "utf8"),
   ]);
   assert.match(route, /requester_user_id=\?/);
-  assert.match(route, /p\.user_id=\? AND p\.status='public_approved'/);
+  assert.match(route, /p\.user_id=\?\s+AND p\.status='public_approved'/);
   assert.match(route, /g\.revoked_at IS NULL/);
   assert.match(route, /lawyer_request_message_sent/);
-  assert.match(route, /ORDER BY created_at ASC,id ASC LIMIT 200/);
+  assert.match(route, /ORDER BY m\.created_at ASC,m\.id ASC LIMIT 200/);
   assert.match(client, /x-juro-csrf/);
   assert.match(migration, /CREATE TABLE `lawyer_request_messages`/);
 });

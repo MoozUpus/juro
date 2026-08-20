@@ -16,7 +16,7 @@ const consultationInput = z.discriminatedUnion("action", [
     internalNote: z.string().trim().max(1_000).optional(),
   }),
   z.object({
-    action: z.enum(["confirm", "cancel"]),
+    action: z.enum(["confirm", "start", "cancel"]),
     requestId: z.string().uuid(),
   }),
   z.object({
@@ -248,6 +248,30 @@ export const POST = withApiErrors(async function POST(request: Request) {
           }),
           now,
         ),
+      db.prepare(
+        `INSERT INTO case_events
+          (id,case_id,actor_user_id,event_type,metadata_json,created_at)
+         VALUES (?,?,?,'lawyer_consultation_proposed',?,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        handoff.caseId,
+        user.id,
+        JSON.stringify({ requestId: parsed.data.requestId, consultationId: id }),
+        now,
+      ),
+      db.prepare(
+        `INSERT INTO notifications
+          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+         VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,NULL,
+           'lawyer_consultation_proposed',?,?,NULL,?)`,
+      ).bind(
+        crypto.randomUUID(),
+        handoff.clientUserId,
+        handoff.clientUserId,
+        "Юрист предложил время консультации / Yurist maslahat vaqtini taklif qildi",
+        startsAt,
+        now,
+      ),
     ]);
     return response({ ok: true, id, status: "proposed" }, existing ? 200 : 201);
   }
@@ -269,6 +293,18 @@ export const POST = withApiErrors(async function POST(request: Request) {
       {
         code: "INVALID_CONSULTATION_TRANSITION",
         error: "Подтвердить предложенное время может только клиент.",
+      },
+      409,
+    );
+  }
+  if (
+    transition === "start" &&
+    (!isLawyer || existing.status !== "confirmed")
+  ) {
+    return response(
+      {
+        code: "INVALID_CONSULTATION_TRANSITION",
+        error: "Начать можно только подтверждённую консультацию.",
       },
       409,
     );
@@ -300,9 +336,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const status =
     transition === "confirm"
       ? "confirmed"
-      : transition === "cancel"
-        ? "cancelled"
-        : "completed";
+      : transition === "start"
+        ? "in_progress"
+        : transition === "cancel"
+          ? "cancelled"
+          : "completed";
+  const recipientUserId = isLawyer ? handoff.clientUserId : handoff.lawyerUserId;
   await db.batch([
     db
       .prepare(
@@ -330,6 +369,31 @@ export const POST = withApiErrors(async function POST(request: Request) {
         JSON.stringify({ requestId: parsed.data.requestId }),
         now,
       ),
+    db.prepare(
+      `INSERT INTO case_events
+        (id,case_id,actor_user_id,event_type,metadata_json,created_at)
+       VALUES (?,?,?,?,?,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      handoff.caseId,
+      user.id,
+      `lawyer_consultation_${status}`,
+      JSON.stringify({ requestId: parsed.data.requestId, consultationId: existing.id }),
+      now,
+    ),
+    db.prepare(
+      `INSERT INTO notifications
+        (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+       VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,NULL,?,?,?,NULL,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      recipientUserId,
+      recipientUserId,
+      `lawyer_consultation_${status}`,
+      `Консультация: ${status} / Konsultatsiya: ${status}`,
+      parsed.data.action === "complete" ? parsed.data.resultNote : "",
+      now,
+    ),
   ]);
   return response({ ok: true, id: existing.id, status });
 });

@@ -8,6 +8,8 @@ export type LawyerWorkspaceParticipant = {
   role: "client" | "lawyer";
 };
 
+export type LawyerMessageAttachmentRecipientRole = "client" | "lawyer";
+
 type ParticipantRow = Omit<LawyerWorkspaceParticipant, "role"> & {
   profileStatus: string;
   marketplaceStatus: string;
@@ -72,4 +74,60 @@ export async function hasActiveLawyerDocumentGrant(
        AND (g.expires_at IS NULL OR g.expires_at>?) LIMIT 1`,
   ).bind(input.caseId, input.workspaceId, input.ownerUserId, input.lawyerUserId, input.caseId, input.lawyerUserId, input.now ?? new Date().toISOString()).first<{ id: string }>();
   return Boolean(row);
+}
+
+/**
+ * Resolves access created by an explicit document attachment in a two-party
+ * lawyer request. Client access to a lawyer-delivered result persists as part
+ * of the request record. Lawyer access to a client document remains contingent
+ * on the current approved profile and active case grant.
+ */
+export async function lawyerMessageAttachmentRecipientRole(
+  db: D1Database,
+  input: {
+    documentId: string;
+    recipientUserId: string;
+    now?: string;
+  },
+): Promise<LawyerMessageAttachmentRecipientRole | null> {
+  const row = await db.prepare(
+    `SELECT r.requester_user_id AS clientUserId,p.user_id AS lawyerUserId,
+      p.status AS profileStatus,p.marketplace_status AS marketplaceStatus,
+      a.shared_by_user_id AS sharedByUserId,a.recipient_user_id AS recipientUserId,
+      g.id AS grantId
+     FROM lawyer_request_message_attachments a
+     JOIN lawyer_request_messages m ON m.id=a.message_id AND m.lawyer_request_id=a.lawyer_request_id
+     JOIN lawyer_requests r ON r.id=a.lawyer_request_id
+     JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+     LEFT JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.case_id=r.case_id
+       AND g.lawyer_user_id=p.user_id AND g.revoked_at IS NULL
+       AND (g.expires_at IS NULL OR g.expires_at>?)
+     WHERE a.document_id=? AND a.recipient_user_id=?
+     ORDER BY a.created_at DESC LIMIT 1`,
+  ).bind(
+    input.now ?? new Date().toISOString(),
+    input.documentId,
+    input.recipientUserId,
+  ).first<{
+    clientUserId: string;
+    lawyerUserId: string;
+    profileStatus: string;
+    marketplaceStatus: string;
+    sharedByUserId: string;
+    recipientUserId: string;
+    grantId: string | null;
+  }>();
+  if (!row || row.recipientUserId !== input.recipientUserId) return null;
+  if (
+    row.clientUserId === input.recipientUserId
+    && row.sharedByUserId === row.lawyerUserId
+  ) return "client";
+  if (
+    row.lawyerUserId === input.recipientUserId
+    && row.sharedByUserId === row.clientUserId
+    && row.grantId
+    && row.profileStatus === "public_approved"
+    && row.marketplaceStatus === "public_approved"
+  ) return "lawyer";
+  return null;
 }

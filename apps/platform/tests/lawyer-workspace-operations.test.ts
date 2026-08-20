@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   activeLawyerWorkspaceParticipant,
   hasActiveLawyerDocumentGrant,
+  lawyerMessageAttachmentRecipientRole,
 } from "../lib/platform/lawyer-workspace-access";
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
@@ -71,9 +72,87 @@ test("0143 keeps task comments immutable and document requests terminal", () => 
   }
 });
 
+test("0144 keeps request messages immutable and scopes document delivery to the exact recipient", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  try {
+    seed(sqlite);
+    sqlite.prepare(`INSERT INTO documents
+      (id,workspace_id,case_id,owner_user_id,template_id,template_code,template_version,language,participant_mode,title,category,status,revision,created_at,updated_at)
+      VALUES ('lawyer-result-ops','workspace-lawyer-ops',NULL,'lawyer-ops','template-a','1234567','1','ru','configurable','Lawyer result','contracts','Черновик',1,?,?)`).run(now, now);
+    sqlite.prepare(`INSERT INTO documents
+      (id,workspace_id,case_id,owner_user_id,template_id,template_code,template_version,language,participant_mode,title,category,status,revision,created_at,updated_at)
+      VALUES ('client-evidence-ops','workspace-owner-ops','case-ops','owner-ops','template-a','1234567','1','ru','configurable','Client evidence','contracts','Черновик',1,?,?)`).run(now, now);
+    sqlite.prepare(`INSERT INTO lawyer_request_messages
+      (id,lawyer_request_id,author_user_id,author_role,body,created_at)
+      VALUES ('message-lawyer-ops','request-ops','lawyer-ops','lawyer','Result attached',?)`).run(now);
+    sqlite.prepare(`INSERT INTO lawyer_request_message_attachments
+      (id,message_id,lawyer_request_id,document_id,shared_by_user_id,recipient_user_id,status,created_at,updated_at)
+      VALUES ('attachment-lawyer-ops','message-lawyer-ops','request-ops','lawyer-result-ops','lawyer-ops','owner-ops','sent',?,?)`).run(now, now);
+    sqlite.prepare(`INSERT INTO lawyer_request_messages
+      (id,lawyer_request_id,author_user_id,author_role,body,created_at)
+      VALUES ('message-client-ops','request-ops','owner-ops','owner','Evidence attached',?)`).run(now);
+    sqlite.prepare(`INSERT INTO lawyer_request_message_attachments
+      (id,message_id,lawyer_request_id,document_id,shared_by_user_id,recipient_user_id,status,created_at,updated_at)
+      VALUES ('attachment-client-ops','message-client-ops','request-ops','client-evidence-ops','owner-ops','lawyer-ops','sent',?,?)`).run(now, now);
+
+    assert.throws(() => sqlite.prepare(`INSERT INTO lawyer_request_message_attachments
+      (id,message_id,lawyer_request_id,document_id,shared_by_user_id,recipient_user_id,status,created_at,updated_at)
+      VALUES ('attachment-forged-ops','message-client-ops','request-ops','client-evidence-ops','owner-ops','outsider-ops','sent',?,?)`).run(now, now), /scope is invalid/u);
+
+    assert.equal(await lawyerMessageAttachmentRecipientRole(d1, {
+      documentId: "lawyer-result-ops",
+      recipientUserId: "owner-ops",
+      now,
+    }), "client");
+    assert.equal(await lawyerMessageAttachmentRecipientRole(d1, {
+      documentId: "client-evidence-ops",
+      recipientUserId: "lawyer-ops",
+      now,
+    }), "lawyer");
+    assert.equal(await lawyerMessageAttachmentRecipientRole(d1, {
+      documentId: "lawyer-result-ops",
+      recipientUserId: "outsider-ops",
+      now,
+    }), null);
+    sqlite.prepare("UPDATE lawyer_request_messages SET read_at=? WHERE id='message-lawyer-ops'").run(now);
+    assert.throws(() => sqlite.prepare("UPDATE lawyer_request_messages SET read_at=NULL WHERE id='message-lawyer-ops'").run(), /read lawyer request message is terminal/u);
+    assert.throws(() => sqlite.prepare("UPDATE lawyer_request_messages SET body='changed' WHERE id='message-lawyer-ops'").run(), /content is immutable/u);
+    sqlite.prepare("UPDATE lawyer_request_message_attachments SET status='viewed',updated_at=? WHERE id='attachment-lawyer-ops'").run(now);
+    assert.throws(() => sqlite.prepare("UPDATE lawyer_request_message_attachments SET status='sent' WHERE id='attachment-lawyer-ops'").run(), /terminal/u);
+    assert.throws(() => sqlite.prepare("DELETE FROM lawyer_request_message_attachments WHERE id='attachment-lawyer-ops'").run(), /append-only/u);
+    sqlite.prepare(`INSERT INTO lawyer_request_messages
+      (id,lawyer_request_id,author_user_id,author_role,body,created_at)
+      VALUES ('message-cascade-ops','request-ops','owner-ops','owner','Cascade-safe evidence',?)`).run(now);
+    sqlite.prepare(`INSERT INTO lawyer_request_message_attachments
+      (id,message_id,lawyer_request_id,document_id,shared_by_user_id,recipient_user_id,status,created_at,updated_at)
+      VALUES ('attachment-cascade-ops','message-cascade-ops','request-ops','client-evidence-ops','owner-ops','lawyer-ops','sent',?,?)`).run(now, now);
+    sqlite.prepare("DELETE FROM lawyer_request_messages WHERE id='message-cascade-ops'").run();
+    assert.equal(
+      (sqlite.prepare("SELECT count(*) AS count FROM lawyer_request_message_attachments WHERE id='attachment-cascade-ops'").get() as { count: number } | undefined)?.count,
+      0,
+    );
+    sqlite.prepare("UPDATE lawyer_access_grants SET revoked_at=? WHERE id='grant-ops'").run(now);
+    assert.equal(await lawyerMessageAttachmentRecipientRole(d1, {
+      documentId: "client-evidence-ops",
+      recipientUserId: "lawyer-ops",
+      now,
+    }), null);
+    assert.equal(await lawyerMessageAttachmentRecipientRole(d1, {
+      documentId: "lawyer-result-ops",
+      recipientUserId: "owner-ops",
+      now,
+    }), "client");
+    assert.deepEqual(sqlite.prepare("PRAGMA foreign_key_check").all(), []);
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("lawyer task and document request routes stay CSRF, grant, tenant and audit scoped", () => {
   const taskRoute = readFileSync(new URL("../app/api/platform/lawyer-tasks/route.ts", import.meta.url), "utf8");
   const documentRoute = readFileSync(new URL("../app/api/platform/lawyer-document-requests/route.ts", import.meta.url), "utf8");
+  const messageRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/[requestId]/messages/route.ts", import.meta.url), "utf8");
+  const consultationRoute = readFileSync(new URL("../app/api/platform/lawyer-consultations/route.ts", import.meta.url), "utf8");
   const workspaceRoute = readFileSync(new URL("../app/api/platform/lawyer-workspace/route.ts", import.meta.url), "utf8");
   const caseTasksRoute = readFileSync(new URL("../app/api/platform/cases/[caseId]/tasks/route.ts", import.meta.url), "utf8");
   const permissions = readFileSync(new URL("../lib/document-builder/permissions/index.ts", import.meta.url), "utf8");
@@ -88,12 +167,25 @@ test("lawyer task and document request routes stay CSRF, grant, tenant and audit
   assert.match(taskRoute, /lawyer_task_comments/u);
   assert.match(documentRoute, /owner_user_id=\? AND workspace_id=\? AND case_id=\?/u);
   assert.match(documentRoute, /status='provided'/u);
+  assert.match(messageRoute, /action === "mark_read"/u);
+  assert.match(messageRoute, /lawyer_request_message_attachments/u);
+  assert.match(messageRoute, /owner_user_id=\? AND workspace_id=\? AND case_id=\?/u);
+  assert.match(messageRoute, /recipient_user_id=\?/u);
+  assert.match(messageRoute, /workspace_audit_events/u);
+  assert.match(messageRoute, /case_events/u);
+  assert.match(consultationRoute, /transition === "start"/u);
+  assert.match(consultationRoute, /\? "in_progress"/u);
+  assert.match(consultationRoute, /case_events/u);
+  assert.match(consultationRoute, /INSERT INTO notifications/u);
   assert.match(workspaceRoute, /CASE WHEN t\.owner_user_id=\? AND t\.plan_step_id IS NULL/u);
   assert.match(workspaceRoute, /lawyer_task_comments/u);
+  assert.match(workspaceRoute, /ownDocuments/u);
+  assert.match(workspaceRoute, /u\.default_workspace_id=d\.workspace_id/u);
   assert.match(workspaceRoute, /SELECT DISTINCT c\.id/u);
   assert.match(caseTasksRoute, /JOIN tasks t ON t\.id=c\.task_id AND t\.case_id=\? AND t\.workspace_id=\?/u);
   assert.match(caseTasksRoute, /comments: commentsByTask/u);
   assert.match(permissions, /hasActiveLawyerDocumentGrant/u);
+  assert.match(permissions, /lawyerMessageAttachmentRecipientRole/u);
   assert.match(permissions, /ROLE_PERMISSIONS\["legal-reviewer"\]/u);
 });
 
@@ -103,6 +195,8 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   const assigned = readFileSync(new URL("../app/_platform/LawyerRequestsClient.tsx", import.meta.url), "utf8");
   const client = readFileSync(new URL("../app/_platform/LawyerHandoffClient.tsx", import.meta.url), "utf8");
   const clientCase = readFileSync(new URL("../app/_platform/CaseWorkspaceClient.tsx", import.meta.url), "utf8");
+  const messages = readFileSync(new URL("../app/_platform/LawyerRequestMessages.tsx", import.meta.url), "utf8");
+  const consultation = readFileSync(new URL("../app/_platform/LawyerConsultationPanel.tsx", import.meta.url), "utf8");
   assert.match(workspace, /action: "create"/u);
   assert.match(workspace, /action: "update"/u);
   assert.match(workspace, /action: "comment"/u);
@@ -115,6 +209,12 @@ test("lawyer workspace UI exposes real task actions, document requests and docum
   assert.match(workspace, /type="datetime-local"/u);
   assert.match(clientCase, /case-workspace-task-comments/u);
   assert.match(clientCase, /comment\.authorName/u);
+  assert.match(messages, /action: "mark_read"/u);
+  assert.match(messages, /documentId: documentId \|\| undefined/u);
+  assert.match(messages, /message\.readAt/u);
+  assert.match(consultation, /action: "start"/u);
+  assert.match(workspace, /document-builder/u);
+  assert.match(workspace, /data\?\.ownDocuments\.map/u);
   assert.doesNotMatch(workspace, /demo(?:Client|Task|Matter)|fake(?:Client|Task|Matter)/iu);
 });
 
@@ -125,6 +225,10 @@ function seed(sqlite: ReturnType<typeof sqliteD1Fixture>["sqlite"]): void {
   for (const id of ["workspace-owner-ops", "workspace-lawyer-ops", "workspace-other-ops"]) {
     sqlite.prepare("INSERT INTO workspaces(id,type,name,created_at,updated_at) VALUES (?,'individual',?,?,?)").run(id, id, now, now);
   }
+  sqlite.prepare("UPDATE user_profiles SET default_workspace_id='workspace-owner-ops' WHERE id='owner-ops'").run();
+  sqlite.prepare("UPDATE user_profiles SET default_workspace_id='workspace-lawyer-ops' WHERE id='lawyer-ops'").run();
+  sqlite.prepare("UPDATE user_profiles SET default_workspace_id='workspace-other-ops' WHERE id='outsider-ops'").run();
+  sqlite.prepare("INSERT INTO document_templates(id,key,category,active,created_at,updated_at) VALUES ('template-a','template-a','contracts',1,?,?)").run(now, now);
   sqlite.prepare(`INSERT INTO cases
     (id,workspace_id,owner_user_id,account_type,locale,title,legal_area,status,current_revision,created_at,updated_at)
     VALUES ('case-ops','workspace-owner-ops','owner-ops','individual','ru','Case','contracts','open',1,?,?)`).run(now, now);

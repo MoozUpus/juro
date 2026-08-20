@@ -13,13 +13,14 @@ import { LawyerRequestsClient } from "./LawyerRequestsClient";
 type LawyerProfileSummary = { id: string; displayName: string; status: string; marketplaceStatus: string; availabilityStatus: string; nextAvailableAt: string | null; profileRevision: number };
 type RequestItem = { id: string; status: string; anonymizedSummary: string; createdAt: string; updatedAt: string; caseId: string | null; caseTitle: string | null; legalArea: string | null; clientName: string | null; hasAccess: number };
 type Matter = { id: string; title: string; description: string | null; status: string; legalArea: string | null; nextDeadlineAt: string | null; updatedAt: string; clientName: string | null; requestId: string };
-type Message = { id: string; requestId: string; authorRole: string; body: string; createdAt: string };
+type Message = { id: string; requestId: string; authorRole: string; body: string; readAt: string | null; createdAt: string; documentId: string | null; documentTitle: string | null; attachmentStatus: string | null };
 type DocumentItem = { id: string; title: string; category: string; status: string; updatedAt: string; caseId: string; requestId: string };
+type OwnDocumentItem = { id: string; title: string; category: string; status: string; updatedAt: string };
 type TaskItem = { id: string; title: string; description: string | null; status: string; dueAt: string | null; caseId: string; updatedAt: string; requestId: string; isEditable: number };
 type TaskComment = { id: string; taskId: string; body: string; createdAt: string; authorName: string | null };
 type CaseEvent = { id: string; caseId: string; eventType: string; createdAt: string };
 type Consultation = { id: string; requestId: string; caseId: string; startsAt: string; endsAt: string; timezone: string; format: string; status: string; internalNote: string | null; resultNote: string | null };
-export type LawyerWorkspaceData = { profile: LawyerProfileSummary | null; operational: boolean; requests: RequestItem[]; matters: Matter[]; messages: Message[]; documents: DocumentItem[]; tasks: TaskItem[]; taskComments: TaskComment[]; consultations: Consultation[]; caseEvents: CaseEvent[] };
+export type LawyerWorkspaceData = { profile: LawyerProfileSummary | null; operational: boolean; unreadMessageCount: number; requests: RequestItem[]; matters: Matter[]; messages: Message[]; documents: DocumentItem[]; ownDocuments: OwnDocumentItem[]; tasks: TaskItem[]; taskComments: TaskComment[]; consultations: Consultation[]; caseEvents: CaseEvent[] };
 
 export function useLawyerWorkspace() {
   const [data, setData] = useState<LawyerWorkspaceData | null>(null);
@@ -68,7 +69,7 @@ export function LawyerDashboardClient({ locale, userName }: { locale: PlatformLo
         <article><UsersRound /><span>{ru ? "Активные заявки" : "Faol so‘rovlar"}</span><strong>{openRequests.length}</strong></article>
         <article><UserRound /><span>{ru ? "Клиенты с доступом" : "Ruxsatli mijozlar"}</span><strong>{new Set(data.matters.map((item) => item.clientName).filter(Boolean)).size}</strong></article>
         <article><BriefcaseBusiness /><span>{ru ? "Дела в работе" : "Ishdagi ishlar"}</span><strong>{data.matters.length}</strong></article>
-        <article><MessageSquareText /><span>{ru ? "Сообщения" : "Xabarlar"}</span><strong>{data.messages.length}</strong></article>
+        <article><MessageSquareText /><span>{ru ? "Непрочитанные" : "O‘qilmagan"}</span><strong>{data.unreadMessageCount}</strong></article>
       </div>
       <div className="lawyer-dashboard-grid">
         <section><header><h2>{ru ? "Требует внимания" : "E’tibor talab qiladi"}</h2><Link href={`${base}/consultations?view=requests`}>{ru ? "Все заявки" : "Barcha so‘rovlar"}</Link></header>{openRequests.slice(0, 4).map((item) => <Link className="lawyer-work-row" href={`${base}/consultations?view=requests#request-${item.id}`} key={item.id}><CircleAlert /><span><strong>{statusCopy(item.status, ru)}</strong><small>{item.anonymizedSummary}</small></span></Link>)}{!openRequests.length && <Empty text={ru ? "Нет заявок, требующих действия." : "Amal talab qiladigan so‘rovlar yo‘q."} />}</section>
@@ -103,9 +104,11 @@ function LawyerRecordsClient({ locale, view }: { locale: PlatformLocale; view: s
   return <section className="lawyer-workspace lawyer-records"><header className="lawyer-records-header"><Icon /><div><small>JURO · {ru ? "кабинет юриста" : "yurist kabineti"}</small><h1>{definition.title}</h1><p>{definition.description}</p></div></header>{error && <p className="lawyer-workspace-error" role="alert">{error}</p>}{loading && !data ? <div className="lawyer-workspace-loading"><LoaderCircle className="spin" /></div> : <div className="lawyer-record-list">
     {view === "clients" && clients.map((item) => <article key={item.clientName}><UserRound /><div><strong>{item.clientName}</strong><small>{item.legalArea || (ru ? "Область не указана" : "Yo‘nalish ko‘rsatilmagan")}</small></div><span>{(data?.matters ?? []).filter((matter) => matter.clientName === item.clientName).length} {ru ? "дел" : "ish"}</span></article>)}
     {view === "matters" && data?.matters.map((item) => { const messages = data.messages.filter((message) => message.requestId === item.requestId); const documents = data.documents.filter((document) => document.caseId === item.id); const tasks = data.tasks.filter((task) => task.caseId === item.id); const consultations = data.consultations.filter((consultation) => consultation.caseId === item.id); const events = data.caseEvents.filter((event) => event.caseId === item.id).slice(0, 8); return <details className="lawyer-matter-card" key={item.id}><summary><BriefcaseBusiness /><span><strong>{item.title}</strong><small>{item.clientName || "—"} · {item.legalArea || item.status}</small></span><em>{item.status}</em></summary><div className="lawyer-matter-details"><p>{item.description || (ru ? "Описание дела не заполнено." : "Ish tavsifi kiritilmagan.")}</p><dl><div><dt>{ru ? "Консультации" : "Maslahatlar"}</dt><dd>{consultations.length}</dd></div><div><dt>{ru ? "Сообщения" : "Xabarlar"}</dt><dd>{messages.length}</dd></div><div><dt>{ru ? "Документы" : "Hujjatlar"}</dt><dd>{documents.length}</dd></div><div><dt>{ru ? "Задачи" : "Vazifalar"}</dt><dd>{tasks.length}</dd></div></dl>{item.nextDeadlineAt && <p><strong>{ru ? "Ближайший срок: " : "Yaqin muddat: "}</strong>{formatDate(item.nextDeadlineAt, ru)}</p>}<section><h2>{ru ? "Последние события" : "So‘nggi voqealar"}</h2>{events.length ? <ol>{events.map((event) => <li key={event.id}><span>{caseEventLabel(event.eventType, ru)}</span><time>{formatDate(event.createdAt, ru)}</time></li>)}</ol> : <p>{ru ? "Событий пока нет." : "Voqealar hozircha yo‘q."}</p>}</section><nav aria-label={ru ? "Следующие действия по делу" : "Ish bo‘yicha keyingi harakatlar"}><Link href={`${base}/consultations?view=requests#request-${item.requestId}`}>{ru ? "Открыть заявку и сообщения" : "So‘rov va xabarlarni ochish"}</Link><Link href={`${base}/consultations?view=tasks`}>{ru ? "Управлять задачами" : "Vazifalarni boshqarish"}</Link></nav></div></details>; })}
-    {view === "messages" && data?.messages.map((item) => <Link href={`${base}/consultations?view=requests#request-${item.requestId}`} key={item.id}><MessageSquareText /><div><strong>{item.authorRole === "lawyer" ? (ru ? "Вы" : "Siz") : (ru ? "Клиент" : "Mijoz")}</strong><small>{item.body}</small></div><time>{formatDate(item.createdAt, ru)}</time></Link>)}
+    {view === "messages" && data?.messages.map((item) => <Link href={`${base}/consultations?view=requests#request-${item.requestId}`} key={item.id}><MessageSquareText /><div><strong>{item.authorRole === "lawyer" ? (ru ? "Вы" : "Siz") : (ru ? "Клиент" : "Mijoz")}</strong><small>{item.body || item.documentTitle || (ru ? "Документ" : "Hujjat")}{item.authorRole === "lawyer" ? ` · ${item.readAt ? (ru ? "прочитано" : "o‘qilgan") : (ru ? "отправлено" : "yuborilgan")}` : ""}</small></div><time>{formatDate(item.createdAt, ru)}</time></Link>)}
+    {view === "documents" && <Link href={`${base}/document-builder`}><Plus /><div><strong>{ru ? "Создать проект документа" : "Hujjat loyihasini yaratish"}</strong><small>{ru ? "Открыть существующий JURO Builder" : "Mavjud JURO Builder-ni ochish"}</small></div></Link>}
+    {view === "documents" && data?.ownDocuments.map((item) => <Link href={`${base}/documents/${encodeURIComponent(item.id)}`} key={`own-${item.id}`}><FileText /><div><strong>{item.title}</strong><small>{ru ? "Ваш проект" : "Sizning loyihangiz"} · {item.status}</small></div><time>{formatDate(item.updatedAt, ru)}</time></Link>)}
     {view === "documents" && data?.documents.map((item) => <Link href={`${base}/documents/${encodeURIComponent(item.id)}`} key={item.id}><FileText /><div><strong>{item.title}</strong><small>{item.category} · {item.status}</small></div><time>{formatDate(item.updatedAt, ru)}</time></Link>)}
-    {data && ((view === "clients" && !clients.length) || (view === "matters" && !data.matters.length) || (view === "messages" && !data.messages.length) || (view === "documents" && !data.documents.length)) && <Empty text={ru ? "Реальных записей пока нет." : "Hozircha haqiqiy yozuvlar yo‘q."} />}
+    {data && ((view === "clients" && !clients.length) || (view === "matters" && !data.matters.length) || (view === "messages" && !data.messages.length) || (view === "documents" && !data.documents.length && !data.ownDocuments.length)) && <Empty text={ru ? "Реальных записей пока нет." : "Hozircha haqiqiy yozuvlar yo‘q."} />}
   </div>}</section>;
 }
 
@@ -258,6 +261,12 @@ function caseEventLabel(eventType: string, ru: boolean) {
     lawyer_document_requested: ["Юрист запросил документ", "Yurist hujjat so‘radi"],
     lawyer_document_provided: ["Клиент предоставил документ", "Mijoz hujjat taqdim etdi"],
     lawyer_document_request_cancelled: ["Запрос документа отменён", "Hujjat so‘rovi bekor qilindi"],
+    lawyer_request_message_sent: ["Отправлено сообщение по делу", "Ish bo‘yicha xabar yuborildi"],
+    lawyer_consultation_proposed: ["Предложено время консультации", "Maslahat vaqti taklif qilindi"],
+    lawyer_consultation_confirmed: ["Консультация подтверждена", "Maslahat tasdiqlandi"],
+    lawyer_consultation_in_progress: ["Консультация началась", "Maslahat boshlandi"],
+    lawyer_consultation_completed: ["Консультация завершена", "Maslahat yakunlandi"],
+    lawyer_consultation_cancelled: ["Консультация отменена", "Maslahat bekor qilindi"],
   };
   return labels[eventType]?.[ru ? 0 : 1] || (ru ? "Обновление дела" : "Ish yangilanishi");
 }

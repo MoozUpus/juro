@@ -28,12 +28,12 @@ export const GET = withApiErrors(async function GET() {
     nextAvailableAt: string | null;
     profileRevision: number;
   }>();
-  if (!profile) return response({ profile: null, operational: false, requests: [], matters: [], messages: [], documents: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
+  if (!profile) return response({ profile: null, operational: false, unreadMessageCount: 0, requests: [], matters: [], messages: [], documents: [], ownDocuments: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
 
   const operational = profile.status === "public_approved" && profile.marketplaceStatus === "public_approved";
-  if (!operational) return response({ profile, operational, requests: [], matters: [], messages: [], documents: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
+  if (!operational) return response({ profile, operational, unreadMessageCount: 0, requests: [], matters: [], messages: [], documents: [], ownDocuments: [], tasks: [], taskComments: [], consultations: [], caseEvents: [] });
   const now = new Date().toISOString();
-  const [requests, matters, messages, documents, tasks, taskComments, consultations, caseEvents] = await Promise.all([
+  const [requests, matters, messages, unreadMessages, documents, ownDocuments, tasks, taskComments, consultations, caseEvents] = await Promise.all([
     db.prepare(
       `SELECT r.id,r.status,r.anonymized_summary AS anonymizedSummary,r.created_at AS createdAt,r.updated_at AS updatedAt,
         CASE WHEN g.id IS NOT NULL THEN cs.id END AS caseId,
@@ -60,13 +60,24 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY cs.updated_at DESC LIMIT 100`,
     ).bind(profile.id, user.id, now).all(),
     db.prepare(
-      `SELECT m.id,m.lawyer_request_id AS requestId,m.author_role AS authorRole,m.body,m.created_at AS createdAt
+      `SELECT m.id,m.lawyer_request_id AS requestId,m.author_role AS authorRole,m.body,
+        m.read_at AS readAt,m.created_at AS createdAt,a.document_id AS documentId,
+        d.title AS documentTitle,a.status AS attachmentStatus
        FROM lawyer_request_messages m
        JOIN lawyer_requests r ON r.id=m.lawyer_request_id AND r.lawyer_profile_id=?
        JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=?
          AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
+       LEFT JOIN lawyer_request_message_attachments a ON a.message_id=m.id
+       LEFT JOIN documents d ON d.id=a.document_id
        ORDER BY m.created_at DESC LIMIT 50`,
     ).bind(profile.id, user.id, now).all(),
+    db.prepare(
+      `SELECT count(*) AS count FROM lawyer_request_messages m
+       JOIN lawyer_requests r ON r.id=m.lawyer_request_id AND r.lawyer_profile_id=?
+       JOIN lawyer_access_grants g ON g.lawyer_request_id=r.id AND g.lawyer_user_id=?
+         AND g.revoked_at IS NULL AND (g.expires_at IS NULL OR g.expires_at>?)
+       WHERE m.author_user_id<>? AND m.read_at IS NULL`,
+    ).bind(profile.id, user.id, now, user.id).first<{ count: number }>(),
     db.prepare(
       `SELECT DISTINCT d.id,d.title,d.category,d.status,d.updated_at AS updatedAt,d.case_id AS caseId,r.id AS requestId
        FROM documents d JOIN lawyer_access_grants g ON g.case_id=d.case_id
@@ -94,6 +105,12 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY c.created_at ASC LIMIT 300`,
     ).bind(profile.id, user.id, now).all(),
     db.prepare(
+      `SELECT d.id,d.title,d.category,d.status,d.updated_at AS updatedAt
+       FROM documents d JOIN user_profiles u ON u.id=? AND u.default_workspace_id=d.workspace_id
+       WHERE d.owner_user_id=? AND d.archived_at IS NULL
+       ORDER BY d.updated_at DESC LIMIT 100`,
+    ).bind(user.id, user.id).all(),
+    db.prepare(
       `SELECT id,lawyer_request_id AS requestId,case_id AS caseId,starts_at AS startsAt,ends_at AS endsAt,
         timezone,format,status,internal_note AS internalNote,result_note AS resultNote
        FROM lawyer_consultations WHERE lawyer_profile_id=? ORDER BY starts_at ASC LIMIT 100`,
@@ -109,10 +126,12 @@ export const GET = withApiErrors(async function GET() {
   return response({
     profile,
     operational,
+    unreadMessageCount: Number(unreadMessages?.count ?? 0),
     requests: requests.results,
     matters: matters.results,
     messages: messages.results,
     documents: documents.results,
+    ownDocuments: ownDocuments.results,
     tasks: tasks.results,
     taskComments: taskComments.results,
     consultations: consultations.results,

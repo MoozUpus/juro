@@ -193,6 +193,26 @@ export function LawyerConsultationPanel({
       ) : (
         <>
           {consultation?.status === "confirmed" && (
+            <div className="lawyer-consultation-actions">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void mutate({ action: "start" })}
+              >
+                {busy && <LoaderCircle className="spin" />}
+                {ru ? "Начать консультацию" : "Konsultatsiyani boshlash"}
+              </button>
+              <button
+                className="secondary"
+                type="button"
+                disabled={busy}
+                onClick={() => void mutate({ action: "cancel" })}
+              >
+                {ru ? "Отменить" : "Bekor qilish"}
+              </button>
+            </div>
+          )}
+          {consultation?.status === "in_progress" && (
             <div className="lawyer-consultation-completion">
               <label>
                 {ru ? "Итоговый комментарий клиенту" : "Mijoz uchun yakuniy izoh"}
@@ -210,14 +230,6 @@ export function LawyerConsultationPanel({
                   onClick={() => void mutate({ action: "complete", resultNote: resultNote.trim() })}
                 >
                   {ru ? "Завершить консультацию" : "Konsultatsiyani yakunlash"}
-                </button>
-                <button
-                  className="secondary"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void mutate({ action: "cancel" })}
-                >
-                  {ru ? "Отменить" : "Bekor qilish"}
                 </button>
               </div>
             </div>
