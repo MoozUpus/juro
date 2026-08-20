@@ -1421,3 +1421,20 @@ This is a recovered transient, not a terminal ingestion failure. No code
 change or retry-policy change was made. The final queue probe still showed
 zero terminal jobs, terminal failures and dead letters; the ingestion queue
 remains active and the freeze gate stays open.
+
+## Post-retry staging recovery (2026-08-20)
+
+The next scheduled staging invocation started at `2026-08-20T11:20:53.111Z`
+and completed at `2026-08-20T11:27:30.337Z` with `status=completed` and
+`error_code=NULL`. The retryable revision incident did not recur. The
+read-only D1 probe recorded 44/44 completed discovery checkpoints, 38,310
+queued fetch jobs, 6,205 queued version jobs and 7,057 live/manual queued
+jobs; terminal jobs, terminal failures, dead letters, unresolved retrying
+jobs and unresolved terminal jobs remained zero. Corpus totals remained
+3,575 canonical documents, 62,075 unique current provisions and 151,499
+indexed current chunks.
+
+The release gate is still intentionally open because the source/revision
+queue is not frozen. Snapshot creation, indexed 314-scenario evaluation,
+Qdrant benchmark/restore, D1 backup/restore, preview and rollout are not
+claimed by this run. Production remains untouched.
