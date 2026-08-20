@@ -33,6 +33,7 @@
 /* Opening a completed source file is a primary review action; keep the same
    44px minimum touch target as its neighboring export controls. */
 .review-result-head a{min-height:44px}
+.review-result-pane{min-width:0;background:#faf9f6}
 
 /* Keep both per-suggestion and bulk actions clear of their section divider. */
 .review-revision-list article>footer,

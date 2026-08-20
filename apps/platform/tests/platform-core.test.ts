@@ -1127,7 +1127,8 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(shellComponent, /useSearchParams/);
   assert.match(shellComponent, /const query = searchParams\.toString\(\)/);
   assert.match(shellComponent, /router\.push\(query \? `\$\{nextPath\}\?\$\{query\}` : nextPath\)/);
-  assert.match(shellComponent, /window\.matchMedia\("\(max-width: 800px\)"\)/);
+  assert.match(shellComponent, /window\.matchMedia\("\(max-width: 900px\)"\)/);
+  assert.match(shell, /min-width:801px\) and \(max-width:900px/);
   assert.match(shellComponent, /aria-hidden=\{mobile && !open \? true : undefined\}/);
   assert.match(shellComponent, /inert=\{mobile && !open \? true : undefined\}/);
   assert.match(shellComponent, /window\.requestAnimationFrame\(\(\) => openButtonRef\.current\?\.focus\(\)\)/);

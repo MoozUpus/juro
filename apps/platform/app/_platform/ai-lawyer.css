@@ -29,3 +29,35 @@
   .ai-conversations,.ai-dialog{grid-row:1}
   .ai-context{grid-row:2}
 }
+
+/* Product workspace density follows the usable canvas inside the 272px app
+   shell, not only the outer viewport. */
+.ai-workspace{grid-template-columns:230px minmax(500px,1fr) 280px}
+.ai-answer p,.ai-answer li{font-size:15px;line-height:1.72}
+.ai-answer h2{font-size:23px}
+.ai-answer h3{font-size:16px}
+.ai-context section>p,.ai-fact p{font-size:12px;line-height:1.6}
+.ai-context h2{font-size:14px}
+.ai-conversation-list strong{font-size:13px}
+.ai-conversation-list small{font-size:11px}
+@media(max-width:1380px){
+  .ai-workspace{grid-template-columns:210px minmax(0,1fr)}
+  .ai-context{grid-column:1/-1;border-top:1px solid rgba(6,40,68,.12);border-left:0}
+  .ai-context section{display:inline-block;width:50%;vertical-align:top;padding-right:14px}
+}
+@media(min-width:981px) and (max-width:1380px){
+  .ai-workspace{grid-template-rows:minmax(0,1fr) minmax(9rem,28%)}
+  .ai-conversations,.ai-dialog{grid-row:1}
+  .ai-context{grid-row:2}
+}
+@media(min-width:761px) and (max-width:980px){
+  .ai-workspace{grid-template-columns:minmax(0,1fr);grid-template-rows:none}
+  .ai-conversations{display:grid;padding:10px 16px;grid-template-columns:auto 148px minmax(0,1fr);align-items:center;gap:12px;border-right:0;border-bottom:1px solid rgba(6,40,68,.12)}
+  .ai-dialog{grid-row:auto;min-height:calc(100dvh - 146px)}
+  .ai-context{grid-row:auto;grid-column:auto}
+}
+@media(max-width:760px){
+  .ai-workspace{display:block;min-height:0;padding-bottom:74px;grid-template-rows:none}
+  .ai-dialog{height:calc(100dvh - 70px - 68px);min-height:0;overflow:hidden}
+  .ai-context section{display:block;width:100%;padding-right:0}
+}
