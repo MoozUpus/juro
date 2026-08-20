@@ -172,6 +172,11 @@ second crawler while a paced batch is still active, including bounded D1/index
 maintenance after the final Lex request. The previous seven-minute lease was
 shown to expire during a healthy eight-minute staging run; this longer lease is
 still bounded by the durable lock and does not widen the Lex request budget.
+Production retains its 195,000 ms ingestion start fence. Staging uses a
+twelve-minute fence with the fifteen-minute lease, leaving three minutes for
+bounded sparse-index and D1 finalization while allowing more already-queued
+jobs in the same sequential invocation. The robots policy and 20-second
+host-wide pacer remain authoritative for every source request.
 The first four ingestion
 slots prefer already-discovered `court_acts`, `laws`, `court_practice`,
 `oliy_majlis` or `president` catalogue jobs while rotating exact source

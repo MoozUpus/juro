@@ -43,6 +43,10 @@ const LOCK_NAME = "legal-corpus-worker";
 export const LEGAL_CORPUS_SCHEDULE_LEASE_MS = 15 * 60_000;
 const LOCK_MS = LEGAL_CORPUS_SCHEDULE_LEASE_MS;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
+// Staging uses the remaining wall-clock budget of the 15-minute Cron
+// invocation to drain more already-queued, sequential jobs. Production keeps
+// the historical short fence and its acquisition flags remain disabled.
+export const LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS = 12 * 60_000;
 // Once all core codes are settled, four catalogue pages advance the durable
 // discovery checkpoints per staging tick. The shared 20-second host pacer
 // permits ten sequential Lex.uz request windows per four-minute invocation
@@ -84,14 +88,12 @@ const VERSION_CATCHUP_MINIMUM_FETCH_SLOTS = 0;
 const VERSION_CATCHUP_MAX_SLOTS = 10;
 export const LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES = LEX_CORPUS_CATEGORY_PRIORITY;
 const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
-// A short canonical page may require one additional robots-checked, paced PDF
-// or ZIP representation fetch. Stop claiming new jobs after 3m15s from the
-// scheduled tick so one worst-case HTML + representation job can still finish
-// before the next staging invocation. More than eight hours of post-fence
-// staging evidence kept ordinary runs between 195s and 202s, leaving at least
-// 38s before the four-minute tick. A rare overrun remains fail-closed behind
-// the distributed lock. Production retains the five-minute cadence and the
-// durable queue retains every job not started in this window.
+// Production retains a short start fence so its disabled acquisition path
+// remains conservative. Staging uses the explicit twelve-minute fence above;
+// the 15-minute distributed lease leaves three minutes for sparse-index and
+// D1 finalization while allowing several already-queued jobs to run in one
+// sequential invocation. The shared robots policy and 20-second host pacer
+// remain authoritative for every source request.
 const INGESTION_START_CUTOFF_MS = 195_000;
 // Dense activation happens only after the source queue is frozen. Four
 // 64-chunk batches cap one invocation at eight embedding calls while allowing
@@ -226,9 +228,11 @@ async function queuedLegalCorpusVersionJobs(db: D1Database): Promise<number> {
 export function legalCorpusIngestionStartAllowed(
   scheduledTime: number,
   now: number,
+  cutoffMs = INGESTION_START_CUTOFF_MS,
 ): boolean {
-  if (!Number.isFinite(scheduledTime) || !Number.isFinite(now)) return false;
-  return Math.max(0, now - scheduledTime) < INGESTION_START_CUTOFF_MS;
+  if (!Number.isFinite(scheduledTime) || !Number.isFinite(now) || !Number.isFinite(cutoffMs)) return false;
+  if (cutoffMs <= 0) return false;
+  return Math.max(0, now - scheduledTime) < cutoffMs;
 }
 
 type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
@@ -493,7 +497,10 @@ export async function handleLegalCorpusScheduled(
         queuedVersionJobs: await queuedLegalCorpusVersionJobs(env.DB),
       });
       for (let index = 0; index < ingestionBudget; index += 1) {
-        if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now())) {
+        const startCutoffMs = env.APP_ENV === "staging"
+          ? LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS
+          : INGESTION_START_CUTOFF_MS;
+        if (!legalCorpusIngestionStartAllowed(controller.scheduledTime, Date.now(), startCutoffMs)) {
           ingestionStartCutoffReached = true;
           break;
         }

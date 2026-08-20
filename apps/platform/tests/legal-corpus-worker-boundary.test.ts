@@ -12,6 +12,7 @@ import {
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SCHEDULE_LEASE_MS,
+  LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS,
   LEGAL_CORPUS_SEED_CRON,
   LEGAL_CORPUS_STAGING_PROCESS_CRON,
 } from "../worker/legal-corpus-worker";
@@ -189,6 +190,17 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 195_000), false);
   assert.equal(legalCorpusIngestionStartAllowed(Number.NaN, scheduledTime), false);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, Number.POSITIVE_INFINITY), false);
+  assert.equal(legalCorpusIngestionStartAllowed(
+    scheduledTime,
+    scheduledTime + LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS - 1,
+    LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS,
+  ), true);
+  assert.equal(legalCorpusIngestionStartAllowed(
+    scheduledTime,
+    scheduledTime + LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS,
+    LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS,
+  ), false);
+  assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 1, 0), false);
 });
 
 test("scheduled lease covers a bounded long-running staging batch", () => {
@@ -370,6 +382,7 @@ test("main application scheduler cannot import or invoke heavy corpus work", () 
   assert.match(corpusWorker, /const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;/u);
   assert.match(corpusWorker, /const VERSION_INGESTION_SLOT_INDEX = 3;/u);
   assert.match(corpusWorker, /const INGESTION_START_CUTOFF_MS = 195_000;/u);
+  assert.match(corpusWorker, /LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS = 12 \* 60_000;/u);
   assert.match(corpusWorker, /const QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN = 4;/u);
   assert.doesNotMatch(corpusWorker, /afterIngest:/u);
 });
