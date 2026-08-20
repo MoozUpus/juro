@@ -24,7 +24,7 @@ test("tablet shell uses the off-canvas navigation before content becomes cramped
     source("../app/_platform/platform-shell.css"),
   ]);
   assert.match(shell, /matchMedia\("\(max-width: 900px\)"\)/);
-  assert.match(styles, /@media\(min-width:801px\) and \(max-width:900px\)/);
+  assert.match(styles, /@media\s*\(min-width:\s*801px\)\s*and\s*\(max-width:\s*900px\)/);
   const documentNav = shell.match(/const documentNav = \[(.*?)\];/s)?.[1] ?? "";
   assert.doesNotMatch(documentNav, /\["document-builder",/);
   assert.doesNotMatch(documentNav, /\["document-review",/);
@@ -47,9 +47,9 @@ test("history presents human labels without exposing opaque entity ids", async (
 
 test("dashboard changes composition before the hero controls are squeezed", async () => {
   const styles = await source("../app/_platform/dashboard.css");
-  assert.match(styles, /@media\(max-width:1380px\)/);
-  assert.match(styles, /\.dashboard-command-hero\{grid-template-columns:1fr;min-height:0\}/);
-  assert.match(styles, /\.dashboard-quick-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
+  assert.match(styles, /@media\s*\(max-width:\s*1380px\)/);
+  assert.match(styles, /\.dashboard-command-hero\s*\{[\s\S]*?grid-template-columns:\s*1fr;[\s\S]*?min-height:\s*0;/);
+  assert.match(styles, /\.dashboard-quick-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\);/);
 });
 
 test("document review mode tabs remain usable at the narrowest supported width", async () => {

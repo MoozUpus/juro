@@ -27,7 +27,7 @@ function TemplateCard({ document, language, paths }: { document: DocumentLibrary
   const verified = document.editorialStatus === "Published";
   return <article className={`dbt-template-card ${available ? "published" : "review"}`}>
     <div className="dbt-template-card-top"><span className={`dbt-template-state ${verified ? "ready" : "pending"}`}>{verified ? (language === "uz" ? "Tekshirilgan" : "Проверен") : (language === "uz" ? "Beta · tekshiruvda" : "Бета · на проверке")}</span><small>№ {document.code}</small></div>
-    <h3>{title}</h3>
+    <h3 title={title}>{title}</h3>
     <p>{description}</p>
     <div className="dbt-template-meta"><span><Clock3 size={15}/>{document.estimatedMinutes ?? 10} {language === "uz" ? "daqiqa" : "мин"}</span><span><FileCheck2 size={15}/>DOCX · PDF</span></div>
     {!verified && <p className="dbt-translation-note"><ShieldCheck size={15}/>{language === "uz" ? "Topshirishdan oldin yurist tekshiruvi talab etiladi." : "Перед подачей требуется проверка юристом."}</p>}

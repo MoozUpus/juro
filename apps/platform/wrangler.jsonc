@@ -32,11 +32,12 @@
     "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
     "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
     "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+    "LEGAL_CORPUS_DENSE_ENABLED": "false",
     "LEGAL_CORPUS_SHADOW_MODE": "false",
     "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
     "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
     "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
-    "LAWYER_PROFILE_DIRECTORY_ENABLED": "false",
+    "LAWYER_PROFILE_DIRECTORY_ENABLED": "true",
     "IDENTITY_PROTECTION_MODE": "legacy",
     "JOB_SCHEMA_VERSION": "1",
     "EMBEDDING_MODEL": "text-embedding-3-large",
@@ -187,14 +188,15 @@
         "LEGAL_LEX_METADATA_MONITOR_ENABLED": "true",
         "LEGAL_ADVICE_INGESTION_ENABLED": "false",
         "LEGAL_DIRECT_RETRIEVAL_ENABLED": "true",
-        "LEGAL_CORPUS_ENABLED": "false",
-        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
-        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
-        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
-        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
-        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
-        "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
-        "LEGAL_CORPUS_SHADOW_MODE": "false",
+        "LEGAL_CORPUS_ENABLED": "true",
+        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "true",
+        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "true",
+        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "true",
+        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
+        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
+        "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
+        "LEGAL_CORPUS_DENSE_ENABLED": "false",
+        "LEGAL_CORPUS_SHADOW_MODE": "true",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
         "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",
         "LEGAL_SOURCE_STAFF_API_ENABLED": "false",
@@ -211,7 +213,8 @@
         "OPENAI_TRANSCRIPTION_MODEL": "gpt-4o-transcribe",
         "OPENAI_TTS_MODEL": "gpt-4o-mini-tts",
         "ANTHROPIC_DOCUMENT_MODEL": "claude-sonnet-4-6",
-        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6"
+        "ANTHROPIC_FALLBACK_MODEL": "claude-sonnet-4-6",
+        "QDRANT_COLLECTION": "juro_legal_staging"
       },
       "d1_databases": [
         {
@@ -225,6 +228,10 @@
         {
           "tag": "v1-malware-scanner-container",
           "new_sqlite_classes": ["MalwareScannerContainer"]
+        },
+        {
+          "tag": "v2-staging-legal-corpus-qdrant",
+          "new_sqlite_classes": ["LegalCorpusQdrantContainer"]
         }
       ],
       "durable_objects": {
@@ -232,6 +239,10 @@
           {
             "name": "MALWARE_SCANNER_CONTAINER",
             "class_name": "MalwareScannerContainer"
+          },
+          {
+            "name": "QDRANT_CONTAINER",
+            "class_name": "LegalCorpusQdrantContainer"
           }
         ]
       },
@@ -240,6 +251,13 @@
           "name": "juro-staging-malware-scanner",
           "class_name": "MalwareScannerContainer",
           "image": "docker.io/clamav/clamav@sha256:4de20bd9ab45a4b763c5412b769217ef5082572ebc8a63aff1a77943419e5dd8",
+          "instance_type": "standard-1",
+          "max_instances": 1
+        },
+        {
+          "name": "juro-staging-legal-corpus-qdrant",
+          "class_name": "LegalCorpusQdrantContainer",
+          "image": "docker.io/qdrant/qdrant@sha256:da65a06bc75e42702f80c992b99c5144b0fbd675ae7a96d2991de0bf957b7071",
           "instance_type": "standard-1",
           "max_instances": 1
         }
@@ -483,6 +501,11 @@
           "custom_domain": true
         },
         {
+          "pattern": "lawyer.juro.uz",
+          "zone_name": "juro.uz",
+          "custom_domain": true
+        },
+        {
           "pattern": "admin.juro.uz",
           "zone_name": "juro.uz",
           "custom_domain": true
@@ -528,6 +551,7 @@
         "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
         "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+        "LEGAL_CORPUS_DENSE_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "false",
         "LEGAL_ADVICE_SITEMAP_DISCOVERY_ENABLED": "false",
         "LEGAL_LEX_RSS_DISCOVERY_ENABLED": "true",

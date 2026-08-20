@@ -217,6 +217,31 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
       time: item.updatedAt,
     })),
   ].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime()).slice(0, 7) : [];
+  const dayKey = (value: string) => new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Tashkent",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(value));
+  const todayKey = data ? dayKey(data.serverNow) : "";
+  const today = data ? [
+    ...data.deadlines.filter((item) => dayKey(item.dueAt) === todayKey).map((item) => ({
+      id: `today-deadline-${item.id}`,
+      href: `${base}/action-plan/${item.caseId}`,
+      icon: CalendarClock,
+      title: item.title,
+      detail: item.caseTitle,
+      time: item.dueAt,
+    })),
+    ...data.notifications.filter((item) => dayKey(item.createdAt) === todayKey).map((item) => ({
+      id: `today-notification-${item.id}`,
+      href: `${base}/notifications`,
+      icon: Bell,
+      title: item.title,
+      detail: item.body,
+      time: item.createdAt,
+    })),
+  ].sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()).slice(0, 4) : [];
 
   return (
     <div className="dashboard-command">
@@ -226,7 +251,7 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
             {accountType === "business" ? <BriefcaseBusiness /> : <ShieldCheck />}
             <span>{accountType === "business" ? copy.contextBusiness : copy.contextPersonal}</span>
           </div>
-          <p>{copy.greeting}, {userName}</p>
+          <p>{userName ? `${copy.greeting}, ${userName}` : copy.greeting}</p>
           <h1>{copy.question}</h1>
           <form className="dashboard-command-form" onSubmit={startTask}>
             <label className="sr-only" htmlFor="dashboard-legal-task">{copy.prompt}</label>
@@ -253,6 +278,9 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
             >
               <Paperclip />
             </button>
+            <Link className="dashboard-voice-action" href={`${base}/ai-lawyer/voice`} aria-label={ru ? "Открыть голосовой режим" : "Ovozli rejimni ochish"}>
+              <Mic aria-hidden="true" />
+            </Link>
             <button className="dashboard-start" disabled={submitting || (!prompt.trim() && !file) || Boolean(file && !consent)}>
               {submitting ? <LoaderCircle className="spin" /> : <Send />}
               <span>{copy.send}</span>
@@ -272,14 +300,18 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
             )}
             {uploadProgress && <><div className="dashboard-upload-progress" role="progressbar" aria-label={ru ? "Прогресс загрузки файла" : "Fayl yuklash jarayoni"} aria-valuemin={0} aria-valuemax={100} aria-valuenow={uploadPercent ?? undefined} aria-valuetext={uploadStatus}><span style={{ transform: `scaleX(${uploadPercent === null ? .08 : Math.max(.08, uploadPercent / 100)})` }} /></div><p className="dashboard-upload-status" role="status" aria-live="polite">{uploadStatus}</p></>}
           </form>
-          <Link className="dashboard-voice-entry" href={`${base}/ai-lawyer/voice`}>
-            <Mic aria-hidden="true" />
-            <span>{ru ? "Открыть голосовой режим" : "Ovozli rejimni ochish"}</span>
-            <small>{ru ? "Запись включится только после нажатия" : "Yozuv faqat bosgandan keyin boshlanadi"}</small>
-            <ArrowRight aria-hidden="true" />
-          </Link>
         </div>
-        <GoldenRoute locale={locale} label={copy.journeyLabel} steps={copy.journeySteps} />
+        <aside className="dashboard-today" aria-labelledby="dashboard-today-title">
+          <header><span>{ru ? "Рабочий день" : "Ish kuni"}</span><h2 id="dashboard-today-title">{ru ? "Сегодня" : "Bugun"}</h2></header>
+          {loading && !data ? <div className="dashboard-today-state"><LoaderCircle className="spin" /><span>{ru ? "Синхронизируем" : "Sinxronlanmoqda"}</span></div> : today.length ? today.map((item) => (
+            <Link href={item.href} key={item.id}>
+              <item.icon aria-hidden="true" />
+              <span><strong>{item.title}</strong><small>{item.detail}</small></span>
+              <time>{formatDateTime(item.time, ru)}</time>
+            </Link>
+          )) : <div className="dashboard-today-state"><CheckCircle2 /><span>{ru ? "На сегодня срочных событий нет" : "Bugun shoshilinch voqealar yo‘q"}</span></div>}
+          <Link className="dashboard-today-calendar" href={`${base}/calendar`}>{ru ? "Открыть календарь" : "Kalendarni ochish"}<ArrowRight aria-hidden="true" /></Link>
+        </aside>
       </section>
 
       {error && (
@@ -351,34 +383,6 @@ export function DashboardClient({ locale, accountType, userName }: DashboardProp
           <span><Bell /><b>{data.counts.unreadNotifications}</b>{ru ? "новых событий" : "yangi voqea"}</span>
         </section>
       )}
-    </div>
-  );
-}
-
-function GoldenRoute({ locale, label, steps }: { locale: PlatformLocale; label: string; steps: readonly string[] }) {
-  return (
-    <div className="golden-route" aria-label={label}>
-      <div className="golden-route-heading">
-        <span>JURO</span>
-        <p>{locale === "ru" ? "От проблемы к обоснованному действию" : "Muammodan asoslangan harakatgacha"}</p>
-      </div>
-      <div className="golden-route-track">
-        <svg viewBox="0 0 600 80" preserveAspectRatio="none" aria-hidden="true">
-          <path className="golden-route-base" d="M42 40 H558" />
-          <path className="golden-route-progress" d="M42 40 H558" pathLength="1" />
-        </svg>
-        {steps.map((step, index) => (
-          <div className="golden-route-step" key={step}>
-            <span>{index === steps.length - 1 ? <CheckCircle2 /> : index + 1}</span>
-            <strong>{step}</strong>
-          </div>
-        ))}
-      </div>
-      <p className="golden-route-note">
-        {locale === "ru"
-          ? "Источники и уровень уверенности остаются видимыми на каждом этапе."
-          : "Manbalar va ishonch darajasi har bir bosqichda ko‘rinib turadi."}
-      </p>
     </div>
   );
 }

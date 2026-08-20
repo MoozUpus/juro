@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { TurnstileWidget } from "./TurnstileWidget";
+import { ThemeSwitcher } from "../_theme/ThemeSwitcher";
 
 type AccountType = "individual" | "entrepreneur" | "lawyer";
 type Locale = "ru" | "uz";
@@ -94,6 +95,7 @@ export function AuthForm({
   const otpInput = useRef<HTMLInputElement>(null);
   const mfaInput = useRef<HTMLInputElement>(null);
   const ru = locale === "ru";
+  const lawyerProduct = initialAccountType === "lawyer";
   const explicitReturnTo = safeReturnPath(returnTo);
   const protectedReturnTo = explicitReturnTo ?? "/";
   const localeHref = (nextLocale: Locale): string => {
@@ -275,8 +277,9 @@ export function AuthForm({
   if (!otpEnabled) {
     return (
       <main className="auth-page" lang={locale}>
-        <BrandPanel locale={locale} mode={mode} />
+        <BrandPanel locale={locale} mode={mode} lawyerProduct={lawyerProduct} />
         <section className="auth-card">
+          <div className="auth-theme"><ThemeSwitcher locale={locale} compact persistAccount={false} /></div>
           <LanguageSwitch locale={locale} hrefFor={localeHref} />
           <header className="auth-unavailable">
             <KeyRound />
@@ -288,9 +291,9 @@ export function AuthForm({
             </div>
           </header>
           {developmentAuthEnabled
-            ? <Link className="auth-submit" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}</Link>
+            ? <a className="auth-submit" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}</a>
             : platformAuthEnabled
-            ? <Link className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Продолжить защищённый вход" : "Himoyalangan kirishni davom ettirish"}</Link>
+            ? <a className="auth-submit" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}><ArrowRight />{ru ? "Продолжить защищённый вход" : "Himoyalangan kirishni davom ettirish"}</a>
             : <p className="auth-error" role="status">{ru ? "Владелец проекта должен подключить Resend и Cloudflare Turnstile через защищённое хранилище." : "Loyiha egasi Resend va Cloudflare Turnstile xizmatlarini himoyalangan saqlash orqali ulashi kerak."}</p>}
         </section>
       </main>
@@ -299,8 +302,9 @@ export function AuthForm({
 
   return (
     <main className="auth-page" lang={locale}>
-      <BrandPanel locale={locale} mode={mode} />
+      <BrandPanel locale={locale} mode={mode} lawyerProduct={lawyerProduct} />
       <section className="auth-card">
+        <div className="auth-theme"><ThemeSwitcher locale={locale} compact persistAccount={false} /></div>
         <LanguageSwitch locale={locale} hrefFor={localeHref} />
         {step === "details" ? (
           <form onSubmit={requestCode}>
@@ -316,7 +320,7 @@ export function AuthForm({
 
             {mode === "register" && (
               <>
-                <div className="auth-account-type" aria-label={ru ? "Тип профиля" : "Profil turi"}>
+                {!lawyerProduct && <div className="auth-account-type" aria-label={ru ? "Тип профиля" : "Profil turi"}>
                   <button type="button" className={accountType === "individual" ? "active" : ""} aria-pressed={accountType === "individual"} onClick={() => setAccountType("individual")}>
                     <UserRound />{ru ? "Физлицо" : "Jismoniy shaxs"}
                   </button>
@@ -326,7 +330,7 @@ export function AuthForm({
                   <button type="button" className={accountType === "lawyer" ? "active" : ""} aria-pressed={accountType === "lawyer"} onClick={() => setAccountType("lawyer")}>
                     <Scale />{ru ? "Юрист" : "Yurist"}
                   </button>
-                </div>
+                </div>}
                 <div className="auth-row">
                   <label>{ru ? "Имя" : "Ism"}<input value={firstName} onChange={(event) => setFirstName(event.target.value.slice(0, 80))} required autoComplete="given-name" /></label>
                   <label>{ru ? "Фамилия" : "Familiya"}<input value={lastName} onChange={(event) => setLastName(event.target.value.slice(0, 80))} required autoComplete="family-name" /></label>
@@ -464,36 +468,36 @@ export function AuthForm({
         {error && <p className="auth-error" role="alert">{error}</p>}
         <div className="auth-switch">
           {mode === "register"
-            ? <>{ru ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href={`/${locale}/auth/login`}>{ru ? "Войти" : "Kirish"}</Link></>
+            ? <>{ru ? "Уже есть аккаунт?" : "Hisobingiz bormi?"} <Link href={`/${locale}/auth/login${lawyerProduct ? "?accountType=lawyer" : ""}`}>{ru ? "Войти" : "Kirish"}</Link></>
             : <>{ru ? "Нет аккаунта?" : "Hisob yo‘qmi?"} <Link href={`/${locale}/auth/register?accountType=${accountType}`}>{ru ? "Создать" : "Yaratish"}</Link></>}
         </div>
         {developmentAuthEnabled
-          ? <Link className="auth-siwc" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}>
+          ? <a className="auth-siwc" href={`/api/auth/dev-login?returnTo=${encodeURIComponent(protectedReturnTo)}`}>
               {ru ? "Войти как локальный разработчик" : "Mahalliy dasturchi sifatida kirish"}
-            </Link>
-          : platformAuthEnabled && <Link className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
+            </a>
+          : platformAuthEnabled && <a className="auth-siwc" href={`/signin-with-chatgpt?return_to=${encodeURIComponent(protectedReturnTo)}`}>
               {ru ? "Войти через защищённую учётную запись" : "Himoyalangan hisob orqali kirish"}
-            </Link>}
+            </a>}
       </section>
     </main>
   );
 }
 
-function BrandPanel({ locale, mode }: { locale: Locale; mode: "login" | "register" }) {
+function BrandPanel({ locale, mode, lawyerProduct }: { locale: Locale; mode: "login" | "register"; lawyerProduct: boolean }) {
   const ru = locale === "ru";
   return (
-    <section className="auth-brand">
+    <section className="auth-brand" data-product={lawyerProduct ? "lawyer" : "client"}>
       <Link href={`https://juro.uz/${locale}`} aria-label="JURO">
         <Image src="/juro-logo-light.png" alt="JURO" width={1268} height={1240} unoptimized />
       </Link>
       <div>
-        <span><ShieldCheck />{ru ? "Защищённое юридическое пространство" : "Himoyalangan yuridik makon"}</span>
+        <span>{lawyerProduct ? <Scale /> : <ShieldCheck />}{lawyerProduct ? (ru ? "Профессиональная практика JURO" : "JURO professional amaliyoti") : (ru ? "Защищённое юридическое пространство" : "Himoyalangan yuridik makon")}</span>
         <h1>{mode === "register"
-          ? (ru ? "Начните работу в JURO" : "JURO bilan ishlashni boshlang")
-          : (ru ? "С возвращением" : "Qaytganingizdan xursandmiz")}</h1>
-        <p>{ru
-          ? "Документы, дела и планы связаны с вашей учётной записью и открываются только после серверной проверки сессии."
-          : "Hujjatlar, ishlar va rejalar hisobingizga bog‘langan va faqat server sessiyani tekshirgandan keyin ochiladi."}</p>
+          ? (lawyerProduct ? (ru ? "Создайте кабинет юриста" : "Yurist kabinetini yarating") : (ru ? "Начните работу в JURO" : "JURO bilan ishlashni boshlang"))
+          : (lawyerProduct ? (ru ? "Вернитесь к своей практике" : "Amaliyotingizga qayting") : (ru ? "С возвращением" : "Qaytganingizdan xursandmiz"))}</h1>
+        <p>{lawyerProduct
+          ? (ru ? "Заявки, консультации и материалы клиентов открываются только после проверки профиля и явного разрешения клиента." : "So‘rovlar, maslahatlar va mijoz materiallari faqat profil tekshiruvi va mijozning aniq ruxsatidan keyin ochiladi.")
+          : (ru ? "Документы, дела и планы связаны с вашей учётной записью и открываются только после серверной проверки сессии." : "Hujjatlar, ishlar va rejalar hisobingizga bog‘langan va faqat server sessiyani tekshirgandan keyin ochiladi.")}</p>
       </div>
       <small>{ru ? "JURO не является государственным органом или нотариусом." : "JURO davlat organi yoki notarius emas."}</small>
     </section>

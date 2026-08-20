@@ -30,6 +30,10 @@ import {
   retrieveCorpusAwareLegalSources,
   type LegalChatSourceRetrieval,
 } from "../../../../lib/legal-corpus/chat-retrieval";
+import {
+  retrieveTrustedUserDocumentSources,
+  type TrustedUserDocumentRetrieval,
+} from "../../../../lib/document-analysis/user-document-chat-sources";
 import { discoverOfficialLexUrls } from "../../../../lib/legal/openai-lex-discovery";
 import { legalCitationStatements } from "../../../../lib/legal/direct-citation-store";
 import {
@@ -384,6 +388,8 @@ async function executePostWithinBudget(
   // encrypted-memory lookup cannot delay safe, source-free SSE progress.
   const memoryStage = budget.beginStage("memory_context", { timeoutMs: 1_250 });
   const retrievalStage = budget.beginStage("live_lex_retrieval", { timeoutMs: 2_900 });
+  const privateDocumentStage = budget.beginStage("private_document_retrieval", { timeoutMs: 1_800 });
+  const bindings = runtimeEnv();
   const memoryContext = (async () => {
     try {
       const keyring = memoryKeyring(runtimeEnv().IDENTITY_KEYRING);
@@ -481,11 +487,55 @@ async function executePostWithinBudget(
       });
     }
   })();
+  const privateDocumentRetrieval = (async (): Promise<TrustedUserDocumentRetrieval> => {
+    if (
+      bindings.LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST !== "true"
+      || !bindings.APP_ENV
+      || !bindings.BUCKET
+      || !bindings.USER_DOCUMENTS_INDEX
+      || !bindings.OPENAI_API_KEY
+    ) {
+      privateDocumentStage.complete();
+      return { sources: [], evidence: [], errors: [] };
+    }
+    try {
+      await assertProviderCallAllowed({ db, environment: providerEnvironment, provider: "openai" });
+      const result = await retrieveTrustedUserDocumentSources({
+        APP_ENV: bindings.APP_ENV,
+        DB: db,
+        BUCKET: bindings.BUCKET,
+        USER_DOCUMENTS_INDEX: bindings.USER_DOCUMENTS_INDEX,
+        OPENAI_API_KEY: bindings.OPENAI_API_KEY,
+        EMBEDDING_MODEL: bindings.EMBEDDING_MODEL,
+      }, {
+        workspaceId: workspace.id,
+        userId: user.id,
+        query: retrievalQuestion,
+        locale,
+        limit: 3,
+      }, { signal: privateDocumentStage.signal });
+      privateDocumentStage.complete();
+      return result;
+    } catch (error) {
+      privateDocumentStage.fail();
+      console.warn(JSON.stringify({
+        event: "ai.private_document_retrieval_unavailable",
+        code: error instanceof Error ? error.name : "PRIVATE_DOCUMENT_RETRIEVAL_FAILED",
+      }));
+      return {
+        sources: [],
+        evidence: [],
+        errors: [{ code: "PRIVATE_DOCUMENT_RETRIEVAL_UNAVAILABLE" }],
+      };
+    }
+  })();
   // Source verification progress is content-free. A separate preliminary
   // event is emitted only after a complete provider finding passes the same
   // authoritative Lex claim/span gate as the terminal answer.
-  const retrieval = await liveLexRetrieval;
-  const { sources, evidence, freshness, legalDatabaseAsOf } = retrieval;
+  const [retrieval, privateDocuments] = await Promise.all([liveLexRetrieval, privateDocumentRetrieval]);
+  const sources = [...retrieval.sources, ...privateDocuments.sources];
+  const evidence = [...retrieval.evidence, ...privateDocuments.evidence];
+  const { freshness, legalDatabaseAsOf, coverageStatus } = retrieval;
   await emitProgress({ stage: "source_verified" });
   const { memoryEncryption, memories } = await memoryContext;
   const requestHash = await sha256Json({
@@ -759,16 +809,28 @@ async function executePostWithinBudget(
           actTitle: source.actTitle,
           actIdentifier: source.actIdentifier,
           article: source.article ?? null,
-          excerpt: null,
+          excerpt: (source.spans?.find((span) => span.article === (reference.article ?? source.article))
+            ?? source.spans?.[0])?.text.slice(0, 1_200)
+            ?? source.excerpt?.slice(0, 1_200)
+            ?? null,
           originalUrl: source.officialUrl,
           status: source.applicabilityStatus ?? "current" as const,
           effectiveDate: source.effectiveDate ?? null,
           verifiedAt: source.verifiedAt,
+          documentType: source.documentType ?? null,
+          documentNumber: source.documentNumber ?? source.actIdentifier ?? null,
+          adoptingAuthority: source.adoptingAuthority ?? null,
+          sourceClass: source.sourceClass ?? "OFFICIAL_LEGISLATION",
+          language: source.locale === "uzc" ? "uz-Cyrl" as const
+            : source.locale === "uz" ? "uz-Latn" as const
+              : source.locale === "en" ? "en" as const : "ru" as const,
+          sourceOrigin: source.verificationState === "direct_validated" ? "live" as const : "indexed" as const,
         };
       }),
       sourceAccessMode: retrieval.sourceAccessMode,
       sourcesRetrievedAt: retrieval.sourcesRetrievedAt,
       sourceValidationStatus: retrieval.sourceValidationStatus,
+      coverageStatus,
     };
     result = enforceLegalDatabaseFreshness(
       canonicalResult,
@@ -960,6 +1022,8 @@ async function executePostWithinBudget(
       sourceFreshnessStatus: freshness.status,
       sourceFreshnessAsOf: freshness.asOf,
       liveLexRetrievalErrorCodes: retrieval.errors.map((error) => error.code).slice(0, 4),
+      privateDocumentRetrievalErrorCodes: privateDocuments.errors.map((error) => error.code).slice(0, 4),
+      trustedPrivateSourceCount: result.sources.filter((source) => source.sourceClass === "USER_TRUSTED_PRIVATE").length,
       branchId, operation: branchInput.operation,
       sourceMessageId: branchInput.forkedFromMessageId,
     }), now),
@@ -1143,7 +1207,9 @@ async function loadConversationResult(db: D1Database, conversationId: string, wo
   if (!conversation?.structuredJson) return null;
   const facts = await db.prepare("SELECT id,statement,status FROM confirmed_facts WHERE conversation_id=? ORDER BY created_at")
     .bind(conversationId).all();
-  const { result, sourceFreshness } = storedConversationResult(conversation.structuredJson);
+  const stored = storedConversationResult(conversation.structuredJson);
+  const result = await restoreDisplayedCitationExcerpts(db, conversation.messageId, stored.result);
+  const { sourceFreshness } = stored;
   return {
     conversationId: conversation.conversationId,
     messageId: conversation.messageId,
@@ -1179,6 +1245,36 @@ function storedConversationResult(structuredJson: string) {
   return { result, sourceFreshness };
 }
 
+async function restoreDisplayedCitationExcerpts(
+  db: D1Database,
+  messageId: string,
+  result: ReturnType<typeof parseLegalChatResponse>,
+): Promise<ReturnType<typeof parseLegalChatResponse>> {
+  try {
+    const rows = await db.prepare(`SELECT canonical_url AS canonicalUrl,
+        article_reference AS articleReference,excerpt
+      FROM legal_source_references
+      WHERE message_id=? AND citation_validation_status='validated'
+      ORDER BY created_at ASC LIMIT 12`).bind(messageId).all<{
+        canonicalUrl: string;
+        articleReference: string | null;
+        excerpt: string | null;
+      }>();
+    return {
+      ...result,
+      sources: result.sources.map((source) => {
+        const row = rows.results.find((candidate) => candidate.canonicalUrl === source.originalUrl
+          && (candidate.articleReference ?? null) === (source.article ?? null));
+        return row?.excerpt ? { ...source, excerpt: row.excerpt.slice(0, 1_200) } : source;
+      }),
+    };
+  } catch {
+    // Old rows can predate exact-quote persistence; the legal answer and its
+    // canonical Lex link remain available without inventing a quotation.
+    return result;
+  }
+}
+
 async function conversationTurnsForClient(input: {
   db: D1Database;
   conversationId: string;
@@ -1187,19 +1283,22 @@ async function conversationTurnsForClient(input: {
   leafBranchId: string | null;
 }) {
   const turns = await loadAiConversationTurns(input);
-  return turns.flatMap((turn) => {
-    if (!turn.structuredJson) return [];
-    const { result, sourceFreshness } = storedConversationResult(turn.structuredJson);
-    return [{
+  const output = [];
+  for (const turn of turns) {
+    if (!turn.structuredJson) continue;
+    const stored = storedConversationResult(turn.structuredJson);
+    const result = await restoreDisplayedCitationExcerpts(input.db, turn.responseMessageId, stored.result);
+    output.push({
       branchId: turn.branchId,
       requestMessageId: turn.requestMessageId,
       responseMessageId: turn.responseMessageId,
       question: turn.question,
       createdAt: turn.createdAt,
       result,
-      sourceFreshness,
-    }];
-  });
+      sourceFreshness: stored.sourceFreshness,
+    });
+  }
+  return output;
 }
 
 function boundedConversationHistory(

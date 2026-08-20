@@ -21,7 +21,10 @@ test("comparison entry always opens comparison mode instead of the document rout
   assert.match(shell, /\["documents", Files, "Мои документы", "Mening hujjatlarim"\]/);
   assert.match(shell, /\["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"\]/);
   assert.match(shell, /\["document-review", FileCheck2, "Проверить документ", "Hujjatni tekshirish"\]/);
-  assert.match(shell, /\["document-review\?mode=compare", Files, "Сравнить версии", "Versiyalarni solishtirish"\]/);
+  assert.match(
+    shell,
+    /\[\s*"document-review\?mode=compare",\s*Files,\s*"Сравнить версии",\s*"Versiyalarni solishtirish",?\s*\]/,
+  );
   assert.doesNotMatch(shell, /\["documents\/comparisons", Files, "Сравнить версии", "Versiyalarni solishtirish"\]/);
   assert.match(shell, /const \[route, query\] = slug\.split\("\?"\)/);
   assert.match(shell, /new URLSearchParams\(query\)/);

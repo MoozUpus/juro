@@ -74,6 +74,7 @@ test("case section UI uses URL navigation, real endpoints and allowlisted offici
   assert.match(client, /analysisId=/);
   assert.match(client, /documents\/comparisons/);
   assert.match(client, /url\.hostname === "lex\.uz"/);
-  assert.match(client, /url\.hostname === "advice\.uz"/);
+  assert.match(client, /url\.hostname\.endsWith\("\.lex\.uz"\)/);
+  assert.doesNotMatch(client, /advice\.uz/);
   assert.doesNotMatch(client, /dangerouslySetInnerHTML/);
 });

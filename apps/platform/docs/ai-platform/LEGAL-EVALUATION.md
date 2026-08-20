@@ -1,6 +1,15 @@
 # JURO legal evaluation
 
-Updated: 2026-08-13
+Updated: 2026-08-15
+
+The canonical protected staging execution completed on 2026-08-14: 314/314
+unique runs have immutable per-scenario evidence linked to a named
+`legal_reviewer` decision made with fresh MFA. The scope digest, event chain and
+compact export digest were independently reverified. See
+`../../../../docs/integrations/huquq-ai/STAGING_RELEASE_EVIDENCE_2026-08-14.md`.
+This closes that exact direct-source evaluation gate only; changed prompts,
+models or source snapshots require a new review, and the indexed-corpus release
+gate remains separate.
 
 ## Reproducible corpus harness
 
@@ -116,6 +125,7 @@ legal correctness of real provider output or substitute for named legal review.
   applicable date, expected answer, result, and remediation.
 
 The corpus and fail-closed automated gate are implemented. Unit fixtures only
-exercise the validator and are never legal ground truth. A release-quality
-percentage is still not claimed until all 314 real outputs, current live-link
-checks and named human reviews are supplied through the validator.
+exercise the validator and are never legal ground truth. The 2026-08-14
+canonical evidence satisfies the exact 314-case review contract above; no
+quality percentage is carried forward to a changed model, prompt, source
+snapshot or the still-growing indexed corpus without a new reproducible run.

@@ -1,12 +1,15 @@
 # Interactive AI reliability and status evidence
 
-Status: **exact staging candidate meets legal-chat SLO; external legal-review gate remains open**.
-Updated: 2026-08-14
+Status: **exact staging candidate meets legal-chat SLO; its canonical 314-case
+legal-review evidence completed later on 2026-08-14**.
+Updated: 2026-08-15
 
 This document describes the contracts introduced with migrations `0112` and
 `0113`, plus the evidence observed at the 2026-08-12 and 2026-08-14 staging
-checkpoints. It does not claim production deployment, a healthy provider fleet
-or completed legal review.
+checkpoints. The named fresh-MFA review and per-scenario ledger completed later
+as recorded in `../../../../docs/integrations/huquq-ai/STAGING_RELEASE_EVIDENCE_2026-08-14.md`.
+That later evidence does not certify the newer indexed-corpus snapshot or a
+healthy provider fleet.
 
 ## Exact-candidate checkpoint — 2026-08-14
 
@@ -27,7 +30,8 @@ content-free nearest-rank results:
 This satisfies the configured sample minimum and the p95 legal-chat SLO for
 this exact staging candidate. It does not certify another deployment, the
 Anthropic tail, legal correctness or production readiness. The named external
-human review of all 314 cases remains absent and fail-closed.
+human review of all 314 cases was still absent at this exact-candidate
+checkpoint; it was completed later through the protected evidence flow.
 
 ## Staging checkpoint — 2026-08-12
 
@@ -198,9 +202,10 @@ rollout and needs separate approval. See [ROLLBACK.md](./ROLLBACK.md).
 - The 20-sample p50/p95 result applies only to Worker
   `e201be50-1c16-42aa-8031-3a379c6b7c06`; any relevant code, configuration,
   model or binding change requires a new window.
-- The external named human review and staging-persisted evidence for all 314
-  legal-evaluation cases are still absent, so the production release gate
-  remains fail-closed.
+- At this dated checkpoint the external named human review and staging-persisted
+  evidence for all 314 legal-evaluation cases were absent. They were completed
+  later on 2026-08-14; the indexed-corpus release gate remains separately
+  fail-closed until its own frozen-snapshot benchmark passes.
 - The post-deploy Anthropic recovery is one fresh operational observation, not
   enough data to certify its tail behavior or the end-to-end SLO.
 - Browser, accessibility, legal-quality, scanner and document-analysis gates

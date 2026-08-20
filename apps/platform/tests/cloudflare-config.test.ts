@@ -150,7 +150,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       config.vars.LEGAL_DIRECT_RETRIEVAL_ENABLED,
       "true",
     );
-    for (const flag of [
+    const stagingCorpusFlags = new Set([
       "LEGAL_CORPUS_ENABLED",
       "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
       "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
@@ -159,8 +159,26 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
       "LEGAL_CORPUS_HISTORICAL_ENABLED",
       "LEGAL_CORPUS_SHADOW_MODE",
+    ]);
+    for (const flag of [
+      "LEGAL_CORPUS_ENABLED",
+      "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED",
+      "LEGAL_CORPUS_AUTO_INGEST_ENABLED",
+      "LEGAL_CORPUS_MULTILINGUAL_ENABLED",
+      "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST",
+      "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST",
+      "LEGAL_CORPUS_HISTORICAL_ENABLED",
+      "LEGAL_CORPUS_DENSE_ENABLED",
+      "LEGAL_CORPUS_SHADOW_MODE",
     ]) {
-      assert.equal(config.vars[flag], "false", `${environment} must keep ${flag} fail-closed`);
+      const expected = environment === "staging" && stagingCorpusFlags.has(flag)
+        ? "true"
+        : "false";
+      assert.equal(
+        config.vars[flag],
+        expected,
+        `${environment} must configure ${flag} as ${expected}`,
+      );
     }
     assert.equal(
       config.vars.LEGAL_LEX_RSS_DISCOVERY_ENABLED,
@@ -176,7 +194,9 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     );
     assert.equal(
       config.vars.LAWYER_PROFILE_DIRECTORY_ENABLED,
-      environment === "staging" || environment === "production" ? "true" : "false",
+      environment === "development" || environment === "staging" || environment === "production"
+        ? "true"
+        : "false",
     );
     assert.equal(
       config.vars.GUEST_AI_ENABLED,
@@ -483,6 +503,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
   assert.deepEqual(source.env.staging.routes, []);
   assert.deepEqual(source.env.production.routes, [
     { pattern: "app.juro.uz", zone_name: "juro.uz", custom_domain: true },
+    { pattern: "lawyer.juro.uz", zone_name: "juro.uz", custom_domain: true },
     { pattern: "admin.juro.uz", zone_name: "juro.uz", custom_domain: true },
     { pattern: "status.juro.uz", zone_name: "juro.uz", custom_domain: true },
   ]);
@@ -535,6 +556,7 @@ test("pins verified D1 identifiers for every isolated environment and excludes s
     "IDENTITY_KEYRING",
     "AI_PROVIDER_API_KEY",
     "LEGISLATION_FEED_API_KEY",
+    "QDRANT_API_KEY",
     "PAYMENT_API_KEY",
     "PAYMENT_WEBHOOK_SECRET",
   ]) {

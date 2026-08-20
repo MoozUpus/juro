@@ -33,6 +33,7 @@ import {
   deviceContinuityCookie,
   mfaChallengeCookie,
   sessionCookie,
+  sharedAuthCookieDomain,
 } from "../../../../lib/auth/session";
 import {
   createPrimarySessionIfMfaDisabled,
@@ -229,9 +230,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       acceptedAt: now,
     });
   }
+  const requestHostname = new URL(request.url).hostname;
+  const lawyerHost = requestHostname.toLowerCase() === "lawyer.juro.uz";
   const redirectTo = purpose === "register" || !user.onboardingCompletedAt
     ? `/${locale}/onboarding`
-    : `/${locale}/${accountType}/dashboard`;
+    : lawyerHost && accountType === "lawyer" ? `/${locale}/dashboard` : `/${locale}/${accountType}/dashboard`;
   if (await hasActiveMfa(db, user.id)) {
     try {
       const challenge = await createLoginMfaChallenge(
@@ -318,7 +321,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ok: true,
     redirectTo,
   }, 200, [
-    sessionCookie(session.token, body.rememberMe),
+    sessionCookie(session.token, body.rememberMe, sharedAuthCookieDomain(requestHostname)),
     ...(session.deviceContinuityToken
       ? [deviceContinuityCookie(session.deviceContinuityToken)]
       : []),

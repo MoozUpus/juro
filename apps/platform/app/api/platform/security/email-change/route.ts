@@ -28,7 +28,10 @@ import {
   requireRecentLocalSession,
 } from "../../../../../lib/auth/mfa-service";
 import type { LocalSession } from "../../../../../lib/auth/session-management";
-import { sessionCookieUntil } from "../../../../../lib/auth/session-persistence";
+import {
+  sessionCookieUntil,
+  sharedAuthCookieDomain,
+} from "../../../../../lib/auth/session-persistence";
 import { sessionTokenFromCookie } from "../../../../../lib/auth/session-token";
 import {
   assertSafeWrite,
@@ -499,6 +502,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       securityNotificationQueued: true,
     },
     200,
-    [sessionCookieUntil(result.session.token, result.session.expiresAt)],
+    [sessionCookieUntil(
+      result.session.token,
+      result.session.expiresAt,
+      undefined,
+      sharedAuthCookieDomain(new URL(request.url).hostname),
+    )],
   );
 });

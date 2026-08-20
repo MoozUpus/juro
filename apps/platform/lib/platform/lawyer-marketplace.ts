@@ -9,7 +9,8 @@ export const lawyerMarketplaceStatuses = [
   "archived",
 ] as const;
 
-export type LawyerMarketplaceStatus = (typeof lawyerMarketplaceStatuses)[number];
+export type LawyerMarketplaceStatus =
+  (typeof lawyerMarketplaceStatuses)[number];
 
 export type LawyerMarketplaceCompletionInput = {
   displayName: string;
@@ -51,13 +52,19 @@ export function missingLawyerMarketplaceFields(
   if (!profile.consultationFormats.length) missing.push("consultationFormats");
   if (!profilePhotoPresent(profile)) missing.push("profilePhoto");
   if (!profile.hasPhone) missing.push("phone");
-  if (!['available', 'limited', 'unavailable'].includes(profile.availabilityStatus)) {
+  if (
+    !["available", "limited", "unavailable"].includes(
+      profile.availabilityStatus,
+    )
+  ) {
     missing.push("availabilityStatus");
   }
   return missing;
 }
 
-function profilePhotoPresent(profile: LawyerMarketplaceCompletionInput): boolean {
+function profilePhotoPresent(
+  profile: LawyerMarketplaceCompletionInput,
+): boolean {
   return hasText(profile.profilePhotoKey);
 }
 
@@ -84,5 +91,10 @@ export function mayReceiveLawyerRequests(status: string): boolean {
 }
 
 export function isRestrictedLawyerMarketplaceStatus(status: string): boolean {
-  return status === "suspended" || status === "blocked" || status === "archived";
+  return (
+    status === "pending_review" ||
+    status === "suspended" ||
+    status === "blocked" ||
+    status === "archived"
+  );
 }

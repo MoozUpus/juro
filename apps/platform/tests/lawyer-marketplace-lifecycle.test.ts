@@ -50,7 +50,7 @@ test("only an approved profile may receive a client request", () => {
   assert.equal(isRestrictedLawyerMarketplaceStatus("suspended"), true);
   assert.equal(isRestrictedLawyerMarketplaceStatus("blocked"), true);
   assert.equal(isRestrictedLawyerMarketplaceStatus("archived"), true);
-  assert.equal(isRestrictedLawyerMarketplaceStatus("pending_review"), false);
+  assert.equal(isRestrictedLawyerMarketplaceStatus("pending_review"), true);
 });
 
 test("restricted profiles are locked for edits and excluded from new handoff work", () => {
@@ -77,6 +77,42 @@ test("profile status notifications are localized and preserve only a bounded rev
   const uz = localizedLawyerProfileStatusNotification("uz", "pending_review");
   assert.equal(uz.title, "Yurist profilingiz tekshiruvga yuborildi");
   assert.doesNotMatch(uz.body, /Izoh:/u);
+});
+
+test("lawyer scheduling persists recurring hours and bounded unavailability", () => {
+  const route = readFileSync(new URL("../app/api/platform/lawyer-schedule/route.ts", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../drizzle/0142_legal_ecosystem_foundation.sql", import.meta.url), "utf8");
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /requireApiUser\(\)/);
+  assert.match(route, /lawyer_unavailability_periods/);
+  assert.match(route, /datetime\(\{ offset: true \}\)/);
+  assert.match(route, /max\(100\)/);
+  assert.match(migration, /CREATE TABLE `lawyer_availability_rules`/);
+  assert.match(migration, /CREATE TABLE `lawyer_unavailability_periods`/);
+  assert.match(migration, /CHECK \(`starts_at` < `ends_at`\)/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE/iu);
+});
+
+test("consultation transitions are participant-scoped, audited and return a real result", () => {
+  const route = readFileSync(new URL("../app/api/platform/lawyer-consultations/route.ts", import.meta.url), "utf8");
+  assert.match(route, /assertSafeWrite\(request\)/);
+  assert.match(route, /!isLawyer && !isClient/);
+  assert.match(route, /!isClient \|\| existing\.status !== "proposed"/);
+  assert.match(route, /!isLawyer \|\| !\["confirmed", "in_progress"\]\.includes/);
+  assert.match(route, /resultNote: z\.string\(\)\.trim\(\)\.min\(1\)\.max\(4_000\)/);
+  assert.match(route, /lawyer_consultation_\$\{status\}/);
+  assert.match(route, /CASE WHEN \?='completed' THEN \? ELSE result_note END/);
+});
+
+test("lawyer application has an explicit submit gate and draft saves do not publish", () => {
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  const submitRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/submit/route.ts", import.meta.url), "utf8");
+  assert.match(profileRoute, /lawyer_profile_draft_saved/);
+  assert.doesNotMatch(profileRoute, /lawyer_profile_submitted/);
+  assert.match(submitRoute, /marketplace_status='pending_review'/);
+  assert.match(submitRoute, /missingLawyerMarketplaceFields/);
+  assert.match(submitRoute, /lawyer_profile_submitted/);
+  assert.match(submitRoute, /profile_revision=\?/);
 });
 
 test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {

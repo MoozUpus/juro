@@ -1,0 +1,147 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "juro-legal-corpus-development",
+  "main": "./worker/legal-corpus-worker.ts",
+  "compatibility_date": "2026-07-26",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "keep_vars": true,
+  "workers_dev": false,
+  "preview_urls": false,
+  "vars": {
+    "APP_ENV": "development",
+    "LEGAL_CORPUS_ENABLED": "false",
+    "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
+    "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
+    "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
+    "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
+    "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
+    "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+    "LEGAL_CORPUS_DENSE_ENABLED": "false",
+    "LEGAL_CORPUS_SHADOW_MODE": "false"
+  },
+  "triggers": {
+    "crons": ["*/5 * * * *", "5 19 * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "juro-development",
+      "database_id": "d07670cf-f7bf-460c-a668-101671d4c330",
+      "migrations_dir": "./drizzle"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "juro-development-files"
+    },
+    {
+      "binding": "BACKUP_BUCKET",
+      "bucket_name": "juro-development-backups"
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "logs": {
+      "enabled": true,
+      "head_sampling_rate": 1,
+      "invocation_logs": true
+    },
+    "traces": {
+      "enabled": true,
+      "head_sampling_rate": 0.1
+    }
+  },
+  "env": {
+    "staging": {
+      "name": "juro-legal-corpus-staging",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "staging",
+        "LEGAL_CORPUS_ENABLED": "true",
+        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "true",
+        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "true",
+        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "true",
+        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "true",
+        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "true",
+        "LEGAL_CORPUS_HISTORICAL_ENABLED": "true",
+        "LEGAL_CORPUS_DENSE_ENABLED": "false",
+        "LEGAL_CORPUS_SHADOW_MODE": "true",
+        "QDRANT_URL": "https://qdrant.internal",
+        "QDRANT_COLLECTION": "juro_legal_staging",
+        "EMBEDDING_MODEL": "text-embedding-3-large"
+      },
+      "triggers": {
+        "crons": ["*/4 * * * *", "5 19 * * *"]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "juro-staging",
+          "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+          "migrations_dir": "./drizzle"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "BUCKET",
+          "bucket_name": "juro-staging-files"
+        },
+        {
+          "binding": "BACKUP_BUCKET",
+          "bucket_name": "juro-staging-backups"
+        }
+      ],
+      "services": [
+        {
+          "binding": "QDRANT_SERVICE",
+          "service": "juro-platform-staging"
+        },
+        {
+          "binding": "LEGAL_CORPUS_EMBEDDING_SERVICE",
+          "service": "juro-platform-staging"
+        }
+      ]
+    },
+    "production": {
+      "name": "juro-legal-corpus",
+      "workers_dev": false,
+      "preview_urls": false,
+      "vars": {
+        "APP_ENV": "production",
+        "LEGAL_CORPUS_ENABLED": "false",
+        "LEGAL_CORPUS_AUTO_INGEST_ENABLED": "false",
+        "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED": "false",
+        "LEGAL_CORPUS_MULTILINGUAL_ENABLED": "false",
+        "LEGAL_CORPUS_OWNER_UPLOAD_AUTO_TRUST": "false",
+        "LEGAL_CORPUS_USER_UPLOAD_AUTO_TRUST": "false",
+        "LEGAL_CORPUS_HISTORICAL_ENABLED": "false",
+        "LEGAL_CORPUS_DENSE_ENABLED": "false",
+        "LEGAL_CORPUS_SHADOW_MODE": "false"
+      },
+      "triggers": {
+        "crons": ["*/5 * * * *", "5 19 * * *"]
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "juro-production",
+          "database_id": "4cce509b-0e02-4ca9-a3ba-a5ce1327aeda",
+          "migrations_dir": "./drizzle",
+          "migrations_pattern": "./drizzle/012[145-9]_*.sql"
+        }
+      ],
+      "r2_buckets": [
+        {
+          "binding": "BUCKET",
+          "bucket_name": "juro-private-documents"
+        },
+        {
+          "binding": "BACKUP_BUCKET",
+          "bucket_name": "juro-production-backups"
+        }
+      ]
+    }
+  }
+}

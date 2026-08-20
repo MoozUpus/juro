@@ -13,6 +13,17 @@ use production as a rehearsal target.
    present.
 6. Store the results as release evidence without source text or user content.
 
+For Qdrant, restore only the latest D1-ledgered manifest whose environment,
+collection, manifest SHA-256, snapshot size and R2 SHA-256 all verify. Recovery
+uses Qdrant's uploaded-snapshot endpoint with `priority=snapshot` and the exact
+checksum. It must then verify the collection contract and total point count.
+Because Container disk is ephemeral, application startup is allowed to perform
+this recovery through the private binding; it must fail closed when D1 has
+tracked point IDs but the private snapshot is absent or invalid. Any D1 point ID
+whose dense indexing timestamp is later than the restored snapshot cutoff is
+cleared and deterministically re-backfilled. Never create a new empty collection
+over an existing D1 vector ledger.
+
 `SQLITE_NOMEM`, a timeout or an incomplete import is a failed probe. It must
 never be recorded as an integrity pass. Delete local plaintext exports after
 the isolated restore and checksum evidence are complete.

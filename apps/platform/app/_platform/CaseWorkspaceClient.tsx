@@ -33,7 +33,8 @@ import { usePlatformBasePath } from "./PlatformRouteContext";
 
 type Step = { id: string; title: string; status: string; dueAt?: string | null };
 type CaseRecord = { id: string; title: string; description?: string | null; legalArea: string; status: string; nextDeadlineAt?: string | null; archivedAt?: string | null; completedAt?: string | null; lifecycleRevision?: number; progressPercent?: number; steps?: Step[] };
-type Task = { id: string; title: string; status: string; dueAt?: string | null; safeDueAt?: string | null };
+type TaskComment = { id: string; taskId: string; body: string; createdAt: string; authorName?: string | null };
+type Task = { id: string; title: string; description?: string | null; status: string; dueAt?: string | null; safeDueAt?: string | null; comments?: TaskComment[] };
 type CaseDocument = { id: string; title: string; status: string; language: string; planStepId?: string | null; updatedAt: string };
 type CaseActivity = { eventType: string; createdAt: string; metadata: Record<string, unknown> };
 type CaseConversation = { id: string; title: string; status: string; locale: string; updatedAt: string };
@@ -262,7 +263,7 @@ function PlanSteps({ item, locale, base, embedded = false }: { item: CaseRecord;
 
 function TaskList({ tasks, locale, embedded = false }: { tasks: Task[]; locale: PlatformLocale; embedded?: boolean }) {
   const ru = locale === "ru";
-  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={ListChecks} title={ru ? "Задачи" : "Vazifalar"} />{tasks.length ? <ul className="case-workspace-tasks">{tasks.map((task) => <li key={task.id}><div><strong>{task.title}</strong><span>{date(task.dueAt, locale)}</span></div><b>{statusLabel(task.status, ru)}</b></li>)}</ul> : <p className="case-workspace-muted">{ru ? "Подтвердите план, чтобы создать задачи и напоминания." : "Vazifalar va eslatmalar yaratish uchun rejani tasdiqlang."}</p>}</section>;
+  return <section className={embedded ? "case-workspace-embedded" : undefined}><PanelHeading icon={ListChecks} title={ru ? "Задачи" : "Vazifalar"} />{tasks.length ? <ul className="case-workspace-tasks">{tasks.map((task) => <li key={task.id}><div className="case-workspace-task-copy"><strong>{task.title}</strong>{task.description && <p>{task.description}</p>}<span>{date(task.dueAt, locale)}</span>{Boolean(task.comments?.length) && <ol className="case-workspace-task-comments" aria-label={ru ? "Комментарии юриста" : "Yurist izohlari"}>{task.comments?.map((comment) => <li key={comment.id}><MessageSquareText aria-hidden="true" /><div><strong>{comment.authorName || (ru ? "Юрист" : "Yurist")}</strong><p>{comment.body}</p><time>{date(comment.createdAt, locale)}</time></div></li>)}</ol>}</div><b>{statusLabel(task.status, ru)}</b></li>)}</ul> : <p className="case-workspace-muted">{ru ? "Подтвердите план, чтобы создать задачи и напоминания." : "Vazifalar va eslatmalar yaratish uchun rejani tasdiqlang."}</p>}</section>;
 }
 
 function sectionLabel(section: CaseSection, ru: boolean) {
@@ -273,7 +274,7 @@ function sectionLabel(section: CaseSection, ru: boolean) {
 }
 
 function activityLabel(eventType: string, ru: boolean) {
-  const labels: Record<string, [string, string]> = { case_created: ["Дело создано", "Ish yaratildi"], step_updated: ["Шаг плана обновлён", "Reja qadami yangilandi"], plan_changes_confirmed: ["Изменения плана подтверждены", "Reja o‘zgarishlari tasdiqlandi"], tasks_created: ["Задачи из плана подтверждены", "Rejadagi vazifalar tasdiqlandi"], document_created: ["Документ добавлен", "Hujjat qo‘shildi"], document_linked: ["Документ добавлен в дело", "Hujjat ishga qo‘shildi"], document_unlinked: ["Документ удалён из дела", "Hujjat ishdan olib tashlandi"], analysis_linked: ["Анализ добавлен в дело", "Tahlil ishga qo‘shildi"], analysis_unlinked: ["Анализ удалён из дела", "Tahlil ishdan olib tashlandi"], legal_bookmark_saved: ["Правовой источник сохранён", "Huquqiy manba saqlandi"], legal_bookmark_removed: ["Правовая закладка удалена", "Huquqiy xatcho‘p olib tashlandi"] };
+  const labels: Record<string, [string, string]> = { case_created: ["Дело создано", "Ish yaratildi"], step_updated: ["Шаг плана обновлён", "Reja qadami yangilandi"], plan_changes_confirmed: ["Изменения плана подтверждены", "Reja o‘zgarishlari tasdiqlandi"], tasks_created: ["Задачи из плана подтверждены", "Rejadagi vazifalar tasdiqlandi"], document_created: ["Документ добавлен", "Hujjat qo‘shildi"], document_linked: ["Документ добавлен в дело", "Hujjat ishga qo‘shildi"], document_unlinked: ["Документ удалён из дела", "Hujjat ishdan olib tashlandi"], analysis_linked: ["Анализ добавлен в дело", "Tahlil ishga qo‘shildi"], analysis_unlinked: ["Анализ удалён из дела", "Tahlil ishdan olib tashlandi"], legal_bookmark_saved: ["Правовой источник сохранён", "Huquqiy manba saqlandi"], legal_bookmark_removed: ["Правовая закладка удалена", "Huquqiy xatcho‘p olib tashlandi"], lawyer_task_created: ["Юрист добавил задачу", "Yurist vazifa qo‘shdi"], lawyer_task_updated: ["Юрист обновил задачу", "Yurist vazifani yangiladi"], lawyer_task_comment_added: ["Юрист добавил комментарий", "Yurist izoh qo‘shdi"], lawyer_document_requested: ["Юрист запросил документ", "Yurist hujjat so‘radi"], lawyer_document_provided: ["Клиент предоставил документ", "Mijoz hujjat taqdim etdi"], lawyer_document_request_cancelled: ["Запрос документа отменён", "Hujjat so‘rovi bekor qilindi"] };
   return labels[eventType]?.[ru ? 0 : 1] || (ru ? "Дело обновлено" : "Ish yangilandi");
 }
 

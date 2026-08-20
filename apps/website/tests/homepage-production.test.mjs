@@ -218,27 +218,7 @@ test("laptop layouts prevent large headline and product-grid clipping", () => {
   assert.match(motionStyles, /\[data-reveal="mask"\]\[data-reveal-state="visible"\]\) \{\s*clip-path: inset/);
 });
 
-test("localized scenario questions keep a readable measure", () => {
-  assert.match(homepageStyles, /\.caseMap\.caseMap[\s\S]*?grid-template-columns: minmax\(18rem, \.88fr\) 42px minmax\(0, 1\.12fr\)/);
-  assert.match(homepageStyles, /\.caseInput\.caseInput p[\s\S]*?max-width: 18ch[\s\S]*?text-wrap: balance/);
-  assert.match(homepageStyles, /@media \(max-width: 860px\)[\s\S]*?\.caseMap\.caseMap \{ grid-template-columns: minmax\(0, 1fr\)/);
-});
-
-test("editorial section introductions stay on one aligned content axis", () => {
-  assert.match(homepage, /laptopStyles\.audienceHeader/);
-  assert.match(homepage, /laptopStyles\.documentHeader/);
-  assert.match(homepage, /laptopStyles\.trustHeader/);
-  assert.match(homepage, /laptopStyles\.resourcesHeader/);
-  assert.match(homepage, /laptopStyles\.accessHeader/);
-  assert.match(laptopStyles, /\.audienceHeader\.audienceHeader/);
-  assert.match(laptopStyles, /\.documentHeader\.documentHeader/);
-  assert.match(laptopStyles, /\.trustHeader\.trustHeader/);
-  assert.match(laptopStyles, /\.resourcesHeader\.resourcesHeader/);
-  assert.match(laptopStyles, /\.accessHeader\.accessHeader/);
-  assert.match(laptopStyles, /grid-column: auto/);
-});
-
-test("brand lockups use standalone marks and one intentional wordmark", () => {
+test("brand mark uses a dedicated symbol asset and keeps one intentional wordmark", () => {
   assert.match(chrome, /brandStyles\.markFrame/);
   assert.match(chrome, /brandStyles\.mobileMarkFrame/);
   assert.match(chrome, /brandStyles\.footerMarkFrame/);

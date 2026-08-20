@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  discoverLexArchiveRepresentation,
+  discoverExactLexCoreCodeDocument,
   discoverLexDocumentLinks,
   discoverLexRevisionHistory,
   languageVariantsFromLinks,
   parseLexDocumentEffectivity,
+  parseLexDocumentMetadata,
   parseLexDocumentUrl,
+  LEX_CORE_CODE_TARGETS,
+  lexCoreCodeSearchUrl,
 } from "../lib/legal-corpus/lex-discovery";
 import {
   chunkLegalProvision,
@@ -25,6 +30,57 @@ test("Lex discovery deduplicates canonical language variants and ignores off-ori
     { canonicalDocumentId: "lexuz:111189", language: "uz-Latn", sourceUrl: "https://lex.uz/uz/docs/-111189" },
   ]);
   assert.equal(languageVariantsFromLinks("lexuz:111189", links).length, 2);
+});
+
+test("core-code discovery accepts only an exact official code title, never an amendment", () => {
+  const target = LEX_CORE_CODE_TARGETS.find((candidate) => candidate.id === "family")!;
+  const html = [
+    '<a href="/ru/docs/111">О внесении изменений в Семейный кодекс Республики Узбекистан</a>',
+    '<a href="/ru/docs/222">Семейный кодекс Республики Узбекистан</a>',
+  ].join("\n");
+  assert.deepEqual(discoverExactLexCoreCodeDocument(html, target, lexCoreCodeSearchUrl(target)), {
+    canonicalDocumentId: "lexuz:222",
+    language: "ru",
+    sourceUrl: "https://lex.uz/ru/docs/222",
+  });
+  assert.equal(discoverExactLexCoreCodeDocument(
+    '<a href="/ru/docs/222">Семейный кодекс Республики Узбекистан (проект)</a>', target,
+  ), null);
+});
+
+test("Lex archive representation accepts one exact same-origin numeric ZIP", () => {
+  assert.deepEqual(discoverLexArchiveRepresentation(`
+    <a href="https://evil.example/files/6783200.zip">outside</a>
+    <a href="/files/6783200.zip">Ҳужжат матни PDF шаклда берилган.</a>
+    <a href="/uz/files/6783200.zip">localized duplicate</a>
+    <a href="/files/not-a-number.zip">invalid</a>
+    <a href="/files/6783200.zip?download=1">query</a>
+  `), {
+    sourceUrl: "https://lex.uz/files/6783200.zip",
+    archiveId: "6783200",
+  });
+  assert.throws(
+    () => discoverLexArchiveRepresentation(`
+      <a href="/files/6783200.zip">one</a>
+      <a href="/files/6783246.zip">two</a>
+    `),
+    /LEGAL_CORPUS_ATTACHMENT_CONFLICT/,
+  );
+  assert.deepEqual(
+    discoverLexArchiveRepresentation(
+      '<a href="/ru/files/6783200.zip">localized official PDF</a>',
+    ),
+    {
+      sourceUrl: "https://lex.uz/files/6783200.zip",
+      archiveId: "6783200",
+    },
+  );
+  assert.equal(
+    discoverLexArchiveRepresentation(
+      '<a href="/fr/files/6783200.zip">unknown locale</a>',
+    ),
+    null,
+  );
 });
 
 test("Lex revision discovery keeps only same-document ONDATE history newest first", () => {
@@ -61,6 +117,33 @@ test("Lex effectivity is derived from official visible status, never fetch time"
     <div>Дата вступления в силу</div><div>08.11.2026</div>
     <div>Акт еще не вступил в силу</div>
   `), { status: "unknown", validFrom: "2026-11-08", validTo: null });
+  assert.deepEqual(parseLexDocumentEffectivity(`
+    <main><div class="docHeader"><div>Кучга кириш санаси</div><div>24.12.2024</div></div>
+    <div class="container docBody-container"><div id="divCont">
+      Аввалги қарор ўз кучини йўқотган деб ҳисоблансин.
+    </div></div></main>
+  `), { status: "active", validFrom: "2024-12-24", validTo: null });
+});
+
+test("Lex metadata uses only the official document header and keeps ambiguous fields null", () => {
+  assert.deepEqual(parseLexDocumentMetadata(`
+    <main><div class="docHeader"><div class="docHeader__item-label">
+      Постановление Центральной избирательной комиссии Республики Узбекистан,
+      от 24.12.2024 г. № 1424
+    </div><div>Дата вступления в силу</div><div>24.12.2024</div></div>
+    <div class="container docBody-container">В тексте упомянут приказ № 99.</div></main>
+  `), {
+    documentType: "Постановление",
+    documentNumber: "1424",
+    adoptingAuthority: "Центральной избирательной комиссии Республики Узбекистан",
+    adoptionDate: "2024-12-24",
+  });
+  assert.deepEqual(parseLexDocumentMetadata("<main><p>Закон без официальной карточки № 7.</p></main>"), {
+    documentType: null,
+    documentNumber: null,
+    adoptingAuthority: null,
+    adoptionDate: null,
+  });
 });
 
 test("provision parser keeps article structure and only splits genuinely large articles", () => {

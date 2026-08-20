@@ -20,9 +20,17 @@ import {
   featureEnabled,
   type LegalCorpusFeatureFlag,
 } from "./trust";
+import { createQdrantDenseSearch } from "./qdrant-indexing";
 
 type CorpusRuntimeEnv = Pick<Env, "DB"> & { APP_ENV?: Env["APP_ENV"] }
-  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
+  & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>
+  & {
+    OPENAI_API_KEY?: string;
+    EMBEDDING_MODEL?: string;
+    QDRANT_URL?: string;
+    QDRANT_API_KEY?: string;
+    QDRANT_COLLECTION?: string;
+  };
 
 export type LegalChatSourceEvidence = {
   sourceId: string;
@@ -43,6 +51,7 @@ export type LegalChatSourceRetrieval = {
   sourceValidationStatus: "validated" | "unavailable";
   errors: Array<{ code: string }>;
   evidence: LegalChatSourceEvidence[];
+  coverageStatus: "good_coverage" | "partial_coverage" | "weak_coverage" | "no_coverage";
 };
 
 type LiveSearchInput = Parameters<typeof retrieveLiveLexSources>[0];
@@ -55,6 +64,9 @@ function providerCoverage(query: string, sources: readonly LegalSourceProviderRe
       documentId: source.document_id,
       documentTitle: source.document_title,
       documentType: source.document_type,
+      documentNumber: source.document_number,
+      adoptingAuthority: source.adopting_authority,
+      sourceClass: source.source_class,
       articleNumber: source.article_number || null,
       articleTitle: source.article_title || null,
       exactQuote: source.exact_quote,
@@ -110,6 +122,10 @@ function indexedContext(source: LegalSourceProviderResult): LegalSourceContext |
     locale: sourceLocale(source.language),
     publishedAt: null,
     sourceType: "lex",
+    documentType: source.document_type,
+    documentNumber: source.document_number,
+    adoptingAuthority: source.adopting_authority,
+    sourceClass: source.source_class,
     status: "verified",
     verificationState: "verified",
     verifiedAt: source.fetched_at,
@@ -141,6 +157,7 @@ function indexedContext(source: LegalSourceProviderResult): LegalSourceContext |
 function indexedRetrieval(
   sources: readonly LegalSourceProviderResult[],
   now: Date,
+  coverageStatus: LegalChatSourceRetrieval["coverageStatus"],
 ): LegalChatSourceRetrieval {
   const contexts = sources.map(indexedContext).filter((source): source is LegalSourceContext => Boolean(source));
   const retrievedAt = contexts.map((source) => source.lastCheckedAt)
@@ -167,7 +184,50 @@ function indexedRetrieval(
       validatedAt: source.verifiedAt,
       validationStatus: "validated",
     })),
+    coverageStatus,
   };
+}
+
+function liveCoverage(
+  query: string,
+  sources: readonly LegalSourceContext[],
+): LegalChatSourceRetrieval["coverageStatus"] {
+  return assessLegalCorpusCoverage({
+    query,
+    sources: sources.flatMap((source) => {
+      const exactQuote = source.spans?.[0]?.text ?? source.excerpt ?? "";
+      if (!exactQuote.trim()) return [];
+      return [{
+        chunkId: source.id,
+        documentId: source.actIdentifier ?? source.id,
+        documentTitle: source.actTitle,
+        documentType: "legal_act",
+        documentNumber: source.actIdentifier ?? null,
+        adoptingAuthority: null,
+        sourceClass: "OFFICIAL_LEGISLATION" as const,
+        articleNumber: source.article ?? null,
+        articleTitle: null,
+        exactQuote,
+        sourceUrl: source.officialUrl,
+        language: source.locale === "uzc" ? "uz-Cyrl" as const
+          : source.locale === "uz" ? "uz-Latn" as const
+            : source.locale === "en" ? "en" as const : "ru" as const,
+        status: source.applicabilityStatus === "historical" ? "historical" as const : "active" as const,
+        validFrom: source.effectiveDate ?? null,
+        validTo: null,
+        versionDate: source.revisionDate,
+        fetchedAt: source.lastCheckedAt,
+        contentHash: source.contentSha256,
+      }];
+    }),
+  });
+}
+
+function withLiveCoverage(
+  result: LiveLexRetrievalResult,
+  query: string,
+): LegalChatSourceRetrieval {
+  return { ...result, coverageStatus: liveCoverage(query, result.sources) };
 }
 
 async function queueValidatedLiveSources(
@@ -221,12 +281,19 @@ export async function retrieveCorpusAwareLegalSources(input: {
     discoverOfficialUrls: input.discoverOfficialUrls,
   };
   if (!featureEnabled(input.env, "LEGAL_CORPUS_ENABLED")) {
-    return liveSearch(liveInput);
+    return withLiveCoverage(await liveSearch(liveInput), input.query);
   }
 
   let indexed: LegalSourceProviderResult[] = [];
   try {
-    indexed = await new LexUzIndexedProvider(input.env.DB).search({
+    const denseSearch = input.env.APP_ENV
+      ? createQdrantDenseSearch({
+        ...input.env,
+        APP_ENV: input.env.APP_ENV,
+        DB: input.env.DB,
+      })
+      : undefined;
+    indexed = await new LexUzIndexedProvider(input.env.DB, denseSearch).search({
       query: input.query,
       scope: input.scope,
       limit: input.limit,
@@ -236,7 +303,7 @@ export async function retrieveCorpusAwareLegalSources(input: {
     indexed = [];
   }
   const coverage = providerCoverage(input.query, indexed);
-  const indexedPacket = indexedRetrieval(indexed, input.now ?? new Date());
+  const indexedPacket = indexedRetrieval(indexed, input.now ?? new Date(), coverage);
   const hasUsableIndexedCoverage = indexedPacket.sources.length > 0
     && (coverage === "good_coverage" || coverage === "partial_coverage");
   const liveEnabled = featureEnabled(input.env, "LEGAL_CORPUS_LIVE_LEXUZ_ENABLED");
@@ -253,13 +320,15 @@ export async function retrieveCorpusAwareLegalSources(input: {
   if (featureEnabled(input.env, "LEGAL_CORPUS_SHADOW_MODE")) {
     const live = await liveSearch(liveInput);
     await queueValidatedLiveSources(input.env, live, input.correlationId);
-    return live;
+    return withLiveCoverage(live, input.query);
   }
   if (useIndexed) return indexedPacket;
   if (!liveEnabled) {
-    return hasUsableIndexedCoverage ? indexedPacket : indexedRetrieval([], input.now ?? new Date());
+    return hasUsableIndexedCoverage
+      ? indexedPacket
+      : indexedRetrieval([], input.now ?? new Date(), "no_coverage");
   }
   const live = await liveSearch(liveInput);
   await queueValidatedLiveSources(input.env, live, input.correlationId);
-  return live;
+  return withLiveCoverage(live, input.query);
 }

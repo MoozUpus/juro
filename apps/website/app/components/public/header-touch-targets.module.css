@@ -12,6 +12,14 @@
   padding-block: 0;
 }
 
+@media (max-width: 980px) {
+  /* Sign-in remains available inside the mobile panel. Reassert this after
+     the touch-target declaration so CSS-module load order cannot unhide it. */
+  .login {
+    display: none;
+  }
+}
+
 @media (max-width: 620px) {
   .language:not([aria-current="page"]) {
     display: none;
