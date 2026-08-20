@@ -17,6 +17,7 @@ export function JuroMotionDirector() {
     const chapters = Array.from(root.querySelectorAll<HTMLElement>("[data-chapter]"));
     const chapterLinks = Array.from(root.querySelectorAll<HTMLAnchorElement>("[data-chapter-link]"));
     const storyRail = root.querySelector<HTMLElement>("[data-story-rail]");
+    const storySection = storyRail?.closest<HTMLElement>("[data-chapter]") ?? null;
     const continuity = root.querySelector<HTMLElement>("[data-continuity-story]");
     const documentStory = root.querySelector<HTMLElement>("[data-document-story]");
     const handoff = root.querySelector<HTMLElement>("[data-handoff-story]");
@@ -63,7 +64,7 @@ export function JuroMotionDirector() {
     hero?.addEventListener("pointermove", onPointerMove, { passive: true });
 
     let scrollFrame = 0;
-    let lastClause = -1;
+    let lastContinuityStep = -1;
     const updateScrollStory = () => {
       scrollFrame = 0;
       const viewport = window.innerHeight;
@@ -92,41 +93,47 @@ export function JuroMotionDirector() {
       }
 
       if (storySteps.length) {
-        const target = viewport * 0.48;
-        let active = 0;
-        let distance = Number.POSITIVE_INFINITY;
+        const sectionRect = storySection?.getBoundingClientRect();
+        const stickyOffset = Math.min(144, viewport * .14);
+        const storyRange = Math.max(1, (sectionRect?.height ?? viewport) - viewport * .72);
+        const storyProgress = sectionRect ? clamp((stickyOffset - sectionRect.top) / storyRange) : 0;
+        const active = Math.round(storyProgress * (storySteps.length - 1));
         storySteps.forEach((step, index) => {
-          const rect = step.getBoundingClientRect();
-          const current = Math.abs(rect.top + rect.height / 2 - target);
-          if (current < distance) {
-            active = index;
-            distance = current;
-          }
+          step.dataset.active = index === active ? "true" : "false";
+          step.dataset.complete = index < active ? "true" : "false";
         });
-        storySteps.forEach((step, index) => { step.dataset.active = index === active ? "true" : "false"; });
-        storyRail?.style.setProperty("--story-progress", String(active / Math.max(1, storySteps.length - 1)));
+        const activeStep = storySteps[active];
+        if (storyRail && activeStep) {
+          const railRect = storyRail.getBoundingClientRect();
+          const stepCenter = (step: HTMLElement) => {
+            const rect = step.getBoundingClientRect();
+            return rect.top - railRect.top + rect.height / 2;
+          };
+          const trackStart = stepCenter(storySteps[0]);
+          const trackEnd = stepCenter(storySteps[storySteps.length - 1]);
+          const activeCenter = stepCenter(activeStep);
+          storyRail.style.setProperty("--story-track-start-px", `${Math.round(trackStart)}px`);
+          storyRail.style.setProperty("--story-track-height-px", `${Math.round(trackEnd - trackStart)}px`);
+          storyRail.style.setProperty("--story-progress-px", `${Math.round(activeCenter - trackStart)}px`);
+        }
       }
 
       if (documentStory) {
         const rect = documentStory.getBoundingClientRect();
         const progress = clamp((viewport * 0.76 - rect.top) / (rect.height + viewport * 0.34));
         documentStory.style.setProperty("--document-progress", String(progress));
-        const clause = Math.min(2, Math.floor(progress * 3));
-        if (clause !== lastClause) {
-          lastClause = clause;
-          document.dispatchEvent(new CustomEvent("juro:document-step", { detail: clause }));
-        }
       }
 
       if (continuity) {
         const rect = continuity.getBoundingClientRect();
-        const progress = clamp((viewport * 0.74 - rect.top) / (rect.height + viewport * 0.3));
+        const stickyOffset = Math.min(56, viewport * .06);
+        const progress = clamp((stickyOffset - rect.top) / Math.max(1, rect.height - viewport));
         continuity.style.setProperty("--continuity-progress", String(progress));
-        const active = Math.min(continuitySteps.length - 1, Math.floor(progress * continuitySteps.length));
-        continuitySteps.forEach((step, index) => {
-          if (index <= active) step.setAttribute("data-active", "true");
-          else step.removeAttribute("data-active");
-        });
+        const active = Math.round(progress * (continuitySteps.length - 1));
+        if (active !== lastContinuityStep) {
+          lastContinuityStep = active;
+          document.dispatchEvent(new CustomEvent("juro:continuity-step", { detail: active }));
+        }
       }
 
       if (handoff) {

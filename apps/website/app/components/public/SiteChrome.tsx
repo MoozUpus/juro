@@ -136,14 +136,14 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
       <a className={styles.skipLink} href="#main-content">{t.skip}</a>
       <div className={styles.headerInner}>
         <Link aria-label="JURO" className={`${styles.logo} ${brandStyles.logo}`} href={`/${locale}`}>
-          <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={313} priority src={tone === "dark" && !scrolled ? "/juro-logo-light.avif" : "/juro-logo-primary.avif"} unoptimized width={320} /></span>
+          <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={1000} priority src={tone === "dark" && !scrolled ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1000} /></span>
           <span className={brandStyles.wordmark}>JURO</span>
         </Link>
         <nav aria-label={t.nav} className={styles.desktopNav}>
           {nav.map(([label, href]) => <Link href={href} key={href}>{label}</Link>)}
         </nav>
         <div className={styles.actions}>
-          <Link aria-label={locale === "ru" ? "O‘zbekcha" : "Русский"} className={styles.language} href={localeHref}>{otherLocale.toUpperCase()}</Link>
+          <Link aria-label={locale === "ru" ? "O‘zbekcha" : "Русский"} className={styles.language} href={localeHref} scroll={false}>{otherLocale.toUpperCase()}</Link>
           <a className={styles.login} href={`https://app.juro.uz/${locale}/auth/login`}>{t.signIn}</a>
           <a className={styles.primary} href={`https://app.juro.uz/register?lang=${locale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
           <button aria-controls={panelId} aria-expanded={open} aria-label={t.open} className={styles.menuButton} onClick={() => setOpen(true)} ref={triggerRef} type="button"><Menu aria-hidden="true" size={22} /></button>
@@ -155,7 +155,7 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
           <div aria-label={t.nav} aria-modal="true" className={styles.mobilePanel} id={panelId} ref={panelRef} role="dialog">
             <div className={styles.mobileTop}>
               <div className={brandStyles.mobileBrand}>
-                <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={313} src="/juro-logo-primary.avif" unoptimized width={320} /></span>
+                <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={1000} src="/juro-mark.png" unoptimized width={1000} /></span>
                 <span>JURO</span>
               </div>
               <button aria-label={t.close} className={styles.closeButton} onClick={() => setOpen(false)} type="button"><X aria-hidden="true" size={22} /></button>
@@ -167,7 +167,7 @@ export function SiteHeader({ locale, tone = "light", languageHref }: { locale: L
               <Link href={`/${locale}/legal`} onClick={() => setOpen(false)}><span>07</span>{t.legal}<ArrowRight aria-hidden="true" size={18} /></Link>
             </nav>
             <div className={styles.mobileActions}>
-              <Link href={localeHref} onClick={() => setOpen(false)}>{locale === "ru" ? "O‘zbekcha" : "Русский"}</Link>
+              <Link href={localeHref} onClick={() => setOpen(false)} scroll={false}>{locale === "ru" ? "O‘zbekcha" : "Русский"}</Link>
               <a href={`https://app.juro.uz/register?lang=${locale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
             </div>
           </div>
@@ -191,7 +191,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
       <div className={styles.footerTop}>
         <div className={styles.footerBrand}>
           <Link aria-label="JURO" className={brandStyles.footerLogo} href={`/${locale}`}>
-            <span className={brandStyles.footerMarkFrame}><Image alt="" className={brandStyles.footerMark} height={313} src="/juro-logo-light.avif" unoptimized width={320} /></span>
+            <span className={brandStyles.footerMarkFrame}><Image alt="" className={brandStyles.footerMark} height={1000} src="/juro-mark-light.png" unoptimized width={1000} /></span>
             <span>JURO</span>
           </Link>
           <p>{t.description}</p>
@@ -200,7 +200,7 @@ export function SiteFooter({ locale }: { locale: Locale }) {
         <div className={styles.footerColumn}><strong>{t.companyLabel}</strong><Link href={`/${locale}/trust`}>Trust Center</Link><Link href={`/${locale}/video`}>{t.video}</Link><Link href={`/${locale}/knowledge/contract-review-preparation`}>{t.knowledge}</Link><a href="mailto:muzaffarbekmurodoff@gmail.com">{t.contact}</a></div>
         <div className={styles.footerColumn}><strong>{t.legalLabel}</strong><Link href={`/${locale}/legal`}>{t.legal}</Link><Link href={`/${locale}/privacy-policy`}>{t.privacy}</Link><Link href={`/${locale}/terms`}>{t.terms}</Link><Link href={`/${locale}/personal-data-processing`}>{t.data}</Link><Link href={`/${locale}/ai-rules`}>{t.aiRules}</Link></div>
       </div>
-      <div className={styles.footerBottom}><span>© {year} JURO</span><p>{t.note}</p><Link href={`/${locale === "ru" ? "uz" : "ru"}`}>{locale === "ru" ? "O‘zbekcha" : "Русский"}</Link></div>
+      <div className={styles.footerBottom}><span>© {year} JURO</span><p>{t.note}</p><Link href={`/${locale === "ru" ? "uz" : "ru"}`} scroll={false}>{locale === "ru" ? "O‘zbekcha" : "Русский"}</Link></div>
     </footer>
   );
 }

@@ -6,7 +6,6 @@ import {
   ArrowDownRight,
   ArrowRight,
   Check,
-  ChevronRight,
   CircleDot,
   Clock3,
   FileCheck2,
@@ -16,7 +15,7 @@ import {
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
-import { type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type CSSProperties, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { ru } from "../../../content/ru";
 import { uz } from "../../../content/uz";
 import type { Language } from "../../../content/types";
@@ -209,8 +208,9 @@ export function JuroHomepage({ language }: { language: Language }) {
   const content = language === "ru" ? ru : uz;
   const [scenario, setScenario] = useState(0);
   const [clause, setClause] = useState(0);
+  const [continuityStep, setContinuityStep] = useState(0);
   const scenarioInteracted = useRef(false);
-  const clauseInteracted = useRef(false);
+  const continuityInteracted = useRef(false);
   const activeScenario = t.scenarios[scenario];
   const activeClause = t.document.clauses[clause];
   const register = `https://app.juro.uz/register?lang=${language}&accountType=individual`;
@@ -242,14 +242,14 @@ export function JuroHomepage({ language }: { language: Language }) {
   }, [t.scenarios.length]);
 
   useEffect(() => {
-    const updateClause = (event: Event) => {
-      if (clauseInteracted.current) return;
+    const updateContinuity = (event: Event) => {
+      if (continuityInteracted.current) return;
       const next = (event as CustomEvent<number>).detail;
-      if (Number.isInteger(next) && next >= 0 && next < t.document.clauses.length) setClause(next);
+      if (Number.isInteger(next) && next >= 0 && next < t.continuity.steps.length) setContinuityStep(next);
     };
-    document.addEventListener("juro:document-step", updateClause);
-    return () => document.removeEventListener("juro:document-step", updateClause);
-  }, [t.document.clauses.length]);
+    document.addEventListener("juro:continuity-step", updateContinuity);
+    return () => document.removeEventListener("juro:continuity-step", updateContinuity);
+  }, [t.continuity.steps.length]);
 
   const selectScenario = (index: number) => {
     scenarioInteracted.current = true;
@@ -257,8 +257,12 @@ export function JuroHomepage({ language }: { language: Language }) {
   };
 
   const selectClause = (index: number) => {
-    clauseInteracted.current = true;
     setClause(index);
+  };
+
+  const selectContinuityStep = (index: number) => {
+    continuityInteracted.current = true;
+    setContinuityStep(index);
   };
 
   const moveTab = (
@@ -298,7 +302,7 @@ export function JuroHomepage({ language }: { language: Language }) {
                 <a className={styles.buttonGold} href={register}>{t.hero.primary}<ArrowRight aria-hidden="true" size={18} /></a>
                 <a className={styles.buttonGhost} href="#product"><Play aria-hidden="true" size={16} />{t.hero.secondary}</a>
               </div>
-              <p className={styles.heroNote}>{t.hero.note}</p>
+              <p className={`${styles.heroNote} ${laptopStyles.heroNote}`}>{t.hero.note}</p>
               <ul className={styles.heroProof}>{t.proof.map((item) => <li key={item}><Check aria-hidden="true" size={14} />{item}</li>)}</ul>
             </div>
             <div className={`${styles.heroProduct} ${motionStyles.heroProductMotion} ${laptopStyles.heroProduct}`} data-motion-product>
@@ -323,11 +327,11 @@ export function JuroHomepage({ language }: { language: Language }) {
 
         <section className={`${styles.transitionSection} ${motionStyles.storySection} ${laptopStyles.transitionSection}`} data-chapter id="product">
           <div className={`${styles.sectionIntro} ${laptopStyles.sectionIntro}`} data-reveal="left"><p className={styles.eyebrowDark}>{t.transition.eyebrow}</p><h2 className={laptopStyles.transitionTitle}>{t.transition.title}</h2><p>{t.transition.lead}</p></div>
-          <div className={`${styles.transitionRail} ${motionStyles.storyRail}`} data-story-rail>{t.transition.items.map(([number, title, body]) => <article className={motionStyles.storyStep} data-story-step key={number}><span>{number}</span><div><h3>{title}</h3><p>{body}</p></div><ChevronRight aria-hidden="true" size={18} /></article>)}</div>
+          <div className={`${styles.transitionRail} ${motionStyles.storyRail}`} data-story-rail>{t.transition.items.map(([number, title, body]) => <article className={motionStyles.storyStep} data-story-step key={number}><span>{number}</span><div><h3>{title}</h3><p>{body}</p></div></article>)}</div>
         </section>
 
         <section className={styles.audienceSection} id="audiences">
-          <header className={styles.sectionHeader} data-reveal><p className={styles.eyebrowDark}>{t.audience.eyebrow}</p><h2>{t.audience.title}</h2></header>
+          <header className={`${styles.sectionHeader} ${laptopStyles.audienceHeader}`} data-reveal><p className={styles.eyebrowDark}>{t.audience.eyebrow}</p><h2>{t.audience.title}</h2></header>
           <div className={styles.audienceLayout}>
             <div className={styles.audienceList}>{content.audience.top.map((item, index) => <article className={motionStyles.audienceCardMotion} data-reveal="left" key={item.id}><span>0{index + 1}</span><div><h3>{item.title}</h3><p>{item.body}</p><ul>{item.scenarios.map((scenarioItem) => <li key={scenarioItem}>{scenarioItem}</li>)}</ul></div><a href={`${register}&intent=${item.id}`}>{item.cta}<ArrowRight aria-hidden="true" size={16} /></a></article>)}</div>
             <aside className={`${styles.investorPanel} ${motionStyles.investorMotion}`} data-reveal="right"><span>04</span><Sparkles aria-hidden="true" size={26} /><h3>{t.audience.investor}</h3><p>{t.audience.investorBody}</p><Link href={`/${language}/video`}>{t.audience.investorCta}<ArrowRight aria-hidden="true" size={17} /></Link></aside>
@@ -335,7 +339,7 @@ export function JuroHomepage({ language }: { language: Language }) {
         </section>
 
         <section className={`${styles.documentSection} ${motionStyles.documentStory}`} data-chapter data-document-story id="analysis">
-          <header className={styles.documentIntro} data-reveal><p className={styles.eyebrowLight}>{t.document.eyebrow}</p><h2>{t.document.title}</h2><p>{t.document.lead}</p></header>
+          <header className={`${styles.documentIntro} ${laptopStyles.documentHeader}`} data-reveal><p className={styles.eyebrowLight}>{t.document.eyebrow}</p><h2>{t.document.title}</h2><p>{t.document.lead}</p></header>
           <div className={`${styles.documentLab} ${motionStyles.documentLabMotion}`} data-reveal="mask">
             <div className={`${styles.documentCanvas} ${motionStyles.documentCanvasMotion}`}>
               <div className={styles.documentToolbar}><span><FileCheck2 aria-hidden="true" size={16} />{t.document.file}</span><i>•••</i></div>
@@ -360,9 +364,9 @@ export function JuroHomepage({ language }: { language: Language }) {
         <section className={`${styles.continuitySection} ${motionStyles.continuityMotion}`} data-chapter data-continuity-story id="case-flow">
           <div className={styles.continuityCopy} data-reveal="left"><p className={styles.eyebrowDark}>{t.continuity.eyebrow}</p><h2>{t.continuity.title}</h2><p>{t.continuity.lead}</p></div>
           <div className={`${styles.continuityVisual} ${motionStyles.continuityVisualMotion}`} data-reveal="right">
-            <div className={styles.caseCard}><small>JURO / CASE 024</small><h3>{t.continuity.cardTitle}</h3><p>{t.continuity.cardBody}</p></div>
-            <ol>{t.continuity.steps.map((step, index) => <li data-active={index === 0 || undefined} data-continuity-step key={step}><span>0{index + 1}</span>{step}</li>)}</ol>
-            <div className={styles.nextCard}><span>{t.continuity.next}</span><strong>{t.continuity.nextBody}</strong><ArrowDownRight aria-hidden="true" size={20} /></div>
+            <div className={styles.caseCard}><small>JURO / CASE 024 · {continuityStep + 1}/{t.continuity.steps.length}</small><h3>{t.continuity.cardTitle}</h3><p>{t.continuity.cardBody}</p></div>
+            <ol aria-label={language === "ru" ? "Этапы дела" : "Ish bosqichlari"} className={motionStyles.continuitySteps} style={{ "--continuity-stage-progress": continuityStep / Math.max(1, t.continuity.steps.length - 1) } as CSSProperties}>{t.continuity.steps.map((step, index) => <li data-active={index <= continuityStep || undefined} data-continuity-step data-current={index === continuityStep || undefined} key={step}><button aria-current={index === continuityStep ? "step" : undefined} id={`continuity-step-${index}`} onClick={() => selectContinuityStep(index)} onKeyDown={(event) => moveTab(event, index, t.continuity.steps.length, "continuity-step", selectContinuityStep)} type="button"><span>0{index + 1}</span><strong>{step}</strong></button></li>)}</ol>
+            <div className={styles.nextCard}><span>{t.continuity.next}</span><strong>{t.continuity.nextBody}</strong></div>
           </div>
         </section>
 
@@ -373,20 +377,20 @@ export function JuroHomepage({ language }: { language: Language }) {
         </section>
 
         <section className={`${styles.trustSection} ${editorialStyles.trustSection}`} data-chapter id="trust">
-          <header data-reveal><p className={styles.eyebrowDark}>{t.trust.eyebrow}</p><h2>{t.trust.title}</h2><p>{t.trust.lead}</p></header>
-          <div className={`${styles.trustGrid} ${editorialStyles.trustGrid}`}>{content.security.items.map((item, index) => <article className={`${motionStyles.trustMotion} ${editorialStyles.trustItem}`} data-primary={index === 0 || undefined} data-reveal key={item.title}><span>{index === 2 ? t.trust.policy : t.trust.verified}</span><ShieldCheck aria-hidden="true" size={22} /><h3>{item.title}</h3><p>{item.body}</p></article>)}</div>
+          <header className={laptopStyles.trustHeader} data-reveal><p className={styles.eyebrowDark}>{t.trust.eyebrow}</p><h2>{t.trust.title}</h2><p>{t.trust.lead}</p></header>
+          <div className={`${styles.trustGrid} ${editorialStyles.trustGrid}`}>{content.security.items.map((item, index) => <article className={`${motionStyles.trustMotion} ${editorialStyles.trustItem}`} data-primary={index === 0 || undefined} data-trust-card key={item.title}><span>{index === 2 ? t.trust.policy : t.trust.verified}</span><ShieldCheck aria-hidden="true" size={22} /><h3>{item.title}</h3><p>{item.body}</p></article>)}</div>
           <div className={styles.trustActions}><Link href={`/${language}/trust`}>{t.trust.cta}<ArrowRight aria-hidden="true" size={17} /></Link><Link href={`/${language}/legal`}>{t.trust.legal}</Link></div>
         </section>
 
         <section className={`${styles.resourcesSection} ${editorialStyles.resourcesSection}`} id="resources">
-          <header data-reveal><p className={styles.eyebrowDark}>{t.resources.eyebrow}</p><h2>{t.resources.title}</h2></header>
-          <div className={editorialStyles.resourceGrid}>{t.resources.items.map(([title, meta, body, path], index) => <Link className={`${motionStyles.resourceMotion} ${editorialStyles.resourceItem}`} data-primary={index === 0 || undefined} data-reveal href={`/${language}/${path}`} key={path}><span>0{index + 1}</span><small>{meta}</small><h3>{title}</h3><p>{body}</p>{index === 0 ? <div className={editorialStyles.watchSignal}><Play aria-hidden="true" size={15} />{language === "ru" ? "Смотреть обзор" : "Sharhni ko‘rish"}</div> : null}<ArrowDownRight aria-hidden="true" size={22} /></Link>)}</div>
+          <header className={laptopStyles.resourcesHeader} data-reveal><p className={styles.eyebrowDark}>{t.resources.eyebrow}</p><h2>{t.resources.title}</h2></header>
+          <div className={editorialStyles.resourceGrid}>{t.resources.items.map(([title, meta, body, path], index) => <Link className={`${motionStyles.resourceMotion} ${editorialStyles.resourceItem}`} data-primary={index === 0 || undefined} data-reveal href={`/${language}/${path}`} key={path}>{index === 0 ? <><div className={editorialStyles.resourceFeatureMeta}><span>01</span><small>{meta}</small></div><div className={editorialStyles.resourceFeatureCopy}><div className={editorialStyles.resourceFeatureHeading}><h3>{title}</h3><p>{body}</p></div><span aria-hidden="true" className={editorialStyles.resourceFeaturePlay}><Play size={54} /></span></div><div className={editorialStyles.resourceFeatureAction}><span className={editorialStyles.watchSignal}><Play aria-hidden="true" size={15} />{language === "ru" ? "Смотреть обзор" : "Sharhni ko‘rish"}</span></div></> : <><span>0{index + 1}</span><small>{meta}</small><h3>{title}</h3><p>{body}</p><ArrowDownRight aria-hidden="true" size={22} /></>}</Link>)}</div>
         </section>
 
         <section className={`${styles.accessSection} ${decisionStyles.accessSection}`} id="pricing">
-          <header data-reveal><p className={styles.eyebrowLight}>{t.access.eyebrow}</p><h2>{t.access.title}</h2></header>
-          <div className={`${styles.accessPlans} ${decisionStyles.accessPlans}`}>{t.access.plans.map(([title, meta, body, cta], index) => <article className={`${motionStyles.planMotion} ${decisionStyles.accessPlan}`} data-featured={index === 1 || undefined} data-reveal key={title}><span>0{index + 1}</span><small>{meta}</small><h3>{title}</h3><p>{body}</p><a href={index === 2 ? "mailto:muzaffarbekmurodoff@gmail.com" : `${register}&intent=${index === 1 ? "business" : "individual"}`}>{cta}<ArrowRight aria-hidden="true" size={16} /></a></article>)}</div>
-          <p className={styles.accessNote}>{t.access.note}</p>
+          <header className={laptopStyles.accessHeader} data-reveal><p className={styles.eyebrowLight}>{t.access.eyebrow}</p><h2>{t.access.title}</h2></header>
+          <div className={`${styles.accessPlans} ${decisionStyles.accessPlans}`}>{t.access.plans.map(([title, meta, body, cta], index) => <article className={`${motionStyles.planMotion} ${decisionStyles.accessPlan}`} data-access-plan data-featured={index === 1 || undefined} key={title}><span>0{index + 1}</span><small>{meta}</small><h3>{title}</h3><p>{body}</p><a href={index === 2 ? "mailto:muzaffarbekmurodoff@gmail.com" : `${register}&intent=${index === 1 ? "business" : "individual"}`}>{cta}<ArrowRight aria-hidden="true" size={16} /></a></article>)}</div>
+          <p className={`${styles.accessNote} ${laptopStyles.accessNote}`}>{t.access.note}</p>
         </section>
 
         <section className={styles.faqSection} id="faq">
