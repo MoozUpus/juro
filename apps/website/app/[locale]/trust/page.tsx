@@ -59,7 +59,7 @@ function EnglishTrustPage() {
     ["AI providers and subprocessors", "The final list of production providers, processing regions and subprocessors will be published after the architecture and contractual terms are approved. Until then, JURO does not make unverified claims about data localisation or training models on documents.", "Being clarified before production launch"],
     ["Encryption, logging and standards", "JURO does not claim certifications, specific encryption algorithms or standards compliance without technical evidence. Verified information will be added with its last-checked date.", "Not claimed without confirmation"],
   ] as const;
-  return <div className={styles.page} lang="en">
+  return <div className={`${styles.page} juro-public-theme`} lang="en">
     <SiteHeader languageHref="/ru/trust" locale="en" />
     <main id="main-content">
       <section className={styles.hero}><div className={styles.heroCopy}><div className={styles.breadcrumbs}><Link href="/en">JURO</Link><span>/</span><span>Trust Center</span></div><span className={styles.eyebrow}>TRUST CENTER</span><h1>Security, data and transparency</h1><p>JURO separates verified product facts from information that is still being clarified.</p><small>Last public review: 9 August 2026</small></div><aside className={styles.heroIndex} aria-label="Data-control map"><span>DATA FLOW</span><ol><li><b>01</b><strong>Public website</strong><small>no file upload</small></li><li><b>02</b><strong>Protected account</strong><small>session and permissions</small></li><li><b>03</b><strong>Professional handoff</strong><small>only with confirmation</small></li></ol></aside></section>
@@ -145,7 +145,7 @@ export default async function TrustPage({ params }: Props) {
   ];
 
   return (
-    <div className={styles.page} lang={locale}>
+    <div className={`${styles.page} juro-public-theme`} lang={locale}>
       <SiteHeader languageHref={`/${locale === "ru" ? "uz" : "ru"}/trust`} locale={locale} />
       <main id="main-content">
         <section className={styles.hero}>

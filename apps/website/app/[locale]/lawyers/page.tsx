@@ -44,7 +44,7 @@ export default async function LawyersPage({ params, searchParams }: Props) {
   });
   const approved = results.filter((lawyer) => lawyer.canReceiveRequests);
   const pending = results.filter((lawyer) => !lawyer.canReceiveRequests);
-  return <div className={styles.page} lang={locale}>
+  return <div className={`${styles.page} juro-public-theme`} lang={locale}>
     <SiteHeader languageHref="/ru/lawyers" locale={locale} tone="dark" />
     <main id="main-content">
       <section className={styles.hero}><span>{t.eyebrow}</span><h1>{t.heading}</h1><p>{t.lead}</p></section>

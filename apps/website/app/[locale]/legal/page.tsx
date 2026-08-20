@@ -26,7 +26,7 @@ export default async function LegalCenter({ params }: Props) {
   const ru = locale === "ru";
   const copy = legalConfig.publication[locale];
   return (
-    <div className={styles.page} lang={locale}>
+    <div className={`${styles.page} juro-public-theme`} lang={locale}>
       <SiteHeader languageHref={`/${locale === "ru" ? "uz" : "ru"}/legal`} locale={locale} />
       <main id="main-content">
       <section className={styles.hero}>

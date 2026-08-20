@@ -45,7 +45,7 @@ export default async function LegalDocumentPage({ params }: Props) {
   const sections = document.sections.map((section, index) => ({ ...section, id: `section-${index + 1}` }));
   const related = relatedLegalDocuments(locale, legalSlug);
   return (
-    <div className={styles.page} lang={locale}>
+    <div className={`${styles.page} juro-public-theme`} lang={locale}>
       <SiteHeader languageHref={legalPath(locale === "ru" ? "uz" : "ru", legalSlug)} locale={locale} />
       <main id="main-content">
       <article className={styles.document}>

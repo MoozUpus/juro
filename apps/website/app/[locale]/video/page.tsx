@@ -82,7 +82,7 @@ export default async function InvestorVideoPage({ params }: Props) {
   const content = copy[locale];
 
   return (
-    <div className={styles.page} lang={locale}>
+    <div className={`${styles.page} juro-public-theme`} lang={locale}>
       <SiteHeader languageHref={content.languageHref} locale={locale} tone="dark" />
       <main id="main-content">
       <section className={styles.hero}>

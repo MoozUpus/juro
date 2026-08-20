@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Mail, MapPin, Menu, Phone, X } from "lucide-react";
+import { ArrowRight, Mail, MapPin, Menu, Moon, Phone, Sun, X } from "lucide-react";
 import { type MouseEvent, useEffect, useId, useRef, useState } from "react";
 import type { PublicLanguage } from "../../../content/types";
 import brandStyles from "./brand-lockup.module.css";
@@ -10,6 +10,7 @@ import footerContactStyles from "./footer-contact.module.css";
 import footerRailStyles from "./footer-rail.module.css";
 import headerTouchStyles from "./header-touch-targets.module.css";
 import styles from "./site-chrome.module.css";
+import themeStyles from "./site-theme.module.css";
 
 type Locale = PublicLanguage;
 
@@ -44,6 +45,8 @@ const copy = {
     contacts: "Контакты",
     address: "Ташкент, Узбекистан",
     note: "AI помогает подготовить работу, но не заменяет обязательную профессиональную помощь.",
+    lightTheme: "Включить светлую тему",
+    darkTheme: "Включить тёмную тему",
   },
   uz: {
     nav: "Asosiy navigatsiya",
@@ -75,9 +78,11 @@ const copy = {
     contacts: "Aloqa",
     address: "Toshkent, O‘zbekiston",
     note: "AI ishni tayyorlashga yordam beradi, ammo majburiy professional yordamni almashtirmaydi.",
+    lightTheme: "Yorug‘ mavzuni yoqish",
+    darkTheme: "Qorong‘i mavzuni yoqish",
   },
   en: {
-    nav: "Main navigation", product: "Product", people: "Who it is for", trust: "Trust", resources: "Resources", lawyers: "Professionals", video: "Video", legal: "Legal Centre", signIn: "Sign in", start: "Start with JURO", open: "Open menu", close: "Close menu", skip: "Skip to main content", productLabel: "Product", companyLabel: "JURO", legalLabel: "Legal information", description: "A legal situation becomes a verifiable plan, a document and a clear next step.", ai: "AI legal assistant", document: "Document review", plan: "Action plan", business: "For business", knowledge: "Knowledge base", privacy: "Privacy", terms: "Terms of use", data: "Personal data", aiRules: "AI rules", contacts: "Contact", address: "Tashkent, Uzbekistan", note: "AI helps prepare legal work, but does not replace required professional advice.",
+    nav: "Main navigation", product: "Product", people: "Who it is for", trust: "Trust", resources: "Resources", lawyers: "Professionals", video: "Video", legal: "Legal Centre", signIn: "Sign in", start: "Start with JURO", open: "Open menu", close: "Close menu", skip: "Skip to main content", productLabel: "Product", companyLabel: "JURO", legalLabel: "Legal information", description: "A legal situation becomes a verifiable plan, a document and a clear next step.", ai: "AI legal assistant", document: "Document review", plan: "Action plan", business: "For business", knowledge: "Knowledge base", privacy: "Privacy", terms: "Terms of use", data: "Personal data", aiRules: "AI rules", contacts: "Contact", address: "Tashkent, Uzbekistan", note: "AI helps prepare legal work, but does not replace required professional advice.", lightTheme: "Use light theme", darkTheme: "Use dark theme",
   },
 } as const;
 
@@ -88,6 +93,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
   const t = copy[locale];
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [theme, setTheme] = useState<"light" | "dark">("light");
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -101,6 +107,34 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
     window.addEventListener("scroll", update, { passive: true });
     return () => window.removeEventListener("scroll", update);
   }, []);
+
+  useEffect(() => {
+    const current = document.documentElement.dataset.theme;
+    const frame = window.requestAnimationFrame(() => setTheme(current === "dark" ? "dark" : "light"));
+    const systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncSystemTheme = () => {
+      if (localStorage.getItem("juro-theme") || /(?:^|; )juro_theme=(?:light|dark)/.test(document.cookie)) return;
+      const next = systemTheme.matches ? "dark" : "light";
+      document.documentElement.dataset.theme = next;
+      document.documentElement.style.colorScheme = next;
+      setTheme(next);
+    };
+    systemTheme.addEventListener("change", syncSystemTheme);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      systemTheme.removeEventListener("change", syncSystemTheme);
+    };
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    document.documentElement.dataset.theme = next;
+    document.documentElement.style.colorScheme = next;
+    localStorage.setItem("juro-theme", next);
+    const sharedDomain = location.hostname === "juro.uz" || location.hostname.endsWith(".juro.uz") ? "; Domain=.juro.uz" : "";
+    document.cookie = `juro_theme=${next}; Path=/; Max-Age=31536000; SameSite=Lax${sharedDomain}`;
+    setTheme(next);
+  };
 
   useEffect(() => {
     if (!open) return;
@@ -145,11 +179,11 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
   ] as const;
 
   return (
-    <header className={styles.header} data-scrolled={scrolled || undefined} data-tone={tone}>
+    <header className={`${styles.header} juro-site-header`} data-scrolled={scrolled || undefined} data-tone={tone}>
       <a className={styles.skipLink} href="#main-content">{t.skip}</a>
       <div className={styles.headerInner}>
         <Link aria-label="JURO" className={`${styles.logo} ${brandStyles.logo}`} href={`/${locale}`}>
-          <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={1024} priority src={tone === "dark" && !scrolled ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1024} /></span>
+          <span className={brandStyles.markFrame}><Image alt="" className={brandStyles.mark} height={1024} priority src={theme === "dark" || (tone === "dark" && !scrolled) ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1024} /></span>
           <span className={brandStyles.wordmark}>JURO</span>
         </Link>
         <nav aria-label={t.nav} className={styles.desktopNav}>
@@ -157,6 +191,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
         </nav>
         <div className={styles.actions}>
           <div aria-label="Language" className={`${styles.languageSet} ${headerTouchStyles.languageSet}`}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} className={`${styles.language} ${headerTouchStyles.language}`} href={localeHref(target)} key={target}>{languageLabels[target]}</Link>)}</div>
+          <button aria-label={theme === "dark" ? t.lightTheme : t.darkTheme} aria-pressed={theme === "dark"} className={themeStyles.themeToggle} onClick={toggleTheme} title={theme === "dark" ? t.lightTheme : t.darkTheme} type="button">{theme === "dark" ? <Sun aria-hidden="true" size={18} /> : <Moon aria-hidden="true" size={18} />}</button>
           <a className={`${styles.login} ${headerTouchStyles.login}`} href={`https://app.juro.uz/${platformLocale}/auth/login`}>{t.signIn}</a>
           <a className={styles.primary} href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
           <button aria-controls={panelId} aria-expanded={open} aria-label={t.open} className={styles.menuButton} onClick={() => setOpen(true)} ref={triggerRef} type="button"><Menu aria-hidden="true" size={22} /></button>
@@ -165,10 +200,10 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
       {open ? (
         <div className={styles.mobileLayer}>
           <button aria-label={t.close} className={styles.scrim} onClick={() => setOpen(false)} type="button" />
-          <div aria-label={t.nav} aria-modal="true" className={styles.mobilePanel} id={panelId} ref={panelRef} role="dialog">
+          <div aria-label={t.nav} aria-modal="true" className={`${styles.mobilePanel} juro-site-mobile-panel`} id={panelId} ref={panelRef} role="dialog">
             <div className={styles.mobileTop}>
               <div className={brandStyles.mobileBrand}>
-                <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={1024} src="/juro-mark.png" unoptimized width={1024} /></span>
+                <span className={brandStyles.mobileMarkFrame}><Image alt="" className={brandStyles.mobileMark} height={1024} src={theme === "dark" ? "/juro-mark-light.png" : "/juro-mark.png"} unoptimized width={1024} /></span>
                 <span>JURO</span>
               </div>
               <button aria-label={t.close} className={styles.closeButton} onClick={() => setOpen(false)} type="button"><X aria-hidden="true" size={22} /></button>
@@ -180,6 +215,7 @@ export function SiteHeader({ locale, tone = "light", languageHref, onSectionNavi
               <Link href={`/${locale}/legal`} onClick={() => setOpen(false)}><span>07</span>{t.legal}<ArrowRight aria-hidden="true" size={18} /></Link>
             </nav>
             <div className={styles.mobileActions}>
+              <button aria-label={theme === "dark" ? t.lightTheme : t.darkTheme} aria-pressed={theme === "dark"} className={themeStyles.mobileThemeToggle} onClick={toggleTheme} type="button">{theme === "dark" ? <Sun aria-hidden="true" size={18} /> : <Moon aria-hidden="true" size={18} />}<span>{theme === "dark" ? t.lightTheme : t.darkTheme}</span></button>
               <div aria-label="Language" className={styles.mobileLanguageSet}>{languages.map((target) => <Link aria-current={target === locale ? "page" : undefined} href={localeHref(target)} key={target} onClick={() => setOpen(false)}>{languageLabels[target]}</Link>)}</div>
               <a href={`https://app.juro.uz/register?lang=${platformLocale}&accountType=individual`}>{t.start}<ArrowRight aria-hidden="true" size={17} /></a>
             </div>

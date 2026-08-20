@@ -16,8 +16,11 @@ const juroDisplay = Cormorant_Garamond({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#061827",
-  colorScheme: "light",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f8f6f2" },
+    { media: "(prefers-color-scheme: dark)", color: "#061827" },
+  ],
+  colorScheme: "light dark",
 };
 
 export const metadata: Metadata = {
@@ -44,7 +47,10 @@ export default async function RootLayout({
   const requestPath = requestHeaders.get("x-juro-request-path") ?? "";
   const locale = /^\/uz(?:\/|$)/.test(requestPath) ? "uz" : /^\/en(?:\/|$)/.test(requestPath) ? "en" : "ru";
   return (
-    <html lang={locale}>
+    <html lang={locale} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: `(function(){var s="";try{s=localStorage.getItem("juro-theme")||""}catch(e){}if(s!=="light"&&s!=="dark"){var m=document.cookie.match(/(?:^|; )juro_theme=(light|dark)/);s=m?m[1]:""}var t=s==="light"||s==="dark"?s:(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.dataset.theme=t;document.documentElement.style.colorScheme=t})();` }} />
+      </head>
       <body className={`${geistSans.variable} ${juroDisplay.variable}`}>
         {children}
       </body>

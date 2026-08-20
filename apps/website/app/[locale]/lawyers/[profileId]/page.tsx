@@ -39,7 +39,7 @@ export default async function LawyerProfilePage({ params }: Props) {
   const pending = lawyer.marketplaceStatus === "pending_review";
   const photo = publicPhotoUrl(lawyer.profilePhotoUrl);
   const platformLocale = locale === "en" ? "ru" : locale;
-  return <div className={styles.page} lang={locale}><SiteHeader languageHref={`/ru/lawyers/${profileId}`} locale={locale} /><main id="main-content"><article className={styles.profile}>
+  return <div className={`${styles.page} juro-public-theme`} lang={locale}><SiteHeader languageHref={`/ru/lawyers/${profileId}`} locale={locale} /><main id="main-content"><article className={styles.profile}>
     <Link className={styles.back} href={`/${locale}/lawyers`}>← {t.back}</Link>
     <div className={styles.profileHead}><LawyerAvatar className={styles.profilePhoto} fallbackClassName={styles.profileInitials} initials={lawyer.displayName.slice(0, 1)} size={144} src={photo} /><div><span className={pending ? styles.pending : styles.approved}>{pending ? t.pending : t.approved}</span><h1>{lawyer.displayName}</h1><p>{lawyer.firmName || t.independent}</p><p className={styles.specialties}>{lawyer.specialties.join(" · ")}</p></div></div>
     {pending && <aside className={styles.reviewNotice}>{t.pendingNotice}</aside>}

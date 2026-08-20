@@ -1,0 +1,293 @@
+:root {
+  color-scheme: light dark;
+  --theme-canvas: #f6f2e9;
+  --theme-surface: #ffffff;
+  --theme-surface-soft: #f7f5f0;
+  --theme-surface-raised: #ffffff;
+  --theme-ink: #142230;
+  --theme-muted: #5d6974;
+  --theme-line: rgba(7, 26, 46, .12);
+  --theme-navy: #071a2e;
+  --theme-gold: #c79d4e;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --theme-canvas: #071521;
+  --theme-surface: #0d2535;
+  --theme-surface-soft: #102c3e;
+  --theme-surface-raised: #153447;
+  --theme-ink: #eef3f6;
+  --theme-muted: #afbec8;
+  --theme-line: rgba(177, 202, 217, .18);
+  --theme-navy: #f2f5f7;
+  --theme-gold: #d7b56f;
+}
+
+html,
+body {
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+html[data-theme="dark"],
+html[data-theme="dark"] body {
+  background: var(--theme-canvas);
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .platform-shell {
+  --p-navy: #071a2e;
+  --p-navy2: #0d2944;
+  --p-gold: #d7b56f;
+  --p-cream: var(--theme-canvas);
+  --p-line: var(--theme-line);
+  background: var(--theme-canvas);
+  color: var(--theme-ink);
+}
+
+.global-theme-control {
+  position: fixed;
+  inset: 18px 18px auto auto;
+  z-index: 95;
+  display: grid;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--theme-line);
+  border-radius: 50%;
+  background: rgba(255,255,255,.9);
+  color: #16283a;
+  box-shadow: 0 10px 30px rgba(7,26,46,.12);
+  backdrop-filter: blur(14px);
+  transition: background-color 160ms ease,border-color 160ms ease,color 160ms ease,transform 120ms ease;
+}
+
+.global-theme-control svg { width: 19px; }
+.global-theme-control:active { transform: scale(.97); }
+body:has(.platform-shell)>.global-theme-control { display: none; }
+
+html[data-theme="dark"] .global-theme-control {
+  border-color: rgba(215,181,111,.36);
+  background: rgba(13,37,53,.92);
+  color: #f2dfb7;
+  box-shadow: 0 12px 32px rgba(0,0,0,.24);
+}
+
+html[data-theme="dark"] .auth-page {
+  background: #071521;
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .auth-card {
+  border-color: var(--theme-line);
+  background: var(--theme-surface);
+  color: var(--theme-ink);
+  box-shadow: 0 24px 70px rgba(0,0,0,.24);
+}
+
+html[data-theme="dark"] .auth-card :is(h1,h2,h3,label) { color: var(--theme-ink); }
+html[data-theme="dark"] .auth-card :is(p,.auth-switch,.auth-siwc,.auth-hint,.auth-language) { color: var(--theme-muted); }
+html[data-theme="dark"] .auth-language a.active { background:#d7b56f;color:#071521; }
+html[data-theme="dark"] .auth-card :is(input,.auth-account-type button,.auth-turnstile-retry) { border-color:#39566a;background:#0a2131;color:var(--theme-ink); }
+html[data-theme="dark"] .auth-account-type button.active { border-color:#d7b56f;background:#352d1f;color:#f2dfb7; }
+
+html[data-theme="dark"] :is(.onboarding,.landing) { background:var(--theme-canvas);color:var(--theme-ink); }
+html[data-theme="dark"] :is(.onboarding,.landing) :is(header,article,form) { border-color:var(--theme-line);background:var(--theme-surface);color:var(--theme-ink); }
+
+@media(hover:hover) and (pointer:fine){.global-theme-control:hover{border-color:rgba(199,157,78,.7);background:var(--theme-surface)}}
+@media(max-width:520px){.global-theme-control{inset:12px 12px auto auto;width:44px;height:44px}}
+
+html[data-theme="dark"] .platform-topbar {
+  background: rgba(7, 21, 33, .92);
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .platform-topbar small,
+html[data-theme="dark"] .platform-welcome p,
+html[data-theme="dark"] .platform-module header p,
+html[data-theme="dark"] .platform-dashboard-grid>article>p,
+html[data-theme="dark"] .platform-empty,
+html[data-theme="dark"] .plan-heading p,
+html[data-theme="dark"] .consult-workspace header p {
+  color: var(--theme-muted);
+}
+
+html[data-theme="dark"] .platform-topbar button,
+html[data-theme="dark"] .platform-topbar a,
+html[data-theme="dark"] .platform-menu,
+html[data-theme="dark"] .platform-quick-grid a,
+html[data-theme="dark"] .platform-dashboard-grid>article,
+html[data-theme="dark"] .platform-module-empty,
+html[data-theme="dark"] .plan-create,
+html[data-theme="dark"] .plan-list,
+html[data-theme="dark"] .plan-calendar,
+html[data-theme="dark"] .plan-card-head,
+html[data-theme="dark"] .slot-grid button {
+  border-color: var(--theme-line);
+  background: var(--theme-surface);
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .platform-welcome h1,
+html[data-theme="dark"] .platform-module h1,
+html[data-theme="dark"] .platform-quick-grid a,
+html[data-theme="dark"] .platform-dashboard-grid h2 {
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .platform-mobile-nav {
+  border-color: var(--theme-line);
+  background: rgba(7, 21, 33, .97);
+  box-shadow: 0 -10px 28px rgba(0, 0, 0, .24);
+}
+
+html[data-theme="dark"] .platform-mobile-nav a,
+html[data-theme="dark"] .platform-mobile-nav button {
+  color: var(--theme-muted);
+}
+
+html[data-theme="dark"] .platform-mobile-nav a.active {
+  color: #f4e5c2;
+}
+
+html[data-theme="dark"] .platform-shell :is(input, textarea, select) {
+  border-color: #39566a;
+  background-color: #0a2131;
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .platform-shell :is(input, textarea)::placeholder {
+  color: #8fa2ae;
+}
+
+html[data-theme="dark"] .dashboard-command-form textarea {
+  color: #edf2f5;
+  -webkit-text-fill-color: #edf2f5;
+}
+
+html[data-theme="dark"] .dashboard-command-form textarea::placeholder {
+  color: #aebdc7;
+  -webkit-text-fill-color: #aebdc7;
+}
+
+/* Shared product surfaces. Keeping the selectors explicit protects status,
+   risk and primary-action colours while covering every authenticated module. */
+html[data-theme="dark"] .platform-shell :is(
+  .ai-conversations,.ai-context,.ai-answer,.ai-composer,.ai-source-card,.ai-result-block,.ai-assistant-draft,.ai-feedback,.ai-feedback-form,.ai-plan-card,.ai-date-popover,
+  .billing-free,.billing-plans article,.billing-history,.demo-payment-flows article,.demo-payment-history,
+  .calendar-tabs button,.calendar-loading,.calendar-error,.calendar-empty,.calendar-month>div,.calendar-list>section,.calendar-case-list>section,
+  .case-workspace>header,.case-workspace-grid>section,.case-workspace-tab-panel,.case-workspace-embedded,.case-access-grid>ul,.case-access-grid>p,
+  .cases-live-tools,.cases-live-list article,.cases-live-empty,.case-create form,.case-create-scenarios button,.case-create-actions button,
+  .billing-empty,.checkout-grid article,.payment-card,.sandbox-panel,
+  .lawyer-handoff,.lawyer-request-list article,.lawyer-offer-form,.lawyer-review-reply-editor blockquote,
+  .consult-empty,.consult-bookings,
+  .dashboard-command-form,.dashboard-quick-grid>a,.dashboard-work-list,
+  .comparison-create>form,.comparison-progress,.comparison-recent,.comparison-recent-list article>a,.comparison-recent-list article>button,.comparison-result-hero,.comparison-version-metadata article,.comparison-case-link,.comparison-result-tabs,.comparison-metrics article,.comparison-summary-grid>article,.comparison-filters,.comparison-change-card,.comparison-before-after section,.comparison-no-results,.comparison-no-sources,.comparison-result-state,.comparison-side,.comparison-redline-row,.comparison-sources article,
+  .review-upload,.review-layout,.review-summary-grid>section,.review-risks article,.review-package-context,.review-url-import,.review-result-pane,
+  .global-search-layer,.global-search-dialog,.global-search-dialog>header,.global-search-results>a,.global-search-dialog>footer,
+  .help-grid article,.help-ticket-history,.help-support,.help-knowledge,.knowledge-article>article,.knowledge-related,.public-knowledge>form,
+  .history-list,.archive-grid>section,.archive-grid article>a,.archive-grid article>button,
+  .lawyer-directory-controls,.lawyer-directory-card,.lawyer-directory-state,.lawyer-directory-empty,.lawyer-public-profile-hero,.lawyer-public-booking,.lawyer-public-profile-grid>section,.lawyer-public-reviews,
+  .monitoring-settings,.monitoring-feed,
+  .profile-workspace>nav,.profile-form,.profile-panels>section,.delete-request,.email-change-panel,.business-workspace-panel,.notification-preferences-panel,.memory-panel,
+  .team-invite,.team-grid>article,
+  .dbt-form-card,.dbt-review-panel,.dbt-editor,.dbt-collaboration,.dbt-assets,.dbt-versions,.dbt-doc-search,.dbt-list-loading,.dbt-empty-state,.dbt-document-card,.dbt-card-menu,.dbt-contact-list article,.dbt-contact-form,.dbt-notification-list article,.dbt-related article,.dbt-consultation-modal,.dbt-delete-choice,.dbt-template-card,.dbt-config-form,.dbt-config-repeat fieldset,.dbt-invitation-page>section
+) {
+  border-color: var(--theme-line);
+  background: var(--theme-surface);
+  color: var(--theme-ink);
+  box-shadow: none;
+}
+
+html[data-theme="dark"] .platform-shell :is(
+  .ai-dialog,.ai-workspace,.ai-dialog>header,.ai-preliminary,.ai-branch-history,.ai-date-popover>footer,
+  .calendar-month>span,.calendar-list h2,.calendar-case-list h2,.calendar-month a,
+  .case-workspace-summary article,.case-workspace-grid-inset,.case-bookmark-group>h3,
+  .dashboard-attach,.dashboard-action-icon,.dashboard-work-list>header,
+  .comparison-drop,.comparison-recent>header,.comparison-summary-grid li,.comparison-before-after section,.comparison-version-heads,
+  .review-drop,.review-layout>main,.review-risks blockquote,.review-package-members li,.review-version-export,.review-normalized-note,.review-revision-diff>div,.review-result-pane,
+  .global-search-trigger kbd,.global-search-dialog header button,
+  .help-ticket-thread article,.help-knowledge-heading form,.knowledge-feedback,
+  .history-list li>span,
+  .monitoring-segmented label,.monitoring-consent,.monitoring-update section,
+  .profile-form input:disabled,.mfa-state,.mfa-setup,.backup-codes,.business-workspace-heading>svg,
+  .team-invite>div>svg,.team-title span,.team-role,
+  .dbt-preview-toolbar,.dbt-contact-choice,.dbt-dynamic-fields,.dbt-schedule-row,.dbt-witness,.dbt-final-checks p,.dbt-builder-analysis,.dbt-quality-grid article,.dbt-diff>div,.dbt-version-empty,.dbt-version-loading,.dbt-version-list li,.dbt-editor-locked,.dbt-collaborators article,.dbt-comments article,.dbt-generated-files button,.dbt-status-actions,.dbt-attachment-list article,.dbt-analysis-result,.dbt-notifications-empty>svg,.dbt-category-grid>a>span,.dbt-template-card.review,.dbt-config-repeat,.dbt-privacy-note
+) {
+  border-color: var(--theme-line);
+  background: var(--theme-surface-soft);
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .platform-shell :is(
+  .platform-dashboard,.platform-module,.plan-workspace,.consult-workspace,.case-workspace,.calendar-workspace,
+  .billing-workspace,.cases-live,.comparison-workspace,.review-workspace,.help-workspace,.history-workspace,.archive-workspace,
+  .lawyer-directory,.monitoring-workspace,.profile-workspace,.team-workspace,.dbt-app,.dbt-shell
+) :is(h1,h2,h3,h4,strong,label,dt) {
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .platform-shell :is(
+  .platform-dashboard,.platform-module,.plan-workspace,.consult-workspace,.case-workspace,.calendar-workspace,
+  .billing-workspace,.cases-live,.comparison-workspace,.review-workspace,.help-workspace,.history-workspace,.archive-workspace,
+  .lawyer-directory,.monitoring-workspace,.profile-workspace,.team-workspace,.dbt-app,.dbt-shell
+) :is(p,li,dd,small) {
+  border-color: var(--theme-line);
+}
+
+html[data-theme="dark"] .ai-workspace {
+  background: #061a29;
+  color: var(--theme-ink);
+}
+
+html[data-theme="dark"] .ai-workspace :is(h1,h2,h3,strong,label) { color: #f4f7f9; }
+html[data-theme="dark"] .ai-workspace :is(p,li,small) { color: #b7c5ce; }
+html[data-theme="dark"] .ai-workspace :is(.ai-conversations,.ai-context,.ai-dialog>header,.ai-composer) { border-color:#294657;background:#0b2537;color:#edf2f5; }
+html[data-theme="dark"] .ai-workspace :is(.ai-composer textarea,.ai-composer-mode button,.ai-segmented button,.ai-date-trigger,.ai-date-grid>button,.ai-date-popover>footer button,.ai-source-actions button,.ai-source-actions a,.ai-source-bookmark select,.ai-source-bookmark textarea,.ai-document-prefill input,.ai-document-prefill textarea,.ai-feedback textarea) { border-color:#3b5a6e;background:#0b2233;color:#edf2f5;-webkit-text-fill-color:#edf2f5; }
+html[data-theme="dark"] .ai-workspace :is(.ai-composer-mode button[aria-pressed="true"],.ai-segmented button[aria-pressed="true"],.ai-branch-history a[aria-current="page"]) { border-color:#caa55d;background:#3a301d;color:#fff3d8;-webkit-text-fill-color:#fff3d8; }
+html[data-theme="dark"] .ai-workspace :is(.ai-conversations>div a,.ai-conversations>div button,.ai-feedback-actions>button,.ai-feedback-form button,.ai-plan-card footer button.secondary,.ai-conversation-delete-confirm button,.ai-composer .ai-date-clear) { border-color:#315064;background:#102c3e;color:#edf2f5; }
+html[data-theme="dark"] .ai-workspace :is(.ai-conversations>div a:hover,.ai-conversations>div button:hover,.ai-composer-mode button:not(:disabled):hover) { background:#17384b; }
+html[data-theme="dark"] .ai-workspace .ai-composer textarea::placeholder { color:#aebdc7;-webkit-text-fill-color:#aebdc7; }
+html[data-theme="dark"] .ai-workspace .ai-conversation-list>p { border-color:#39566a;background:#102c3e;color:#b7c5ce; }
+html[data-theme="dark"] .ai-conversation-list a { border-color:#315064;background:#102c3e;color:#edf2f5;box-shadow:none; }
+html[data-theme="dark"] .ai-conversation-list a[aria-current="page"] { border-color:#caa55d;background:linear-gradient(135deg,#17384b,#302a1d);box-shadow:inset 3px 0 #be974f; }
+html[data-theme="dark"] .ai-cautions,
+html[data-theme="dark"] .ai-unavailable,
+html[data-theme="dark"] .ai-source-modal-warning,
+html[data-theme="dark"] .ai-document-sensitive-consent { border-color:#7e693d;background:#352d1f;color:#f2dfb7; }
+html[data-theme="dark"] .ai-error { background:#402522;color:#ffd7d2; }
+
+html[data-theme="dark"] .platform-shell :is(.risk-high,.risk-critical,.billing-error,.history-error,.archive-error,.cases-live-error,.profile-message.error,.team-message.error,.review-message.error,.comparison-message.error,.plan-error) {
+  border-color: #7f4845;
+  background: #402522;
+  color: #ffd7d2;
+}
+
+html[data-theme="dark"] .platform-shell :is(.risk-medium,.ai-assumption,.ai-source-freshness,.billing-provider,.demo-payment-warning,.consult-consent,.monitoring-status,.monitoring-preference-note,.review-message.warning,.comparison-message.warning,.deadline-result) {
+  border-color: #7e693d;
+  background: #352d1f;
+  color: #f2dfb7;
+}
+
+html[data-theme="dark"] .platform-shell :is(button,a,input,textarea,select,summary) {
+  transition-property: background-color,border-color,color,box-shadow,transform;
+  transition-duration: 160ms;
+  transition-timing-function: ease;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme="dark"] .platform-topbar { background: var(--theme-canvas); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  html[data-theme="dark"] .platform-shell :is(button,a,input,textarea,select,summary) {
+    transition: none;
+  }
+}
+
+@media print {
+  html[data-theme="dark"] { color-scheme: light; }
+}
