@@ -11,6 +11,7 @@ import {
   legalCorpusVersionSlotIndexes,
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
   LEGAL_CORPUS_PROCESS_CRON,
+  LEGAL_CORPUS_SCHEDULE_LEASE_MS,
   LEGAL_CORPUS_SEED_CRON,
   LEGAL_CORPUS_STAGING_PROCESS_CRON,
 } from "../worker/legal-corpus-worker";
@@ -188,6 +189,13 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 195_000), false);
   assert.equal(legalCorpusIngestionStartAllowed(Number.NaN, scheduledTime), false);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, Number.POSITIVE_INFINITY), false);
+});
+
+test("scheduled lease covers a bounded long-running staging batch", () => {
+  // The prior seven-minute lease expired while the bounded worker was still
+  // finishing D1/index maintenance. Keep this explicit regression gate so a
+  // future timeout reduction cannot recreate that false terminal run.
+  assert.equal(LEGAL_CORPUS_SCHEDULE_LEASE_MS, 15 * 60_000);
 });
 
 test("version debt reuses only existing sequential slots while preserving the request budget", () => {

@@ -35,7 +35,13 @@ export const LEGAL_CORPUS_STAGING_PROCESS_CRON = "*/4 * * * *";
 export const LEGAL_CORPUS_SEED_CRON = "5 19 * * *";
 
 const LOCK_NAME = "legal-corpus-worker";
-const LOCK_MS = 7 * 60_000;
+// A paced ingestion run can continue with bounded D1/index maintenance after
+// the last Lex request. The previous seven-minute lease expired during a
+// healthy eight-minute staging run, causing a false terminal scheduler
+// failure. Keep one lease for the whole bounded batch and leave the next
+// invocation to the durable lock; the start fence still bounds source work.
+export const LEGAL_CORPUS_SCHEDULE_LEASE_MS = 15 * 60_000;
+const LOCK_MS = LEGAL_CORPUS_SCHEDULE_LEASE_MS;
 const SCHEDULED_RUN_STALE_AFTER_MS = LOCK_MS;
 // Once all core codes are settled, four catalogue pages advance the durable
 // discovery checkpoints per staging tick. The shared 20-second host pacer

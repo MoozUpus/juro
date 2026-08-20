@@ -167,8 +167,12 @@ discovery has no eligible page, unused discovery capacity can be reclaimed by
 ingestion only within the same pace and start fence. Every real Lex request,
 including `robots.txt`, first claims a host-wide D1 time window; the observed
 `Crawl-delay` is cached for the Worker run and persisted for later runs. The
-seven-minute lease prevents the next staging processing cron from starting a
-second crawler while a paced batch is still active. The first four ingestion
+fifteen-minute lease prevents the next staging processing cron from starting a
+second crawler while a paced batch is still active, including bounded D1/index
+maintenance after the final Lex request. The previous seven-minute lease was
+shown to expire during a healthy eight-minute staging run; this longer lease is
+still bounded by the durable lock and does not widen the Lex request budget.
+The first four ingestion
 slots prefer already-discovered `court_acts`, `laws`, `court_practice`,
 `oliy_majlis` or `president` catalogue jobs while rotating exact source
 languages through Uzbek Cyrillic, Russian, Uzbek Latin and English. The fifth
