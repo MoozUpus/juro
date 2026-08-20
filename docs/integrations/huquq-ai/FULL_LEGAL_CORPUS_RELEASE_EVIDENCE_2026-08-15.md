@@ -1501,3 +1501,19 @@ current chunks; all 44 discovery checkpoints remained completed. The queue is
 still active, so the ingestion freeze gate and all downstream snapshot,
 evaluation, backup/restore and rollout gates remain open. Production remains
 untouched.
+
+## Subsequent clean staging run (2026-08-20)
+
+The subsequent scheduled invocation started at `2026-08-20T13:20:45.513Z`
+and completed at `2026-08-20T13:34:53.128Z` with `status=completed`,
+`error_code=NULL` and a duration of 847 seconds. Post-run read-only probes
+found no running, retrying, failed or dead-letter jobs;
+`terminal_or_dead_letter_jobs=0`, `active_jobs_with_errors=0`,
+`unresolved_retrying=0` and `unresolved_technical=0`.
+
+The queue contained 38,310 queued fetch jobs and 6,112 queued version jobs;
+`live_manual_queued=6,964`. Corpus totals remained 3,575 canonical documents,
+62,075 unique current provisions and 151,499 indexed current chunks, with all
+44 discovery checkpoints completed. The queue is not frozen, so snapshot,
+indexed evaluation, Qdrant/D1 backup and restore, preview and rollout remain
+unclaimed. Production remains untouched.
