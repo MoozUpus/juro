@@ -1395,6 +1395,14 @@ dead letters remained zero. This confirms the scheduler continues to release
 its lock cleanly across consecutive runs. The queue is still active, so no
 snapshot or post-ingestion gate is claimed.
 
+The next scheduled invocation started at `2026-08-20T11:12:53.111Z` and
+completed at `2026-08-20T11:19:29.631Z` with `status=completed` and
+`error_code=NULL`. The recovered revision retry did not recur as a run-level
+error. The read-only probe recorded 38,310 queued fetch jobs, 6,214 queued
+version jobs and 7,066 live/manual queued jobs, with zero terminal jobs,
+terminal failures, dead letters, unresolved retrying jobs and unresolved
+terminal jobs. Ingestion remains active and the freeze gate is still open.
+
 ## Recovered transient revision retry (2026-08-20)
 
 The staging invocation started at `2026-08-20T11:04:53.112Z` completed at
