@@ -1385,3 +1385,12 @@ following read-only probe showed 38,310 queued fetch jobs, 6,249 queued
 version jobs and 7,101 live/manual queued jobs; terminal jobs, terminal
 failures and dead letters remained zero. This confirms the bounded staging
 run remains healthy while the queue drains; it does not close the freeze gate.
+
+The following staging run started at `2026-08-20T10:56:53.114Z` and completed
+at `2026-08-20T11:03:27.327Z` with `status=completed` and
+`error_code=NULL` (6 minutes 34.213 seconds), completing nine version jobs.
+The queue probe immediately afterwards recorded 38,310 fetch jobs, 6,231
+version jobs and 7,083 live/manual jobs; terminal jobs, terminal failures and
+dead letters remained zero. This confirms the scheduler continues to release
+its lock cleanly across consecutive runs. The queue is still active, so no
+snapshot or post-ingestion gate is claimed.
