@@ -2433,3 +2433,14 @@ discovery checkpoints were queued with zero attempts. The ingestion ledger
 contained 6 completed and 20 queued fetch jobs plus 36 completed, 895 queued
 and 1 running version jobs. `legal_corpus_failures` remained empty. These
 counts are progress evidence only and do not satisfy the release gate.
+
+## Completed-cycle reconciliation probe (2026-08-21, 11:29Z)
+
+The 11:24 UTC scheduled run completed without an actionable run error. The
+latest read-only D1 totals remain 4 canonical documents, 1,642 unique current
+provisions and 4,629 indexed chunks. Core-code targets are split as 3
+`indexed`, 11 `awaiting_ingestion`, 1 `queued` and 4 `retrying`; all 44
+catalogue checkpoints remain queued. The job ledger contains 6 completed and
+20 queued fetch jobs, 39 completed and 893 queued version jobs, and the
+failure ledger remains empty. Release floors and all downstream gates remain
+unproven.
