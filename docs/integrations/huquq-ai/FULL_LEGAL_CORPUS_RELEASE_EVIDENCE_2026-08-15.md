@@ -2444,3 +2444,11 @@ catalogue checkpoints remain queued. The job ledger contains 6 completed and
 20 queued fetch jobs, 39 completed and 893 queued version jobs, and the
 failure ledger remains empty. Release floors and all downstream gates remain
 unproven.
+
+## Core-code reconciliation probe (2026-08-21, 11:33Z)
+
+During the 11:32 UTC scheduled run, sequential read-only D1 checks showed 4
+core-code targets `indexed`, 10 `awaiting_ingestion`, 1 `queued` and 4
+`retrying`. All 44 discovery checkpoints remained queued and the failure
+ledger remained empty. The scheduled run was still active at probe time; no
+release-gate or completion claim is made.
