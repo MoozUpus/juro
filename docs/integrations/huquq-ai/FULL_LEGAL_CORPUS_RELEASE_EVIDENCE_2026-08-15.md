@@ -3105,6 +3105,22 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM continued cataloguing (2026-08-21, 19:28–19:32Z)
+
+Run `690b1beb-d449-4b90-a0ee-dc3739874be9` continued the single sequential
+government stream. Uzbek Latin reached page 3 with 60 durable records; the
+English ledger is at page 1, Uzbek Cyrillic is queued with its duplicate-page
+marker, and Russian retains page 3. All four laws checkpoints remain
+completed, and no retryable catalogue response was treated as completion.
+
+The latest read-only totals are 37 canonical documents, 43 language variants,
+6,748 distinct current provisions and 18,917 indexed chunks, with 1,957
+live-or-manual queued/retrying jobs. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter is zero. The
+release floors, queue freeze and post-ingestion gates remain unproven;
+production is untouched.
+
 ## Government/PKM run closure and retry preservation (2026-08-21, 19:27–19:29Z)
 
 Run `b6fe86c1-8432-443e-b6ec-bb6fc3977a8b` closed at 19:27:31.266Z with the
