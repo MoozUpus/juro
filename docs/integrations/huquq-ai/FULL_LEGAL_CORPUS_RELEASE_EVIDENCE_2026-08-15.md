@@ -2295,3 +2295,18 @@ jobs remain zero, but two retrying jobs still carry errors. Totals remain
 3,575 canonical documents / 62,075 unique current provisions / 151,499
 indexed current chunks and D1 `size_after=9,999,978,496` bytes. Snapshot,
 evaluation, backup/restore, preview, rollout and CI gates remain unclaimed.
+
+## D1 hard-cap failure containment (2026-08-21, 07:40Z)
+
+The staging tail captured the first post-guard invocation failure:
+`D1_ERROR: Exceeded maximum DB size`, thrown by the initial `claimRun` batch
+at `07:40:02Z` before a scheduler row could be written. This confirms the
+remaining blocker is the managed D1 hard ceiling, not a Lex source condition.
+
+Commit `59a00df6` makes scheduler claim failure fail closed: it records only
+the safe `D1_ERROR` token, calls `controller.noRetry()`, and returns without
+starting discovery, fetching, sparse maintenance or any other source work.
+The focused tests, type-check, lint and artifact dry-run pass; staging deploy
+version `87c59531-b6ed-4e02-8ad6-efe8b74c0bb7` completed at `07:47Z`.
+Production is unchanged. A post-deploy scheduled observation is still
+required; no release-gate success is claimed.
