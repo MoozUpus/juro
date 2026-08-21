@@ -3105,6 +3105,21 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## President bounded run closure (2026-08-21, 21:16–21:21Z)
+
+Run `7f9f33ae-c016-486c-a174-bd0a0d4149a2` closed at 21:21:14.884Z with
+the allow-listed retryable `LEX_CATALOG_TIMEOUT`. It preserved the single
+sequential lease and did not force-complete the president checkpoint.
+
+The final read-only totals remain 49 canonical documents, 55 language
+variants, 6,960 distinct current provisions and 19,260 indexed chunks, with
+1,904 live-or-manual queued/retrying jobs. The checkpoint ledger is 8
+completed and 36 queued. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## President run closure (2026-08-21, 21:08–21:13Z)
 
 Run `ae75c826-6892-4f48-aef8-0b65171da4f8` completed at 21:13:14.548Z with
