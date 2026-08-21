@@ -2310,3 +2310,13 @@ The focused tests, type-check, lint and artifact dry-run pass; staging deploy
 version `87c59531-b6ed-4e02-8ad6-efe8b74c0bb7` completed at `07:47Z`.
 Production is unchanged. A post-deploy scheduled observation is still
 required; no release-gate success is claimed.
+
+## Fail-closed claim verification (2026-08-21, 07:52Z)
+
+The first scheduled tick observed on staging version
+`87c59531-b6ed-4e02-8ad6-efe8b74c0bb7` emitted
+`legal_corpus.claim_failed` with safe `errorCode=D1_ERROR`, had no uncaught
+exception (`outcome=ok`), and performed no scheduler write or source fetch.
+This proves the D1 hard-cap containment is active. It does not satisfy the
+release gate: the ingestion queue remains non-empty and two retrying jobs are
+still unresolved, so snapshot/evaluation/restore/CI gates remain pending.
