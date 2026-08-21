@@ -3105,6 +3105,22 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Historical version retry resolved (2026-08-21, 19:14–19:18Z)
+
+The newly observed retryable version job
+`legal-version:b893bc40975146c8b403fcde55fd` for the historical Russian
+representation of `lexuz:97664` completed on attempt 2 at 19:16:35.429Z. No
+terminal/dead-letter conversion occurred; the retry ledger remains durable
+historical evidence rather than an active failed job. The single sequential
+run `5165ca88-180c-49d9-a838-361a38380b6e` remains active on the government
+catalogue.
+
+The latest totals are 35 canonical documents, 41 language variants, 6,709
+distinct current provisions and 18,780 indexed chunks, with 1,961
+live-or-manual queued/retrying jobs. Release floors, queue freeze,
+snapshot/evaluation, Qdrant/D1 restore and CI remain unproven; production is
+untouched.
+
 ## Government/PKM run closure (2026-08-21, 19:11Z)
 
 Run `c53f796c-72e9-4d48-b2d3-debaefa29b9f` closed at 19:11:21.722Z with the
