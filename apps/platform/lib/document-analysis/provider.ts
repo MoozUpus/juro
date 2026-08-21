@@ -46,7 +46,11 @@ export function documentAnalysisMaxOutputTokens(mode: DocumentAnalysisProviderRe
 }
 
 export function documentAnalysisTimeoutMs(mode: DocumentAnalysisProviderRequest["mode"]): number {
-  return mode === "expert" ? 90_000 : 60_000;
+  // Production quick analyses with the complete fail-closed schema can spend
+  // more than one minute generating a valid forced-tool/structured response.
+  // Keep this asynchronous budget below the Queue consumer wall-time while
+  // avoiding deterministic provider timeouts for otherwise healthy calls.
+  return mode === "expert" ? 150_000 : 120_000;
 }
 
 /**
