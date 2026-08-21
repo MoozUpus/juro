@@ -594,16 +594,16 @@ export async function handleLegalCorpusScheduled(
       }
     }
     const qdrantBackfills: Awaited<ReturnType<typeof runNextLegalCorpusQdrantBackfillBatch>>[] = [];
-    await renewRunLease(env, run);
-    const compactedSparseJsonChunks = ingestionEnabled(env)
-      ? await compactLegacySparseJsonBatch(env.DB)
-      : 0;
     // The additive compressed index is populated only after a successful
     // staging migration. Its bounded transactional backfill leaves every
     // legacy posting readable until the replacement posting is committed.
     await renewRunLease(env, run);
-    const compressedSparseBackfillChunks = ingestionEnabled(env)
-      && sparseCompressionBackfillEnabled(env)
+    const sparseCompressionMaintenanceEnabled = ingestionEnabled(env)
+      && sparseCompressionBackfillEnabled(env);
+    const compactedSparseJsonChunks = sparseCompressionMaintenanceEnabled
+      ? await compactLegacySparseJsonBatch(env.DB)
+      : 0;
+    const compressedSparseBackfillChunks = sparseCompressionMaintenanceEnabled
       ? await backfillCompressedSparseIndexBatch(env.DB)
       : 0;
     const ingestionClaimed = ingestions.some((result) => result.claimed);
