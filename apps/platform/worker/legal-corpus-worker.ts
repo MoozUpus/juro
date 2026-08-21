@@ -240,6 +240,8 @@ type LegalCorpusWorkerEnv = LegalCorpusIngestionEnv & QdrantCorpusEnv & {
   OPENAI_API_KEY?: string;
   EMBEDDING_MODEL?: string;
   LEGAL_CORPUS_EMBEDDING_SERVICE?: Fetcher;
+  /** Additive compressed sparse migration remains an explicit capacity gate. */
+  LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED?: string;
 };
 
 type ClaimedRun = {
@@ -281,6 +283,11 @@ function denseBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
   return featureEnabled(env, "LEGAL_CORPUS_ENABLED")
     && featureEnabled(env, "LEGAL_CORPUS_DENSE_ENABLED")
     && !ingestionEnabled(env);
+}
+
+function sparseCompressionBackfillEnabled(env: LegalCorpusWorkerEnv): boolean {
+  return env.APP_ENV === "staging"
+    && env.LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED === "true";
 }
 
 function enabled(env: LegalCorpusWorkerEnv): boolean {
@@ -584,6 +591,7 @@ export async function handleLegalCorpusScheduled(
     // legacy posting readable until the replacement posting is committed.
     await renewRunLease(env, run);
     const compressedSparseBackfillChunks = ingestionEnabled(env)
+      && sparseCompressionBackfillEnabled(env)
       ? await backfillCompressedSparseIndexBatch(env.DB)
       : 0;
     const ingestionClaimed = ingestions.some((result) => result.claimed);

@@ -449,6 +449,7 @@ test("dedicated Worker is route-free, production-fail-closed and staging-bounded
     assert.equal(environment.preview_urls, false);
     assert.deepEqual(environment.routes ?? [], []);
     assert.equal(environment.vars.LEGAL_CORPUS_DENSE_ENABLED, "false");
+    assert.equal(environment.vars.LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED, "false");
     assert.equal(environment.r2_buckets.some(({ binding }) => binding === "BACKUP_BUCKET"), true);
   }
   assert.deepEqual(config.triggers.crons, [LEGAL_CORPUS_PROCESS_CRON, LEGAL_CORPUS_SEED_CRON]);

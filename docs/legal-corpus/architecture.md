@@ -142,6 +142,13 @@ numeric chunk-key dictionary, then stores BM25 frequencies as
 version, language and chunk identifiers from every posting without changing
 source text, citations, ranking weights or tenant filtering.
 
+The scheduled Worker keeps this additive migration backfill behind the explicit
+`LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED` flag, which is currently `false` in
+all environments. Legacy sparse postings remain the authoritative fallback and
+retrieval reads the union of both representations. Enabling the backfill
+requires a fresh capacity probe and a separate bounded migration approval so
+it cannot consume the remaining staging D1 reserve during the legal crawl.
+
 The application first detects the additive tables at runtime. Before the
 migration it continues to write and query the legacy exportable sparse table.
 Afterward it writes new chunks only to the compressed tables while retrieval
