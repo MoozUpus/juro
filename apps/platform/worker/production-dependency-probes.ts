@@ -171,7 +171,11 @@ async function runPrivateR2Probe(env: PlatformJobEnv): Promise<ProbeOutcome> {
 
 async function fetchAsset(env: PlatformJobEnv, path: string): Promise<ArrayBuffer> {
   if (!env.ASSETS) throw new Error("BUILDER_ASSET_BINDING_UNAVAILABLE");
-  const response = await env.ASSETS.fetch(new Request(`https://app.juro.uz${path}`, {
+  // Queue exporters already use a deliberately non-public origin for direct
+  // ASSETS binding reads. Reuse that boundary here: a production custom-domain
+  // URL can re-enter Worker routing from a scheduled event instead of resolving
+  // as a binding-local asset lookup.
+  const response = await env.ASSETS.fetch(new Request(`https://juro-assets.invalid${path}`, {
     headers: { accept: "*/*" },
   }));
   if (!response.ok) throw new Error("BUILDER_ASSET_UNAVAILABLE");
@@ -182,6 +186,7 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
   if (!(await probeDue(env, "document_builder", BUILDER_PROBE_INTERVAL_MS))) return "skipped";
   const startedAt = Date.now();
   const objectKey = "system/probes/production-document-builder-v1.zip";
+  let stage: "asset" | "generation" | "storage" = "asset";
   try {
     const [
       { createDefaultAnswers },
@@ -202,6 +207,7 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
       fetchAsset(env, "/document-templates/DejaVuSans-Bold-JURO.ttf"),
       fetchAsset(env, "/document-templates/juro-mark-footer.png"),
     ]);
+    stage = "generation";
     const paragraphs = renderReceipt(createDefaultAnswers("ru")).paragraphs;
     const docx = generateDocx(template, paragraphs);
     const pdf = await generatePdf(paragraphs, regularFont, boldFont, footerMark);
@@ -213,12 +219,17 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
       || zip[0] !== 0x50 || zip[1] !== 0x4b) {
       throw new Error("BUILDER_OUTPUT_INVALID");
     }
+    stage = "storage";
     await roundTripR2(env.BUCKET, objectKey, zip);
     await recordOperational(env, "document_builder", startedAt);
     await recordOperational(env, "private_r2", startedAt);
     return "succeeded";
   } catch {
-    await recordFailure(env, "document_builder", "BUILDER_UNAVAILABLE", startedAt);
+    await recordFailure(env, "document_builder", stage === "asset"
+      ? "BUILDER_ASSET_UNAVAILABLE"
+      : stage === "generation"
+        ? "BUILDER_GENERATION_FAILED"
+        : "BUILDER_STORAGE_FAILED", startedAt);
     return "failed";
   }
 }
