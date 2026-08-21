@@ -2782,3 +2782,30 @@ ingestion failure. The next scheduled invocation is expected to retry the
 catalog path; this source timeout remains an explicit release blocker for
 queue freeze, while the lease-renewal regression itself is fixed and observed
 to renew during the long-running write.
+
+## Core-code title-search timeout mitigation (2026-08-21, 15:00Z)
+
+Read-only staging inspection found a repeatable source-path condition: the
+three unresolved core-code targets (`customs`, `economic_procedure` and
+`housing`) had each accumulated `LEX_CATALOG_TIMEOUT` on their fixed Lex title
+search, while 16 of 19 core-code targets were already indexed. A single
+bounded direct request to the customs title-search URL completed with HTTP 200
+in 219ms outside the Worker, so the failure was isolated to the Worker
+response deadline rather than an invalid URL or an allowed-source policy
+change.
+
+Commit `a97d6839` extends the deadline only for the one-per-run core-code title
+lookup to a bounded 45 seconds (`CORE_CODE_TIMEOUT_MS`); the normal catalogue
+deadline remains 20 seconds and the robots 20-second crawl delay, sequential
+pacer and distributed lock are unchanged. The focused catalog/core-code suite
+passed 28/28, followed by type-check, lint, artifact dry-run and diff checks.
+The staging-only deployment is Worker version
+`703677e4-0236-4b21-8c0f-628775deffc4`; production was not deployed or changed.
+
+The first run using the new version started at 15:04:13.885Z. At the
+15:05Z read-only probe, `economic_procedure` had advanced to attempt 7 with
+`last_error_code=NULL` (its prior repeated timeout no longer recurred on that
+lookup), while `customs` and `housing` remain retrying and are awaiting their
+rotated bounded attempts. The run is still active; no completion or release
+gate is claimed. Current core-code and checkpoint completion, queue freeze,
+snapshot, evaluation, restore and CI gates remain unproven.
