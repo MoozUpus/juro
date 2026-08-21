@@ -6,6 +6,8 @@ import {
   handleLegalCorpusScheduled,
   legalCorpusActionableRunErrorCode,
   legalCorpusCoverageBootstrapTarget,
+  legalCorpusCorePagerContinuationRequired,
+  legalCorpusIngestionBudgetForCorePager,
   legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
   legalCorpusWorkerErrorCode,
@@ -202,6 +204,21 @@ test("the bounded acquisition phase prioritizes discovery and reuses only empty 
   ]), 5);
   assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "failed" }]), 5);
   assert.equal(legalCorpusIngestionJobBudget([{ claimed: false, status: "disabled" }]), 5);
+});
+
+test("long historical batches reserve one bounded slot to continue a live core-code pager", () => {
+  assert.equal(legalCorpusCorePagerContinuationRequired({
+    status: "queued", targetId: "customs", canonicalDocumentId: null,
+  }), true);
+  assert.equal(legalCorpusCorePagerContinuationRequired({
+    status: "queued", targetId: "customs", canonicalDocumentId: "lexuz:2876352",
+  }), false);
+  assert.equal(legalCorpusCorePagerContinuationRequired({
+    status: "all_settled", targetId: null, canonicalDocumentId: null,
+  }), false);
+  assert.equal(legalCorpusIngestionBudgetForCorePager({ ingestionBudget: 5, continuePager: true }), 4);
+  assert.equal(legalCorpusIngestionBudgetForCorePager({ ingestionBudget: 6, continuePager: true }), 5);
+  assert.equal(legalCorpusIngestionBudgetForCorePager({ ingestionBudget: 5, continuePager: false }), 5);
 });
 
 test("ingestion start fence leaves a bounded representation-fetch window", () => {

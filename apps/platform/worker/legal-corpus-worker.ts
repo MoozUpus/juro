@@ -193,6 +193,31 @@ export function legalCorpusIngestionJobBudget(
 }
 
 /**
+ * An ASP.NET core-code pager carries a short-lived Lex session. A historical
+ * ingestion batch can occupy the Worker long enough for the next cron slot to
+ * miss that session, so reserve one existing ingestion slot for a continuation
+ * request in the same sequential invocation. The total source-request budget
+ * stays unchanged: one fewer document slot pays for the extra pager page.
+ */
+export function legalCorpusCorePagerContinuationRequired(input: {
+  status: string;
+  targetId: string | null;
+  canonicalDocumentId: string | null;
+}): boolean {
+  return input.status === "queued"
+    && input.targetId !== null
+    && input.canonicalDocumentId === null;
+}
+
+export function legalCorpusIngestionBudgetForCorePager(input: {
+  ingestionBudget: number;
+  continuePager: boolean;
+}): number {
+  const budget = Math.max(0, Math.floor(input.ingestionBudget));
+  return Math.max(1, budget - (input.continuePager ? 1 : 0));
+}
+
+/**
  * Keep historical revision discovery finite. A fetched current document can
  * enqueue many official ONDATE revisions, so a single reserved version slot
  * cannot drain the queue once catalogue discovery has reached broad coverage.
@@ -565,8 +590,14 @@ export async function handleLegalCorpusScheduled(
       const coverageBootstrapTarget = coreCode.status === "all_settled"
         ? await nextLegalCorpusCoverageBootstrapTarget(env.DB)
         : null;
-      const ingestionBudget = legalCorpusIngestionJobBudget(discoveries, {
+      const nominalIngestionBudget = legalCorpusIngestionJobBudget(discoveries, {
         persistentRobotsPolicy: pacerStats.persistentRobotsCacheHits > 0,
+      });
+      let corePagerContinuationRequired = legalCorpusCorePagerContinuationRequired(coreCode);
+      let corePagerContinuationAttempted = false;
+      const ingestionBudget = legalCorpusIngestionBudgetForCorePager({
+        ingestionBudget: nominalIngestionBudget,
+        continuePager: corePagerContinuationRequired,
       });
       const versionSlotIndexes = legalCorpusVersionSlotIndexes({
         ingestionBudget,
@@ -610,6 +641,19 @@ export async function handleLegalCorpusScheduled(
         });
         ingestions.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
+        // Keep a valid Lex pager session alive before a long historical batch
+        // can consume the remainder of this Worker invocation. This consumes
+        // the reserved slot above and never opens a parallel fetch stream.
+        if (!corePagerContinuationAttempted
+          && corePagerContinuationRequired
+          && ingestions.filter((job) => job.claimed).length >= Math.min(2, ingestionBudget)) {
+          corePagerContinuationAttempted = true;
+          await renewRunLease(env, run);
+          coreCode = await runNextLexCoreCodeDiscovery(env, {
+            now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
+          });
+          corePagerContinuationRequired = legalCorpusCorePagerContinuationRequired(coreCode);
+        }
       }
     }
     const qdrantBackfills: Awaited<ReturnType<typeof runNextLegalCorpusQdrantBackfillBatch>>[] = [];
