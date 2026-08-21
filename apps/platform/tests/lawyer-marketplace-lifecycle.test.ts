@@ -115,6 +115,32 @@ test("lawyer application has an explicit submit gate and draft saves do not publ
   assert.match(submitRoute, /profile_revision=\?/);
 });
 
+test("lawyer service details and six-step application are persisted and reviewable", () => {
+  const migration = readFileSync(new URL("../drizzle/0145_lawyer_profile_services.sql", import.meta.url), "utf8");
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  const application = readFileSync(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8");
+  const adminDetail = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/route.ts", import.meta.url), "utf8");
+  const adminPhoto = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/photo/route.ts", import.meta.url), "utf8");
+  const adminInbox = readFileSync(new URL("../app/_staff/LawyerProfileModerationInbox.tsx", import.meta.url), "utf8");
+  assert.match(migration, /consultation_duration_minutes/);
+  assert.match(migration, /additional_services_json/);
+  assert.match(migration, /BETWEEN 15 AND 480/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|DELETE\s+FROM/iu);
+  assert.match(profileRoute, /consultation_duration_minutes/);
+  assert.match(profileRoute, /additional_services_json/);
+  assert.match(application, /Стандартная длительность консультации/);
+  assert.match(application, /Дополнительные услуги через запятую/);
+  assert.match(application, /Шаг 4 · Расписание/);
+  assert.match(application, /Отправить профиль на проверку/);
+  assert.match(adminDetail, /lawyer_profile_moderation/);
+  assert.match(adminDetail, /lawyer_profile_lifecycle_events/);
+  assert.match(adminDetail, /lawyer_availability_rules/);
+  assert.match(adminPhoto, /lawyer\.profiles\.moderate/);
+  assert.match(adminPhoto, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(adminInbox, /REVIEW VIEW/);
+  assert.match(adminInbox, /\/lifecycle/);
+});
+
 test("availability-only edits preserve an approved public profile", () => {
   const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
   assert.match(profileRoute, /preservesPublishedProfile/);
