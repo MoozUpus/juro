@@ -3105,6 +3105,23 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM materialized continuation (2026-08-21, 20:00–20:05Z)
+
+Run `592ce653-8d10-437d-ab7b-90deb2d47eb3` acquired the single distributed
+lease at 20:00:13.672Z and remained active at the 20:04:40.377Z probe. It
+continued the preserved government page markers; English and Uzbek Cyrillic
+remain queued after duplicate-page handling, so no checkpoint was force-
+completed.
+
+Read-only totals reached 41 canonical documents, 47 language variants, 6,833
+distinct current provisions and 19,036 indexed chunks, with 1,941
+live-or-manual queued/retrying jobs. The global checkpoint ledger remains 6
+completed and 38 queued. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## Government/PKM checkpoint progress (2026-08-21, 19:52–19:55Z)
 
 Run `51198d26-2b64-454c-8532-6179cc9ec1c1` acquired the distributed lease at
