@@ -2710,3 +2710,20 @@ attempts and zero errors. Core-code reconciliation was 12 `indexed`, 2
 retryable source conditions. Release floors, queue freeze, snapshot,
 evaluation, restore and CI gates remain unproven. Production remains
 untouched.
+
+## Active replacement cycle probe (2026-08-21, 13:22Z)
+
+The 13:20:13Z scheduled invocation was still `running` at the sequential
+13:22Z probe under the distributed lock. The ledger contained 19 completed
+and 29 queued fetch jobs plus 87 completed, 1 running and 1,660 queued version
+jobs; no ingestion job carried `last_error_code`. The failure ledger remained
+empty (zero terminal/technically-unavailable rows and zero dead-letter jobs),
+and all 44 discovery checkpoints remained `queued` with zero attempts and
+zero errors.
+
+Materialized totals advanced to 13 canonical documents, 19 language variants,
+4,929 unique current provisions and 15,939 indexed current chunks. Core-code
+reconciliation was 12 `indexed`, 2 `awaiting_ingestion`, 1 `queued` and 4
+`retrying`; these remain retryable source conditions. Release floors, queue
+freeze, snapshot, evaluation, restore and CI gates remain unproven.
+Production remains untouched.
