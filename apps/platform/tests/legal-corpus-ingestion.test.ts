@@ -35,6 +35,18 @@ function lexHtml(articleTwo = true): string {
   </main></body></html>`;
 }
 
+function manyArticleLexHtml(articleCount = 450): string {
+  const articles = Array.from({ length: articleCount }, (_, index) => {
+    const number = index + 1;
+    return `<div class="lx_elem ARTICLE">Статья ${number}. Правило ${number}</div>`
+      + `<div class="lx_elem">Норма ${number} применяется в установленном законом порядке.</div>`;
+  }).join("");
+  return `<!doctype html><html><body><main id="divCont">
+    <div class="lx_elem ACT_TITLE">Большой тестовый закон</div>
+    ${articles}
+  </main></body></html>`;
+}
+
 function fetchFor(html: string, declaredContentLength?: number) {
   return async (input: RequestInfo | URL): Promise<Response> => {
     const url = String(input);
@@ -171,6 +183,29 @@ test("official Lex ingestion is article-first, immutable and idempotent", async 
     assert.equal(
       Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_versions").get() as { count: number }).count),
       1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("large version writes renew the scheduler lease between D1 batches", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  let heartbeatCalls = 0;
+  try {
+    const result = await ingestOfficialLexDocument(envFor(d1, bucket), {
+      sourceUrl: "https://lex.uz/ru/docs/12346",
+      now,
+      fetchImpl: fetchFor(manyArticleLexHtml()),
+      heartbeat: async () => { heartbeatCalls += 1; },
+    });
+    assert.equal(result.status, "indexed");
+    assert.equal(result.provisionCount, 450);
+    assert.ok(heartbeatCalls >= 2, `expected batch heartbeats, got ${heartbeatCalls}`);
+    assert.equal(
+      Number((sqlite.prepare("SELECT count(*) AS count FROM legal_corpus_provisions").get() as { count: number }).count),
+      450,
     );
   } finally {
     sqlite.close();

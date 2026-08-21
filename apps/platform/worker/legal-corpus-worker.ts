@@ -588,6 +588,7 @@ export async function handleLegalCorpusScheduled(
         const result = await runNextLegalCorpusIngestionJob(env, {
           wait,
           fetchImpl,
+          heartbeat: () => renewRunLease(env, run),
           preferredCatalogCategories: coverageBootstrapSlot
             ? [coverageBootstrapTarget.categoryKey]
             : preferredCatalogSlot

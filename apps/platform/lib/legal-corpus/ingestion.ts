@@ -437,9 +437,19 @@ function retryAt(now: Date, attempt: number): string {
   return new Date(now.getTime() + delayMs).toISOString();
 }
 
-async function runBatches(db: D1Database, statements: D1PreparedStatement[]): Promise<void> {
+async function runBatches(
+  db: D1Database,
+  statements: D1PreparedStatement[],
+  heartbeat?: () => Promise<void>,
+): Promise<void> {
+  let batchNumber = 0;
   for (let offset = 0; offset < statements.length; offset += WRITE_BATCH_SIZE) {
+    // A large historical Lex version can require many bounded D1 batches.
+    // Renew the scheduler lease between batches so durable work cannot be
+    // mistaken for a stale Worker after the fifteen-minute fence expires.
+    if (heartbeat && batchNumber % 8 === 0) await heartbeat();
     await db.batch(statements.slice(offset, offset + WRITE_BATCH_SIZE));
+    batchNumber += 1;
   }
 }
 
@@ -771,6 +781,7 @@ export async function ingestOfficialLexDocument(
     now?: Date;
     wait?: (delayMs: number) => Promise<void>;
     fetchImpl?: FetchLike;
+    heartbeat?: () => Promise<void>;
   },
 ): Promise<LegalCorpusIngestionResult> {
   if (!featureEnabled(env, "LEGAL_CORPUS_ENABLED")) {
@@ -1092,7 +1103,7 @@ export async function ingestOfficialLexDocument(
       language: currentDocument.language,
     }));
   }
-  await runBatches(env.DB, provisionStatements);
+  await runBatches(env.DB, provisionStatements, input.heartbeat);
   if (!revision) {
     if (
       current?.currentVersionId
@@ -1210,6 +1221,7 @@ export async function runNextLegalCorpusIngestionJob(
     now?: Date;
     wait?: (delayMs: number) => Promise<void>;
     fetchImpl?: FetchLike;
+    heartbeat?: () => Promise<void>;
     afterIngest?: (result: LegalCorpusIngestionResult) => Promise<void>;
     /** Reserves one bounded slot for a durable queued job type. A due retry
      * still has global precedence, and an empty reservation falls back to
@@ -1283,6 +1295,7 @@ export async function runNextLegalCorpusIngestionJob(
       now: nowDate,
       wait: input.wait,
       fetchImpl: input.fetchImpl,
+      heartbeat: input.heartbeat,
     });
     if (result.status !== "halted_suspicious_change" && result.versionId && input.afterIngest) {
       await input.afterIngest(result);
