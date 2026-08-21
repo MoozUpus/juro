@@ -3105,6 +3105,23 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government-to-president checkpoint transition (2026-08-21, 20:28–20:31Z)
+
+Run `699ddffa-e87d-4f84-8b01-4f51d4bd8fb2` acquired the single distributed
+lease at 20:28:13.665Z and remained active at the 20:30:44.093Z probe. The
+government Uzbek Cyrillic checkpoint completed after its preserved page-six
+retry. The next priority family, `president/en`, is now running from page 0;
+no duplicate or timeout state was force-completed.
+
+Read-only totals remain 43 canonical documents, 49 language variants, 6,901
+distinct current provisions and 19,130 indexed chunks, with 1,928
+live-or-manual queued/retrying jobs. The global checkpoint ledger is now 8
+completed and 35 queued, with the president English checkpoint running. The
+failure ledger remains two retrying `LEGAL_CORPUS_INGESTION_FAILED` and three
+retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter
+remains zero. Release floors, queue freeze, snapshot/evaluation, Qdrant/D1
+restore and CI gates remain unproven; production is untouched.
+
 ## Government/PKM materialized progress (2026-08-21, 20:16–20:18Z)
 
 Run `f1853ca2-ff74-495e-ad67-9595ba1b37bb` acquired the single distributed
