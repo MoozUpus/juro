@@ -2693,3 +2693,20 @@ reconciliation remained 11 `indexed`, 3 `awaiting_ingestion`, 1 `queued` and
 4 `retrying`; retrying rows are source retries, not terminal failures. Release
 floors, queue freeze, snapshot, evaluation, restore and CI gates remain
 unproven. Production remains untouched.
+
+## Completed replacement cycle with retryable catalog timeout (2026-08-21, 13:19Z)
+
+The 13:12:13Z scheduled invocation finished at 13:19:09Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. Sequential post-run probes found
+zero terminal/technically-unavailable failure rows, zero dead-letter jobs and
+no ingestion jobs with `last_error_code`; the next 13:20:13Z invocation was
+already running under the distributed lock.
+
+The replacement corpus advanced to 13 canonical documents and 19 language
+variants, while unique current provisions remained 4,814 and indexed current
+chunks 15,812. All 44 discovery checkpoints remained queued with zero
+attempts and zero errors. Core-code reconciliation was 12 `indexed`, 2
+`awaiting_ingestion`, 1 `queued` and 4 `retrying`; the retrying rows remain
+retryable source conditions. Release floors, queue freeze, snapshot,
+evaluation, restore and CI gates remain unproven. Production remains
+untouched.
