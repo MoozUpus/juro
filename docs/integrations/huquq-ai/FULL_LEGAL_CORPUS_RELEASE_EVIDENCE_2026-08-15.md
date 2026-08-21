@@ -2883,3 +2883,32 @@ The queue is now 182 completed and 2,007 queued jobs. This second long-run
 observation confirms the phase-level heartbeat fix across consecutive staging
 invocations; it does not change the open customs/checkpoint, queue-freeze,
 snapshot, evaluation, restore or CI gates.
+
+## Core-code customs pager continuation fix (2026-08-21, 16:12–16:35Z)
+
+The customs title search was independently reproduced against Lex.uz with its
+robots policy and one sequential ASP.NET session: the exact current title is
+not on page 1, appears on page 3 as `/ru/docs/2876352` (the older exact-title
+result is `/ru/docs/184744`), and page 4 contains the adoption act
+`/ru/docs/90324`. The staging target repeatedly reached page 1, then the
+15-minute source-session expired before the next cron invocation became free
+after a long historical batch; the pager was reset and checkpoints could not
+unlock. This is a repeatable scheduler/source-session interaction, not a
+terminal legal-source failure.
+
+Commit `ae32d4a8` adds a bounded continuation request inside the same
+sequential Worker run when a core-code pager is live. One of the existing
+document-ingestion slots is reserved for that continuation, so the total
+source-request budget is unchanged and no parallel crawl is introduced. The
+regression is covered by the new worker-boundary test; the focused suites pass
+21/21 worker tests and 35/35 ingestion tests, followed by type-check, lint,
+staging artifact dry-run and diff checks. The fix was pushed to
+`feature/full-legal-corpus` and deployed only to staging Worker version
+`b429f8d3-ced7-4edc-864c-534665d015c7`.
+
+The 16:12:13.903Z run was already executing the previous Worker version when
+the deploy completed and remained active at the 16:34Z probe; its old lease is
+still bounded through 16:37:42.662Z. No result from that run is attributed to
+the continuation fix. The next available staging invocation must be observed
+for page 2/page 3 progress before checkpoints or release readiness can be
+claimed. Production remains untouched.
