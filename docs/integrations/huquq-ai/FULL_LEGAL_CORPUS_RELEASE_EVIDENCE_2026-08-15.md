@@ -3105,6 +3105,22 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM page-three progress (2026-08-21, 19:20–19:24Z)
+
+The bounded run `b6fe86c1-8432-443e-b6ec-bb6fc3977a8b` advanced the Russian
+government checkpoint to page 3 with 60 durable discovery records. The other
+government language ledgers remain queued or retryable with their page markers
+preserved; none was force-completed. The four laws checkpoints remain
+completed.
+
+The latest D1 totals are 36 canonical documents, 42 language variants, 6,735
+distinct current provisions and 18,877 indexed chunks, with 1,961
+live-or-manual queued/retrying jobs. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter is zero. The
+release floors, queue freeze and all post-ingestion gates remain unproven;
+production is untouched.
+
 ## Government/PKM continuation (2026-08-21, 19:20–19:22Z)
 
 Run `b6fe86c1-8432-443e-b6ec-bb6fc3977a8b` acquired the next distributed
