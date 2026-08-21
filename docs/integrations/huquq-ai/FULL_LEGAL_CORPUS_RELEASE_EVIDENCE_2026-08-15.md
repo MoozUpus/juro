@@ -3019,3 +3019,19 @@ live-or-manual jobs. The failure ledger is unchanged at one retrying
 `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter count remains
 zero. The release thresholds, queue freeze and all post-ingestion gates remain
 open; production is untouched.
+
+## Clean sequential ingestion run (2026-08-21, 18:04–18:11Z)
+
+Run `da054cf6-e3cf-45ed-92c6-1c0ea0cd0c78` completed at 18:11:25.996Z with
+no run-level error after processing the historical/version queue under the
+phase heartbeat. The laws checkpoint ledger remained 2 completed and 42
+queued: Russian and Uzbek Latin completed; English and Uzbek Cyrillic retain
+retryable duplicate-page state. No terminal or dead-letter failure appeared.
+
+The latest materialized totals were 27 canonical documents, 6,441 distinct
+current provisions, 18,343 current provision rows and 18,353 indexed chunks;
+1,994 live-or-manual jobs remained queued/retrying. The failure ledger still
+contained only one retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows. Queue freeze, release floors,
+remaining checkpoints, snapshot/evaluation, Qdrant/D1 restore and CI gates
+remain open. Production was not changed.
