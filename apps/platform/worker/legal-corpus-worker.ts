@@ -73,19 +73,21 @@ const INGESTION_JOBS_PER_RUN = 5;
 // Place the ordinary reserved historical version slot after three fetch slots,
 // so secondary PDF/ZIP representations cannot consistently consume the start
 // window before versioning progresses. When durable historical work has grown
-// beyond a bounded debt threshold, temporarily reserve every already-
-// authorised sequential window for versions. Ordinary priority fetching
-// resumes automatically below that threshold. This is back-pressure, not a
-// new crawl stream: the shared 20-second host pacer and start fence still
-// govern every source request.
+// beyond a bounded debt threshold, reserve the already-authorised sequential
+// windows for versions while retaining one fetch slot. The retained slot is
+// required for unresolved core-code/catalogue work; without it, a large
+// historical queue can starve the current corpus indefinitely. Ordinary
+// priority fetching resumes automatically below that threshold. This is
+// back-pressure, not a new crawl stream: the shared 20-second host pacer and
+// start fence still govern every source request.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
 const VERSION_CATCHUP_QUEUE_THRESHOLD = 500;
-const VERSION_CATCHUP_MINIMUM_FETCH_SLOTS = 0;
+const VERSION_CATCHUP_MINIMUM_FETCH_SLOTS = 1;
 // Ten is the established upper bound for a scheduled worker invocation. The
 // elapsed-time start fence remains authoritative if the robots policy or a
 // secondary official representation consumes part of that request budget.
-const VERSION_CATCHUP_MAX_SLOTS = 10;
+const VERSION_CATCHUP_MAX_SLOTS = 9;
 export const LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES = LEX_CORPUS_CATEGORY_PRIORITY;
 const PREFERRED_INGESTION_LANGUAGE_ROTATION = ["uz-Cyrl", "ru", "uz-Latn", "en"] as const;
 // Production retains a short start fence so its disabled acquisition path

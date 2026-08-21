@@ -266,12 +266,12 @@ test("scheduled lease covers a bounded long-running staging batch", () => {
   assert.equal(LEGAL_CORPUS_SCHEDULE_LEASE_MS, 15 * 60_000);
 });
 
-test("version debt reuses only existing sequential slots while preserving the request budget", () => {
+test("version debt preserves one current-corpus fetch slot within the request budget", () => {
   assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 499 }), [3]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 500 }), [0, 1, 2, 3, 4, 5, 6, 7, 8]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 10, queuedVersionJobs: 500 }), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 5, queuedVersionJobs: 500 }), [0, 1, 2, 3, 4]);
-  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 2, queuedVersionJobs: 500 }), [0, 1]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 9, queuedVersionJobs: 500 }), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 10, queuedVersionJobs: 500 }), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 5, queuedVersionJobs: 500 }), [1, 2, 3, 4]);
+  assert.deepEqual(legalCorpusVersionSlotIndexes({ ingestionBudget: 2, queuedVersionJobs: 500 }), [1]);
 });
 
 test("preferred catalogue order follows the laws, PKM, President, then public-authority policy", () => {
