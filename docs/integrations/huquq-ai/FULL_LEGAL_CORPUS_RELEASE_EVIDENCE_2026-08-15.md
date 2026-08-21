@@ -3105,6 +3105,21 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM run closure and retry preservation (2026-08-21, 19:27–19:29Z)
+
+Run `b6fe86c1-8432-443e-b6ec-bb6fc3977a8b` closed at 19:27:31.266Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. The next run
+`690b1beb-d449-4b90-a0ee-dc3739874be9` acquired the single lease; its Uzbek
+Cyrillic government checkpoint is running and English remains retrying from a
+preserved timeout. No checkpoint was force-completed and no terminal/dead-letter
+row was written.
+
+The post-run totals remain 36 canonical documents, 42 language variants, 6,735
+distinct current provisions and 18,877 indexed chunks, with 1,958
+live-or-manual queued/retrying jobs. Release floors, queue freeze,
+snapshot/evaluation, Qdrant/D1 restore and CI remain unproven; production is
+untouched.
+
 ## Government/PKM page-three progress (2026-08-21, 19:20–19:24Z)
 
 The bounded run `b6fe86c1-8432-443e-b6ec-bb6fc3977a8b` advanced the Russian
