@@ -8,6 +8,7 @@ import {
   legalCorpusCoverageBootstrapTarget,
   legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
+  legalCorpusWorkerErrorCode,
   legalCorpusVersionSlotIndexes,
   renewRunLease,
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
@@ -33,6 +34,21 @@ function controller(cron: string, scheduledTime = Date.UTC(2026, 7, 15, 19, 5)) 
     noRetryCalls: () => noRetryCalls,
   };
 }
+
+test("worker errors preserve only safe actionable tokens", () => {
+  assert.equal(
+    legalCorpusWorkerErrorCode(new Error("D1: SQLITE_NOMEM while reading source https://lex.uz/private")),
+    "SQLITE_NOMEM",
+  );
+  assert.equal(
+    legalCorpusWorkerErrorCode(new Error("LEGAL_CORPUS_SCHEDULE_LEASE_LOST")),
+    "LEGAL_CORPUS_SCHEDULE_LEASE_LOST",
+  );
+  assert.equal(
+    legalCorpusWorkerErrorCode(new Error("provider response contained an unsafe message")),
+    "LEGAL_CORPUS_WORKER_FAILED",
+  );
+});
 
 test("corpus Worker is inert before both ingestion flags are enabled", async () => {
   let databaseCalls = 0;

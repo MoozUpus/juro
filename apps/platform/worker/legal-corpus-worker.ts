@@ -274,6 +274,18 @@ function log(
   else console.log(entry);
 }
 
+/**
+ * Preserve an actionable, non-sensitive error code in the durable run ledger.
+ * D1/Worker errors often arrive as a longer provider message; only the
+ * allow-listed LEGAL_* and SQLITE_* tokens are surfaced so URLs, SQL and
+ * source text never enter operational status or logs.
+ */
+export function legalCorpusWorkerErrorCode(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/\b(?:LEGAL|SQLITE)_[A-Z0-9_]+\b/u);
+  return match?.[0] ?? "LEGAL_CORPUS_WORKER_FAILED";
+}
+
 function ingestionEnabled(env: LegalCorpusWorkerEnv): boolean {
   return featureEnabled(env, "LEGAL_CORPUS_ENABLED")
     && featureEnabled(env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED");
@@ -656,7 +668,7 @@ export async function handleLegalCorpusScheduled(
   } catch (error) {
     const errorCode = error instanceof LegalCorpusSparseIndexError
       ? error.code
-      : "LEGAL_CORPUS_WORKER_FAILED";
+      : legalCorpusWorkerErrorCode(error);
     try {
       await finishRun(env, run, "failed", errorCode);
     } catch {
