@@ -2955,3 +2955,30 @@ still bounded through 16:37:42.662Z. No result from that run is attributed to
 the continuation fix. The next available staging invocation must be observed
 for page 2/page 3 progress before checkpoints or release readiness can be
 claimed. Production remains untouched.
+
+## Sequential laws-catalog progress (2026-08-21, 17:32–17:51Z)
+
+Read-only D1 probes observed the bounded staging worker continuing under its
+distributed lease. Runs `0e1a1462-f7ff-4507-9cad-f5e49c542ac7` and
+`76df3b56-2087-40a5-8996-06b160b13726` completed with retryable
+`LEX_CATALOG_TIMEOUT`; the subsequent `b2b94900-e9ab-46c2-890b-e92c69988fde`
+run also ended with that retryable code, and `b200ce4a-5d08-4990-9e8f-7e78324b7b72`
+was running at the latest probe. The lease was refreshed throughout; no
+terminal or dead-letter failure was recorded.
+
+The laws catalogue has durable progress in all four language checkpoints:
+Russian 60 documents/page 2, English 60/page 3, Uzbek Cyrillic 60/page 3 and
+Uzbek Latin 60/page 1. The Cyrillic and Russian rows each retain a
+`LEX_CATALOG_DUPLICATE_PAGE` marker while their undeclared pagers are retried;
+this is not a terminal failure and the immutable discovery ledger remains the
+source of truth. Other 40 checkpoints remain queued, so the required 44/44
+completion gate is open.
+
+The latest materialized totals were 24 canonical documents, 30 language
+variants, 6,383 distinct current provisions (18,253 current provision rows),
+18,263 indexed current chunks and 2,006 queued/retrying live-or-manual jobs.
+The failure ledger contained one `LEGAL_CORPUS_INGESTION_FAILED` and three
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows, all `retrying`; terminal/dead-letter
+count was zero. Queue freeze, release floors, snapshot, indexed 314-scenario
+evaluation, Qdrant/D1 restore and CI gates remain unproven. Production was not
+changed.
