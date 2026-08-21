@@ -3085,3 +3085,22 @@ live-or-manual queue is 1,981 jobs. The failure ledger remains one retrying
 `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows, with zero terminal/dead-letter
 failures. Release floors, queue freeze and all post-ingestion gates remain
 open; production was not changed.
+
+## Government/PKM sequential continuation (2026-08-21, 18:40–18:52Z)
+
+The bounded government-family runs continued under the single distributed
+lease. Run `754e344f-43c6-43c3-abc4-0e307073e6fc` ended at 18:47:27.771Z with
+the allow-listed retryable `LEX_CATALOG_TIMEOUT`; the next run
+`617d6764-e0f5-4e47-a6f9-a0cd21ebd40a` was active at the final probe. Russian
+and English government checkpoints advanced to page 2 (40 discovered records
+each); Uzbek Latin and Uzbek Cyrillic remain at page 2 with 40 records each.
+No checkpoint was marked complete prematurely.
+
+The latest read-only totals are 32 canonical documents, 6,564 distinct
+current provisions, 18,553 indexed current chunks and 1,975 live-or-manual
+jobs queued/retrying. The failure ledger still contains one retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter count remains
+zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
+314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
+production is untouched.
