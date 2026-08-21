@@ -2982,3 +2982,22 @@ The failure ledger contained one `LEGAL_CORPUS_INGESTION_FAILED` and three
 count was zero. Queue freeze, release floors, snapshot, indexed 314-scenario
 evaluation, Qdrant/D1 restore and CI gates remain unproven. Production was not
 changed.
+
+## Laws checkpoint completion progress (2026-08-21, 17:55–17:58Z)
+
+The `b200ce4a-5d08-4990-9e8f-7e78324b7b72` run completed at 17:55:34Z with
+retryable `LEX_CATALOG_TIMEOUT`; the next sequential run
+`39ec64a7-9807-4fd3-b64f-580c321d20e4` was active at the latest probe. The
+Russian laws checkpoint completed at 17:57:32Z after its undeclared pager
+reached page 3 (60 durable discovery records). English was processing its
+page-one retry with a transient timeout marker; Uzbek Cyrillic and Uzbek Latin
+remain queued with 60 durable records each. Thus 1/44 checkpoints is complete,
+43 remain open, and no terminal/dead-letter failure exists.
+
+The materialized totals remain 25 canonical documents, 31 language variants,
+6,399 distinct current provisions (18,285 current provision rows) and 18,295
+indexed current chunks. The live/manual queue is 2,002 jobs. The failure ledger
+contains one retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter count is zero.
+Release floors, queue freeze, snapshot, evaluation, Qdrant/D1 restore and CI
+remain unproven. Production remains untouched.
