@@ -2645,3 +2645,18 @@ reconciliation is still 10 `indexed`, 4 `awaiting_ingestion`, 1 `queued` and
 4 `retrying`. This is staging progress only; release floors, queue freeze,
 snapshot, evaluation, restore and CI gates remain unproven. Production remains
 untouched.
+
+## Completed replacement cycle (2026-08-21, 13:11Z)
+
+The 13:04:13Z scheduled invocation completed at 13:11:24Z with
+`status=completed` and `error_code=NULL`. Sequential post-run probes found
+zero terminal/technically-unavailable failures, zero dead-letter jobs and no
+ingestion jobs with `last_error_code`. The next 13:12:13Z invocation was
+already running under the distributed lock.
+
+The replacement corpus remained at 11 canonical documents, 17 language
+variants, 4,704 unique current provisions and 15,598 indexed current chunks;
+all 44 discovery checkpoints remained queued with zero attempts and zero
+errors. Release floors, checkpoint completion, queue freeze, snapshot,
+evaluation, restore and CI gates remain unproven. Production remains
+untouched.
