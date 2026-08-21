@@ -9,6 +9,7 @@ import {
   executeDocumentAnalysisJob,
 } from "../lib/document-analysis/processor";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
+import { ProviderUsageError } from "../lib/ai/provider-usage";
 import { ComparisonProcessingError } from "../lib/document-comparison/types";
 import { PackageExtractionError } from "../lib/document-analysis/package-extractor";
 import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "../lib/document-analysis/limits";
@@ -121,9 +122,21 @@ test("provider diagnostics expose only an allow-listed HTTP category", () => {
     documentAnalysisDiagnosticDetail(new AiUnavailableError("response withheld", "PROVIDER_UNAVAILABLE", false, 400)),
     "PROVIDER_HTTP_400",
   );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new ProviderUsageError("PROVIDER_USAGE_PERSISTENCE_FAILED"), "provider"),
+    "PROVIDER_USAGE_PERSISTENCE_FAILED",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new Error("opaque provider failure"), "provider"),
+    "PROVIDER_EXECUTION_FAILED",
+  );
+  assert.equal(
+    documentAnalysisDiagnosticDetail(new Error("LIKE or GLOB pattern too complex"), "retrieval"),
+    "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX",
+  );
 });
 
-test("controlled staging document probes keep append-only provider usage opaque and unique per seeded run", async () => {
+test("document provider calls keep append-only usage opaque across queue retries", async () => {
   const base = {
     analysisId: "staging-document-analysis-v1-analysis",
     consentVersion: "synthetic-probe",
@@ -132,28 +145,33 @@ test("controlled staging document probes keep append-only provider usage opaque 
     row: { ...base, createdAt: "2026-08-12T10:00:00.000Z" },
     environment: "staging",
     provider: "anthropic",
+    callStartedAt: "2026-08-12T10:00:01.000Z",
+    callOrdinal: 1,
   });
   const firstRepeat = await documentAnalysisProviderUsageEventId({
     row: { ...base, createdAt: "2026-08-12T10:00:00.000Z" },
     environment: "staging",
     provider: "anthropic",
+    callStartedAt: "2026-08-12T10:00:01.000Z",
+    callOrdinal: 1,
   });
-  const laterRun = await documentAnalysisProviderUsageEventId({
-    row: { ...base, createdAt: "2026-08-12T10:05:00.000Z" },
+  const queueRetry = await documentAnalysisProviderUsageEventId({
+    row: { ...base, createdAt: "2026-08-12T10:00:00.000Z" },
     environment: "staging",
     provider: "anthropic",
+    callStartedAt: "2026-08-12T10:05:01.000Z",
+    callOrdinal: 1,
   });
 
-  assert.match(first, /^provider_usage_document_probe_[a-f0-9]{48}$/);
+  assert.match(first, /^provider_usage_document_v2_[a-f0-9]{48}$/);
   assert.equal(firstRepeat, first);
-  assert.notEqual(laterRun, first);
+  assert.notEqual(queueRetry, first);
   assert.equal(first.includes(base.analysisId), false);
   assert.equal(first.includes("2026-08-12"), false);
 });
 
-test("ordinary document analysis preserves its existing deterministic provider usage event ID", async () => {
-  assert.equal(
-    await documentAnalysisProviderUsageEventId({
+test("ordinary document analysis provider calls do not collide across attempts", async () => {
+  const first = await documentAnalysisProviderUsageEventId({
       row: {
         analysisId: "analysis-a",
         consentVersion: "2026-07-30",
@@ -161,9 +179,22 @@ test("ordinary document analysis preserves its existing deterministic provider u
       },
       environment: "staging",
       provider: "openai",
-    }),
-    "provider_usage_document_analysis-a_openai",
-  );
+      callStartedAt: "2026-07-30T00:01:00.000Z",
+      callOrdinal: 1,
+    });
+  const retry = await documentAnalysisProviderUsageEventId({
+    row: {
+      analysisId: "analysis-a",
+      consentVersion: "2026-07-30",
+      createdAt: "2026-07-30T00:00:00.000Z",
+    },
+    environment: "staging",
+    provider: "openai",
+    callStartedAt: "2026-07-30T00:03:00.000Z",
+    callOrdinal: 1,
+  });
+  assert.notEqual(first, retry);
+  assert.equal(first.includes("analysis-a"), false);
 });
 
 test("document analysis carries a safe provider diagnostic into its worker boundary", async () => {
