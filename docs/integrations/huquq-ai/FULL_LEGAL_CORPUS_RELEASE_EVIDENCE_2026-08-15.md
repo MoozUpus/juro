@@ -1535,6 +1535,33 @@ remained 3,575 canonical documents, 62,075 unique current provisions and
 snapshot, indexed 314-scenario evaluation, Qdrant/D1 backup and restore,
 preview and rollout gates remain unclaimed. Production remains untouched.
 
+## Overnight clean staging runs and queue progress (2026-08-20/21)
+
+Five consecutive scheduled invocations completed without a scheduler error:
+`22:52:45.512Z → 23:05:27.252Z` (761 seconds),
+`23:08:45.514Z → 23:21:44.632Z` (779 seconds),
+`23:24:45.512Z → 23:37:38.937Z` (773 seconds),
+`23:40:45.518Z → 23:50:08.910Z` (563 seconds), and
+`23:52:45.517Z → 2026-08-21T00:05:32.504Z` (766 seconds). Every row had
+`status=completed` and `error_code=NULL`.
+
+The post-run read-only D1 probe at `2026-08-21T00:07:24Z` recorded 44/44
+completed discovery checkpoints, no running jobs and zero failure counters:
+`terminal_or_dead_letter_jobs=0`, `active_jobs_with_errors=0`,
+`unresolved_retrying=0` and `unresolved_technical=0`. Queue progress was
+38,310 queued fetch jobs, 5,822 queued version jobs and 3,538 completed
+version jobs; `live_manual_queued=6,674`. Corpus totals remained 3,575
+canonical documents, 62,075 unique current provisions and 151,499 indexed
+current chunks. The queue is still active, so freeze and all downstream
+snapshot, evaluation and backup/restore gates remain unclaimed. Production
+remains untouched.
+
+The first probe after the environment rollover briefly returned Cloudflare
+API error `7403`; `wrangler whoami` showed the expected account and D1 scope,
+and a subsequent remote `SELECT 1` plus the full read-only probes succeeded.
+This was a transient probe transport issue, not a corpus ingestion failure,
+and no mutation or code change was made.
+
 ## Subsequent clean staging run (2026-08-20, 13:52Z)
 
 The next scheduled invocation started at `2026-08-20T13:52:45.509Z` and
