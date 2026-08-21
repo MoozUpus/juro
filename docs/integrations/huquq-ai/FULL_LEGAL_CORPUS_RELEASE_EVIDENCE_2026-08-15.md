@@ -3105,6 +3105,23 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM materialized progress (2026-08-21, 20:16–20:18Z)
+
+Run `f1853ca2-ff74-495e-ad67-9595ba1b37bb` acquired the single distributed
+lease at 20:16:13.664Z and remained active at the 20:17:48.221Z probe. The
+government Uzbek Cyrillic checkpoint is retrying its preserved page-six
+catalogue after the allow-listed `LEX_CATALOG_TIMEOUT`; this is not a terminal
+failure and was not force-completed.
+
+Read-only totals reached 43 canonical documents, 49 language variants, 6,901
+distinct current provisions and 19,130 indexed chunks, with 1,934
+live-or-manual queued/retrying jobs. The global checkpoint ledger is 7
+completed, 36 queued and 1 retrying. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## Government/PKM materialized progress (2026-08-21, 20:08–20:14Z)
 
 The same bounded run `e1183cbb-a470-446d-8df3-b152fb4e1262` remained under
