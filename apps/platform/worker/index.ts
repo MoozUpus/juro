@@ -15,6 +15,10 @@ import {
   isStagingQueueHealthProbeQueue,
 } from "./staging-queue-health-probe";
 import {
+  handleProductionQueueHealthProbeBatch,
+  isProductionQueueHealthProbeQueue,
+} from "./production-queue-health-probe";
+import {
   handleStagingLegalEvaluationQueueBatch,
   isStagingLegalEvaluationQueue,
 } from "./staging-legal-evaluation-queue";
@@ -219,6 +223,10 @@ const worker = {
     batch: MessageBatch<unknown>,
     env: FrameworkEnv,
   ): Promise<void> {
+    if (isProductionQueueHealthProbeQueue(batch.queue, env)) {
+      await handleProductionQueueHealthProbeBatch(batch, env);
+      return;
+    }
     if (isStagingQueueHealthProbeQueue(batch.queue, env)) {
       await handleStagingQueueHealthProbeBatch(batch, env);
       return;

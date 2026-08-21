@@ -93,6 +93,15 @@ async function maybeEnqueueStagingQueueHealthProbe(env: PlatformJobEnv) {
   const { enqueueStagingQueueHealthProbe } = await import("./staging-queue-health-probe");
   return enqueueStagingQueueHealthProbe(env);
 }
+
+async function maybeEnqueueProductionQueueHealthProbe(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "production"
+    || (env as Record<string, unknown>).PRODUCTION_QUEUE_HEALTH_PROBE_ENABLED !== "true"
+  ) return null;
+  const { enqueueProductionQueueHealthProbe } = await import("./production-queue-health-probe");
+  return enqueueProductionQueueHealthProbe(env);
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -561,6 +570,8 @@ export async function handleScheduled(
     const summary = await dispatchOutbox(env, 100);
     failureCode = "QUEUE_HEALTH_PROBE_ENQUEUE_FAILED";
     const queueHealthProbe = await maybeEnqueueStagingQueueHealthProbe(env);
+    failureCode = "PRODUCTION_QUEUE_HEALTH_PROBE_ENQUEUE_FAILED";
+    const productionQueueHealthProbe = await maybeEnqueueProductionQueueHealthProbe(env);
     failureCode = "QUEUE_DLQ_RECONCILIATION_FAILED";
     const documentDlqReconciliation = await reconcileRetryExhaustedQueueJobs(
       env,
@@ -668,6 +679,10 @@ export async function handleScheduled(
       emailDeliveryProbeAttempted: emailDeliveryProbe?.attempted ?? 0,
       emailDeliveryProbeAccepted: emailDeliveryProbe?.accepted ?? 0,
       emailDeliveryProbeFailed: emailDeliveryProbe?.failed ?? 0,
+      productionQueueHealthProbeEnqueued: productionQueueHealthProbe?.enqueued ?? 0,
+      productionQueueHealthProbeStale: productionQueueHealthProbe?.stale ?? 0,
+      productionQueueHealthProbeFailed: productionQueueHealthProbe?.failed ?? 0,
+      productionQueueHealthProbeSkipped: productionQueueHealthProbe?.skipped ?? 0,
       emailDeliveryProbeSkipped: emailDeliveryProbe?.skipped ?? 0,
       emailDeliveryProbeAlreadyAccepted: emailDeliveryProbe?.alreadyAccepted ?? 0,
       malwareScannerProbeAttempted: malwareScannerProbe?.attempted ?? 0,

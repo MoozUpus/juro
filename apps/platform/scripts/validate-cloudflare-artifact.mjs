@@ -225,6 +225,10 @@ if (["staging", "production"].includes(requestedEnvironment)) {
       ? "false"
       : (artifact.vars?.STAGING_DOCUMENT_ANALYSIS_PROBE_ENABLED === "true" ? "true" : "false"),
   );
+  assert.equal(
+    artifact.vars?.PRODUCTION_QUEUE_HEALTH_PROBE_ENABLED,
+    requestedEnvironment === "production" ? "true" : undefined,
+  );
   assert.deepEqual(artifact.migrations, selected.migrations);
   assert.deepEqual(artifact.durable_objects, selected.durable_objects);
   assert.deepEqual(artifact.containers, selected.containers);
@@ -252,6 +256,9 @@ const isolatedDlqContract = [
 const stagingQueueHealthProbeContract = [
   ["STAGING_QUEUE_HEALTH_PROBE_QUEUE", "queue-health"],
 ];
+const productionQueueHealthProbeContract = [
+  ["PRODUCTION_QUEUE_HEALTH_PROBE_QUEUE", "queue-health"],
+];
 const hasAsyncConsumers = ["staging", "production"].includes(requestedEnvironment);
 const queueContract = hasAsyncConsumers
   ? [
@@ -265,6 +272,7 @@ const queueContract = hasAsyncConsumers
     ["MALWARE_SCAN_QUEUE", "malware-scan"],
     isolatedDlqContract[3],
     ...(requestedEnvironment === "staging" ? stagingQueueHealthProbeContract : []),
+    ...(requestedEnvironment === "production" ? productionQueueHealthProbeContract : []),
   ]
   : [
     sourceQueueContract[0],
@@ -338,6 +346,16 @@ assert.deepEqual(
           max_batch_timeout: 1,
           max_retries: 0,
           max_concurrency: 4,
+        }] : []),
+        ...(requestedEnvironment === "production" ? [{
+          // No recursive DLQ: after bounded consumer retries the durable D1
+          // claim becomes a truthful degraded signal on the next cron.
+          queue: `${requestedEnvironment}-queue-health`,
+          max_batch_size: 1,
+          max_batch_timeout: 5,
+          max_retries: 3,
+          max_concurrency: 1,
+          retry_delay: 30,
         }] : []),
       ];
     })()
