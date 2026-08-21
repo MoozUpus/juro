@@ -2254,3 +2254,31 @@ remained 3,575 canonical documents, 62,075 unique current provisions and
 151,499 indexed current chunks. Ingestion is still not frozen, so the
 snapshot, indexed 314-scenario evaluation, Qdrant/D1 backup and restore,
 preview and rollout gates remain unclaimed. Production remains untouched.
+
+## Sparse-capacity guard and post-deploy diagnostics (2026-08-21, 07:12–07:36Z)
+
+The `07:12:02Z` scheduled run was already in flight before commit `fdae5fd5`
+(`fix: gate compressed sparse backfill by capacity flag`) reached staging and
+ended with `LEGAL_CORPUS_SPARSE_BACKFILL_FAILED` at `07:16:16Z`. The next
+invocations on version `5a73f277` (`07:20:02Z`, `07:24:02Z` and `07:28:02Z`)
+ended with the generic `LEGAL_CORPUS_WORKER_FAILED` code. No terminal or
+dead-letter ingestion jobs were created; the unresolved retrying work was
+limited to the existing Lex historical-version queue.
+
+Commit `0fa77933` added a safe error-code classifier that exposes only
+allow-listed `LEGAL_*`/`SQLITE_*` tokens (never URLs, SQL or source text) in
+the run ledger. Commit `bc6d19cd` then put both optional sparse compaction and
+compressed-index backfill behind the same
+`LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED` capacity flag. Both commits passed
+the focused tests, type-check, lint and artifact dry-run; staging was deployed
+as version `4a10213e-74ba-4fb8-bfb7-8c525d033e78` at `07:35:49Z` with the flag
+explicitly `false`. A new post-deploy scheduled invocation has not yet been
+observed, so no clean-run claim is made here.
+
+At the latest read-only probe, D1 `size_after` was `9,999,978,496` bytes,
+44/44 discovery checkpoints were completed, totals were 3,575 canonical
+documents / 62,075 current provisions / 151,499 indexed chunks, and the
+queue remained unfrozen (38,310 fetch + 5,376 version queued, one retrying
+version job). The release snapshot, indexed 314-scenario evaluation, Qdrant
+benchmark/restore, D1 backup/restore, preview and rollout gates remain
+unclaimed. Production remains untouched.
