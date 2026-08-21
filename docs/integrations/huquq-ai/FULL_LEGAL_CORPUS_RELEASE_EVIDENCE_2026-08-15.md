@@ -2593,3 +2593,21 @@ zero attempts and zero errors. Materialized totals were unchanged at 10
 canonical documents, 4,123 unique current provisions and 14,924 indexed
 current chunks. This remains staging progress only; no release-gate or
 production claim is made.
+
+## Completed replacement cycle (2026-08-21, 13:01Z)
+
+The 12:52:13Z scheduled invocation completed at 13:01:00Z with
+`status=completed` and `error_code=NULL`. Sequential post-run probes found
+zero ingestion failure rows, zero terminal/technically-unavailable rows and
+zero dead-letter jobs; all job groups had no `last_error_code`. The next
+13:04:13Z invocation was already running under the distributed lock, so no
+parallel crawler was started.
+
+The replacement corpus advanced to 11 canonical documents and 17 language
+variants, with 4,123 unique current provisions and 14,924 indexed current
+chunks. All 44 discovery checkpoints remained `queued` with zero attempts and
+zero errors. Core-code reconciliation was 10 `indexed`, 4
+`awaiting_ingestion`, 1 `queued` and 4 `retrying`; the retrying rows are
+retryable source conditions, not terminal ingestion failures. Release floors,
+checkpoint completion, queue freeze, snapshot, evaluation, restore and CI
+gates remain unproven. Production remains untouched.
