@@ -1,6 +1,31 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  turnstileClientFailure,
+  turnstileClientRetryMode,
+} from "../lib/auth/turnstile-client";
 import { validateAuthTurnstile, validateTurnstile } from "../lib/auth/turnstile";
+
+test("Turnstile client failures are bounded and distinguish configuration errors", () => {
+  assert.equal(turnstileClientRetryMode, "never");
+  assert.deepEqual(turnstileClientFailure("110200", "ru"), {
+    code: "110200",
+    retryable: false,
+    message:
+      "Проверка безопасности временно недоступна из-за настройки сервиса. Обновите страницу позже или обратитесь в поддержку.",
+  });
+  assert.deepEqual(turnstileClientFailure("200500", "uz"), {
+    code: "200500",
+    retryable: true,
+    message:
+      "Xavfsizlik tekshiruvi yakunlanmadi. Tekshiruvni takrorlang.",
+  });
+  assert.deepEqual(turnstileClientFailure("unsafe-code", "ru"), {
+    code: null,
+    retryable: true,
+    message: "Проверка безопасности не завершилась. Повторите проверку.",
+  });
+});
 
 test("Turnstile verification binds token, IP, action, and hostname", async () => {
   let requestBody: Record<string, unknown> | null = null;
