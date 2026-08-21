@@ -2337,3 +2337,29 @@ A fresh machine-captured staging capacity artifact was generated with
 `bb716a96-b2fb-4823-90d6-6c228fed181a` / `juro-staging` to
 `databaseSizeBytes=9,999,998,976`; the 8 GB release-reserve check therefore
 remains a proven failure, not an inferred or stale value.
+
+## Staging D1 replacement and ingestion restart (2026-08-21)
+
+The original `juro-staging` database reached Cloudflare's 10 GB per-database
+limit and was preserved unchanged. The owner created a separate staging
+database `juro-staging-corpus-v2` with UUID
+`62620fb3-3da3-4c76-a8e9-aa60858c1063`. The staging-only Wrangler binding
+`DB` now points to that UUID; the production `DB` binding, production flags and
+production Worker were not changed. The staging Qdrant collection was also
+separated as `juro_legal_staging_v2` so an empty replacement database cannot
+read vectors belonging to the retired staging ledger.
+
+The new database received all 142 staging migrations, including evidence
+migrations `0122–0123`, legal-corpus migrations `0124–0140`, and the robots
+policy migration `0141`. Artifact dry-run confirmed the new D1/R2/service
+bindings and all staging flags. The dedicated legal-corpus Worker was deployed
+staging-only as version `8b7fd349-9cfd-4391-a0b8-2502bdf84233`.
+
+Sequential read-only probes after the first cron ticks showed 44 discovery
+checkpoints seeded, no terminal/dead-letter failure rows, and ingestion
+progressing on the replacement database. The latest probe recorded 1 completed,
+507 queued and 1 running ingestion jobs, 1 canonical document, and 968 active
+provisions. The database size was 19,861,504 bytes. These are restart
+observations, not release-gate success: the replacement corpus is empty and
+still must complete discovery, ingestion, indexing, queue freeze, snapshot,
+314-scenario indexed evaluation, Qdrant/D1 restore and CI gates.
