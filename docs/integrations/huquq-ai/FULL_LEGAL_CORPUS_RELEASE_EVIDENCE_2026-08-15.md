@@ -3105,6 +3105,24 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## President multilingual page progress (2026-08-21, 20:36–20:40Z)
+
+Run `390469ab-17c6-4b25-bd0a-0fb0fcbe3524` remained under the single
+distributed lease through the 20:39:24.514Z probe. The president catalogue
+now has 20 discovered records on page 1 in each of RU, Uzbek Cyrillic, Uzbek
+Latin and English. All four ledgers remain queued for their next bounded page;
+the Russian timeout was preserved as retryable and no checkpoint was force-
+completed.
+
+Read-only totals remain 44 canonical documents, 50 language variants, 6,913
+distinct current provisions and 19,165 indexed chunks, with 1,924
+live-or-manual queued/retrying jobs. The global checkpoint ledger remains 8
+completed and 36 queued. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## President catalogue materialized progress (2026-08-21, 20:28–20:34Z)
 
 Run `699ddffa-e87d-4f84-8b01-4f51d4bd8fb2` remained under the single
