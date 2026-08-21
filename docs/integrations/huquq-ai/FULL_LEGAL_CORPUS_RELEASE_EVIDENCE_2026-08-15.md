@@ -2545,3 +2545,20 @@ errors. Materialized totals were 9 canonical documents, 13 language variants,
 `size_after=583,974,912` bytes. This remains staging progress only: release
 floors, completed checkpoints, queue freeze, snapshot, evaluation, restore and
 CI gates are unproven. Production remains untouched.
+
+## Replacement cycle with retryable catalog timeout (2026-08-21, 12:36Z)
+
+The 12:28:13Z scheduled invocation finished at 12:36:59Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. Sequential post-run D1 probes
+recorded no terminal or technically-unavailable failure rows, no dead-letter
+jobs and no active job errors. The ingestion ledger contained 14 completed and
+26 queued fetch jobs plus 71 completed and 1,471 queued version jobs, all
+without `last_error_code`.
+
+All 44 discovery checkpoints remained `queued` with zero attempts and zero
+errors. Materialized totals were 10 canonical documents, 14 language variants,
+4,123 unique current provisions and 10,629 indexed current chunks; D1 reported
+`size_after=630,329,344` bytes. Core-code reconciliation was 9 `indexed`, 5
+`awaiting_ingestion`, 2 `queued` and 3 `retrying`. This remains staging
+progress only: release floors, completed checkpoints, queue freeze, snapshot,
+evaluation, restore and CI gates are unproven. Production remains untouched.
