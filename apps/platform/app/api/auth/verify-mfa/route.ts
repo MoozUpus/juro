@@ -27,6 +27,7 @@ import {
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1 } from "../../../../lib/document-builder/storage/runtime";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
+import { lawyerLandingDestination } from "../../../../lib/platform/lawyer-entry-routing";
 
 function terminalMfaError(error: unknown): boolean {
   return error instanceof MfaError
@@ -82,11 +83,30 @@ export const POST = withApiErrors(async function POST(request: Request) {
       ? result.accountType
       : "individual";
     const requestHostname = new URL(request.url).hostname;
-    const redirectTo = result.onboardingCompletedAt
-      ? requestHostname.toLowerCase() === "lawyer.juro.uz" && accountType === "lawyer"
-        ? `/${userLocale}/dashboard`
-        : `/${userLocale}/${accountType}/dashboard`
-      : `/${userLocale}/onboarding`;
+    const normalizedHostname = requestHostname.toLowerCase();
+    const lawyerHost = normalizedHostname === "lawyer.juro.uz"
+      || normalizedHostname === "lawyer.staging.juro.uz";
+    const lawyerProfile = accountType === "lawyer"
+      ? await requireD1().prepare(
+          `SELECT status AS lawyerProfileStatus,
+            marketplace_status AS lawyerMarketplaceStatus
+           FROM lawyer_profiles WHERE user_id=? LIMIT 1`,
+        ).bind(result.userId).first<{
+          lawyerProfileStatus: string | null;
+          lawyerMarketplaceStatus: string | null;
+        }>()
+      : null;
+    const redirectTo = accountType === "lawyer"
+      ? lawyerLandingDestination({
+          locale: userLocale,
+          accountType,
+          onboardingCompleted: Boolean(result.onboardingCompletedAt),
+          lawyerProfileStatus: lawyerProfile?.lawyerProfileStatus ?? null,
+          lawyerMarketplaceStatus: lawyerProfile?.lawyerMarketplaceStatus ?? null,
+        }, lawyerHost, requestHostname)
+      : result.onboardingCompletedAt
+        ? `/${userLocale}/${accountType}/dashboard`
+        : `/${userLocale}/onboarding`;
     return jsonNoStore({ ok: true, redirectTo }, 200, [
       clearMfaChallengeCookie(),
       ...replacementSessionCookies(result.session.token, rememberMe, requestHostname),

@@ -23,6 +23,11 @@ import {
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { PlatformShell } from "./PlatformShell";
 import { safeDisplayName } from "../../lib/platform/display-name";
+import { headers } from "next/headers";
+import {
+  isLawyerHostRequest,
+  lawyerLandingDestination,
+} from "../../lib/platform/lawyer-entry-routing";
 
 export async function WorkspaceShellLayout({
   children,
@@ -50,8 +55,34 @@ export async function WorkspaceShellLayout({
   const user = await requireChatGPTUser(returnTo);
   const userProfile = await getOrCreateUserProfile(user);
   const profile = await workspaceProfile(user.email);
+  const requestHeaders = await headers();
+  const lawyerHost = isLawyerHostRequest(requestHeaders);
   if (profile && !profile.onboardingCompleted) {
-    redirect(`/${profile.locale}/onboarding`);
+    redirect(profile.accountType === "lawyer"
+      ? lawyerLandingDestination(
+          profile,
+          lawyerHost,
+          requestHeaders.get("host"),
+        )
+      : `/${profile.locale}/onboarding`);
+  }
+  if (accountType === "lawyer" && profile?.accountType !== "lawyer") {
+    if (lawyerHost) {
+      const query = new URLSearchParams({
+        accountType: "lawyer",
+        reauth: "1",
+        returnTo: `/${locale}/dashboard`,
+      });
+      redirect(`/${locale}/auth/login?${query}`);
+    }
+    redirect(`/${profile?.locale ?? locale}/${profile?.accountType ?? "individual"}/dashboard`);
+  }
+  if (profile?.accountType === "lawyer" && accountType !== "lawyer") {
+    redirect(lawyerLandingDestination(
+      profile,
+      lawyerHost,
+      requestHeaders.get("host"),
+    ));
   }
 
   const defaultWorkspace = requestedWorkspaceId

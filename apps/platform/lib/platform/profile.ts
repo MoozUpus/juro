@@ -7,7 +7,15 @@ import {
   type PlatformLocale,
 } from "./routing";
 
-export async function workspaceProfile(email: string): Promise<{ locale: PlatformLocale; accountType: AccountType; onboardingCompleted: boolean } | null> {
+export type WorkspaceProfile = {
+  locale: PlatformLocale;
+  accountType: AccountType;
+  onboardingCompleted: boolean;
+  lawyerProfileStatus: string | null;
+  lawyerMarketplaceStatus: string | null;
+};
+
+export async function workspaceProfile(email: string): Promise<WorkspaceProfile | null> {
   try {
     const db = requireD1();
     const userId = await userIdByEmail(
@@ -19,8 +27,12 @@ export async function workspaceProfile(email: string): Promise<{ locale: Platfor
     const row = await db.prepare(
       `SELECT p.locale,p.account_type AS accountPersona,
         w.type AS workspaceType,
-        p.onboarding_completed_at AS onboardingCompletedAt
-       FROM user_profiles p LEFT JOIN workspaces w ON w.id=p.default_workspace_id
+        p.onboarding_completed_at AS onboardingCompletedAt,
+        lp.status AS lawyerProfileStatus,
+        lp.marketplace_status AS lawyerMarketplaceStatus
+       FROM user_profiles p
+       LEFT JOIN workspaces w ON w.id=p.default_workspace_id
+       LEFT JOIN lawyer_profiles lp ON lp.user_id=p.id
        WHERE p.id=? LIMIT 1`,
     )
       .bind(userId).first<{
@@ -28,6 +40,8 @@ export async function workspaceProfile(email: string): Promise<{ locale: Platfor
         accountPersona: string;
         workspaceType: string | null;
         onboardingCompletedAt: string | null;
+        lawyerProfileStatus: string | null;
+        lawyerMarketplaceStatus: string | null;
       }>();
     if (!row) return null;
     return {
@@ -38,6 +52,8 @@ export async function workspaceProfile(email: string): Promise<{ locale: Platfor
           ? row.accountPersona
           : "individual",
       onboardingCompleted: Boolean(row.onboardingCompletedAt),
+      lawyerProfileStatus: row.lawyerProfileStatus,
+      lawyerMarketplaceStatus: row.lawyerMarketplaceStatus,
     };
   } catch { return null; }
 }

@@ -4,7 +4,7 @@ import { projectPublicLawyerDirectory } from "../../../../../lib/platform/lawyer
 
 type Context = { params: Promise<{ profileId: string }> };
 
-/** A strict public-detail allowlist. Pending profiles remain visible, never bookable. */
+/** A strict public-detail allowlist for fully approved profiles only. */
 export async function GET(_request: Request, context: Context) {
   const parsedId = z.string().uuid().safeParse((await context.params).profileId);
   if (!parsedId.success) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
@@ -18,9 +18,9 @@ export async function GET(_request: Request, context: Context) {
        juro_approval_status AS juroApprovalStatus,top_lawyer_status AS topLawyerStatus,
        top_lawyer_criteria AS topLawyerCriteria,
        CASE WHEN profile_photo_key IS NOT NULL THEN '/api/public/lawyers/' || id || '/photo' ELSE NULL END AS profilePhotoUrl
-     FROM lawyer_profiles WHERE id=?
-       AND ((status='public_approved' AND marketplace_status='public_approved' AND public_approved_at IS NOT NULL)
-         OR (marketplace_status='pending_review' AND status='pending')) LIMIT 1`,
+     FROM lawyer_profiles WHERE id=? AND status='public_approved'
+       AND marketplace_status='public_approved'
+       AND public_approved_at IS NOT NULL LIMIT 1`,
   ).bind(parsedId.data).all<{ id: string; displayName: string; specialtiesJson: unknown; languagesJson: unknown; experienceYears: number | null; priceDescription: string | null; availabilityStatus: string; nextAvailableAt: string | null; advocateStatus: string; firmName: string | null; bio: string | null; marketplaceStatus: string; city: string | null; region: string | null; education: string | null; consultationFormatsJson: unknown; profilePhotoUrl: string | null; juroApprovalStatus: string; topLawyerStatus: string; topLawyerCriteria: string | null }>();
   if (!lawyers.results.length) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
   const aggregates = await db.prepare(
