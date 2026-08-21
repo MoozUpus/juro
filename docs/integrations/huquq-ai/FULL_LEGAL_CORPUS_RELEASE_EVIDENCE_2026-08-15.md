@@ -2581,3 +2581,15 @@ retryable source conditions, not terminal ingestion failures. This is staging
 progress only: the release floors, completed checkpoints, queue freeze,
 snapshot, evaluation, restore and CI gates are unproven. Production remains
 untouched.
+
+## Active replacement cycle continuation (2026-08-21, 13:00Z)
+
+The same 12:52:13Z scheduled invocation remained `running` at the next
+sequential probe; its lease was renewed through 13:15:05Z. The ingestion
+ledger advanced to 16 completed and 25 queued fetch jobs plus 79 completed
+and 1,607 queued version jobs, with no job-level error codes. The failure
+ledger remained empty and all 44 discovery checkpoints remained queued with
+zero attempts and zero errors. Materialized totals were unchanged at 10
+canonical documents, 4,123 unique current provisions and 14,924 indexed
+current chunks. This remains staging progress only; no release-gate or
+production claim is made.
