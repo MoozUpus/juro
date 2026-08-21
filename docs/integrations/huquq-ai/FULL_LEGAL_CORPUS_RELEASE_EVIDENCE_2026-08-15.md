@@ -2329,3 +2329,11 @@ for this branch yet. Read-only Wrangler deployment history confirms the
 production legal-corpus Worker is still version
 `ca9f9b82-1430-4bae-80ce-94e1194d420a` from `2026-08-14`; no production deploy
 was performed by this integration.
+
+A fresh machine-captured staging capacity artifact was generated with
+`npm run capture:legal-corpus:d1-capacity -- --config wrangler.legal-corpus.jsonc
+--output dist/legal-corpus-worker/staging-d1-capacity.json` at
+`2026-08-21T08:00:10.835Z`. It binds database
+`bb716a96-b2fb-4823-90d6-6c228fed181a` / `juro-staging` to
+`databaseSizeBytes=9,999,998,976`; the 8 GB release-reserve check therefore
+remains a proven failure, not an inferred or stale value.
