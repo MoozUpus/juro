@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import type { DependencyHealthKey } from "../lib/operations/dependency-health";
 import { recordDependencyHealthEvidence } from "../worker/dependency-health-evidence";
@@ -26,6 +27,49 @@ function probeEnv(db: D1Database) {
     PRODUCTION_SYNTHETIC_PROBES_ENABLED: "true",
     DB: db,
   } as unknown as PlatformJobEnv & { PRODUCTION_SYNTHETIC_PROBES_ENABLED: string };
+}
+
+function builderBucket() {
+  const objects = new Map<string, Uint8Array>();
+  const bucket = {
+    async delete(key: string) {
+      objects.delete(key);
+    },
+    async put(key: string, value: Uint8Array) {
+      const bytes = Uint8Array.from(value);
+      objects.set(key, bytes);
+      return { size: bytes.byteLength };
+    },
+    async head(key: string) {
+      const bytes = objects.get(key);
+      return bytes ? { size: bytes.byteLength } : null;
+    },
+    async get(key: string) {
+      const bytes = objects.get(key);
+      return bytes ? {
+        body: null,
+        async arrayBuffer() {
+          return bytes.slice().buffer;
+        },
+      } : null;
+    },
+  } as unknown as R2Bucket;
+  return { bucket, objects };
+}
+
+function builderAssets(requests: string[]): Fetcher {
+  return {
+    async fetch(request: RequestInfo | URL) {
+      const url = new URL(request instanceof Request ? request.url : String(request));
+      requests.push(url.href);
+      const path = url.pathname.replace(/^\//u, "");
+      try {
+        return new Response(await readFile(new URL(`../public/${path}`, import.meta.url)));
+      } catch {
+        return new Response(null, { status: 404 });
+      }
+    },
+  } as Fetcher;
 }
 
 async function seedOperational(
@@ -123,6 +167,33 @@ test("provider probes publish operational evidence only for exact non-fallback r
       { dependencyKey: "anthropic", state: "operational", evidenceKind: "synthetic_probe" },
       { dependencyKey: "openai", state: "operational", evidenceKind: "synthetic_probe" },
     ]);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("the Builder probe uses the binding-local asset origin and removes its R2 archive", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const { bucket, objects } = builderBucket();
+  const assetRequests: string[] = [];
+  try {
+    const env = {
+      ...probeEnv(d1),
+      ASSETS: builderAssets(assetRequests),
+      BUCKET: bucket,
+    };
+    await seedOperational(env, ["document_builder"]);
+    const summary = await runProductionDependencyProbes(env);
+    assert.equal(summary?.documentBuilder, "succeeded");
+    assert.equal(objects.size, 0);
+    assert.equal(assetRequests.length, 4);
+    assert.ok(assetRequests.every((request) => new URL(request).origin === "https://juro-assets.invalid"));
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='document_builder'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "operational",
+      safeErrorCode: null,
+    });
   } finally {
     sqlite.close();
   }
