@@ -5,6 +5,7 @@ import type { DependencyHealthKey } from "../lib/operations/dependency-health";
 import { recordDependencyHealthEvidence } from "../worker/dependency-health-evidence";
 import type { PlatformJobEnv } from "../worker/platform-jobs";
 import {
+  PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS,
   productionDependencyProbesEnabled,
   runProductionDependencyProbes,
 } from "../worker/production-dependency-probes";
@@ -106,6 +107,12 @@ test("production dependency probes are impossible outside explicitly enabled pro
     APP_ENV: "production",
     PRODUCTION_SYNTHETIC_PROBES_ENABLED: "true",
   }), true);
+});
+
+test("the production malware probe allows a bounded ClamAV cold start", () => {
+  assert.equal(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS, 55_000);
+  assert.ok(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS > 30_000);
+  assert.ok(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS < 60_000);
 });
 
 test("fresh operational evidence skips every production dependency probe", async () => {

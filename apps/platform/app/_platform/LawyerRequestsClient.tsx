@@ -16,6 +16,11 @@ import { LawyerConsultationPanel } from "./LawyerConsultationPanel";
 import { LawyerDocumentRequests } from "./LawyerDocumentRequests";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import {
+  formatLawyerRequestDate as formatRequestDate,
+  lawyerRequestFormatLabel as formatLabel,
+  lawyerRequestServiceLabel as serviceLabel,
+} from "../../lib/platform/lawyer-request-presentation";
 
 type AssignedRequest = {
   id: string;
@@ -42,6 +47,9 @@ type AssignedRequest = {
   reviewReplyStatus?: "pending" | "approved" | "rejected" | null;
   reviewReplyBody?: string | null;
   reviewReplyVersion?: number | null;
+  serviceCode?: string | null;
+  preferredFormat?: string | null;
+  proposedStartsAt?: string | null;
 };
 
 export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
@@ -214,6 +222,11 @@ export function LawyerRequestsClient({ locale }: { locale: PlatformLocale }) {
                   }).format(new Date(item.createdAt))}
                 </time>
                 <p>{item.anonymizedSummary}</p>
+                <div className="lawyer-request-intake">
+                  <span>{serviceLabel(item.serviceCode, ru)}</span>
+                  <span>{formatLabel(item.preferredFormat, ru)}</span>
+                  {item.proposedStartsAt && <time dateTime={item.proposedStartsAt}>{formatRequestDate(item.proposedStartsAt, ru)}</time>}
+                </div>
               </div>
               {item.status === "conflict_check_pending" && (
                 <div className="lawyer-conflict-actions">

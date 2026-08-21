@@ -343,6 +343,11 @@ function createDatabase(): {
       evidence_kind text NOT NULL,
       created_at text NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS operational_job_redrive_events (
+      id text PRIMARY KEY NOT NULL,
+      source_job_id text NOT NULL,
+      version integer NOT NULL
+    );
   `);
   const guestMigration = readFileSync(
     new URL("../drizzle/0065_guest_ai_sessions.sql", import.meta.url),
@@ -1087,6 +1092,42 @@ test("document-analysis DLQ terminalizes only the durable run, preserves retryab
     assert.equal(health.state, "degraded");
     assert.equal(health.safeErrorCode, "DLQ_BACKLOG");
     assert.equal(health.evidenceKind, "integration_event");
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a superseded DLQ delivery cannot terminalize a newer audited redrive", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    const body = envelope("document.analyze", {
+      jobId: "job_document_superseded_dlq",
+      idempotencyKey: "idem_document_superseded_dlq",
+      subjectId: "analysis_document_superseded_dlq",
+      correlationId: "corr_document_superseded_dlq",
+      redriveVersion: 0,
+    });
+    insertSourceQueueJobRun(sqlite, body);
+    sqlite.prepare(`
+      INSERT INTO operational_job_redrive_events (id,source_job_id,version)
+      VALUES ('redrive_document_superseded_dlq',?,1)
+    `).run(body.jobId);
+
+    const { env } = createEnv(d1);
+    const item = mockMessage(body, "document_superseded_dlq_delivery");
+    await runBatch(
+      env,
+      expectedDocumentAnalysisDlqQueueName("development"),
+      [item.message],
+    );
+
+    assert.equal(item.state.acknowledgements, 1);
+    assert.deepEqual(item.state.retries, []);
+    const run = sqlite.prepare(
+      "SELECT status,error_code AS errorCode FROM job_runs WHERE id=?",
+    ).get(body.jobId) as { status: string; errorCode: string };
+    assert.equal(run.status, "retrying");
+    assert.equal(run.errorCode, "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE");
   } finally {
     sqlite.close();
   }
@@ -2425,11 +2466,13 @@ test("outbox dispatch is leased, identifiers-only, and fenced on success", async
         "idempotencyKey",
         "jobId",
         "kind",
+        "redriveVersion",
         "schemaVersion",
         "subjectId",
         "workspaceId",
       ].sort(),
     );
+    assert.equal((sends[0]?.body as JobEnvelope).redriveVersion, 0);
     const row = sqlite.prepare(`
       SELECT status, lease_owner, dispatched_at
       FROM job_outbox
@@ -2442,6 +2485,29 @@ test("outbox dispatch is leased, identifiers-only, and fenced on success", async
     assert.equal(row.status, "dispatched");
     assert.equal(row.lease_owner, null);
     assert.ok(row.dispatched_at);
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("outbox dispatch publishes the latest audited redrive version", async () => {
+  const { sqlite, d1 } = createDatabase();
+  try {
+    insertOutbox(sqlite, { id: "outbox_redrive_version" });
+    sqlite.prepare(`
+      INSERT INTO operational_job_redrive_events (id,source_job_id,version)
+      VALUES ('redrive_outbox_version_1','outbox_redrive_version',1),
+        ('redrive_outbox_version_2','outbox_redrive_version',2)
+    `).run();
+    const { env, sends } = createEnv(d1);
+
+    assert.deepEqual(await dispatchOutbox(env), {
+      claimed: 1,
+      dispatched: 1,
+      rejected: 0,
+      retrying: 0,
+    });
+    assert.equal((sends[0]?.body as JobEnvelope).redriveVersion, 2);
   } finally {
     sqlite.close();
   }

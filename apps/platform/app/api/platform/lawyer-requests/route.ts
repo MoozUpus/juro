@@ -18,6 +18,9 @@ export const GET = withApiErrors(async function GET() {
   const results = await db.prepare(
     `SELECT r.id,r.case_id AS caseId,r.lawyer_profile_id AS lawyerProfileId,r.status,r.anonymized_summary AS anonymizedSummary,
       r.created_at AS createdAt,r.updated_at AS updatedAt,p.display_name AS lawyerName,
+      json_extract(r.requested_scope_json,'$.serviceCode') AS serviceCode,
+      json_extract(r.requested_scope_json,'$.preferredFormat') AS preferredFormat,
+      json_extract(r.requested_scope_json,'$.proposedStartsAt') AS proposedStartsAt,
       c.status AS conflictStatus,g.id AS activeGrantId,g.created_at AS grantedAt,
       (SELECT o.id FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) AS offerId,
       (SELECT o.status FROM lawyer_offers o WHERE o.lawyer_request_id=r.id ORDER BY o.version DESC LIMIT 1) AS offerStatus,
@@ -80,7 +83,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
   await db.batch([
     db.prepare(
       "INSERT INTO lawyer_requests (id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?)",
-    ).bind(requestId, workspace.id, parsed.data.caseId, user.id, lawyer?.id ?? null, status, parsed.data.anonymizedSummary, JSON.stringify({ scope: "case", consentVersion: "2026-07-31" }), now, now),
+    ).bind(requestId, workspace.id, parsed.data.caseId, user.id, lawyer?.id ?? null, status, parsed.data.anonymizedSummary, JSON.stringify({
+      scope: "case",
+      consentVersion: "2026-07-31",
+      serviceCode: parsed.data.serviceCode ?? null,
+      preferredFormat: parsed.data.preferredFormat ?? null,
+      proposedStartsAt: parsed.data.proposedStartsAt ?? null,
+    }), now, now),
     ...(lawyer && conflictCheckId ? [db.prepare(
       "INSERT INTO conflict_checks (id,lawyer_request_id,lawyer_profile_id,status,created_at) VALUES (?,?,?,'pending',?)",
     ).bind(conflictCheckId, requestId, lawyer.id, now)] : []),
@@ -89,7 +98,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ).bind(crypto.randomUUID(), user.id, workspace.id, JSON.stringify(scope), now),
     db.prepare(
       "INSERT INTO workspace_audit_events (id,workspace_id,actor_user_id,entity_type,entity_id,action,metadata_json,created_at) VALUES (?,?,?,'lawyer_request',?,'lawyer_request_created',?,?)",
-    ).bind(crypto.randomUUID(), workspace.id, user.id, requestId, JSON.stringify({ caseId: parsed.data.caseId, lawyerProfileId: lawyer?.id ?? null, planCode: entitlements.planCode }), now),
+    ).bind(crypto.randomUUID(), workspace.id, user.id, requestId, JSON.stringify({
+      caseId: parsed.data.caseId,
+      lawyerProfileId: lawyer?.id ?? null,
+      planCode: entitlements.planCode,
+      serviceCode: parsed.data.serviceCode ?? null,
+      preferredFormat: parsed.data.preferredFormat ?? null,
+      hasProposedStart: Boolean(parsed.data.proposedStartsAt),
+    }), now),
   ]);
 
   return response({ ok: true, requestId, status, conflictCheckRequired: Boolean(lawyer) }, 201);

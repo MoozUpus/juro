@@ -115,6 +115,40 @@ test("lawyer application has an explicit submit gate and draft saves do not publ
   assert.match(submitRoute, /profile_revision=\?/);
 });
 
+test("lawyer service details and six-step application are persisted and reviewable", () => {
+  const migration = readFileSync(new URL("../drizzle/0145_lawyer_profile_services.sql", import.meta.url), "utf8");
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  const application = readFileSync(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8");
+  const adminDetail = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/route.ts", import.meta.url), "utf8");
+  const adminPhoto = readFileSync(new URL("../app/api/platform/admin/lawyer-profiles/[profileId]/photo/route.ts", import.meta.url), "utf8");
+  const adminInbox = readFileSync(new URL("../app/_staff/LawyerProfileModerationInbox.tsx", import.meta.url), "utf8");
+  assert.match(migration, /consultation_duration_minutes/);
+  assert.match(migration, /additional_services_json/);
+  assert.match(migration, /BETWEEN 15 AND 480/);
+  assert.doesNotMatch(migration, /DROP\s+TABLE|DELETE\s+FROM/iu);
+  assert.match(profileRoute, /consultation_duration_minutes/);
+  assert.match(profileRoute, /additional_services_json/);
+  assert.match(application, /Стандартная длительность консультации/);
+  assert.match(application, /Дополнительные услуги через запятую/);
+  assert.match(application, /Шаг 4 · Расписание/);
+  assert.match(application, /Отправить профиль на проверку/);
+  assert.match(adminDetail, /lawyer_profile_moderation/);
+  assert.match(adminDetail, /lawyer_profile_lifecycle_events/);
+  assert.match(adminDetail, /lawyer_availability_rules/);
+  assert.match(adminPhoto, /lawyer\.profiles\.moderate/);
+  assert.match(adminPhoto, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(adminInbox, /REVIEW VIEW/);
+  assert.match(adminInbox, /\/lifecycle/);
+});
+
+test("availability-only edits preserve an approved public profile", () => {
+  const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
+  assert.match(profileRoute, /preservesPublishedProfile/);
+  assert.match(profileRoute, /!moderatedFieldsChanged\(current, next\)/);
+  assert.match(profileRoute, /public_approved_at=CASE WHEN \?='public_approved' THEN public_approved_at ELSE NULL END/);
+  assert.match(profileRoute, /publicationPreserved: preservesPublishedProfile/);
+});
+
 test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {
   const [lawyer] = projectPublicLawyerDirectory([{
     id: "correction-requested-lawyer",
@@ -143,7 +177,7 @@ test("profile photos remain fail-closed until the malware scanner verifies their
   assert.ok(route.indexOf("const scanVerdict") < route.indexOf("const objectKey"));
 });
 
-test("a completed profile under review is visible but cannot receive a request", () => {
+test("a completed profile stays private until approval and retains a self-only preview", () => {
   const publicPhotoRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/photo/route.ts", import.meta.url), "utf8");
   const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
   const publicDirectoryRoute = readFileSync(new URL("../app/api/public/lawyers/route.ts", import.meta.url), "utf8");
@@ -153,21 +187,21 @@ test("a completed profile under review is visible but cannot receive a request",
   const detailClient = readFileSync(new URL("../app/_platform/LawyerProfileClient.tsx", import.meta.url), "utf8");
   const privatePhotoRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/photo/route.ts", import.meta.url), "utf8");
   const privateProfileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
-  assert.match(publicPhotoRoute, /marketplace_status='pending_review' AND status='pending'/);
-  assert.match(directoryRoute, /marketplace_status='pending_review' AND status='pending'/);
-  assert.match(publicDirectoryRoute, /marketplace_status='pending_review' AND status='pending'/);
-  assert.match(publicDetailRoute, /marketplace_status='pending_review' AND status='pending'/);
+  for (const source of [publicPhotoRoute, directoryRoute, publicDirectoryRoute, publicDetailRoute, detailRoute]) {
+    assert.match(source, /status='public_approved'/);
+    assert.match(source, /marketplace_status='public_approved'/);
+    assert.doesNotMatch(source, /marketplace_status='pending_review' AND status='pending'/);
+  }
   assert.doesNotMatch(publicDirectoryRoute, /phone|user_profiles|moderation_notes/i);
-  assert.match(directoryClient, /Профиль на проверке JURO/);
-  assert.match(directoryClient, /Запись после проверки/);
-  assert.match(detailRoute, /marketplace_status='pending_review' AND status='pending'/);
   assert.match(detailClient, /consultations\?lawyer=/);
-  assert.match(detailClient, /Запись после проверки/);
-  assert.match(detailClient, /Профиль на проверке JURO/);
+  assert.match(privateProfileRoute, /lawyer_profile_status/);
+  const application = readFileSync(new URL("../app/_platform/LawyerProfessionalProfile.tsx", import.meta.url), "utf8");
+  assert.match(application, /lawyer-profile-preview/);
+  assert.match(application, /Предпросмотр публичного профиля/);
   assert.match(privatePhotoRoute, /export const GET/);
   assert.match(privatePhotoRoute, /WHERE user_id=\?/);
   assert.match(privatePhotoRoute, /lawyer_profile_status/);
-  assert.match(privateProfileRoute, /lawyer_profile_status/);
+  assert.match(directoryClient, /canReceiveRequests/);
 });
 
 test("JURO approval and Top Lawyer remain separate public designations", () => {

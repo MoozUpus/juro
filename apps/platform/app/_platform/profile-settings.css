@@ -714,7 +714,7 @@
 }
 
 .lawyer-professional-profile > section { display: grid; gap: 15px; }
-.lawyer-application-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.lawyer-application-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .lawyer-application-steps span { display: flex; min-width: 0; min-height: 48px; align-items: center; gap: 7px; padding: 9px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-subtle); color: var(--text-secondary); font-size: 11px; }
 .lawyer-application-steps span > svg { width: 16px; }
 .lawyer-application-steps span.done { border-color: color-mix(in srgb, var(--status-success) 35%, var(--border-subtle)); color: var(--status-success); }
@@ -730,6 +730,7 @@
 .profile-form input,.profile-form select,.profile-form textarea{width:100%;max-width:100%;min-width:0}
 .profile-form>button{min-width:0}
 @media(max-width:720px){.profile-form{grid-template-columns:1fr}}
+.lawyer-profile-preview { grid-column: 1 / -1; }
 .lawyer-required-fields { grid-column: 1 / -1; margin: 0; color: var(--status-warning); font-size: 12px; line-height: 1.55; }
 .lawyer-application-actions { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lawyer-application-actions button { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--brand-navy); border-radius: 10px; background: var(--surface-raised); color: var(--brand-navy); font-weight: 850; }

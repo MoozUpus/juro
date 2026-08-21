@@ -1,7 +1,7 @@
 "use client";
 
 import { Laptop, Moon, Sun } from "lucide-react";
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { isThemeMode, type ThemeMode } from "./theme";
 
 type Props = {
@@ -34,6 +34,12 @@ function readThemeMode(): ThemeMode {
   return isThemeMode(value) ? value : "system";
 }
 
+function readThemeCookie(): ThemeMode | null {
+  if (typeof document === "undefined") return null;
+  const value = document.cookie.match(/(?:^|; )juro_theme=(system|light|dark)(?:;|$)/)?.[1];
+  return isThemeMode(value) ? value : null;
+}
+
 function subscribeThemeMode(onStoreChange: () => void) {
   window.addEventListener(THEME_CHANGE_EVENT, onStoreChange);
   return () => window.removeEventListener(THEME_CHANGE_EVENT, onStoreChange);
@@ -59,6 +65,7 @@ function writePreference(mode: ThemeMode) {
 }
 
 export function ThemeSwitcher({ locale, compact = false, persistAccount = true }: Props) {
+  const accountSyncController = useRef<AbortController | null>(null);
   const mode = useSyncExternalStore(
     subscribeThemeMode,
     readThemeMode,
@@ -68,7 +75,26 @@ export function ThemeSwitcher({ locale, compact = false, persistAccount = true }
   useEffect(() => {
     if (!persistAccount) return;
     const controller = new AbortController();
+    accountSyncController.current = controller;
     const startedRevision = readThemeInteractionRevision();
+    const cookieTheme = readThemeCookie();
+
+    if (cookieTheme) {
+      writePreference(cookieTheme);
+      applyTheme(cookieTheme);
+      announceThemeMode();
+      fetch("/api/platform/theme", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ theme: cookieTheme }),
+        signal: controller.signal,
+      }).catch(() => undefined);
+      return () => {
+        controller.abort();
+        if (accountSyncController.current === controller) accountSyncController.current = null;
+      };
+    }
+
     fetch("/api/platform/theme", { cache: "no-store", signal: controller.signal })
       .then(async (response) => response.ok ? response.json() as Promise<{ theme?: unknown }> : null)
       .then((body) => {
@@ -78,7 +104,10 @@ export function ThemeSwitcher({ locale, compact = false, persistAccount = true }
         announceThemeMode();
       })
       .catch(() => undefined);
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (accountSyncController.current === controller) accountSyncController.current = null;
+    };
   }, [persistAccount]);
 
   useEffect(() => {
@@ -90,6 +119,8 @@ export function ThemeSwitcher({ locale, compact = false, persistAccount = true }
   }, [mode]);
 
   async function select(next: ThemeMode) {
+    accountSyncController.current?.abort();
+    accountSyncController.current = null;
     markThemeInteraction();
     writePreference(next);
     applyTheme(next);

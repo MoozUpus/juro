@@ -23,6 +23,7 @@ const DOCUMENT_ANALYSIS_PROBE_INTERVAL_MS = 25 * 60_000;
 const LAWYER_AREA_PROBE_INTERVAL_MS = 25 * 60_000;
 const EMAIL_PROBE_INTERVAL_MS = 23 * 60 * 60_000;
 const MAX_PROVIDER_RESPONSE_BYTES = 4_096;
+export const PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS = 55_000;
 
 const r2Payload = new TextEncoder().encode(
   "JURO production private R2 synthetic dependency probe v1\n",
@@ -392,7 +393,11 @@ async function runMalwareScannerProbe(env: PlatformJobEnv): Promise<ProbeOutcome
         "x-juro-scan-schema": "1",
       },
       body: eicarBytes,
-      signal: AbortSignal.timeout(30_000),
+      // The private ClamAV container scales to zero between sparse requests.
+      // Production evidence shows a clean cold scan can take nearly 30 seconds,
+      // so keep the probe bounded without classifying a healthy cold start as
+      // an outage. This remains far below the Cron invocation wall-time.
+      signal: AbortSignal.timeout(PRODUCTION_MALWARE_SCANNER_PROBE_TIMEOUT_MS),
     });
     if (!response.ok) {
       await response.body?.cancel();

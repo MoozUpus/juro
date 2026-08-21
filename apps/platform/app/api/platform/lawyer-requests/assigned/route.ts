@@ -10,6 +10,9 @@ export const GET = withApiErrors(async function GET() {
   const db = requireD1();
   const requests = await db.prepare(
     `SELECT r.id,r.status,r.anonymized_summary AS anonymizedSummary,r.created_at AS createdAt,
+      json_extract(r.requested_scope_json,'$.serviceCode') AS serviceCode,
+      json_extract(r.requested_scope_json,'$.preferredFormat') AS preferredFormat,
+      json_extract(r.requested_scope_json,'$.proposedStartsAt') AS proposedStartsAt,
       c.status AS conflictStatus,g.id AS accessGrantId,g.created_at AS accessGrantedAt,
       CASE WHEN g.id IS NOT NULL THEN cs.id END AS caseId,
       CASE WHEN g.id IS NOT NULL THEN cs.title END AS caseTitle,
