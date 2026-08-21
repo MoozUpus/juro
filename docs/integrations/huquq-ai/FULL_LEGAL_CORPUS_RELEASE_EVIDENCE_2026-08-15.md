@@ -2220,3 +2220,20 @@ remained 3,575 canonical documents, 62,075 unique current provisions and
 151,499 indexed current chunks. Ingestion is still not frozen, so the
 snapshot, indexed 314-scenario evaluation, Qdrant/D1 backup and restore,
 preview and rollout gates remain unclaimed. Production remains untouched.
+
+## Subsequent clean staging run (2026-08-21, 06:24Z)
+
+The next scheduled invocation started at `2026-08-21T06:24:32.998Z` and
+completed at `2026-08-21T06:29:16.524Z` with `status=completed`,
+`error_code=NULL` and a duration of 283 seconds. The post-run read-only D1
+probe recorded 44/44 discovery checkpoints completed and no running jobs.
+Failure counters were all zero: `terminal_or_dead_letter_jobs=0`,
+`active_jobs_with_errors=0`, `unresolved_retrying=0` and
+`unresolved_technical=0`.
+
+The queue probe recorded 38,310 queued fetch jobs, 5,410 queued version jobs
+and 3,950 completed version jobs; `live_manual_queued=6,262`. Corpus totals
+remained 3,575 canonical documents, 62,075 unique current provisions and
+151,499 indexed current chunks. Ingestion is still not frozen, so the
+snapshot, indexed 314-scenario evaluation, Qdrant/D1 backup and restore,
+preview and rollout gates remain unclaimed. Production remains untouched.
