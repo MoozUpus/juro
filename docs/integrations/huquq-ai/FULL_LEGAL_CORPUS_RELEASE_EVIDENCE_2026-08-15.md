@@ -2809,3 +2809,13 @@ lookup), while `customs` and `housing` remain retrying and are awaiting their
 rotated bounded attempts. The run is still active; no completion or release
 gate is claimed. Current core-code and checkpoint completion, queue freeze,
 snapshot, evaluation, restore and CI gates remain unproven.
+
+The same run completed the `economic_procedure` title pager at
+15:12:13.000Z and moved that target to `awaiting_ingestion` with official
+source `https://lex.uz/ru/docs/3523895` (`lexuz:3523895`), with no error code.
+The corresponding fetch job completed at 15:13:03.119Z and produced only
+queued version work; it will be reconciled to `indexed` on a subsequent run.
+At 15:15Z the 15:12:13.670Z scheduled run remained active with a renewed
+lease and no run-level error. `customs` and `housing` remain the only
+unresolved core-code title targets. This is measurable staging progress, not
+a claim of checkpoint completion or release readiness.
