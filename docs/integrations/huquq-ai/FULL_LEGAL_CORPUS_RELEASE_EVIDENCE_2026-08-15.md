@@ -2749,6 +2749,19 @@ rows; terminal/dead-letter failures were 0 and dead-letter checkpoints were 0.
 No snapshot, queue freeze, evaluation, restore, human legal review or release
 gate is claimed. Production remains untouched.
 
+The following run (`4d2ab640-1414-4648-a0fc-a7b84f371e6c`,
+17:12:13.672Z–17:19:49.102Z) continued the laws catalog. It completed with the
+same bounded retryable `LEX_CATALOG_TIMEOUT` condition for the English laws
+checkpoint; the checkpoint remains `retrying` with its page-one ledger intact
+(20 discovered URLs), while RU and Uzbek Cyrillic remain at page two (40 URLs)
+and Uzbek Latin is being retried from page one. The subsequent run
+(`76df3b56-2087-40a5-8996-06b160b13726`, started 17:20:13.677Z) holds the
+distributed lease and is still processing. The latest read-only materialized
+totals are 21 canonical documents, 18,987 active provisions and 155,102
+indexed chunks; 205 ingestion jobs are completed and 2,154 are queued. The
+failure ledger has only retrying historical rows; terminal/dead-letter counts
+remain zero. Checkpoints are not yet complete and ingestion is not frozen.
+
 ## Active replacement cycle long-running version probe (2026-08-21, 13:30Z)
 
 The 13:20:13Z scheduled invocation remained `running` with the distributed
