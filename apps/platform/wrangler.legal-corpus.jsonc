@@ -71,7 +71,7 @@
         "LEGAL_CORPUS_SPARSE_COMPRESSION_ENABLED": "false",
         "LEGAL_CORPUS_SHADOW_MODE": "true",
         "QDRANT_URL": "https://qdrant.internal",
-        "QDRANT_COLLECTION": "juro_legal_staging",
+        "QDRANT_COLLECTION": "juro_legal_staging_v2",
         "EMBEDDING_MODEL": "text-embedding-3-large"
       },
       "triggers": {
@@ -80,8 +80,8 @@
       "d1_databases": [
         {
           "binding": "DB",
-          "database_name": "juro-staging",
-          "database_id": "bb716a96-b2fb-4823-90d6-6c228fed181a",
+          "database_name": "juro-staging-corpus-v2",
+          "database_id": "62620fb3-3da3-4c76-a8e9-aa60858c1063",
           "migrations_dir": "./drizzle"
         }
       ],
