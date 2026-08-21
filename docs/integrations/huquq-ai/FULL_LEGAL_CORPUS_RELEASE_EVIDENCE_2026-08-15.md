@@ -3105,6 +3105,23 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Next government/PKM run started (2026-08-21, 19:04–19:06Z)
+
+Run `c53f796c-72e9-4d48-b2d3-debaefa29b9f` acquired the lease for the next
+sequential invocation. The English government checkpoint is running from its
+preserved page-one ledger after a retryable timeout; Russian resumed at page 1,
+while Uzbek Cyrillic and Uzbek Latin retain their page-two duplicate-page
+markers. The worker keeps all four laws checkpoints completed and does not
+advance a checkpoint on a duplicate or timeout response.
+
+Read-only totals remain 33 canonical documents, 39 language variants, 6,608
+distinct current provisions and 18,612 indexed chunks, with 1,968
+live-or-manual queued/retrying jobs. Failure rows remain one retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`; terminal/dead-letter is zero. Release
+floors, queue freeze and post-ingestion gates remain unproven; production is
+untouched.
+
 ## Government/PKM run closure (2026-08-21, 19:03Z)
 
 Run `2b12acc2-22c7-44bf-bc70-bfb58ade5a1d` closed at 19:03:29.754Z with the
