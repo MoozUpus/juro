@@ -3105,6 +3105,24 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM page continuation (2026-08-21, 18:56–19:00Z)
+
+The same bounded run `2b12acc2-22c7-44bf-bc70-bfb58ade5a1d` continued under
+the distributed lease. The government Uzbek Latin checkpoint advanced through
+its second page and retained the allow-listed `LEX_CATALOG_DUPLICATE_PAGE`
+marker for a later pager attempt; the ledger still records 40 discovered
+documents and remains queued rather than being marked complete. Uzbek Cyrillic
+returned to queued state at page 1 after its timeout retry, while Russian and
+English remain at page 2. The four completed laws checkpoints remain intact.
+
+Read-only materialized totals are now 33 canonical documents, 39 language
+variants, 6,608 distinct current provisions and 18,612 indexed chunks, with
+1,971 live-or-manual jobs queued/retrying. Failure rows are unchanged (one
+retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`); terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+remain unproven; production is untouched.
+
 ## Government/PKM retry-preserving continuation (2026-08-21, 18:56–18:58Z)
 
 Run `2b12acc2-22c7-44bf-bc70-bfb58ade5a1d` acquired the distributed lease and
