@@ -110,6 +110,38 @@ export function documentAnalysisProviderStatus() {
   };
 }
 
+type SafeDocumentAnalysisProviderFailure = {
+  event: "document_analysis.provider_failed";
+  provider: "openai" | "anthropic";
+  errorCode: "PROVIDER_UNAVAILABLE" | "PROVIDER_TIMEOUT" | "INVALID_AI_OUTPUT" | "PROVIDER_CIRCUIT_OPEN" | "AI_REFUSED" | "AI_CANCELLED" | "ANTHROPIC_PREFLIGHT_FAILED" | "ANTHROPIC_REQUEST_FAILED" | "ANTHROPIC_POSTPROCESS_FAILED";
+  httpCategory: "HTTP_400" | "HTTP_401" | "HTTP_403" | "HTTP_404" | "HTTP_408" | "HTTP_409" | "HTTP_429" | "HTTP_5XX" | "HTTP_OTHER" | null;
+};
+
+export function safeDocumentAnalysisProviderFailure(
+  provider: "openai" | "anthropic",
+  error: unknown,
+): SafeDocumentAnalysisProviderFailure {
+  const errorCode = error instanceof AiUnavailableError ? error.code : "PROVIDER_UNAVAILABLE";
+  const status = error instanceof AiUnavailableError ? error.providerStatus : null;
+  const httpCategory = status === null ? null
+    : status === 400 ? "HTTP_400"
+      : status === 401 ? "HTTP_401"
+        : status === 403 ? "HTTP_403"
+          : status === 404 ? "HTTP_404"
+            : status === 408 ? "HTTP_408"
+              : status === 409 ? "HTTP_409"
+                : status === 429 ? "HTTP_429"
+                  : status >= 500 ? "HTTP_5XX"
+                    : "HTTP_OTHER";
+  return { event: "document_analysis.provider_failed", provider, errorCode, httpCategory };
+}
+
+function logDocumentAnalysisProviderFailure(provider: "openai" | "anthropic", error: unknown): void {
+  // This event contains fixed operational categories only. Never add provider
+  // bodies, request input, document/source content, identifiers, or secrets.
+  console.error(JSON.stringify(safeDocumentAnalysisProviderFailure(provider, error)));
+}
+
 export async function runDocumentAnalysis(
   input: DocumentAnalysisProviderRequest,
   options: {
@@ -152,12 +184,18 @@ export async function runDocumentAnalysis(
     try {
       return await runOpenAiDocumentAnalysis(input, runtimeOptions);
     } catch (error) {
+      logDocumentAnalysisProviderFailure("openai", error);
       if (!hasAnthropicConfiguration() || !documentAnalysisFallbackAllowed(error, runtimeOptions)) throw error;
-      const fallback = await runAnthropicDocumentAnalysis(input, {
-        ...runtimeOptions,
-        providerTimeoutMs: options.providerTimeoutMs ?? documentAnalysisFallbackTimeoutMs(input.mode),
-      });
-      return { ...fallback, fallbackFromProvider: "openai" };
+      try {
+        const fallback = await runAnthropicDocumentAnalysis(input, {
+          ...runtimeOptions,
+          providerTimeoutMs: options.providerTimeoutMs ?? documentAnalysisFallbackTimeoutMs(input.mode),
+        });
+        return { ...fallback, fallbackFromProvider: "openai" };
+      } catch (fallbackError) {
+        logDocumentAnalysisProviderFailure("anthropic", fallbackError);
+        throw fallbackError;
+      }
     }
   }
   if (status.provider === "openai") return runOpenAiDocumentAnalysis(input, runtimeOptions);
@@ -239,7 +277,7 @@ async function runOpenAiDocumentAnalysis(
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode, hasUsableOfficialLexSources(input)),
     input: providerInput(input),
-    reasoningEffort: input.mode === "quick" ? "none" : undefined,
+    reasoningEffort: input.mode === "quick" ? "low" : undefined,
     textVerbosity: input.mode === "quick" ? "low" : undefined,
     maxOutputTokens: documentAnalysisMaxOutputTokens(input.mode),
   });
@@ -263,6 +301,7 @@ function documentAnalysisInstructions(
     "Оценка качества объясняет полноту/ясность документа, а не вероятность победы и не подлинность документа.",
     ...(mode === "quick" ? [
       "Режим quick — это компактный первый проход, а не полный постатейный обзор: дай краткое резюме, только наиболее существенные риски, сроки, вопросы и рекомендации. Не заполняй необязательные списки ради полноты, не предлагай длинные новые формулировки и не повторяй один вывод в нескольких полях.",
+      "Жёсткие лимиты quick-результата: summary — не более 700 символов; parties — до 6; amounts и dates — до 8 каждый; obligations — до 8; deadlines — до 5; risks — до 3; missingClauses и contradictions — до 3 каждый; questions и recommendations — до 5 каждый; sources — только реально использованные, до 3. Остальные элементы опускай, а не расширяй формулировки.",
       "Если extractionWarnings содержит DOCUMENT_QUICK_REPRESENTATIVE_SAMPLE, анализируй только переданные репрезентативные фрагменты, явно укажи ограниченную полноту обзора и не утверждай, что проверен весь документ.",
       ...(!hasUsableOfficialLexSources ? [
         "В этом запуске officialLexSources пусты: legalComplianceStatus обязан быть unverified, sources и missingClauses — пустыми массивами, legal_compliance risks запрещены. risks либо пуст, либо содержит не более одного краткого document_internal risk, который прямо опирается на текст документа.",

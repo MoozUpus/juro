@@ -20,6 +20,7 @@ import {
   documentFallbackEligible,
   QUICK_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS,
   runDocumentAnalysis,
+  safeDocumentAnalysisProviderFailure,
 } from "../lib/document-analysis/provider";
 import type { AiRuntimeSettings } from "../lib/ai/runtime-settings";
 import { AiUnavailableError } from "../lib/document-builder/ai/openai";
@@ -268,6 +269,30 @@ test("quick document analysis has an explicit compact output budget", () => {
   assert.equal(documentAnalysisTimeoutMs("expert"), 150_000);
 });
 
+test("document analysis provider diagnostics expose fixed categories only", () => {
+  assert.deepEqual(
+    safeDocumentAnalysisProviderFailure(
+      "openai",
+      new AiUnavailableError("provider body must remain private", "PROVIDER_UNAVAILABLE", false, 400, "untrusted_detail"),
+    ),
+    {
+      event: "document_analysis.provider_failed",
+      provider: "openai",
+      errorCode: "PROVIDER_UNAVAILABLE",
+      httpCategory: "HTTP_400",
+    },
+  );
+  assert.deepEqual(
+    safeDocumentAnalysisProviderFailure("anthropic", new Error("untrusted dynamic failure")),
+    {
+      event: "document_analysis.provider_failed",
+      provider: "anthropic",
+      errorCode: "PROVIDER_UNAVAILABLE",
+      httpCategory: null,
+    },
+  );
+});
+
 test("quick document analysis prefers bounded low-reasoning OpenAI structured output", async () => {
   const runtime = env as unknown as {
     ANTHROPIC_API_KEY?: string;
@@ -310,7 +335,7 @@ test("quick document analysis prefers bounded low-reasoning OpenAI structured ou
       };
       assert.equal(request.model, "gpt-test");
       assert.equal(request.max_output_tokens, 3_600);
-      assert.deepEqual(request.reasoning, { effort: "none" });
+      assert.deepEqual(request.reasoning, { effort: "low" });
       assert.equal(request.text?.verbosity, "low");
       return Response.json({
         id: "resp_document_quick",

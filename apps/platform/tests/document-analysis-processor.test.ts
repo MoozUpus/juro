@@ -422,6 +422,7 @@ test("large quick analysis uses one bounded representative provider request", as
   fixture.sqlite.prepare("UPDATE document_files SET mime_type='application/pdf',file_name='contract.pdf',size_bytes=?,sha256=? WHERE id='file-a'")
     .run(bytes.byteLength, sha256);
   let aiCalls = 0;
+  let retrievalLimit = 0;
   const stored = new Map<string, { bytes: Uint8Array; sha256: string }>();
   const longText = `${"x".repeat(DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT + 1)} срок определяется дополнительно`;
 
@@ -462,11 +463,14 @@ test("large quick analysis uses one bounded representative provider request", as
         sections: [],
         packageContext: null,
       }),
-      retrieve: async () => ({
-        sources: [],
-        freshness: { status: "unavailable" as const, asOf: "unavailable", ageDays: null, maxAgeDays: 7 },
-        legalDatabaseAsOf: "unavailable",
-      }),
+      retrieve: async (_db, _query, _locale, limit) => {
+        retrievalLimit = limit ?? 0;
+        return {
+          sources: [],
+          freshness: { status: "unavailable" as const, asOf: "unavailable", ageDays: null, maxAgeDays: 7 },
+          legalDatabaseAsOf: "unavailable",
+        };
+      },
       analyze: async (input) => {
         aiCalls += 1;
         assert.equal(input.extractedText.length <= QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE, true);
@@ -491,6 +495,7 @@ test("large quick analysis uses one bounded representative provider request", as
   assert.equal(analysis.status, "completed");
   assert.equal(analysis.errorCode, null);
   assert.equal(aiCalls, 1);
+  assert.equal(retrievalLimit, 3);
   assert.equal((fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 1);
   fixture.sqlite.close();
 });
