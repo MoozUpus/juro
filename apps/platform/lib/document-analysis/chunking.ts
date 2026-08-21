@@ -7,7 +7,12 @@
 export const DOCUMENT_ANALYSIS_CHUNK_SIZE = 72_000;
 export const DOCUMENT_ANALYSIS_CHUNK_OVERLAP = 2_000;
 export const DOCUMENT_ANALYSIS_MAX_CHUNKS = 8;
-export const QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE = 24_000;
+// Production quick-mode recovery evidence showed that a 24k representative
+// request could still consume the complete Queue execution window before a
+// structured provider result arrived. Keep three-way document coverage, but
+// bound the actual untrusted text to roughly 3k input tokens so the model has
+// enough time to emit and validate the complete fail-closed output contract.
+export const QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE = 12_000;
 const QUICK_DOCUMENT_ANALYSIS_SAMPLE_PARTS = 3;
 const QUICK_DOCUMENT_ANALYSIS_SAMPLE_BOUNDARY = "\n\n[JURO_REPRESENTATIVE_SAMPLE_BOUNDARY]\n\n";
 

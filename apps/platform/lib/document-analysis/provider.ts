@@ -46,12 +46,22 @@ export function documentAnalysisMaxOutputTokens(mode: DocumentAnalysisProviderRe
 }
 
 export function documentAnalysisTimeoutMs(mode: DocumentAnalysisProviderRequest["mode"]): number {
-  // Production quick analyses with the complete fail-closed schema can spend
-  // more than one minute generating a valid forced-tool/structured response.
-  // Keep this asynchronous budget below the Queue consumer wall-time while
-  // avoiding deterministic provider timeouts for otherwise healthy calls.
+  // A production Queue consumer has to retain enough wall time to try the
+  // configured fallback and persist a validated result. A 120s quick primary
+  // consumed that entire window and made the fallback nominal rather than
+  // operational. OpenAI quick mode gets the larger share of a bounded 110s
+  // total budget; Anthropic receives the remainder if recovery is required.
+  if (mode === "quick") return 80_000;
   return mode === "expert" ? 150_000 : 120_000;
 }
+
+export function documentAnalysisFallbackTimeoutMs(
+  mode: DocumentAnalysisProviderRequest["mode"],
+): number {
+  return mode === "quick" ? 30_000 : documentAnalysisTimeoutMs(mode);
+}
+
+export const QUICK_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS = 110_000;
 
 /**
  * Document analysis already has a provider-level fallback. Retrying a slow
@@ -124,10 +134,31 @@ export async function runDocumentAnalysis(
     db: runtimeEnv().DB,
     env: runtimeEnv(),
   });
-  const runtimeOptions = { ...options, runtimeSettings };
+  const runtimeOptions = {
+    ...options,
+    runtimeSettings,
+    deadlineAt: options.deadlineAt
+      ?? (input.mode === "quick" ? Date.now() + QUICK_DOCUMENT_ANALYSIS_TOTAL_TIMEOUT_MS : undefined),
+  };
   const status = documentAnalysisProviderStatus();
   if (!status.configured) {
     throw new AiUnavailableError("Провайдер анализа документов не подключён.", "PROVIDER_UNAVAILABLE", false);
+  }
+  // Quick analysis is latency-sensitive structured extraction. Prefer the
+  // native OpenAI JSON-schema path with explicitly minimal reasoning, while
+  // retaining Anthropic as a real bounded fallback. Controlled one-provider
+  // probes keep the configured provider path by disabling fallback.
+  if (input.mode === "quick" && hasAiConfiguration() && options.fallbackEnabled !== false) {
+    try {
+      return await runOpenAiDocumentAnalysis(input, runtimeOptions);
+    } catch (error) {
+      if (!hasAnthropicConfiguration() || !documentAnalysisFallbackAllowed(error, runtimeOptions)) throw error;
+      const fallback = await runAnthropicDocumentAnalysis(input, {
+        ...runtimeOptions,
+        providerTimeoutMs: options.providerTimeoutMs ?? documentAnalysisFallbackTimeoutMs(input.mode),
+      });
+      return { ...fallback, fallbackFromProvider: "openai" };
+    }
   }
   if (status.provider === "openai") return runOpenAiDocumentAnalysis(input, runtimeOptions);
   try {
@@ -208,6 +239,8 @@ async function runOpenAiDocumentAnalysis(
     model,
     instructions: documentAnalysisInstructions(input.locale, options.runtimeSettings, input.mode, hasUsableOfficialLexSources(input)),
     input: providerInput(input),
+    reasoningEffort: input.mode === "quick" ? "none" : undefined,
+    textVerbosity: input.mode === "quick" ? "low" : undefined,
     maxOutputTokens: documentAnalysisMaxOutputTokens(input.mode),
   });
   return constrainResult(result, input);
