@@ -2810,6 +2810,16 @@ rotated bounded attempts. The run is still active; no completion or release
 gate is claimed. Current core-code and checkpoint completion, queue freeze,
 snapshot, evaluation, restore and CI gates remain unproven.
 
+At the 15:16Z sequential D1 probe, the economic-procedure fetch had
+materialized one additional canonical document. Totals were 17 canonical
+documents, 23 language variants, 5,701 unique current provisions and 17,393
+indexed current chunks. The job ledger was 24 completed and 39 queued fetch
+jobs, 140 completed, one running and 1,954 queued version jobs. The 15:12Z
+scheduled run still held a renewed lock without a run-level error; `customs`
+and `housing` remained retrying core-code targets and the economic target was
+awaiting reconciliation. Terminal/dead-letter counts remain zero, while the
+queue, checkpoint, snapshot, evaluation, restore and CI gates remain open.
+
 The same run completed the `economic_procedure` title pager at
 15:12:13.000Z and moved that target to `awaiting_ingestion` with official
 source `https://lex.uz/ru/docs/3523895` (`lexuz:3523895`), with no error code.
