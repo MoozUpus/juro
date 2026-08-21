@@ -67,6 +67,13 @@ test("сумма в долларах учитывает валюту", () => ass
 test("доллары с центами сохраняют дробную часть", () => assert.match(amountToWords("125.42", "ru", "USD", true), /42 цента/));
 test("узбекская сумма прописью формируется кириллицей", () => assert.equal(amountToWords("123", "uz-cyrl", "UZS", false), "бир юз йигирма уч сўм"));
 
+test("synthetic defaults can use a fixed date without reading the runtime clock", () => {
+  const answers = createDefaultAnswers("ru", "2026-01-01");
+  assert.equal(answers.documentDate, "2026-01-01");
+  assert.equal(answers.loanTransferDate, "2026-01-01");
+  assert.equal(answers.transfer.date, "2026-01-01");
+});
+
 test("каждый способ передачи формирует юридические детали", () => {
   for (const method of ["cash", "bank", "card", "other"] satisfies TransferMethod[]) {
     const answers = configured(); answers.transfer.method = method;

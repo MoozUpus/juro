@@ -213,8 +213,22 @@ test("the Builder probe records a content-free DOCX-stage failure for an invalid
       BUCKET: bucket,
     };
     await seedOperational(env, ["document_builder"]);
-    const summary = await runProductionDependencyProbes(env);
+    const originalConsoleError = console.error;
+    const errors: string[] = [];
+    console.error = (...values: unknown[]) => { errors.push(values.join(" ")); };
+    let summary;
+    try {
+      summary = await runProductionDependencyProbes(env);
+    } finally {
+      console.error = originalConsoleError;
+    }
     assert.equal(summary?.documentBuilder, "failed");
+    assert.deepEqual(JSON.parse(errors[0]), {
+      event: "production_dependency_probe.builder_failed",
+      stage: "docx",
+      errorName: "Error",
+      reason: "End of data reached (data length = 1, asked index = 4). Corrupted zip ?",
+    });
     assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
       FROM dependency_health_checks WHERE dependency_key='document_builder'
       ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
