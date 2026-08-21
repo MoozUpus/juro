@@ -259,8 +259,9 @@ test("quick document analysis has an explicit compact output budget", () => {
   assert.equal(documentAnalysisMaxOutputTokens("quick"), 3_600);
   assert.equal(documentAnalysisMaxOutputTokens("full"), 8_192);
   assert.equal(documentAnalysisMaxOutputTokens("expert"), 8_192);
-  assert.equal(documentAnalysisTimeoutMs("quick"), 60_000);
-  assert.equal(documentAnalysisTimeoutMs("expert"), 90_000);
+  assert.equal(documentAnalysisTimeoutMs("quick"), 120_000);
+  assert.equal(documentAnalysisTimeoutMs("full"), 120_000);
+  assert.equal(documentAnalysisTimeoutMs("expert"), 150_000);
 });
 
 test("document analysis sends Anthropic a forced envelope and restores the canonical validated result", async () => {
