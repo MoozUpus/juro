@@ -2463,3 +2463,20 @@ and 1,048 queued version jobs. Core-code targets remained 4 `indexed`, 10
 checkpoints remained queued. The run ended with the allow-listed retryable
 `LEX_CATALOG_TIMEOUT`, while `legal_corpus_failures` remained empty. No
 release-gate claim is made.
+
+## Completed replacement cycle (2026-08-21, 11:53Z)
+
+The 11:48:02Z scheduled invocation completed at 11:53:26Z with
+`status=completed` and `error_code=NULL`. Sequential read-only D1 probes after
+the run recorded 9 completed and 23 queued fetch jobs, plus 51 completed and
+1,212 queued version jobs. All 44 discovery checkpoints remained `queued`
+with zero attempts and zero checkpoint errors. The failure ledger returned no
+rows: terminal, technically-unavailable and dead-letter counts are all zero.
+
+The materialized replacement-corpus totals advanced to 7 canonical documents,
+9 language variants, 3,007 unique current provisions and 6,711 indexed current
+chunks; D1 reported `size_after=450,928,640` bytes. Core-code reconciliation
+advanced to 6 `indexed`, 8 `awaiting_ingestion`, 1 `queued` and 4 `retrying`
+targets. This is verified staging progress only: the 1,500/22,000/22,513
+floors, 44 completed checkpoints, queue freeze, snapshot, indexed evaluation,
+Qdrant/D1 restore and CI gates remain unproven. Production remains untouched.
