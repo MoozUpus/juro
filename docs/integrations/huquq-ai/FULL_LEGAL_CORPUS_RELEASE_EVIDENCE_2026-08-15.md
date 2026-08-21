@@ -2480,3 +2480,20 @@ advanced to 6 `indexed`, 8 `awaiting_ingestion`, 1 `queued` and 4 `retrying`
 targets. This is verified staging progress only: the 1,500/22,000/22,513
 floors, 44 completed checkpoints, queue freeze, snapshot, indexed evaluation,
 Qdrant/D1 restore and CI gates remain unproven. Production remains untouched.
+
+## Replacement cycle with retryable catalog timeout (2026-08-21, 12:03Z)
+
+The 11:56:13Z scheduled invocation finished at 12:03:12Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. Sequential post-run D1 probes
+showed no rows in `legal_corpus_failures`; ingestion jobs contained 10
+completed and 25 queued fetch jobs plus 55 completed and 1,241 queued version
+jobs, all without `last_error_code`. All 44 discovery checkpoints remained
+`queued` with zero attempts and zero errors.
+
+The replacement corpus nevertheless advanced to 8 canonical documents, 10
+language variants, 3,226 unique current provisions and 6,931 indexed current
+chunks (`size_after=483,028,992` bytes). The timeout therefore did not create a
+terminal/dead-letter condition and no code change is justified by this
+transient run-level failure. Release floors, checkpoint completion, queue
+freeze, snapshot, evaluation, restore and CI gates remain open; production is
+untouched.
