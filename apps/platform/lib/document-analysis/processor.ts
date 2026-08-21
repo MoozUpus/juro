@@ -27,7 +27,7 @@ import {
   OcrProcessingError,
   scheduleOcrProcessing,
 } from "./ocr-processor";
-import { chunkDocumentForAnalysis } from "./chunking";
+import { planDocumentAnalysis } from "./chunking";
 import {
   extractAnalysisDocument,
   isAnalysisPackageContext,
@@ -524,7 +524,8 @@ async function analyzeObject(
     let ai: AiStructuredResult<DocumentAnalysisResult>;
     try {
       diagnosticStage = "provider";
-      const chunks = chunkDocumentForAnalysis(extracted.text);
+      const analysisPlan = planDocumentAnalysis(extracted.text, request.mode);
+      const chunks = analysisPlan.chunks;
       const chunkResults: AiStructuredResult<DocumentAnalysisResult>[] = [];
       for (const chunk of chunks) {
         chunkResults.push(await deps.analyze({
@@ -534,6 +535,7 @@ async function analyzeObject(
           detectedLanguage: extracted.detectedLanguage,
           extractionWarnings: [
             ...(extracted.warningCode ? [extracted.warningCode] : []),
+            ...(analysisPlan.representativeSample ? ["DOCUMENT_QUICK_REPRESENTATIVE_SAMPLE"] : []),
             ...(chunks.length > 1 ? [`DOCUMENT_CHUNK_${chunk.index}_OF_${chunk.total}`] : []),
           ],
           packageContext: extracted.packageContext ?? null,
