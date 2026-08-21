@@ -1,0 +1,527 @@
+import { z } from "zod";
+import type {
+  DependencyHealthKey,
+  DependencyHealthSafeErrorCode,
+} from "../lib/operations/dependency-health";
+import { malwareScannerResponseSchema } from "../lib/document-analysis/malware-scanner";
+import type { PlatformJobEnv } from "./platform-jobs";
+import {
+  providerFailureEvidence,
+  recordDependencyHealthEvidence,
+} from "./dependency-health-evidence";
+
+const R2_PROBE_INTERVAL_MS = 8 * 60_000;
+const MALWARE_PROBE_INTERVAL_MS = 10 * 60_000;
+const PROVIDER_PROBE_INTERVAL_MS = 10 * 60_000;
+const BUILDER_PROBE_INTERVAL_MS = 20 * 60_000;
+const DOCUMENT_ANALYSIS_PROBE_INTERVAL_MS = 25 * 60_000;
+const LAWYER_AREA_PROBE_INTERVAL_MS = 25 * 60_000;
+const EMAIL_PROBE_INTERVAL_MS = 23 * 60 * 60_000;
+const MAX_PROVIDER_RESPONSE_BYTES = 4_096;
+
+const r2Payload = new TextEncoder().encode(
+  "JURO production private R2 synthetic dependency probe v1\n",
+);
+const eicarBytes = new TextEncoder().encode(
+  "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*",
+);
+
+const resendResponseSchema = z.object({
+  id: z.string().regex(/^[A-Za-z0-9_-]{1,180}$/u),
+}).passthrough();
+
+type ProbeOutcome = "succeeded" | "failed" | "skipped";
+
+export type ProductionDependencyProbeSummary = {
+  privateR2: ProbeOutcome;
+  documentBuilder: ProbeOutcome;
+  malwareScanner: ProbeOutcome;
+  openai: ProbeOutcome;
+  anthropic: ProbeOutcome;
+  documentAnalysis: ProbeOutcome;
+  resend: ProbeOutcome;
+  lawyerArea: ProbeOutcome;
+};
+
+type ProviderProbeResult = {
+  provider: "openai" | "anthropic";
+  fallbackFromProvider: "openai" | "anthropic" | null;
+  responseKind: string;
+};
+
+export type ProductionDependencyProbeHooks = {
+  fetchImpl?: typeof fetch;
+  openai?: () => Promise<ProviderProbeResult>;
+  anthropic?: () => Promise<ProviderProbeResult>;
+  documentAnalysis?: () => Promise<void>;
+};
+
+export function productionDependencyProbesEnabled(
+  env: Pick<PlatformJobEnv, "APP_ENV"> & { PRODUCTION_SYNTHETIC_PROBES_ENABLED?: string },
+): boolean {
+  return env.APP_ENV === "production"
+    && env.PRODUCTION_SYNTHETIC_PROBES_ENABLED === "true";
+}
+
+async function probeDue(
+  env: Pick<PlatformJobEnv, "DB" | "APP_ENV">,
+  key: DependencyHealthKey,
+  intervalMs: number,
+  now = new Date(),
+): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT state,checked_at AS checkedAt
+       FROM dependency_health_checks
+      WHERE environment=? AND dependency_key=?
+      ORDER BY checked_at DESC,id DESC
+      LIMIT 1`,
+  ).bind(env.APP_ENV, key).first<{ state: string; checkedAt: string }>();
+  if (!row || row.state !== "operational") return true;
+  const checkedAt = Date.parse(row.checkedAt);
+  return !Number.isFinite(checkedAt) || now.getTime() - checkedAt >= intervalMs;
+}
+
+async function recordOperational(
+  env: PlatformJobEnv,
+  key: DependencyHealthKey,
+  startedAt: number,
+): Promise<void> {
+  await recordDependencyHealthEvidence(env, {
+    key,
+    state: "operational",
+    evidenceKind: "synthetic_probe",
+    startedAt,
+  });
+}
+
+async function recordFailure(
+  env: PlatformJobEnv,
+  key: DependencyHealthKey,
+  safeErrorCode: DependencyHealthSafeErrorCode,
+  startedAt: number,
+): Promise<void> {
+  await recordDependencyHealthEvidence(env, {
+    key,
+    state: "degraded",
+    safeErrorCode,
+    evidenceKind: "synthetic_probe",
+    startedAt,
+  });
+}
+
+async function sha256(bytes: Uint8Array): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", Uint8Array.from(bytes));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
+  if (left.byteLength !== right.byteLength) return false;
+  return left.every((byte, index) => byte === right[index]);
+}
+
+async function roundTripR2(
+  bucket: R2Bucket,
+  objectKey: string,
+  payload: Uint8Array,
+): Promise<void> {
+  await bucket.delete(objectKey).catch(() => undefined);
+  try {
+    const stored = await bucket.put(objectKey, payload, {
+      sha256: await sha256(payload),
+      httpMetadata: {
+        contentType: "application/octet-stream",
+        cacheControl: "private, no-store",
+      },
+      customMetadata: {
+        purpose: "production-dependency-probe",
+        synthetic: "true",
+      },
+    });
+    if (!stored || stored.size !== payload.byteLength) {
+      throw new Error("R2_PROBE_WRITE_INVALID");
+    }
+    const head = await bucket.head(objectKey);
+    if (!head || head.size !== payload.byteLength) {
+      throw new Error("R2_PROBE_HEAD_INVALID");
+    }
+    const object = await bucket.get(objectKey);
+    if (!object || !("body" in object)) throw new Error("R2_PROBE_READ_MISSING");
+    const received = new Uint8Array(await object.arrayBuffer());
+    if (!equalBytes(received, payload)) throw new Error("R2_PROBE_READ_INVALID");
+  } finally {
+    await bucket.delete(objectKey).catch(() => undefined);
+  }
+}
+
+async function runPrivateR2Probe(env: PlatformJobEnv): Promise<ProbeOutcome> {
+  if (!(await probeDue(env, "private_r2", R2_PROBE_INTERVAL_MS))) return "skipped";
+  const startedAt = Date.now();
+  try {
+    await Promise.all([
+      roundTripR2(env.BUCKET, "system/probes/production-private-r2-v1.bin", r2Payload),
+      roundTripR2(env.QUARANTINE_BUCKET, "system/probes/production-quarantine-r2-v1.bin", r2Payload),
+    ]);
+    await recordOperational(env, "private_r2", startedAt);
+    return "succeeded";
+  } catch {
+    await recordFailure(env, "private_r2", "DEPENDENCY_UNAVAILABLE", startedAt);
+    return "failed";
+  }
+}
+
+async function fetchAsset(env: PlatformJobEnv, path: string): Promise<ArrayBuffer> {
+  if (!env.ASSETS) throw new Error("BUILDER_ASSET_BINDING_UNAVAILABLE");
+  const response = await env.ASSETS.fetch(new Request(`https://app.juro.uz${path}`, {
+    headers: { accept: "*/*" },
+  }));
+  if (!response.ok) throw new Error("BUILDER_ASSET_UNAVAILABLE");
+  return response.arrayBuffer();
+}
+
+async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcome> {
+  if (!(await probeDue(env, "document_builder", BUILDER_PROBE_INTERVAL_MS))) return "skipped";
+  const startedAt = Date.now();
+  const objectKey = "system/probes/production-document-builder-v1.zip";
+  try {
+    const [
+      { createDefaultAnswers },
+      { renderReceipt },
+      { generateDocx },
+      { generatePdf },
+      { generateZip },
+    ] = await Promise.all([
+      import("../lib/document-builder/defaults"),
+      import("../lib/document-builder/templates/receipt"),
+      import("../lib/document-builder/generation/docx"),
+      import("../lib/document-builder/generation/pdf"),
+      import("../lib/document-builder/generation/zip"),
+    ]);
+    const [template, regularFont, boldFont, footerMark] = await Promise.all([
+      fetchAsset(env, "/document-templates/receipt-ru.docx"),
+      fetchAsset(env, "/document-templates/DejaVuSans-JURO.ttf"),
+      fetchAsset(env, "/document-templates/DejaVuSans-Bold-JURO.ttf"),
+      fetchAsset(env, "/document-templates/juro-mark-footer.png"),
+    ]);
+    const paragraphs = renderReceipt(createDefaultAnswers("ru")).paragraphs;
+    const docx = generateDocx(template, paragraphs);
+    const pdf = await generatePdf(paragraphs, regularFont, boldFont, footerMark);
+    const zip = generateZip([
+      { name: "juro-production-probe.docx", bytes: docx },
+      { name: "juro-production-probe.pdf", bytes: pdf },
+    ]);
+    if (docx[0] !== 0x50 || docx[1] !== 0x4b || pdf[0] !== 0x25 || pdf[1] !== 0x50
+      || zip[0] !== 0x50 || zip[1] !== 0x4b) {
+      throw new Error("BUILDER_OUTPUT_INVALID");
+    }
+    await roundTripR2(env.BUCKET, objectKey, zip);
+    await recordOperational(env, "document_builder", startedAt);
+    await recordOperational(env, "private_r2", startedAt);
+    return "succeeded";
+  } catch {
+    await recordFailure(env, "document_builder", "BUILDER_UNAVAILABLE", startedAt);
+    return "failed";
+  }
+}
+
+function providerRequest() {
+  return {
+    question: "Synthetic production dependency check. Ask for clarification only.",
+    locale: "ru" as const,
+    answerMode: "short" as const,
+    reasoningMode: "fast" as const,
+    sources: [],
+    legalDatabaseAsOf: "unavailable",
+    requestId: crypto.randomUUID(),
+    safetyIdentifier: "production-synthetic-provider-probe",
+  };
+}
+
+function safeProviderCode(error: unknown): string {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code?: unknown }).code;
+    if (typeof code === "string" && /^[A-Z0-9_]{3,64}$/u.test(code)) return code;
+  }
+  return "PROVIDER_UNAVAILABLE";
+}
+
+async function defaultOpenAiProbe(): Promise<ProviderProbeResult> {
+  const { legalAiProvider } = await import("../lib/ai/provider");
+  const provider = legalAiProvider();
+  if (!provider) throw Object.assign(new Error("OPENAI_NOT_CONFIGURED"), { code: "PROBE_CONFIGURATION_ERROR" });
+  const result = await provider.runLegalChat(providerRequest(), {
+    providerTimeoutMs: 20_000,
+  });
+  return {
+    provider: result.provider,
+    fallbackFromProvider: result.fallbackFromProvider,
+    responseKind: result.data.responseKind,
+  };
+}
+
+async function defaultAnthropicProbe(): Promise<ProviderProbeResult> {
+  const { runAnthropicLegalChat } = await import("../lib/ai/anthropic-provider");
+  const result = await runAnthropicLegalChat(providerRequest(), {
+    providerTimeoutMs: 20_000,
+    nonStreamingResponseStartTimeoutMs: 20_000,
+  });
+  return {
+    provider: result.provider,
+    fallbackFromProvider: result.fallbackFromProvider,
+    responseKind: result.data.responseKind,
+  };
+}
+
+async function runOneProviderProbe(
+  env: PlatformJobEnv,
+  provider: "openai" | "anthropic",
+  hook: (() => Promise<ProviderProbeResult>) | undefined,
+): Promise<ProbeOutcome> {
+  if (!(await probeDue(env, provider, PROVIDER_PROBE_INTERVAL_MS))) return "skipped";
+  const startedAt = Date.now();
+  try {
+    const result = await (hook ?? (provider === "openai" ? defaultOpenAiProbe : defaultAnthropicProbe))();
+    if (result.provider !== provider || result.fallbackFromProvider !== null
+      || result.responseKind !== "clarification_required") {
+      throw Object.assign(new Error("PROVIDER_PROBE_BOUNDARY_FAILED"), { code: "PROVIDER_UNAVAILABLE" });
+    }
+    await recordOperational(env, provider, startedAt);
+    return "succeeded";
+  } catch (error) {
+    await recordDependencyHealthEvidence(env, {
+      ...providerFailureEvidence(provider, safeProviderCode(error)),
+      evidenceKind: "synthetic_probe",
+      startedAt,
+    });
+    return "failed";
+  }
+}
+
+async function defaultDocumentAnalysisProbe(): Promise<void> {
+  const { runDocumentAnalysis } = await import("../lib/document-analysis/provider");
+  await runDocumentAnalysis({
+    fileName: "juro-production-synthetic-probe.txt",
+    mimeType: "text/plain",
+    extractedText: "Synthetic technical health-check document. It contains no user data and no legal claim.",
+    detectedLanguage: "en",
+    extractionWarnings: [],
+    packageContext: null,
+    locale: "ru",
+    mode: "quick",
+    userSide: null,
+    sources: [],
+    legalDatabaseAsOf: "unavailable",
+    requestId: crypto.randomUUID(),
+  }, {
+    providerTimeoutMs: 50_000,
+    providerMaxAttempts: 1,
+    deadlineAt: Date.now() + 55_000,
+    fallbackEnabled: false,
+  });
+}
+
+async function runDocumentAnalysisProbe(
+  env: PlatformJobEnv,
+  hook?: () => Promise<void>,
+): Promise<ProbeOutcome> {
+  if (!(await probeDue(env, "document_analysis", DOCUMENT_ANALYSIS_PROBE_INTERVAL_MS))) return "skipped";
+  const startedAt = Date.now();
+  try {
+    await (hook ?? defaultDocumentAnalysisProbe)();
+    await recordOperational(env, "document_analysis", startedAt);
+    return "succeeded";
+  } catch {
+    await recordFailure(env, "document_analysis", "ANALYSIS_JOB_FAILED", startedAt);
+    return "failed";
+  }
+}
+
+async function runMalwareScannerProbe(env: PlatformJobEnv): Promise<ProbeOutcome> {
+  if (!(await probeDue(env, "malware_scanner", MALWARE_PROBE_INTERVAL_MS))) return "skipped";
+  const startedAt = Date.now();
+  try {
+    if (env.MALWARE_SCAN_ENABLED !== "true" || !env.MALWARE_SCANNER) {
+      throw new Error("SCANNER_CONFIGURATION_UNAVAILABLE");
+    }
+    const sourceSha256 = await sha256(eicarBytes);
+    const response = await env.MALWARE_SCANNER.fetch("https://malware-scanner.internal/v1/scan", {
+      method: "POST",
+      headers: {
+        "content-type": "application/octet-stream",
+        "content-length": String(eicarBytes.byteLength),
+        "x-content-sha256": sourceSha256,
+        "x-juro-scan-schema": "1",
+      },
+      body: eicarBytes,
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error("SCANNER_HTTP_ERROR");
+    }
+    const responseText = await response.text();
+    if (new TextEncoder().encode(responseText).byteLength > MAX_PROVIDER_RESPONSE_BYTES) {
+      throw new Error("SCANNER_RESPONSE_TOO_LARGE");
+    }
+    const result = malwareScannerResponseSchema.parse(JSON.parse(responseText) as unknown);
+    if (result.verdict !== "infected" || result.sourceSha256 !== sourceSha256
+      || result.threats.length < 1) {
+      throw new Error("SCANNER_DETECTION_FAILED");
+    }
+    await recordOperational(env, "malware_scanner", startedAt);
+    return "succeeded";
+  } catch {
+    await recordFailure(env, "malware_scanner", "SCANNER_UNAVAILABLE", startedAt);
+    return "failed";
+  }
+}
+
+function safeRecipient(value: string | undefined): string | null {
+  const normalized = value?.trim().toLowerCase() ?? "";
+  return normalized.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(normalized)
+    ? normalized
+    : null;
+}
+
+async function boundedJson(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (new TextEncoder().encode(text).byteLength > MAX_PROVIDER_RESPONSE_BYTES) {
+    throw new Error("PROVIDER_RESPONSE_TOO_LARGE");
+  }
+  return JSON.parse(text) as unknown;
+}
+
+async function runEmailDeliveryProbe(
+  env: PlatformJobEnv,
+  fetchImpl: typeof fetch,
+): Promise<ProbeOutcome> {
+  if (!(await probeDue(env, "resend", EMAIL_PROBE_INTERVAL_MS))) return "skipped";
+  const startedAt = Date.now();
+  const recipient = safeRecipient(env.OPERATIONS_ALERT_EMAIL);
+  if (!env.RESEND_API_KEY || !env.EMAIL_FROM || !recipient) {
+    await recordFailure(env, "resend", "PROBE_CONFIGURATION_ERROR", startedAt);
+    return "failed";
+  }
+  try {
+    const day = new Date().toISOString().slice(0, 10).replaceAll("-", "");
+    const response = await fetchImpl("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${env.RESEND_API_KEY}`,
+        "content-type": "application/json",
+        "idempotency-key": `juro-production-health-${day}`,
+      },
+      body: JSON.stringify({
+        from: env.EMAIL_FROM,
+        to: [recipient],
+        subject: "[JURO production] Контролируемая проверка email",
+        html: "<p>Контролируемая техническая проверка production JURO. Письмо не содержит пользовательских или юридических данных.</p>",
+      }),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new Error("EMAIL_PROVIDER_REJECTED");
+    }
+    resendResponseSchema.parse(await boundedJson(response));
+    await recordOperational(env, "resend", startedAt);
+    return "succeeded";
+  } catch {
+    await recordFailure(env, "resend", "EMAIL_DELIVERY_FAILED", startedAt);
+    return "failed";
+  }
+}
+
+async function runLawyerAreaProbe(env: PlatformJobEnv): Promise<ProbeOutcome> {
+  if (!(await probeDue(env, "lawyer_area", LAWYER_AREA_PROBE_INTERVAL_MS))) return "skipped";
+  const startedAt = Date.now();
+  const prefix = "production-health-lawyer-v1";
+  const ids = {
+    client: `${prefix}-client`,
+    lawyer: `${prefix}-lawyer`,
+    workspace: `${prefix}-workspace`,
+    member: `${prefix}-member`,
+    caseId: `${prefix}-case`,
+    profile: `${prefix}-profile`,
+    request: `${prefix}-request`,
+    grant: `${prefix}-grant`,
+  };
+  const now = new Date().toISOString();
+  try {
+    const results = await env.DB.batch([
+      env.DB.prepare(`INSERT INTO user_profiles(id,email,full_name,locale,account_type,lifecycle_status,created_at,updated_at)
+        VALUES (?,?,'JURO synthetic client probe','ru','individual','active',?,?)`).bind(
+        ids.client, `${ids.client}@example.test`, now, now,
+      ),
+      env.DB.prepare(`INSERT INTO user_profiles(id,email,full_name,locale,account_type,lifecycle_status,created_at,updated_at)
+        VALUES (?,?,'JURO synthetic lawyer probe','ru','lawyer','active',?,?)`).bind(
+        ids.lawyer, `${ids.lawyer}@example.test`, now, now,
+      ),
+      env.DB.prepare("INSERT INTO workspaces(id,type,name,locale,created_at,updated_at) VALUES (?,'individual','JURO synthetic lawyer probe','ru',?,?)")
+        .bind(ids.workspace, now, now),
+      env.DB.prepare(`INSERT INTO workspace_members(id,workspace_id,user_id,role,status,joined_at,created_at,updated_at)
+        VALUES (?,?,?,'owner','active',?,?,?)`).bind(ids.member, ids.workspace, ids.client, now, now, now),
+      env.DB.prepare(`INSERT INTO cases(id,owner_user_id,workspace_id,account_type,locale,title,legal_area,status,created_at,updated_at)
+        VALUES (?,?,?,'individual','ru','JURO synthetic lawyer probe','other','open',?,?)`)
+        .bind(ids.caseId, ids.client, ids.workspace, now, now),
+      env.DB.prepare(`INSERT INTO lawyer_profiles(id,user_id,display_name,status,created_at,updated_at)
+        VALUES (?,?,'JURO synthetic lawyer probe','pending',?,?)`).bind(ids.profile, ids.lawyer, now, now),
+      env.DB.prepare(`INSERT INTO lawyer_requests
+        (id,workspace_id,case_id,requester_user_id,lawyer_profile_id,status,anonymized_summary,requested_scope_json,created_at,updated_at)
+        VALUES (?,?,?,?,?,'awaiting_user_consent','Synthetic technical probe','{}',?,?)`)
+        .bind(ids.request, ids.workspace, ids.caseId, ids.client, ids.profile, now, now),
+      env.DB.prepare(`INSERT INTO lawyer_access_grants
+        (id,lawyer_request_id,case_id,lawyer_user_id,granted_by_user_id,created_at)
+        VALUES (?,?,?,?,?,?)`).bind(ids.grant, ids.request, ids.caseId, ids.lawyer, ids.client, now),
+      env.DB.prepare(`SELECT g.id AS grantId
+        FROM lawyer_access_grants g
+        JOIN lawyer_requests r ON r.id=g.lawyer_request_id
+        JOIN lawyer_profiles p ON p.id=r.lawyer_profile_id
+        WHERE g.id=? AND g.case_id=? AND g.lawyer_user_id=? AND r.workspace_id=? AND p.user_id=?`)
+        .bind(ids.grant, ids.caseId, ids.lawyer, ids.workspace, ids.lawyer),
+      env.DB.prepare("DELETE FROM lawyer_access_grants WHERE id=?").bind(ids.grant),
+      env.DB.prepare("DELETE FROM lawyer_requests WHERE id=?").bind(ids.request),
+      env.DB.prepare("DELETE FROM lawyer_profiles WHERE id=?").bind(ids.profile),
+      env.DB.prepare("DELETE FROM cases WHERE id=?").bind(ids.caseId),
+      env.DB.prepare("DELETE FROM workspace_members WHERE id=?").bind(ids.member),
+      env.DB.prepare("DELETE FROM workspaces WHERE id=?").bind(ids.workspace),
+      env.DB.prepare("DELETE FROM user_profiles WHERE id IN (?,?)").bind(ids.client, ids.lawyer),
+    ]);
+    const verification = results[8]?.results as Array<{ grantId?: string }> | undefined;
+    if (verification?.[0]?.grantId !== ids.grant) throw new Error("LAWYER_AREA_PROBE_VERIFICATION_FAILED");
+    await recordOperational(env, "lawyer_area", startedAt);
+    return "succeeded";
+  } catch {
+    await recordFailure(env, "lawyer_area", "LAWYER_HANDOFF_UNAVAILABLE", startedAt);
+    return "failed";
+  }
+}
+
+/**
+ * Production-only, content-free dependency checks. The scheduler already owns
+ * an idempotent per-slot lease; individual due checks bound provider cost and
+ * prevent routine probes from growing the append-only health ledger.
+ */
+export async function runProductionDependencyProbes(
+  env: PlatformJobEnv & { PRODUCTION_SYNTHETIC_PROBES_ENABLED?: string },
+  hooks: ProductionDependencyProbeHooks = {},
+): Promise<ProductionDependencyProbeSummary | null> {
+  if (!productionDependencyProbesEnabled(env)) return null;
+  const privateR2 = await runPrivateR2Probe(env);
+  const documentBuilder = await runDocumentBuilderProbe(env);
+  const malwareScanner = await runMalwareScannerProbe(env);
+  const openai = await runOneProviderProbe(env, "openai", hooks.openai);
+  const anthropic = await runOneProviderProbe(env, "anthropic", hooks.anthropic);
+  const documentAnalysis = await runDocumentAnalysisProbe(env, hooks.documentAnalysis);
+  const resend = await runEmailDeliveryProbe(env, hooks.fetchImpl ?? fetch);
+  const lawyerArea = await runLawyerAreaProbe(env);
+  return {
+    privateR2,
+    documentBuilder,
+    malwareScanner,
+    openai,
+    anthropic,
+    documentAnalysis,
+    resend,
+    lawyerArea,
+  };
+}

@@ -102,6 +102,15 @@ async function maybeEnqueueProductionQueueHealthProbe(env: PlatformJobEnv) {
   const { enqueueProductionQueueHealthProbe } = await import("./production-queue-health-probe");
   return enqueueProductionQueueHealthProbe(env);
 }
+
+async function maybeRunProductionDependencyProbes(env: PlatformJobEnv) {
+  if (
+    env.APP_ENV !== "production"
+    || (env as Record<string, unknown>).PRODUCTION_SYNTHETIC_PROBES_ENABLED !== "true"
+  ) return null;
+  const { runProductionDependencyProbes } = await import("./production-dependency-probes");
+  return runProductionDependencyProbes(env);
+}
 function logScheduled(
   level: "info" | "error",
   fields: Record<string, string | number | boolean | null>,
@@ -543,6 +552,7 @@ export async function handleScheduled(
       lexMetadataStaleRuns = await reconcileStaleLexMetadataMonitorRuns(env, { now: new Date(now) });
     }
     const directLexRetrievalEnabled = (env as Record<string, unknown>).LEGAL_DIRECT_RETRIEVAL_ENABLED === "true";
+    const lexSourceStartedAt = Date.now();
     failureCode = "LEX_SOURCE_HEALTH_CHECK_FAILED";
     const lexSourceHealth = directLexRetrievalEnabled
       ? await runDirectLegalSourceHealthCheck({
@@ -556,6 +566,23 @@ export async function handleScheduled(
         ageMinutes: null,
         sources: [],
       };
+    if (directLexRetrievalEnabled) {
+      await recordDependencyHealthEvidence(env, lexSourceHealth.state === "fresh"
+        ? {
+          key: "legal_source_sync",
+          state: "operational",
+          evidenceKind: "synthetic_probe",
+          startedAt: lexSourceStartedAt,
+          minimumOperationalIntervalMs: 20 * 60 * 60_000,
+        }
+        : {
+          key: "legal_source_sync",
+          state: "degraded",
+          safeErrorCode: lexSourceHealth.state === "stale" ? "LEGAL_SYNC_STALE" : "LEGAL_SYNC_FAILED",
+          evidenceKind: "synthetic_probe",
+          startedAt: lexSourceStartedAt,
+        });
+    }
     if (lexMetadataMonitorEnabled) {
       failureCode = "LEX_METADATA_MONITOR_RETRY_FAILED";
       lexMetadataRetry = await lexMetadataRetryDue(env, new Date(now))
@@ -622,6 +649,8 @@ export async function handleScheduled(
       failureCode = documentAnalysisProbe.errorCode ?? failureCode;
       throw new Error(failureCode);
     }
+    failureCode = "PRODUCTION_DEPENDENCY_PROBES_FAILED";
+    const productionDependencyProbes = await maybeRunProductionDependencyProbes(env);
     // `scheduled_runs` makes this completion idempotent per cron slot. This
     // must be a heartbeat, not a throttled product event, otherwise cron
     // jitter can suppress a real D1 success immediately before its age limit.
@@ -683,6 +712,14 @@ export async function handleScheduled(
       productionQueueHealthProbeStale: productionQueueHealthProbe?.stale ?? 0,
       productionQueueHealthProbeFailed: productionQueueHealthProbe?.failed ?? 0,
       productionQueueHealthProbeSkipped: productionQueueHealthProbe?.skipped ?? 0,
+      productionPrivateR2Probe: productionDependencyProbes?.privateR2 ?? "disabled",
+      productionDocumentBuilderProbe: productionDependencyProbes?.documentBuilder ?? "disabled",
+      productionMalwareScannerProbe: productionDependencyProbes?.malwareScanner ?? "disabled",
+      productionOpenAiProbe: productionDependencyProbes?.openai ?? "disabled",
+      productionAnthropicProbe: productionDependencyProbes?.anthropic ?? "disabled",
+      productionDocumentAnalysisProbe: productionDependencyProbes?.documentAnalysis ?? "disabled",
+      productionEmailProbe: productionDependencyProbes?.resend ?? "disabled",
+      productionLawyerAreaProbe: productionDependencyProbes?.lawyerArea ?? "disabled",
       emailDeliveryProbeSkipped: emailDeliveryProbe?.skipped ?? 0,
       emailDeliveryProbeAlreadyAccepted: emailDeliveryProbe?.alreadyAccepted ?? 0,
       malwareScannerProbeAttempted: malwareScannerProbe?.attempted ?? 0,
