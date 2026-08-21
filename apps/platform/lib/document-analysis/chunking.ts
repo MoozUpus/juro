@@ -7,12 +7,60 @@
 export const DOCUMENT_ANALYSIS_CHUNK_SIZE = 72_000;
 export const DOCUMENT_ANALYSIS_CHUNK_OVERLAP = 2_000;
 export const DOCUMENT_ANALYSIS_MAX_CHUNKS = 8;
+export const QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE = 24_000;
+const QUICK_DOCUMENT_ANALYSIS_SAMPLE_PARTS = 3;
+const QUICK_DOCUMENT_ANALYSIS_SAMPLE_BOUNDARY = "\n\n[JURO_REPRESENTATIVE_SAMPLE_BOUNDARY]\n\n";
 
 export type DocumentAnalysisChunk = {
   index: number;
   total: number;
   text: string;
 };
+
+export type DocumentAnalysisPlan = {
+  chunks: DocumentAnalysisChunk[];
+  representativeSample: boolean;
+};
+
+/**
+ * Quick analysis is a compact first pass, so a large document must not become
+ * one oversized structured-output request. Select deterministic beginning,
+ * middle, and ending windows in a single bounded request. This preserves broad
+ * document coverage while keeping the provider call below the asynchronous job
+ * budget. The explicit boundary marker is untrusted document data and cannot
+ * pass the later exact-excerpt check as evidence.
+ */
+export function planDocumentAnalysis(
+  text: string,
+  mode: "quick" | "full" | "expert",
+): DocumentAnalysisPlan {
+  if (mode !== "quick" || text.length <= QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE) {
+    return {
+      chunks: chunkDocumentForAnalysis(text),
+      representativeSample: false,
+    };
+  }
+
+  const boundaryBudget = QUICK_DOCUMENT_ANALYSIS_SAMPLE_BOUNDARY.length
+    * (QUICK_DOCUMENT_ANALYSIS_SAMPLE_PARTS - 1);
+  const windowSize = Math.floor(
+    (QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE - boundaryBudget)
+      / QUICK_DOCUMENT_ANALYSIS_SAMPLE_PARTS,
+  );
+  const starts = [
+    0,
+    Math.floor((text.length - windowSize) / 2),
+    text.length - windowSize,
+  ];
+  const sampledText = starts
+    .map((start) => text.slice(start, start + windowSize))
+    .join(QUICK_DOCUMENT_ANALYSIS_SAMPLE_BOUNDARY);
+
+  return {
+    chunks: [{ index: 1, total: 1, text: sampledText }],
+    representativeSample: true,
+  };
+}
 
 export function chunkDocumentForAnalysis(
   text: string,

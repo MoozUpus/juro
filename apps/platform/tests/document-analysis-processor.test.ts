@@ -12,6 +12,7 @@ import { AiUnavailableError } from "../lib/document-builder/ai/openai";
 import { ComparisonProcessingError } from "../lib/document-comparison/types";
 import { PackageExtractionError } from "../lib/document-analysis/package-extractor";
 import { DOCUMENT_ANALYSIS_INLINE_TEXT_LIMIT } from "../lib/document-analysis/limits";
+import { QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE } from "../lib/document-analysis/chunking";
 import type { DocumentAnalysisResult } from "../lib/document-analysis/schema";
 
 const result: DocumentAnalysisResult = {
@@ -414,7 +415,7 @@ test("an expanded ZIP beyond the inline memory budget fails terminally without p
   fixture.sqlite.close();
 });
 
-test("extracted text beyond the single-request boundary is analysed in bounded chunks", async () => {
+test("large quick analysis uses one bounded representative provider request", async () => {
   const fixture = await databaseFixture("ready", "analysis_safe");
   const bytes = new TextEncoder().encode("synthetic-verified-pdf-bytes");
   const sha256 = await sha256Hex(bytes);
@@ -466,8 +467,11 @@ test("extracted text beyond the single-request boundary is analysed in bounded c
         freshness: { status: "unavailable" as const, asOf: "unavailable", ageDays: null, maxAgeDays: 7 },
         legalDatabaseAsOf: "unavailable",
       }),
-      analyze: async () => {
+      analyze: async (input) => {
         aiCalls += 1;
+        assert.equal(input.extractedText.length <= QUICK_DOCUMENT_ANALYSIS_INPUT_SIZE, true);
+        assert.equal(input.extractionWarnings.includes("DOCUMENT_QUICK_REPRESENTATIVE_SAMPLE"), true);
+        assert.equal(input.extractedText.includes("JURO_REPRESENTATIVE_SAMPLE_BOUNDARY"), true);
         return {
           data: result,
           provider: "anthropic" as const,
@@ -486,7 +490,7 @@ test("extracted text beyond the single-request boundary is analysed in bounded c
   assert.equal(completed.status, "completed");
   assert.equal(analysis.status, "completed");
   assert.equal(analysis.errorCode, null);
-  assert.equal(aiCalls, 3);
+  assert.equal(aiCalls, 1);
   assert.equal((fixture.sqlite.prepare("SELECT COUNT(*) AS count FROM job_outbox").get() as { count: number }).count, 1);
   fixture.sqlite.close();
 });
