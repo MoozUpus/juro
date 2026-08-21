@@ -1599,6 +1599,7 @@ test("ingestion links official RU UZ Cyrillic UZ Latin and EN variants into one 
 test("historical Lex revisions are queued newest-first and keep non-overlapping validity", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
+  let heartbeatCalls = 0;
   const revisionHtml = (selected: string, body: string, includeHistory = false) => `<!doctype html><main id="divCont">
     <div>Дата вступления в силу</div><div>01.04.1996</div>
     <div class="dropdown-menu__item lx_date_selected stopProp">${selected}</div>
@@ -1627,8 +1628,10 @@ test("historical Lex revisions are queued newest-first and keep non-overlapping 
 
     const current = await ingestOfficialLexDocument(env, {
       sourceUrl: "https://lex.uz/ru/docs/145261", now, fetchImpl,
+      heartbeat: async () => { heartbeatCalls += 1; },
     });
     assert.equal(current.status, "indexed");
+    assert.ok(heartbeatCalls >= 4, `expected phase and queue heartbeats, got ${heartbeatCalls}`);
     const queued = sqlite.prepare("SELECT job_type AS jobType,source_url AS sourceUrl FROM legal_corpus_ingestion_jobs ORDER BY created_at")
       .all() as Array<{ jobType: string; sourceUrl: string }>;
     assert.equal(queued.length, 2);

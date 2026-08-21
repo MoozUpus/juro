@@ -556,6 +556,7 @@ async function persistLanguageAliasesAndQueue(input: {
   variants: readonly LexDiscoveredDocument[];
   currentSourceUrl: string;
   now: Date;
+  heartbeat?: () => Promise<void>;
 }): Promise<void> {
   const timestamp = input.now.toISOString();
   await input.env.DB.batch(input.variants.map((variant) => input.env.DB.prepare(`INSERT INTO legal_corpus_source_aliases
@@ -566,8 +567,10 @@ async function persistLanguageAliasesAndQueue(input: {
     variant.sourceUrl, input.documentId, variant.canonicalDocumentId,
     variant.language, timestamp,
   )));
+  await input.heartbeat?.();
   if (!featureEnabled(input.env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) return;
-  for (const variant of input.variants) {
+  for (const [index, variant] of input.variants.entries()) {
+    if (index > 0 && index % 4 === 0) await input.heartbeat?.();
     if (variant.sourceUrl === input.currentSourceUrl) continue;
     await enqueueOfficialLexCorpusDocument(input.env, {
       sourceUrl: variant.sourceUrl,
@@ -623,16 +626,19 @@ async function enqueueRevisionHistory(input: {
   revisions: readonly LexDiscoveredRevision[];
   now: Date;
   documentId: string;
+  heartbeat?: () => Promise<void>;
 }): Promise<void> {
   if (!featureEnabled(input.env, "LEGAL_CORPUS_HISTORICAL_ENABLED")
     || !featureEnabled(input.env, "LEGAL_CORPUS_AUTO_INGEST_ENABLED")) return;
   for (const [index, revision] of input.revisions.entries()) {
+    if (index % 4 === 0) await input.heartbeat?.();
     await enqueueOfficialLexCorpusRevision(input.env, {
       sourceUrl: revision.sourceUrl,
       now: new Date(input.now.getTime() + index),
       correlationId: `revision-history:${input.documentId}`,
     });
   }
+  await input.heartbeat?.();
 }
 
 async function recordFailure(input: {
@@ -801,6 +807,7 @@ export async function ingestOfficialLexDocument(
     fetchImpl: input.fetchImpl,
     maxBytes: MAX_LEX_SOURCE_BYTES,
   });
+  await input.heartbeat?.();
   const sourceUrl = fetched.canonicalUrl;
   const sourceHash = fetched.contentSha256;
   const rawHtml = new TextDecoder("utf-8", { fatal: true }).decode(fetched.bytes);
@@ -820,6 +827,7 @@ export async function ingestOfficialLexDocument(
     wait: input.wait,
     fetchImpl: input.fetchImpl,
   });
+  await input.heartbeat?.();
   const { normalized, representation } = normalizedSource;
   const normalizedJson = JSON.stringify(normalized);
   const normalizedHash = await sha256(normalizedJson);
@@ -847,6 +855,7 @@ export async function ingestOfficialLexDocument(
   if (chunks.length === 0 || chunks.length > MAX_CHUNKS_PER_VERSION) {
     throw new TypeError("LEGAL_CORPUS_CHUNK_LIMIT_REJECTED");
   }
+  await input.heartbeat?.();
 
   const now = nowIso(input.now);
   const current = await existingVariant(env.DB, documentId, currentDocument.language);
@@ -901,10 +910,11 @@ export async function ingestOfficialLexDocument(
     }
     await persistLanguageAliasesAndQueue({
       env, documentId: current.documentId, variants: languageVariants,
-      currentSourceUrl: sourceUrl, now: input.now ?? new Date(),
+      currentSourceUrl: sourceUrl, now: input.now ?? new Date(), heartbeat: input.heartbeat,
     });
     await enqueueRevisionHistory({
       env, revisions: revisionHistory.revisions, now: input.now ?? new Date(), documentId,
+      heartbeat: input.heartbeat,
     });
     return {
       status: "unchanged", documentId: current.documentId, variantId: current.variantId,
@@ -952,6 +962,7 @@ export async function ingestOfficialLexDocument(
       }),
     },
   });
+  await input.heartbeat?.();
   if (representation !== null && representationContainerKey !== null) {
     await env.BUCKET.put(representationContainerKey, representation.containerBytes, {
       httpMetadata: { contentType: representation.contentType },
@@ -980,6 +991,7 @@ export async function ingestOfficialLexDocument(
         },
       });
     }
+    await input.heartbeat?.();
   }
   await env.BUCKET.put(normalizedObjectKey, normalizedJson, {
     httpMetadata: { contentType: "application/json; charset=utf-8" },
@@ -998,6 +1010,7 @@ export async function ingestOfficialLexDocument(
       }),
     },
   });
+  await input.heartbeat?.();
 
   const versionNumber = await nextVersionNumber(env.DB, variantId);
   const versionId = `${variantId}:v${versionNumber}:${versionHash.slice(0, 12)}`;
@@ -1055,13 +1068,15 @@ export async function ingestOfficialLexDocument(
     ),
   ];
   await env.DB.batch(header);
+  await input.heartbeat?.();
 
   // New Workers can run before the additive sparse migration. Resolve this
   // once per source so a deployment and schema migration can be rolled out in
   // either safe order without dropping a document's sparse evidence.
   const sparseMode = await sparseStorageMode(env.DB);
   const provisionStatements: D1PreparedStatement[] = [];
-  for (const provision of provisions) {
+  for (const [provisionIndex, provision] of provisions.entries()) {
+    if (provisionIndex % 64 === 0) await input.heartbeat?.();
     const provisionId = `${versionId}:p${provision.sequence}`;
     const provisionHash = await sha256(provision.text);
     provisionStatements.push(env.DB.prepare(`INSERT INTO legal_corpus_provisions
@@ -1075,7 +1090,8 @@ export async function ingestOfficialLexDocument(
       revisionDate, validTo, sourceUrl, provisionHash, now,
     ));
   }
-  for (const chunk of chunks) {
+  for (const [chunkIndex, chunk] of chunks.entries()) {
+    if (chunkIndex % 64 === 0) await input.heartbeat?.();
     const provisionId = `${versionId}:p${chunk.provision.sequence}`;
     const sparseEntries = buildSparseTermEntries({
       text: chunk.text,
@@ -1104,6 +1120,7 @@ export async function ingestOfficialLexDocument(
     }));
   }
   await runBatches(env.DB, provisionStatements, input.heartbeat);
+  await input.heartbeat?.();
   if (!revision) {
     if (
       current?.currentVersionId
@@ -1121,10 +1138,11 @@ export async function ingestOfficialLexDocument(
 
     await persistLanguageAliasesAndQueue({
       env, documentId, variants: languageVariants,
-      currentSourceUrl: currentDocument.sourceUrl, now: input.now ?? new Date(),
+      currentSourceUrl: currentDocument.sourceUrl, now: input.now ?? new Date(), heartbeat: input.heartbeat,
     });
     await enqueueRevisionHistory({
       env, revisions: revisionHistory.revisions, now: input.now ?? new Date(), documentId,
+      heartbeat: input.heartbeat,
     });
   }
 
