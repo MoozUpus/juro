@@ -2727,3 +2727,18 @@ reconciliation was 12 `indexed`, 2 `awaiting_ingestion`, 1 `queued` and 4
 `retrying`; these remain retryable source conditions. Release floors, queue
 freeze, snapshot, evaluation, restore and CI gates remain unproven.
 Production remains untouched.
+
+## Active replacement cycle long-running version probe (2026-08-21, 13:30Z)
+
+The 13:20:13Z scheduled invocation remained `running` with the distributed
+lock valid through 13:38:23Z. One version job (`legal-version:036a5d26…`)
+has remained `running` since its last durable update at 13:23:02Z; this is a
+long-running ingestion operation, not a terminal/dead-letter row, so it was
+not interrupted. Sequential D1 checks still show zero failure rows, zero
+terminal/technically-unavailable rows and zero dead-letter jobs; all 44
+discovery checkpoints remain queued with zero attempts and zero errors.
+
+Totals remain 13 canonical documents, 4,929 unique current provisions and
+15,939 indexed current chunks. Release floors, queue freeze, snapshot,
+evaluation, restore and CI gates remain unproven. Production remains
+untouched.
