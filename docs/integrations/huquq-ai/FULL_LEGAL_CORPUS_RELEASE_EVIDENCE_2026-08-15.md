@@ -3105,6 +3105,21 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM ingestion progress (2026-08-21, 19:04–19:08Z)
+
+The sequential run `c53f796c-72e9-4d48-b2d3-debaefa29b9f` continued the
+government family after the preserved page markers. No checkpoint was marked
+complete on a retryable duplicate or timeout; all four laws checkpoints remain
+completed and the government ledger remains resumable.
+
+The latest D1 totals are 34 canonical documents, 40 language variants, 6,650
+distinct current provisions and 18,704 indexed chunks, with 1,966
+live-or-manual jobs queued/retrying. The failure ledger remains one retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`; terminal/dead-letter is zero. Release
+floors, queue freeze and all post-ingestion gates remain unproven; production is
+untouched.
+
 ## Next government/PKM run started (2026-08-21, 19:04–19:06Z)
 
 Run `c53f796c-72e9-4d48-b2d3-debaefa29b9f` acquired the lease for the next
