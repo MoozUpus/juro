@@ -9,6 +9,14 @@ import {
 } from "./lex-discovery";
 import { featureEnabled, type LegalCorpusFeatureFlag } from "./trust";
 
+// Fixed title-search pages for the core-code bootstrap have repeatedly hit
+// Lex's slow edge from the Worker even though the same bounded GET completes
+// quickly outside the Worker. Keep the normal catalogue deadline unchanged;
+// give only this one-per-run bootstrap lookup a bounded 45-second response
+// window so a slow public response can complete without being misclassified
+// as a source-unavailable retry on every cycle.
+export const CORE_CODE_TIMEOUT_MS = 45_000;
+
 type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 type CoreCodeEnv = LegalCorpusQueueEnv & Partial<Record<LegalCorpusFeatureFlag, string | undefined>>;
 
@@ -234,6 +242,7 @@ export async function runNextLexCoreCodeDiscovery(
       fetchImpl: input.fetchImpl,
       wait: input.wait,
       pacingAlreadyApplied: input.pacingAlreadyApplied,
+      timeoutMs: CORE_CODE_TIMEOUT_MS,
     });
     if (resumePager && page.currentPage !== targetRow.pageNumber + 1) {
       await env.DB.prepare(`UPDATE legal_corpus_core_code_targets

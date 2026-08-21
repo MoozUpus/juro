@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { fetchLexCatalogPage } from "../lib/legal-corpus/lex-catalog-discovery";
 import {
+  CORE_CODE_TIMEOUT_MS,
   LEX_CORE_CODE_SEED_URLS,
   runNextLexCoreCodeDiscovery,
   seedLexCoreCodeJobs,
@@ -11,6 +12,10 @@ import { LEX_CORE_CODE_TARGETS, lexCoreCodeSearchUrl } from "../lib/legal-corpus
 import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const robots = "User-agent: *\nAllow: /\nCrawl-delay: 0\n";
+
+test("core-code title lookup keeps a bounded extended Worker response window", () => {
+  assert.equal(CORE_CODE_TIMEOUT_MS, 45_000);
+});
 
 test("core-code searches remain limited to the fixed official target registry", async () => {
   const family = LEX_CORE_CODE_TARGETS.find((target) => target.id === "family")!;
