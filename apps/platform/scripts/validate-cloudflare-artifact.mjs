@@ -15,6 +15,7 @@ const artifactHostingPath = resolve(
 const sourceMigrations = resolve(projectRoot, "drizzle");
 const artifactMigrations = resolve(projectRoot, "dist/.openai/drizzle");
 const workerPath = resolve(projectRoot, "dist/server/index.js");
+const serverRoot = resolve(projectRoot, "dist/server");
 
 const requestedEnvironment = process.env.CLOUDFLARE_ENV?.trim() || "development";
 assert.ok(
@@ -509,6 +510,25 @@ for (const path of await filesBelow(resolve(projectRoot, "dist"))) {
     `secret file was packaged: ${path}`,
   );
 }
+
+const productionProbeChunks = [];
+for (const path of await filesBelow(serverRoot)) {
+  if (!path.endsWith(".js")) continue;
+  const source = await readFile(resolve(serverRoot, path), "utf8");
+  if (source.includes("production_dependency_probe.builder_failed")) {
+    productionProbeChunks.push({ path, source });
+  }
+}
+assert.equal(
+  productionProbeChunks.length,
+  1,
+  "artifact must contain exactly one production dependency probe chunk",
+);
+assert.doesNotMatch(
+  productionProbeChunks[0].source,
+  /import\(["']\.\.\/index\.js["']\)/u,
+  "Builder probe modules must be statically linked; the Worker entry does not export their runtime functions",
+);
 
 assert.deepEqual(
   JSON.parse(await readFile(artifactHostingPath, "utf8")),

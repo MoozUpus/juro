@@ -1,4 +1,9 @@
 import { z } from "zod";
+import { createDefaultAnswers } from "../lib/document-builder/defaults";
+import { generateDocx } from "../lib/document-builder/generation/docx";
+import { generatePdf } from "../lib/document-builder/generation/pdf";
+import { generateZip } from "../lib/document-builder/generation/zip";
+import { renderReceipt } from "../lib/document-builder/templates/receipt";
 import type {
   DependencyHealthKey,
   DependencyHealthSafeErrorCode,
@@ -222,19 +227,6 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
   const objectKey = "system/probes/production-document-builder-v1.zip";
   let stage: BuilderProbeStage = "asset";
   try {
-    const [
-      { createDefaultAnswers },
-      { renderReceipt },
-      { generateDocx },
-      { generatePdf },
-      { generateZip },
-    ] = await Promise.all([
-      import("../lib/document-builder/defaults"),
-      import("../lib/document-builder/templates/receipt"),
-      import("../lib/document-builder/generation/docx"),
-      import("../lib/document-builder/generation/pdf"),
-      import("../lib/document-builder/generation/zip"),
-    ]);
     const [template, regularFont, boldFont, footerMark] = await Promise.all([
       fetchAsset(env, "/document-templates/receipt-ru.docx"),
       fetchAsset(env, "/document-templates/DejaVuSans-JURO.ttf"),
