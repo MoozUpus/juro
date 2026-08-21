@@ -16,7 +16,10 @@ type Profile = {
     | "pending_review"
     | "changes_requested"
     | "public_approved"
-    | "rejected";
+    | "rejected"
+    | "suspended"
+    | "blocked"
+    | "archived";
   publicApprovedAt: string | null;
   experienceYears: number | null;
   priceDescription: string | null;
@@ -33,6 +36,13 @@ type Profile = {
   profilePhotoUrl: string | null;
   missingRequiredFields: string[];
   moderationReason: string | null;
+  updatedAt: string;
+  moderationHistory: Array<{
+    profileRevision: number;
+    decision: "approved" | "changes_requested" | "rejected";
+    reason: string | null;
+    createdAt: string;
+  }>;
 };
 
 type Form = {
@@ -113,6 +123,11 @@ export function LawyerProfessionalProfile({
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const editingLocked = profile
+    ? ["pending_review", "suspended", "blocked", "archived"].includes(
+        profile.marketplaceStatus,
+      )
+    : false;
 
   useEffect(() => {
     fetch("/api/platform/lawyer-profile", { cache: "no-store" })
@@ -180,7 +195,11 @@ export function LawyerProfessionalProfile({
         error?: string;
       };
       if (!result.ok || !body.profile) throw new Error(body.error || "Ошибка");
-      setProfile(body.profile);
+      setProfile({
+        ...body.profile,
+        moderationHistory:
+          body.profile.moderationHistory ?? profile?.moderationHistory ?? [],
+      });
       setForm(toForm(body.profile));
       if (intent === "submit") {
         const submission = await fetch("/api/platform/lawyer-profile/submit", {
@@ -192,6 +211,7 @@ export function LawyerProfessionalProfile({
           error?: string;
           marketplaceStatus?: Profile["marketplaceStatus"];
           missingRequiredFields?: string[];
+          updatedAt?: string;
         };
         if (!submission.ok) {
           if (submissionBody.missingRequiredFields?.length) {
@@ -214,6 +234,7 @@ export function LawyerProfessionalProfile({
                 marketplaceStatus:
                   submissionBody.marketplaceStatus ?? "pending_review",
                 missingRequiredFields: [],
+                updatedAt: submissionBody.updatedAt ?? current.updatedAt,
               }
             : current,
         );
@@ -339,8 +360,31 @@ export function LawyerProfessionalProfile({
           <div className="lawyer-application-status" role="status">
             <strong>{statusLabel(profile.marketplaceStatus, ru)}</strong>
             <span>{statusDescription(profile.marketplaceStatus, ru)}</span>
+            <time dateTime={profile.updatedAt}>
+              {ru ? "Обновлено " : "Yangilandi "}
+              {formatProfileDate(profile.updatedAt, ru)}
+            </time>
           </div>
         )}
+        {profile?.moderationHistory?.length ? (
+          <section className="lawyer-moderation-history" aria-labelledby="lawyer-moderation-history-title">
+            <h3 id="lawyer-moderation-history-title">
+              {ru ? "История модерации" : "Moderatsiya tarixi"}
+            </h3>
+            <ol>
+              {profile.moderationHistory.map((item) => (
+                <li key={`${item.profileRevision}:${item.createdAt}`}>
+                  <div>
+                    <strong>{moderationDecisionLabel(item.decision, ru)}</strong>
+                    <span>{ru ? `Версия ${item.profileRevision}` : `${item.profileRevision}-versiya`}</span>
+                  </div>
+                  {item.reason && <p>{item.reason}</p>}
+                  <time dateTime={item.createdAt}>{formatProfileDate(item.createdAt, ru)}</time>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
         {profile?.marketplaceStatus === "changes_requested" && (
           <section className="profile-message warning" role="status">
             <strong>
@@ -367,7 +411,7 @@ export function LawyerProfessionalProfile({
           </p>
         )}
         <form className="profile-form" onSubmit={(event) => void save(event)}>
-          <fieldset disabled={profile?.marketplaceStatus === "pending_review"}>
+          <fieldset disabled={editingLocked}>
             <section className="lawyer-profile-photo">
               <label>
                 {ru
@@ -584,6 +628,54 @@ export function LawyerProfessionalProfile({
               </label>
             </section>
           </fieldset>
+          <section
+            className="lawyer-profile-preview"
+            aria-labelledby="lawyer-profile-preview-title"
+          >
+            <header>
+              <div>
+                <small>{ru ? "Предпросмотр" : "Ko‘rib chiqish"}</small>
+                <h3 id="lawyer-profile-preview-title">
+                  {ru
+                    ? "Предпросмотр публичного профиля"
+                    : "Ommaviy profilni ko‘rib chiqish"}
+                </h3>
+              </div>
+              <span>{ru ? "Виден только вам" : "Faqat sizga ko‘rinadi"}</span>
+            </header>
+            <div className="lawyer-profile-preview-card">
+              {profile?.profilePhotoUrl ? (
+                <Image
+                  src={profile.profilePhotoUrl}
+                  alt=""
+                  width={88}
+                  height={88}
+                  unoptimized
+                />
+              ) : (
+                <div className="lawyer-profile-preview-photo" aria-hidden="true">
+                  {form.displayName.trim().slice(0, 1).toUpperCase() || "J"}
+                </div>
+              )}
+              <div>
+                <h4>{form.displayName.trim() || (ru ? "Имя юриста" : "Yurist ismi")}</h4>
+                <p>{[form.city, form.region].filter(Boolean).join(" · ") || "—"}</p>
+                <div className="lawyer-profile-preview-tags">
+                  {list(form.specialties).map((value) => <span key={value}>{value}</span>)}
+                  {list(form.languages).map((value) => <span key={value}>{value}</span>)}
+                </div>
+              </div>
+              <dl>
+                <div><dt>{ru ? "Стаж" : "Tajriba"}</dt><dd>{form.experienceYears ? `${form.experienceYears} ${ru ? "лет" : "yil"}` : "—"}</dd></div>
+                <div><dt>{ru ? "Образование" : "Ta’lim"}</dt><dd>{form.education || "—"}</dd></div>
+                <div><dt>{ru ? "Место работы" : "Ish joyi"}</dt><dd>{form.firmName || "—"}</dd></div>
+                <div><dt>{ru ? "Форматы" : "Formatlar"}</dt><dd>{list(form.consultationFormats).join(", ") || "—"}</dd></div>
+                <div><dt>{ru ? "Стоимость" : "Narx"}</dt><dd>{form.priceDescription || "—"}</dd></div>
+                <div><dt>{ru ? "Доступность" : "Mavjudlik"}</dt><dd>{availabilityLabel(form.availabilityStatus, ru)}</dd></div>
+              </dl>
+              {form.bio && <p className="lawyer-profile-preview-bio">{form.bio}</p>}
+            </div>
+          </section>
           {profile?.missingRequiredFields.length ? (
             <p className="lawyer-required-fields" role="status">
               {ru
@@ -633,6 +725,9 @@ function statusLabel(status: Profile["marketplaceStatus"], ru: boolean) {
     changes_requested: ["Нужны изменения", "O‘zgartirish kerak"],
     public_approved: ["Профиль опубликован", "Profil nashr etilgan"],
     rejected: ["Заявка отклонена", "Ariza rad etilgan"],
+    suspended: ["Профиль приостановлен", "Profil to‘xtatilgan"],
+    blocked: ["Профиль заблокирован", "Profil bloklangan"],
+    archived: ["Профиль в архиве", "Profil arxivda"],
   };
   return labels[status][ru ? 0 : 1];
 }
@@ -659,8 +754,52 @@ function statusDescription(status: Profile["marketplaceStatus"], ru: boolean) {
       "Причина решения отображается ниже, если она доступна.",
       "Qaror sababi mavjud bo‘lsa, quyida ko‘rsatiladi.",
     ],
+    suspended: [
+      "Публичная карточка и новые заявки временно недоступны.",
+      "Ommaviy karta va yangi so‘rovlar vaqtincha mavjud emas.",
+    ],
+    blocked: [
+      "Доступ к профессиональным действиям заблокирован решением JURO.",
+      "Professional amallarga kirish JURO qarori bilan bloklangan.",
+    ],
+    archived: [
+      "Профиль снят с публикации и помещён в архив.",
+      "Profil nashrdan olib tashlangan va arxivga joylangan.",
+    ],
   };
   return descriptions[status][ru ? 0 : 1];
+}
+
+function availabilityLabel(status: Form["availabilityStatus"], ru: boolean) {
+  const labels: Record<Form["availabilityStatus"], [string, string]> = {
+    unknown: ["Не указана", "Ko‘rsatilmagan"],
+    available: ["Доступен", "Mavjud"],
+    limited: ["Ограниченная", "Cheklangan"],
+    unavailable: ["Недоступен", "Mavjud emas"],
+  };
+  return labels[status][ru ? 0 : 1];
+}
+
+function moderationDecisionLabel(
+  decision: Profile["moderationHistory"][number]["decision"],
+  ru: boolean,
+) {
+  const labels = {
+    approved: ["Одобрена и опубликована", "Tasdiqlandi va nashr qilindi"],
+    changes_requested: ["Запрошены изменения", "O‘zgartirishlar so‘raldi"],
+    rejected: ["Отклонена", "Rad etildi"],
+  } satisfies Record<typeof decision, [string, string]>;
+  return labels[decision][ru ? 0 : 1];
+}
+
+function formatProfileDate(value: string, ru: boolean) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Tashkent",
+  }).format(date);
 }
 
 function requiredFieldLabel(field: string, ru: boolean) {

@@ -1,4 +1,5 @@
-import { notFound } from "next/navigation";
+import { headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 
 import { requireChatGPTUser } from "../chatgpt-auth";
 import { publicDocumentUrlImportEnabled } from "../../lib/document-analysis/public-url-import-feature";
@@ -6,6 +7,11 @@ import { runtimeEnv } from "../../lib/document-builder/storage/runtime";
 import { isAccountType, isLocale, isPlatformModule, isWorkspaceId, platformPath, type AccountType, type PlatformLocale, type PlatformModule } from "../../lib/platform/routing";
 import { ModuleContent } from "./ModuleContent";
 import { safeDisplayName } from "../../lib/platform/display-name";
+import {
+  accountModuleRedirect,
+  isLawyerHostRequest,
+} from "../../lib/platform/lawyer-entry-routing";
+import { workspaceProfile } from "../../lib/platform/profile";
 
 type AccountModuleRouteInput = {
   locale: string;
@@ -26,7 +32,18 @@ type BusinessModuleRouteInput = {
  */
 export async function renderAccountModuleRoute({ locale, accountType, module }: AccountModuleRouteInput) {
   if (!isLocale(locale) || !isAccountType(accountType) || !isPlatformModule(module)) notFound();
+  const requestHeaders = await headers();
+  const lawyerHost = isLawyerHostRequest(requestHeaders);
   const user = await requireChatGPTUser(`/${locale}/${accountType}/${module}`);
+  const destination = accountModuleRedirect({
+    requestedLocale: locale,
+    requestedAccountType: accountType,
+    module,
+    lawyerHost,
+    requestHost: requestHeaders.get("host"),
+    profile: await workspaceProfile(user.email),
+  });
+  if (destination) redirect(destination);
   const publicUrlImportEnabled = publicDocumentUrlImportEnabled(runtimeEnv().PUBLIC_DOCUMENT_URL_IMPORT_ENABLED);
   return (
     <ModuleContent

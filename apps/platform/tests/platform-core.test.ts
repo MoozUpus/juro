@@ -70,7 +70,8 @@ test("lawyer professional profile accepts only bounded self-declared directory d
   ]);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "development", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
-  for (const environment of [undefined, "production", "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
+  assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "production", LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), true);
+  for (const environment of [undefined, "preview"]) assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: environment, LAWYER_PROFILE_DIRECTORY_ENABLED: "true", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "false", DB: {} }), false);
   assert.equal(isLawyerProfileDirectoryPreviewEnabled({ APP_ENV: "staging", LAWYER_PROFILE_DIRECTORY_ENABLED: "true" }), false);
   assert.match(route, /account_type='lawyer'/); assert.match(route, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(route, /assertSafeWrite/); assert.match(route, /lawyer_profile_created/); assert.match(route, /lawyer_profile_draft_saved/); assert.match(route, /meta\.changes/); assert.match(route, /WHERE EXISTS/);
@@ -1195,11 +1196,15 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
     caseId,
     lawyerProfileId,
     anonymizedSummary: "Нужна проверка договорного спора без раскрытия персональных данных.",
+    serviceCode: "document_review",
+    preferredFormat: "video",
+    proposedStartsAt: "2026-08-24T10:00:00+05:00",
     consent: true,
     locale: "ru",
   }).success, true);
   assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "слишком коротко", consent: true, locale: "ru" }).success, false);
   assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "Достаточно длинное нейтральное описание ситуации для проверки конфликта.", consent: false, locale: "ru" }).success, false);
+  assert.equal(lawyerRequestSchema.safeParse({ caseId, anonymizedSummary: "Достаточно длинное нейтральное описание ситуации для проверки конфликта.", serviceCode: "invented", consent: true, locale: "ru" }).success, false);
   assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "clear", locale: "uz" }).success, true);
   assert.equal(conflictCheckDecisionSchema.safeParse({ decision: "approve", locale: "uz" }).success, false);
   assert.equal(lawyerAccessGrantSchema.safeParse({ consent: true, locale: "ru" }).success, true);
@@ -1213,6 +1218,8 @@ test("lawyer handoff keeps conflict review anonymized and access explicitly cons
   assert.match(requestRoute, /workspaceEntitlements\(db, workspace\.id\)/);
   assert.match(requestRoute, /WHERE id=\? AND workspace_id=\? AND archived_at IS NULL/);
   assert.match(requestRoute, /anonymized_summary/);
+  assert.match(requestRoute, /serviceCode: parsed\.data\.serviceCode/);
+  assert.match(requestRoute, /json_extract\(r\.requested_scope_json,'\$\.preferredFormat'\)/);
   assert.match(conflictRoute, /anonymized summary/);
   assert.match(conflictRoute, /p\.user_id=\? AND p\.status='public_approved'/);
   assert.match(grantRoute, /c\.status='clear'/);

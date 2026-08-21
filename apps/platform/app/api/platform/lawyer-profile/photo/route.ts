@@ -400,7 +400,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       ok: true,
       marketplaceStatus,
       missingRequiredFields,
-      profilePhotoUrl: `/api/public/lawyers/${encodeURIComponent(profile.id)}/photo`,
+      profilePhotoUrl: "/api/platform/lawyer-profile/photo",
     },
     201,
   );

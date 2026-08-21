@@ -50,6 +50,7 @@ import {
 } from "../../../../lib/legal/acceptance";
 import { ensureDefaultWorkspace } from "../../../../lib/platform/workspace";
 import { isPersonalAccountType } from "../../../../lib/platform/routing";
+import { lawyerLandingDestination } from "../../../../lib/platform/lawyer-entry-routing";
 
 function json(body: unknown, status = 200, cookies?: string | string[]) {
   const headers = new Headers({ "content-type": "application/json", "cache-control": "private, no-store", pragma: "no-cache" });
@@ -154,13 +155,19 @@ export const POST = withApiErrors(async function POST(request: Request) {
   const existingUserId = await userIdByEmail(db, identityContext, email);
   let user = existingUserId
     ? await db.prepare(
-      `SELECT id,account_type AS accountType,
-        onboarding_completed_at AS onboardingCompletedAt
-       FROM user_profiles WHERE id=? LIMIT 1`,
+      `SELECT u.id,u.account_type AS accountType,
+        u.onboarding_completed_at AS onboardingCompletedAt,
+        lp.status AS lawyerProfileStatus,
+        lp.marketplace_status AS lawyerMarketplaceStatus
+       FROM user_profiles u
+       LEFT JOIN lawyer_profiles lp ON lp.user_id=u.id
+       WHERE u.id=? LIMIT 1`,
     ).bind(existingUserId).first<{
       id: string;
       accountType: string;
       onboardingCompletedAt: string | null;
+      lawyerProfileStatus: string | null;
+      lawyerMarketplaceStatus: string | null;
     }>()
     : null;
   // The caller has already proved control of this email with a valid OTP, so
@@ -192,6 +199,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
       id: crypto.randomUUID(),
       accountType,
       onboardingCompletedAt: null,
+      lawyerProfileStatus: null,
+      lawyerMarketplaceStatus: null,
     };
     const identity = await prepareUserIdentityWrite(identityContext, {
       userId: user.id,
@@ -230,10 +239,20 @@ export const POST = withApiErrors(async function POST(request: Request) {
     });
   }
   const requestHostname = new URL(request.url).hostname;
-  const lawyerHost = requestHostname.toLowerCase() === "lawyer.juro.uz";
-  const redirectTo = purpose === "register" || !user.onboardingCompletedAt
-    ? `/${locale}/onboarding`
-    : lawyerHost && accountType === "lawyer" ? `/${locale}/dashboard` : `/${locale}/${accountType}/dashboard`;
+  const normalizedHostname = requestHostname.toLowerCase();
+  const lawyerHost = normalizedHostname === "lawyer.juro.uz"
+    || normalizedHostname === "lawyer.staging.juro.uz";
+  const redirectTo = accountType === "lawyer"
+    ? lawyerLandingDestination({
+        locale,
+        accountType,
+        onboardingCompleted: Boolean(user.onboardingCompletedAt) && purpose !== "register",
+        lawyerProfileStatus: user.lawyerProfileStatus,
+        lawyerMarketplaceStatus: user.lawyerMarketplaceStatus,
+      }, lawyerHost, requestHostname)
+    : purpose === "register" || !user.onboardingCompletedAt
+      ? `/${locale}/onboarding`
+      : `/${locale}/${accountType}/dashboard`;
   if (await hasActiveMfa(db, user.id)) {
     try {
       const challenge = await createLoginMfaChallenge(

@@ -19,10 +19,6 @@ export function lawyerHostTarget(url: URL): URL | null {
   if (url.pathname === "/") {
     target.pathname = "/ru/auth/login";
     target.searchParams.set("accountType", "lawyer");
-    // The auth cookie is shared across *.juro.uz. A client session visiting the
-    // lawyer host would otherwise be redirected back to `/`, which this router
-    // rewrites to the same authenticated login page and creates a redirect loop.
-    target.searchParams.set("reauth", "1");
     return target;
   }
   const auth = url.pathname.match(/^\/(?:(ru|uz)\/)?(login|register|verify)\/?$/u);

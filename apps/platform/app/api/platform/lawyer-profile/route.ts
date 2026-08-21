@@ -45,6 +45,14 @@ type LawyerProfile = {
   profileRevision: number;
   hasPhone: number;
   moderationReason: string | null;
+  updatedAt: string;
+};
+
+type ModerationHistoryItem = {
+  profileRevision: number;
+  decision: string;
+  reason: string | null;
+  createdAt: string;
 };
 
 type EditableProfile = {
@@ -119,7 +127,10 @@ function completion(profile: LawyerProfile, value = toEditable(profile)) {
   };
 }
 
-function serialize(profile: LawyerProfile) {
+function serialize(
+  profile: LawyerProfile,
+  moderationHistory: ModerationHistoryItem[] = [],
+) {
   const required = completion(profile);
   return {
     id: profile.id,
@@ -142,7 +153,7 @@ function serialize(profile: LawyerProfile) {
     consultationFormats: list(profile.consultationFormatsJson),
     hasPhone: profile.hasPhone === 1,
     profilePhotoUrl: profile.profilePhotoKey
-      ? `/api/public/lawyers/${encodeURIComponent(profile.id)}/photo`
+      ? "/api/platform/lawyer-profile/photo"
       : null,
     moderationReason:
       profile.marketplaceStatus === "changes_requested"
@@ -150,6 +161,8 @@ function serialize(profile: LawyerProfile) {
         : null,
     missingRequiredFields: missingLawyerMarketplaceFields(required),
     profileRevision: profile.profileRevision,
+    updatedAt: profile.updatedAt,
+    moderationHistory,
   };
 }
 
@@ -173,6 +186,7 @@ async function ownProfile(userId: string) {
        p.firm_name AS firmName,p.bio,p.city,p.region,p.education,
        p.consultation_formats_json AS consultationFormatsJson,
        p.profile_photo_key AS profilePhotoKey,p.profile_revision AS profileRevision,
+       p.updated_at AS updatedAt,
        CASE WHEN u.phone IS NOT NULL AND length(trim(u.phone))>0 THEN 1 ELSE 0 END AS hasPhone,
        (SELECT m.reason FROM lawyer_profile_moderation m
          WHERE m.lawyer_profile_id=p.id AND m.profile_revision=p.profile_revision
@@ -186,6 +200,17 @@ async function ownProfile(userId: string) {
     .first<LawyerProfile>();
 }
 
+async function ownModerationHistory(profileId: string) {
+  const history = await requireD1().prepare(
+    `SELECT profile_revision AS profileRevision,decision,reason,
+      created_at AS createdAt
+     FROM lawyer_profile_moderation
+     WHERE lawyer_profile_id=?
+     ORDER BY created_at DESC,id DESC LIMIT 25`,
+  ).bind(profileId).all<ModerationHistoryItem>();
+  return history.results;
+}
+
 function changed(current: EditableProfile, next: EditableProfile): boolean {
   return (
     current.displayName !== next.displayName ||
@@ -195,6 +220,27 @@ function changed(current: EditableProfile, next: EditableProfile): boolean {
     current.priceDescription !== next.priceDescription ||
     current.availabilityStatus !== next.availabilityStatus ||
     current.nextAvailableAt !== next.nextAvailableAt ||
+    current.advocateStatus !== next.advocateStatus ||
+    current.firmName !== next.firmName ||
+    current.bio !== next.bio ||
+    current.city !== next.city ||
+    current.region !== next.region ||
+    current.education !== next.education ||
+    JSON.stringify(current.consultationFormats) !==
+      JSON.stringify(next.consultationFormats)
+  );
+}
+
+function moderatedFieldsChanged(
+  current: EditableProfile,
+  next: EditableProfile,
+): boolean {
+  return (
+    current.displayName !== next.displayName ||
+    JSON.stringify(current.specialties) !== JSON.stringify(next.specialties) ||
+    JSON.stringify(current.languages) !== JSON.stringify(next.languages) ||
+    current.experienceYears !== next.experienceYears ||
+    current.priceDescription !== next.priceDescription ||
     current.advocateStatus !== next.advocateStatus ||
     current.firmName !== next.firmName ||
     current.bio !== next.bio ||
@@ -221,7 +267,11 @@ export const GET = withApiErrors(async function GET() {
     );
   }
   const profile = await ownProfile(user.id);
-  return response({ profile: profile ? serialize(profile) : null });
+  return response({
+    profile: profile
+      ? serialize(profile, await ownModerationHistory(profile.id))
+      : null,
+  });
 });
 
 export const POST = withApiErrors(async function POST(request: Request) {
@@ -332,7 +382,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       ),
   ]);
   const profile = await ownProfile(user.id);
-  return response({ profile: profile ? serialize(profile) : null }, 201);
+  return response({
+    profile: profile
+      ? serialize(profile, await ownModerationHistory(profile.id))
+      : null,
+  }, 201);
 });
 
 export const PATCH = withApiErrors(async function PATCH(request: Request) {
@@ -416,9 +470,21 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     consultationFormats:
       value.consultationFormats ?? current.consultationFormats,
   };
-  if (!changed(current, next)) return response({ profile: serialize(profile) });
+  if (!changed(current, next)) {
+    return response({
+      profile: serialize(profile, await ownModerationHistory(profile.id)),
+    });
+  }
 
-  const marketplaceStatus = "profile_incomplete";
+  const preservesPublishedProfile = profile.status === "public_approved"
+    && profile.marketplaceStatus === "public_approved"
+    && !moderatedFieldsChanged(current, next);
+  const marketplaceStatus = preservesPublishedProfile
+    ? "public_approved"
+    : "profile_incomplete";
+  const profileStatus = preservesPublishedProfile
+    ? "public_approved"
+    : "pending";
   const missingRequiredFields = missingLawyerMarketplaceFields(
     completion(profile, next),
   );
@@ -438,8 +504,9 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
        display_name=?,specialties_json=?,languages_json=?,experience_years=?,
        price_description=?,availability_status=?,next_available_at=?,advocate_status=?,
        firm_name=?,bio=?,city=?,region=?,education=?,consultation_formats_json=?,
-       profile_revision=profile_revision+1,status='pending',marketplace_status=?,
-       public_approved_at=NULL,updated_at=?
+       profile_revision=profile_revision+1,status=?,marketplace_status=?,
+       public_approved_at=CASE WHEN ?='public_approved' THEN public_approved_at ELSE NULL END,
+       updated_at=?
        WHERE id=? AND user_id=? AND profile_revision=?`,
       )
       .bind(
@@ -457,6 +524,8 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
         next.region,
         next.education,
         JSON.stringify(next.consultationFormats),
+        profileStatus,
+        marketplaceStatus,
         marketplaceStatus,
         now,
         profile.id,
@@ -471,7 +540,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
        WHERE EXISTS (
          SELECT 1 FROM lawyer_profiles
          WHERE id=? AND user_id=? AND profile_revision=?
-           AND status='pending' AND marketplace_status=? AND updated_at=?
+           AND status=? AND marketplace_status=? AND updated_at=?
        )`,
       )
       .bind(
@@ -483,11 +552,13 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
           previousRevision: profile.profileRevision,
           marketplaceStatus,
           missingRequiredFields,
+          publicationPreserved: preservesPublishedProfile,
         }),
         now,
         profile.id,
         user.id,
         profile.profileRevision + 1,
+        profileStatus,
         marketplaceStatus,
         now,
       ),
@@ -502,7 +573,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
          WHERE EXISTS (
            SELECT 1 FROM lawyer_profiles
            WHERE id=? AND user_id=? AND profile_revision=?
-             AND status='pending' AND marketplace_status=? AND updated_at=?
+           AND status=? AND marketplace_status=? AND updated_at=?
          )`,
         )
         .bind(
@@ -515,6 +586,7 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
           profile.id,
           user.id,
           profile.profileRevision + 1,
+          profileStatus,
           marketplaceStatus,
           now,
         ),
@@ -535,5 +607,9 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
     );
   }
   const updated = await ownProfile(user.id);
-  return response({ profile: updated ? serialize(updated) : null });
+  return response({
+    profile: updated
+      ? serialize(updated, await ownModerationHistory(updated.id))
+      : null,
+  });
 });
