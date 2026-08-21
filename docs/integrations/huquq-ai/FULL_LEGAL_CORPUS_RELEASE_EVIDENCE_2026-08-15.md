@@ -2775,3 +2775,10 @@ totals were 16 canonical documents, 22 language variants, 5,315 unique current
 provisions and 16,330 indexed current chunks. Release floors, queue freeze,
 snapshot, indexed evaluation, Qdrant/D1 restore and CI gates remain unproven.
 Production remains untouched.
+
+The 14:40:13.669Z run later completed at 14:47:02.981Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`, not a lease-expiry or terminal
+ingestion failure. The next scheduled invocation is expected to retry the
+catalog path; this source timeout remains an explicit release blocker for
+queue freeze, while the lease-renewal regression itself is fixed and observed
+to renew during the long-running write.
