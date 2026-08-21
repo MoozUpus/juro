@@ -2728,6 +2728,27 @@ reconciliation was 12 `indexed`, 2 `awaiting_ingestion`, 1 `queued` and 4
 freeze, snapshot, evaluation, restore and CI gates remain unproven.
 Production remains untouched.
 
+## Post-continuation observation: customs indexed and catalog discovery opened (2026-08-21, 16:40–17:09Z)
+
+The first two invocations after Worker version `b429f8d3-ced7-4edc-864c-534665d015c7`
+completed without a run-level error (`07fc8b47-da27-4079-a2b5-723d755ec824`
+and `b7eee862-f6dd-4e9e-980b-cdc75e92aac7`). The second invocation fetched the
+customs source as `https://lex.uz/ru/docs/2876352`; the following reconciliation
+now reports all 19 core-code targets as `indexed` and no non-indexed core target.
+
+The next scheduled invocation (`9e21b446-4c3e-43ba-a0ab-972f70aa3099`,
+17:00:13.677Z–17:09:26.695Z) completed with the bounded, retryable
+`LEX_CATALOG_TIMEOUT` condition while processing the first laws catalogue pages;
+this is recorded as incomplete discovery evidence, not as a successful catalog
+checkpoint. It left three laws language checkpoints with page-one discovery
+evidence (20 URLs each) and the remaining catalog checkpoints queued. At the
+post-run read-only probe, staging held 20 canonical Lex documents, 18,938 active
+provisions and 152,821 indexed chunks. Ingestion had 200 completed and 2,080
+queued jobs. `legal_corpus_failures` still contained only retrying historical
+rows; terminal/dead-letter failures were 0 and dead-letter checkpoints were 0.
+No snapshot, queue freeze, evaluation, restore, human legal review or release
+gate is claimed. Production remains untouched.
+
 ## Active replacement cycle long-running version probe (2026-08-21, 13:30Z)
 
 The 13:20:13Z scheduled invocation remained `running` with the distributed
