@@ -29,6 +29,14 @@ test("lawyer host maps every clean professional route for RU and UZ", () => {
       assert.equal(target?.searchParams.get("view"), view);
     }
   }
+
+  for (const [path, module, view] of routes) {
+    const target = lawyerHostTarget(
+      new URL(`https://lawyer.juro.uz/${path}`),
+    );
+    assert.equal(target?.pathname, `/ru/lawyer/${module}`);
+    assert.equal(target?.searchParams.get("view"), view);
+  }
 });
 
 test("lawyer host fixes registration persona and rejects unknown product pages", () => {
@@ -44,5 +52,17 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   assert.equal(login?.pathname, "/uz/auth/login");
   assert.equal(login?.searchParams.get("accountType"), "lawyer");
 
+  const unprefixedRegister = lawyerHostTarget(new URL("https://lawyer.juro.uz/register"));
+  assert.equal(unprefixedRegister?.pathname, "/ru/auth/register");
+  assert.equal(unprefixedRegister?.searchParams.get("accountType"), "lawyer");
+
+  const verify = lawyerHostTarget(new URL("https://lawyer.juro.uz/verify"));
+  assert.equal(verify?.pathname, "/ru/auth/login");
+  assert.equal(verify?.searchParams.get("accountType"), "lawyer");
+
+  const onboarding = lawyerHostTarget(new URL("https://lawyer.juro.uz/onboarding"));
+  assert.equal(onboarding?.pathname, "/ru/onboarding");
+
   assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/not-a-module")), null);
+  assert.equal(lawyerHostTarget(new URL("https://lawyer.juro.uz/not-a-module")), null);
 });
