@@ -182,11 +182,23 @@ async function fetchAsset(env: PlatformJobEnv, path: string): Promise<ArrayBuffe
   return response.arrayBuffer();
 }
 
+type BuilderProbeStage = "asset" | "render" | "docx" | "pdf" | "archive" | "validation" | "storage";
+
+function builderFailureCode(stage: BuilderProbeStage): DependencyHealthSafeErrorCode {
+  if (stage === "asset") return "BUILDER_ASSET_UNAVAILABLE";
+  if (stage === "render") return "BUILDER_RENDER_FAILED";
+  if (stage === "docx") return "BUILDER_DOCX_FAILED";
+  if (stage === "pdf") return "BUILDER_PDF_FAILED";
+  if (stage === "archive") return "BUILDER_ARCHIVE_FAILED";
+  if (stage === "validation") return "BUILDER_OUTPUT_INVALID";
+  return "BUILDER_STORAGE_FAILED";
+}
+
 async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcome> {
   if (!(await probeDue(env, "document_builder", BUILDER_PROBE_INTERVAL_MS))) return "skipped";
   const startedAt = Date.now();
   const objectKey = "system/probes/production-document-builder-v1.zip";
-  let stage: "asset" | "generation" | "storage" = "asset";
+  let stage: BuilderProbeStage = "asset";
   try {
     const [
       { createDefaultAnswers },
@@ -207,14 +219,18 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
       fetchAsset(env, "/document-templates/DejaVuSans-Bold-JURO.ttf"),
       fetchAsset(env, "/document-templates/juro-mark-footer.png"),
     ]);
-    stage = "generation";
+    stage = "render";
     const paragraphs = renderReceipt(createDefaultAnswers("ru")).paragraphs;
+    stage = "docx";
     const docx = generateDocx(template, paragraphs);
+    stage = "pdf";
     const pdf = await generatePdf(paragraphs, regularFont, boldFont, footerMark);
+    stage = "archive";
     const zip = generateZip([
       { name: "juro-production-probe.docx", bytes: docx },
       { name: "juro-production-probe.pdf", bytes: pdf },
     ]);
+    stage = "validation";
     if (docx[0] !== 0x50 || docx[1] !== 0x4b || pdf[0] !== 0x25 || pdf[1] !== 0x50
       || zip[0] !== 0x50 || zip[1] !== 0x4b) {
       throw new Error("BUILDER_OUTPUT_INVALID");
@@ -225,11 +241,7 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
     await recordOperational(env, "private_r2", startedAt);
     return "succeeded";
   } catch {
-    await recordFailure(env, "document_builder", stage === "asset"
-      ? "BUILDER_ASSET_UNAVAILABLE"
-      : stage === "generation"
-        ? "BUILDER_GENERATION_FAILED"
-        : "BUILDER_STORAGE_FAILED", startedAt);
+    await recordFailure(env, "document_builder", builderFailureCode(stage), startedAt);
     return "failed";
   }
 }

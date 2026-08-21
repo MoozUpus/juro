@@ -199,6 +199,33 @@ test("the Builder probe uses the binding-local asset origin and removes its R2 a
   }
 });
 
+test("the Builder probe records a content-free DOCX-stage failure for an invalid template", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const { bucket } = builderBucket();
+  try {
+    const env = {
+      ...probeEnv(d1),
+      ASSETS: {
+        async fetch() {
+          return new Response(Uint8Array.of(0));
+        },
+      } as unknown as Fetcher,
+      BUCKET: bucket,
+    };
+    await seedOperational(env, ["document_builder"]);
+    const summary = await runProductionDependencyProbes(env);
+    assert.equal(summary?.documentBuilder, "failed");
+    assert.deepEqual({ ...(sqlite.prepare(`SELECT state,safe_error_code AS safeErrorCode
+      FROM dependency_health_checks WHERE dependency_key='document_builder'
+      ORDER BY checked_at DESC,id DESC LIMIT 1`).get() as object) }, {
+      state: "degraded",
+      safeErrorCode: "BUILDER_DOCX_FAILED",
+    });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("the lawyer-area probe exercises and atomically removes its synthetic access grant", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   try {
