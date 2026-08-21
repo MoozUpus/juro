@@ -9,6 +9,7 @@ import {
   legalCorpusIngestionJobBudget,
   legalCorpusIngestionStartAllowed,
   legalCorpusVersionSlotIndexes,
+  renewRunLease,
   LEGAL_CORPUS_PREFERRED_INGESTION_CATALOGUES,
   LEGAL_CORPUS_PROCESS_CRON,
   LEGAL_CORPUS_SCHEDULE_LEASE_MS,
@@ -201,6 +202,41 @@ test("ingestion start fence leaves a bounded representation-fetch window", () =>
     LEGAL_CORPUS_STAGING_INGESTION_START_CUTOFF_MS,
   ), false);
   assert.equal(legalCorpusIngestionStartAllowed(scheduledTime, scheduledTime + 1, 0), false);
+});
+
+test("a live corpus run renews both its durable lock and run heartbeat", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const startedAt = "2026-08-21T06:40:02.000Z";
+  sqlite.prepare(`INSERT INTO scheduled_locks
+    (name,holder_id,acquired_at,expires_at,updated_at)
+    VALUES (?,?,?,?,?)`).run(
+    "legal-corpus-worker", "holder-renew", startedAt, startedAt, startedAt,
+  );
+  sqlite.prepare(`INSERT INTO scheduled_runs
+    (id,schedule_name,cron,scheduled_for,idempotency_key,holder_id,status,error_code,
+      started_at,finished_at,created_at,updated_at)
+    VALUES (?,?,?,?,?,?, 'running',NULL,?,NULL,?,?)`).run(
+    "run-renew", "legal-corpus-worker", LEGAL_CORPUS_STAGING_PROCESS_CRON,
+    startedAt, "legal-corpus-worker:renew", "holder-renew", startedAt, startedAt, startedAt,
+  );
+  try {
+    await renewRunLease(
+      { DB: d1 } as unknown as Parameters<typeof renewRunLease>[0],
+      { id: "run-renew", holderId: "holder-renew" },
+    );
+    const lock = sqlite.prepare(`SELECT expires_at AS expiresAt,updated_at AS updatedAt
+      FROM scheduled_locks WHERE name='legal-corpus-worker'`).get() as {
+        expiresAt: string; updatedAt: string;
+      };
+    const run = sqlite.prepare(`SELECT updated_at AS updatedAt FROM scheduled_runs WHERE id='run-renew'`).get() as {
+      updatedAt: string;
+    };
+    assert.ok(Date.parse(lock.expiresAt) > Date.now());
+    assert.match(lock.updatedAt, /^\d{4}-\d{2}-\d{2}T/u);
+    assert.equal(run.updatedAt, lock.updatedAt);
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("scheduled lease covers a bounded long-running staging batch", () => {

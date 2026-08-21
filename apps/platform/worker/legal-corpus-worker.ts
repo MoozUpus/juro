@@ -381,6 +381,37 @@ async function finishRun(
   }
 }
 
+/**
+ * Keep the durable scheduler fence alive while a bounded source operation is
+ * waiting on Lex's robots delay or finishing D1/R2 maintenance. Without a
+ * heartbeat, a slow but still live revision could outlive the fifteen-minute
+ * lease and let the next cron tick start a second crawler against the same
+ * host and queue.
+ */
+export async function renewRunLease(
+  env: LegalCorpusWorkerEnv,
+  run: ClaimedRun,
+): Promise<void> {
+  const now = new Date().toISOString();
+  const expiresAt = new Date(Date.parse(now) + LOCK_MS).toISOString();
+  const results = await env.DB.batch([
+    env.DB.prepare(`UPDATE scheduled_locks
+      SET expires_at=?,updated_at=?
+      WHERE name=? AND holder_id=?`).bind(
+      expiresAt, now, LOCK_NAME, run.holderId,
+    ),
+    env.DB.prepare(`UPDATE scheduled_runs
+      SET updated_at=?
+      WHERE id=? AND holder_id=? AND status='running'`).bind(
+      now, run.id, run.holderId,
+    ),
+  ]);
+  if (Number(results[0]?.meta?.changes ?? 0) !== 1
+    || Number(results[1]?.meta?.changes ?? 0) !== 1) {
+    throw new Error("LEGAL_CORPUS_SCHEDULE_LEASE_LOST");
+  }
+}
+
 export async function handleLegalCorpusScheduled(
   controller: ScheduledController,
   env: LegalCorpusWorkerEnv,
@@ -467,16 +498,24 @@ export async function handleLegalCorpusScheduled(
     // stored inside a title, keeping source cards and sparse title boosts clean.
     const titleRepairs = await reconcileLegalCorpusTitleUiNoise(env.DB);
     if (ingestionEnabled(env)) {
+      await renewRunLease(env, run);
       catalog = await seedLexCatalogDiscoveryCheckpoints(env);
-      const wait = (delayMs: number) => scheduler.wait(delayMs);
+      const wait = async (delayMs: number) => {
+        await renewRunLease(env, run);
+        await scheduler.wait(delayMs);
+        await renewRunLease(env, run);
+      };
       const pacerStats = { robotsNetworkRequests: 0, persistentRobotsCacheHits: 0 };
       const fetchImpl = createPacedLexFetch({ db: env.DB, wait, stats: pacerStats });
+      await renewRunLease(env, run);
       coreCodeSeeds = await seedLexCoreCodeJobs(env, { now: new Date(controller.scheduledTime) });
+      await renewRunLease(env, run);
       coreCode = await runNextLexCoreCodeDiscovery(env, {
         now: new Date(controller.scheduledTime), wait, fetchImpl, pacingAlreadyApplied: true,
       });
       if (coreCode.status === "all_settled") {
         for (let index = 0; index < DISCOVERY_PAGES_PER_RUN; index += 1) {
+          await renewRunLease(env, run);
           const result = await runNextLexCatalogDiscoveryPage(env, { wait, fetchImpl, pacingAlreadyApplied: true });
           discoveries.push(result);
           if (result.status === "empty" || result.status === "disabled" || result.status === "failed") break;
@@ -504,6 +543,7 @@ export async function handleLegalCorpusScheduled(
           ingestionStartCutoffReached = true;
           break;
         }
+        await renewRunLease(env, run);
         const reservedVersionSlot = versionSlotIndexes.includes(index);
         const coverageBootstrapSlot = index === 0 && coverageBootstrapTarget !== null;
         const preferredCatalogSlot = index < INGESTION_JOBS_PER_RUN && !reservedVersionSlot;
@@ -535,30 +575,34 @@ export async function handleLegalCorpusScheduled(
       }
     }
     const qdrantBackfills: Awaited<ReturnType<typeof runNextLegalCorpusQdrantBackfillBatch>>[] = [];
+    await renewRunLease(env, run);
     const compactedSparseJsonChunks = ingestionEnabled(env)
       ? await compactLegacySparseJsonBatch(env.DB)
       : 0;
     // The additive compressed index is populated only after a successful
     // staging migration. Its bounded transactional backfill leaves every
     // legacy posting readable until the replacement posting is committed.
+    await renewRunLease(env, run);
     const compressedSparseBackfillChunks = ingestionEnabled(env)
       ? await backfillCompressedSparseIndexBatch(env.DB)
       : 0;
     const ingestionClaimed = ingestions.some((result) => result.claimed);
     if (denseBackfillEnabled(env) && !ingestionClaimed) {
       for (let index = 0; index < QDRANT_BACKFILL_BATCHES_PER_IDLE_RUN; index += 1) {
+        await renewRunLease(env, run);
         const result = await runNextLegalCorpusQdrantBackfillBatch(env);
         qdrantBackfills.push(result);
         if (result.status === "empty" || result.status === "disabled") break;
       }
     }
-    const qdrantSnapshot = denseBackfillEnabled(env)
-      // Snapshot only after an entire scheduled invocation starts with no
-      // remaining backfill work. This creates a clean freeze boundary one
-      // cron tick after the last vector write.
-      && qdrantBackfills[0]?.status === "empty"
-      ? await createLegalCorpusQdrantSnapshot(env)
-      : null;
+    // Snapshot only after an entire scheduled invocation starts with no
+    // remaining backfill work. This creates a clean freeze boundary one
+    // cron tick after the last vector write.
+    let qdrantSnapshot: Awaited<ReturnType<typeof createLegalCorpusQdrantSnapshot>> | null = null;
+    if (denseBackfillEnabled(env) && qdrantBackfills[0]?.status === "empty") {
+      await renewRunLease(env, run);
+      qdrantSnapshot = await createLegalCorpusQdrantSnapshot(env);
+    }
     // A completed ingestion can still carry a safe source-condition code when
     // Lex has no official text representation. That condition is recorded in
     // the per-document failure ledger as `technically_unavailable` and is
