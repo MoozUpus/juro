@@ -146,6 +146,10 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       environment === "production" ? "true" : undefined,
     );
     assert.equal(
+      config.vars.PRODUCTION_SYNTHETIC_PROBES_ENABLED,
+      environment === "production" ? "true" : "false",
+    );
+    assert.equal(
       config.vars.MALWARE_SCANNER_PROBE_ENABLED,
         environment === "staging" || environment === "production" ? "false" : undefined,
     );

@@ -229,6 +229,10 @@ if (["staging", "production"].includes(requestedEnvironment)) {
     artifact.vars?.PRODUCTION_QUEUE_HEALTH_PROBE_ENABLED,
     requestedEnvironment === "production" ? "true" : undefined,
   );
+  assert.equal(
+    artifact.vars?.PRODUCTION_SYNTHETIC_PROBES_ENABLED,
+    requestedEnvironment === "production" ? "true" : "false",
+  );
   assert.deepEqual(artifact.migrations, selected.migrations);
   assert.deepEqual(artifact.durable_objects, selected.durable_objects);
   assert.deepEqual(artifact.containers, selected.containers);

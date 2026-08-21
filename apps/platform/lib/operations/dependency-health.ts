@@ -114,7 +114,9 @@ export const dependencyHealthMaxAgeMs: Readonly<Record<DependencyHealthKey, numb
   malware_scanner: 15 * 60_000,
   openai: 15 * 60_000,
   anthropic: 15 * 60_000,
-  resend: 30 * 60_000,
+  // A content-free production acceptance email runs at most once per UTC day;
+  // ordinary email traffic records fresher integration evidence in between.
+  resend: 26 * 60 * 60_000,
   legal_source_sync: 26 * 60 * 60_000,
   document_analysis: 30 * 60_000,
   document_builder: 30 * 60_000,
