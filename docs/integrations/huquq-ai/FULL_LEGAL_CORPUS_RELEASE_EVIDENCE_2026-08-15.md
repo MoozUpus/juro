@@ -3105,6 +3105,22 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM continuation (2026-08-21, 19:20–19:22Z)
+
+Run `b6fe86c1-8432-443e-b6ec-bb6fc3977a8b` acquired the next distributed
+lease. The Russian government checkpoint is running at its preserved page-two
+ledger; Uzbek Cyrillic is retrying a bounded `LEX_CATALOG_TIMEOUT`, while the
+other government checkpoints retain their page markers. No retryable response
+was promoted to a completed checkpoint.
+
+The latest read-only totals are 35 canonical documents, 41 language variants,
+6,709 distinct current provisions, 18,767 current provision rows and 18,780
+indexed chunks, with 1,961 live-or-manual queued/retrying jobs. The failure
+ledger remains two retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter is zero. The
+release floors, queue freeze and all post-ingestion gates remain unproven;
+production is untouched.
+
 ## Historical version retry resolved (2026-08-21, 19:14–19:18Z)
 
 The newly observed retryable version job
