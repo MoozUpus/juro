@@ -2838,3 +2838,39 @@ At 15:15Z the 15:12:13.670Z scheduled run remained active with a renewed
 lease and no run-level error. `customs` and `housing` remain the only
 unresolved core-code title targets. This is measurable staging progress, not
 a claim of checkpoint completion or release readiness.
+
+## Lease-expiry follow-up: long ingestion phases and staging redeploy (2026-08-21, 15:40–15:56Z)
+
+The 15:20:13.672Z run was terminalized by the scheduler at 15:40:13.685Z
+with `LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED`. Its long-running historical job
+`legal-version:80ba4b348949078aeb17b4bbd347`
+(`https://lex.uz/ru/docs/97664?ONDATE=13.09.2019`) had no durable update after
+15:23:28.712Z. The earlier batch-level heartbeat fix did not cover the
+pre-batch provision/chunk hashing and language/revision queue phases, so this
+was recorded as a new actionable scheduler failure rather than treated as a
+successful run.
+
+Commit `e6ea7ef4` adds bounded heartbeat calls after fetch, normalization,
+parsing, R2/header writes and D1 batches, plus every 64 provision/chunk hashes
+and every four language/revision queue operations. The historical regression
+now asserts phase/queue heartbeat activity. `apps/platform/tests/legal-corpus-ingestion.test.ts`
+passed 35/35 and `apps/platform/tests/legal-corpus-worker-boundary.test.ts`
+passed 20/20; type-check, lint, staging artifact dry-run and `git diff --check`
+also passed. The commit was pushed to `feature/full-legal-corpus` and deployed
+only to staging Worker version `e9e2b6a2-96dc-4a94-aa6a-db9a0e625f24`.
+
+The first post-deploy run (`b03b1e81-6e73-4b37-a962-b0cecb2a6af2`,
+15:48:13.666Z) completed at 15:54:45.852Z without a run-level error; its
+distributed lease was renewed through 16:09Z while the historical job was
+processed. Staging now has 178 completed and 2,011 queued ingestion jobs, no
+running job, and zero terminal/dead-letter jobs. The failure ledger still has
+three retrying evidence rows (one generic ingestion retry and two prior stale
+running timeouts), so unresolved-failure and queue-freeze gates remain open.
+
+The materialized read-only totals are 18 canonical documents, 17,524 active
+provisions and 139,703 indexed chunks. Core-code reconciliation is 17
+`indexed`, one `awaiting_ingestion` and `customs` still `retrying` at pager
+page 1 with valid postback state; all 44 discovery checkpoints remain
+`queued`. These counts are progress only: release floors, 44/44 checkpoints,
+zero unresolved failures, queue freeze, snapshot, indexed evaluation,
+Qdrant/D1 restore and CI gates remain unproven. Production remains untouched.
