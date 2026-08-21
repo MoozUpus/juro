@@ -2762,6 +2762,15 @@ indexed chunks; 205 ingestion jobs are completed and 2,154 are queued. The
 failure ledger has only retrying historical rows; terminal/dead-letter counts
 remain zero. Checkpoints are not yet complete and ingestion is not frozen.
 
+The same bounded invocation (`76df3b56-2087-40a5-8996-06b160b13726`,
+17:20:13.677Z–17:28:27.135Z) later completed with retryable
+`LEX_CATALOG_TIMEOUT`; it did not create a terminal or dead-letter row. Laws
+page evidence remained durable (RU page 3, Uzbek Latin and Uzbek Cyrillic page
+2, English page 1). The post-run read-only probe showed 22 canonical documents,
+19,026 active provisions and 157,334 indexed chunks, with 210 completed and
+2,169 queued ingestion jobs. All 44 checkpoints remained incomplete and the
+queue was not frozen. Production remains untouched.
+
 ## Active replacement cycle long-running version probe (2026-08-21, 13:30Z)
 
 The 13:20:13Z scheduled invocation remained `running` with the distributed
