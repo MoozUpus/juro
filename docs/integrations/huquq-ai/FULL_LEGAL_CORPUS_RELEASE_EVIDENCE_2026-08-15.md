@@ -3052,3 +3052,20 @@ retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
 `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter count is zero.
 Release floors, queue freeze, the final checkpoint, post-ingestion gates and
 CI remain unproven. Production remains untouched.
+
+## Laws family complete; government family opened (2026-08-21, 18:24–18:26Z)
+
+The next scheduled run `1b24e10b-9c5c-4327-bc7b-b9b34ab4d64d` resumed the
+previous English pager retry. The English laws checkpoint completed at page 3
+with 60 durable discovery records, so all four laws language checkpoints are
+now `completed` (4/44). The worker then opened the next approved priority
+family, `government`, with the English checkpoint running; this is the Cabinet
+and government-acts stage in the configured Lex catalogue order.
+
+The materialized totals at the transition were 28 canonical documents, 6,457
+distinct current provisions, 18,391 current provision rows and 18,401 indexed
+chunks, with 1,988 live-or-manual jobs queued/retrying. No terminal or
+dead-letter failure was recorded; the existing retrying ingestion rows remain
+bounded and unchanged. Queue freeze, remaining 40 checkpoints, release floors,
+snapshot/evaluation, Qdrant/D1 restore and CI gates remain open. Production was
+not changed.
