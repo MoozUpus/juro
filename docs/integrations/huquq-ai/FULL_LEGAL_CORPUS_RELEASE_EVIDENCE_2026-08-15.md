@@ -3105,6 +3105,22 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## President ingestion materialized continuation (2026-08-21, 21:00–21:05Z)
+
+Run `568315c0-5105-4bef-9644-e31d72373e5a` closed at 21:05:15.708Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. The bounded worker materialized
+one additional canonical document and preserved the president discovery
+ledger; no checkpoint was force-completed. At the final read-only probe, the
+checkpoint ledger was 8 completed and 36 queued, with no running checkpoint.
+
+Read-only totals reached 47 canonical documents, 53 language variants, 6,944
+distinct current provisions and 19,216 indexed chunks, with 1,912
+live-or-manual queued/retrying jobs. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## President page-two continuation (2026-08-21, 21:00–21:03Z)
 
 Run `568315c0-5105-4bef-9644-e31d72373e5a` acquired the single distributed
