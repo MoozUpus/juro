@@ -2396,3 +2396,18 @@ indexed and 12 awaiting-ingestion core-code targets, 44 queued checkpoints,
 but the release gate remains open: checkpoint completion, 1,500 canonical
 documents, queue freeze, snapshot, indexed 314-scenario evaluation, Qdrant/D1
 restore and CI evidence are not yet proven.
+
+## Post-fix ingestion probe (2026-08-21, 11:21Z)
+
+The first full scheduled invocation on Worker version
+`f747ea7f-d86e-458c-9ee7-3498b2a93026` completed the retained current-corpus
+slot: the read-only D1 probe now records 5 completed and 18 queued fetch jobs,
+35 completed and 861 queued version jobs, 3 canonical documents, 5 language
+variants, 1,136 unique current provisions, 3,570 current provisions and
+3,572 indexed chunks. The core-code reconciliation is still pending its next
+cycle (`12 awaiting_ingestion`, `2 indexed`, `1 queued`, `4 retrying`), and
+all 44 discovery checkpoints remain queued. The scheduled run ended with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`; no terminal/dead-letter rows
+were created. This is progress evidence only; all release floors, checkpoint
+completion, queue freeze, snapshot, evaluation, restore and CI gates remain
+open.
