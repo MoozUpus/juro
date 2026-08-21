@@ -2413,3 +2413,12 @@ allow-listed retryable `LEX_CATALOG_TIMEOUT`; no terminal/dead-letter rows
 were created. This is progress evidence only; all release floors, checkpoint
 completion, queue freeze, snapshot, evaluation, restore and CI gates remain
 open.
+
+## Core-code reconciliation probe (2026-08-21, 11:25Z)
+
+The next sequential read-only probe observed the replacement Worker in its
+11:24 UTC run: 3 core-code targets are now `indexed` and 11 remain
+`awaiting_ingestion`; 44 discovery checkpoints are still queued. The job
+ledger had 5 completed, 17 queued and 1 running fetch jobs, 35 completed and
+861 queued version jobs, and no rows in `legal_corpus_failures`. The run was
+still active at probe time, so no completion or release-gate claim is made.
