@@ -3105,6 +3105,24 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## President page-two continuation (2026-08-21, 21:00–21:03Z)
+
+Run `568315c0-5105-4bef-9644-e31d72373e5a` acquired the single distributed
+lease at 21:00:56.276Z and remained active at the 21:02:23.577Z probe. The
+president Uzbek Cyrillic checkpoint advanced to page 2 with 40 discovered
+records and remains running for the bounded next page. English retained its
+allow-listed `LEX_CATALOG_TIMEOUT` retry marker; neither state was force-
+completed.
+
+Read-only totals remain 46 canonical documents, 52 language variants, 6,924
+distinct current provisions and 19,192 indexed chunks, with 1,916
+live-or-manual queued/retrying jobs. The global checkpoint ledger is 8
+completed, 35 queued and 1 running. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## President ingestion materialized continuation (2026-08-21, 20:48–20:57Z)
 
 Run `36c9e777-bfe0-42b3-9f98-9d070f8a7e71` remained under the single
