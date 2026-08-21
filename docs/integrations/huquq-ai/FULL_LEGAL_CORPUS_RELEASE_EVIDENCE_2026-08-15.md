@@ -2320,3 +2320,12 @@ exception (`outcome=ok`), and performed no scheduler write or source fetch.
 This proves the D1 hard-cap containment is active. It does not satisfy the
 release gate: the ingestion queue remains non-empty and two retrying jobs are
 still unresolved, so snapshot/evaluation/restore/CI gates remain pending.
+
+## Current release audit (2026-08-21, 07:53Z)
+
+The branch remains clean at `9152c442` and Draft PR #43 is open, draft and
+points from `feature/full-legal-corpus` to `main`; no CI checks are reported
+for this branch yet. Read-only Wrangler deployment history confirms the
+production legal-corpus Worker is still version
+`ca9f9b82-1430-4bae-80ce-94e1194d420a` from `2026-08-14`; no production deploy
+was performed by this integration.
