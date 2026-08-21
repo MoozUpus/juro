@@ -3001,3 +3001,21 @@ contains one retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
 `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter count is zero.
 Release floors, queue freeze, snapshot, evaluation, Qdrant/D1 restore and CI
 remain unproven. Production remains untouched.
+
+## Second laws checkpoint completed (2026-08-21, 18:04–18:07Z)
+
+The sequential run `39ec64a7-9807-4fd3-b64f-580c321d20e4` completed with its
+retryable `LEX_CATALOG_TIMEOUT`; run `da054cf6-e3cf-45ed-92c6-1c0ea0cd0c78`
+then acquired the distributed lease. During that transition the Uzbek Latin
+laws checkpoint completed at page 3 with 60 durable discovery records. The
+English and Uzbek Cyrillic checkpoints each retain a retryable duplicate-page
+marker while their undeclared pagers resume; Russian remains completed.
+
+The checkpoint ledger is now 2 completed and 42 queued. Materialized totals
+are 27 canonical documents, 6,441 distinct current provisions (18,343 current
+provision rows), 18,353 indexed current chunks and 1,997 queued/retrying
+live-or-manual jobs. The failure ledger is unchanged at one retrying
+`LEGAL_CORPUS_INGESTION_FAILED` plus three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter count remains
+zero. The release thresholds, queue freeze and all post-ingestion gates remain
+open; production is untouched.
