@@ -19,6 +19,16 @@ const blockedNames = new Set([
   "локальный",
 ]);
 
+function looksLikeLatinKeyboardGibberish(token: string): boolean {
+  if (Array.from(token).length < 4) return false;
+  if (!/^[\p{Script=Latin}\p{M}]+$/u.test(token)) return false;
+  const folded = token
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLocaleLowerCase("en");
+  return !/[aeiouy]/u.test(folded);
+}
+
 /** Returns a name that is safe and credible enough for navigation and greetings. */
 export function safeDisplayName(value: unknown): string {
   if (typeof value !== "string") return "";
@@ -33,5 +43,10 @@ export function safeDisplayName(value: unknown): string {
     .split(/[\s'‘’ʻʼ-]+/u)
     .filter(Boolean);
   if (tokens.some((token) => blockedNames.has(token))) return "";
+  // A long Latin-script token without any vowel is usually text entered with
+  // the wrong keyboard layout (or a keyboard mash), not a credible personal
+  // name. Keep short international surnames such as "Ng" available while
+  // preventing malformed profile data from becoming a prominent greeting.
+  if (tokens.some(looksLikeLatinKeyboardGibberish)) return "";
   return normalized;
 }
