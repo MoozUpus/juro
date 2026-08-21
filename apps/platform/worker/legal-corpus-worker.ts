@@ -282,7 +282,7 @@ function log(
  */
 export function legalCorpusWorkerErrorCode(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error);
-  const match = message.match(/\b(?:LEGAL|SQLITE)_[A-Z0-9_]+\b/u);
+  const match = message.match(/\b(?:D1|LEGAL|SQLITE)_[A-Z0-9_]+\b/u);
   return match?.[0] ?? "LEGAL_CORPUS_WORKER_FAILED";
 }
 
@@ -463,7 +463,23 @@ export async function handleLegalCorpusScheduled(
     return;
   }
 
-  const run = await claimRun(controller, env);
+  let run: ClaimedRun | null;
+  try {
+    run = await claimRun(controller, env);
+  } catch (error) {
+    // D1 can reject the first write when the database reaches its hard size
+    // ceiling. Treat claim failure as a bounded, fail-closed tick: never
+    // retry the same write automatically and never start source work without
+    // a durable scheduler lease.
+    log("error", {
+      event: "legal_corpus.claim_failed",
+      environment: env.APP_ENV,
+      cron: controller.cron,
+      errorCode: legalCorpusWorkerErrorCode(error),
+    });
+    controller.noRetry();
+    return;
+  }
   if (!run) {
     log("info", {
       event: "legal_corpus.duplicate_or_busy",

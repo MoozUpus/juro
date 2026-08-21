@@ -41,6 +41,10 @@ test("worker errors preserve only safe actionable tokens", () => {
     "SQLITE_NOMEM",
   );
   assert.equal(
+    legalCorpusWorkerErrorCode(new Error("D1_ERROR: Exceeded maximum DB size")),
+    "D1_ERROR",
+  );
+  assert.equal(
     legalCorpusWorkerErrorCode(new Error("LEGAL_CORPUS_SCHEDULE_LEASE_LOST")),
     "LEGAL_CORPUS_SCHEDULE_LEASE_LOST",
   );
