@@ -3035,3 +3035,20 @@ contained only one retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
 `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows. Queue freeze, release floors,
 remaining checkpoints, snapshot/evaluation, Qdrant/D1 restore and CI gates
 remain open. Production was not changed.
+
+## Third laws checkpoint completed (2026-08-21, 18:12–18:14Z)
+
+Run `41318e3b-570d-4c6b-90a0-3ca74b29705c` acquired the lease after the clean
+prior run. The Uzbek Cyrillic laws checkpoint completed at page 3 with 60
+durable records, bringing the laws-family progress to three completed
+checkpoints (Russian, Uzbek Latin and Uzbek Cyrillic). English is retrying a
+transient `LEX_CATALOG_TIMEOUT` from page 2; its immutable discovery ledger is
+preserved for the next bounded attempt. Forty other checkpoints remain queued.
+
+The latest totals are 28 canonical documents, 6,441 distinct current
+provisions, 18,343 current provision rows and 18,353 indexed chunks, with
+1,994 live-or-manual jobs queued/retrying. The failure ledger still has one
+retrying `LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter count is zero.
+Release floors, queue freeze, the final checkpoint, post-ingestion gates and
+CI remain unproven. Production remains untouched.
