@@ -3104,3 +3104,20 @@ jobs queued/retrying. The failure ledger still contains one retrying
 zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
+
+## Government/PKM retry-preserving continuation (2026-08-21, 18:56–18:58Z)
+
+Run `2b12acc2-22c7-44bf-bc70-bfb58ade5a1d` acquired the distributed lease and
+continued the government family sequentially. `government/uz-Latn` is running
+at page 1. `government/uz-Cyrl` retained 40 discovered records and moved to
+`retrying` with the bounded, allow-listed `LEX_CATALOG_TIMEOUT`; its discovery
+ledger remains intact for the next sequential attempt. The run did not mark
+the checkpoint complete on a timeout.
+
+The latest read-only totals are 32 canonical documents, 38 language variants,
+6,564 distinct current provisions, 18,543 current provision rows and 18,553
+indexed chunks. There are 1,972 live-or-manual queued/retrying jobs. The
+failure ledger remains one retrying `LEGAL_CORPUS_INGESTION_FAILED` and three
+retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter is
+zero. Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore
+and CI remain unproven; production is untouched.
