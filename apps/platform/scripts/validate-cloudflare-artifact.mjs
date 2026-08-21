@@ -75,6 +75,8 @@ assert.equal(
 for (const secretBinding of [
   "OPENAI_API_KEY",
   "ANTHROPIC_API_KEY",
+  "CLOUDFLARE_TURN_KEY_API_TOKEN",
+  "CLOUDFLARE_TURN_KEY_ID",
   "RESEND_API_KEY",
   "SESSION_SECRET",
   "ENCRYPTION_KEY",

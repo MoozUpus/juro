@@ -124,9 +124,9 @@ export async function submitLawyerReviewReply(input: ReplyLifecycleInput & {
       ).bind(crypto.randomUUID(), review.workspaceId, input.actorUserId, id, JSON.stringify({ reviewId: review.id, version }), now),
       input.db.prepare(
         `INSERT INTO notifications
-          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-         VALUES (?,?,?,NULL,'lawyer_review_reply',?,?,NULL,?)`,
-      ).bind(crypto.randomUUID(), review.workspaceId, review.requesterUserId, notification.title, notification.body, now),
+          (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+         VALUES (?,?,?,NULL,'lawyer_profile',?,'lawyer_review_reply',?,?,NULL,?)`,
+      ).bind(crypto.randomUUID(), review.workspaceId, review.requesterUserId, review.lawyerProfileId, notification.title, notification.body, now),
     ]);
   } catch {
     const winner = await input.db.prepare(
@@ -173,7 +173,7 @@ export async function moderateLawyerReviewReply(input: ReplyLifecycleInput & {
   reason: string;
 }) {
   const reply = await input.db.prepare(
-    `SELECT reply.id,reply.review_id AS reviewId,reply.body,reply.version,reply.status,
+    `SELECT reply.id,reply.review_id AS reviewId,reply.lawyer_profile_id AS lawyerProfileId,reply.body,reply.version,reply.status,
       review.workspace_id AS workspaceId,reply.author_user_id AS authorUserId,
       CASE WHEN author.locale='uz' THEN 'uz' ELSE 'ru' END AS authorLocale,
       author.default_workspace_id AS authorWorkspaceId
@@ -182,7 +182,7 @@ export async function moderateLawyerReviewReply(input: ReplyLifecycleInput & {
      JOIN user_profiles author ON author.id=reply.author_user_id
      WHERE reply.id=? LIMIT 1`,
   ).bind(input.replyId).first<{
-    id: string; reviewId: string; body: string; version: number; status: string;
+    id: string; reviewId: string; lawyerProfileId: string; body: string; version: number; status: string;
     workspaceId: string; authorUserId: string; authorLocale: "ru" | "uz"; authorWorkspaceId: string | null;
   }>();
   if (!reply || reply.status !== "pending") throw new LawyerReviewReplyError("REPLY_UNAVAILABLE");
@@ -207,9 +207,9 @@ export async function moderateLawyerReviewReply(input: ReplyLifecycleInput & {
       ).bind(crypto.randomUUID(), reply.workspaceId, input.moderatorUserId, reply.id, JSON.stringify({ reviewId: reply.reviewId, version: reply.version, decision: input.decision, originalBodySha256 }), now),
       input.db.prepare(
         `INSERT INTO notifications
-          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-         VALUES (?,?,?,NULL,'lawyer_review_reply_moderation',?,?,NULL,?)`,
-      ).bind(crypto.randomUUID(), reply.authorWorkspaceId, reply.authorUserId, notification.title, notification.body, now),
+          (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+         VALUES (?,?,?,NULL,'lawyer_profile',?,'lawyer_review_reply_moderation',?,?,NULL,?)`,
+      ).bind(crypto.randomUUID(), reply.authorWorkspaceId, reply.authorUserId, reply.lawyerProfileId, notification.title, notification.body, now),
     ]);
   } catch {
     throw new LawyerReviewReplyError("REPLY_UNAVAILABLE");

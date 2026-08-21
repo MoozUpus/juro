@@ -11,6 +11,9 @@ import {
 } from "../lib/platform/lawyer-marketplace";
 import { projectPublicLawyerDirectory } from "../lib/platform/lawyer-directory-reviews";
 import { localizedLawyerProfileStatusNotification } from "../lib/platform/lawyer-profile-notifications";
+import { lawyerTrialReminderStage } from "../lib/platform/lawyer-trial-reminders";
+import { lawyerTrialEndsAt, lawyerTrialView } from "../lib/platform/lawyer-trial";
+import { sqliteD1Fixture } from "./helpers/sqlite-d1";
 
 const completeProfile: LawyerMarketplaceCompletionInput = {
   displayName: "Юрист JURO",
@@ -104,15 +107,49 @@ test("consultation transitions are participant-scoped, audited and return a real
   assert.match(route, /CASE WHEN \?='completed' THEN \? ELSE result_note END/);
 });
 
-test("lawyer application has an explicit submit gate and draft saves do not publish", () => {
+test("lawyer application auto-publishes only after explicit consent and starts a 90-day trial", () => {
+  const migration = readFileSync(new URL("../drizzle/0146_lawyer_trial_publication.sql", import.meta.url), "utf8");
   const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
   const submitRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/submit/route.ts", import.meta.url), "utf8");
   assert.match(profileRoute, /lawyer_profile_draft_saved/);
   assert.doesNotMatch(profileRoute, /lawyer_profile_submitted/);
-  assert.match(submitRoute, /marketplace_status='pending_review'/);
+  assert.match(submitRoute, /publicationConsent: z\.literal\(true\)/);
+  assert.match(submitRoute, /marketplace_status='public_approved'/);
   assert.match(submitRoute, /missingLawyerMarketplaceFields/);
-  assert.match(submitRoute, /lawyer_profile_submitted/);
+  assert.match(submitRoute, /lawyer_profile_auto_published/);
+  assert.match(submitRoute, /lawyer_trials/);
+  assert.match(submitRoute, /lawyerTrialEndsAt/);
   assert.match(submitRoute, /profile_revision=\?/);
+  assert.match(submitRoute, /lawyer_profile_publication_events/);
+  assert.doesNotMatch(submitRoute, /lawyer_profile_lifecycle_events[\s\S]*auto_publish/);
+  assert.match(migration, /DROP TRIGGER IF EXISTS `lawyer_profiles_status_requires_moderation`/);
+  assert.match(migration, /NEW\.`publication_consent_at`=NEW\.`public_approved_at`/);
+  assert.match(migration, /lawyer_profile_publication_events_no_update/);
+  assert.match(migration, /lawyer_profile_publication_events_no_delete/);
+});
+
+test("the D1 publication guard accepts consent evidence and still rejects an unaudited status change", () => {
+  const { sqlite } = sqliteD1Fixture();
+  const now = "2026-08-22T00:00:00.000Z";
+  try {
+    sqlite.prepare(`INSERT INTO user_profiles(id,email,locale,account_type,created_at,updated_at)
+      VALUES ('lawyer-self-publish','self-publish@example.test','ru','lawyer',?,?)`).run(now, now);
+    sqlite.prepare(`INSERT INTO lawyer_profiles(id,user_id,display_name,status,marketplace_status,created_at,updated_at)
+      VALUES ('profile-self-publish','lawyer-self-publish','Юрист','pending','pending_review',?,?)`).run(now, now);
+    assert.throws(() => sqlite.prepare(`UPDATE lawyer_profiles
+      SET status='public_approved',marketplace_status='public_approved',public_approved_at=?
+      WHERE id='profile-self-publish'`).run(now), /moderation or publication consent evidence required/);
+    sqlite.prepare(`UPDATE lawyer_profiles
+      SET status='public_approved',marketplace_status='public_approved',public_approved_at=?,publication_consent_at=?
+      WHERE id='profile-self-publish'`).run(now, now);
+    sqlite.prepare(`INSERT INTO lawyer_profile_publication_events
+      (id,lawyer_profile_id,actor_user_id,profile_revision,previous_profile_status,previous_marketplace_status,publication_consent_at,created_at)
+      VALUES ('publication-event','profile-self-publish','lawyer-self-publish',1,'pending','pending_review',?,?)`).run(now, now);
+    assert.equal((sqlite.prepare("SELECT status FROM lawyer_profiles WHERE id='profile-self-publish'").get() as { status: string }).status, "public_approved");
+    assert.throws(() => sqlite.prepare("DELETE FROM lawyer_profile_publication_events WHERE id='publication-event'").run(), /append-only/);
+  } finally {
+    sqlite.close();
+  }
 });
 
 test("lawyer service details and six-step application are persisted and reviewable", () => {
@@ -131,7 +168,7 @@ test("lawyer service details and six-step application are persisted and reviewab
   assert.match(application, /Стандартная длительность консультации/);
   assert.match(application, /Дополнительные услуги через запятую/);
   assert.match(application, /Шаг 4 · Расписание/);
-  assert.match(application, /Отправить профиль на проверку/);
+  assert.match(application, /Согласиться и опубликовать/);
   assert.match(adminDetail, /lawyer_profile_moderation/);
   assert.match(adminDetail, /lawyer_profile_lifecycle_events/);
   assert.match(adminDetail, /lawyer_availability_rules/);
@@ -144,9 +181,10 @@ test("lawyer service details and six-step application are persisted and reviewab
 test("availability-only edits preserve an approved public profile", () => {
   const profileRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/route.ts", import.meta.url), "utf8");
   assert.match(profileRoute, /preservesPublishedProfile/);
-  assert.match(profileRoute, /!moderatedFieldsChanged\(current, next\)/);
   assert.match(profileRoute, /public_approved_at=CASE WHEN \?='public_approved' THEN public_approved_at ELSE NULL END/);
   assert.match(profileRoute, /publicationPreserved: preservesPublishedProfile/);
+  assert.match(profileRoute, /lawyer_profile_published_edit_saved/);
+  assert.match(profileRoute, /lawyer_profile_revisions/);
 });
 
 test("a correction-requested profile remains fail-closed if it reaches a directory projection", () => {
@@ -163,6 +201,7 @@ test("a correction-requested profile remains fail-closed if it reaches a directo
     firmName: null,
     bio: null,
     marketplaceStatus: "changes_requested",
+    acceptingNewRequests: 1,
   }], [], []);
   assert.equal(lawyer.marketplaceStatus, "pending_review");
   assert.equal(lawyer.canReceiveRequests, false);
@@ -177,7 +216,7 @@ test("profile photos remain fail-closed until the malware scanner verifies their
   assert.ok(route.indexOf("const scanVerdict") < route.indexOf("const objectKey"));
 });
 
-test("a completed profile stays private until approval and retains a self-only preview", () => {
+test("a completed profile stays private until self-publication and retains a self-only preview", () => {
   const publicPhotoRoute = readFileSync(new URL("../app/api/public/lawyers/[profileId]/photo/route.ts", import.meta.url), "utf8");
   const directoryRoute = readFileSync(new URL("../app/api/platform/lawyers/route.ts", import.meta.url), "utf8");
   const publicDirectoryRoute = readFileSync(new URL("../app/api/public/lawyers/route.ts", import.meta.url), "utf8");
@@ -202,6 +241,84 @@ test("a completed profile stays private until approval and retains a self-only p
   assert.match(privatePhotoRoute, /WHERE user_id=\?/);
   assert.match(privatePhotoRoute, /lawyer_profile_status/);
   assert.match(directoryClient, /canReceiveRequests/);
+});
+
+test("published profiles remain discoverable while request intake is paused", () => {
+  const [lawyer] = projectPublicLawyerDirectory([{
+    id: "paused-lawyer",
+    displayName: "Юрист JURO",
+    specialtiesJson: '["Договоры"]',
+    languagesJson: '["ru","uz"]',
+    experienceYears: 5,
+    priceDescription: "По договорённости",
+    availabilityStatus: "available",
+    nextAvailableAt: null,
+    advocateStatus: "declared",
+    firmName: null,
+    bio: null,
+    marketplaceStatus: "public_approved",
+    acceptingNewRequests: 0,
+  }], [], []);
+  assert.equal(lawyer.marketplaceStatus, "public_approved");
+  assert.equal(lawyer.acceptingNewRequests, false);
+  assert.equal(lawyer.canReceiveRequests, false);
+  const requestRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/route.ts", import.meta.url), "utf8");
+  assert.match(requestRoute, /accepting_new_requests=1/);
+});
+
+test("trial expiry can limit intake without silently unpublishing a profile", () => {
+  const base = {
+    id: "expired-trial-lawyer", displayName: "Юрист JURO", specialtiesJson: '[]', languagesJson: '["ru"]',
+    experienceYears: 5, priceDescription: "По договорённости", availabilityStatus: "available",
+    nextAvailableAt: null, advocateStatus: "declared", firmName: null, bio: null,
+    marketplaceStatus: "public_approved", acceptingNewRequests: 1,
+    trialEndsAt: new Date(Date.now() - 60_000).toISOString(),
+  } as const;
+  const [limited] = projectPublicLawyerDirectory([{ ...base, trialPostExpiryMode: "limit_new_requests" }], [], []);
+  const [published] = projectPublicLawyerDirectory([{ ...base, trialPostExpiryMode: "stay_published" }], [], []);
+  assert.equal(limited.marketplaceStatus, "public_approved");
+  assert.equal(limited.trialExpired, true);
+  assert.equal(limited.canReceiveRequests, false);
+  assert.equal(published.canReceiveRequests, true);
+  const requestRoute = readFileSync(new URL("../app/api/platform/lawyer-requests/route.ts", import.meta.url), "utf8");
+  const publicDirectory = readFileSync(new URL("../app/api/public/lawyers/route.ts", import.meta.url), "utf8");
+  assert.match(requestRoute, /post_expiry_mode IN \('limit_new_requests','hide_profile'\)/);
+  assert.match(publicDirectory, /post_expiry_mode='hide_profile'/);
+});
+
+test("lawyer workspace maps parallel D1 results to the correct response fields", () => {
+  const route = readFileSync(new URL("../app/api/platform/lawyer-workspace/route.ts", import.meta.url), "utf8");
+  assert.match(route, /\[requests, matters, messages, unreadMessages, documents, tasks, taskComments, ownDocuments, consultations, caseEvents\]/);
+  assert.ok(route.indexOf("FROM tasks t JOIN lawyer_access_grants") < route.indexOf("FROM lawyer_task_comments c"));
+  assert.ok(route.indexOf("FROM lawyer_task_comments c") < route.indexOf("FROM documents d JOIN user_profiles"));
+});
+
+test("profile deletion is a controlled admin decision with append-only evidence", () => {
+  const migration = readFileSync(new URL("../drizzle/0146_lawyer_trial_publication.sql", import.meta.url), "utf8");
+  const ownerRoute = readFileSync(new URL("../app/api/platform/lawyer-profile/deletion-request/route.ts", import.meta.url), "utf8");
+  const staffRoute = readFileSync(new URL("../app/api/platform/admin/lawyer-profile-deletion-requests/[requestId]/route.ts", import.meta.url), "utf8");
+  assert.match(migration, /lawyer_profile_deletion_requests_no_delete/);
+  assert.match(migration, /lawyer_profile_deletion_requests_terminal_guard/);
+  assert.match(ownerRoute, /confirmation: z\.literal\(true\)/);
+  assert.match(ownerRoute, /lawyer_profile_deletion_requested/);
+  assert.match(ownerRoute, /admin_lawyer_profile_deletion/);
+  assert.match(staffRoute, /freshMfaWithinMs: 15 \* 60 \* 1_000/);
+  assert.match(staffRoute, /lawyer_profile_deletion_approved/);
+  assert.match(staffRoute, /lawyer_profile_lifecycle_events/);
+  assert.match(staffRoute, /marketplace_status='archived'/);
+});
+
+test("the 90-day trial exposes stable expiry and non-duplicating reminder stages", () => {
+  const startsAt = "2026-08-22T00:00:00.000Z";
+  const endsAt = lawyerTrialEndsAt(startsAt);
+  assert.equal(endsAt, "2026-11-20T00:00:00.000Z");
+  assert.equal(lawyerTrialView({ id: "trial", startsAt, endsAt, status: "active", postExpiryMode: "stay_published" }, Date.parse("2026-11-19T00:00:00.000Z")).daysRemaining, 1);
+  const blank = { endsAt, reminder30SentAt: null, reminder7SentAt: null, reminder1SentAt: null, reminderExpiredSentAt: null };
+  assert.equal(lawyerTrialReminderStage(blank, Date.parse("2026-10-21T00:00:00.000Z")), "30");
+  assert.equal(lawyerTrialReminderStage({ ...blank, reminder30SentAt: "sent" }, Date.parse("2026-11-13T00:00:00.000Z")), "7");
+  assert.equal(lawyerTrialReminderStage({ ...blank, reminder30SentAt: "sent", reminder7SentAt: "sent" }, Date.parse("2026-11-19T00:00:00.000Z")), "1");
+  assert.equal(lawyerTrialReminderStage({ ...blank, reminder30SentAt: "sent", reminder7SentAt: "sent", reminder1SentAt: "sent" }, Date.parse(endsAt)), "expired");
+  assert.equal(lawyerTrialReminderStage({ ...blank, reminder30SentAt: "sent", reminder7SentAt: "sent", reminder1SentAt: "sent", reminderExpiredSentAt: "sent" }, Date.parse(endsAt)), null);
 });
 
 test("JURO approval and Top Lawyer remain separate public designations", () => {

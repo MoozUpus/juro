@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Send, Save } from "lucide-react";
+import { Check, Send, Save, Trash2, X } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
@@ -23,6 +23,8 @@ type Profile = {
     | "blocked"
     | "archived";
   publicApprovedAt: string | null;
+  publicationConsentAt: string | null;
+  acceptingNewRequests: boolean;
   experienceYears: number | null;
   priceDescription: string | null;
   consultationDurationMinutes: number;
@@ -66,6 +68,16 @@ type Form = {
   region: string;
   education: string;
   consultationFormats: string;
+  acceptingNewRequests: boolean;
+};
+
+type DeletionRequest = {
+  id: string;
+  status: "requested" | "approved" | "rejected" | "cancelled";
+  reason: string | null;
+  decisionReason: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
 };
 
 const blank: Form = {
@@ -85,6 +97,7 @@ const blank: Form = {
   region: "",
   education: "",
   consultationFormats: "",
+  acceptingNewRequests: true,
 };
 
 const toForm = (profile: Profile): Form => ({
@@ -108,6 +121,7 @@ const toForm = (profile: Profile): Form => ({
   region: profile.region ?? "",
   education: profile.education ?? "",
   consultationFormats: profile.consultationFormats.join(", "),
+  acceptingNewRequests: profile.acceptingNewRequests,
 });
 
 const list = (value: string) => [
@@ -133,10 +147,14 @@ export function LawyerProfessionalProfile({
   const [unavailable, setUnavailable] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [publicationConsent, setPublicationConsent] = useState(false);
+  const [deletionRequest, setDeletionRequest] = useState<DeletionRequest | null>(null);
+  const [deletionReason, setDeletionReason] = useState("");
+  const [deletionBusy, setDeletionBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const editingLocked = profile
-    ? ["pending_review", "suspended", "blocked", "archived"].includes(
+    ? ["suspended", "blocked", "archived"].includes(
         profile.marketplaceStatus,
       )
     : false;
@@ -180,6 +198,18 @@ export function LawyerProfessionalProfile({
         ),
       )
       .catch(() => setScheduleConfigured(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/platform/lawyer-profile/deletion-request", { cache: "no-store" })
+      .then(async (response) => {
+        if (response.status === 404) return null;
+        const body = await response.json() as { deletionRequest?: DeletionRequest | null };
+        if (!response.ok) throw new Error("DELETION_REQUEST_UNAVAILABLE");
+        return body.deletionRequest ?? null;
+      })
+      .then(setDeletionRequest)
+      .catch(() => undefined);
   }, []);
 
   const personalStepDone = Boolean(
@@ -246,6 +276,7 @@ export function LawyerProfessionalProfile({
       region: form.region || null,
       education: form.education || null,
       consultationFormats: list(form.consultationFormats),
+      acceptingNewRequests: form.acceptingNewRequests,
       locale,
     };
     try {
@@ -269,7 +300,7 @@ export function LawyerProfessionalProfile({
         const submission = await fetch("/api/platform/lawyer-profile/submit", {
           method: "POST",
           headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-          body: JSON.stringify({ locale }),
+          body: JSON.stringify({ locale, publicationConsent: true }),
         });
         const submissionBody = (await submission.json()) as {
           error?: string;
@@ -296,7 +327,7 @@ export function LawyerProfessionalProfile({
             ? {
                 ...current,
                 marketplaceStatus:
-                  submissionBody.marketplaceStatus ?? "pending_review",
+                  submissionBody.marketplaceStatus ?? "public_approved",
                 missingRequiredFields: [],
                 updatedAt: submissionBody.updatedAt ?? current.updatedAt,
               }
@@ -304,14 +335,15 @@ export function LawyerProfessionalProfile({
         );
         setNotice(
           ru
-            ? "Заявка отправлена на проверку JURO."
-            : "Ariza JURO tekshiruviga yuborildi.",
+            ? "Профиль опубликован. Начался 90-дневный тестовый период; отметка проверки JURO не присваивалась."
+            : "Profil nashr qilindi. 90 kunlik sinov davri boshlandi; JURO tekshiruv belgisi berilmadi.",
         );
+        setPublicationConsent(false);
       } else {
         setNotice(
           ru
-            ? "Черновик сохранён. Отправка на проверку не выполнена."
-            : "Qoralama saqlandi. Tekshiruvga yuborilmadi.",
+            ? "Черновик сохранён. Публичное размещение не выполнялось."
+            : "Qoralama saqlandi. Ommaviy joylashtirish bajarilmadi.",
         );
       }
     } catch (value) {
@@ -367,6 +399,38 @@ export function LawyerProfessionalProfile({
     }
   }
 
+  async function submitDeletionRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profile || deletionReason.trim().length < 3) return;
+    setDeletionBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/platform/lawyer-profile/deletion-request", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ locale, reason: deletionReason.trim(), confirmation: true }),
+      });
+      const body = await response.json() as { deletionRequest?: DeletionRequest; code?: string };
+      if (!response.ok || !body.deletionRequest) throw new Error(body.code || "DELETION_REQUEST_UNAVAILABLE");
+      setDeletionRequest(body.deletionRequest); setDeletionReason("");
+      setNotice(ru ? "Запрос на удаление отправлен администратору." : "O‘chirish so‘rovi administratorga yuborildi.");
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setDeletionBusy(false); }
+  }
+
+  async function cancelDeletionRequest() {
+    setDeletionBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/platform/lawyer-profile/deletion-request", {
+        method: "DELETE", headers: { "x-juro-csrf": "1" },
+      });
+      const body = await response.json() as { deletionRequest?: DeletionRequest; code?: string };
+      if (!response.ok || !body.deletionRequest) throw new Error(body.code || "DELETION_REQUEST_UNAVAILABLE");
+      setDeletionRequest(body.deletionRequest);
+      setNotice(ru ? "Запрос на удаление отменён." : "O‘chirish so‘rovi bekor qilindi.");
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setDeletionBusy(false); }
+  }
+
   if (loading)
     return (
       <section className="profile-panels" aria-busy="true">
@@ -401,8 +465,8 @@ export function LawyerProfessionalProfile({
         <h2>{ru ? "Заявка юриста" : "Yurist arizasi"}</h2>
         <p>
           {ru
-            ? "Телефон хранится в защищённом профиле и не публикуется в каталоге. Запись открывается только после отдельного одобрения JURO."
-            : "Telefon himoyalangan profilda saqlanadi va katalogda ko‘rsatilmaydi. So‘rov faqat JURO alohida tasdiqlagandan keyin ochiladi."}
+            ? "Телефон хранится в защищённом профиле и не публикуется в каталоге. После заполнения обязательных полей и вашего согласия профиль публикуется автоматически."
+            : "Telefon himoyalangan profilda saqlanadi va katalogda ko‘rsatilmaydi. Majburiy maydonlar va rozilikdan keyin profil avtomatik nashr qilinadi."}
         </p>
         <p>
           {ru
@@ -626,6 +690,23 @@ export function LawyerProfessionalProfile({
                   </option>
                 </select>
               </label>
+              <label className="lawyer-accepting-requests">
+                <input
+                  type="checkbox"
+                  checked={form.acceptingNewRequests}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      acceptingNewRequests: event.target.checked,
+                    })
+                  }
+                />
+                <span>
+                  {ru
+                    ? "Принимать новые заявки"
+                    : "Yangi so‘rovlarni qabul qilish"}
+                </span>
+              </label>
               <label>
                 {ru ? "Ближайшая доступность" : "Eng yaqin mavjudlik"}
                 <input
@@ -772,6 +853,20 @@ export function LawyerProfessionalProfile({
                 .join(", ")}
             </p>
           ) : null}
+          {profile?.marketplaceStatus !== "public_approved" && !editingLocked ? (
+            <label className="lawyer-publication-consent">
+              <input
+                type="checkbox"
+                checked={publicationConsent}
+                onChange={(event) => setPublicationConsent(event.target.checked)}
+              />
+              <span>
+                {ru
+                  ? "Согласен на публичное размещение указанных данных и понимаю, что это не означает проверку или рекомендацию со стороны JURO."
+                  : "Ko‘rsatilgan ma’lumotlarni ommaviy joylashtirishga roziman va bu JURO tekshiruvi yoki tavsiyasi emasligini tushunaman."}
+              </span>
+            </label>
+          ) : null}
           <div className="lawyer-application-actions">
             <button
               type="submit"
@@ -790,16 +885,20 @@ export function LawyerProfessionalProfile({
               disabled={
                 saving ||
                 uploadingPhoto ||
-                profile?.marketplaceStatus === "pending_review" ||
+                !publicationConsent ||
                 profile?.marketplaceStatus === "public_approved"
               }
             >
               {!saving && <Send aria-hidden="true" />}
-              {ru ? "Отправить профиль на проверку" : "Profilni tekshiruvga yuborish"}
+              {ru ? "Согласиться и опубликовать" : "Rozilik berish va nashr qilish"}
             </button>
           </div>
         </form>
       </section>
+      {profile && <section className="lawyer-profile-deletion" aria-labelledby="lawyer-profile-deletion-title">
+        <header><Trash2 aria-hidden="true" /><div><h2 id="lawyer-profile-deletion-title">{ru ? "Удаление профессионального профиля" : "Professional profilni o‘chirish"}</h2><p>{ru ? "Профиль не удаляется мгновенно: администратор проверит запрос и подтвердит либо отклонит его. До решения профиль работает в текущем статусе." : "Profil darhol o‘chirilmaydi: administrator so‘rovni tekshiradi va tasdiqlaydi yoki rad etadi. Qarorgacha profil joriy holatda ishlaydi."}</p></div></header>
+        {deletionRequest?.status === "requested" ? <div className="lawyer-deletion-status"><strong>{ru ? "Запрос ожидает решения администратора" : "So‘rov administrator qarorini kutmoqda"}</strong><p>{deletionRequest.reason || "—"}</p><time dateTime={deletionRequest.requestedAt}>{formatProfileDate(deletionRequest.requestedAt, ru)}</time><button type="button" disabled={deletionBusy} onClick={() => void cancelDeletionRequest()}><X aria-hidden="true" />{ru ? "Отменить запрос" : "So‘rovni bekor qilish"}</button></div> : <form onSubmit={(event) => void submitDeletionRequest(event)}><label>{ru ? "Причина" : "Sabab"}<textarea required minLength={3} maxLength={1000} value={deletionReason} onChange={(event) => setDeletionReason(event.target.value)} /></label>{deletionRequest && <p className={`lawyer-deletion-previous ${deletionRequest.status}`}>{deletionRequest.status === "approved" ? (ru ? "Предыдущий запрос подтверждён; профиль архивирован." : "Oldingi so‘rov tasdiqlandi; profil arxivlandi.") : deletionRequest.status === "rejected" ? `${ru ? "Предыдущий запрос отклонён" : "Oldingi so‘rov rad etildi"}: ${deletionRequest.decisionReason || "—"}` : (ru ? "Предыдущий запрос отменён." : "Oldingi so‘rov bekor qilindi.")}</p>}<button type="submit" disabled={deletionBusy || deletionReason.trim().length < 3}><Trash2 aria-hidden="true" />{ru ? "Отправить запрос администратору" : "Administratorga so‘rov yuborish"}</button></form>}
+      </section>}
     </section>
   );
 }
@@ -825,8 +924,8 @@ function statusDescription(status: Profile["marketplaceStatus"], ru: boolean) {
       "Ma’lumotlar qoralama sifatida saqlanadi va katalogda ko‘rinmaydi.",
     ],
     pending_review: [
-      "Редактирование временно закрыто до решения модерации.",
-      "Moderatsiya qarorigacha tahrirlash vaqtincha yopilgan.",
+      "Старый статус проверки: подтвердите публикацию по новым тестовым правилам.",
+      "Eski tekshiruv holati: yangi sinov qoidalari bo‘yicha nashrni tasdiqlang.",
     ],
     changes_requested: [
       "Исправьте замечания и отправьте заявку повторно.",

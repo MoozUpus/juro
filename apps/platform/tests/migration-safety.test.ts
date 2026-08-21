@@ -379,14 +379,14 @@ test("0058 preserves lawyer profiles and rejects invalid public-directory states
   }
 });
 
-test("0059 requires immutable per-revision moderation before profile publication", () => {
+test("published lawyer profiles require immutable moderation or explicit publication-consent evidence", () => {
   const db = new DatabaseSync(":memory:");
   try {
     db.exec("PRAGMA foreign_keys = ON");
     for (const entry of journal.entries) applyMigration(db, entry);
     db.exec("PRAGMA foreign_keys = OFF");
     db.prepare("INSERT INTO lawyer_profiles (id,user_id,display_name,specialties_json,languages_json,status,availability_status,advocate_status,created_at,updated_at) VALUES ('profile-moderation','user','Profile','[]','[]','pending','unknown','not_declared','2026-08-02T00:00:00.000Z','2026-08-02T00:00:00.000Z')").run();
-    assert.throws(() => db.prepare("UPDATE lawyer_profiles SET status='public_approved',public_approved_at='2026-08-02T00:00:00.000Z' WHERE id='profile-moderation'").run(), /moderation evidence required/);
+    assert.throws(() => db.prepare("UPDATE lawyer_profiles SET status='public_approved',public_approved_at='2026-08-02T00:00:00.000Z' WHERE id='profile-moderation'").run(), /moderation or publication consent evidence required/);
     db.prepare("INSERT INTO lawyer_profile_moderation (id,lawyer_profile_id,profile_revision,moderator_user_id,decision,reason,profile_sha256,created_at) VALUES (?,?,?,?,?,?,?,?)").run(
       "moderation",
       "profile-moderation",

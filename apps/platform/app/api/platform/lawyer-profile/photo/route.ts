@@ -277,7 +277,12 @@ export const POST = withApiErrors(async function POST(request: Request) {
     createdObject = true;
   }
 
-  const marketplaceStatus = "profile_incomplete";
+  const marketplaceStatus = profile.marketplaceStatus === "public_approved"
+    ? "public_approved"
+    : "profile_incomplete";
+  const profileStatus = marketplaceStatus === "public_approved"
+    ? "public_approved"
+    : "pending";
   const missingRequiredFields = missingLawyerMarketplaceFields({
     displayName: profile.displayName,
     specialties: stringList(profile.specialtiesJson),
@@ -307,8 +312,9 @@ export const POST = withApiErrors(async function POST(request: Request) {
       .prepare(
         `UPDATE lawyer_profiles SET
         profile_photo_key=?,profile_photo_mime=?,profile_photo_sha256=?,profile_photo_size_bytes=?,
-        profile_revision=profile_revision+1,status='pending',marketplace_status=?,
-        public_approved_at=NULL,updated_at=?
+        profile_revision=profile_revision+1,status=?,marketplace_status=?,
+        public_approved_at=CASE WHEN ?='public_approved' THEN public_approved_at ELSE NULL END,
+        updated_at=?
        WHERE id=? AND user_id=? AND profile_revision=?`,
       )
       .bind(
@@ -316,6 +322,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
         spec.mimeType,
         checksum,
         bytes.byteLength,
+        profileStatus,
+        marketplaceStatus,
         marketplaceStatus,
         now,
         profile.id,
@@ -343,11 +351,48 @@ export const POST = withApiErrors(async function POST(request: Request) {
           sizeBytes: bytes.byteLength,
           marketplaceStatus,
           missingRequiredFields,
+          publicationPreserved: marketplaceStatus === "public_approved",
         }),
         now,
         profile.id,
         user.id,
         profile.profileRevision + 1,
+        marketplaceStatus,
+        now,
+      ),
+    db
+      .prepare(
+        `INSERT INTO lawyer_profile_revisions
+          (id,lawyer_profile_id,previous_revision,next_revision,actor_user_id,
+           previous_snapshot_json,next_snapshot_json,reason,created_at)
+         SELECT ?,?,?,?,?,?,?,?,?
+         WHERE EXISTS (
+           SELECT 1 FROM lawyer_profiles
+           WHERE id=? AND user_id=? AND profile_revision=?
+             AND status=? AND marketplace_status=? AND updated_at=?
+         )`,
+      )
+      .bind(
+        crypto.randomUUID(),
+        profile.id,
+        profile.profileRevision,
+        profile.profileRevision + 1,
+        user.id,
+        JSON.stringify({
+          profilePhotoKey: profile.profilePhotoKey,
+          marketplaceStatus: profile.marketplaceStatus,
+        }),
+        JSON.stringify({
+          profilePhotoKey: objectKey,
+          profilePhotoSha256: checksum,
+          marketplaceStatus,
+        }),
+        "profile_photo_edit",
+        now,
+        profile.id,
+        user.id,
+        profile.profileRevision + 1,
+        profileStatus,
         marketplaceStatus,
         now,
       ),
@@ -357,24 +402,26 @@ export const POST = withApiErrors(async function POST(request: Request) {
       db
         .prepare(
           `INSERT INTO notifications
-          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-         SELECT ?,?,?,NULL,'lawyer_profile_status',?,?,NULL,?
+          (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+         SELECT ?,?,?,NULL,'lawyer_profile',?,'lawyer_profile_status',?,?,NULL,?
          WHERE EXISTS (
            SELECT 1 FROM lawyer_profiles
-           WHERE id=? AND user_id=? AND profile_revision=?
-             AND status='pending' AND marketplace_status=? AND updated_at=?
+            WHERE id=? AND user_id=? AND profile_revision=?
+              AND status=? AND marketplace_status=? AND updated_at=?
          )`,
         )
         .bind(
           crypto.randomUUID(),
           workspace.id,
           user.id,
+          profile.id,
           notification.title,
           notification.body,
           now,
           profile.id,
           user.id,
           profile.profileRevision + 1,
+          profileStatus,
           marketplaceStatus,
           now,
         ),
@@ -387,7 +434,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
   if (
     Number(result[0]?.meta.changes ?? 0) !== 1 ||
     Number(result[1]?.meta.changes ?? 0) !== 1 ||
-    (statusChanged && Number(result[2]?.meta.changes ?? 0) !== 1)
+    Number(result[2]?.meta.changes ?? 0) !== 1 ||
+    (statusChanged && Number(result[3]?.meta.changes ?? 0) !== 1)
   ) {
     if (createdObject) await bucket.delete(objectKey).catch(() => undefined);
     return response({ code: "PROFILE_UNAVAILABLE" }, 409);

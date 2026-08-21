@@ -4,6 +4,7 @@ import { workspaceEntitlements } from "../../../../lib/billing/entitlements";
 import { billingPlanSelectionSchema } from "../../../../lib/billing/input";
 import { paymentProviderStatus } from "../../../../lib/billing/provider";
 import { paymentDemoStatus, paymentFoundationStatus } from "../../../../lib/billing/foundation";
+import { listDemoPaymentRuns } from "../../../../lib/billing/demo-payments";
 import {
   assertSafeWrite,
   requireApiUser,
@@ -11,6 +12,7 @@ import {
 } from "../../../../lib/document-builder/auth/api";
 import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/runtime";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
+import { lawyerTrialView, type LawyerTrialRow } from "../../../../lib/platform/lawyer-trial";
 
 function response(body: unknown, status = 200) {
   return Response.json(body, {
@@ -38,12 +40,23 @@ export const GET = withApiErrors(async function GET() {
     workspaceEntitlements(db, workspace.id),
   ]);
   const [subscription, payments] = records;
+  const demo = paymentDemoStatus(runtimeEnv());
+  const [trialRow, demoRuns] = await Promise.all([
+    db.prepare(
+      `SELECT t.id,t.starts_at AS startsAt,t.ends_at AS endsAt,t.status,t.post_expiry_mode AS postExpiryMode
+       FROM lawyer_trials t JOIN lawyer_profiles p ON p.id=t.lawyer_profile_id
+       WHERE p.user_id=? LIMIT 1`,
+    ).bind(user.id).first<LawyerTrialRow>(),
+    demo.enabled ? listDemoPaymentRuns(db, { userId: user.id, workspaceId: workspace.id }) : Promise.resolve([]),
+  ]);
   return response({
     provider: paymentFoundationStatus(runtimeEnv()),
-    demo: paymentDemoStatus(runtimeEnv()),
+    demo,
     config: pricingConfig,
     subscription: subscription.results[0] ?? null,
     payments: payments.results,
+    demoRuns,
+    trial: trialRow ? lawyerTrialView(trialRow) : null,
     entitlements,
   });
 });

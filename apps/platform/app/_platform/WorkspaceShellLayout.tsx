@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
 import { getOrCreateUserProfile } from "../../lib/document-builder/storage/db";
+import { requireD1 } from "../../lib/document-builder/storage/runtime";
 import { workspaceProfile } from "../../lib/platform/profile";
 import {
   workspaceForUser,
@@ -112,6 +113,10 @@ export async function WorkspaceShellLayout({
     redirect(`/${profile.locale}/${profile.accountType}/dashboard`);
   }
 
+  const demoAccount = await requireD1().prepare(
+    "SELECT account_key AS accountKey,dataset_version AS datasetVersion,synthetic_disclosure AS syntheticDisclosure FROM investor_demo_accounts WHERE user_id=? AND status='active' LIMIT 1",
+  ).bind(userProfile.id).first<{ accountKey: "client_demo" | "lawyer_demo" | "admin_demo"; datasetVersion: number; syntheticDisclosure: string }>();
+
   return (
     <PlatformShell
       locale={locale}
@@ -119,6 +124,7 @@ export async function WorkspaceShellLayout({
       userName={safeDisplayName(user.fullName ?? user.displayName)}
       activeWorkspaceId={activeWorkspace.id}
       workspaces={availableWorkspaces}
+      demoAccount={demoAccount ?? null}
     >
       {children}
     </PlatformShell>

@@ -732,6 +732,24 @@
 @media(max-width:720px){.profile-form{grid-template-columns:1fr}}
 .lawyer-profile-preview { grid-column: 1 / -1; }
 .lawyer-required-fields { grid-column: 1 / -1; margin: 0; color: var(--status-warning); font-size: 12px; line-height: 1.55; }
+.lawyer-publication-consent { display: grid; grid-column: 1 / -1; grid-template-columns: 20px minmax(0, 1fr); align-items: start; gap: 10px; padding: 13px 14px; border: 1px solid color-mix(in srgb, var(--brand-gold) 45%, var(--border-subtle)); border-radius: 11px; background: color-mix(in srgb, var(--brand-gold) 8%, var(--surface-raised)); color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.lawyer-publication-consent input { width: 18px; min-height: 18px; margin-top: 1px; accent-color: var(--brand-gold); }
+.lawyer-accepting-requests { display: flex !important; min-height: 44px; align-items: center; gap: 9px !important; padding: 10px 12px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-subtle); }
+.lawyer-accepting-requests input { width: 18px !important; min-height: 18px !important; flex: none; accent-color: var(--brand-gold); }
+.lawyer-profile-deletion { display: grid; gap: 16px; border-color: color-mix(in srgb, var(--status-danger) 24%, var(--border-subtle)) !important; }
+.lawyer-profile-deletion > header { display: flex; align-items: flex-start; gap: 12px; }
+.lawyer-profile-deletion > header > svg { width: 22px; flex: none; color: var(--status-danger); }
+.lawyer-profile-deletion h2 { margin: 0; }
+.lawyer-profile-deletion header p { margin: 6px 0 0; color: var(--text-secondary); line-height: 1.55; }
+.lawyer-profile-deletion form, .lawyer-deletion-status { display: grid; gap: 12px; }
+.lawyer-profile-deletion label { display: grid; gap: 6px; font-weight: 750; }
+.lawyer-profile-deletion textarea { min-height: 96px; border: 1px solid var(--border-subtle); border-radius: 11px; padding: 11px; font: inherit; }
+.lawyer-profile-deletion button { display: inline-flex; min-height: 44px; width: fit-content; align-items: center; justify-content: center; gap: 7px; border: 1px solid color-mix(in srgb, var(--status-danger) 42%, var(--border-subtle)); border-radius: 10px; background: var(--surface-raised); color: var(--status-danger); padding: 0 14px; font-weight: 800; }
+.lawyer-profile-deletion button svg { width: 16px; }
+.lawyer-deletion-status { padding: 16px; border-radius: 13px; background: var(--surface-subtle); }
+.lawyer-deletion-status p { margin: 0; }
+.lawyer-deletion-status time, .lawyer-deletion-previous { color: var(--text-secondary); font-size: 12px; }
+.lawyer-deletion-previous.rejected { color: var(--status-danger); }
 .lawyer-application-actions { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 10px; }
 .lawyer-application-actions button { display: flex; min-height: 48px; align-items: center; justify-content: center; gap: 8px; border: 1px solid var(--brand-navy); border-radius: 10px; background: var(--surface-raised); color: var(--brand-navy); font-weight: 850; }
 .lawyer-application-actions button:last-child { background: var(--brand-navy); color: #fff; }

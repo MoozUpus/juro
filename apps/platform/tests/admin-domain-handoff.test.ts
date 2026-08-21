@@ -361,7 +361,7 @@ test("restricted lawyer lifecycle is append-only, blocks work, and restores only
     assert.equal(profile.publicApprovedAt, null);
     assert.throws(
       () => sqlite.prepare("UPDATE lawyer_profiles SET status='public_approved',marketplace_status='public_approved' WHERE id='pending-lawyer-profile'").run(),
-      /lifecycle evidence required/u,
+      /moderation or publication consent evidence required/u,
     );
     assert.throws(
       () => sqlite.prepare("UPDATE lawyer_profile_lifecycle_events SET reason='tampered' WHERE lawyer_profile_id='pending-lawyer-profile'").run(),

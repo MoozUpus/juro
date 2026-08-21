@@ -19,6 +19,7 @@ import {
 } from "./platform-jobs";
 import { recordDependencyHealthEvidence } from "./dependency-health-evidence";
 import { reconcileQueueDlqHealth } from "./queue-dlq-health-reconciliation";
+import { enqueueDueLawyerTrialReminders } from "../lib/platform/lawyer-trial-reminders";
 
 const OUTBOX_CRON = "*/5 * * * *";
 const LOCK_NAME = "outbox-dispatch";
@@ -544,6 +545,10 @@ export async function handleScheduled(
     failureCode = "TASK_REMINDER_ENQUEUE_FAILED";
     const now = new Date().toISOString();
     const taskReminders = await enqueueDueTaskReminders(env, now);
+    failureCode = "LAWYER_TRIAL_REMINDER_ENQUEUE_FAILED";
+    const lawyerTrialReminders = await enqueueDueLawyerTrialReminders(env.DB, { now: new Date(now) });
+    failureCode = "LAWYER_CALL_SIGNAL_RETENTION_CLEANUP_FAILED";
+    const callSignalCleanup = await env.DB.prepare("DELETE FROM lawyer_call_signals WHERE expires_at<=?").bind(now).run();
     const lexMetadataMonitorEnabled = (env as Record<string, unknown>).LEGAL_LEX_METADATA_MONITOR_ENABLED === "true";
     let lexMetadataStaleRuns = 0;
     let lexMetadataRetry: Awaited<ReturnType<typeof runLexMetadataMonitor>> | null = null;
@@ -680,6 +685,9 @@ export async function handleScheduled(
       queueDlqDurableDeadLettered: queueDlqHealth.durableDeadLettered,
       taskRemindersDue: taskReminders.due,
       taskRemindersEnqueued: taskReminders.enqueued,
+      lawyerTrialRemindersDue: lawyerTrialReminders.due,
+      lawyerTrialRemindersSent: lawyerTrialReminders.sent,
+      lawyerCallSignalsPurged: Number(callSignalCleanup.meta.changes ?? 0),
       lexMetadataStaleRuns,
       lexSourceHealthState: lexSourceHealth.state,
       lexSourceHealthError: lexSourceHealth.alertCode,

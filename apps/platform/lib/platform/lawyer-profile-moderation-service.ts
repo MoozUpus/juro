@@ -170,15 +170,15 @@ export async function moderateLawyerProfile(
       ),
       db.prepare(
         `INSERT INTO notifications
-          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-         SELECT ?,?,?,NULL,'lawyer_profile_status',?,?,NULL,?
+          (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+         SELECT ?,?,?,NULL,'lawyer_profile',?,'lawyer_profile_status',?,?,NULL,?
          WHERE EXISTS (
            SELECT 1 FROM lawyer_profile_moderation
            WHERE id=? AND lawyer_profile_id=? AND profile_revision=?
              AND moderator_user_id=? AND decision=?
          )`,
       ).bind(
-        notificationId, profile.workspaceId, profile.userId, notification.title,
+        notificationId, profile.workspaceId, profile.userId, profile.id, notification.title,
         notification.body, now, moderationId, profile.id, profile.profileRevision,
         input.moderatorUserId, input.decision,
       ),

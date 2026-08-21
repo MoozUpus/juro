@@ -39,6 +39,7 @@ const editableFields = {
   region: optionalText(100),
   education: optionalText(500),
   consultationFormats: draftStringList(10).optional(),
+  acceptingNewRequests: z.boolean().optional(),
 };
 
 export const lawyerProfileCreateSchema = z

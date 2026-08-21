@@ -35,7 +35,7 @@ async function getLawyerProfile(request: Request, context: Context) {
      WHERE p.id=? LIMIT 1`,
   ).bind(profileId.data).first();
   if (!profile) return Response.json({ code: "NOT_FOUND" }, { status: 404 });
-  const [moderationHistory, lifecycleHistory, scheduleRules, unavailability] = await Promise.all([
+  const [moderationHistory, lifecycleHistory, scheduleRules, unavailability, trial] = await Promise.all([
     db.prepare(
       `SELECT profile_revision AS profileRevision,decision,reason,
         moderator_user_id AS moderatorUserId,profile_sha256 AS profileSha256,
@@ -61,6 +61,12 @@ async function getLawyerProfile(request: Request, context: Context) {
        FROM lawyer_unavailability_periods WHERE lawyer_profile_id=?
        ORDER BY starts_at`,
     ).bind(profileId.data).all(),
+    db.prepare(
+      `SELECT id,starts_at AS startsAt,ends_at AS endsAt,status,post_expiry_mode AS postExpiryMode,
+        reminder_30_sent_at AS reminder30SentAt,reminder_7_sent_at AS reminder7SentAt,
+        reminder_1_sent_at AS reminder1SentAt,reminder_expired_sent_at AS reminderExpiredSentAt
+       FROM lawyer_trials WHERE lawyer_profile_id=? LIMIT 1`,
+    ).bind(profileId.data).first(),
   ]);
   return Response.json({
     profile: {
@@ -72,6 +78,7 @@ async function getLawyerProfile(request: Request, context: Context) {
     moderationHistory: moderationHistory.results,
     lifecycleHistory: lifecycleHistory.results,
     schedule: { rules: scheduleRules.results, unavailability: unavailability.results },
+    trial: trial ?? null,
     supportingDocuments: [],
   }, { headers: { "cache-control": "private, no-store", pragma: "no-cache" } });
 }

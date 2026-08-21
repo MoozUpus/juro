@@ -289,6 +289,30 @@ function createDatabase(): {
       read_at text,
       created_at text NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS user_profiles (
+      id text PRIMARY KEY NOT NULL,
+      default_workspace_id text,
+      locale text NOT NULL DEFAULT 'ru'
+    );
+    CREATE TABLE IF NOT EXISTS lawyer_profiles (
+      id text PRIMARY KEY NOT NULL,
+      user_id text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS lawyer_trials (
+      id text PRIMARY KEY NOT NULL,
+      lawyer_profile_id text NOT NULL,
+      status text NOT NULL,
+      ends_at text NOT NULL,
+      reminder_30_sent_at text,
+      reminder_7_sent_at text,
+      reminder_1_sent_at text,
+      reminder_expired_sent_at text,
+      updated_at text NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS lawyer_call_signals (
+      id text PRIMARY KEY NOT NULL,
+      expires_at text NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS user_memories (
       id text PRIMARY KEY NOT NULL,
       status text NOT NULL,

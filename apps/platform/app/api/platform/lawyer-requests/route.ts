@@ -68,8 +68,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
 
   const lawyer = parsed.data.lawyerProfileId
     ? await db.prepare(
-      "SELECT id,user_id AS userId FROM lawyer_profiles WHERE id=? AND status='public_approved' AND marketplace_status='public_approved' LIMIT 1",
-    ).bind(parsed.data.lawyerProfileId).first<{ id: string; userId: string }>()
+      `SELECT id,user_id AS userId FROM lawyer_profiles WHERE id=? AND status='public_approved'
+       AND marketplace_status='public_approved' AND accepting_new_requests=1
+       AND NOT EXISTS (SELECT 1 FROM lawyer_trials t WHERE t.lawyer_profile_id=lawyer_profiles.id
+         AND t.ends_at<=? AND t.post_expiry_mode IN ('limit_new_requests','hide_profile')) LIMIT 1`,
+    ).bind(parsed.data.lawyerProfileId, isoNow()).first<{ id: string; userId: string }>()
     : null;
   if (parsed.data.lawyerProfileId && !lawyer) {
     return response({ code: "LAWYER_UNAVAILABLE", error: localizedHandoffError(locale, "LAWYER_UNAVAILABLE") }, 404);
@@ -106,6 +109,20 @@ export const POST = withApiErrors(async function POST(request: Request) {
       preferredFormat: parsed.data.preferredFormat ?? null,
       hasProposedStart: Boolean(parsed.data.proposedStartsAt),
     }), now),
+    ...(lawyer ? [db.prepare(
+      `INSERT INTO notifications
+        (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+       VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,NULL,
+         'lawyer_request',?,'lawyer_request_received',?,?,NULL,?)`,
+    ).bind(
+      crypto.randomUUID(),
+      lawyer.userId,
+      lawyer.userId,
+      requestId,
+      "Новая заявка клиента / Yangi mijoz so‘rovi",
+      parsed.data.anonymizedSummary,
+      now,
+    )] : []),
   ]);
 
   return response({ ok: true, requestId, status, conflictCheckRequired: Boolean(lawyer) }, 201);
