@@ -2820,6 +2820,15 @@ and `housing` remained retrying core-code targets and the economic target was
 awaiting reconciliation. Terminal/dead-letter counts remain zero, while the
 queue, checkpoint, snapshot, evaluation, restore and CI gates remain open.
 
+The 15:20:13.672Z staging run reconciled `economic_procedure` to indexed and
+then advanced the `customs` title pager with the extended core-code deadline:
+at the 15:21Z probe it was on page 1 with a valid Lex postback target and
+`last_error_code=NULL` (attempt 10). `housing` is the only remaining core-code
+target still carrying the historical timeout row. The run remains active
+under the renewed distributed lock with no run-level error. This confirms the
+timeout mitigation is progressing the previously blocked core-code phase; it
+does not establish 44/44 checkpoints or the release gate.
+
 The same run completed the `economic_procedure` title pager at
 15:12:13.000Z and moved that target to `awaiting_ingestion` with official
 source `https://lex.uz/ru/docs/3523895` (`lexuz:3523895`), with no error code.
