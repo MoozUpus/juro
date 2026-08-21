@@ -3105,6 +3105,24 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM materialized progress (2026-08-21, 19:43–19:49Z)
+
+Run `000c4a9a-a0e6-4c0c-9e27-52d13508a132` closed at 19:43:11.648Z with
+the allow-listed retryable `LEX_CATALOG_TIMEOUT`; run
+`cd661ead-68e5-4fc4-a6c6-76e68ba9efba` then acquired the single distributed
+lease and was still running at the final 19:49:35.376Z probe. The four
+government language ledgers each retain 60 discovered records (pages 2–3,
+with duplicate-page markers preserved), while the global checkpoint ledger is
+4 completed and 40 queued. No retryable catalogue state was force-completed.
+
+Read-only totals reached 39 canonical documents, 45 language variants, 6,821
+distinct current provisions and 19,016 indexed chunks, with 1,949
+live-or-manual queued/retrying jobs. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## Government/PKM run transition (2026-08-21, 19:35–19:37Z)
 
 Run `690b1beb-d449-4b90-a0ee-dc3739874be9` closed at 19:35:18.244Z with the
