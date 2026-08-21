@@ -2282,3 +2282,16 @@ queue remained unfrozen (38,310 fetch + 5,376 version queued, one retrying
 version job). The release snapshot, indexed 314-scenario evaluation, Qdrant
 benchmark/restore, D1 backup/restore, preview and rollout gates remain
 unclaimed. Production remains untouched.
+
+## Post-deploy staging observation (2026-08-21, 07:42Z)
+
+No new `scheduled_runs` row was observed after version
+`4a10213e-74ba-4fb8-bfb7-8c525d033e78` was deployed at `07:35:49Z`; the latest
+run still visible is the pre-deploy `07:28:02Z` generic failure. The read-only
+probe therefore does not claim that the capacity guard has passed. Current
+queue state is 38,310 fetch queued, 5,373 version queued, 3 version jobs
+running and 3,984 completed; `live_manual_queued=6,228`. Terminal/dead-letter
+jobs remain zero, but two retrying jobs still carry errors. Totals remain
+3,575 canonical documents / 62,075 unique current provisions / 151,499
+indexed current chunks and D1 `size_after=9,999,978,496` bytes. Snapshot,
+evaluation, backup/restore, preview, rollout and CI gates remain unclaimed.
