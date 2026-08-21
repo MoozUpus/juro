@@ -3069,3 +3069,19 @@ dead-letter failure was recorded; the existing retrying ingestion rows remain
 bounded and unchanged. Queue freeze, remaining 40 checkpoints, release floors,
 snapshot/evaluation, Qdrant/D1 restore and CI gates remain open. Production was
 not changed.
+
+## Government/PKM discovery progress (2026-08-21, 18:32–18:37Z)
+
+Run `21a69220-2281-40d7-819a-2e4a05b57b5f` moved the approved government
+family forward after the laws family closed. Its four language checkpoints
+have each discovered 20 page-one records; the run is still processing the
+bounded fetch/version queue, so none of the government checkpoints is complete
+yet. The staging ledger is 4 completed and 40 queued checkpoints.
+
+Materialized totals reached 30 canonical documents, 6,520 distinct current
+provisions, 18,490 current provision rows and 18,500 indexed chunks. The
+live-or-manual queue is 1,981 jobs. The failure ledger remains one retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows, with zero terminal/dead-letter
+failures. Release floors, queue freeze and all post-ingestion gates remain
+open; production was not changed.
