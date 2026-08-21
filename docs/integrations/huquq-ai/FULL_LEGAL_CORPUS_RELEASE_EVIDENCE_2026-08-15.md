@@ -2452,3 +2452,14 @@ core-code targets `indexed`, 10 `awaiting_ingestion`, 1 `queued` and 4
 `retrying`. All 44 discovery checkpoints remained queued and the failure
 ledger remained empty. The scheduled run was still active at probe time; no
 release-gate or completion claim is made.
+
+## Replacement corpus progress probe (2026-08-21, 11:37Z)
+
+After the 11:32 UTC scheduled run, the sequential D1 probe recorded 5
+canonical documents, 2,045 unique provisions and 5,034 indexed chunks. The
+job ledger contained 7 completed and 21 queued fetch jobs, plus 43 completed
+and 1,048 queued version jobs. Core-code targets remained 4 `indexed`, 10
+`awaiting_ingestion`, 1 `queued` and 4 `retrying`; all 44 catalogue
+checkpoints remained queued. The run ended with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`, while `legal_corpus_failures` remained empty. No
+release-gate claim is made.
