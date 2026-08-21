@@ -364,9 +364,9 @@ test("OTP, MFA, and logout writes require the application CSRF contract", async 
   assert.match(verifyRoute, /rememberMe: body\.rememberMe/);
   assert.match(
     verifyRoute,
-    /sessionCookie\(session\.token, body\.rememberMe, sharedAuthCookieDomain/,
+    /replacementSessionCookies\(session\.token, body\.rememberMe, requestHostname\)/,
   );
-  assert.match(verifyMfaRoute, /sessionCookie\(result\.session\.token, rememberMe, sharedAuthCookieDomain/);
+  assert.match(verifyMfaRoute, /replacementSessionCookies\(result\.session\.token, rememberMe, requestHostname\)/);
   assert.match(verifyRoute, /deviceContinuityCookie\(session\.deviceContinuityToken\)/);
   assert.match(verifyMfaRoute, /deviceContinuityCookie\(result\.session\.deviceContinuityToken\)/);
 });

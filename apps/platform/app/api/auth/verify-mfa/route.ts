@@ -14,8 +14,7 @@ import {
 import {
   clearMfaChallengeCookie,
   deviceContinuityCookie,
-  sessionCookie,
-  sharedAuthCookieDomain,
+  replacementSessionCookies,
 } from "../../../../lib/auth/session";
 import { authRequestSecurityContext } from "../../../../lib/auth/request-security-evidence";
 import {
@@ -90,7 +89,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
       : `/${userLocale}/onboarding`;
     return jsonNoStore({ ok: true, redirectTo }, 200, [
       clearMfaChallengeCookie(),
-      sessionCookie(result.session.token, rememberMe, sharedAuthCookieDomain(requestHostname)),
+      ...replacementSessionCookies(result.session.token, rememberMe, requestHostname),
       ...(result.session.deviceContinuityToken
         ? [deviceContinuityCookie(result.session.deviceContinuityToken)]
         : []),
