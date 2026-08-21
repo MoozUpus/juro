@@ -52,8 +52,10 @@ export function newWitness(): WitnessDetails {
   };
 }
 
-export function createDefaultAnswers(language: DocumentLanguage = "ru"): ReceiptAnswers {
-  const today = todayIso();
+export function createDefaultAnswers(
+  language: DocumentLanguage = "ru",
+  today = todayIso(),
+): ReceiptAnswers {
   return {
     language,
     participantMode: "self",

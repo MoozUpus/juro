@@ -182,16 +182,38 @@ async function fetchAsset(env: PlatformJobEnv, path: string): Promise<ArrayBuffe
   return response.arrayBuffer();
 }
 
-type BuilderProbeStage = "asset" | "render" | "docx" | "pdf" | "archive" | "validation" | "storage";
+type BuilderProbeStage = "asset" | "defaults" | "render" | "docx" | "pdf" | "archive" | "validation" | "storage";
 
 function builderFailureCode(stage: BuilderProbeStage): DependencyHealthSafeErrorCode {
   if (stage === "asset") return "BUILDER_ASSET_UNAVAILABLE";
+  if (stage === "defaults") return "BUILDER_DEFAULTS_FAILED";
   if (stage === "render") return "BUILDER_RENDER_FAILED";
   if (stage === "docx") return "BUILDER_DOCX_FAILED";
   if (stage === "pdf") return "BUILDER_PDF_FAILED";
   if (stage === "archive") return "BUILDER_ARCHIVE_FAILED";
   if (stage === "validation") return "BUILDER_OUTPUT_INVALID";
   return "BUILDER_STORAGE_FAILED";
+}
+
+function logSyntheticBuilderFailure(stage: BuilderProbeStage, error: unknown): void {
+  const errorName = error instanceof Error && /^(?:Error|RangeError|TypeError)$/u.test(error.name)
+    ? error.name
+    : "UnknownError";
+  const reason = error instanceof Error
+    ? error.message
+      .replace(/[^\x20-\x7e]/gu, "?")
+      .replace(/(?:[A-Za-z]:\\|\/)[^\s]+/gu, "[path]")
+      .slice(0, 160)
+    : "unavailable";
+  // This path operates only on the fixed synthetic fixture below. Keep the
+  // one-line diagnostic bounded and path-free; never emit answers, assets,
+  // stack traces, object keys, credentials, or provider output.
+  console.error(JSON.stringify({
+    event: "production_dependency_probe.builder_failed",
+    stage,
+    errorName,
+    reason,
+  }));
 }
 
 async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcome> {
@@ -219,8 +241,10 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
       fetchAsset(env, "/document-templates/DejaVuSans-Bold-JURO.ttf"),
       fetchAsset(env, "/document-templates/juro-mark-footer.png"),
     ]);
+    stage = "defaults";
+    const answers = createDefaultAnswers("ru", "2026-01-01");
     stage = "render";
-    const paragraphs = renderReceipt(createDefaultAnswers("ru")).paragraphs;
+    const paragraphs = renderReceipt(answers).paragraphs;
     stage = "docx";
     const docx = generateDocx(template, paragraphs);
     stage = "pdf";
@@ -240,7 +264,8 @@ async function runDocumentBuilderProbe(env: PlatformJobEnv): Promise<ProbeOutcom
     await recordOperational(env, "document_builder", startedAt);
     await recordOperational(env, "private_r2", startedAt);
     return "succeeded";
-  } catch {
+  } catch (error) {
+    logSyntheticBuilderFailure(stage, error);
     await recordFailure(env, "document_builder", builderFailureCode(stage), startedAt);
     return "failed";
   }
