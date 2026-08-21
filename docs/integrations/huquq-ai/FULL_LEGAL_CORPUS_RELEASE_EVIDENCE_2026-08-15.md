@@ -2374,3 +2374,25 @@ provisions and 19,048 corpus chunks. The replacement database is healthy and
 well below its capacity limit, but these early restart counts are not release
 evidence; checkpoint completion, the 1,500/22,000/22,513 floors, queue freeze,
 snapshot, indexed evaluation, restore and CI gates remain pending.
+
+## Version-debt starvation fix and post-deploy probe (2026-08-21, 11:10Z)
+
+The replacement queue exposed a scheduler starvation condition: 825 queued
+historical `version` jobs caused the previous catch-up policy to reserve all
+ten bounded ingestion slots, while twelve core-code fetch jobs were still
+awaiting ingestion. This kept generic catalogue discovery behind unresolved
+core-code work. Commit `698c1004` retains one current-corpus fetch slot and
+uses the other nine slots for version catch-up when the debt threshold is
+exceeded. The focused worker-boundary tests, type-check, lint and artifact
+dry-run passed; staging was deployed only as Worker version
+`f747ea7f-d86e-458c-9ee7-3498b2a93026` with the existing v2 D1 and Qdrant
+bindings.
+
+A sequential read-only probe after deployment recorded 4 completed and 16
+queued fetch jobs, 27 completed, 823 queued and 1 running version jobs, 2
+indexed and 12 awaiting-ingestion core-code targets, 44 queued checkpoints,
+2 documents, 27,681 provisions/chunks, and no rows in
+`legal_corpus_failures`. The one retained fetch slot is now making progress,
+but the release gate remains open: checkpoint completion, 1,500 canonical
+documents, queue freeze, snapshot, indexed 314-scenario evaluation, Qdrant/D1
+restore and CI evidence are not yet proven.
