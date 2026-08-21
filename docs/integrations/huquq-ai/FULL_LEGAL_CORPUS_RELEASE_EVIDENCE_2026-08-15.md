@@ -2422,3 +2422,14 @@ The next sequential read-only probe observed the replacement Worker in its
 ledger had 5 completed, 17 queued and 1 running fetch jobs, 35 completed and
 861 queued version jobs, and no rows in `legal_corpus_failures`. The run was
 still active at probe time, so no completion or release-gate claim is made.
+
+## Replacement corpus progress probe (2026-08-21, 11:26Z)
+
+While the 11:24 UTC scheduled run was still active, a sequential read-only
+probe recorded 4 canonical documents, 6 language variants, 1,642 unique
+current provisions, 4,627 current provisions and 4,629 indexed chunks. Three
+core-code targets were indexed and 11 remained awaiting ingestion; all 44
+discovery checkpoints were queued with zero attempts. The ingestion ledger
+contained 6 completed and 20 queued fetch jobs plus 36 completed, 895 queued
+and 1 running version jobs. `legal_corpus_failures` remained empty. These
+counts are progress evidence only and do not satisfy the release gate.
