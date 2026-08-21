@@ -2363,3 +2363,14 @@ provisions. The database size was 19,861,504 bytes. These are restart
 observations, not release-gate success: the replacement corpus is empty and
 still must complete discovery, ingestion, indexing, queue freeze, snapshot,
 314-scenario indexed evaluation, Qdrant/D1 restore and CI gates.
+## Replacement staging progress probe (2026-08-21, 10:57Z)
+
+A sequential read-only probe of `juro-staging-corpus-v2` recorded database size
+`171,651,072` bytes, 22 completed, 847 queued and 1 running ingestion jobs,
+and no rows in `legal_corpus_failures`. All 44 discovery checkpoints remain
+queued while the bounded Worker continues its initial acquisition/indexing
+window. Current materialized totals are 2 canonical documents, 3,342 active
+provisions and 19,048 corpus chunks. The replacement database is healthy and
+well below its capacity limit, but these early restart counts are not release
+evidence; checkpoint completion, the 1,500/22,000/22,513 floors, queue freeze,
+snapshot, indexed evaluation, restore and CI gates remain pending.
