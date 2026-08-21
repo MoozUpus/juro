@@ -291,6 +291,7 @@ const cloudflareTestFiles = [
   "tests/dependency-health-evidence.test.ts",
   "tests/queue-dlq-health-reconciliation.test.ts",
   "tests/staging-queue-health-probe.test.ts",
+  "tests/production-queue-health-probe.test.ts",
   "tests/task-reminder-email.test.ts",
   "tests/staging-email-delivery-probe.test.ts",
     "tests/staging-malware-scanner-probe.test.ts",

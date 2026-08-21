@@ -535,6 +535,7 @@
         "STAGING_SYNTHETIC_PROBES_ENABLED": "false",
         "STAGING_LEGAL_EVALUATION_ENABLED": "false",
         "STAGING_QUEUE_HEALTH_PROBE_ENABLED": "false",
+        "PRODUCTION_QUEUE_HEALTH_PROBE_ENABLED": "true",
         "PUBLIC_DOCUMENT_URL_IMPORT_ENABLED": "false",
         "PAYMENT_FOUNDATION_ENABLED": "true",
         "PAYMENT_SANDBOX_ENABLED": "false",
@@ -676,6 +677,10 @@
           {
             "binding": "MALWARE_SCAN_DLQ",
             "queue": "production-malware-scan-dlq"
+          },
+          {
+            "binding": "PRODUCTION_QUEUE_HEALTH_PROBE_QUEUE",
+            "queue": "production-queue-health"
           }
         ],
         "consumers": [
@@ -782,6 +787,14 @@
             "max_retries": 10,
             "max_concurrency": 1,
             "retry_delay": 60
+          },
+          {
+            "queue": "production-queue-health",
+            "max_batch_size": 1,
+            "max_batch_timeout": 5,
+            "max_retries": 3,
+            "max_concurrency": 1,
+            "retry_delay": 30
           }
         ]
       },

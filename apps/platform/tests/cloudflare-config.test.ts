@@ -84,6 +84,13 @@ const stagingQueueHealthProbeContract = [
   "queue-health",
 ] as const;
 
+// Production has its own content-free Queue round-trip. It is intentionally
+// isolated from all user-work queues and from the staging probe.
+const productionQueueHealthProbeContract = [
+  "PRODUCTION_QUEUE_HEALTH_PROBE_QUEUE",
+  "queue-health",
+] as const;
+
 const vectorContract = [
   ["LEX_UZ_INDEX", "lex-uz"],
   ["ADVICE_UZ_INDEX", "advice-uz"],
@@ -133,6 +140,10 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
     assert.equal(
       config.vars.STAGING_QUEUE_HEALTH_PROBE_ENABLED,
       environment === "staging" ? "true" : "false",
+    );
+    assert.equal(
+      config.vars.PRODUCTION_QUEUE_HEALTH_PROBE_ENABLED,
+      environment === "production" ? "true" : undefined,
     );
     assert.equal(
       config.vars.MALWARE_SCANNER_PROBE_ENABLED,
@@ -271,7 +282,9 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
       ];
     const expectedProducerContract = environment === "staging"
       ? [...environmentProducerContract, stagingQueueHealthProbeContract]
-      : environmentProducerContract;
+      : environment === "production"
+        ? [...environmentProducerContract, productionQueueHealthProbeContract]
+        : environmentProducerContract;
     assert.deepEqual(
       config.queues.producers,
       expectedProducerContract.map(([binding, name]) => ({
@@ -287,6 +300,7 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
         ? [
           ...ATTACHED_PLATFORM_QUEUE_BINDINGS,
           ...(environment === "staging" ? [stagingQueueHealthProbeContract[0]] : []),
+          ...(environment === "production" ? [productionQueueHealthProbeContract[0]] : []),
         ]
         : [...ATTACHED_PLATFORM_QUEUE_BINDINGS].filter((binding) =>
           binding !== "MALWARE_SCAN_QUEUE"
@@ -439,6 +453,18 @@ test("declares isolated Cloudflare environments with reviewed staging and produc
               max_concurrency: 4,
             }]
             : []),
+          ...(environment === "production"
+            ? [{
+              // No DLQ is intentional: bounded delivery failures age the D1
+              // claim into a visible degraded observation on the next cron.
+              queue: "production-queue-health",
+              max_batch_size: 1,
+              max_batch_timeout: 5,
+              max_retries: 3,
+              max_concurrency: 1,
+              retry_delay: 30,
+            }]
+            : []),
         ]
         : [],
     );
@@ -589,7 +615,7 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
   assert.match(serialized, /"MALWARE_SCAN_QUEUE"/);
   assert.match(serialized, /staging-malware-scan/);
   assert.deepEqual(source.queues.consumers, []);
-  assert.equal(source.env.production.queues.consumers.length, 12);
+  assert.equal(source.env.production.queues.consumers.length, 13);
   assert.equal(source.env.staging.queues.consumers.length, 14);
   assert.deepEqual(
     source.env.staging.queues.consumers.map(({ queue }) => queue),
@@ -625,6 +651,7 @@ test("does not attach legacy queue contracts and limits malware scanning to isol
       "production-notifications",
       "production-malware-scan",
       "production-malware-scan-dlq",
+      "production-queue-health",
     ],
   );
 });
