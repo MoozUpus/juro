@@ -2874,3 +2874,12 @@ page 1 with valid postback state; all 44 discovery checkpoints remain
 `queued`. These counts are progress only: release floors, 44/44 checkpoints,
 zero unresolved failures, queue freeze, snapshot, indexed evaluation,
 Qdrant/D1 restore and CI gates remain unproven. Production remains untouched.
+
+The following scheduled run (`2f68c2fa-4b35-4b51-a34a-241a983227dd`,
+15:56:13.861Z) processed another bounded historical batch for 12 minutes and
+completed cleanly at 16:08:29.104Z. Its lease heartbeat remained valid through
+the entire run; no new scheduler-expiry or terminal/dead-letter row appeared.
+The queue is now 182 completed and 2,007 queued jobs. This second long-run
+observation confirms the phase-level heartbeat fix across consecutive staging
+invocations; it does not change the open customs/checkpoint, queue-freeze,
+snapshot, evaluation, restore or CI gates.
