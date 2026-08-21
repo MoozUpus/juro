@@ -26,6 +26,8 @@ import {
 import {
   DocumentAnalysisProcessingError,
   executeDocumentAnalysisJob,
+  type DocumentAnalysisDiagnosticDetail,
+  type DocumentAnalysisDiagnosticStage,
 } from "../lib/document-analysis/processor";
 import {
   executeUserDocumentIndexJob,
@@ -216,12 +218,16 @@ type JobErrorCode =
 type OperationalError = {
   code: JobErrorCode;
   retryable: boolean;
+  diagnosticStage?: DocumentAnalysisDiagnosticStage;
+  diagnosticDetail?: DocumentAnalysisDiagnosticDetail;
 };
 
 class SafeJobError extends Error {
   constructor(
     readonly code: JobErrorCode,
     readonly retryable: boolean,
+    readonly diagnosticStage?: DocumentAnalysisDiagnosticStage,
+    readonly diagnosticDetail?: DocumentAnalysisDiagnosticDetail,
   ) {
     super(code);
     this.name = "SafeJobError";
@@ -427,7 +433,12 @@ function terminalizableDlqKindsForQueue(
 
 function operationalError(error: unknown): OperationalError {
   if (error instanceof SafeJobError) {
-    return { code: error.code, retryable: error.retryable };
+    return {
+      code: error.code,
+      retryable: error.retryable,
+      diagnosticStage: error.diagnosticStage,
+      diagnosticDetail: error.diagnosticDetail,
+    };
   }
   return { code: "JOB_TRANSIENT_FAILURE", retryable: true };
 }
@@ -787,7 +798,12 @@ async function executeJob(
             startedAt,
           });
         }
-        throw new SafeJobError(error.code, error.retryable);
+        throw new SafeJobError(
+          error.code,
+          error.retryable,
+          error.diagnosticStage,
+          error.diagnosticDetail,
+        );
       }
       throw error;
     }
@@ -1551,6 +1567,8 @@ async function processMessage(
         jobId: envelope.jobId,
         jobKind: envelope.kind,
         errorCode: failure.code,
+        ...(failure.diagnosticStage ? { diagnosticStage: failure.diagnosticStage } : {}),
+        ...(failure.diagnosticDetail ? { diagnosticDetail: failure.diagnosticDetail } : {}),
       });
       message.ack();
       return;
@@ -1598,6 +1616,8 @@ async function processMessage(
       jobKind: envelope.kind,
       errorCode: failure.code,
       attempt: message.attempts,
+      ...(failure.diagnosticStage ? { diagnosticStage: failure.diagnosticStage } : {}),
+      ...(failure.diagnosticDetail ? { diagnosticDetail: failure.diagnosticDetail } : {}),
     });
     message.retry({ delaySeconds });
   }

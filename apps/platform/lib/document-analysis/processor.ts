@@ -512,7 +512,12 @@ async function analyzeObject(
     // The full document never becomes a Lex query. A bounded structural
     // sample gives live retrieval the document's subject without handing it a
     // local corpus or building any document-to-law embedding index.
-    const retrieval = await deps.retrieve(env.DB, extracted.text.slice(0, 12_000), request.locale, 5);
+    const retrieval = await deps.retrieve(
+      env.DB,
+      extracted.text.slice(0, 12_000),
+      request.locale,
+      request.mode === "quick" ? 3 : 5,
+    );
     diagnosticStage = "runtime";
     const providerEnvironment = parseProviderEnvironment(env.APP_ENV);
     const runtimeSettings = await resolveAiRuntimeSettings({ db: env.DB, env });
