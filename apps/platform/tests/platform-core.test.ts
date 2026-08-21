@@ -36,7 +36,7 @@ test("lawyer directory projects only moderation-approved review aggregates", () 
     ],
   );
   assert.deepEqual(directory, [{
-    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
+    id: "lawyer-1", displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", consultationDurationMinutes: 60, additionalServices: [], availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика",
     rating: { reviewCount: 3, overallAverage: 4.67, speedAverage: 4.5, qualityAverage: 5, communicationAverage: 4 },
     reviews: [
       { id: "review-1", overallRating: 5, body: "Проверенный текст", createdAt: "2026-08-02T00:00:00.000Z", reply: { body: "Одобренный ответ", createdAt: "2026-08-03T00:00:00.000Z" } },
@@ -56,7 +56,7 @@ test("public lawyer rating waits for the minimum approved-review threshold", () 
 });
 
 test("lawyer professional profile accepts only bounded self-declared directory data", async () => {
-  const valid = { displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика", locale: "ru" };
+  const valid = { displayName: "Юрист JURO", specialties: ["contracts"], languages: ["ru", "uz"], experienceYears: 7, priceDescription: "По договорённости", consultationDurationMinutes: 60, additionalServices: ["Письменное заключение"], availabilityStatus: "available", nextAvailableAt: "2026-08-03T10:00:00.000Z", advocateStatus: "declared", firmName: "JURO Legal", bio: "Договорная практика", locale: "ru" };
   assert.equal(lawyerProfileCreateSchema.safeParse(valid).success, true);
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, advocateStatus: "verified" }).success, false);
   assert.equal(lawyerProfileCreateSchema.safeParse({ ...valid, experienceYears: 100 }).success, false);

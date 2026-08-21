@@ -2,8 +2,10 @@
 
 import { Check, Send, Save } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import { usePlatformBasePath } from "./PlatformRouteContext";
 
 type Profile = {
   id: string;
@@ -23,6 +25,8 @@ type Profile = {
   publicApprovedAt: string | null;
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServices: string[];
   availabilityStatus: "unknown" | "available" | "limited" | "unavailable";
   nextAvailableAt: string | null;
   advocateStatus: "not_declared" | "declared" | "verified";
@@ -51,6 +55,8 @@ type Form = {
   languages: string;
   experienceYears: string;
   priceDescription: string;
+  consultationDurationMinutes: string;
+  additionalServices: string;
   availabilityStatus: Profile["availabilityStatus"];
   nextAvailableAt: string;
   advocateStatus: "not_declared" | "declared";
@@ -68,6 +74,8 @@ const blank: Form = {
   languages: "",
   experienceYears: "",
   priceDescription: "",
+  consultationDurationMinutes: "60",
+  additionalServices: "",
   availabilityStatus: "unknown",
   nextAvailableAt: "",
   advocateStatus: "not_declared",
@@ -86,6 +94,8 @@ const toForm = (profile: Profile): Form => ({
   experienceYears:
     profile.experienceYears === null ? "" : String(profile.experienceYears),
   priceDescription: profile.priceDescription ?? "",
+  consultationDurationMinutes: String(profile.consultationDurationMinutes),
+  additionalServices: profile.additionalServices.join(", "),
   availabilityStatus: profile.availabilityStatus,
   nextAvailableAt: profile.nextAvailableAt
     ? profile.nextAvailableAt.slice(0, 16)
@@ -115,8 +125,10 @@ export function LawyerProfessionalProfile({
   locale: PlatformLocale;
 }) {
   const ru = locale === "ru";
+  const base = usePlatformBasePath();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [form, setForm] = useState<Form>(blank);
+  const [scheduleConfigured, setScheduleConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -153,6 +165,56 @@ export function LawyerProfessionalProfile({
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    fetch("/api/platform/lawyer-schedule", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          rules?: unknown[];
+          unavailability?: unknown[];
+        };
+      })
+      .then((value) =>
+        setScheduleConfigured(
+          Boolean(value?.rules?.length || value?.unavailability?.length),
+        ),
+      )
+      .catch(() => setScheduleConfigured(false));
+  }, []);
+
+  const personalStepDone = Boolean(
+    form.displayName.trim() &&
+      form.city.trim() &&
+      form.region.trim() &&
+      profile?.profilePhotoUrl,
+  );
+  const professionalStepDone = Boolean(
+    form.specialties.trim() &&
+      form.languages.trim() &&
+      form.experienceYears &&
+      form.education.trim() &&
+      form.firmName.trim(),
+  );
+  const servicesStepDone = Boolean(
+    form.consultationFormats.trim() &&
+      form.priceDescription.trim() &&
+      form.consultationDurationMinutes &&
+      form.availabilityStatus !== "unknown",
+  );
+  const submittedStepDone = Boolean(
+    profile &&
+      profile.marketplaceStatus !== "profile_incomplete" &&
+      profile.marketplaceStatus !== "changes_requested",
+  );
+  const applicationSteps = [
+    { label: ru ? "Личные данные" : "Shaxsiy ma’lumotlar", done: personalStepDone },
+    { label: ru ? "Профессия" : "Kasbiy ma’lumot", done: professionalStepDone },
+    { label: ru ? "Услуги" : "Xizmatlar", done: servicesStepDone },
+    { label: ru ? "Расписание" : "Jadval", done: scheduleConfigured },
+    { label: ru ? "Preview" : "Ko‘rib chiqish", done: true },
+    { label: ru ? "Отправка" : "Yuborish", done: submittedStepDone },
+  ];
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const intent =
@@ -171,6 +233,8 @@ export function LawyerProfessionalProfile({
         ? Number(form.experienceYears)
         : null,
       priceDescription: form.priceDescription || null,
+      consultationDurationMinutes: Number(form.consultationDurationMinutes),
+      additionalServices: list(form.additionalServices),
       availabilityStatus: form.availabilityStatus,
       nextAvailableAt: form.nextAvailableAt
         ? new Date(form.nextAvailableAt).toISOString()
@@ -324,24 +388,13 @@ export function LawyerProfessionalProfile({
           className="lawyer-application-steps"
           aria-label={ru ? "Этапы заявки" : "Ariza bosqichlari"}
         >
-          {[
-            ru ? "Аккаунт" : "Hisob",
-            ru ? "Профиль" : "Profil",
-            ru ? "Проверка" : "Tekshiruv",
-            ru ? "Публикация" : "Nashr",
-          ].map((label, index) => (
+          {applicationSteps.map((step, index) => (
             <span
-              key={label}
-              className={
-                index < 2 ||
-                profile?.marketplaceStatus === "pending_review" ||
-                profile?.marketplaceStatus === "public_approved"
-                  ? "done"
-                  : ""
-              }
+              key={step.label}
+              className={step.done ? "done" : ""}
             >
-              {index < 2 ? <Check aria-hidden="true" /> : index + 1}
-              <b>{label}</b>
+              {step.done ? <Check aria-hidden="true" /> : index + 1}
+              <b>{step.label}</b>
             </span>
           ))}
         </div>
@@ -617,6 +670,30 @@ export function LawyerProfessionalProfile({
                 />
               </label>
               <label>
+                {ru ? "Стандартная длительность консультации, минут" : "Maslahatning standart davomiyligi, daqiqa"}
+                <input
+                  required
+                  type="number"
+                  min="15"
+                  max="480"
+                  step="15"
+                  value={form.consultationDurationMinutes}
+                  onChange={(event) =>
+                    setForm({ ...form, consultationDurationMinutes: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                {ru ? "Дополнительные услуги через запятую" : "Qo‘shimcha xizmatlar, vergul bilan"}
+                <input
+                  value={form.additionalServices}
+                  onChange={(event) =>
+                    setForm({ ...form, additionalServices: event.target.value })
+                  }
+                  placeholder={ru ? "Письменное заключение, проверка договора" : "Yozma xulosa, shartnomani tekshirish"}
+                />
+              </label>
+              <label>
                 {ru ? "О себе" : "O‘zingiz haqingizda"}
                 <textarea
                   maxLength={2000}
@@ -626,6 +703,13 @@ export function LawyerProfessionalProfile({
                   }
                 />
               </label>
+            </section>
+            <section className="lawyer-profile-preview">
+              <div>
+                <strong>{ru ? "Шаг 4 · Расписание" : "4-bosqich · Jadval"}</strong>
+                <p>{ru ? "Рабочие дни, свободное время, перерывы и временная недоступность настраиваются в календаре. Часовой пояс: Asia/Tashkent." : "Ish kunlari, bo‘sh vaqt, tanaffuslar va vaqtincha bandlik kalendarda sozlanadi. Vaqt mintaqasi: Asia/Tashkent."}</p>
+              </div>
+              <Link className="btn btn-primary" href={`${base}/calendar`}>{ru ? "Настроить расписание" : "Jadvalni sozlash"}</Link>
             </section>
           </fieldset>
           <section
@@ -671,8 +755,10 @@ export function LawyerProfessionalProfile({
                 <div><dt>{ru ? "Место работы" : "Ish joyi"}</dt><dd>{form.firmName || "—"}</dd></div>
                 <div><dt>{ru ? "Форматы" : "Formatlar"}</dt><dd>{list(form.consultationFormats).join(", ") || "—"}</dd></div>
                 <div><dt>{ru ? "Стоимость" : "Narx"}</dt><dd>{form.priceDescription || "—"}</dd></div>
+                <div><dt>{ru ? "Длительность" : "Davomiyligi"}</dt><dd>{form.consultationDurationMinutes ? `${form.consultationDurationMinutes} ${ru ? "мин." : "daq."}` : "—"}</dd></div>
                 <div><dt>{ru ? "Доступность" : "Mavjudlik"}</dt><dd>{availabilityLabel(form.availabilityStatus, ru)}</dd></div>
               </dl>
+              {list(form.additionalServices).length > 0 && <p className="lawyer-profile-preview-bio"><strong>{ru ? "Дополнительные услуги: " : "Qo‘shimcha xizmatlar: "}</strong>{list(form.additionalServices).join(" · ")}</p>}
               {form.bio && <p className="lawyer-profile-preview-bio">{form.bio}</p>}
             </div>
           </section>
@@ -709,7 +795,7 @@ export function LawyerProfessionalProfile({
               }
             >
               {!saving && <Send aria-hidden="true" />}
-              {ru ? "Отправить на проверку" : "Tekshiruvga yuborish"}
+              {ru ? "Отправить профиль на проверку" : "Profilni tekshiruvga yuborish"}
             </button>
           </div>
         </form>

@@ -714,7 +714,7 @@
 }
 
 .lawyer-professional-profile > section { display: grid; gap: 15px; }
-.lawyer-application-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.lawyer-application-steps { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
 .lawyer-application-steps span { display: flex; min-width: 0; min-height: 48px; align-items: center; gap: 7px; padding: 9px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--surface-subtle); color: var(--text-secondary); font-size: 11px; }
 .lawyer-application-steps span > svg { width: 16px; }
 .lawyer-application-steps span.done { border-color: color-mix(in srgb, var(--status-success) 35%, var(--border-subtle)); color: var(--status-success); }

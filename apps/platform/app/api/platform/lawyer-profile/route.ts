@@ -32,6 +32,8 @@ type LawyerProfile = {
   publicApprovedAt: string | null;
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServicesJson: string;
   availabilityStatus: string;
   nextAvailableAt: string | null;
   advocateStatus: string;
@@ -61,6 +63,8 @@ type EditableProfile = {
   languages: string[];
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServices: string[];
   availabilityStatus: string;
   nextAvailableAt: string | null;
   advocateStatus: string;
@@ -97,6 +101,8 @@ function toEditable(profile: LawyerProfile): EditableProfile {
     languages: list(profile.languagesJson),
     experienceYears: profile.experienceYears,
     priceDescription: profile.priceDescription,
+    consultationDurationMinutes: profile.consultationDurationMinutes,
+    additionalServices: list(profile.additionalServicesJson),
     availabilityStatus: profile.availabilityStatus,
     nextAvailableAt: profile.nextAvailableAt,
     advocateStatus: profile.advocateStatus,
@@ -142,6 +148,8 @@ function serialize(
     publicApprovedAt: profile.publicApprovedAt,
     experienceYears: profile.experienceYears,
     priceDescription: profile.priceDescription,
+    consultationDurationMinutes: profile.consultationDurationMinutes,
+    additionalServices: list(profile.additionalServicesJson),
     availabilityStatus: profile.availabilityStatus,
     nextAvailableAt: profile.nextAvailableAt,
     advocateStatus: profile.advocateStatus,
@@ -181,7 +189,10 @@ async function ownProfile(userId: string) {
       `SELECT p.id,p.display_name AS displayName,p.specialties_json AS specialtiesJson,
        p.languages_json AS languagesJson,p.status,p.marketplace_status AS marketplaceStatus,
        p.public_approved_at AS publicApprovedAt,p.experience_years AS experienceYears,
-       p.price_description AS priceDescription,p.availability_status AS availabilityStatus,
+       p.price_description AS priceDescription,
+       p.consultation_duration_minutes AS consultationDurationMinutes,
+       p.additional_services_json AS additionalServicesJson,
+       p.availability_status AS availabilityStatus,
        p.next_available_at AS nextAvailableAt,p.advocate_status AS advocateStatus,
        p.firm_name AS firmName,p.bio,p.city,p.region,p.education,
        p.consultation_formats_json AS consultationFormatsJson,
@@ -218,6 +229,9 @@ function changed(current: EditableProfile, next: EditableProfile): boolean {
     JSON.stringify(current.languages) !== JSON.stringify(next.languages) ||
     current.experienceYears !== next.experienceYears ||
     current.priceDescription !== next.priceDescription ||
+    current.consultationDurationMinutes !== next.consultationDurationMinutes ||
+    JSON.stringify(current.additionalServices) !==
+      JSON.stringify(next.additionalServices) ||
     current.availabilityStatus !== next.availabilityStatus ||
     current.nextAvailableAt !== next.nextAvailableAt ||
     current.advocateStatus !== next.advocateStatus ||
@@ -241,6 +255,9 @@ function moderatedFieldsChanged(
     JSON.stringify(current.languages) !== JSON.stringify(next.languages) ||
     current.experienceYears !== next.experienceYears ||
     current.priceDescription !== next.priceDescription ||
+    current.consultationDurationMinutes !== next.consultationDurationMinutes ||
+    JSON.stringify(current.additionalServices) !==
+      JSON.stringify(next.additionalServices) ||
     current.advocateStatus !== next.advocateStatus ||
     current.firmName !== next.firmName ||
     current.bio !== next.bio ||
@@ -327,10 +344,11 @@ export const POST = withApiErrors(async function POST(request: Request) {
       .prepare(
         `INSERT INTO lawyer_profiles (
         id,user_id,display_name,specialties_json,languages_json,status,marketplace_status,
-        experience_years,price_description,availability_status,next_available_at,
+        experience_years,price_description,consultation_duration_minutes,
+        additional_services_json,availability_status,next_available_at,
         advocate_status,firm_name,bio,city,region,education,consultation_formats_json,
         created_at,updated_at
-      ) VALUES (?,?,?,?,?,'pending','profile_incomplete',?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      ) VALUES (?,?,?,?,?,'pending','profile_incomplete',?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       )
       .bind(
         id,
@@ -340,6 +358,8 @@ export const POST = withApiErrors(async function POST(request: Request) {
         JSON.stringify(value.languages),
         value.experienceYears ?? null,
         value.priceDescription ?? null,
+        value.consultationDurationMinutes,
+        JSON.stringify(value.additionalServices ?? []),
         value.availabilityStatus,
         value.nextAvailableAt ?? null,
         value.advocateStatus,
@@ -452,6 +472,10 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
       value.priceDescription === undefined
         ? current.priceDescription
         : value.priceDescription,
+    consultationDurationMinutes:
+      value.consultationDurationMinutes ?? current.consultationDurationMinutes,
+    additionalServices:
+      value.additionalServices ?? current.additionalServices,
     availabilityStatus: value.availabilityStatus ?? current.availabilityStatus,
     nextAvailableAt:
       value.nextAvailableAt === undefined
@@ -502,7 +526,8 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
       .prepare(
         `UPDATE lawyer_profiles SET
        display_name=?,specialties_json=?,languages_json=?,experience_years=?,
-       price_description=?,availability_status=?,next_available_at=?,advocate_status=?,
+       price_description=?,consultation_duration_minutes=?,additional_services_json=?,
+       availability_status=?,next_available_at=?,advocate_status=?,
        firm_name=?,bio=?,city=?,region=?,education=?,consultation_formats_json=?,
        profile_revision=profile_revision+1,status=?,marketplace_status=?,
        public_approved_at=CASE WHEN ?='public_approved' THEN public_approved_at ELSE NULL END,
@@ -515,6 +540,8 @@ export const PATCH = withApiErrors(async function PATCH(request: Request) {
         JSON.stringify(next.languages),
         next.experienceYears,
         next.priceDescription,
+        next.consultationDurationMinutes,
+        JSON.stringify(next.additionalServices),
         next.availabilityStatus,
         next.nextAvailableAt,
         next.advocateStatus,
