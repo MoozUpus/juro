@@ -21,9 +21,11 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.searchParams.set("accountType", "lawyer");
     return target;
   }
-  const auth = url.pathname.match(/^\/(ru|uz)\/(login|register)$/u);
+  const auth = url.pathname.match(/^\/(?:(ru|uz)\/)?(login|register|verify)\/?$/u);
   if (auth) {
-    target.pathname = `/${auth[1]}/auth/${auth[2]}`;
+    const locale = auth[1] || "ru";
+    const action = auth[2] === "verify" ? "login" : auth[2];
+    target.pathname = `/${locale}/auth/${action}`;
     target.searchParams.set("accountType", "lawyer");
     return target;
   }
@@ -31,7 +33,19 @@ export function lawyerHostTarget(url: URL): URL | null {
     target.searchParams.set("accountType", "lawyer");
     return target;
   }
-  if (/^\/(?:ru|uz)\/onboarding\/?$/u.test(url.pathname)) return target;
+  const onboarding = url.pathname.match(/^\/(?:(ru|uz)\/)?onboarding\/?$/u);
+  if (onboarding) {
+    target.pathname = `/${onboarding[1] || "ru"}/onboarding`;
+    return target;
+  }
+  const unprefixed = url.pathname.match(/^\/([^/]+)\/?$/u);
+  if (unprefixed) {
+    const mapped = lawyerPageMap[unprefixed[1]];
+    if (!mapped) return null;
+    target.pathname = `/ru/lawyer/${mapped.module}`;
+    if (mapped.view) target.searchParams.set("view", mapped.view);
+    return target;
+  }
   const clean = url.pathname.match(/^\/(ru|uz)(?:\/([^/]+))?\/?$/u);
   if (clean) {
     const locale = clean[1];
