@@ -2404,7 +2404,9 @@ The first full scheduled invocation on Worker version
 slot: the read-only D1 probe now records 5 completed and 18 queued fetch jobs,
 35 completed and 861 queued version jobs, 3 canonical documents, 5 language
 variants, 1,136 unique current provisions, 3,570 current provisions and
-3,572 indexed chunks. The core-code reconciliation is still pending its next
+3,572 indexed chunks. `wrangler d1 info` reports
+`database_size=303,796,224` bytes for the replacement D1, well below the
+release reserve. The core-code reconciliation is still pending its next
 cycle (`12 awaiting_ingestion`, `2 indexed`, `1 queued`, `4 retrying`), and
 all 44 discovery checkpoints remain queued. The scheduled run ended with the
 allow-listed retryable `LEX_CATALOG_TIMEOUT`; no terminal/dead-letter rows
