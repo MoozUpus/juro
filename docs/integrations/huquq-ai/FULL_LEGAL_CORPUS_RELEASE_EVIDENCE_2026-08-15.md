@@ -3105,6 +3105,23 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## President catalogue materialized progress (2026-08-21, 20:28–20:34Z)
+
+Run `699ddffa-e87d-4f84-8b01-4f51d4bd8fb2` remained under the single
+distributed lease through the 20:33:32.747Z probe. The president English
+checkpoint advanced through its first page with 20 discovered records and
+returned to queued state for the next bounded page; no timeout or duplicate
+response was force-completed.
+
+Read-only totals reached 44 canonical documents, 50 language variants, 6,913
+distinct current provisions and 19,165 indexed chunks, with 1,926
+live-or-manual queued/retrying jobs. The global checkpoint ledger remains 8
+completed and 36 queued. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
+
 ## Government-to-president checkpoint transition (2026-08-21, 20:28–20:31Z)
 
 Run `699ddffa-e87d-4f84-8b01-4f51d4bd8fb2` acquired the single distributed
