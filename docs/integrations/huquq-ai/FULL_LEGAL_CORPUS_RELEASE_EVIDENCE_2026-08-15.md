@@ -2497,3 +2497,19 @@ terminal/dead-letter condition and no code change is justified by this
 transient run-level failure. Release floors, checkpoint completion, queue
 freeze, snapshot, evaluation, restore and CI gates remain open; production is
 untouched.
+
+## Replacement cycle with retryable catalog timeout (2026-08-21, 12:11Z)
+
+The 12:04:13Z scheduled invocation finished at 12:11:34Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. Sequential read-only D1 probes
+after completion recorded no terminal or technically-unavailable failure rows,
+no dead-letter jobs and no active job errors. The ingestion ledger contained
+11 completed and 26 queued fetch jobs plus 59 completed and 1,295 queued
+version jobs, all without `last_error_code`.
+
+All 44 discovery checkpoints remained `queued` with zero attempts and zero
+errors. Materialized totals were 9 canonical documents, 11 language variants,
+3,611 unique current provisions and 7,448 indexed current chunks; D1 reported
+`size_after=517,181,440` bytes. This remains staging progress only: release
+floors, completed checkpoints, queue freeze, snapshot, evaluation, restore and
+CI gates are unproven. Production remains untouched.
