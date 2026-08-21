@@ -2562,3 +2562,22 @@ errors. Materialized totals were 10 canonical documents, 14 language variants,
 `awaiting_ingestion`, 2 `queued` and 3 `retrying`. This remains staging
 progress only: release floors, completed checkpoints, queue freeze, snapshot,
 evaluation, restore and CI gates are unproven. Production remains untouched.
+
+## Active replacement cycle probe (2026-08-21, 12:55Z)
+
+The 12:52:13Z scheduled invocation was still `running` at the sequential
+12:55Z read-only probe. Its distributed lock was renewed through 13:08:25Z,
+so the worker was active and no concurrent crawler was started. The job ledger
+contained 15 completed, 25 queued and 1 running fetch jobs plus 75 completed
+and 1,555 queued version jobs; no ingestion job carried `last_error_code`.
+
+The failure ledger remained empty (zero terminal/technically-unavailable rows
+and zero dead-letter rows). All 44 discovery checkpoints were still `queued`
+with zero attempts and zero errors. Materialized totals were 10 canonical
+documents, 16 language variants, 4,123 unique current provisions and 14,924
+indexed current chunks. Core-code reconciliation was 10 `indexed`, 4
+`awaiting_ingestion`, 1 `queued` and 4 `retrying`; the retrying targets remain
+retryable source conditions, not terminal ingestion failures. This is staging
+progress only: the release floors, completed checkpoints, queue freeze,
+snapshot, evaluation, restore and CI gates are unproven. Production remains
+untouched.
