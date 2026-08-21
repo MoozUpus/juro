@@ -2742,3 +2742,36 @@ Totals remain 13 canonical documents, 4,929 unique current provisions and
 15,939 indexed current chunks. Release floors, queue freeze, snapshot,
 evaluation, restore and CI gates remain unproven. Production remains
 untouched.
+
+## Scheduler lease-expiry finding and staging fix (2026-08-21, 13:40–14:45Z)
+
+The 13:20:13Z scheduled invocation was terminated at 13:40:13.676Z with
+`LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED`. The durable run record showed one
+long-running version job (`legal-version:036a5d26f630e54aacacacb36f40`) whose
+last durable update was 13:23:02.122Z; the worker renewed the scheduler lease
+only between jobs, not during a large sequence of D1 writes. This was an
+actionable run-level failure, distinct from the legal corpus failure ledger.
+
+The staging-only fix renews the scheduler lease from the ingestion layer every
+eight D1 write batches and threads that heartbeat through the worker. It is
+covered by `large version writes renew the scheduler lease between D1 batches`
+in `apps/platform/tests/legal-corpus-ingestion.test.ts` (35 ingestion tests
+passed, including the new regression), plus 20 worker-boundary tests passed.
+`npm run type-check`, `npm run lint`,
+`npm run validate:legal-corpus:artifact`, and `git diff --check` all passed.
+The fix is commit `847edd7f` and was deployed only to the staging legal-corpus
+Worker as version `9e795d70-ae97-4f21-8341-3fd4661a0993`; production bindings,
+flags and deployments remain unchanged.
+
+After deployment, the 14:40:13.669Z invocation was still running at the
+14:45Z sequential probe. Its scheduler lock was renewed through 15:00:02.450Z,
+confirming lease heartbeats during the long-running write. The job ledger was
+23 completed and 36 queued fetch jobs, 121 completed and 1,934 queued version
+jobs, and one running version job, with no job `last_error_code`. The failure
+ledger contained one allow-listed retrying `LEGAL_CORPUS_STALE_RUNNING_TIMEOUT`
+row (retry_count=1), with zero terminal/technically-unavailable rows. All 44
+discovery checkpoints remained queued (0 attempts, 0 errors). Materialized
+totals were 16 canonical documents, 22 language variants, 5,315 unique current
+provisions and 16,330 indexed current chunks. Release floors, queue freeze,
+snapshot, indexed evaluation, Qdrant/D1 restore and CI gates remain unproven.
+Production remains untouched.
