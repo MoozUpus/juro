@@ -3105,6 +3105,27 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Oliy Majlis bounded run closure (2026-08-21, 23:16–23:21Z)
+
+Run `6db0fe9a-92a6-4af5-bb1a-3e5d02d8afc3` completed from
+`2026-08-21T23:16:56.207Z` to `2026-08-21T23:21:05.545Z` with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. The sequential worker advanced
+the Oliy Majlis catalogues without force-completing checkpoints: `ru` reached
+page 11 (220 discovered), `uz-Cyrl` page 11 (220 discovered), and `uz-Latn`
+page 10 (200 discovered). The empty `en` checkpoint remains completed with
+zero discovered documents; all three non-empty language checkpoints remain
+queued for their next bounded continuation.
+
+Final read-only totals were 64 canonical documents, 70 language variants,
+7,235 current unique provisions, 19,730 indexed chunks, and 1,845 queued or
+retrying non-catalogue ingestion jobs. The checkpoint ledger remained 13
+completed and 31 queued. The failure ledger remained 2 retrying
+`LEGAL_CORPUS_INGESTION_FAILED` rows plus 3 retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter rows remained
+zero. Release thresholds and queue-freeze remain unproven, so snapshot,
+evaluation, Qdrant/D1 restore gates and CI are still blocked. Production flags,
+corpus ingestion and deployment were not changed.
+
 ## Oliy Majlis bounded run closure (2026-08-21, 23:08–23:13Z)
 
 Run `fb68ed6d-63dd-482e-a049-6eba52c600a1` completed normally from
