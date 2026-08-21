@@ -32,8 +32,7 @@ import {
 import {
   deviceContinuityCookie,
   mfaChallengeCookie,
-  sessionCookie,
-  sharedAuthCookieDomain,
+  replacementSessionCookies,
 } from "../../../../lib/auth/session";
 import {
   createPrimarySessionIfMfaDisabled,
@@ -321,7 +320,7 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ok: true,
     redirectTo,
   }, 200, [
-    sessionCookie(session.token, body.rememberMe, sharedAuthCookieDomain(requestHostname)),
+    ...replacementSessionCookies(session.token, body.rememberMe, requestHostname),
     ...(session.deviceContinuityToken
       ? [deviceContinuityCookie(session.deviceContinuityToken)]
       : []),
