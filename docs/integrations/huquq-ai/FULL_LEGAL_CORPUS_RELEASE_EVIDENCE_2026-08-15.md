@@ -3105,6 +3105,20 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM run closure (2026-08-21, 19:03Z)
+
+Run `2b12acc2-22c7-44bf-bc70-bfb58ade5a1d` closed at 19:03:29.754Z with the
+same allow-listed retryable `LEX_CATALOG_TIMEOUT`. Its durable checkpoint
+records were preserved: four laws checkpoints remain completed, while all
+government checkpoints remain queued for the next bounded invocation. No
+terminal/dead-letter row or destructive reset was produced.
+
+The post-run read-only totals are 33 canonical documents, 39 language
+variants, 6,608 distinct current provisions, 18,612 indexed chunks and 1,968
+live-or-manual queued/retrying jobs. The release floors, queue freeze,
+snapshot/evaluation, Qdrant/D1 restore and CI gates remain open; production is
+untouched.
+
 ## Government/PKM page continuation (2026-08-21, 18:56–19:00Z)
 
 The same bounded run `2b12acc2-22c7-44bf-bc70-bfb58ade5a1d` continued under
