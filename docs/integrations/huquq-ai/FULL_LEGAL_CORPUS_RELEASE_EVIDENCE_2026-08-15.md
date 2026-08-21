@@ -3105,6 +3105,22 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Government/PKM run transition (2026-08-21, 19:35–19:37Z)
+
+Run `690b1beb-d449-4b90-a0ee-dc3739874be9` closed at 19:35:18.244Z with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. The next run
+`000c4a9a-a0e6-4c0c-9e27-52d13508a132` acquired the single distributed lease
+and started the Russian government checkpoint from its preserved page-three
+ledger. The checkpoint ledger is 4 completed, 1 running and 39 queued; no
+retryable catalogue state was force-completed and terminal/dead-letter remains
+zero.
+
+Read-only totals remain 37 canonical documents, 43 language variants, 6,748
+distinct current provisions and 18,917 indexed chunks, with 1,954
+live-or-manual queued/retrying jobs. Release floors, queue freeze,
+snapshot/evaluation, Qdrant/D1 restore and CI remain unproven; production is
+untouched.
+
 ## Government/PKM continued cataloguing (2026-08-21, 19:28–19:32Z)
 
 Run `690b1beb-d449-4b90-a0ee-dc3739874be9` continued the single sequential
