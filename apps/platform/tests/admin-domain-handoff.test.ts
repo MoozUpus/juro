@@ -442,6 +442,12 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(adminWorker, /\/lifecycle/u);
   assert.match(adminWorker, /RESTRICTED_LAWYER_MARKETPLACE_STATUSES/u);
   assert.match(adminWorker, /action !== "suspend"/u);
+  assert.match(adminWorker, /@font-face\{font-family:Manrope/u);
+  assert.match(adminWorker, /font-src 'self'/u);
+  assert.match(adminWorker, /fontAsset\(url\.pathname\)/u);
+  assert.match(adminWorker, /<div class="scroll"><table>/u);
+  assert.match(adminWorker, /\.panel\{min-width:0;overflow:hidden/u);
+  assert.doesNotMatch(adminWorker, /font-family:Inter/iu);
   assert.match(internal, /lawyer\.profiles\.block/u);
   assert.match(internal, /lawyer\.reviews\.moderate/u);
   assert.match(internal, /changes_requested/u);
@@ -454,6 +460,8 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(platformConfig, /"binding": "ADMIN_CONSOLE"/u);
   assert.match(platformConfig, /"service": "juro-admin"/u);
   assert.match(adminConfig, /"name": "juro-admin"/u);
+  assert.match(adminConfig, /"type": "Data"/u);
+  assert.match(adminConfig, /"globs": \["\*\*\/\*\.woff2"\]/u);
   assert.match(adminConfig, /"PLATFORM_ORIGIN": "https:\/\/staging\.app\.juro\.uz"/u);
   assert.match(adminConfig, /"APP_ENV": "production"/u);
   assert.match(adminConfig, /"service": "juro"/u);

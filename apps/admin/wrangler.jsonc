@@ -4,6 +4,13 @@
   "main": "./src/worker.ts",
   "compatibility_date": "2026-08-06",
   "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "rules": [
+    {
+      "type": "Data",
+      "globs": ["**/*.woff2"],
+      "fallthrough": true
+    }
+  ],
   "keep_vars": true,
   "workers_dev": false,
   "vars": {
