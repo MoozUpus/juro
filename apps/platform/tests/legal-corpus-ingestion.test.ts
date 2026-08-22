@@ -1109,6 +1109,75 @@ test("an official page without legal text or a supported representation resolves
   }
 });
 
+test("a signed Lex PDF unavailable result is redriven once after the parser fix", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/uz/docs/-8405608",
+      now,
+      correlationId: "signed-pdf-redrive-test",
+    });
+    const unavailableHtml = archiveBackedHtml("8405608", "uz")
+      .replace(/<a\b[^>]*>[\s\S]*?<\/a>/u, "");
+    const first = await runNextLegalCorpusIngestionJob(env, {
+      now,
+      fetchImpl: fetchFor(unavailableHtml),
+    });
+    assert.equal(first.status, "completed");
+    assert.equal(first.safeErrorCode, "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE");
+
+    const signedHtml = '<!doctype html><html><body><main id="divCont">'
+      + '<div class="lx_elem ACT_TITLE">Подтверждённый акт</div>'
+      + '<script>PDFObject.embed("/pdffile/-8405608", "#pdfBody");</script>'
+      + "</main></body></html>";
+    const pdf = await pdfBytes([
+      "OFFICIAL LEGAL ACT",
+      "Article 1 establishes the rights and duties of the parties under applicable law.",
+      "The authorized court reviews the evidence and records a reasoned decision.",
+      "Each party may submit documents, state objections, and use the appeal procedure.",
+      "The decision must identify the facts, applicable provisions, and procedural result.",
+      "This official text remains linked to the canonical Lex document and its source date.",
+    ]);
+    const second = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000),
+      fetchImpl: async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.endsWith("/robots.txt")) {
+          return new Response("User-agent: *\nAllow: /\n", {
+            headers: { "content-type": "text/plain; charset=utf-8" },
+          });
+        }
+        if (url.endsWith("/pdffile/-8405608")) {
+          return new Response(new Uint8Array(pdf).buffer, {
+            headers: { "content-type": "application/pdf" },
+          });
+        }
+        return new Response(signedHtml, { headers: { "content-type": "text/html; charset=utf-8" } });
+      },
+    });
+    assert.deepEqual(second, {
+      claimed: true,
+      status: "completed",
+      jobId: queued.jobId,
+      safeErrorCode: null,
+    });
+    const job = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,
+      last_error_code AS errorCode FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; errorCode: string | null;
+      };
+    assert.deepEqual({ ...job }, { status: "completed", attemptCount: 2, errorCode: null });
+    const failure = sqlite.prepare(`SELECT retryable,retry_state AS retryState
+      FROM legal_corpus_failures WHERE job_id=?`).get(queued.jobId) as {
+        retryable: number; retryState: string;
+      };
+    assert.deepEqual({ ...failure }, { retryable: 1, retryState: "retrying" });
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a corrupted official Lex ZIP representation resolves as technically unavailable", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();

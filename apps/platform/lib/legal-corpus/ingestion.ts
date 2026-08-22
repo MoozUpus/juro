@@ -92,6 +92,12 @@ const ONE_TIME_BOUNDED_RECOVERY_CODES = [
   "LEGAL_SOURCE_PARSE_TOO_COMPLEX",
   "LEGAL_SOURCE_TOO_LARGE",
 ] as const;
+// The first signed Lex PDF implementation classified a reachable
+// `/pdffile/-<id>` page as unavailable because it stripped the sign before
+// constructing the representation URL. Re-read only that exact legacy shape
+// once after the signed-ID parser is deployed; a second unavailable result is
+// retained as a truthful source condition.
+const SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE = "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE";
 const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
 // A normal scheduled invocation is fenced by a seven-minute distributed lock
 // and its Lex requests have shorter individual timeouts. Keep a wider window
@@ -778,6 +784,35 @@ async function reconcileRecoverableDeadLetter(
   ).run();
 }
 
+async function reconcileRecoverableSignedLexUnavailable(
+  db: D1Database,
+  now: string,
+): Promise<void> {
+  const stranded = await db.prepare(`SELECT id
+      FROM legal_corpus_ingestion_jobs
+      WHERE status='completed' AND attempt_count=1
+        AND last_error_code=?
+        AND (source_url LIKE 'https://lex.uz/docs/-%'
+          OR source_url LIKE 'https://lex.uz/%/docs/-%')
+      ORDER BY updated_at ASC,id ASC LIMIT 1
+    `).bind(SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE).first<{ id: string }>();
+  if (!stranded) return;
+  const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='retrying',next_attempt_at=?,updated_at=?
+      WHERE id=? AND status='completed' AND attempt_count=1
+        AND last_error_code=?
+    `).bind(now, now, stranded.id, SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE).run();
+  if (Number(updated.meta.changes ?? 0) !== 1) return;
+  // Keep the original failure row as evidence. The dashboard projects a
+  // completed job's retrying row as resolved after a successful redrive; if
+  // the second attempt is unavailable, the catch path restores the concrete
+  // technically_unavailable state and the release gate remains blocked.
+  await db.prepare(`UPDATE legal_corpus_failures
+      SET retryable=1,retry_state='retrying'
+      WHERE job_id=? AND error_code=? AND retry_state='technically_unavailable'
+    `).bind(stranded.id, SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE).run();
+}
+
 /**
  * Fetches one official Lex.uz language variant, persists immutable source
  * artifacts in R2, and writes an article-first D1 version. Source HTML is
@@ -1267,6 +1302,7 @@ export async function runNextLegalCorpusIngestionJob(
   const nowDate = input.now ?? new Date();
   const now = nowIso(nowDate);
   await reconcileStaleRunningJob(env.DB, nowDate);
+  await reconcileRecoverableSignedLexUnavailable(env.DB, now);
   await reconcileRecoverableDeadLetter(env.DB, now);
   const retryCandidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
