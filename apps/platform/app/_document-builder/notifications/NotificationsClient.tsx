@@ -38,6 +38,8 @@ function notificationHref(item: NotificationRecord, paths: ReturnType<typeof bui
       return `${base}/billing`;
     case "monitoring":
       return `${base}/monitoring`;
+    case "case_task":
+      return id ? `${base}/cases/${id}/plan` : `${base}/cases`;
     default:
       return null;
   }

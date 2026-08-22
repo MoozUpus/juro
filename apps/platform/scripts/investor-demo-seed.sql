@@ -120,30 +120,62 @@ VALUES
 INSERT OR IGNORE INTO `document_templates`
   (`id`,`key`,`category`,`active`,`created_at`,`updated_at`)
 VALUES
-  ('50000000-0000-4000-8000-000000000001','investor-demo-contract','contracts',1,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+  ('candidate-1301001-v1','1301001','contracts',1,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 
 INSERT OR IGNORE INTO `document_template_locales`
   (`id`,`template_id`,`language`,`name`,`source_object_key`,`created_at`,`updated_at`)
 VALUES
-  ('50000000-0000-4000-8000-000000000011','50000000-0000-4000-8000-000000000001','ru','Synthetic demo · договор',NULL,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  ('50000000-0000-4000-8000-000000000012','50000000-0000-4000-8000-000000000001','uz','Synthetic demo · shartnoma',NULL,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+  ('candidate-1301001-v1-ru','candidate-1301001-v1','ru','Договор купли-продажи товаров между организациями',NULL,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('candidate-1301001-v1-uz','candidate-1301001-v1','uz','Tashkilotlar o‘rtasida tovar oldi-sotdi shartnomasi',NULL,strftime('%Y-%m-%dT%H:%M:%fZ','now'),strftime('%Y-%m-%dT%H:%M:%fZ','now'));
 
 INSERT OR IGNORE INTO `documents`
   (`id`,`workspace_id`,`owner_user_id`,`template_id`,`template_code`,`template_version`,`language`,`participant_mode`,`acting_side`,
    `title`,`category`,`status`,`case_id`,`plan_step_id`,`generated_at`,`revision`,`created_at`,`updated_at`)
 VALUES
   ('51000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001',
-   '50000000-0000-4000-8000-000000000001','investor-demo-contract','1','ru','single','client','Synthetic demo · проект договора','contracts','draft',
+   'candidate-1301001-v1','1301001','0.1.0','ru','configurable',NULL,'Synthetic demo · проект договора','Договоры','Черновик',
    '40000000-0000-4000-8000-000000000001','71000000-0000-4000-8000-000000000002',strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day'),1,strftime('%Y-%m-%dT%H:%M:%fZ','now','-3 days'),strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   ('51000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002',
-   '50000000-0000-4000-8000-000000000001','investor-demo-contract','1','ru','single','lawyer','Synthetic demo · рабочая памятка юриста','contracts','draft',
+   'candidate-1301001-v1','1301001','0.1.0','ru','configurable',NULL,'Synthetic demo · рабочий проект юриста','Договоры','Черновик',
    NULL,NULL,strftime('%Y-%m-%dT%H:%M:%fZ','now','-1 day'),1,strftime('%Y-%m-%dT%H:%M:%fZ','now','-2 days'),strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+
+-- The canonical document route loads configurable drafts only when the
+-- questionnaire answers exist and the template code belongs to the registry.
+INSERT INTO `document_answers` (`document_id`,`answers_json`,`updated_at`)
+VALUES
+  ('51000000-0000-4000-8000-000000000001','{"court.name":"SYNTHETIC DEMO — адресат","applicant.fullName":"Client Demo","applicant.address":"SYNTHETIC DEMO","applicant.phone":"+998 00 000 00 00","otherParty.type":"company","otherParty.companyName":"Synthetic Counterparty LLC","otherParty.tin":"000000000","otherParty.address":"SYNTHETIC DEMO","representative.enabled":"no","case.proceduralStatus":"other","case.background":"Синтетический сценарий проверки проекта договора.","matter.details":"Проверка предмета, сроков, оплаты и порядка приёмки без реальных сторон и обязательств.","matter.hasAmount":"no","claim.request":"Подготовить согласованную безопасную редакцию проекта.","claim.evidence":"SYNTHETIC DEMO — проект без реальных документов.","claim.attachments":"SYNTHETIC DEMO — приложения отсутствуют.","confirmation.accepted":true}',strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('51000000-0000-4000-8000-000000000002','{"court.name":"SYNTHETIC DEMO — адресат","applicant.fullName":"Lawyer Demo","applicant.address":"SYNTHETIC DEMO","applicant.phone":"+998 00 000 00 00","otherParty.type":"company","otherParty.companyName":"Synthetic Counterparty LLC","otherParty.tin":"000000000","otherParty.address":"SYNTHETIC DEMO","representative.enabled":"no","case.proceduralStatus":"other","case.background":"Синтетический рабочий проект юриста.","matter.details":"Проверка структуры договора без реальных сторон и обязательств.","matter.hasAmount":"no","claim.request":"Подготовить вопросы клиенту и согласованную редакцию.","claim.evidence":"SYNTHETIC DEMO — рабочие материалы.","claim.attachments":"SYNTHETIC DEMO — приложения отсутствуют.","confirmation.accepted":true}',strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+ON CONFLICT(`document_id`) DO UPDATE SET
+  `answers_json`=excluded.`answers_json`,
+  `updated_at`=excluded.`updated_at`;
 
 INSERT OR IGNORE INTO `document_current_content`
   (`document_id`,`auto_content`,`final_content`,`manually_edited`,`updated_at`)
 VALUES
-  ('51000000-0000-4000-8000-000000000001','SYNTHETIC DEMO — проект договора без реальных сторон и обязательств.','SYNTHETIC DEMO — проект договора без реальных сторон и обязательств.',0,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
-  ('51000000-0000-4000-8000-000000000002','SYNTHETIC DEMO — рабочая памятка, не юридическое заключение.','SYNTHETIC DEMO — рабочая памятка, не юридическое заключение.',0,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+  ('51000000-0000-4000-8000-000000000001','SYNTHETIC DEMO — ПРОЕКТ ДОГОВОРА'||char(10)||char(10)||'Участники: Client Demo и Synthetic Counterparty LLC.'||char(10)||char(10)||'Предмет: демонстрационная проверка условий поставки без реальных сторон, реквизитов или обязательств.'||char(10)||char(10)||'Следующий шаг: согласовать безопасную редакцию с Lawyer Demo.'||char(10)||char(10)||'Этот проект создан только для investor demo и не является действующим договором.','SYNTHETIC DEMO — ПРОЕКТ ДОГОВОРА'||char(10)||char(10)||'Участники: Client Demo и Synthetic Counterparty LLC.'||char(10)||char(10)||'Предмет: демонстрационная проверка условий поставки без реальных сторон, реквизитов или обязательств.'||char(10)||char(10)||'Следующий шаг: согласовать безопасную редакцию с Lawyer Demo.'||char(10)||char(10)||'Этот проект создан только для investor demo и не является действующим договором.',1,strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  ('51000000-0000-4000-8000-000000000002','SYNTHETIC DEMO — РАБОЧИЙ ПРОЕКТ ЮРИСТА'||char(10)||char(10)||'Контекст: анализ структуры демонстрационного договора Client Demo.'||char(10)||char(10)||'Проверить: предмет, сроки, оплату, приёмку и порядок урегулирования разногласий.'||char(10)||char(10)||'Не отправлять клиенту без явного подтверждения юриста.','SYNTHETIC DEMO — РАБОЧИЙ ПРОЕКТ ЮРИСТА'||char(10)||char(10)||'Контекст: анализ структуры демонстрационного договора Client Demo.'||char(10)||char(10)||'Проверить: предмет, сроки, оплату, приёмку и порядок урегулирования разногласий.'||char(10)||char(10)||'Не отправлять клиенту без явного подтверждения юриста.',1,strftime('%Y-%m-%dT%H:%M:%fZ','now'));
+
+-- Re-applying the seed also upgrades a version-1 dataset that was created
+-- before its document records were made compatible with JURO Builder.
+UPDATE `documents`
+SET `template_id`='candidate-1301001-v1',
+    `template_code`='1301001',
+    `template_version`='0.1.0',
+    `participant_mode`='configurable',
+    `acting_side`=NULL,
+    `category`='Договоры',
+    `status`='Черновик',
+    `title`=CASE `id`
+      WHEN '51000000-0000-4000-8000-000000000002' THEN 'Synthetic demo · рабочий проект юриста'
+      ELSE 'Synthetic demo · проект договора'
+    END,
+    `updated_at`=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+WHERE `id` IN ('51000000-0000-4000-8000-000000000001','51000000-0000-4000-8000-000000000002');
+
+UPDATE `document_current_content`
+SET `manually_edited`=1,
+    `updated_at`=strftime('%Y-%m-%dT%H:%M:%fZ','now')
+WHERE `document_id` IN ('51000000-0000-4000-8000-000000000001','51000000-0000-4000-8000-000000000002');
 
 INSERT OR IGNORE INTO `conversations`
   (`id`,`workspace_id`,`owner_user_id`,`case_id`,`title`,`locale`,`status`,`created_at`,`updated_at`)

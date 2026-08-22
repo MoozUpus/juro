@@ -60,6 +60,7 @@ The corresponding before evidence is in `screenshots/before/`.
 - Professional AI, document preparation, analysis, comparison/redline and
   action-plan workflows using existing authenticated backend data.
 - Lex.uz metadata monitoring with official-source links and task/document actions.
+- Tenant-scoped monitoring-to-task creation with immutable official-source snapshot, exact-case linking, Lawyer/Client rendering and a direct notification handoff.
 - Consultation room/signalling foundation, transparent demo billing, 1% case
   fee semantics, configurable 2%/5% rules, Uzum exclusion and admin fee matrix.
 - Three bounded demo accounts, three synthetic payment records and one
@@ -83,6 +84,12 @@ in commits `49ceed62` and `9dc062fa`.
 The two-participant media portion of the call remains an explicit open QA item;
 camera/microphone access is not inferred from the room/signalling implementation.
 
+The same rehearsal created and stopped a five-second billable timer, ran a
+one-result conflict check, saved a favourite case-linked knowledge note and
+advanced an isolated simulated payment through preview, success and refund.
+Read-only production D1 queries confirmed the timer, immutable conflict event,
+knowledge record and three payment events.
+
 ## 6. Client to lawyer flow
 
 The implemented flow is:
@@ -96,21 +103,27 @@ The implemented flow is:
 7. completion gates the private review and moderation lifecycle.
 
 Backend tests prove tenant scope, consent, grant/revoke, private notes, offer,
-message, phone and review guards. The complete client-side Chrome replay remains
-open until the client session replaces the already-captured lawyer session.
+message, phone and review guards. Production Chrome then replayed the complete
+non-call Client route suite: dashboard, saved clarification-first AI history,
+populated synthetic document and preview, marketplace/profile, accepted request,
+active grant, messages, confirmed consultation, case plan, calendar, billing,
+notifications, profile/settings/security and monitoring. A monitoring task
+notification opened the exact case plan, and a Client attempt to open a Lawyer
+route was denied without exposing professional data. Client responsive widths,
+live AI submission and media-call QA remain open separately.
 
 ## 7. Theme matrix
 
 | Surface | Light | Dark | System |
 | --- | --- | --- | --- |
 | Public | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
-| Client | baseline captured | open visual replay | baseline captured |
+| Client | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
 | Lawyer | verified in production Chrome | verified in production Chrome | verified and restored in production Chrome |
 | Admin | fixed Manrope/light surface deployed | not a supported control in the isolated console | not a supported control in the isolated console |
 
 Shared-theme tests preserve cookie precedence over stale per-domain
-`localStorage`. Remaining public/client visual replay stays explicit in
-`QA_MATRIX.md`.
+`localStorage`. Remaining responsive, zoom, reduced-motion and Admin audit-log
+replay stays explicit in `QA_MATRIX.md`.
 
 ## 8. Browser and device coverage
 
@@ -123,10 +136,26 @@ Edge, Firefox, Safari/WebKit and physical iPhone/iPad/Android are intentionally
 ## 9. Screenshots
 
 The evidence index is `screenshots/README.md`. It includes public home, catalogue,
-profile and responsive evidence; the client baseline; lawyer Light/System and
-Dark, responsive views, live monitoring, AI, billing and profile; plus the admin
-before-state. Fresh-MFA admin after-state is added only after the live session is
-renewed.
+profile and responsive evidence; Client System/Dark, notifications, populated
+synthetic document and monitoring-task source; Lawyer Light/System and Dark,
+responsive views, live monitoring, source-linked task, AI, billing and profile;
+plus the Admin before-state and fresh-MFA overview/billing after-state.
+
+Admin Demo now has an active TOTP factor. The fresh-MFA handoff created the
+separate production Admin session and Chrome verified overview, lawyer profiles,
+review moderation, Legal Corpus and the platform fee matrix. The fee view showed
+the fixed 1% consultation policy, explicit 2%/5% rules, sandbox-only transactions
+and immutable configuration history. Fresh-MFA overview and billing captures are
+included in the evidence index.
+
+That pass also found a previously hidden audit-log failure: production D1
+rejected the seven-term compound query. The fix first shipped in Worker
+`073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker
+`8a77ac8a-ea99-4455-9643-834ca683d67c`, using bounded per-source queries and a
+safe global top-N merge. Focused tests and all seven production D1 source queries
+pass. A final browser replay of this one page is still open because the
+local Chrome client began returning `ERR_BLOCKED_BY_CLIENT` for every platform
+Admin path before requests reached the Worker.
 
 ## 10. Demo script
 
@@ -142,12 +171,12 @@ records during the presentation.
   direct official Lex.uz retrieval/metadata and labels monitoring accordingly.
 - Lawyer call room/TURN/signalling are deployed, but final two-participant
   camera/microphone QA is still open.
-- Client full-route replay, fresh-MFA admin after-state, Chrome zoom,
-  reduced-motion and the end-to-end investor rehearsal remain open.
+- Platform audit-log post-fix browser replay, Client/Admin responsive widths,
+  Chrome zoom, reduced-motion, live AI submission and the end-to-end investor rehearsal remain open.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` after the latest platform deploy is operational with 8/8
   components and no active incidents, generated at
-  `2026-08-22T11:34:32.501Z`.
+  `2026-08-22T14:37:45.993Z`.
 
 Until the open Chrome items are closed, this document is a release-candidate
 report rather than a blanket Definition-of-Done claim.

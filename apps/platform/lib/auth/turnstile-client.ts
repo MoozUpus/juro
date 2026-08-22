@@ -2,6 +2,15 @@ export type TurnstileClientLocale = "ru" | "uz";
 
 export const turnstileClientRetryMode = "never" as const;
 
+// Turnstile does not currently publish an Uzbek widget translation. Passing
+// `uz` makes the provider warn and fall back implicitly, so keep the JURO form
+// localized while asking Turnstile to select a supported browser language.
+export function turnstileClientLanguage(
+  locale: TurnstileClientLocale,
+): "ru" | "auto" {
+  return locale === "ru" ? "ru" : "auto";
+}
+
 const nonRetryableTurnstileCodes = new Set([
   "110100",
   "110110",

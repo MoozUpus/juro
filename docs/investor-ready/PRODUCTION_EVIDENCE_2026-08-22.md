@@ -4,17 +4,17 @@ This is a current-state release record, not a blanket completion claim. Browser 
 
 ## Database and synthetic demo data
 
-- Production D1 migrations `0146` through `0151` were applied sequentially; the production migration list reported no remaining migrations.
-- Pre- and post-migration exports were restored locally. The post-migration restore returned `quickCheck=ok`, zero foreign-key violations, 150 migrations, 278 tables, 598 indexes and 369 triggers.
+- Production D1 migrations `0146` through `0154` were applied sequentially; a fresh production migration list reported no remaining migrations.
+- Pre- and post-migration exports were restored locally. The latest post-migration restore returned `quickCheck=ok` and zero foreign-key violations. The live read-only schema inventory reports 153 migrations, 280 tables, 601 non-system indexes and 371 triggers, ending at `0154_monitoring_task_sources.sql`.
 - Private R2 upload/readback SHA-256 checks matched for both exports. Verified local plaintext SQL/SQLite/readback copies were then removed.
-- Bounded production checks returned exactly three active demo-account registry rows, three synthetic payment rows and one consent-published demo lawyer.
+- Bounded production checks returned exactly three active demo-account registry rows and one consent-published demo lawyer. A later Chrome rehearsal created one additional, explicitly simulated payment run; it is recorded below rather than represented as a real transaction.
 
 ## Realtime and deployment
 
 - Cloudflare Realtime was activated and a TURN application named `juro-production-webrtc` was created.
 - `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` were transmitted directly to Worker `juro` as secrets. Values were not printed, written to disk or committed.
-- Platform Worker production version: `e16811d5-4aef-406d-8977-0e62710f2e35`.
-- Isolated admin Worker production version: `3cf862e1-a501-40e0-b122-2ff48fea224e`.
+- Platform Worker production version: `8a77ac8a-ea99-4455-9643-834ca683d67c`.
+- Isolated admin Worker production version: `d7d732b5-acaa-4b82-b5c4-6c729a1ba511`.
 - Public routing Worker production version: `b87fb3e5-65f3-45ea-9d73-c4ff31d57116`.
 - Sites version 72 is live. It contains the canonical unlocalized lawyer catalogue and profile redirects.
 
@@ -42,7 +42,9 @@ At `2026-08-22T10:42:32.147Z`, `/api/status` returned `overallStatus=operational
 
 A later read at `2026-08-22T11:01:37.131Z` again returned `overallStatus=operational`, all eight components operational and no incidents. The public sitemap smoke followed all 78 canonical URLs without a 4xx/5xx response.
 
-After the final monitoring-layout deployment, a read at `2026-08-22T11:34:32.501Z` remained `overallStatus=operational`, with all eight components operational and no active incidents.
+After the monitoring-task, lawyer-layout, Turnstile-locale and audit-query deployments, a fresh read at `2026-08-22T14:14:22.408Z` remained `overallStatus=operational`, with all eight components operational and no active incidents.
+
+After the final official-URL hardening and Admin localization deployment, a fresh read at `2026-08-22T14:37:45.993Z` again returned `overallStatus=operational`, all eight components operational and zero active incidents.
 
 ## Authenticated Chrome evidence
 
@@ -53,16 +55,23 @@ After the final monitoring-layout deployment, a read at `2026-08-22T11:34:32.501
 - Lawyer Light, Dark and System modes switched visibly and returned the matching `aria-pressed` state. System was restored after the check.
 - Chrome responsive evidence passed at 360, 390, 768, 1366 and 1440 pixels for representative lawyer dashboard, monitoring, AI, billing and profile surfaces.
 - The live Lex.uz feed exposed a two-level intrinsic grid-width defect. Commits `49ceed62` and `9dc062fa` constrained the feed and cards; the post-deploy desktop measurement changed from 3013 pixels of document width to 1521/1536, while the 390-pixel viewport measured 375/390 with no overflow.
-- The isolated admin console had passed authenticated desktop route smoke for overview, lawyers, reviews and legal corpus. Chrome then exposed Inter typography and a 390-pixel lawyer-table overflow. Admin Worker `3cf862e1-a501-40e0-b122-2ff48fea224e` self-hosts Manrope and contains tables; public `/health` and the immutable WOFF2 response are verified. A fresh-MFA after-state browser capture remains open.
+- The deployed monitoring action created a real tenant-scoped task from one live Lex.uz metadata event, retained the exact official source and exact case, and produced a client notification linking to that task. Both Client and Lawyer production Chrome views rendered the source safely.
+- The Client production route replay covered dashboard, saved clarification-first AI history, populated synthetic document/preview, lawyer marketplace/profile, accepted request, active access grant, messages, confirmed consultation, case plan, calendar, billing/demo payments, notifications, profile, settings, security and monitoring. The desktop pages used Manrope, showed no page overflow, and the client was denied a foreign lawyer route without data exposure. Light, Dark and System theme controls passed and System was restored.
+- The Lawyer rehearsal started and stopped a five-second billable timer, ran a one-result conflict check with the human-review warning, created a case-linked favourite knowledge note, and executed an isolated demo payment through `previewed → succeeded → refunded`. Read-only production D1 checks confirmed all four records; the payment remained `provider=demo`, `is_simulation=1`.
+- A fresh UZ Lawyer login after Worker `fb5607d6-679b-46b6-92c0-e92c612dd240` produced an empty console log. The client now maps RU to Turnstile `ru` and UZ to `auto`, avoiding the unsupported-language fallback warning without weakening server verification.
+- Admin Demo enrolled a new TOTP factor. The first diagnostic enrollment was replaced and is `disabled`; the second is `active`, with no failed verification attempts. A fresh-MFA handoff then created a separate, 15-minute host-only production Admin session.
+- The fresh Admin session verified `admin.juro.uz` overview, lawyer profiles, review moderation and Legal Corpus in Chrome with Manrope and no desktop overflow. D1 append-only evidence records the issued/consumed handoff and each route view. The fresh-MFA fee matrix also loaded 1%, active 2%/5% rules, sandbox-only transactions and immutable configuration history with 1521/1521 layout width.
+- Chrome found a production audit-log P1: D1 rejected the previous seven-term compound SELECT. The fix first shipped in Worker `073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker `8a77ac8a-ea99-4455-9643-834ca683d67c`: bounded allowlisted per-source queries plus a safe top-N merge. Focused tests and all seven production D1 source queries succeeded read-only. The post-deploy visual API replay remains open because the local Chrome client subsequently blocked all `app.juro.uz/ru/admin/*` navigation with `ERR_BLOCKED_BY_CLIENT` before a request reached the Worker.
 
 ## Validation
 
 - Website: build and 41/41 tests passed; type-check and lint passed.
-- Platform: production build/artifact and performance budgets passed; full test command, type-check and lint passed.
+- Platform: production build/artifact and performance budgets passed; rendered HTML 32/32, core 1061/1061, Cloudflare 201/201, the final focused set 28/28, type-check and lint passed.
+- Isolated Admin: type-check and production dry-run passed; the current Worker localizes the remaining overview KPI label.
 - Draft PR: [#64](https://github.com/MoozUpus/juro/pull/64).
 
 ## Remaining release evidence
 
-- Establish a sequential client session and renew the short-lived admin MFA session for the remaining authenticated route suite.
-- Complete client/admin responsive and theme checks, Chrome zoom, reduced-motion, call preflight/two-participant media and scripted investor rehearsal checks.
+- Re-run the deployed platform audit-log API in Chrome after clearing the local `ERR_BLOCKED_BY_CLIENT` condition; do not infer this browser pass from unit/D1 evidence.
+- Complete client/admin responsive widths, Chrome zoom, reduced-motion, call preflight/two-participant media and the final scripted investor rehearsal.
 - Edge, Firefox, Safari/WebKit and physical iPhone/iPad/Android remain intentionally `NOT TESTED` by explicit user instruction.

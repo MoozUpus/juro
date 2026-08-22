@@ -19,7 +19,14 @@ recorded in `../QA_MATRIX.md`.
   `after/public-lawyer-profile-1536.png` and
   `after/public-lawyer-profile-768.png` — production catalogue and public demo
   profile at desktop/mobile/tablet widths.
-- `after/client-dashboard-1536.png` — authenticated client dashboard baseline.
+- `after/client-dashboard-1536.png` and
+  `after/client-dashboard-dark-1536.png` — authenticated Client dashboard in
+  restored System and explicit Dark states.
+- `after/client-synthetic-document-1536.png` — populated, clearly synthetic
+  Client document and builder preview.
+- `after/client-notifications-1536.png` and
+  `after/client-monitoring-task-source.png` — exact monitoring-task notification,
+  case-plan handoff and immutable official Lex.uz source rendering.
 - `after/lawyer-dashboard-1536.png` and
   `after/lawyer-dashboard-dark-1536.png` — authenticated lawyer dashboard in
   System/Light-derived and explicit Dark states.
@@ -27,9 +34,18 @@ recorded in `../QA_MATRIX.md`.
   hydrated mobile-width dashboard evidence.
 - `after/lawyer-monitoring-1536.png` and `after/lawyer-monitoring-390.png` — live
   Lex.uz metadata feed after the intrinsic-grid overflow fix.
+- `after/lawyer-monitoring-task-source-full.png` — initial full-page functional
+  proof of the source-linked task before the task-card polish.
+- `after/lawyer-monitoring-task-source-polished.png` and
+  `after/lawyer-monitoring-task-source-polished-card.png` — deployed polished
+  desktop task layout and focused official-source card.
 - `after/lawyer-ai-chat-768.png` — professional AI at tablet width.
 - `after/lawyer-billing-1366.png` — trial/billing surface at laptop width.
 - `after/lawyer-profile-1440.png` — professional profile at desktop width.
+- `after/admin-overview-fresh-mfa-1536.png` — isolated production Admin overview
+  after TOTP enrollment and fresh-MFA handoff.
+- `after/admin-billing-fresh-mfa-1536.png` — fresh-MFA fee matrix with the fixed
+  1% policy and explicit 2%/5% configuration controls.
 
-Fresh-MFA admin after-state and the remaining client flow screenshots are added
-only after those sessions are exercised; their absence is not treated as a pass.
+Responsive Client/Admin evidence, the platform audit-log post-fix replay and call
+media are added only after those checks run; their absence is not treated as a pass.

@@ -13,6 +13,7 @@ import {
   ExternalLink,
   FileSearch,
   Gavel,
+  ListPlus,
   LoaderCircle,
   Mail,
   RefreshCw,
@@ -21,6 +22,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   UserRound,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
@@ -105,6 +107,13 @@ type LegislationUpdate = {
   sourceLastCheckedAt: string | null;
   sourceStatus: string;
 };
+type MonitoringTaskCase = {
+  id: string;
+  title: string;
+  clientName: string | null;
+  requestId: string | null;
+  accessKind: "workspace" | "lawyer_grant";
+};
 
 const copy = {
   ru: {
@@ -163,6 +172,18 @@ const copy = {
     official: "Официальный источник",
     checkDocuments: "Проверить мои документы",
     createTask: "Создать задачу",
+    taskCase: "Дело",
+    taskTitle: "Название задачи",
+    taskDue: "Срок (необязательно)",
+    taskHint: "Задача получит неизменяемую ссылку на эту запись мониторинга и официальный Lex.uz URL.",
+    noTaskCase: "Сначала создайте дело или получите действующий доступ клиента.",
+    cancelTask: "Отмена",
+    creatingTask: "Создаём…",
+    taskCreated: "Задача создана и связана с источником.",
+    taskExists: "Такая задача для этого дела уже существует.",
+    openTask: "Открыть задачи дела",
+    createCase: "Создать дело",
+    openRequests: "Открыть заявки и доступы",
     lawyer: "Передать юристу",
     retry: "Повторить",
   },
@@ -222,6 +243,18 @@ const copy = {
     official: "Rasmiy manba",
     checkDocuments: "Hujjatlarimni tekshirish",
     createTask: "Vazifa yaratish",
+    taskCase: "Ish",
+    taskTitle: "Vazifa nomi",
+    taskDue: "Muddat (ixtiyoriy)",
+    taskHint: "Vazifa ushbu monitoring yozuvi va rasmiy Lex.uz URL bilan o‘zgarmas bog‘lanadi.",
+    noTaskCase: "Avval ish yarating yoki mijozning amaldagi ruxsatini oling.",
+    cancelTask: "Bekor qilish",
+    creatingTask: "Yaratilmoqda…",
+    taskCreated: "Vazifa yaratildi va manbaga bog‘landi.",
+    taskExists: "Ushbu ish uchun bunday vazifa allaqachon mavjud.",
+    openTask: "Ish vazifalarini ochish",
+    createCase: "Ish yaratish",
+    openRequests: "So‘rov va ruxsatlarni ochish",
     lawyer: "Yuristga yuborish",
     retry: "Qayta urinish",
   },
@@ -273,6 +306,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
   });
   const [status, setStatus] = useState<MonitoringStatus>(defaultStatus);
   const [updates, setUpdates] = useState<LegislationUpdate[]>([]);
+  const [taskCases, setTaskCases] = useState<MonitoringTaskCase[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -285,6 +319,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
       const body = await response.json() as {
         preference?: Preference | null;
         updates?: LegislationUpdate[];
+        taskCases?: MonitoringTaskCase[];
         status?: MonitoringStatus;
         error?: string;
       };
@@ -296,6 +331,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         });
       }
       setUpdates(body.updates ?? []);
+      setTaskCases(body.taskCases ?? []);
       setStatus(body.status ?? defaultStatus);
     } catch (value) {
       setError(value instanceof Error ? value.message : String(value));
@@ -422,7 +458,7 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
         <section className="monitoring-feed">
           <div className="monitoring-section-heading"><Gavel /><div><h2>{t.feed}</h2><p>{t.coverage}</p></div></div>
           {loading ? <div className="monitoring-loading"><LoaderCircle className="spin" /><span>{locale === "ru" ? "Проверяем сохранённые записи…" : "Saqlangan yozuvlar tekshirilmoqda…"}</span></div>
-            : updates.length ? <div className="monitoring-updates">{updates.map(update => <UpdateCard key={update.id} update={update} locale={locale} />)}</div>
+            : updates.length ? <div className="monitoring-updates">{updates.map(update => <UpdateCard key={update.id} update={update} locale={locale} cases={taskCases} accountType={accountType} />)}</div>
               : <div className="monitoring-empty"><Scale /><h3>{t.empty}</h3><p>{t.emptyHint}</p></div>}
         </section>
       </div>
@@ -430,9 +466,61 @@ export function MonitoringClient({ locale, accountType }: { locale: PlatformLoca
   );
 }
 
-function UpdateCard({ update, locale }: { update: LegislationUpdate; locale: PlatformLocale }) {
+function UpdateCard({ update, locale, cases, accountType }: { update: LegislationUpdate; locale: PlatformLocale; cases: MonitoringTaskCase[]; accountType: AccountType }) {
   const t = copy[locale];
   const base = usePlatformBasePath();
+  const [taskOpen, setTaskOpen] = useState(false);
+  const [selectedCaseId, setSelectedCaseId] = useState(cases[0]?.id ?? "");
+  const [taskTitle, setTaskTitle] = useState(defaultTaskTitle(update, locale));
+  const [dueDate, setDueDate] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskError, setTaskError] = useState("");
+  const [taskResult, setTaskResult] = useState<{ href: string; created: boolean } | null>(null);
+
+  function openTaskForm() {
+    setSelectedCaseId(current => current || cases[0]?.id || "");
+    setTaskTitle(defaultTaskTitle(update, locale));
+    setTaskError("");
+    setTaskResult(null);
+    setTaskOpen(true);
+  }
+
+  async function createTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const selectedCase = cases.find(item => item.id === selectedCaseId);
+    if (!selectedCase) {
+      setTaskError(t.noTaskCase);
+      return;
+    }
+    setTaskSaving(true);
+    setTaskError("");
+    setTaskResult(null);
+    try {
+      const response = await fetch("/api/platform/monitoring/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({
+          updateId: update.id,
+          caseId: selectedCase.id,
+          requestId: selectedCase.requestId,
+          title: taskTitle,
+          dueDate: dueDate || null,
+          locale,
+        }),
+      });
+      const body = await response.json() as { created?: boolean; error?: string };
+      if (!response.ok) throw new Error(body.error || (locale === "ru" ? "Задача не создана." : "Vazifa yaratilmadi."));
+      const href = selectedCase.accessKind === "lawyer_grant"
+        ? `${base}/consultations?view=tasks&caseId=${encodeURIComponent(selectedCase.id)}`
+        : `${base}/cases/${encodeURIComponent(selectedCase.id)}/plan`;
+      setTaskResult({ href, created: Boolean(body.created) });
+    } catch (value) {
+      setTaskError(value instanceof Error ? value.message : String(value));
+    } finally {
+      setTaskSaving(false);
+    }
+  }
+
   return <article className="monitoring-update">
     <div className="monitoring-update-meta">
       {update.topics.map(topic => <span key={topic}>{topicLabels[topic as Topic]?.[locale] ?? topic}</span>)}
@@ -450,10 +538,26 @@ function UpdateCard({ update, locale }: { update: LegislationUpdate; locale: Pla
     <a className="monitoring-source" href={update.officialUrl} target="_blank" rel="noopener noreferrer"><ExternalLink /><span><strong>{t.official}</strong><small>{update.sourceTitle}{update.sourceIdentifier ? ` · ${update.sourceIdentifier}` : ""}</small></span></a>
     <div className="monitoring-update-actions">
       <Link href={`${base}/document-review`}><FileSearch />{t.checkDocuments}</Link>
-      <Link href={`${base}/action-plan`}>{t.createTask}</Link>
+      <button type="button" onClick={openTaskForm}><ListPlus />{t.createTask}</button>
       <Link href={`${base}/consultations`}>{t.lawyer}</Link>
     </div>
+    {taskOpen && <form className="monitoring-task-form" onSubmit={createTask}>
+      <header><div><strong>{t.createTask}</strong><small>{t.taskHint}</small></div><button type="button" aria-label={t.cancelTask} onClick={() => setTaskOpen(false)}><X /></button></header>
+      {cases.length ? <>
+        <label>{t.taskCase}<select value={selectedCaseId} onChange={event => setSelectedCaseId(event.target.value)}>{cases.map(item => <option value={item.id} key={`${item.accessKind}-${item.id}`}>{item.clientName ? `${item.clientName} · ` : ""}{item.title}</option>)}</select></label>
+        <label>{t.taskTitle}<input required minLength={2} maxLength={240} value={taskTitle} onChange={event => setTaskTitle(event.target.value)} /></label>
+        <label>{t.taskDue}<input type="date" value={dueDate} onChange={event => setDueDate(event.target.value)} /></label>
+        {taskError && <p className="monitoring-task-error" role="alert">{taskError}</p>}
+        {taskResult && <p className="monitoring-task-result" role="status"><CheckCircle2 />{taskResult.created ? t.taskCreated : t.taskExists}<Link href={taskResult.href}>{t.openTask}</Link></p>}
+        <footer><button type="button" onClick={() => setTaskOpen(false)}>{t.cancelTask}</button><button type="submit" disabled={taskSaving || taskTitle.trim().length < 2}>{taskSaving ? <LoaderCircle className="spin" /> : <ListPlus />}{taskSaving ? t.creatingTask : t.createTask}</button></footer>
+      </> : <div className="monitoring-task-empty"><p>{t.noTaskCase}</p><Link href={accountType === "lawyer" ? `${base}/consultations?view=requests` : `${base}/cases/new`}>{accountType === "lawyer" ? t.openRequests : t.createCase}</Link></div>}
+    </form>}
   </article>;
+}
+
+function defaultTaskTitle(update: LegislationUpdate, locale: PlatformLocale) {
+  const source = update.sourceIdentifier || update.sourceTitle || update.title;
+  return `${locale === "ru" ? "Проверить влияние" : "Ta’sirini tekshirish"}: ${source}`.slice(0, 240);
 }
 
 function formatDate(value: string, locale: PlatformLocale, withTime = false) {

@@ -447,6 +447,8 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(adminWorker, /fontAsset\(url\.pathname\)/u);
   assert.match(adminWorker, /<div class="scroll"><table>/u);
   assert.match(adminWorker, /\.panel\{min-width:0;overflow:hidden/u);
+  assert.match(adminWorker, /События аудита/u);
+  assert.doesNotMatch(adminWorker, />Audit events</u);
   assert.doesNotMatch(adminWorker, /font-family:Inter/iu);
   assert.match(internal, /lawyer\.profiles\.block/u);
   assert.match(internal, /lawyer\.reviews\.moderate/u);

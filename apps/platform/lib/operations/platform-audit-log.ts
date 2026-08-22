@@ -147,71 +147,127 @@ export async function verifyPlatformAuditAccessHistory(
   return { valid: true, checked: events.length };
 }
 
-function auditUnionSql(filters: PlatformAuditFilters): { sql: string; bindings: Array<string | number> } {
+type AuditSourceQuery = {
+  source: PlatformAuditSource;
+  selectSql: string;
+  actionSql: string;
+  actorSql: string;
+  scopeSql: string;
+  severitySql: string;
+};
+
+const auditSourceQueries: AuditSourceQuery[] = [
+  {
+    source: "security",
+    selectSql: `SELECT id,'security' AS source,NULL AS actorUserId,user_id AS scopeId,
+      'user_security' AS entityType,user_id AS entityId,event_type AS action,
+      CASE WHEN severity IN ('info','warning','critical') THEN severity ELSE 'warning' END AS severity,
+      created_at AS createdAt FROM security_events`,
+    actionSql: "event_type",
+    actorSql: "NULL",
+    scopeSql: "user_id",
+    severitySql: "CASE WHEN severity IN ('info','warning','critical') THEN severity ELSE 'warning' END",
+  },
+  {
+    source: "staff_role",
+    selectSql: `SELECT id,'staff_role' AS source,actor_user_id AS actorUserId,subject_user_id AS scopeId,
+      'staff_assignment' AS entityType,subject_assignment_id AS entityId,event_type AS action,
+      'warning' AS severity,created_at AS createdAt FROM platform_staff_role_events`,
+    actionSql: "event_type",
+    actorSql: "actor_user_id",
+    scopeSql: "subject_user_id",
+    severitySql: "'warning'",
+  },
+  {
+    source: "workspace",
+    selectSql: `SELECT id,'workspace' AS source,actor_user_id AS actorUserId,workspace_id AS scopeId,
+      entity_type AS entityType,entity_id AS entityId,action,'info' AS severity,
+      created_at AS createdAt FROM workspace_audit_events`,
+    actionSql: "action",
+    actorSql: "actor_user_id",
+    scopeSql: "workspace_id",
+    severitySql: "'info'",
+  },
+  {
+    source: "operations",
+    selectSql: `SELECT id,'operations' AS source,actor_user_id AS actorUserId,environment AS scopeId,
+      'provider_circuit' AS entityType,provider AS entityId,'provider_circuit.'||transition AS action,
+      CASE WHEN transition='opened' THEN 'critical' ELSE 'info' END AS severity,
+      created_at AS createdAt FROM ai_cost_control_events`,
+    actionSql: "'provider_circuit.'||transition",
+    actorSql: "actor_user_id",
+    scopeSql: "environment",
+    severitySql: "CASE WHEN transition='opened' THEN 'critical' ELSE 'info' END",
+  },
+  {
+    source: "operations",
+    selectSql: `SELECT id,'operations' AS source,created_by_user_id AS actorUserId,incident_id AS scopeId,
+      'system_status' AS entityType,incident_id AS entityId,'system_status.'||state AS action,
+      CASE WHEN state='resolved' THEN 'info' ELSE 'warning' END AS severity,
+      created_at AS createdAt FROM system_status_updates`,
+    actionSql: "'system_status.'||state",
+    actorSql: "created_by_user_id",
+    scopeSql: "incident_id",
+    severitySql: "CASE WHEN state='resolved' THEN 'info' ELSE 'warning' END",
+  },
+  {
+    source: "operations",
+    selectSql: `SELECT id,'operations' AS source,actor_user_id AS actorUserId,environment AS scopeId,
+      'feature_flag' AS entityType,feature_key AS entityId,
+      CASE WHEN enabled=1 THEN 'feature.enabled' ELSE 'feature.disabled' END AS action,
+      CASE WHEN enabled=1 THEN 'info' ELSE 'warning' END AS severity,
+      created_at AS createdAt FROM operational_feature_flag_versions`,
+    actionSql: "CASE WHEN enabled=1 THEN 'feature.enabled' ELSE 'feature.disabled' END",
+    actorSql: "actor_user_id",
+    scopeSql: "environment",
+    severitySql: "CASE WHEN enabled=1 THEN 'info' ELSE 'warning' END",
+  },
+  {
+    source: "operations",
+    selectSql: `SELECT id,'operations' AS source,actor_user_id AS actorUserId,environment AS scopeId,
+      'job_redrive' AS entityType,source_job_id AS entityId,'job.redrive' AS action,
+      'warning' AS severity,created_at AS createdAt FROM operational_job_redrive_events`,
+    actionSql: "'job.redrive'",
+    actorSql: "actor_user_id",
+    scopeSql: "environment",
+    severitySql: "'warning'",
+  },
+];
+
+function auditSourceStatement(
+  db: D1Database,
+  query: AuditSourceQuery,
+  filters: PlatformAuditFilters,
+): D1PreparedStatement {
   const where: string[] = [];
   const bindings: Array<string | number> = [];
-  if (filters.source) { where.push("source=?"); bindings.push(filters.source); }
-  if (filters.severity) { where.push("severity=?"); bindings.push(filters.severity); }
-  if (filters.action) { where.push("action LIKE ?"); bindings.push(`%${filters.action}%`); }
-  if (filters.actorUserId) { where.push("actorUserId=?"); bindings.push(filters.actorUserId); }
-  if (filters.scopeId) { where.push("scopeId=?"); bindings.push(filters.scopeId); }
-  if (filters.from) { where.push("createdAt>=?"); bindings.push(filters.from); }
-  if (filters.to) { where.push("createdAt<=?"); bindings.push(filters.to); }
+  if (filters.severity) { where.push(`${query.severitySql}=?`); bindings.push(filters.severity); }
+  if (filters.action) { where.push(`${query.actionSql} LIKE ?`); bindings.push(`%${filters.action}%`); }
+  if (filters.actorUserId) { where.push(`${query.actorSql}=?`); bindings.push(filters.actorUserId); }
+  if (filters.scopeId) { where.push(`${query.scopeSql}=?`); bindings.push(filters.scopeId); }
+  if (filters.from) { where.push("created_at>=?"); bindings.push(filters.from); }
+  if (filters.to) { where.push("created_at<=?"); bindings.push(filters.to); }
   bindings.push(filters.limit);
-  return {
-    sql: `SELECT id,source,actorUserId,scopeId,entityType,entityId,action,severity,createdAt
-      FROM (
-        SELECT id,'security' AS source,NULL AS actorUserId,user_id AS scopeId,
-          'user_security' AS entityType,user_id AS entityId,event_type AS action,
-          CASE WHEN severity IN ('info','warning','critical') THEN severity ELSE 'warning' END AS severity,
-          created_at AS createdAt
-        FROM security_events
-        UNION ALL
-        SELECT id,'staff_role' AS source,actor_user_id AS actorUserId,subject_user_id AS scopeId,
-          'staff_assignment' AS entityType,subject_assignment_id AS entityId,event_type AS action,
-          'warning' AS severity,created_at AS createdAt
-        FROM platform_staff_role_events
-        UNION ALL
-        SELECT id,'workspace' AS source,actor_user_id AS actorUserId,workspace_id AS scopeId,
-          entity_type AS entityType,entity_id AS entityId,action,'info' AS severity,
-          created_at AS createdAt
-        FROM workspace_audit_events
-        UNION ALL
-        SELECT id,'operations' AS source,actor_user_id AS actorUserId,environment AS scopeId,
-          'provider_circuit' AS entityType,provider AS entityId,
-          'provider_circuit.'||transition AS action,
-          CASE WHEN transition='opened' THEN 'critical' ELSE 'info' END AS severity,
-          created_at AS createdAt
-        FROM ai_cost_control_events
-        UNION ALL
-        SELECT id,'operations' AS source,created_by_user_id AS actorUserId,incident_id AS scopeId,
-          'system_status' AS entityType,incident_id AS entityId,'system_status.'||state AS action,
-          CASE WHEN state='resolved' THEN 'info' ELSE 'warning' END AS severity,
-          created_at AS createdAt
-        FROM system_status_updates
-        UNION ALL
-        SELECT id,'operations' AS source,actor_user_id AS actorUserId,environment AS scopeId,
-          'feature_flag' AS entityType,feature_key AS entityId,
-          CASE WHEN enabled=1 THEN 'feature.enabled' ELSE 'feature.disabled' END AS action,
-          CASE WHEN enabled=1 THEN 'info' ELSE 'warning' END AS severity,
-          created_at AS createdAt
-        FROM operational_feature_flag_versions
-        UNION ALL
-        SELECT id,'operations' AS source,actor_user_id AS actorUserId,environment AS scopeId,
-          'job_redrive' AS entityType,source_job_id AS entityId,'job.redrive' AS action,
-          'warning' AS severity,created_at AS createdAt
-        FROM operational_job_redrive_events
-      ) AS audit
-      ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-      ORDER BY createdAt DESC,id DESC LIMIT ?`,
-    bindings,
-  };
+  return db.prepare(`${query.selectSql}
+    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+    ORDER BY createdAt DESC,id DESC LIMIT ?`).bind(...bindings);
 }
 
 async function safeAuditRows(db: D1Database, filters: PlatformAuditFilters): Promise<PlatformAuditRow[]> {
-  const query = auditUnionSql(filters);
-  const result = await db.prepare(query.sql).bind(...query.bindings).all<PlatformAuditRow>();
-  return result.results;
+  // Production D1 rejects the previous seven-term compound SELECT. Querying
+  // each allowlisted source independently also bounds every table read before
+  // the global merge while preserving the exact top-N result.
+  const sources = filters.source
+    ? auditSourceQueries.filter((query) => query.source === filters.source)
+    : auditSourceQueries;
+  const results = await db.batch(
+    sources.map((query) => auditSourceStatement(db, query, filters)),
+  );
+  return results
+    .flatMap((result) => result.results as PlatformAuditRow[])
+    .sort((left, right) => right.createdAt.localeCompare(left.createdAt)
+      || right.id.localeCompare(left.id))
+    .slice(0, filters.limit);
 }
 
 async function appendAccessEvent(input: {

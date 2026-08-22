@@ -93,7 +93,7 @@ export const GET = withApiErrors(async function GET() {
        ORDER BY d.updated_at DESC LIMIT 100`,
     ).bind(profile.id, user.id, now).all(),
     db.prepare(
-      `SELECT DISTINCT t.id,t.title,t.description,t.status,t.due_at AS dueAt,t.case_id AS caseId,
+      `SELECT DISTINCT t.id,t.title,t.description,t.legal_basis AS legalBasis,t.status,t.due_at AS dueAt,t.case_id AS caseId,
         t.updated_at AS updatedAt,r.id AS requestId,
         CASE WHEN t.owner_user_id=? AND t.plan_step_id IS NULL THEN 1 ELSE 0 END AS isEditable
        FROM tasks t JOIN lawyer_access_grants g ON g.case_id=t.case_id

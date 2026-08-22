@@ -1065,6 +1065,27 @@
       "when": 1787374800000,
       "tag": "0151_lawyer_professional_tools",
       "breakpoints": true
+    },
+    {
+      "idx": 152,
+      "version": "7",
+      "when": 1787378400000,
+      "tag": "0152_investor_demo_builder_documents",
+      "breakpoints": true
+    },
+    {
+      "idx": 153,
+      "version": "7",
+      "when": 1787382000000,
+      "tag": "0153_investor_demo_document_content",
+      "breakpoints": true
+    },
+    {
+      "idx": 154,
+      "version": "7",
+      "when": 1787385600000,
+      "tag": "0154_monitoring_task_sources",
+      "breakpoints": true
     }
   ]
 }

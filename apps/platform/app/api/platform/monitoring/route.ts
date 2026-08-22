@@ -4,6 +4,7 @@ import { requireD1, runtimeEnv } from "../../../../lib/document-builder/storage/
 import {
   summarizeLexMetadataMonitoringFreshness,
 } from "../../../../lib/legal/monitoring-freshness";
+import { listMonitoringTaskCases } from "../../../../lib/platform/monitoring-tasks";
 import { workspaceForUser } from "../../../../lib/platform/workspace";
 
 const topics = new Set([
@@ -88,6 +89,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
       };
     });
   const now = new Date();
+  const taskCases = await listMonitoringTaskCases(db, user.id, workspace.id, now.toISOString());
   const freshness = summarizeLexMetadataMonitoringFreshness(sourceStatusRows, now);
   const env = runtimeEnv();
   const latestRunRow = latestRun.results[0] as Record<string, unknown> | undefined;
@@ -105,6 +107,7 @@ export const GET = withApiErrors(async function GET(request: Request) {
   } : null;
   return response({
     preference: parsedPreference,
+    taskCases,
     updates: updates.results
       .map((raw) => {
         const item = raw as Record<string, unknown>;
