@@ -23,6 +23,8 @@ const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-ta
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
+const lawyerCard = fs.readFileSync("app/[locale]/lawyers/LawyerCard.tsx", "utf8");
+const lawyerProfile = fs.readFileSync("app/[locale]/lawyers/[profileId]/page.tsx", "utf8");
 const worker = fs.readFileSync("worker/index.ts", "utf8");
 const productionDeploy = fs.readFileSync("scripts/deploy-production.mjs", "utf8");
 
@@ -288,4 +290,10 @@ test("English marketplace presentation localizes published taxonomy and tolerate
   assert.match(lawyerCatalog, /Unknown future values intentionally fall back/);
   assert.match(lawyerAvatar, /onError=\{\(\) => setFailed\(true\)\}/);
   assert.match(lawyerAvatar, /if \(!src \|\| failed\)/);
+});
+
+test("auto-published lawyer profiles do not imply a JURO verification that did not occur", () => {
+  assert.match(lawyerCard, /newProfile: "New profile"/);
+  assert.match(lawyerProfile, /newProfile: "НОВЫЙ ПРОФИЛЬ"/);
+  assert.doesNotMatch(lawyerCard + lawyerProfile, /Approved by JURO|Одобрен JURO|ОДОБРЕН JURO|JURO tasdiqlagan|JURO TASDIQLAGAN/);
 });

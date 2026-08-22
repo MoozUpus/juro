@@ -22,6 +22,12 @@ recorded in `../QA_MATRIX.md`.
 - `after/client-dashboard-1536.png` and
   `after/client-dashboard-dark-1536.png` — authenticated Client dashboard in
   restored System and explicit Dark states.
+- `after/client-dashboard-360.png`, `after/client-dashboard-768.png` and
+  `after/client-dashboard-1440.png` — authenticated Client dashboard at the
+  representative responsive widths, captured after the mobile drawer
+  transition completed.
+- `after/client-ai-grounded-live-1536.png` — live production AI answer grounded
+  in Labour Code article 217 with the direct official Lex.uz source.
 - `after/client-synthetic-document-1536.png` — populated, clearly synthetic
   Client document and builder preview.
 - `after/client-notifications-1536.png` and
@@ -51,5 +57,5 @@ recorded in `../QA_MATRIX.md`.
 - `after/admin-billing-fresh-mfa-1536.png` — fresh-MFA fee matrix with the fixed
   1% policy and explicit 2%/5% configuration controls.
 
-Responsive Client/Admin evidence and the platform audit-log post-fix replay are
-added only after those checks run; their absence is not treated as a pass.
+Responsive Admin evidence and the platform audit-log post-fix replay are added
+only after a new fresh-MFA session; their absence is not treated as a pass.

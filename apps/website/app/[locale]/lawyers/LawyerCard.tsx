@@ -8,7 +8,7 @@ import styles from "./lawyers.module.css";
 export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: PublicLanguage }) {
   const ru = locale === "ru";
   const en = locale === "en";
-  const t = en ? { independent: "Independent professional", pending: "Profile is under JURO review", approved: "Approved by JURO", advocate: "Advocate status verified", city: "City", experience: "Experience", languages: "Languages", price: "Price", noRating: "A rating appears after 3 approved reviews", profile: "Profile", appointment: "Requests after review", request: "Request a consultation", years: "years" } : ru ? { independent: "Независимый специалист", pending: "Профиль проверяется JURO", approved: "Одобрен JURO", advocate: "Статус адвоката подтверждён", city: "Город", experience: "Опыт", languages: "Языки", price: "Стоимость", noRating: "Рейтинг появится после 3 одобренных отзывов", profile: "Профиль", appointment: "Запись после проверки", request: "Оставить заявку", years: "лет" } : { independent: "Mustaqil mutaxassis", pending: "Profil JURO tomonidan tekshirilmoqda", approved: "JURO tasdiqlagan", advocate: "Advokat maqomi tasdiqlangan", city: "Shahar", experience: "Tajriba", languages: "Tillar", price: "Narx", noRating: "Reyting 3 ta tasdiqlangan fikrdan keyin ko‘rinadi", profile: "Profil", appointment: "Tekshiruvdan keyin", request: "So‘rov qoldirish", years: "yil" };
+  const t = en ? { independent: "Independent professional", pending: "Profile is under JURO review", newProfile: "New profile", advocate: "Advocate status verified", city: "City", experience: "Experience", languages: "Languages", price: "Price", noRating: "A rating appears after 3 approved reviews", profile: "Profile", appointment: "Requests after review", request: "Request a consultation", years: "years" } : ru ? { independent: "Независимый специалист", pending: "Профиль проверяется JURO", newProfile: "Новый профиль", advocate: "Статус адвоката подтверждён", city: "Город", experience: "Опыт", languages: "Языки", price: "Стоимость", noRating: "Рейтинг появится после 3 одобренных отзывов", profile: "Профиль", appointment: "Запись после проверки", request: "Оставить заявку", years: "лет" } : { independent: "Mustaqil mutaxassis", pending: "Profil JURO tomonidan tekshirilmoqda", newProfile: "Yangi profil", advocate: "Advokat maqomi tasdiqlangan", city: "Shahar", experience: "Tajriba", languages: "Tillar", price: "Narx", noRating: "Reyting 3 ta tasdiqlangan fikrdan keyin ko‘rinadi", profile: "Profil", appointment: "Tekshiruvdan keyin", request: "So‘rov qoldirish", years: "yil" };
   const pending = lawyer.marketplaceStatus === "pending_review";
   const profileHref = `/${locale}/lawyers/${encodeURIComponent(lawyer.id)}`;
   const consultationHref = `https://app.juro.uz/${locale === "en" ? "ru" : locale}/individual/consultations?lawyer=${encodeURIComponent(lawyer.id)}`;
@@ -19,7 +19,7 @@ export function LawyerCard({ lawyer, locale }: { lawyer: PublicLawyer; locale: P
       <div><h2>{lawyer.displayName}</h2><p>{lawyer.firmName || t.independent}</p></div>
     </div>
     <div className={styles.badges}>
-      {pending ? <span className={styles.pending}>{t.pending}</span> : <span className={styles.approved}>{t.approved}</span>}
+      <span className={styles.pending}>{pending ? t.pending : t.newProfile}</span>
       {lawyer.advocateStatus === "verified" && <span className={styles.advocate}>{t.advocate}</span>}
     </div>
     <p className={styles.specialties}>{lawyer.specialties.join(" · ")}</p>
