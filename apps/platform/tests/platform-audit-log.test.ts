@@ -171,6 +171,16 @@ test("audit filters are strict and CSV neutralizes spreadsheet formulas", () => 
   assert.match(csv, /"'=CMD\(\)"/);
 });
 
+test("0155 uses a D1-safe bounded uppercase hex constraint", () => {
+  const migration = readFileSync(
+    new URL("../drizzle/0155_platform_audit_hash_constraints.sql", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(migration, /replace\(hex\(zeroblob\(32\)\)/i);
+  assert.equal((migration.match(/length\(`(?:filters_hash|result_digest|previous_hash|event_hash)`\)=64/g) ?? []).length, 4);
+  assert.equal((migration.match(/NOT GLOB '\*\[\^A-F0-9\]\*'/g) ?? []).length, 4);
+});
+
 test("audit-log route is POST-only, CSRF/fresh-MFA protected and UI is metadata-safe", () => {
   const route = readFileSync(new URL("../app/api/platform/admin/audit-log/route.ts", import.meta.url), "utf8");
   const page = readFileSync(new URL("../app/[locale]/admin/audit-log/page.tsx", import.meta.url), "utf8");
