@@ -1152,6 +1152,8 @@ test("new work surfaces keep mobile, zoom and keyboard accessibility safeguards"
   assert.match(comparison, /max-width:560px/);
   assert.match(comparison, /prefers-reduced-motion:reduce/);
   assert.match(monitoring, /max-width:700px/);
+  assert.match(monitoring, /\.monitoring-settings,\.monitoring-feed,\.monitoring-section-heading>div,[\s\S]*?\.monitoring-updates,\.monitoring-update\{min-width:0\}/);
+  assert.match(monitoring, /\.monitoring-update h3,\.monitoring-update p,\.monitoring-source small\{overflow-wrap:anywhere\}/);
   assert.match(readability, /font-size:14px/);
   assert.match(readability, /min-height:44px/);
   for (const source of [dashboard, comparison, monitoring]) {

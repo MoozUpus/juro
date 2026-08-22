@@ -23,3 +23,9 @@
 .monitoring-preference-note,.monitoring-field-hint{margin:0;color:#5d5140;font-size:13px;line-height:1.5}
 .monitoring-preference-note{padding:12px 13px;border-left:3px solid #be974f;border-radius:0 10px 10px 0;background:#fffaf0}
 .monitoring-field-hint{margin:-3px 0 10px;color:#6b6255}
+
+/* Live Lex.uz titles can be much longer than ordinary interface copy. Keep
+   their intrinsic width from expanding the two-column workspace. */
+.monitoring-settings,.monitoring-feed,.monitoring-section-heading>div,
+.monitoring-updates,.monitoring-update{min-width:0}
+.monitoring-update h3,.monitoring-update p,.monitoring-source small{overflow-wrap:anywhere}
