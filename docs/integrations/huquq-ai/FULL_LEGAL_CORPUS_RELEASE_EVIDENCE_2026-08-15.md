@@ -248,6 +248,21 @@ rows and dead-letter jobs are both zero. Discovery remains 21/44 completed
 and the queue is not frozen, so release floors and all post-ingestion gates
 remain open; production is untouched.
 
+## Sequential continuation after retryable catalogue timeout (2026-08-22, 20:36–20:42Z)
+
+Run `a4a1728e-95ff-4caa-9add-b68a23d322b7` closed at
+`2026-08-22T20:42:20.803Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. The sequential lease and 20-second source pacing were
+preserved; no terminal or dead-letter ingestion row was created.
+
+The post-run read-only boundary is 225 canonical documents, 260 language
+variants, 12,822 distinct current provisions and 35,101 indexed chunks. The
+ingestion ledger contains 1,249 completed and 13,356 queued jobs. Failure
+rows remain retrying-only (9); unresolved terminal/technically-unavailable
+rows and dead-letter jobs are both zero. Discovery remains 21/44 completed
+and the queue is not frozen, so release floors and all post-ingestion gates
+remain open; production is untouched.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
