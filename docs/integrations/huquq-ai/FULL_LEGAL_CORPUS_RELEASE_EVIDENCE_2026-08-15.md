@@ -279,6 +279,26 @@ or staging redeploy. Snapshot, indexed evaluation, Qdrant/D1 restore and CI
 gates remained unopened; production bindings, corpus ingestion, feature flags
 and DNS were unchanged.
 
+## Sequential v2 monitoring continuation (2026-08-22, 23:12–23:15Z)
+
+Scheduled run `38021673-249b-4095-bb71-1f7ef1e7ae15` completed at
+`2026-08-22T23:15:52.037Z` with `error_code=NULL`. The following read-only
+probe observed the next invocation running: 21/44 checkpoints completed, 1
+running and 22 queued. The ingestion ledger contained 1,410 completed and
+15,292 queued jobs. The failure ledger contained nine `retrying` rows only; no
+terminal or technically-unavailable source rows and no failed, terminal or
+dead-letter ingestion jobs were observed.
+
+One intermediate Wrangler read-only probe returned Cloudflare API
+authentication error `10000`; the immediate retry succeeded and no D1 write or
+ingestion action was performed by that probe. The materialized v2 totals at
+the completed-run boundary were 255 canonical documents, 350 language
+variants, 13,850 distinct current provisions and 40,515 indexed current
+chunks. The document and provision floors remained open and ingestion was not
+frozen. No code change or staging redeploy was needed. Snapshot, indexed
+evaluation, Qdrant/D1 restore and CI gates remained unopened; production
+bindings, corpus ingestion, feature flags and DNS were unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-22, 23:08–23:11Z)
 
 Scheduled run `c04a8b3c-78c2-45c6-82d9-c0b0e3dfb3e9` completed at
