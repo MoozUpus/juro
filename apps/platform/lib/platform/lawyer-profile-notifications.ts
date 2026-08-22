@@ -23,16 +23,16 @@ export function localizedLawyerProfileStatusNotification(
         body: "Marketpleysga yuborish uchun majburiy maydonlarni to‘ldiring.",
       },
       pending_review: {
-        title: "Yurist profilingiz tekshiruvga yuborildi",
-        body: "JURO moderatori profilingizni ko‘rib chiqadi. Tekshiruv tugaguncha yangi mijoz so‘rovlarini qabul qilib bo‘lmaydi.",
+        title: "Yurist profilingiz e’lon qilishga tayyor",
+        body: "Ochiq ko‘rinishni tekshiring va e’lon qilishga rozilikni tasdiqlang. Tasdiqlanguncha yangi mijoz so‘rovlarini qabul qilib bo‘lmaydi.",
       },
       public_approved: {
-        title: "Yurist profilingiz tasdiqlandi",
-        body: `Profilingiz JURO marketpleysida qabul qilindi.${suffix}`,
+        title: "Yurist profilingiz e’lon qilindi",
+        body: `Profilingiz JURO marketpleysida ochiq e’lon qilindi.${suffix}`,
       },
       changes_requested: {
         title: "Yurist profilingizni to‘ldirish kerak",
-        body: `Qayta ko‘rib chiqishdan oldin ko‘rsatilgan izohni tuzating.${suffix}`,
+        body: `Qayta e’lon qilishdan oldin ko‘rsatilgan izohni tuzating.${suffix}`,
       },
       rejected: {
         title: "Yurist profilingiz rad etildi",
@@ -59,16 +59,16 @@ export function localizedLawyerProfileStatusNotification(
       body: "Заполните обязательные поля, чтобы отправить профиль в маркетплейс.",
     },
     pending_review: {
-      title: "Профиль юриста отправлен на проверку",
-      body: "Модератор JURO проверит профиль. До завершения проверки нельзя принимать новые клиентские заявки.",
+      title: "Профиль юриста готов к публикации",
+      body: "Проверьте публичный вид и подтвердите согласие на публикацию. До подтверждения новые клиентские заявки недоступны.",
     },
     public_approved: {
-      title: "Профиль юриста одобрен",
-      body: `Профиль принят в маркетплейс JURO.${suffix}`,
+      title: "Профиль юриста опубликован",
+      body: `Профиль публично размещён в маркетплейсе JURO.${suffix}`,
     },
     changes_requested: {
       title: "Профиль юриста нужно доработать",
-      body: `Исправьте профиль перед повторной проверкой.${suffix}`,
+      body: `Исправьте замечания перед повторной публикацией.${suffix}`,
     },
     rejected: {
       title: "Профиль юриста отклонён",

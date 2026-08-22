@@ -24,6 +24,7 @@ const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
 const lawyerCard = fs.readFileSync("app/[locale]/lawyers/LawyerCard.tsx", "utf8");
+const lawyerCataloguePage = fs.readFileSync("app/[locale]/lawyers/page.tsx", "utf8");
 const lawyerProfile = fs.readFileSync("app/[locale]/lawyers/[profileId]/page.tsx", "utf8");
 const worker = fs.readFileSync("worker/index.ts", "utf8");
 const productionDeploy = fs.readFileSync("scripts/deploy-production.mjs", "utf8");
@@ -295,5 +296,6 @@ test("English marketplace presentation localizes published taxonomy and tolerate
 test("auto-published lawyer profiles do not imply a JURO verification that did not occur", () => {
   assert.match(lawyerCard, /newProfile: "New profile"/);
   assert.match(lawyerProfile, /newProfile: "НОВЫЙ ПРОФИЛЬ"/);
-  assert.doesNotMatch(lawyerCard + lawyerProfile, /Approved by JURO|Одобрен JURO|ОДОБРЕН JURO|JURO tasdiqlagan|JURO TASDIQLAGAN/);
+  assert.match(lawyerCataloguePage, /каталог пополняется автоматически после заполнения обязательных сведений и согласия на публикацию/);
+  assert.doesNotMatch(lawyerCard + lawyerCataloguePage + lawyerProfile, /Approved by JURO|Одобрен JURO|ОДОБРЕН JURO|JURO tasdiqlagan|JURO TASDIQLAGAN|under JURO review|проверке JURO|проверяется JURO|JURO tekshiruvi/);
 });

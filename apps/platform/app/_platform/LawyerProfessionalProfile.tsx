@@ -906,7 +906,7 @@ export function LawyerProfessionalProfile({
 function statusLabel(status: Profile["marketplaceStatus"], ru: boolean) {
   const labels: Record<Profile["marketplaceStatus"], [string, string]> = {
     profile_incomplete: ["Черновик", "Qoralama"],
-    pending_review: ["На проверке JURO", "JURO tekshiruvida"],
+    pending_review: ["Подтвердите публикацию", "Nashrni tasdiqlang"],
     changes_requested: ["Нужны изменения", "O‘zgartirish kerak"],
     public_approved: ["Профиль опубликован", "Profil nashr etilgan"],
     rejected: ["Заявка отклонена", "Ariza rad etilgan"],

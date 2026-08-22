@@ -44,7 +44,7 @@ export function useLawyerWorkspace() {
 function statusCopy(status: string, ru: boolean) {
   const values: Record<string, [string, string]> = {
     profile_incomplete: ["Заполните профиль", "Profilni to‘ldiring"],
-    pending_review: ["Профиль на проверке JURO", "Profil JURO tekshiruvida"],
+    pending_review: ["Подтвердите публикацию профиля", "Profil nashrini tasdiqlang"],
     changes_requested: ["Нужны исправления", "Tuzatishlar kerak"],
     public_approved: ["Профиль опубликован", "Profil e’lon qilingan"],
     rejected: ["Публикация отклонена", "E’lon rad etildi"],

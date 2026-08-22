@@ -448,6 +448,10 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(adminWorker, /<div class="scroll"><table>/u);
   assert.match(adminWorker, /\.panel\{min-width:0;overflow:hidden/u);
   assert.match(adminWorker, /События аудита/u);
+  assert.match(adminWorker, /Ожидают самопубликации/u);
+  assert.match(adminWorker, /Опубликованные профили/u);
+  assert.match(adminWorker, /Правовой корпус/u);
+  assert.doesNotMatch(adminWorker, /Профили на проверке|Одобренные профили/u);
   assert.doesNotMatch(adminWorker, />Audit events</u);
   assert.doesNotMatch(adminWorker, /font-family:Inter/iu);
   assert.match(internal, /lawyer\.profiles\.block/u);

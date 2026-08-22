@@ -31,7 +31,7 @@ const completeProfile: LawyerMarketplaceCompletionInput = {
   hasPhone: true,
 };
 
-test("a lawyer profile is reviewable only after every required professional field is present", () => {
+test("a lawyer profile is ready for self-publication only after every required professional field is present", () => {
   assert.equal(isLawyerMarketplaceProfileComplete(completeProfile), true);
   assert.equal(marketplaceStatusAfterProfileEdit(completeProfile), "pending_review");
 
@@ -41,7 +41,7 @@ test("a lawyer profile is reviewable only after every required professional fiel
   assert.equal(marketplaceStatusAfterProfileEdit(incomplete), "profile_incomplete");
 });
 
-test("only an approved profile may receive a client request", () => {
+test("only a published profile may receive a client request", () => {
   assert.equal(mayReceiveLawyerRequests("profile_incomplete"), false);
   assert.equal(mayReceiveLawyerRequests("pending_review"), false);
   assert.equal(mayReceiveLawyerRequests("changes_requested"), false);
@@ -78,8 +78,11 @@ test("profile status notifications are localized and preserve only a bounded rev
   assert.equal(ru.title, "Профиль юриста нужно доработать");
   assert.match(ru.body, /Уточните формат консультации\./u);
   const uz = localizedLawyerProfileStatusNotification("uz", "pending_review");
-  assert.equal(uz.title, "Yurist profilingiz tekshiruvga yuborildi");
+  assert.equal(uz.title, "Yurist profilingiz e’lon qilishga tayyor");
   assert.doesNotMatch(uz.body, /Izoh:/u);
+  const published = localizedLawyerProfileStatusNotification("ru", "public_approved");
+  assert.equal(published.title, "Профиль юриста опубликован");
+  assert.doesNotMatch(published.body, /одобрен|проверен/iu);
 });
 
 test("lawyer scheduling persists recurring hours and bounded unavailability", () => {
