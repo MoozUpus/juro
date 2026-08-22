@@ -189,6 +189,20 @@ ingestion jobs and terminal or technically-unavailable failure rows remained
 zero. Ingestion remains active; queue freeze, release floors and all
 post-ingestion gates remain open.
 
+## Completed staging continuation run (2026-08-22, 15:20–15:26Z)
+
+Run `3673bd37-b699-422c-bb3e-1336f855aaaa` completed at
+`2026-08-22T15:26:29.347Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT` source condition. The worker retained the single
+distributed lease while advancing the ministry-language checkpoints; no
+parallel crawler was started and no checkpoint was force-completed. The
+post-run read-only boundary recorded 191 canonical documents, 12,007 distinct
+current provisions and 31,510 indexed chunks, with 17/44 discovery
+checkpoints complete and 1,487 live-or-manual queued/running/retrying jobs.
+Dead-letter ingestion jobs and terminal or technically-unavailable failure
+rows remained zero. Ingestion remains active; queue freeze, release floors
+and all post-ingestion gates remain open.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
