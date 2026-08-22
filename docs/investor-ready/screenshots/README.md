@@ -18,7 +18,9 @@ recorded in `../QA_MATRIX.md`.
 - `after/public-lawyers-1536.png`, `after/public-lawyers-390.png`,
   `after/public-lawyer-profile-1536.png` and
   `after/public-lawyer-profile-768.png` — production catalogue and public demo
-  profile at desktop/mobile/tablet widths.
+  profile at desktop/mobile/tablet widths. The refreshed profile captures show
+  the neutral `НОВЫЙ ПРОФИЛЬ` designation from Sites 74 rather than an unearned
+  JURO approval badge.
 - `after/client-dashboard-1536.png` and
   `after/client-dashboard-dark-1536.png` — authenticated Client dashboard in
   restored System and explicit Dark states.

@@ -37,7 +37,7 @@ The corresponding before evidence is in `screenshots/before/`.
 
 ## 3. Architecture
 
-- The public Sites project is version 72, fronted by the public routing Worker.
+- The public Sites project is version 74, fronted by the public routing Worker.
 - The platform Worker serves the client, lawyer and status hosts with canonical
   host-aware routing and server-side persona/role enforcement.
 - Admin is a separate Worker service with a separate host-only session. Every
@@ -68,9 +68,13 @@ The corresponding before evidence is in `screenshots/before/`.
   bounded demo-call reset.
 - Three bounded demo accounts, three synthetic payment records and one
   consent-published demo lawyer. Synthetic data is labelled and bounded.
+- Auto-published profiles now use neutral publication language on public,
+  Lawyer and Admin surfaces; no badge implies a JURO verification that did not
+  occur. The Admin console no longer offers manual initial approval as the
+  normal publication path.
 - Manrope and navy/gold visual system across public, client, lawyer and admin
   surfaces; gold professional navigation accents and responsive containment.
-- Canonical public catalogue/profile redirects in Sites 72 with query retention.
+- Canonical public catalogue/profile redirects in Sites 74 with query retention.
 
 ## 5. Lawyer platform
 
@@ -117,8 +121,10 @@ active grant, messages, confirmed consultation, case plan, calendar, billing,
 notifications, profile/settings/security and monitoring. A monitoring task
 notification opened the exact case plan, and a Client attempt to open a Lawyer
 route was denied without exposing professional data. The two-party Client/Lawyer
-media call also passed. Client responsive widths and live AI submission remain
-open separately.
+media call also passed. The authenticated Client dashboard passed
+360/390/768/1366/1440 widths, and a live AI request completed with a direct
+official Lex.uz link whose article 217 text was opened and checked in a second
+Chrome profile.
 
 ## 7. Theme matrix
 
@@ -161,7 +167,7 @@ included in the evidence index.
 That pass also found a previously hidden audit-log failure: production D1
 rejected the seven-term compound query. The fix first shipped in Worker
 `073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker
-`28535b0e-8104-48bb-8b73-d5f3d6422ed9`, using bounded per-source queries and a
+`727eacbe-7fb6-4012-87a9-3e290edd525b`, using bounded per-source queries and a
 safe global top-N merge. Focused tests and all seven production D1 source queries
 pass. A final browser replay of this one page is still open because the
 local Chrome client began returning `ERR_BLOCKED_BY_CLIENT` for every platform
@@ -179,13 +185,13 @@ records during the presentation.
   no synthetic row is represented as a settled real payment.
 - Full local legal-corpus and dense/vector flags are off. The live release uses
   direct official Lex.uz retrieval/metadata and labels monitoring accordingly.
-- Platform audit-log post-fix browser replay, Client/Admin responsive widths,
-  Chrome zoom, reduced-motion, screen-share picker/forced reconnect, live AI
-  submission and the end-to-end investor rehearsal remain open.
+- Platform audit-log/latest-Admin browser replay, Admin responsive widths,
+  Chrome zoom, live reduced-motion emulation, screen-share source selection,
+  forced reconnect and the final Admin segment of the investor rehearsal remain open.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
-- `/api/status` after the latest platform deploy is operational with 8/8
-  components and no active incidents, generated at
-  `2026-08-22T15:46:44.553Z`.
+- `/api/status` returned to a fully operational 8/8 aggregate after the latest
+  Worker deploy and scheduled probe, with no stale dependencies or active
+  incidents at `2026-08-22T16:40:54.780Z`.
 
 Until the open Chrome items are closed, this document is a release-candidate
 report rather than a blanket Definition-of-Done claim.
