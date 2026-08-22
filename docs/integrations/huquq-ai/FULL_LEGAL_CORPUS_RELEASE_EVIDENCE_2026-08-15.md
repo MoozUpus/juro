@@ -25,6 +25,25 @@ variants, 11,387 distinct current provisions, 29,996 indexed chunks and
 rehydrating the bounded catalogue and is not presented as the old 3,575-row
 corpus. No production binding, migration, feature flag or DNS record changed.
 
+## Read-only database reconciliation (2026-08-22, 18:36–18:44Z)
+
+The old `juro-staging` database remains a separate, full 10 GB-boundary
+snapshot. A direct read-only probe returned 3,575 documents; it was not used
+as the write target and was not modified.
+
+The active `juro-staging-corpus-v2` stream is a separate resumable rebuild,
+not a diff-and-copy operation against the old database. At the boundary, v2
+contained 210 canonical documents, 218 language variants, 12,549 distinct
+current provisions, 33,564 current/indexed chunks and 21/44 completed
+discovery checkpoints. The non-catalogue queued/retrying ingestion count was
+1,442; terminal failures and dead-letter ingestion jobs were both zero.
+
+Run `790de8a3-24d6-4d5d-bb3d-c575c0cf98ca` had just completed with
+`error_code=NULL`; the next sequential run
+`c0e71f3f-0c3d-413c-892f-3decaaf65623` was running at the probe. No parallel
+crawl, old-database backfill, production binding change or release freeze was
+performed.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
