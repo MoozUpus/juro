@@ -3,6 +3,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 const rootPage = fs.readFileSync("app/page.tsx", "utf8");
+const rootLawyersPage = fs.readFileSync("app/lawyers/page.tsx", "utf8");
 const localizedPage = fs.readFileSync("app/[locale]/page.tsx", "utf8");
 const adapter = fs.readFileSync("app/components/cinematic/CinematicLandingPage.tsx", "utf8");
 const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
@@ -20,6 +21,8 @@ const headerTouchStyles = fs.readFileSync("app/components/public/header-touch-ta
 const sitemap = fs.readFileSync("app/sitemap.ts", "utf8");
 const lawyerCatalog = fs.readFileSync("app/[locale]/lawyers/catalog.ts", "utf8");
 const lawyerAvatar = fs.readFileSync("app/[locale]/lawyers/LawyerAvatar.tsx", "utf8");
+const worker = fs.readFileSync("worker/index.ts", "utf8");
+const productionDeploy = fs.readFileSync("scripts/deploy-production.mjs", "utf8");
 
 test("selected JURO direction is the only public homepage implementation", () => {
   assert.match(rootPage, /CinematicLandingPage language="ru"/);
@@ -79,6 +82,15 @@ test("public chrome exposes every primary public destination in all three locale
   assert.match(chrome, /app\.juro\.uz/);
   assert.match(sitemap, /\/lawyers/);
   assert.doesNotMatch(sitemap, /prototype/);
+});
+
+test("the unlocalized lawyer catalogue entry redirects to the canonical RU route", () => {
+  assert.match(rootLawyersPage, /redirect\("\/ru\/lawyers"\)/);
+  assert.match(localizedPage, /rawLocale === "lawyers"\) redirect\("\/ru\/lawyers"\)/);
+  assert.match(worker, /url\.pathname === "\/lawyers"/);
+  assert.match(worker, /Response\.redirect\(destination, 308\)/);
+  assert.match(worker, /destination\.search = url\.search/);
+  assert.match(productionDeploy, /run_worker_first: true/);
 });
 
 test("mobile chrome keeps fixed controls clear of iOS safe areas", () => {
