@@ -45,6 +45,12 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.hostname === "www.juro.uz") {
+      const destination = new URL(url);
+      destination.hostname = "juro.uz";
+      return withSecurityHeaders(Response.redirect(destination, 308), url);
+    }
+
     // Vinext 0.0.50 currently resolves the unlocalized lawyer catalogue and
     // profiles through generic dynamic routes before their specific App Router
     // entries. Keep every public marketplace entry canonical at the edge.
