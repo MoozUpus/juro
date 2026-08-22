@@ -7,9 +7,9 @@
 - Do not enter real personal, client, document or case data.
 - Payment steps are simulation only. The call is real WebRTC media but is not recorded.
 - Treat `QA_MATRIX.md` as the hard rehearsal gate. Do not advertise the full
-  script as end-to-end ready while native Chrome zoom, reduced motion,
-  selected-source remote screen rendering or live forced reconnect is still
-  `PENDING`, `PARTIAL` or `NOT TESTED`.
+  script as end-to-end ready while selected-source remote screen rendering or
+  live forced reconnect is still `PENDING`, `PARTIAL` or `NOT TESTED`. Native
+  Chrome page zoom is intentionally outside the QA scope by user instruction.
 - Before a two-profile rehearsal, confirm that the ChatGPT Chrome extension is
   stably connected to both selected Chrome profiles. A tab listing alone is not
   sufficient: navigation and DOM inspection must also succeed after any Windows

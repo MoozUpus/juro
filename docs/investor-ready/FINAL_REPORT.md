@@ -184,8 +184,8 @@ on-screen mobile keyboard and is not promoted to that separate gate.
 
 Shared-theme tests preserve cookie precedence over stale per-domain
 `localStorage`. The polished Admin overview passed every requested viewport from
-320 through 1920 pixels. Remaining full-matrix responsive and native Chrome
-zoom coverage stay explicit in `QA_MATRIX.md`.
+320 through 1920 pixels. Remaining full-matrix responsive coverage and the
+user-excluded native Chrome page-zoom check stay explicit in `QA_MATRIX.md`.
 
 Client theme coverage was later expanded beyond dashboard screenshots. All 20
 top-level Client routes passed a 390×844 loop in explicit Dark and a second loop
@@ -291,8 +291,9 @@ records during the presentation.
   visibly unfilled operator identity/address fields. Commercial production still
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
-- Chrome zoom, Lawyer/Admin Windows-scale 150%, screen-share source selection
-  and forced reconnect remain open. The Client
+- Lawyer/Admin Windows-scale 150%, screen-share source selection and forced
+  reconnect remain open. Native Chrome page zoom is intentionally `NOT TESTED`
+  by the latest explicit user instruction. The Client
   dashboard passed Windows-scale 150% and the host was restored to 125%. The
   forced-reconnect and capture-cleanup source,
   focused tests, full CI and production asset are verified, but no live network
