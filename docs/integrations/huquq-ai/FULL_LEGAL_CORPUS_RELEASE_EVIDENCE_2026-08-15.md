@@ -355,6 +355,19 @@ failure rows remained zero. The lease was released after completion. Ingestion
 is not frozen; queue freeze, release floors and all post-ingestion gates remain
 open.
 
+## Completed staging continuation run (2026-08-22, 17:08–17:16Z)
+
+Run `2823d6b3-3488-43b1-b8f3-dd01aa733a93` completed at
+`2026-08-22T17:16:58.104Z` with `error_code = NULL`. The worker held the
+single distributed lease for the bounded invocation; no parallel crawler was
+started and no checkpoint was force-completed. The post-run read-only boundary
+recorded 202 canonical documents, 12,320 distinct current provisions and
+32,891 indexed chunks, with 19/44 discovery checkpoints complete and 1,471
+live-or-manual queued/running/retrying jobs (catalog jobs excluded).
+Dead-letter ingestion jobs and terminal or technically-unavailable failure
+rows remained zero. The lease was released after completion. Ingestion is not
+frozen; queue freeze, release floors and all post-ingestion gates remain open.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
