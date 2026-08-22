@@ -98,7 +98,15 @@ and joined one production room. Both showed synchronized timers; mute/unmute,
 camera-off and simultaneous end-call states passed without raw technical codes.
 Cloudflare TURN preflight returned `relayAvailable=true`, and D1 recorded
 `provider=cloudflare_realtime_turn`. Screen-share picker selection and forced
-reconnect remain narrower open checks rather than inferred passes.
+reconnect remain narrower open checks rather than inferred passes. A subsequent
+call-lifecycle audit fixed the untested failure paths in commit `6eaad19d`:
+reconnect is now bounded to three automatic attempts, refreshes short-lived TURN
+credentials, uses a fresh peer with ICE restart and rejects callbacks from stale
+peers. Display capture now has an explicit stop action and is stopped on track
+replacement failure, reconnect, end-call and teardown. CI run `32592751302`
+passed both jobs and Worker `b9481033-bd24-4dda-8f75-61b8a7ce2473` deployed the
+new asset. This is implementation/deployment evidence, not a substitute for the
+still-open live interruption and selected-source checks.
 
 The same rehearsal created and stopped a five-second billable timer, ran a
 one-result conflict check, saved a favourite case-linked knowledge note and
@@ -224,14 +232,17 @@ records during the presentation.
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
 - Chrome zoom, live reduced-motion emulation, screen-share source selection and
-  forced reconnect remain open. The platform trial/deletion segment now passes
-  in fresh-MFA RU and UZ Chrome with direct navigation and refresh.
+  forced reconnect remain open. The forced-reconnect and capture-cleanup source,
+  focused tests, full CI and production asset are verified, but no live network
+  interruption or selected-source remote rendering is inferred from them. The
+  platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
+  direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
-- `/api/status` returned to a fully operational 8/8 aggregate after the latest
-  Worker deploy and stayed operational after migration `0155`, with no stale or
-  degraded component and zero incident after Worker
-  `e8fc00ed-6249-4e04-9300-8732a4a05e91` at
-  `2026-08-22T18:20:55.816Z`.
+- `/api/status` returned to a fully operational 8/8 aggregate after migration
+  `0155` and remained operational after Worker
+  `b9481033-bd24-4dda-8f75-61b8a7ce2473`: independent app/status-host reads
+  generated at `2026-08-22T19:17:27.353Z` showed no stale or degraded component
+  and zero active or recent incident.
 
 Until the open Chrome and legal-publication items are closed, this document is a
 release-candidate report rather than a blanket Definition-of-Done claim.
