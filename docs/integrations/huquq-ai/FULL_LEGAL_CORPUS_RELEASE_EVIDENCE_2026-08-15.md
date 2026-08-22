@@ -313,6 +313,32 @@ terminal or technically-unavailable failure rows remained zero. Ingestion
 remains active; queue freeze, release floors and all post-ingestion gates
 remain open.
 
+## Completed staging continuation run (2026-08-22, 16:44–16:53Z)
+
+Run `af1c7ab9-c67f-446f-be1b-4e286999812b` completed at
+`2026-08-22T16:53:35.514Z` with `error_code = NULL`. The worker held and
+renewed the single distributed lease for the full bounded invocation; no
+parallel crawler was started and no checkpoint was force-completed. The
+post-run read-only boundary recorded 200 canonical documents, 12,293 distinct
+current provisions and 32,780 indexed chunks, with 18/44 discovery
+checkpoints complete and 1,479 live-or-manual queued/running/retrying jobs.
+Dead-letter ingestion jobs and terminal or technically-unavailable failure
+rows remained zero. Ingestion remains active; queue freeze, release floors
+and all post-ingestion gates remain open.
+
+## Version-debt slot balancing fix (2026-08-22)
+
+The run boundary showed 217 queued fetch jobs versus 1,262 queued historical
+version jobs while the prior policy reserved nine of ten sequential slots for
+version catch-up. Commit `d1cecdab` caps the catch-up reservation at four slots,
+retaining at least five current-corpus fetch slots while preserving the shared
+20-second Lex.uz pacer, one distributed lock and the existing start fence. The
+focused worker boundary suite passed **21/21**, `npm run type-check`,
+`npm run lint` and `npm run validate:legal-corpus:artifact` all passed. The
+staging-only Worker was deployed as version
+`09dba303-8870-45ab-ac5b-f24abfa6a3c1`; no production binding, flag, migration
+or DNS record changed.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
