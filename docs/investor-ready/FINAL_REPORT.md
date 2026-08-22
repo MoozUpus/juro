@@ -127,6 +127,17 @@ with camera, display capture and microphone denied. A new live call preflight is
 not inferred from those non-call reads; the allow branch remains rendered-test
 verified.
 
+The final Admin re-auth and Lawyer clean-view correction is commit `06239de4`.
+GitHub CI run `32599975102` passed both jobs, and the reviewed production release
+script deployed Worker `5438d2e3-b0b5-4e4e-8af6-c1fc910aabcd` (version 121).
+Post-deploy authenticated Chrome rendered the exact Requests, Schedule, Clients,
+Matters, Messages, Documents and Tasks screens on all seven visible clean Lawyer
+URLs at DPR 1.25 with no page overflow. The enabled legacy Admin routes now
+render the localized protected re-auth surface instead of an opaque 404: all 13
+RU routes and an UZ representative passed. The disabled
+`/admin/legal-sources/reviews` surface intentionally remains 404 behind its
+production feature flag.
+
 The same rehearsal created and stopped a five-second billable timer, ran a
 one-result conflict check, saved a favourite case-linked knowledge note and
 advanced an isolated simulated payment through preview, success and refund.
@@ -307,8 +318,9 @@ records during the presentation.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` returned to a fully operational 8/8 aggregate after migration
   `0155` and remained operational after Worker
-  `2ab9e425-6a1f-4126-a244-99f27f25861c`: independent app/status-host reads
-  generated at `2026-08-22T19:51:50.946Z` and `2026-08-22T19:51:51.615Z`
+  `5438d2e3-b0b5-4e4e-8af6-c1fc910aabcd` (version 121): independent
+  app/status-host reads generated at `2026-08-22T21:47:14.564Z` and
+  `2026-08-22T21:47:15.633Z`
   showed no stale or degraded component and zero active or recent incident.
 
 Until the open Chrome and legal-publication items are closed, this document is a
