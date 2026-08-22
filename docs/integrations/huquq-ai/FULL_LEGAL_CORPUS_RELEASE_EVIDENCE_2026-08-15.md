@@ -83,6 +83,44 @@ after deployment. Its read-only boundary showed 212 canonical documents,
 chunks, with 1,435 queued/retrying jobs, terminal failures 0 and dead-letter
 jobs 0. The release floors, queue freeze and post-ingestion gates remain open.
 
+## Lex alternate-language recovery deployed and verified (2026-08-22, 18:54–19:27Z)
+
+The bounded staging stream first recorded a source-language condition for
+`lexuz:8385395` (`https://lex.uz/ru/docs/8385395`). The official page returned
+HTTP 200 but its warning states that the act text is provided in Uzbek and
+links to the official alternate page `https://lex.uz/ru/docs/8383786`; the
+alternate page also returned HTTP 200 with legal body text. The diagnostic
+requests followed Lex.uz's published crawl-delay (20 seconds) and did not
+start a parallel crawl.
+
+Commit `ed86b593` adds a bounded, one-time recovery path: the parser preserves
+the verified official alternate link, the next sequential run reopens a
+completed `LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE` row, redirects it once,
+and the alternate document is then parsed and indexed. It does not increase
+the request budget, bypass the distributed lock, or treat the warning as
+legal content. The focused parser suite passed 12/12, ingestion suite 38/38,
+worker-boundary suite 21/21; type-check, lint and the legal-corpus artifact
+dry-run also passed.
+
+Staging-only Worker deployment `1af6e465-d269-48e2-b8ff-cd811ea814c` completed
+at `2026-08-22T19:16:30.242Z`. The immediately preceding run started at
+19:16:22Z and therefore used the prior version; it closed with the
+allow-listed `LEX_CATALOG_TIMEOUT`. The first run using the new version,
+`8e641892-9bd7-428a-aa34-8815d88ed78c` (scheduled 19:24:22Z), reopened the
+old row at 19:26:23Z, recorded the bounded redirect, and completed the
+alternate source at 19:26:50Z. The job now has `status=completed`,
+`attempt_count=3`, `last_error_code=NULL`, source URL
+`https://lex.uz/ru/docs/8383786`, and language `ru` (the official route's
+body is Uzbek; no translation was introduced).
+
+The post-recovery read-only boundary is 216 canonical documents, 233 language
+variants, 12,677 distinct current provisions and 34,125 indexed chunks.
+Failure rows are retrying-only (9); terminal/technically-unavailable source
+rows are 0 and dead-letter ingestion jobs are 0. Discovery remains 21/44
+completed with the queue active, so release floors, ingestion freeze,
+snapshot/evaluation, Qdrant/D1 restore and CI gates remain unproven;
+production is untouched.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
