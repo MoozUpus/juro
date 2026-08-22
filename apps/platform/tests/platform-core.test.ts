@@ -94,6 +94,9 @@ test("lawyer-profile approval is staff-capability and revision gated", async () 
   assert.match(decisionRoute, /isLawyerProfileDirectoryPreviewEnabled/); assert.match(decisionRoute, /moderateLawyerProfile/);
   assert.match(service, /lawyer_profile_moderation/); assert.match(service, /profileSha256/); assert.match(service, /lawyer_profile_moderated/); assert.match(service, /meta\.changes/); assert.match(service, /WHERE EXISTS/);
   assert.match(page, /lawyer\.profiles\.moderate/);
+  assert.match(page, /AdminConsoleAccess/);
+  assert.match(page, /returnTo=\{`\/\$\{locale\}\/admin\/lawyer-profiles`\}/);
+  assert.doesNotMatch(page, /catch\s*\{\s*notFound\(\)/u);
   assert.match(migration, /lawyer_profile_moderation_revision_uidx/); assert.match(migration, /lawyer_profiles_status_requires_moderation/); assert.match(migration, /append-only/);
 });
 

@@ -176,6 +176,10 @@ test("platform staff roles are distinct from workspace roles and grant no conten
     true,
   );
   assert.equal(
+    platformStaffRoleAllows("administrator", "lawyer.profiles.moderate"),
+    true,
+  );
+  assert.equal(
     platformStaffRoleAllows("legal_reviewer", "legal.sources.publish"),
     true,
   );

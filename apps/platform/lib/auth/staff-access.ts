@@ -36,6 +36,7 @@ const roleCapabilities: Readonly<
     "staff.operations.manage",
     "legal.sources.publish",
     "knowledge.base.manage",
+    "lawyer.profiles.moderate",
     "ai.settings.manage",
   ]),
   support: new Set([
