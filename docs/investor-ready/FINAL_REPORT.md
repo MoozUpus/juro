@@ -174,7 +174,7 @@ included in the evidence index.
 That pass also found a previously hidden audit-log failure: production D1
 rejected the seven-term compound query. The fix first shipped in Worker
 `073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker
-`727eacbe-7fb6-4012-87a9-3e290edd525b`, using bounded per-source queries and a
+`e8fc00ed-6249-4e04-9300-8732a4a05e91`, using bounded per-source queries and a
 safe global top-N merge. A later fresh-MFA Chrome replay reached the route and
 found a second D1-specific fault: migration `0086` generated a 64-term hash
 `GLOB` that D1 rejected as too complex. Production migration `0155` now uses
@@ -201,8 +201,11 @@ records during the presentation.
    owner-approved legal identity, address and final RU/UZ editions.
 2. **Investor-doubt pass.** Production D1 confirms one active synthetic trial,
    one pending synthetic profile-deletion request, 12 explicitly simulated demo
-   payment runs and two immutable post-`0155` audit-access events. The evidence
-   does not promote those aggregates to a visual browser pass.
+   payment runs and two immutable post-`0155` audit-access events. After the
+   administrator capability/session-expiry fix in commit `4751d3c7` and Worker
+   `e8fc00ed-6249-4e04-9300-8732a4a05e91`, fresh-MFA Chrome promoted the
+   profile/trial/deletion aggregate to a RU/UZ visual pass without submitting a
+   mutation.
 3. **Weakest-screen pass.** The isolated Admin overview was the weakest primary
    surface. It was rebuilt around localized publication semantics, clear KPI
    hierarchy, an explicit access boundary and operational quick links, deployed,
@@ -220,15 +223,15 @@ records during the presentation.
   visibly unfilled operator identity/address fields. Commercial production still
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
-- Chrome zoom, live reduced-motion emulation, screen-share source selection,
-  forced reconnect and the platform trial/deletion visual segment of the
-  investor rehearsal remain open. The underlying synthetic trial/deletion rows
-  are confirmed in production D1, but local Chrome navigation to that screen is
-  currently blocked before the Worker receives a request.
+- Chrome zoom, live reduced-motion emulation, screen-share source selection and
+  forced reconnect remain open. The platform trial/deletion segment now passes
+  in fresh-MFA RU and UZ Chrome with direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` returned to a fully operational 8/8 aggregate after the latest
   Worker deploy and stayed operational after migration `0155`, with no stale or
-  degraded component and zero incident at `2026-08-22T17:59:06.166Z`.
+  degraded component and zero incident after Worker
+  `e8fc00ed-6249-4e04-9300-8732a4a05e91` at
+  `2026-08-22T18:20:55.816Z`.
 
 Until the open Chrome and legal-publication items are closed, this document is a
 release-candidate report rather than a blanket Definition-of-Done claim.
