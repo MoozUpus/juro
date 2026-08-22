@@ -1,2 +1,2 @@
 import { platformEntryRoute } from "../platform-entry-route";
-export const GET = platformEntryRoute("consultations");
+export const GET = platformEntryRoute("lawyers");

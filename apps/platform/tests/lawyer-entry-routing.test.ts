@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -31,6 +32,12 @@ const client: LawyerEntryProfile = {
   lawyerProfileStatus: null,
   lawyerMarketplaceStatus: null,
 };
+
+test("the legacy app lawyer entry opens the marketplace instead of consultations", () => {
+  const route = readFileSync(new URL("../app/lawyers/route.ts", import.meta.url), "utf8");
+  assert.match(route, /platformEntryRoute\("lawyers"\)/);
+  assert.doesNotMatch(route, /platformEntryRoute\("consultations"\)/);
+});
 
 test("lawyer public origin is selected only for known production and staging hosts", () => {
   assert.equal(lawyerPublicOrigin("app.juro.uz"), "https://lawyer.juro.uz");
