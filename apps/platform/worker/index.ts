@@ -96,7 +96,7 @@ function withSecurityHeaders(response: Response, url: URL): Response {
     "Permissions-Policy",
     mediaEnabledCallPage
       ? "camera=(self), display-capture=(self), geolocation=(), payment=(), usb=(), microphone=(self)"
-      : "camera=(), display-capture=(), geolocation=(), payment=(), usb=(), microphone=(self)",
+      : "camera=(), display-capture=(), geolocation=(), payment=(), usb=(), microphone=()",
   );
   headers.set("X-Frame-Options", "DENY");
   headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");

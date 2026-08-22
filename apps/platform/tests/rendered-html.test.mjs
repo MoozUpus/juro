@@ -728,6 +728,7 @@ test("adds production security headers and keeps private HTML out of caches", as
   assert.equal(response.headers.get("x-content-type-options"), "nosniff");
   assert.match(response.headers.get("referrer-policy") ?? "", /strict-origin/);
   assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
+  assert.match(response.headers.get("permissions-policy") ?? "", /microphone=\(\)/);
   assert.match(response.headers.get("permissions-policy") ?? "", /display-capture=\(\)/);
   assert.match(response.headers.get("content-security-policy") ?? "", /default-src 'self'/);
 });
@@ -749,6 +750,7 @@ test("allows camera, microphone and screen capture only on protected consultatio
   const nonCall = await worker.fetch(new Request("http://localhost/ru/individual/consultations", { headers: { accept: "text/html" } }), runtime, context);
   const nonCallPolicy = nonCall.headers.get("permissions-policy") ?? "";
   assert.match(nonCallPolicy, /camera=\(\)/);
+  assert.match(nonCallPolicy, /microphone=\(\)/);
   assert.match(nonCallPolicy, /display-capture=\(\)/);
 });
 
