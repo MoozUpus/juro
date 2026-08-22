@@ -451,6 +451,9 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.match(adminWorker, /Ожидают самопубликации/u);
   assert.match(adminWorker, /Опубликованные профили/u);
   assert.match(adminWorker, /Правовой корпус/u);
+  assert.match(adminWorker, /Функциональные флаги/u);
+  assert.match(adminWorker, /Состояние повтора/u);
+  assert.doesNotMatch(adminWorker, /"Legal Corpus"|>Feature flags<|>Retry state<|>Actor</u);
   assert.doesNotMatch(adminWorker, /Профили на проверке|Одобренные профили/u);
   assert.doesNotMatch(adminWorker, />Audit events</u);
   assert.doesNotMatch(adminWorker, /font-family:Inter/iu);
