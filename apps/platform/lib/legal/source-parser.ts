@@ -23,8 +23,18 @@ export const LEGAL_SOURCE_PARSER_ERROR_CODES = [
 export type LegalSourceParserErrorCode =
   (typeof LEGAL_SOURCE_PARSER_ERROR_CODES)[number];
 
+export type LegalSourceAlternateLanguage = "ru" | "uz-Latn" | "uz-Cyrl" | "en";
+
+export type LegalSourceAlternateLanguageSource = {
+  href: string;
+  language: LegalSourceAlternateLanguage;
+};
+
 export class LegalSourceParserError extends Error {
-  constructor(readonly code: LegalSourceParserErrorCode) {
+  constructor(
+    readonly code: LegalSourceParserErrorCode,
+    readonly alternateLanguageSource: LegalSourceAlternateLanguageSource | null = null,
+  ) {
     super(code);
     this.name = "LegalSourceParserError";
   }
@@ -241,6 +251,33 @@ function collectVisiblePageText(node: Node): string {
     if (node.tagName === "br") return "\n";
   }
   return node.childNodes.map((child) => collectVisiblePageText(child)).join("");
+}
+
+function alternateLanguageFromNotice(value: string): LegalSourceAlternateLanguage | null {
+  const normalized = normalizeText(value).toLocaleLowerCase();
+  if (/(?:английск|english)/u.test(normalized)) return "en";
+  if (/(?:русск|russian)/u.test(normalized)) return "ru";
+  if (/(?:узбекск|ўзбек|uzbek)/u.test(normalized)) {
+    return /(?:латин|latin|o['’]zbek|oʻzbek)/u.test(normalized)
+      ? "uz-Latn"
+      : "uz-Cyrl";
+  }
+  return null;
+}
+
+function findLexAlternateLanguageSource(
+  root: DefaultTreeAdapterTypes.Document,
+): LegalSourceAlternateLanguageSource | null {
+  let result: LegalSourceAlternateLanguageSource | null = null;
+  walkElements(root, (element) => {
+    if (result || !classTokens(element).has("COMMENT_FOR_WARNING")) return;
+    const language = alternateLanguageFromNotice(collectVisiblePageText(element));
+    if (!language) return;
+    const anchor = findFirstElement(element, (candidate) => candidate.tagName === "a");
+    const href = anchor ? attribute(anchor, "href") : null;
+    if (href) result = { href, language };
+  }, { value: 0 });
+  return result;
 }
 
 function walkElements(
@@ -518,7 +555,10 @@ export function normalizeLegalSourceHtml(input: {
     const sourceText = normalizeText(collectVisiblePageText(document));
     if (input.reference.sourceKind === "lex"
       && LEX_LANGUAGE_TEXT_UNAVAILABLE_PATTERNS.some((pattern) => pattern.test(sourceText))) {
-      throw new LegalSourceParserError("LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE");
+      throw new LegalSourceParserError(
+        "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
+        findLexAlternateLanguageSource(document),
+      );
     }
     throw new LegalSourceParserError("LEGAL_SOURCE_CONTENT_INSUFFICIENT");
   }

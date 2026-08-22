@@ -98,6 +98,8 @@ const ONE_TIME_BOUNDED_RECOVERY_CODES = [
 // once after the signed-ID parser is deployed; a second unavailable result is
 // retained as a truthful source condition.
 const SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE = "LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE";
+const LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE = "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE";
+const ALTERNATE_LANGUAGE_REDIRECT_CODE = "LEGAL_CORPUS_ALTERNATE_LANGUAGE_REDIRECT";
 const STALE_RUNNING_ERROR_CODE = "LEGAL_CORPUS_STALE_RUNNING_TIMEOUT";
 // A normal scheduled invocation is fenced by a seven-minute distributed lock
 // and its Lex requests have shorter individual timeouts. Keep a wider window
@@ -813,6 +815,44 @@ async function reconcileRecoverableSignedLexUnavailable(
     `).bind(stranded.id, SIGNED_LEX_UNAVAILABLE_RECOVERY_CODE).run();
 }
 
+async function reconcileRecoverableLanguageTextUnavailable(
+  db: D1Database,
+  now: string,
+): Promise<void> {
+  const stranded = await db.prepare(`SELECT id
+      FROM legal_corpus_ingestion_jobs
+      WHERE status='completed' AND attempt_count=1
+        AND last_error_code=?
+      ORDER BY updated_at ASC,id ASC LIMIT 1
+    `).bind(LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE).first<{ id: string }>();
+  if (!stranded) return;
+  const updated = await db.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='retrying',next_attempt_at=?,updated_at=?
+      WHERE id=? AND status='completed' AND attempt_count=1
+        AND last_error_code=?
+    `).bind(now, now, stranded.id, LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE).run();
+  if (Number(updated.meta.changes ?? 0) !== 1) return;
+  await db.prepare(`UPDATE legal_corpus_failures
+      SET retryable=1,retry_state='retrying'
+      WHERE job_id=? AND error_code=? AND retry_state='technically_unavailable'
+    `).bind(stranded.id, LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE).run();
+}
+
+function alternateLanguageSource(error: unknown): LexDiscoveredDocument | null {
+  if (!(error instanceof LegalSourceParserError)
+    || error.code !== LANGUAGE_TEXT_UNAVAILABLE_RECOVERY_CODE
+    || !error.alternateLanguageSource) return null;
+  const parsed = parseLexDocumentUrl(error.alternateLanguageSource.href);
+  if (!parsed) return null;
+  const id = parsed.canonicalDocumentId.replace(/^lexuz:/u, "");
+  const localePath = error.alternateLanguageSource.language === "uz-Cyrl"
+    ? ""
+    : error.alternateLanguageSource.language === "uz-Latn"
+      ? "/uz"
+      : `/${error.alternateLanguageSource.language}`;
+  return parseLexDocumentUrl(`https://lex.uz${localePath}/docs/${id}`);
+}
+
 /**
  * Fetches one official Lex.uz language variant, persists immutable source
  * artifacts in R2, and writes an article-first D1 version. Source HTML is
@@ -1303,6 +1343,7 @@ export async function runNextLegalCorpusIngestionJob(
   const now = nowIso(nowDate);
   await reconcileStaleRunningJob(env.DB, nowDate);
   await reconcileRecoverableSignedLexUnavailable(env.DB, now);
+  await reconcileRecoverableLanguageTextUnavailable(env.DB, now);
   await reconcileRecoverableDeadLetter(env.DB, now);
   const retryCandidate = await env.DB.prepare(`SELECT id,job_type AS jobType,source_url AS sourceUrl,language,canonical_document_id AS canonicalDocumentId,attempt_count AS attemptCount,max_attempts AS maxAttempts
     FROM legal_corpus_ingestion_jobs
@@ -1369,6 +1410,22 @@ export async function runNextLegalCorpusIngestionJob(
     };
   } catch (error) {
     const errorCode = safeErrorCode(error);
+    const alternate = alternateLanguageSource(error);
+    if (alternate && candidate.attemptCount <= 1 && alternate.sourceUrl !== candidate.sourceUrl) {
+      await recordFailure({
+        db: env.DB, jobId: candidate.id, documentId: candidate.canonicalDocumentId,
+        sourceUrl: candidate.sourceUrl, language: candidate.language, now,
+        errorCode, httpStatus: fetchHttpStatus(error), retryable: true,
+        retryCount: attempt, retryState: "retrying",
+      });
+      await env.DB.prepare(`UPDATE legal_corpus_ingestion_jobs
+        SET status='retrying',source_url=?,language=?,next_attempt_at=?,last_error_code=?,updated_at=?
+        WHERE id=? AND status='running'
+      `).bind(
+        alternate.sourceUrl, alternate.language, now, ALTERNATE_LANGUAGE_REDIRECT_CODE, now, candidate.id,
+      ).run();
+      return { claimed: true, status: "completed", jobId: candidate.id, safeErrorCode: null };
+    }
     const unavailable = technicallyUnavailable(error);
     const shouldRetry = !unavailable && retryable(error) && attempt < candidate.maxAttempts;
     if (unavailable) {

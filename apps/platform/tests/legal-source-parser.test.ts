@@ -321,3 +321,19 @@ test("parser distinguishes an explicit Lex alternate-language notice from a brok
       && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
   );
 });
+
+test("parser preserves a verified Lex alternate-language source link", () => {
+  const html = `<html><body><main id="divCont">
+    <div id="divBody"><div class="ACT_TITLE lx_elem">Акт</div>
+      <div class="ACT_TEXT lx_elem">Короткий текст.</div></div>
+    <div class="COMMENT_FOR_WARNING"><div>Текст акта приводится на <a href="/ru/docs/8383786">узбекском языке</a>.</div></div>
+  </main></body></html>`;
+  assert.throws(() => normalizeLegalSourceHtml({
+    html,
+    reference: { sourceKind: "lex", locale: "ru", canonicalId: "8385395", canonicalUrl: "https://lex.uz/ru/docs/8385395" },
+    rawContentSha256: "a".repeat(64),
+  }), (error: unknown) => error instanceof LegalSourceParserError
+    && error.code === "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE"
+    && error.alternateLanguageSource?.href === "/ru/docs/8383786"
+    && error.alternateLanguageSource.language === "uz-Cyrl");
+});

@@ -1109,6 +1109,101 @@ test("an official page without legal text or a supported representation resolves
   }
 });
 
+test("a verified Lex alternate-language link is redriven once through its canonical source", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const unavailableHtml = `<html><body><main id="divCont">
+    <div id="divBody"><div class="ACT_TITLE lx_elem">Акт</div>
+      <div class="ACT_TEXT lx_elem">Короткий текст.</div></div>
+    <div class="COMMENT_FOR_WARNING"><div>Текст акта приводится на <a href="/ru/docs/8383786">узбекском языке</a>.</div></div>
+  </main></body></html>`;
+  const availableHtml = `<html><body><main id="divCont"><div id="divBody">
+    <div class="ACT_TITLE lx_elem">Риэлторлик фаолияти тўғрисида</div>
+    <div class="ACT_TEXT lx_elem">${"Официальная норма. ".repeat(24)}</div>
+  </div></main></body></html>`;
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/8385395", now,
+      correlationId: "alternate-language-redrive-test",
+    });
+    const first = await runNextLegalCorpusIngestionJob(env, {
+      now, fetchImpl: fetchFor(unavailableHtml),
+    });
+    assert.deepEqual(first, { claimed: true, status: "completed", jobId: queued.jobId, safeErrorCode: null });
+    const redirected = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,source_url AS sourceUrl,language,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; sourceUrl: string; language: string; errorCode: string;
+      };
+    assert.deepEqual({ ...redirected }, {
+      status: "retrying", attemptCount: 1, sourceUrl: "https://lex.uz/docs/8383786",
+      language: "uz-Cyrl", errorCode: "LEGAL_CORPUS_ALTERNATE_LANGUAGE_REDIRECT",
+    });
+    const second = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000), fetchImpl: fetchFor(availableHtml),
+    });
+    assert.deepEqual(second, { claimed: true, status: "completed", jobId: queued.jobId, safeErrorCode: null });
+    const completed = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,last_error_code AS errorCode
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; errorCode: string | null;
+      };
+    assert.deepEqual({ ...completed }, { status: "completed", attemptCount: 2, errorCode: null });
+    assert.equal(
+      (sqlite.prepare(`SELECT count(*) AS count FROM legal_corpus_failures WHERE job_id=? AND retry_state='retrying'`)
+        .get(queued.jobId) as { count: number }).count,
+      1,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
+test("a completed language-unavailable row is recovered before alternate redrive", async () => {
+  const { sqlite, d1 } = sqliteD1Fixture();
+  const bucket = new MemoryBucket();
+  const unavailableHtml = `<html><body><main id="divCont"><div id="divBody">
+    <div class="ACT_TITLE lx_elem">Акт</div><div class="ACT_TEXT lx_elem">Короткий текст.</div>
+    </div><div class="COMMENT_FOR_WARNING">Текст акта приводится на <a href="/ru/docs/8383786">узбекском языке</a>.</div>
+  </main></body></html>`;
+  try {
+    const env = envFor(d1, bucket);
+    const queued = await enqueueOfficialLexCorpusDocument(env, {
+      sourceUrl: "https://lex.uz/ru/docs/8385395", now,
+      correlationId: "alternate-language-existing-row-test",
+    });
+    sqlite.prepare(`UPDATE legal_corpus_ingestion_jobs
+      SET status='completed',attempt_count=1,last_error_code=?,updated_at=? WHERE id=?`).run(
+      "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE", now.toISOString(), queued.jobId,
+    );
+    sqlite.prepare(`INSERT INTO legal_corpus_failures
+      (id,job_id,canonical_document_id,source_url,language,attempted_at,http_status,error_code,
+        safe_message,retryable,retry_count,retry_state)
+      VALUES (?,?,?,?,?,?,NULL,?,?,0,1,'technically_unavailable')`).run(
+      "existing-language-unavailable", queued.jobId, "lexuz:8385395",
+      "https://lex.uz/ru/docs/8385395", "ru", now.toISOString(),
+      "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE", "LEGAL_SOURCE_LANGUAGE_TEXT_UNAVAILABLE",
+    );
+    const run = await runNextLegalCorpusIngestionJob(env, {
+      now: new Date(now.getTime() + 60_000), fetchImpl: fetchFor(unavailableHtml),
+    });
+    assert.deepEqual(run, { claimed: true, status: "completed", jobId: queued.jobId, safeErrorCode: null });
+    const redirected = sqlite.prepare(`SELECT status,attempt_count AS attemptCount,source_url AS sourceUrl,language
+      FROM legal_corpus_ingestion_jobs WHERE id=?`).get(queued.jobId) as {
+        status: string; attemptCount: number; sourceUrl: string; language: string;
+      };
+    assert.deepEqual({ ...redirected }, {
+      status: "retrying", attemptCount: 2, sourceUrl: "https://lex.uz/docs/8383786", language: "uz-Cyrl",
+    });
+    assert.equal(
+      (sqlite.prepare(`SELECT count(*) AS count FROM legal_corpus_failures WHERE job_id=? AND retry_state='retrying'`)
+        .get(queued.jobId) as { count: number }).count,
+      2,
+    );
+  } finally {
+    sqlite.close();
+  }
+});
+
 test("a signed Lex PDF unavailable result is redriven once after the parser fix", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new MemoryBucket();
