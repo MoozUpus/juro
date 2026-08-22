@@ -199,6 +199,25 @@ rows and dead-letter jobs are both zero. Discovery remains 21/44 completed
 and the queue is not frozen, so release floors and all post-ingestion gates
 remain open; production is untouched.
 
+## Sequential continuation with transient Lex timeout (2026-08-22, 20:12–20:18Z)
+
+Run `a8db95be-baa3-4959-bcc0-8ac688c5d333` closed at
+`2026-08-22T20:18:22.049Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. The `local_authorities/uz-Latn` checkpoint was
+temporarily retrying at page 20 and returned to the queued ledger; no
+checkpoint was force-completed and no terminal or dead-letter ingestion row
+was created.
+
+The post-run read-only boundary is 222 canonical documents, 251 language
+variants, 12,761 distinct current provisions and 34,784 indexed chunks. The
+ingestion ledger contains 1,234 completed and 13,171 queued jobs. Failure
+rows remain retrying-only (9); unresolved terminal/technically-unavailable
+rows and dead-letter jobs are both zero. Discovery remains 21/44 completed
+and the queue is not frozen, so release floors and all post-ingestion gates
+remain open; production is untouched. A single transient Cloudflare D1 probe
+returned API code 7403; `wrangler whoami` confirmed the authorized OAuth
+account and the identical read-only query succeeded on retry.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
