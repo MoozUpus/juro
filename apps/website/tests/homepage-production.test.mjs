@@ -4,7 +4,9 @@ import test from "node:test";
 
 const rootPage = fs.readFileSync("app/page.tsx", "utf8");
 const rootLawyersPage = fs.readFileSync("app/lawyers/page.tsx", "utf8");
+const rootLawyerProfilePage = fs.readFileSync("app/lawyers/[profileId]/page.tsx", "utf8");
 const localizedPage = fs.readFileSync("app/[locale]/page.tsx", "utf8");
+const legacyLegalPage = fs.readFileSync("app/[locale]/[legalSlug]/page.tsx", "utf8");
 const adapter = fs.readFileSync("app/components/cinematic/CinematicLandingPage.tsx", "utf8");
 const homepage = fs.readFileSync("app/components/public/JuroHomepage.tsx", "utf8");
 const homepageStyles = fs.readFileSync("app/components/public/juro-home.module.css", "utf8");
@@ -84,10 +86,13 @@ test("public chrome exposes every primary public destination in all three locale
   assert.doesNotMatch(sitemap, /prototype/);
 });
 
-test("the unlocalized lawyer catalogue entry redirects to the canonical RU route", () => {
+test("unlocalized lawyer catalogue and profile entries redirect to canonical RU routes", () => {
   assert.match(rootLawyersPage, /redirect\("\/ru\/lawyers"\)/);
+  assert.match(rootLawyerProfilePage, /redirect\(`\/ru\/lawyers\/\$\{encodeURIComponent\(profileId\)\}`\)/);
   assert.match(localizedPage, /rawLocale === "lawyers"\) redirect\("\/ru\/lawyers"\)/);
-  assert.match(worker, /url\.pathname === "\/lawyers"/);
+  assert.match(legacyLegalPage, /locale === "lawyers"\) permanentRedirect\(`\/ru\/lawyers\/\$\{encodeURIComponent\(legalSlug\)\}`\)/);
+  assert.match(worker, /url\.pathname === "\/lawyers" \|\| url\.pathname\.startsWith\("\/lawyers\/"\)/);
+  assert.match(worker, /new URL\(`\/ru\$\{url\.pathname\}`/);
   assert.match(worker, /Response\.redirect\(destination, 308\)/);
   assert.match(worker, /destination\.search = url\.search/);
   assert.match(productionDeploy, /run_worker_first: true/);

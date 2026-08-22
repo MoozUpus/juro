@@ -61,7 +61,7 @@
 .platform-sidebar nav{scrollbar-width:thin;scrollbar-color:rgba(255,255,255,.22) transparent}
 .platform-sidebar nav::-webkit-scrollbar{width:5px}
 .platform-sidebar nav::-webkit-scrollbar-thumb{border-radius:999px;background:rgba(255,255,255,.2)}
-.platform-nav-section{padding:14px 12px 5px;color:#7f94a3;font-size:10px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}
+.platform-nav-section{padding:14px 12px 5px;color:var(--p-gold);font-size:10px;font-weight:850;letter-spacing:.12em;text-transform:uppercase}
 .platform-nav-section:first-child{padding-top:3px}
 .platform-sidebar nav a{min-height:43px}
 .platform-sidebar nav a.active{box-shadow:inset 3px 0 var(--p-gold)}
@@ -81,6 +81,7 @@
 @media(hover:hover) and (pointer:fine){.platform-nav-documents summary:hover,.platform-nav-more summary:hover{background:rgba(255,255,255,.1);color:#fff}}
 .platform-nav-documents summary:focus-visible,.platform-nav-more summary:focus-visible{outline:3px solid rgba(199,157,78,.88);outline-offset:2px}
 .platform-nav-documents summary svg,.platform-nav-more summary svg{width:19px;flex:none}
+.platform-sidebar nav a>svg,.platform-sidebar-bottom a>svg,.platform-sidebar-logout>svg,.platform-collapse>svg,.platform-nav-documents summary>svg:first-child,.platform-nav-more summary>svg:first-child{color:var(--p-gold)}
 .platform-nav-documents summary .platform-nav-documents-chevron,.platform-nav-more summary .platform-nav-more-chevron{margin-left:auto;width:16px}
 .platform-nav-documents[open]>summary .platform-nav-documents-chevron,.platform-nav-more[open]>summary .platform-nav-more-chevron{transform:rotate(180deg)}
 .platform-nav-documents-content{padding:3px 0 3px 12px}
@@ -125,3 +126,7 @@
 }
 @media(max-width:340px){.platform-topbar-logout{display:none!important}}
 @media(max-width:520px){.platform-topbar>div:first-of-type{display:none}}
+
+/* Navigation labels remain readable while the leading icon consistently uses
+   JURO gold across desktop and compact mobile navigation. */
+.platform-mobile-nav svg,.platform-mobile-nav a.active svg{color:var(--brand-gold-text)}
