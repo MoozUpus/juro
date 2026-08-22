@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Camera, CameraOff, Cast, CircleAlert, LoaderCircle, Mic, MicOff, PhoneOff, RotateCcw, ShieldCheck, UsersRound, Volume2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { describeLawyerCallApiError, describeLawyerCallMediaError } from "../../lib/platform/lawyer-call-media-error";
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 type IceServer = { urls: string | string[]; username?: string; credential?: string };
@@ -10,10 +11,17 @@ type PrepareResponse = { roomId: string; role: "client" | "lawyer"; peerName: st
 type Signal = { id: string; type: "offer" | "answer" | "ice" | "restart"; payload: Record<string, unknown>; createdAt: string };
 type Phase = "preflight" | "preparing" | "ready" | "joining" | "waiting" | "connected" | "reconnecting" | "ended";
 
+class LawyerCallApiError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+    this.name = "LawyerCallApiError";
+  }
+}
+
 async function api<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
   const payload = await response.json() as T & { code?: string; error?: string };
-  if (!response.ok) throw new Error(payload.error || payload.code || `HTTP ${response.status}`);
+  if (!response.ok) throw new LawyerCallApiError(payload.code || payload.error || `HTTP_${response.status}`);
   return payload;
 }
 
@@ -89,9 +97,9 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
         cursor.current = { after: signal.createdAt, afterId: signal.id };
       }
     } catch (value) {
-      setError(value instanceof Error ? value.message : String(value));
+      setError(describeLawyerCallApiError(value, locale));
     } finally { pollActive.current = false; }
-  }, [endpoint, handleSignal, phase]);
+  }, [endpoint, handleSignal, locale, phase]);
 
   async function prepare() {
     if (!navigator.mediaDevices?.getUserMedia || typeof RTCPeerConnection === "undefined") {
@@ -110,7 +118,8 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
       setPrepared(result); setPhase("ready");
     } catch (value) {
       localStream.current?.getTracks().forEach((track) => track.stop()); localStream.current = null;
-      setPhase("preflight"); setError(value instanceof Error ? value.message : String(value));
+      setPhase("preflight");
+      setError(value instanceof LawyerCallApiError ? describeLawyerCallApiError(value, locale) : describeLawyerCallMediaError(value, locale));
     }
   }
 
@@ -137,7 +146,7 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
       setPhase("waiting");
       if (prepared.role === "lawyer") await createOffer(reconnect);
       else await sendSignal("restart", { reason: reconnect ? "client_reconnect" : "client_ready" });
-    } catch (value) { setPhase("ready"); setError(value instanceof Error ? value.message : String(value)); }
+    } catch (value) { setPhase("ready"); setError(describeLawyerCallApiError(value, locale)); }
   }
 
   async function shareScreen() {
@@ -149,11 +158,11 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
       if (!screenTrack || !sender) return;
       await sender.replaceTrack(screenTrack); setSharing(true);
       screenTrack.onended = () => { const cameraTrack = localStream.current?.getVideoTracks()[0]; if (cameraTrack) void sender.replaceTrack(cameraTrack); setSharing(false); };
-    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    } catch (value) { setError(describeLawyerCallMediaError(value, locale, "screen_share")); }
   }
 
   async function endCall() {
-    try { await post({ action: "end" }); } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    try { await post({ action: "end" }); } catch (value) { setError(describeLawyerCallApiError(value, locale)); }
     peer.current?.close(); localStream.current?.getTracks().forEach((track) => track.stop()); setPhase("ended");
   }
 

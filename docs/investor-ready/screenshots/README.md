@@ -27,6 +27,10 @@ recorded in `../QA_MATRIX.md`.
 - `after/client-notifications-1536.png` and
   `after/client-monitoring-task-source.png` — exact monitoring-task notification,
   case-plan handoff and immutable official Lex.uz source rendering.
+- `after/client-call-preflight-1536.png` — privacy-safe production Chrome
+  call-room preflight after the route-scoped device policy and heading-contrast
+  fix. The connected two-party pass is backed by synchronized DOM timers and D1
+  provider/events evidence; live camera frames are intentionally not retained.
 - `after/lawyer-dashboard-1536.png` and
   `after/lawyer-dashboard-dark-1536.png` — authenticated lawyer dashboard in
   System/Light-derived and explicit Dark states.
@@ -47,5 +51,5 @@ recorded in `../QA_MATRIX.md`.
 - `after/admin-billing-fresh-mfa-1536.png` — fresh-MFA fee matrix with the fixed
   1% policy and explicit 2%/5% configuration controls.
 
-Responsive Client/Admin evidence, the platform audit-log post-fix replay and call
-media are added only after those checks run; their absence is not treated as a pass.
+Responsive Client/Admin evidence and the platform audit-log post-fix replay are
+added only after those checks run; their absence is not treated as a pass.

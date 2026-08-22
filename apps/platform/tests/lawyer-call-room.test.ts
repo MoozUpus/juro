@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import { generateLawyerCallIceServers } from "../lib/platform/lawyer-call";
+import { describeLawyerCallApiError, describeLawyerCallMediaError } from "../lib/platform/lawyer-call-media-error";
 
 test("lawyer calls fail over to Cloudflare STUN without exposing a long-lived key", async () => {
   const result = await generateLawyerCallIceServers({});
@@ -42,6 +43,8 @@ test("call room is participant-scoped, ephemeral, audited and never records medi
     assert.match(source, /assertSafeWrite/);
   }
   assert.match(roomRoute, /workspace_audit_events/);
+  assert.match(roomRoute, /room\.status === "ended" && parsed\.data\.action === "end"/);
+  assert.match(roomRoute, /status: "ended"/);
   assert.match(signalRoute, /expires_at/);
   assert.match(signalRoute, /created_at>=\?\) < 480/);
   assert.match(signalRoute, /SIGNAL_RATE_LIMITED/);
@@ -53,4 +56,24 @@ test("call room is participant-scoped, ephemeral, audited and never records medi
   assert.match(migration, /FOREIGN KEY \(`consultation_id`\)/);
   assert.match(migration, /CHECK \(`signal_type` IN \('offer','answer','ice','restart'\)\)/);
   assert.doesNotMatch(migration, /DROP\s+TABLE/iu);
+});
+
+test("call room converts browser media failures into actionable RU and UZ guidance", () => {
+  const denied = { name: "NotAllowedError", message: "Permission denied" };
+  const busy = { name: "NotReadableError" };
+  const missing = { name: "NotFoundError" };
+
+  assert.match(describeLawyerCallMediaError(denied, "ru"), /настройки сайта.*разрешите камеру и микрофон/iu);
+  assert.doesNotMatch(describeLawyerCallMediaError(denied, "ru"), /Permission denied/u);
+  assert.match(describeLawyerCallMediaError(denied, "uz"), /sayt sozlamalarini.*ruxsat bering/iu);
+  assert.match(describeLawyerCallMediaError(busy, "ru"), /заняты другим приложением/iu);
+  assert.match(describeLawyerCallMediaError(missing, "uz"), /topilmadi/iu);
+  assert.match(describeLawyerCallMediaError(denied, "ru", "screen_share"), /Показ экрана отменён или запрещён/iu);
+});
+
+test("call room converts API codes into investor-safe RU and UZ guidance", () => {
+  assert.match(describeLawyerCallApiError({ code: "CALL_ENDED" }, "ru"), /Звонок уже завершён/iu);
+  assert.match(describeLawyerCallApiError({ code: "CALL_NOT_PREPARED" }, "uz"), /Avval kamera va mikrofonni tekshiring/iu);
+  assert.doesNotMatch(describeLawyerCallApiError(new Error("CALL_ENDED"), "ru"), /CALL_ENDED/u);
+  assert.doesNotMatch(describeLawyerCallApiError(new Error("unexpected"), "uz"), /unexpected/u);
 });

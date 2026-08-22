@@ -63,6 +63,9 @@ The corresponding before evidence is in `screenshots/before/`.
 - Tenant-scoped monitoring-to-task creation with immutable official-source snapshot, exact-case linking, Lawyer/Client rendering and a direct notification handoff.
 - Consultation room/signalling foundation, transparent demo billing, 1% case
   fee semantics, configurable 2%/5% rules, Uzum exclusion and admin fee matrix.
+- Route-scoped camera/microphone/display-capture policy, actionable RU/UZ device
+  errors, TURN credential exchange, idempotent end-call handling and reusable
+  bounded demo-call reset.
 - Three bounded demo accounts, three synthetic payment records and one
   consent-published demo lawyer. Synthetic data is labelled and bounded.
 - Manrope and navy/gold visual system across public, client, lawyer and admin
@@ -81,8 +84,12 @@ Representative production widths passed at 360, 390, 768, 1366 and 1440
 pixels. The live monitoring defect found during this pass was fixed and deployed
 in commits `49ceed62` and `9dc062fa`.
 
-The two-participant media portion of the call remains an explicit open QA item;
-camera/microphone access is not inferred from the room/signalling implementation.
+Two separate authenticated Chrome profiles completed camera/microphone preflight
+and joined one production room. Both showed synchronized timers; mute/unmute,
+camera-off and simultaneous end-call states passed without raw technical codes.
+Cloudflare TURN preflight returned `relayAvailable=true`, and D1 recorded
+`provider=cloudflare_realtime_turn`. Screen-share picker selection and forced
+reconnect remain narrower open checks rather than inferred passes.
 
 The same rehearsal created and stopped a five-second billable timer, ran a
 one-result conflict check, saved a favourite case-linked knowledge note and
@@ -109,8 +116,9 @@ populated synthetic document and preview, marketplace/profile, accepted request,
 active grant, messages, confirmed consultation, case plan, calendar, billing,
 notifications, profile/settings/security and monitoring. A monitoring task
 notification opened the exact case plan, and a Client attempt to open a Lawyer
-route was denied without exposing professional data. Client responsive widths,
-live AI submission and media-call QA remain open separately.
+route was denied without exposing professional data. The two-party Client/Lawyer
+media call also passed. Client responsive widths and live AI submission remain
+open separately.
 
 ## 7. Theme matrix
 
@@ -140,6 +148,8 @@ profile and responsive evidence; Client System/Dark, notifications, populated
 synthetic document and monitoring-task source; Lawyer Light/System and Dark,
 responsive views, live monitoring, source-linked task, AI, billing and profile;
 plus the Admin before-state and fresh-MFA overview/billing after-state.
+The index also contains a privacy-safe production Client call preflight capture;
+live camera frames were not retained in the repository.
 
 Admin Demo now has an active TOTP factor. The fresh-MFA handoff created the
 separate production Admin session and Chrome verified overview, lawyer profiles,
@@ -151,7 +161,7 @@ included in the evidence index.
 That pass also found a previously hidden audit-log failure: production D1
 rejected the seven-term compound query. The fix first shipped in Worker
 `073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker
-`8a77ac8a-ea99-4455-9643-834ca683d67c`, using bounded per-source queries and a
+`28535b0e-8104-48bb-8b73-d5f3d6422ed9`, using bounded per-source queries and a
 safe global top-N merge. Focused tests and all seven production D1 source queries
 pass. A final browser replay of this one page is still open because the
 local Chrome client began returning `ERR_BLOCKED_BY_CLIENT` for every platform
@@ -169,14 +179,13 @@ records during the presentation.
   no synthetic row is represented as a settled real payment.
 - Full local legal-corpus and dense/vector flags are off. The live release uses
   direct official Lex.uz retrieval/metadata and labels monitoring accordingly.
-- Lawyer call room/TURN/signalling are deployed, but final two-participant
-  camera/microphone QA is still open.
 - Platform audit-log post-fix browser replay, Client/Admin responsive widths,
-  Chrome zoom, reduced-motion, live AI submission and the end-to-end investor rehearsal remain open.
+  Chrome zoom, reduced-motion, screen-share picker/forced reconnect, live AI
+  submission and the end-to-end investor rehearsal remain open.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` after the latest platform deploy is operational with 8/8
   components and no active incidents, generated at
-  `2026-08-22T14:37:45.993Z`.
+  `2026-08-22T15:46:44.553Z`.
 
 Until the open Chrome items are closed, this document is a release-candidate
 report rather than a blanket Definition-of-Done claim.

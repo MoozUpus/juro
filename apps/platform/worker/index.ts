@@ -87,9 +87,17 @@ function isSupportedImageOutputFormat(
 
 function withSecurityHeaders(response: Response, url: URL): Response {
   const headers = new Headers(response.headers);
+  const mediaEnabledCallPage =
+    /^\/(?:ru|uz)\/(?:individual|entrepreneur|lawyer)\/consultations\/call\/[^/]+\/?$/u.test(url.pathname) ||
+    /^\/(?:ru|uz)\/business\/[^/]+\/consultations\/call\/[^/]+\/?$/u.test(url.pathname);
   headers.set("X-Content-Type-Options", "nosniff");
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  headers.set("Permissions-Policy", "camera=(), geolocation=(), payment=(), usb=(), microphone=(self)");
+  headers.set(
+    "Permissions-Policy",
+    mediaEnabledCallPage
+      ? "camera=(self), display-capture=(self), geolocation=(), payment=(), usb=(), microphone=(self)"
+      : "camera=(), display-capture=(), geolocation=(), payment=(), usb=(), microphone=(self)",
+  );
   headers.set("X-Frame-Options", "DENY");
   headers.set("X-Robots-Tag", "noindex, nofollow, noarchive");
   headers.set(

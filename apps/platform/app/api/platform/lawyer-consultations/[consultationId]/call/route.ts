@@ -82,6 +82,9 @@ async function postCall(request: Request, context: Context) {
      WHERE r.consultation_id=? LIMIT 1`,
   ).bind(user.id, participant.consultationId).first<{ id: string; status: string; preparedAt: string | null }>();
   if (!room?.preparedAt) return response({ code: "CALL_NOT_PREPARED" }, 409);
+  if (room.status === "ended" && parsed.data.action === "end") {
+    return response({ ok: true, roomId: room.id, status: "ended" });
+  }
   if (room.status === "ended" && parsed.data.action !== "heartbeat") return response({ code: "CALL_ENDED" }, 409);
 
   if (parsed.data.action === "heartbeat") {
