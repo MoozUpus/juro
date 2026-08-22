@@ -13,7 +13,7 @@ This is a current-state release record, not a blanket completion claim. Browser 
 
 - Cloudflare Realtime was activated and a TURN application named `juro-production-webrtc` was created.
 - `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` were transmitted directly to Worker `juro` as secrets. Values were not printed, written to disk or committed.
-- Platform Worker production version: `873f178f-2b82-4793-ba6a-8a506f348d0d`.
+- Platform Worker production version: `82293dc7-f208-4142-9ccf-8bec75fb6432`.
 - Public routing Worker production version: `b87fb3e5-65f3-45ea-9d73-c4ff31d57116`.
 - Sites version 70 is live. Sites version 72 contains the canonical unlocalized lawyer-profile route and is saved but not yet published.
 
@@ -38,6 +38,8 @@ Repository-only or inactive names `staging.juro.uz`, `app.staging.juro.uz`, `law
 ## Health
 
 At `2026-08-22T10:42:32.147Z`, `/api/status` returned `overallStatus=operational`, all eight published components operational and no active incidents. A request made during the immediate post-deploy probe refresh briefly observed stale evidence; the subsequent authoritative response was operational after the scheduled/synthetic probes completed.
+
+A later read at `2026-08-22T11:01:37.131Z` again returned `overallStatus=operational`, all eight components operational and no incidents. The public sitemap smoke followed all 78 canonical URLs without a 4xx/5xx response.
 
 ## Validation
 

@@ -49,6 +49,6 @@ Automated tests already enforce the shared-cookie precedence rule and cross-host
 | Production artifact | VERIFIED locally — production bindings/artifact and performance gates |
 | D1 backup/restore and migrations | VERIFIED — pre/post private R2 backup readback hashes matched; post restore `quickCheck=ok`, zero FK violations; `0146`–`0151` applied with no pending migrations; bounded demo counts 3 accounts / 3 payments / 1 published lawyer |
 | Cloudflare Calls TURN secret | VERIFIED — Realtime TURN application created and both production Worker secrets bound; secret values were never written to the repository or evidence |
-| Production deployment | PARTIAL — platform Worker `873f178f-2b82-4793-ba6a-8a506f348d0d`; public Worker `b87fb3e5-65f3-45ea-9d73-c4ff31d57116`; Sites 70 live; Sites 72 saved and awaiting action-time publish approval |
-| `/api/status` after deployment | VERIFIED — generated `2026-08-22T10:42:32.147Z`, overall operational, 8/8 components operational, 0 active incidents |
+| Production deployment | PARTIAL — platform Worker `82293dc7-f208-4142-9ccf-8bec75fb6432`; public Worker `b87fb3e5-65f3-45ea-9d73-c4ff31d57116`; Sites 70 live; Sites 72 saved and awaiting action-time publish approval |
+| `/api/status` after deployment | VERIFIED — generated `2026-08-22T11:01:37.131Z`, overall operational, 8/8 components operational, no active incidents |
 | Authenticated Chrome QA | PENDING |
