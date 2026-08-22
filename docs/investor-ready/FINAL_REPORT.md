@@ -158,6 +158,15 @@ media call also passed. The authenticated Client dashboard passed
 official Lex.uz link whose article 217 text was opened and checked in a second
 Chrome profile.
 
+A later authenticated responsive replay covered 20 top-level Client routes at
+both 390×844 mobile and 768×1024 tablet viewports: dashboard, AI, builder,
+review, cases, documents, plans, calendar, archive, history, consultations,
+lawyers, monitoring, notifications, billing, profile, settings, security,
+demo payments and help. Every route retained its canonical URL and Manrope,
+returned a real page rather than 404, fit the root width without horizontal
+overflow and produced no browser warning/error log. This is Chrome responsive
+viewport evidence, not a physical-device claim.
+
 ## 7. Theme matrix
 
 | Surface | Light | Dark | System |
