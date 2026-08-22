@@ -368,6 +368,38 @@ Dead-letter ingestion jobs and terminal or technically-unavailable failure
 rows remained zero. The lease was released after completion. Ingestion is not
 frozen; queue freeze, release floors and all post-ingestion gates remain open.
 
+## Signed Lex PDF redrive and terminal-failure recovery (2026-08-22)
+
+A read-only staging probe found one technically-unavailable row for
+`lexuz:8420999` (`https://lex.uz/uz/docs/-8420999`, attempted at
+`2026-08-22T17:22:55.627Z`). A live, robots-checked read of that official page
+returned HTTP 200 and showed the signed representation path
+`/pdffile/-8420999`; the previous parser had stripped the leading minus sign
+and therefore treated a reachable official PDF as unavailable. This was a
+parser defect, not a legal-source determination.
+
+Commit `7b87ee28` preserves signed Lex IDs in the source fetcher,
+normalizer and ingestion path. Commit `e1889189` adds a bounded recovery rule:
+only a first-attempt `LEGAL_CORPUS_OFFICIAL_TEXT_UNAVAILABLE` row whose source
+URL is a signed Lex `/docs/-<id>` path is re-read once. The original failure
+row is retained as evidence; a second unavailable result remains
+`technically_unavailable` and blocks the release gate. The regression suite
+passed **36/36**, `npm run type-check`, `npm run lint`,
+`npm run validate:legal-corpus:artifact` and `git diff --check` passed.
+
+Staging-only Worker version `111cac77-7cd4-4405-bfce-842e9e05d314` deployed the
+fix against `juro-staging-corpus-v2` and `juro_legal_staging_v2`. The next
+sequential cron run redrove the target job (`attempt_count 1 → 2`), completed
+it with `last_error_code = NULL`, and left the original failure row in the
+ledger as a completed-job retry projection. A subsequent read-only D1 probe
+reported **0 terminal/technically-unavailable failures**. The current
+admin-equivalent totals were 205 canonical documents, 12,485 unique current
+provisions, 33,485 indexed chunks, 21/44 checkpoints and 1,464 live/manual
+queued or retrying jobs. Seven historical retrying rows belong to completed
+jobs and are projected as resolved by the dashboard; ingestion is still not
+frozen and release floors, snapshot, evaluation and restore gates remain open.
+Production bindings, flags, migrations and DNS were not changed.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
