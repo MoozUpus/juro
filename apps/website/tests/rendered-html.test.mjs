@@ -76,6 +76,45 @@ test("renders the complete English public landing and routes product actions to 
   for (const route of ["/en/video", "/en/lawyers", "/en/legal", "/en/trust"]) assert.match(html, new RegExp(`href="${route}"`));
 });
 
+test("serves localized search landing pages and a crawlable knowledge hub", async () => {
+  const worker = await createWorker();
+  for (const locale of ["ru", "uz", "en"]) {
+    for (const slug of ["ai-lawyer", "online-lawyer", "contract-review", "knowledge"]) {
+      const route = `/${locale}/${slug}`;
+      const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
+      assert.equal(response.status, 200, route);
+      const html = await response.text();
+      assert.match(html, new RegExp(`<link rel="canonical" href="https://juro\\.uz${route}"`), route);
+      assert.match(html, /<meta property="og:description"/);
+      assert.match(html, /<meta name="twitter:description"/);
+      assert.match(html, /application\/ld\+json/);
+    }
+  }
+});
+
+test("keeps preview legal documents accessible but out of search indexing and the sitemap", async () => {
+  const worker = await createWorker();
+  for (const route of ["/ru/legal", "/uz/legal/user-agreement", "/en/legal/user-agreement"]) {
+    const response = await worker.fetch(new Request(`http://localhost${route}`, { headers: { accept: "text/html" } }), runtime, context);
+    assert.equal(response.status, 200, route);
+    assert.match(await response.text(), /<meta name="robots" content="[^"\n]*noindex[^"\n]*follow[^"\n]*"/);
+  }
+  const sitemap = await worker.fetch(new Request("http://localhost/sitemap.xml"), runtime, context);
+  assert.equal(sitemap.status, 200);
+  const xml = await sitemap.text();
+  assert.doesNotMatch(xml, /\/legal(?:\/|<)/);
+  for (const route of ["/ru/ai-lawyer", "/uz/online-lawyer", "/en/contract-review", "/ru/knowledge"]) assert.match(xml, new RegExp(route));
+});
+
+test("publishes consistent JURO Uzbekistan entity markup", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(new Request("http://localhost/ru", { headers: { accept: "text/html" } }), runtime, context);
+  const html = await response.text();
+  assert.match(html, /"@type":"Organization"/);
+  assert.match(html, /"alternateName":"JURO Uzbekistan"/);
+  assert.match(html, /"@type":"WebSite"/);
+});
+
 test("removed landing test routes return not found", async () => {
   const worker = await createWorker();
   for (const route of ["/landing-test", "/lending-test"]) {

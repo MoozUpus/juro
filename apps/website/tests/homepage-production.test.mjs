@@ -64,7 +64,7 @@ test("production interactions have complete keyboard and reduced-motion contract
 });
 
 test("public chrome exposes every primary public destination in both locales", () => {
-  for (const route of ["/trust", "/video", "/lawyers", "/legal", "/knowledge/"]) {
+  for (const route of ["/trust", "/video", "/lawyers", "/legal", "/knowledge"]) {
     assert.match(chrome, new RegExp(route.replaceAll("/", "\\/")));
   }
   assert.match(chrome, /languageHref/);
