@@ -318,10 +318,11 @@ records during the presentation.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` returned to a fully operational 8/8 aggregate after migration
   `0155` and remained operational after Worker
-  `5438d2e3-b0b5-4e4e-8af6-c1fc910aabcd` (version 121): independent
-  app/status-host reads generated at `2026-08-22T21:47:14.564Z` and
-  `2026-08-22T21:47:15.633Z`
-  showed no stale or degraded component and zero active or recent incident.
+  `c03c3516-4828-44ab-bac6-74b85f45c7b4` (version 122): independent
+  app/status-host reads generated at `2026-08-22T22:33:15.747Z` and
+  `2026-08-22T22:33:17.064Z` showed no stale or degraded component and no
+  incident object. The live content-hashed Admin launch asset contains Manrope
+  and no previous inline Inter declaration.
 
 Until the open Chrome and legal-publication items are closed, this document is a
 release-candidate report rather than a blanket Definition-of-Done claim.

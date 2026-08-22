@@ -1,6 +1,7 @@
 # Investor-ready Chrome screenshots
 
-These images are production Chrome evidence captured on 2026-08-22. They are
+These images are production Chrome evidence captured on 2026-08-22 and
+2026-08-23. They are
 not design mockups. Browser/device exclusions and incomplete role flows remain
 recorded in `../QA_MATRIX.md`.
 
@@ -32,6 +33,9 @@ recorded in `../QA_MATRIX.md`.
   in Labour Code article 217 with the direct official Lex.uz source.
 - `after/client-synthetic-document-1536.jpg` — populated, clearly synthetic
   Client document and builder preview.
+- `after/client-lawyer-synthetic-chat-1536.png` — privacy-safe production
+  Client↔Lawyer message history containing only records explicitly marked
+  `SYNTHETIC DEMO`; no real contact details or camera frames are retained.
 - `after/client-notifications-1536.jpg` and
   `after/client-monitoring-task-source.jpg` — exact monitoring-task notification,
   case-plan handoff and immutable official Lex.uz source rendering.
