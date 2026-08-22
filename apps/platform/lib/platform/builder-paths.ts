@@ -66,6 +66,7 @@ export function builderNavigationPaths(
       "monitoring",
       "action-plan",
       "consultations",
+      "knowledge",
       "history",
       "archive",
       "team",

@@ -361,7 +361,7 @@ test("restricted lawyer lifecycle is append-only, blocks work, and restores only
     assert.equal(profile.publicApprovedAt, null);
     assert.throws(
       () => sqlite.prepare("UPDATE lawyer_profiles SET status='public_approved',marketplace_status='public_approved' WHERE id='pending-lawyer-profile'").run(),
-      /lifecycle evidence required/u,
+      /moderation or publication consent evidence required/u,
     );
     assert.throws(
       () => sqlite.prepare("UPDATE lawyer_profile_lifecycle_events SET reason='tampered' WHERE lawyer_profile_id='pending-lawyer-profile'").run(),
@@ -423,7 +423,8 @@ test("admin handoff route requires same-origin write protection and current MFA"
   assert.doesNotMatch(launchPage, /catch\s*\{\s*notFound\(\)/u);
   assert.match(accessPage, /15 минут/u);
   assert.match(accessPage, /auth\/login\?reauth=1&returnTo=/u);
-  assert.match(authPage, /authenticated && !\(mode === "login" && reauth\)/u);
+  assert.match(authPage, /authenticatedAuthRedirect/u);
+  assert.match(authPage, /mode,\s*reauth,/u);
   assert.match(localizedLogin, /reauth=\{query\.reauth === "1"\}/u);
   assert.match(accessPage, /environment === "production" \? "JURO · ADMIN" : "JURO · STAGING ADMIN"/u);
   assert.match(migration, /admin_handoff_tickets/u);

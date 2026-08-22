@@ -6,6 +6,10 @@ import { lawyerHostTarget } from "../worker/lawyer-host-router";
 test("lawyer host maps every clean professional route for RU and UZ", () => {
   const routes = [
     ["dashboard", "dashboard", null],
+    ["ai-chat", "ai-chat", null],
+    ["document-builder", "document-builder", null],
+    ["document-review", "document-review", null],
+    ["monitoring", "monitoring", null],
     ["requests", "consultations", "requests"],
     ["consultations", "consultations", "schedule"],
     ["clients", "consultations", "clients"],
@@ -14,9 +18,14 @@ test("lawyer host maps every clean professional route for RU and UZ", () => {
     ["messages", "consultations", "messages"],
     ["documents", "consultations", "documents"],
     ["tasks", "consultations", "tasks"],
+    ["knowledge", "knowledge", null],
+    ["billing", "billing", null],
+    ["demo-payments", "demo-payments", null],
     ["application", "profile", null],
     ["status", "profile", null],
     ["profile", "profile", null],
+    ["security", "security", null],
+    ["help", "help", null],
     ["settings", "settings", null],
   ] as const;
 
@@ -43,6 +52,7 @@ test("lawyer host fixes registration persona and rejects unknown product pages",
   const root = lawyerHostTarget(new URL("https://lawyer.juro.uz/"));
   assert.equal(root?.pathname, "/ru/auth/login");
   assert.equal(root?.searchParams.get("accountType"), "lawyer");
+  assert.equal(root?.searchParams.get("reauth"), null);
 
   const register = lawyerHostTarget(new URL("https://lawyer.juro.uz/ru/register"));
   assert.equal(register?.pathname, "/ru/auth/register");

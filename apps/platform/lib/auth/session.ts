@@ -6,6 +6,11 @@ import {
   MFA_CHALLENGE_COOKIE,
   SESSION_COOKIE,
 } from "./session-token";
+import {
+  sessionCookie,
+  sessionCookieUntil,
+  sharedAuthCookieDomain,
+} from "./session-persistence";
 import { localSessionFromCookie } from "./session-management";
 import type { LocalAssuranceLevel } from "./session-management";
 
@@ -14,7 +19,7 @@ export {
   MFA_CHALLENGE_COOKIE,
   SESSION_COOKIE,
 } from "./session-token";
-export { sessionCookie, sessionCookieUntil, sharedAuthCookieDomain } from "./session-persistence";
+export { sessionCookie, sessionCookieUntil, sharedAuthCookieDomain };
 
 export type SessionUser = {
   email: string;
@@ -57,6 +62,23 @@ export async function getSessionUser(request?: Request): Promise<SessionUser | n
 
 export function clearSessionCookie(domain?: string): string {
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0${domain ? `; Domain=${domain}` : ""}`;
+}
+
+/**
+ * Replace any legacy host-only session before installing the shared
+ * app/lawyer cookie. Browsers may otherwise send two `juro_session` values
+ * and the request parser cannot distinguish their cookie scopes.
+ */
+export function replacementSessionCookies(
+  token: string,
+  rememberMe: boolean,
+  hostname: string,
+): string[] {
+  const sharedDomain = sharedAuthCookieDomain(hostname);
+  return [
+    ...(sharedDomain ? [clearSessionCookie()] : []),
+    sessionCookie(token, rememberMe, sharedDomain),
+  ];
 }
 
 export function deviceContinuityCookie(

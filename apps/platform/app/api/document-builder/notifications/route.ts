@@ -20,7 +20,9 @@ export async function GET(): Promise<Response> {
     const user = await requireApiUser();
     const workspace = await workspaceForUser(user);
     const result = await requireD1().prepare(
-      "SELECT id, document_id AS documentId, type, title, body, read_at AS readAt, created_at AS createdAt FROM notifications WHERE user_id = ? AND workspace_id = ? ORDER BY created_at DESC LIMIT 200",
+      `SELECT id,document_id AS documentId,target_type AS targetType,target_id AS targetId,
+        type,title,body,read_at AS readAt,created_at AS createdAt
+       FROM notifications WHERE user_id=? AND workspace_id=? ORDER BY created_at DESC LIMIT 200`,
     ).bind(user.id, workspace.id).all();
     return jsonResponse({ notifications: result.results });
   } catch (error) {

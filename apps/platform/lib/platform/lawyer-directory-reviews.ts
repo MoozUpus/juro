@@ -5,6 +5,8 @@ export type PublicLawyerDirectoryRow = {
   languagesJson: unknown;
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes?: number;
+  additionalServicesJson?: unknown;
   availabilityStatus: string;
   nextAvailableAt: string | null;
   advocateStatus: string;
@@ -19,6 +21,9 @@ export type PublicLawyerDirectoryRow = {
   juroApprovalStatus?: string;
   topLawyerStatus?: string;
   topLawyerCriteria?: string | null;
+  acceptingNewRequests?: number | boolean;
+  trialEndsAt?: string | null;
+  trialPostExpiryMode?: "stay_published" | "limit_new_requests" | "hide_profile" | null;
 };
 
 export type ApprovedReviewAggregateRow = {
@@ -85,6 +90,9 @@ export function projectPublicLawyerDirectory(
       || lawyer.profilePhotoUrl !== undefined
       || lawyer.juroApprovalStatus !== undefined
       || lawyer.topLawyerStatus !== undefined;
+    const trialExpired = Boolean(lawyer.trialEndsAt && Date.parse(lawyer.trialEndsAt) <= Date.now());
+    const trialLimitsIntake = trialExpired
+      && (lawyer.trialPostExpiryMode === "limit_new_requests" || lawyer.trialPostExpiryMode === "hide_profile");
     return {
       id: lawyer.id,
       displayName: lawyer.displayName,
@@ -92,19 +100,25 @@ export function projectPublicLawyerDirectory(
       languages: stringList(lawyer.languagesJson),
       experienceYears: lawyer.experienceYears,
       priceDescription: lawyer.priceDescription,
+      consultationDurationMinutes: lawyer.consultationDurationMinutes ?? 60,
+      additionalServices: stringList(lawyer.additionalServicesJson),
       availabilityStatus: lawyer.availabilityStatus,
       nextAvailableAt: lawyer.nextAvailableAt,
       advocateStatus: lawyer.advocateStatus,
       firmName: lawyer.firmName,
       bio: lawyer.bio,
       ...(hasMarketplaceProjection ? {
-        // The directory query admits only pending-review and approved profiles. Keep
-        // this projection fail-closed as a second boundary: any future status such
-        // as "changes_requested" must neither look published nor accept a request.
+        // Publication and request intake are separate choices. A published profile
+        // remains discoverable when the lawyer temporarily pauses new requests.
         marketplaceStatus: lawyer.marketplaceStatus === "public_approved"
           ? "public_approved"
           : "pending_review",
-        canReceiveRequests: lawyer.marketplaceStatus === "public_approved",
+        acceptingNewRequests: lawyer.acceptingNewRequests === true || lawyer.acceptingNewRequests === 1,
+        canReceiveRequests: lawyer.marketplaceStatus === "public_approved"
+          && (lawyer.acceptingNewRequests === true || lawyer.acceptingNewRequests === 1)
+          && !trialLimitsIntake,
+        trialExpired,
+        trialLimitsIntake,
         city: lawyer.city ?? null,
         region: lawyer.region ?? null,
         education: lawyer.education ?? null,

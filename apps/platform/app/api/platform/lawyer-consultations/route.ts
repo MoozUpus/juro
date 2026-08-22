@@ -261,13 +261,14 @@ export const POST = withApiErrors(async function POST(request: Request) {
       ),
       db.prepare(
         `INSERT INTO notifications
-          (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
+          (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
          VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,NULL,
-           'lawyer_consultation_proposed',?,?,NULL,?)`,
+           'lawyer_consultation',?,'lawyer_consultation_proposed',?,?,NULL,?)`,
       ).bind(
         crypto.randomUUID(),
         handoff.clientUserId,
         handoff.clientUserId,
+        id,
         "Юрист предложил время консультации / Yurist maslahat vaqtini taklif qildi",
         startsAt,
         now,
@@ -383,12 +384,13 @@ export const POST = withApiErrors(async function POST(request: Request) {
     ),
     db.prepare(
       `INSERT INTO notifications
-        (id,workspace_id,user_id,document_id,type,title,body,read_at,created_at)
-       VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,NULL,?,?,?,NULL,?)`,
+        (id,workspace_id,user_id,document_id,target_type,target_id,type,title,body,read_at,created_at)
+       VALUES (?,(SELECT default_workspace_id FROM user_profiles WHERE id=?),?,NULL,'lawyer_consultation',?,?,?,?,NULL,?)`,
     ).bind(
       crypto.randomUUID(),
       recipientUserId,
       recipientUserId,
+      existing.id,
       `lawyer_consultation_${status}`,
       `Консультация: ${status} / Konsultatsiya: ${status}`,
       parsed.data.action === "complete" ? parsed.data.resultNote : "",

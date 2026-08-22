@@ -4,6 +4,7 @@ import {
   check,
   index,
   integer,
+  primaryKey,
   sqliteTable,
   text,
   uniqueIndex,
@@ -566,13 +567,18 @@ export const notifications = sqliteTable(
     workspaceId: text("workspace_id").references(() => workspaces.id, { onDelete: "cascade" }),
     userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
     documentId: text("document_id").references(() => documents.id, { onDelete: "cascade" }),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
     type: text("type").notNull(),
     title: text("title").notNull(),
     body: text("body").notNull(),
     readAt: text("read_at"),
     createdAt: text("created_at").notNull(),
   },
-  (table) => [index("notifications_user_idx").on(table.userId, table.createdAt)],
+  (table) => [
+    index("notifications_user_idx").on(table.userId, table.createdAt),
+    index("notifications_target_idx").on(table.userId, table.targetType, table.targetId, table.createdAt),
+  ],
 );
 
 export const activityEvents = sqliteTable(
@@ -1527,8 +1533,8 @@ export const taskReminders = sqliteTable("task_reminders", {
   status: text("status").notNull().default("pending"), idempotencyKey: text("idempotency_key").notNull(), sentAt: text("sent_at"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("task_reminders_idempotency_uidx").on(table.idempotencyKey), index("task_reminders_due_idx").on(table.status, table.reminderAt)]);
 export const lawyerProfiles = sqliteTable("lawyer_profiles", {
-  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), displayName: text("display_name").notNull(), specialtiesJson: text("specialties_json").notNull().default("[]"), languagesJson: text("languages_json").notNull().default("[]"), status: text("status").notNull().default("pending"), marketplaceStatus: text("marketplace_status").notNull().default("profile_incomplete"), publicApprovedAt: text("public_approved_at"), juroApprovalStatus: text("juro_approval_status").notNull().default("not_approved"), juroApprovedAt: text("juro_approved_at"), juroApprovedByUserId: text("juro_approved_by_user_id"), topLawyerStatus: text("top_lawyer_status").notNull().default("not_featured"), topLawyerCriteria: text("top_lawyer_criteria"), topLawyerAt: text("top_lawyer_at"), experienceYears: integer("experience_years"), priceDescription: text("price_description"), availabilityStatus: text("availability_status").notNull().default("unknown"), nextAvailableAt: text("next_available_at"), advocateStatus: text("advocate_status").notNull().default("not_declared"), firmName: text("firm_name"), bio: text("bio"), profileRevision: integer("profile_revision").notNull().default(1), city: text("city"), region: text("region"), education: text("education"), consultationFormatsJson: text("consultation_formats_json").notNull().default("[]"), profilePhotoKey: text("profile_photo_key"), profilePhotoMime: text("profile_photo_mime"), profilePhotoSha256: text("profile_photo_sha256"), profilePhotoSizeBytes: integer("profile_photo_size_bytes"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
-}, (table) => [uniqueIndex("lawyer_profiles_user_uidx").on(table.userId), index("lawyer_profiles_status_idx").on(table.status, table.updatedAt), index("lawyer_profiles_trust_designations_idx").on(table.juroApprovalStatus, table.topLawyerStatus, table.marketplaceStatus)]);
+  id: text("id").primaryKey(), userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), displayName: text("display_name").notNull(), specialtiesJson: text("specialties_json").notNull().default("[]"), languagesJson: text("languages_json").notNull().default("[]"), status: text("status").notNull().default("pending"), marketplaceStatus: text("marketplace_status").notNull().default("profile_incomplete"), publicApprovedAt: text("public_approved_at"), publicationConsentAt: text("publication_consent_at"), acceptingNewRequests: integer("accepting_new_requests").notNull().default(1), juroApprovalStatus: text("juro_approval_status").notNull().default("not_approved"), juroApprovedAt: text("juro_approved_at"), juroApprovedByUserId: text("juro_approved_by_user_id"), topLawyerStatus: text("top_lawyer_status").notNull().default("not_featured"), topLawyerCriteria: text("top_lawyer_criteria"), topLawyerAt: text("top_lawyer_at"), experienceYears: integer("experience_years"), priceDescription: text("price_description"), consultationDurationMinutes: integer("consultation_duration_minutes").notNull().default(60), additionalServicesJson: text("additional_services_json").notNull().default("[]"), availabilityStatus: text("availability_status").notNull().default("unknown"), nextAvailableAt: text("next_available_at"), advocateStatus: text("advocate_status").notNull().default("not_declared"), firmName: text("firm_name"), bio: text("bio"), profileRevision: integer("profile_revision").notNull().default(1), city: text("city"), region: text("region"), education: text("education"), consultationFormatsJson: text("consultation_formats_json").notNull().default("[]"), profilePhotoKey: text("profile_photo_key"), profilePhotoMime: text("profile_photo_mime"), profilePhotoSha256: text("profile_photo_sha256"), profilePhotoSizeBytes: integer("profile_photo_size_bytes"), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
+}, (table) => [uniqueIndex("lawyer_profiles_user_uidx").on(table.userId), index("lawyer_profiles_status_idx").on(table.status, table.updatedAt), index("lawyer_profiles_trust_designations_idx").on(table.juroApprovalStatus, table.topLawyerStatus, table.marketplaceStatus), check("lawyer_profiles_consultation_duration_check", sql`${table.consultationDurationMinutes} BETWEEN 15 AND 480`), check("lawyer_profiles_accepting_requests_check", sql`${table.acceptingNewRequests} IN (0,1)`)]);
 
 export const lawyerAvailabilityRules = sqliteTable("lawyer_availability_rules", {
   id: text("id").primaryKey(),
@@ -1581,6 +1587,119 @@ export const lawyerProfileLifecycleEvents = sqliteTable("lawyer_profile_lifecycl
   index("lawyer_profile_lifecycle_actor_idx").on(table.actorUserId, table.createdAt),
 ]);
 
+export const lawyerTrials = sqliteTable("lawyer_trials", {
+  id: text("id").primaryKey(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  status: text("status").notNull().default("active"),
+  postExpiryMode: text("post_expiry_mode").notNull().default("stay_published"),
+  reminder30SentAt: text("reminder_30_sent_at"),
+  reminder7SentAt: text("reminder_7_sent_at"),
+  reminder1SentAt: text("reminder_1_sent_at"),
+  reminderExpiredSentAt: text("reminder_expired_sent_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("lawyer_trials_profile_uidx").on(table.lawyerProfileId),
+  index("lawyer_trials_expiry_idx").on(table.status, table.endsAt),
+  check("lawyer_trials_time_check", sql`${table.startsAt} < ${table.endsAt}`),
+]);
+
+export const lawyerProfilePublicationEvents = sqliteTable("lawyer_profile_publication_events", {
+  id: text("id").primaryKey(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  actorUserId: text("actor_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  profileRevision: integer("profile_revision").notNull(),
+  previousProfileStatus: text("previous_profile_status").notNull(),
+  previousMarketplaceStatus: text("previous_marketplace_status").notNull(),
+  publicationConsentAt: text("publication_consent_at").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("lawyer_profile_publication_events_revision_uidx").on(table.lawyerProfileId, table.profileRevision),
+  index("lawyer_profile_publication_events_actor_idx").on(table.actorUserId, table.createdAt),
+]);
+
+export const lawyerProfileRevisions = sqliteTable("lawyer_profile_revisions", {
+  id: text("id").primaryKey(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  previousRevision: integer("previous_revision").notNull(),
+  nextRevision: integer("next_revision").notNull(),
+  actorUserId: text("actor_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  previousSnapshotJson: text("previous_snapshot_json").notNull(),
+  nextSnapshotJson: text("next_snapshot_json").notNull(),
+  reason: text("reason").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("lawyer_profile_revisions_version_uidx").on(table.lawyerProfileId, table.nextRevision),
+  index("lawyer_profile_revisions_created_idx").on(table.lawyerProfileId, table.createdAt),
+  check("lawyer_profile_revisions_sequence_check", sql`${table.nextRevision} = ${table.previousRevision} + 1`),
+]);
+
+export const lawyerProfileDeletionRequests = sqliteTable("lawyer_profile_deletion_requests", {
+  id: text("id").primaryKey(),
+  lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }),
+  requestedByUserId: text("requested_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  status: text("status").notNull().default("requested"),
+  reason: text("reason"),
+  decisionReason: text("decision_reason"),
+  reviewedByUserId: text("reviewed_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  requestedAt: text("requested_at").notNull(),
+  reviewedAt: text("reviewed_at"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("lawyer_profile_deletion_requests_open_uidx").on(table.lawyerProfileId).where(sql`${table.status} = 'requested'`),
+  index("lawyer_profile_deletion_requests_status_idx").on(table.status, table.requestedAt),
+]);
+
+export const billingFeePolicyVersions = sqliteTable("billing_fee_policy_versions", {
+  id: text("id").primaryKey(),
+  version: integer("version").notNull(),
+  mode: text("mode").notNull().default("sandbox"),
+  consultationFeeBasisPoints: integer("consultation_fee_basis_points").notNull().default(100),
+  installmentServiceMarkupBasisPoints: integer("installment_service_markup_basis_points").notNull().default(0),
+  installmentWaivesCaseTransfer: integer("installment_waives_case_transfer", { mode: "boolean" }).notNull().default(true),
+  effectiveFrom: text("effective_from").notNull(),
+  effectiveTo: text("effective_to"),
+  createdByUserId: text("created_by_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  reason: text("reason").notNull(),
+  source: text("source").notNull().default("admin"),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("billing_fee_policy_versions_version_uidx").on(table.version),
+  index("billing_fee_policy_versions_effective_idx").on(table.mode, table.effectiveFrom, table.effectiveTo),
+]);
+
+export const billingCaseTransferFeeRules = sqliteTable("billing_case_transfer_fee_rules", {
+  id: text("id").primaryKey(),
+  version: integer("version").notNull(),
+  labelRu: text("label_ru").notNull(),
+  labelUz: text("label_uz").notNull(),
+  legalArea: text("legal_area"),
+  caseType: text("case_type"),
+  feeBasisPoints: integer("fee_basis_points").notNull(),
+  priority: integer("priority").notNull().default(100),
+  effectiveFrom: text("effective_from").notNull(),
+  effectiveTo: text("effective_to"),
+  createdByUserId: text("created_by_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  reason: text("reason").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [
+  uniqueIndex("billing_case_transfer_fee_rules_version_uidx").on(table.version),
+  index("billing_case_transfer_fee_rules_match_idx").on(table.legalArea, table.caseType, table.effectiveFrom, table.effectiveTo, table.priority),
+]);
+
+export const billingFeeConfigurationEvents = sqliteTable("billing_fee_configuration_events", {
+  id: text("id").primaryKey(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull(),
+  action: text("action").notNull(),
+  actorUserId: text("actor_user_id").references(() => userProfiles.id, { onDelete: "restrict" }),
+  reason: text("reason").notNull(),
+  previousSnapshotJson: text("previous_snapshot_json"),
+  nextSnapshotJson: text("next_snapshot_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("billing_fee_configuration_events_entity_idx").on(table.entityType, table.entityId, table.createdAt)]);
+
 export const lawyerRequests = sqliteTable("lawyer_requests", {
   id: text("id").primaryKey(), workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }), caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }), requesterUserId: text("requester_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").references(() => lawyerProfiles.id, { onDelete: "set null" }), status: text("status").notNull().default("requested"), anonymizedSummary: text("anonymized_summary").notNull(), requestedScopeJson: text("requested_scope_json").notNull(), createdAt: text("created_at").notNull(), updatedAt: text("updated_at").notNull(),
 }, (table) => [index("lawyer_requests_workspace_idx").on(table.workspaceId, table.updatedAt), index("lawyer_requests_lawyer_idx").on(table.lawyerProfileId, table.status)]);
@@ -1605,6 +1724,127 @@ export const lawyerConsultations = sqliteTable("lawyer_consultations", {
   index("lawyer_consultations_client_time_idx").on(table.clientUserId, table.startsAt, table.status),
   check("lawyer_consultations_time_check", sql`${table.startsAt} < ${table.endsAt}`),
 ]);
+
+export const lawyerCallRooms = sqliteTable("lawyer_call_rooms", {
+  id: text("id").primaryKey(),
+  consultationId: text("consultation_id").notNull().references(() => lawyerConsultations.id, { onDelete: "cascade" }),
+  provider: text("provider").notNull().default("cloudflare_realtime_turn"),
+  status: text("status").notNull().default("waiting"),
+  startedAt: text("started_at"),
+  endedAt: text("ended_at"),
+  endedByUserId: text("ended_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("lawyer_call_rooms_consultation_uidx").on(table.consultationId),
+  index("lawyer_call_rooms_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const lawyerCallParticipants = sqliteTable("lawyer_call_participants", {
+  roomId: text("room_id").notNull().references(() => lawyerCallRooms.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  role: text("role").notNull(),
+  deviceReadinessJson: text("device_readiness_json").notNull(),
+  preparedAt: text("prepared_at").notNull(),
+  joinedAt: text("joined_at"),
+  lastSeenAt: text("last_seen_at").notNull(),
+  leftAt: text("left_at"),
+}, (table) => [
+  primaryKey({ columns: [table.roomId, table.userId] }),
+  index("lawyer_call_participants_presence_idx").on(table.roomId, table.lastSeenAt),
+]);
+
+export const lawyerCallSignals = sqliteTable("lawyer_call_signals", {
+  id: text("id").primaryKey(),
+  roomId: text("room_id").notNull().references(() => lawyerCallRooms.id, { onDelete: "cascade" }),
+  senderUserId: text("sender_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  recipientUserId: text("recipient_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  signalType: text("signal_type").notNull(),
+  payloadJson: text("payload_json").notNull(),
+  createdAt: text("created_at").notNull(),
+  expiresAt: text("expires_at").notNull(),
+}, (table) => [
+  index("lawyer_call_signals_recipient_idx").on(table.roomId, table.recipientUserId, table.createdAt, table.id),
+  index("lawyer_call_signals_expiry_idx").on(table.expiresAt),
+]);
+
+export const lawyerCallEvents = sqliteTable("lawyer_call_events", {
+  id: text("id").primaryKey(),
+  roomId: text("room_id").notNull().references(() => lawyerCallRooms.id, { onDelete: "cascade" }),
+  actorUserId: text("actor_user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  eventType: text("event_type").notNull(),
+  metadataJson: text("metadata_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("lawyer_call_events_room_idx").on(table.roomId, table.createdAt)]);
+
+export const lawyerTimeEntries = sqliteTable("lawyer_time_entries", {
+  id: text("id").primaryKey(),
+  lawyerUserId: text("lawyer_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  caseId: text("case_id").notNull().references(() => cases.id, { onDelete: "cascade" }),
+  lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }),
+  source: text("source").notNull(),
+  status: text("status").notNull(),
+  description: text("description").notNull(),
+  billable: integer("billable", { mode: "boolean" }).notNull().default(false),
+  startedAt: text("started_at").notNull(),
+  endedAt: text("ended_at"),
+  durationSeconds: integer("duration_seconds"),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("lawyer_time_entries_one_running_uidx").on(table.lawyerUserId).where(sql`${table.status}='running'`),
+  index("lawyer_time_entries_case_idx").on(table.lawyerUserId, table.caseId, table.startedAt),
+]);
+
+export const lawyerConflictSearchEvents = sqliteTable("lawyer_conflict_search_events", {
+  id: text("id").primaryKey(),
+  lawyerUserId: text("lawyer_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  querySha256: text("query_sha256").notNull(),
+  resultCount: integer("result_count").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("lawyer_conflict_search_events_user_idx").on(table.lawyerUserId, table.createdAt)]);
+
+export const lawyerKnowledgeItems = sqliteTable("lawyer_knowledge_items", {
+  id: text("id").primaryKey(),
+  lawyerUserId: text("lawyer_user_id").notNull().references(() => userProfiles.id, { onDelete: "cascade" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "cascade" }),
+  caseId: text("case_id").references(() => cases.id, { onDelete: "set null" }),
+  clientUserId: text("client_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  sourceUrl: text("source_url"),
+  folder: text("folder").notNull(),
+  tagsJson: text("tags_json").notNull().default("[]"),
+  favorite: integer("favorite", { mode: "boolean" }).notNull().default(false),
+  archivedAt: text("archived_at"),
+  ...timestamps,
+}, (table) => [
+  index("lawyer_knowledge_items_user_idx").on(table.lawyerUserId, table.archivedAt, table.updatedAt),
+  index("lawyer_knowledge_items_case_idx").on(table.lawyerUserId, table.caseId, table.updatedAt),
+  index("lawyer_knowledge_items_client_idx").on(table.lawyerUserId, table.clientUserId, table.updatedAt),
+]);
+
+export const investorDemoAccounts = sqliteTable("investor_demo_accounts", {
+  accountKey: text("account_key").primaryKey(),
+  userId: text("user_id").notNull().references(() => userProfiles.id, { onDelete: "restrict" }),
+  workspaceId: text("workspace_id").notNull().references(() => workspaces.id, { onDelete: "restrict" }),
+  datasetVersion: integer("dataset_version").notNull().default(1),
+  status: text("status").notNull().default("active"),
+  syntheticDisclosure: text("synthetic_disclosure").notNull(),
+  ...timestamps,
+}, (table) => [
+  uniqueIndex("investor_demo_accounts_user_uidx").on(table.userId),
+  index("investor_demo_accounts_status_idx").on(table.status, table.updatedAt),
+]);
+
+export const investorDemoDatasetEvents = sqliteTable("investor_demo_dataset_events", {
+  id: text("id").primaryKey(),
+  datasetVersion: integer("dataset_version").notNull(),
+  eventType: text("event_type").notNull(),
+  actorUserId: text("actor_user_id").references(() => userProfiles.id, { onDelete: "set null" }),
+  summaryJson: text("summary_json").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (table) => [index("investor_demo_dataset_events_version_idx").on(table.datasetVersion, table.createdAt)]);
 
 export const conflictChecks = sqliteTable("conflict_checks", {
   id: text("id").primaryKey(), lawyerRequestId: text("lawyer_request_id").notNull().references(() => lawyerRequests.id, { onDelete: "cascade" }), lawyerProfileId: text("lawyer_profile_id").notNull().references(() => lawyerProfiles.id, { onDelete: "cascade" }), status: text("status").notNull().default("pending"), reviewedAt: text("reviewed_at"), reviewedByUserId: text("reviewed_by_user_id").references(() => userProfiles.id, { onDelete: "set null" }), createdAt: text("created_at").notNull(),

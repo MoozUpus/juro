@@ -8,6 +8,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Archive,
   Bell,
+  BookOpen,
   Bot,
   BriefcaseBusiness,
   CalendarCheck2,
@@ -53,6 +54,7 @@ type Props = {
   userName: string;
   activeWorkspaceId: string;
   workspaces: WorkspaceOption[];
+  demoAccount: { accountKey: "client_demo" | "lawyer_demo" | "admin_demo"; datasetVersion: number; syntheticDisclosure: string } | null;
   children: React.ReactNode;
 };
 
@@ -82,10 +84,23 @@ const lawyerClientNav = [
   ["consultations?view=tasks", CalendarCheck2, "Задачи", "Vazifalar"],
 ] as const;
 
+const lawyerAiNav = [
+  ["ai-chat", Bot, "Профессиональный AI", "Professional AI"],
+  ["document-builder", FilePenLine, "Создать документ", "Hujjat yaratish"],
+  ["document-review", FileCheck2, "Анализ и сравнение", "Tahlil va taqqoslash"],
+  ["monitoring", Scale, "Мониторинг", "Monitoring"],
+] as const;
+
 const lawyerPracticeNav = [
   ["calendar", CalendarDays, "Календарь", "Kalendar"],
+  ["knowledge", BookOpen, "База знаний", "Bilimlar bazasi"],
   ["profile", UserRound, "Публичный профиль", "Ommaviy profil"],
   ["settings", ShieldCheck, "Настройки", "Sozlamalar"],
+] as const;
+
+const lawyerFinanceNav = [
+  ["billing", CreditCard, "Подписка и расчёты", "Obuna va hisob-kitob"],
+  ["demo-payments", ReceiptText, "Демо-платежи", "Demo to‘lovlar"],
 ] as const;
 
 const documentNav = [
@@ -128,6 +143,7 @@ export function PlatformShell({
   userName,
   activeWorkspaceId,
   workspaces,
+  demoAccount,
   children,
 }: Props) {
   const pathname = usePathname();
@@ -156,10 +172,22 @@ export function PlatformShell({
           items: lawyerClientNav,
         },
         {
+          key: "ai",
+          ru: "AI и документы",
+          uz: "AI va hujjatlar",
+          items: lawyerAiNav,
+        },
+        {
           key: "practice",
           ru: "Практика",
           uz: "Amaliyot",
           items: lawyerPracticeNav,
+        },
+        {
+          key: "finance",
+          ru: "Финансы",
+          uz: "Moliya",
+          items: lawyerFinanceNav,
         },
       ] as const)
     : ([
@@ -547,6 +575,7 @@ export function PlatformShell({
             </div>
           </header>
           <main className="platform-content" id="main-content" tabIndex={-1}>
+            {demoAccount && <div className="platform-demo-banner" role="status"><strong>{locale === "ru" ? "Investor Demo · синтетические данные" : "Investor Demo · sintetik ma’lumotlar"}</strong><span>{demoAccount.syntheticDisclosure} · v{demoAccount.datasetVersion}</span></div>}
             {children}
           </main>
           <nav

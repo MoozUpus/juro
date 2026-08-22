@@ -45,6 +45,15 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
+    // Vinext 0.0.50 currently resolves /lawyers through the dynamic /:locale
+    // segment before the more specific App Router entry. Keep the public
+    // catalogue entry canonical at the edge until route priority is fixed.
+    if (url.pathname === "/lawyers") {
+      const destination = new URL("/ru/lawyers", url);
+      destination.search = url.search;
+      return withSecurityHeaders(Response.redirect(destination, 308), url);
+    }
+
     if (url.pathname === "/_vinext/image") {
       const allowedWidths = [...DEFAULT_DEVICE_SIZES, ...DEFAULT_IMAGE_SIZES];
       const optimized = await handleImageOptimization(request, {

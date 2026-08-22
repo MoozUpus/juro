@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { CinematicLandingPage } from "../components/cinematic/CinematicLandingPage";
 import { ru } from "../../content/ru";
 import { uz } from "../../content/uz";
@@ -55,6 +55,10 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function LocalizedHome({ params }: Props) {
   const { locale: rawLocale } = await params;
+  // Vinext currently matches /lawyers through this dynamic segment before the
+  // more specific app/lawyers/page.tsx route. Keep the canonical unlocalized
+  // entry working until its route-priority behavior matches Next.js.
+  if (rawLocale === "lawyers") redirect("/ru/lawyers");
   const locale = parseLocale(rawLocale);
   if (!locale) notFound();
   return <CinematicLandingPage language={locale} />;

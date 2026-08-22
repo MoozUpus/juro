@@ -1,9 +1,11 @@
 "use client";
 
-import { Check, Send, Save } from "lucide-react";
+import { Check, Send, Save, Trash2, X } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState, type ChangeEvent, type FormEvent } from "react";
 import type { PlatformLocale } from "../../lib/platform/routing";
+import { usePlatformBasePath } from "./PlatformRouteContext";
 
 type Profile = {
   id: string;
@@ -16,10 +18,17 @@ type Profile = {
     | "pending_review"
     | "changes_requested"
     | "public_approved"
-    | "rejected";
+    | "rejected"
+    | "suspended"
+    | "blocked"
+    | "archived";
   publicApprovedAt: string | null;
+  publicationConsentAt: string | null;
+  acceptingNewRequests: boolean;
   experienceYears: number | null;
   priceDescription: string | null;
+  consultationDurationMinutes: number;
+  additionalServices: string[];
   availabilityStatus: "unknown" | "available" | "limited" | "unavailable";
   nextAvailableAt: string | null;
   advocateStatus: "not_declared" | "declared" | "verified";
@@ -33,6 +42,13 @@ type Profile = {
   profilePhotoUrl: string | null;
   missingRequiredFields: string[];
   moderationReason: string | null;
+  updatedAt: string;
+  moderationHistory: Array<{
+    profileRevision: number;
+    decision: "approved" | "changes_requested" | "rejected";
+    reason: string | null;
+    createdAt: string;
+  }>;
 };
 
 type Form = {
@@ -41,6 +57,8 @@ type Form = {
   languages: string;
   experienceYears: string;
   priceDescription: string;
+  consultationDurationMinutes: string;
+  additionalServices: string;
   availabilityStatus: Profile["availabilityStatus"];
   nextAvailableAt: string;
   advocateStatus: "not_declared" | "declared";
@@ -50,6 +68,16 @@ type Form = {
   region: string;
   education: string;
   consultationFormats: string;
+  acceptingNewRequests: boolean;
+};
+
+type DeletionRequest = {
+  id: string;
+  status: "requested" | "approved" | "rejected" | "cancelled";
+  reason: string | null;
+  decisionReason: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
 };
 
 const blank: Form = {
@@ -58,6 +86,8 @@ const blank: Form = {
   languages: "",
   experienceYears: "",
   priceDescription: "",
+  consultationDurationMinutes: "60",
+  additionalServices: "",
   availabilityStatus: "unknown",
   nextAvailableAt: "",
   advocateStatus: "not_declared",
@@ -67,6 +97,7 @@ const blank: Form = {
   region: "",
   education: "",
   consultationFormats: "",
+  acceptingNewRequests: true,
 };
 
 const toForm = (profile: Profile): Form => ({
@@ -76,6 +107,8 @@ const toForm = (profile: Profile): Form => ({
   experienceYears:
     profile.experienceYears === null ? "" : String(profile.experienceYears),
   priceDescription: profile.priceDescription ?? "",
+  consultationDurationMinutes: String(profile.consultationDurationMinutes),
+  additionalServices: profile.additionalServices.join(", "),
   availabilityStatus: profile.availabilityStatus,
   nextAvailableAt: profile.nextAvailableAt
     ? profile.nextAvailableAt.slice(0, 16)
@@ -88,6 +121,7 @@ const toForm = (profile: Profile): Form => ({
   region: profile.region ?? "",
   education: profile.education ?? "",
   consultationFormats: profile.consultationFormats.join(", "),
+  acceptingNewRequests: profile.acceptingNewRequests,
 });
 
 const list = (value: string) => [
@@ -105,14 +139,25 @@ export function LawyerProfessionalProfile({
   locale: PlatformLocale;
 }) {
   const ru = locale === "ru";
+  const base = usePlatformBasePath();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [form, setForm] = useState<Form>(blank);
+  const [scheduleConfigured, setScheduleConfigured] = useState(false);
   const [loading, setLoading] = useState(true);
   const [unavailable, setUnavailable] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [publicationConsent, setPublicationConsent] = useState(false);
+  const [deletionRequest, setDeletionRequest] = useState<DeletionRequest | null>(null);
+  const [deletionReason, setDeletionReason] = useState("");
+  const [deletionBusy, setDeletionBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const editingLocked = profile
+    ? ["suspended", "blocked", "archived"].includes(
+        profile.marketplaceStatus,
+      )
+    : false;
 
   useEffect(() => {
     fetch("/api/platform/lawyer-profile", { cache: "no-store" })
@@ -138,6 +183,68 @@ export function LawyerProfessionalProfile({
       .finally(() => setLoading(false));
   }, []);
 
+  useEffect(() => {
+    fetch("/api/platform/lawyer-schedule", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) return null;
+        return (await response.json()) as {
+          rules?: unknown[];
+          unavailability?: unknown[];
+        };
+      })
+      .then((value) =>
+        setScheduleConfigured(
+          Boolean(value?.rules?.length || value?.unavailability?.length),
+        ),
+      )
+      .catch(() => setScheduleConfigured(false));
+  }, []);
+
+  useEffect(() => {
+    fetch("/api/platform/lawyer-profile/deletion-request", { cache: "no-store" })
+      .then(async (response) => {
+        if (response.status === 404) return null;
+        const body = await response.json() as { deletionRequest?: DeletionRequest | null };
+        if (!response.ok) throw new Error("DELETION_REQUEST_UNAVAILABLE");
+        return body.deletionRequest ?? null;
+      })
+      .then(setDeletionRequest)
+      .catch(() => undefined);
+  }, []);
+
+  const personalStepDone = Boolean(
+    form.displayName.trim() &&
+      form.city.trim() &&
+      form.region.trim() &&
+      profile?.profilePhotoUrl,
+  );
+  const professionalStepDone = Boolean(
+    form.specialties.trim() &&
+      form.languages.trim() &&
+      form.experienceYears &&
+      form.education.trim() &&
+      form.firmName.trim(),
+  );
+  const servicesStepDone = Boolean(
+    form.consultationFormats.trim() &&
+      form.priceDescription.trim() &&
+      form.consultationDurationMinutes &&
+      form.availabilityStatus !== "unknown",
+  );
+  const submittedStepDone = Boolean(
+    profile &&
+      profile.marketplaceStatus !== "profile_incomplete" &&
+      profile.marketplaceStatus !== "changes_requested",
+  );
+  const applicationSteps = [
+    { label: ru ? "Личные данные" : "Shaxsiy ma’lumotlar", done: personalStepDone },
+    { label: ru ? "Профессия" : "Kasbiy ma’lumot", done: professionalStepDone },
+    { label: ru ? "Услуги" : "Xizmatlar", done: servicesStepDone },
+    { label: ru ? "Расписание" : "Jadval", done: scheduleConfigured },
+    { label: ru ? "Preview" : "Ko‘rib chiqish", done: true },
+    { label: ru ? "Отправка" : "Yuborish", done: submittedStepDone },
+  ];
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const intent =
@@ -156,6 +263,8 @@ export function LawyerProfessionalProfile({
         ? Number(form.experienceYears)
         : null,
       priceDescription: form.priceDescription || null,
+      consultationDurationMinutes: Number(form.consultationDurationMinutes),
+      additionalServices: list(form.additionalServices),
       availabilityStatus: form.availabilityStatus,
       nextAvailableAt: form.nextAvailableAt
         ? new Date(form.nextAvailableAt).toISOString()
@@ -167,6 +276,7 @@ export function LawyerProfessionalProfile({
       region: form.region || null,
       education: form.education || null,
       consultationFormats: list(form.consultationFormats),
+      acceptingNewRequests: form.acceptingNewRequests,
       locale,
     };
     try {
@@ -180,18 +290,23 @@ export function LawyerProfessionalProfile({
         error?: string;
       };
       if (!result.ok || !body.profile) throw new Error(body.error || "Ошибка");
-      setProfile(body.profile);
+      setProfile({
+        ...body.profile,
+        moderationHistory:
+          body.profile.moderationHistory ?? profile?.moderationHistory ?? [],
+      });
       setForm(toForm(body.profile));
       if (intent === "submit") {
         const submission = await fetch("/api/platform/lawyer-profile/submit", {
           method: "POST",
           headers: { "content-type": "application/json", "x-juro-csrf": "1" },
-          body: JSON.stringify({ locale }),
+          body: JSON.stringify({ locale, publicationConsent: true }),
         });
         const submissionBody = (await submission.json()) as {
           error?: string;
           marketplaceStatus?: Profile["marketplaceStatus"];
           missingRequiredFields?: string[];
+          updatedAt?: string;
         };
         if (!submission.ok) {
           if (submissionBody.missingRequiredFields?.length) {
@@ -212,21 +327,23 @@ export function LawyerProfessionalProfile({
             ? {
                 ...current,
                 marketplaceStatus:
-                  submissionBody.marketplaceStatus ?? "pending_review",
+                  submissionBody.marketplaceStatus ?? "public_approved",
                 missingRequiredFields: [],
+                updatedAt: submissionBody.updatedAt ?? current.updatedAt,
               }
             : current,
         );
         setNotice(
           ru
-            ? "Заявка отправлена на проверку JURO."
-            : "Ariza JURO tekshiruviga yuborildi.",
+            ? "Профиль опубликован. Начался 90-дневный тестовый период; отметка проверки JURO не присваивалась."
+            : "Profil nashr qilindi. 90 kunlik sinov davri boshlandi; JURO tekshiruv belgisi berilmadi.",
         );
+        setPublicationConsent(false);
       } else {
         setNotice(
           ru
-            ? "Черновик сохранён. Отправка на проверку не выполнена."
-            : "Qoralama saqlandi. Tekshiruvga yuborilmadi.",
+            ? "Черновик сохранён. Публичное размещение не выполнялось."
+            : "Qoralama saqlandi. Ommaviy joylashtirish bajarilmadi.",
         );
       }
     } catch (value) {
@@ -282,6 +399,38 @@ export function LawyerProfessionalProfile({
     }
   }
 
+  async function submitDeletionRequest(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!profile || deletionReason.trim().length < 3) return;
+    setDeletionBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/platform/lawyer-profile/deletion-request", {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-juro-csrf": "1" },
+        body: JSON.stringify({ locale, reason: deletionReason.trim(), confirmation: true }),
+      });
+      const body = await response.json() as { deletionRequest?: DeletionRequest; code?: string };
+      if (!response.ok || !body.deletionRequest) throw new Error(body.code || "DELETION_REQUEST_UNAVAILABLE");
+      setDeletionRequest(body.deletionRequest); setDeletionReason("");
+      setNotice(ru ? "Запрос на удаление отправлен администратору." : "O‘chirish so‘rovi administratorga yuborildi.");
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setDeletionBusy(false); }
+  }
+
+  async function cancelDeletionRequest() {
+    setDeletionBusy(true); setError(""); setNotice("");
+    try {
+      const response = await fetch("/api/platform/lawyer-profile/deletion-request", {
+        method: "DELETE", headers: { "x-juro-csrf": "1" },
+      });
+      const body = await response.json() as { deletionRequest?: DeletionRequest; code?: string };
+      if (!response.ok || !body.deletionRequest) throw new Error(body.code || "DELETION_REQUEST_UNAVAILABLE");
+      setDeletionRequest(body.deletionRequest);
+      setNotice(ru ? "Запрос на удаление отменён." : "O‘chirish so‘rovi bekor qilindi.");
+    } catch (value) { setError(value instanceof Error ? value.message : String(value)); }
+    finally { setDeletionBusy(false); }
+  }
+
   if (loading)
     return (
       <section className="profile-panels" aria-busy="true">
@@ -303,32 +452,21 @@ export function LawyerProfessionalProfile({
           className="lawyer-application-steps"
           aria-label={ru ? "Этапы заявки" : "Ariza bosqichlari"}
         >
-          {[
-            ru ? "Аккаунт" : "Hisob",
-            ru ? "Профиль" : "Profil",
-            ru ? "Проверка" : "Tekshiruv",
-            ru ? "Публикация" : "Nashr",
-          ].map((label, index) => (
+          {applicationSteps.map((step, index) => (
             <span
-              key={label}
-              className={
-                index < 2 ||
-                profile?.marketplaceStatus === "pending_review" ||
-                profile?.marketplaceStatus === "public_approved"
-                  ? "done"
-                  : ""
-              }
+              key={step.label}
+              className={step.done ? "done" : ""}
             >
-              {index < 2 ? <Check aria-hidden="true" /> : index + 1}
-              <b>{label}</b>
+              {step.done ? <Check aria-hidden="true" /> : index + 1}
+              <b>{step.label}</b>
             </span>
           ))}
         </div>
         <h2>{ru ? "Заявка юриста" : "Yurist arizasi"}</h2>
         <p>
           {ru
-            ? "Телефон хранится в защищённом профиле и не публикуется в каталоге. Запись открывается только после отдельного одобрения JURO."
-            : "Telefon himoyalangan profilda saqlanadi va katalogda ko‘rsatilmaydi. So‘rov faqat JURO alohida tasdiqlagandan keyin ochiladi."}
+            ? "Телефон хранится в защищённом профиле и не публикуется в каталоге. После заполнения обязательных полей и вашего согласия профиль публикуется автоматически."
+            : "Telefon himoyalangan profilda saqlanadi va katalogda ko‘rsatilmaydi. Majburiy maydonlar va rozilikdan keyin profil avtomatik nashr qilinadi."}
         </p>
         <p>
           {ru
@@ -339,8 +477,31 @@ export function LawyerProfessionalProfile({
           <div className="lawyer-application-status" role="status">
             <strong>{statusLabel(profile.marketplaceStatus, ru)}</strong>
             <span>{statusDescription(profile.marketplaceStatus, ru)}</span>
+            <time dateTime={profile.updatedAt}>
+              {ru ? "Обновлено " : "Yangilandi "}
+              {formatProfileDate(profile.updatedAt, ru)}
+            </time>
           </div>
         )}
+        {profile?.moderationHistory?.length ? (
+          <section className="lawyer-moderation-history" aria-labelledby="lawyer-moderation-history-title">
+            <h3 id="lawyer-moderation-history-title">
+              {ru ? "История модерации" : "Moderatsiya tarixi"}
+            </h3>
+            <ol>
+              {profile.moderationHistory.map((item) => (
+                <li key={`${item.profileRevision}:${item.createdAt}`}>
+                  <div>
+                    <strong>{moderationDecisionLabel(item.decision, ru)}</strong>
+                    <span>{ru ? `Версия ${item.profileRevision}` : `${item.profileRevision}-versiya`}</span>
+                  </div>
+                  {item.reason && <p>{item.reason}</p>}
+                  <time dateTime={item.createdAt}>{formatProfileDate(item.createdAt, ru)}</time>
+                </li>
+              ))}
+            </ol>
+          </section>
+        ) : null}
         {profile?.marketplaceStatus === "changes_requested" && (
           <section className="profile-message warning" role="status">
             <strong>
@@ -367,7 +528,7 @@ export function LawyerProfessionalProfile({
           </p>
         )}
         <form className="profile-form" onSubmit={(event) => void save(event)}>
-          <fieldset disabled={profile?.marketplaceStatus === "pending_review"}>
+          <fieldset disabled={editingLocked}>
             <section className="lawyer-profile-photo">
               <label>
                 {ru
@@ -529,6 +690,23 @@ export function LawyerProfessionalProfile({
                   </option>
                 </select>
               </label>
+              <label className="lawyer-accepting-requests">
+                <input
+                  type="checkbox"
+                  checked={form.acceptingNewRequests}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      acceptingNewRequests: event.target.checked,
+                    })
+                  }
+                />
+                <span>
+                  {ru
+                    ? "Принимать новые заявки"
+                    : "Yangi so‘rovlarni qabul qilish"}
+                </span>
+              </label>
               <label>
                 {ru ? "Ближайшая доступность" : "Eng yaqin mavjudlik"}
                 <input
@@ -573,6 +751,30 @@ export function LawyerProfessionalProfile({
                 />
               </label>
               <label>
+                {ru ? "Стандартная длительность консультации, минут" : "Maslahatning standart davomiyligi, daqiqa"}
+                <input
+                  required
+                  type="number"
+                  min="15"
+                  max="480"
+                  step="15"
+                  value={form.consultationDurationMinutes}
+                  onChange={(event) =>
+                    setForm({ ...form, consultationDurationMinutes: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                {ru ? "Дополнительные услуги через запятую" : "Qo‘shimcha xizmatlar, vergul bilan"}
+                <input
+                  value={form.additionalServices}
+                  onChange={(event) =>
+                    setForm({ ...form, additionalServices: event.target.value })
+                  }
+                  placeholder={ru ? "Письменное заключение, проверка договора" : "Yozma xulosa, shartnomani tekshirish"}
+                />
+              </label>
+              <label>
                 {ru ? "О себе" : "O‘zingiz haqingizda"}
                 <textarea
                   maxLength={2000}
@@ -583,7 +785,64 @@ export function LawyerProfessionalProfile({
                 />
               </label>
             </section>
+            <section className="lawyer-profile-preview">
+              <div>
+                <strong>{ru ? "Шаг 4 · Расписание" : "4-bosqich · Jadval"}</strong>
+                <p>{ru ? "Рабочие дни, свободное время, перерывы и временная недоступность настраиваются в календаре. Часовой пояс: Asia/Tashkent." : "Ish kunlari, bo‘sh vaqt, tanaffuslar va vaqtincha bandlik kalendarda sozlanadi. Vaqt mintaqasi: Asia/Tashkent."}</p>
+              </div>
+              <Link className="btn btn-primary" href={`${base}/calendar`}>{ru ? "Настроить расписание" : "Jadvalni sozlash"}</Link>
+            </section>
           </fieldset>
+          <section
+            className="lawyer-profile-preview"
+            aria-labelledby="lawyer-profile-preview-title"
+          >
+            <header>
+              <div>
+                <small>{ru ? "Предпросмотр" : "Ko‘rib chiqish"}</small>
+                <h3 id="lawyer-profile-preview-title">
+                  {ru
+                    ? "Предпросмотр публичного профиля"
+                    : "Ommaviy profilni ko‘rib chiqish"}
+                </h3>
+              </div>
+              <span>{ru ? "Виден только вам" : "Faqat sizga ko‘rinadi"}</span>
+            </header>
+            <div className="lawyer-profile-preview-card">
+              {profile?.profilePhotoUrl ? (
+                <Image
+                  src={profile.profilePhotoUrl}
+                  alt=""
+                  width={88}
+                  height={88}
+                  unoptimized
+                />
+              ) : (
+                <div className="lawyer-profile-preview-photo" aria-hidden="true">
+                  {form.displayName.trim().slice(0, 1).toUpperCase() || "J"}
+                </div>
+              )}
+              <div>
+                <h4>{form.displayName.trim() || (ru ? "Имя юриста" : "Yurist ismi")}</h4>
+                <p>{[form.city, form.region].filter(Boolean).join(" · ") || "—"}</p>
+                <div className="lawyer-profile-preview-tags">
+                  {list(form.specialties).map((value) => <span key={value}>{value}</span>)}
+                  {list(form.languages).map((value) => <span key={value}>{value}</span>)}
+                </div>
+              </div>
+              <dl>
+                <div><dt>{ru ? "Стаж" : "Tajriba"}</dt><dd>{form.experienceYears ? `${form.experienceYears} ${ru ? "лет" : "yil"}` : "—"}</dd></div>
+                <div><dt>{ru ? "Образование" : "Ta’lim"}</dt><dd>{form.education || "—"}</dd></div>
+                <div><dt>{ru ? "Место работы" : "Ish joyi"}</dt><dd>{form.firmName || "—"}</dd></div>
+                <div><dt>{ru ? "Форматы" : "Formatlar"}</dt><dd>{list(form.consultationFormats).join(", ") || "—"}</dd></div>
+                <div><dt>{ru ? "Стоимость" : "Narx"}</dt><dd>{form.priceDescription || "—"}</dd></div>
+                <div><dt>{ru ? "Длительность" : "Davomiyligi"}</dt><dd>{form.consultationDurationMinutes ? `${form.consultationDurationMinutes} ${ru ? "мин." : "daq."}` : "—"}</dd></div>
+                <div><dt>{ru ? "Доступность" : "Mavjudlik"}</dt><dd>{availabilityLabel(form.availabilityStatus, ru)}</dd></div>
+              </dl>
+              {list(form.additionalServices).length > 0 && <p className="lawyer-profile-preview-bio"><strong>{ru ? "Дополнительные услуги: " : "Qo‘shimcha xizmatlar: "}</strong>{list(form.additionalServices).join(" · ")}</p>}
+              {form.bio && <p className="lawyer-profile-preview-bio">{form.bio}</p>}
+            </div>
+          </section>
           {profile?.missingRequiredFields.length ? (
             <p className="lawyer-required-fields" role="status">
               {ru
@@ -593,6 +852,20 @@ export function LawyerProfessionalProfile({
                 .map((field) => requiredFieldLabel(field, ru))
                 .join(", ")}
             </p>
+          ) : null}
+          {profile?.marketplaceStatus !== "public_approved" && !editingLocked ? (
+            <label className="lawyer-publication-consent">
+              <input
+                type="checkbox"
+                checked={publicationConsent}
+                onChange={(event) => setPublicationConsent(event.target.checked)}
+              />
+              <span>
+                {ru
+                  ? "Согласен на публичное размещение указанных данных и понимаю, что это не означает проверку или рекомендацию со стороны JURO."
+                  : "Ko‘rsatilgan ma’lumotlarni ommaviy joylashtirishga roziman va bu JURO tekshiruvi yoki tavsiyasi emasligini tushunaman."}
+              </span>
+            </label>
           ) : null}
           <div className="lawyer-application-actions">
             <button
@@ -612,16 +885,20 @@ export function LawyerProfessionalProfile({
               disabled={
                 saving ||
                 uploadingPhoto ||
-                profile?.marketplaceStatus === "pending_review" ||
+                !publicationConsent ||
                 profile?.marketplaceStatus === "public_approved"
               }
             >
               {!saving && <Send aria-hidden="true" />}
-              {ru ? "Отправить на проверку" : "Tekshiruvga yuborish"}
+              {ru ? "Согласиться и опубликовать" : "Rozilik berish va nashr qilish"}
             </button>
           </div>
         </form>
       </section>
+      {profile && <section className="lawyer-profile-deletion" aria-labelledby="lawyer-profile-deletion-title">
+        <header><Trash2 aria-hidden="true" /><div><h2 id="lawyer-profile-deletion-title">{ru ? "Удаление профессионального профиля" : "Professional profilni o‘chirish"}</h2><p>{ru ? "Профиль не удаляется мгновенно: администратор проверит запрос и подтвердит либо отклонит его. До решения профиль работает в текущем статусе." : "Profil darhol o‘chirilmaydi: administrator so‘rovni tekshiradi va tasdiqlaydi yoki rad etadi. Qarorgacha profil joriy holatda ishlaydi."}</p></div></header>
+        {deletionRequest?.status === "requested" ? <div className="lawyer-deletion-status"><strong>{ru ? "Запрос ожидает решения администратора" : "So‘rov administrator qarorini kutmoqda"}</strong><p>{deletionRequest.reason || "—"}</p><time dateTime={deletionRequest.requestedAt}>{formatProfileDate(deletionRequest.requestedAt, ru)}</time><button type="button" disabled={deletionBusy} onClick={() => void cancelDeletionRequest()}><X aria-hidden="true" />{ru ? "Отменить запрос" : "So‘rovni bekor qilish"}</button></div> : <form onSubmit={(event) => void submitDeletionRequest(event)}><label>{ru ? "Причина" : "Sabab"}<textarea required minLength={3} maxLength={1000} value={deletionReason} onChange={(event) => setDeletionReason(event.target.value)} /></label>{deletionRequest && <p className={`lawyer-deletion-previous ${deletionRequest.status}`}>{deletionRequest.status === "approved" ? (ru ? "Предыдущий запрос подтверждён; профиль архивирован." : "Oldingi so‘rov tasdiqlandi; profil arxivlandi.") : deletionRequest.status === "rejected" ? `${ru ? "Предыдущий запрос отклонён" : "Oldingi so‘rov rad etildi"}: ${deletionRequest.decisionReason || "—"}` : (ru ? "Предыдущий запрос отменён." : "Oldingi so‘rov bekor qilindi.")}</p>}<button type="submit" disabled={deletionBusy || deletionReason.trim().length < 3}><Trash2 aria-hidden="true" />{ru ? "Отправить запрос администратору" : "Administratorga so‘rov yuborish"}</button></form>}
+      </section>}
     </section>
   );
 }
@@ -633,6 +910,9 @@ function statusLabel(status: Profile["marketplaceStatus"], ru: boolean) {
     changes_requested: ["Нужны изменения", "O‘zgartirish kerak"],
     public_approved: ["Профиль опубликован", "Profil nashr etilgan"],
     rejected: ["Заявка отклонена", "Ariza rad etilgan"],
+    suspended: ["Профиль приостановлен", "Profil to‘xtatilgan"],
+    blocked: ["Профиль заблокирован", "Profil bloklangan"],
+    archived: ["Профиль в архиве", "Profil arxivda"],
   };
   return labels[status][ru ? 0 : 1];
 }
@@ -644,8 +924,8 @@ function statusDescription(status: Profile["marketplaceStatus"], ru: boolean) {
       "Ma’lumotlar qoralama sifatida saqlanadi va katalogda ko‘rinmaydi.",
     ],
     pending_review: [
-      "Редактирование временно закрыто до решения модерации.",
-      "Moderatsiya qarorigacha tahrirlash vaqtincha yopilgan.",
+      "Старый статус проверки: подтвердите публикацию по новым тестовым правилам.",
+      "Eski tekshiruv holati: yangi sinov qoidalari bo‘yicha nashrni tasdiqlang.",
     ],
     changes_requested: [
       "Исправьте замечания и отправьте заявку повторно.",
@@ -659,8 +939,52 @@ function statusDescription(status: Profile["marketplaceStatus"], ru: boolean) {
       "Причина решения отображается ниже, если она доступна.",
       "Qaror sababi mavjud bo‘lsa, quyida ko‘rsatiladi.",
     ],
+    suspended: [
+      "Публичная карточка и новые заявки временно недоступны.",
+      "Ommaviy karta va yangi so‘rovlar vaqtincha mavjud emas.",
+    ],
+    blocked: [
+      "Доступ к профессиональным действиям заблокирован решением JURO.",
+      "Professional amallarga kirish JURO qarori bilan bloklangan.",
+    ],
+    archived: [
+      "Профиль снят с публикации и помещён в архив.",
+      "Profil nashrdan olib tashlangan va arxivga joylangan.",
+    ],
   };
   return descriptions[status][ru ? 0 : 1];
+}
+
+function availabilityLabel(status: Form["availabilityStatus"], ru: boolean) {
+  const labels: Record<Form["availabilityStatus"], [string, string]> = {
+    unknown: ["Не указана", "Ko‘rsatilmagan"],
+    available: ["Доступен", "Mavjud"],
+    limited: ["Ограниченная", "Cheklangan"],
+    unavailable: ["Недоступен", "Mavjud emas"],
+  };
+  return labels[status][ru ? 0 : 1];
+}
+
+function moderationDecisionLabel(
+  decision: Profile["moderationHistory"][number]["decision"],
+  ru: boolean,
+) {
+  const labels = {
+    approved: ["Одобрена и опубликована", "Tasdiqlandi va nashr qilindi"],
+    changes_requested: ["Запрошены изменения", "O‘zgartirishlar so‘raldi"],
+    rejected: ["Отклонена", "Rad etildi"],
+  } satisfies Record<typeof decision, [string, string]>;
+  return labels[decision][ru ? 0 : 1];
+}
+
+function formatProfileDate(value: string, ru: boolean) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return new Intl.DateTimeFormat(ru ? "ru-RU" : "uz-UZ", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Tashkent",
+  }).format(date);
 }
 
 function requiredFieldLabel(field: string, ru: boolean) {

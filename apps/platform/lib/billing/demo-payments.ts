@@ -1,3 +1,5 @@
+import { calculateDemoFeeBreakdown, type DemoFeeBreakdown, type DemoServiceKind } from "./demo-fees";
+
 export const DEMO_PAYMENT_FLOW_TYPES = [
   "subscription",
   "lawyer_service",
@@ -27,6 +29,13 @@ export type DemoPaymentRun = {
   amountMinor: number;
   currency: "UZS";
   installmentCount: 3 | 6 | 12 | null;
+  serviceKind: DemoServiceKind | null;
+  paymentMethod: "direct" | "installment" | null;
+  legalArea: string | null;
+  feePolicyVersionId: string | null;
+  caseTransferFeeRuleId: string | null;
+  breakdownJson: string | null;
+  breakdown: DemoFeeBreakdown | null;
   status: DemoPaymentStatus;
   version: number;
   createdAt: string;
@@ -35,15 +44,25 @@ export type DemoPaymentRun = {
 
 function selectRunSql(extra = "") {
   return `SELECT id,external_id AS externalId,flow_type AS flowType,provider,is_simulation AS isSimulation,
-    amount_minor AS amountMinor,currency,installment_count AS installmentCount,status,version,
+    amount_minor AS amountMinor,currency,installment_count AS installmentCount,service_kind AS serviceKind,
+    payment_method AS paymentMethod,legal_area AS legalArea,fee_policy_version_id AS feePolicyVersionId,
+    case_transfer_fee_rule_id AS caseTransferFeeRuleId,breakdown_json AS breakdownJson,status,version,
     created_at AS createdAt,updated_at AS updatedAt
     FROM demo_payment_runs WHERE workspace_id=? AND user_id=?${extra}`;
+}
+
+function hydrateBreakdown(run: DemoPaymentRun): DemoPaymentRun {
+  try {
+    return { ...run, breakdown: run.breakdownJson ? JSON.parse(run.breakdownJson) as DemoFeeBreakdown : null };
+  } catch {
+    return { ...run, breakdown: null };
+  }
 }
 
 export async function listDemoPaymentRuns(db: D1Database, actor: Actor): Promise<DemoPaymentRun[]> {
   const rows = await db.prepare(`${selectRunSql()} ORDER BY created_at DESC LIMIT 30`)
     .bind(actor.workspaceId, actor.userId).all<DemoPaymentRun>();
-  return rows.results;
+  return rows.results.map(hydrateBreakdown);
 }
 
 export async function createDemoPaymentRun(
@@ -54,13 +73,16 @@ export async function createDemoPaymentRun(
     flowType: DemoPaymentFlowType;
     amountMinor: number;
     installmentCount?: 3 | 6 | 12;
+    serviceKind?: "subscription" | "consultation" | "case_transfer";
+    legalArea?: string;
+    caseType?: string;
   },
   now = new Date(),
 ): Promise<DemoPaymentRun> {
   const idempotencyKey = `demo-payment:create:${input.requestId}`;
   const existing = await db.prepare(`${selectRunSql(" AND idempotency_key=?")} LIMIT 1`)
     .bind(actor.workspaceId, actor.userId, idempotencyKey).first<DemoPaymentRun>();
-  if (existing) return existing;
+  if (existing) return hydrateBreakdown(existing);
 
   const id = crypto.randomUUID();
   const externalId = `demo_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -68,11 +90,29 @@ export async function createDemoPaymentRun(
   const installmentCount = input.flowType === "uzum_installment"
     ? (input.installmentCount ?? 3)
     : null;
+  const serviceKind = input.flowType === "subscription"
+    ? "subscription"
+    : input.flowType === "uzum_installment"
+      ? "case_transfer"
+      : (input.serviceKind ?? "consultation");
+  const paymentMethod = input.flowType === "uzum_installment" ? "installment" : "direct";
+  const breakdown = await calculateDemoFeeBreakdown(db, {
+    serviceKind,
+    paymentMethod,
+    amountMinor: input.amountMinor,
+    legalArea: input.legalArea,
+    caseType: input.caseType,
+    installmentCount: input.installmentCount,
+    now,
+  });
   await db.batch([
     db.prepare(`INSERT INTO demo_payment_runs(
       id,external_id,workspace_id,user_id,flow_type,provider,is_simulation,amount_minor,currency,
-      installment_count,status,idempotency_key,version,created_at,updated_at
-    ) VALUES (?,?,?,?,?,'demo',1,?,'UZS',?,'previewed',?,1,?,?)`).bind(
+      installment_count,service_kind,payment_method,legal_area,fee_policy_version_id,case_transfer_fee_rule_id,
+      lawyer_service_amount_minor,consultation_fee_amount_minor,case_transfer_fee_amount_minor,
+      juro_service_markup_minor,client_total_minor,lawyer_payout_minor,breakdown_json,
+      status,idempotency_key,version,created_at,updated_at
+    ) VALUES (?,?,?,?,?,'demo',1,?,'UZS',?,?,?,?,?,?,?,?,?,?,?,?,?,'previewed',?,1,?,?)`).bind(
       id,
       externalId,
       actor.workspaceId,
@@ -80,6 +120,18 @@ export async function createDemoPaymentRun(
       input.flowType,
       input.amountMinor,
       installmentCount,
+      serviceKind,
+      paymentMethod,
+      input.legalArea?.trim() || null,
+      breakdown.feePolicy.id,
+      breakdown.appliedCaseTransferRule?.id ?? null,
+      breakdown.lawyerServiceAmountMinor,
+      breakdown.consultationFeeAmountMinor,
+      breakdown.caseTransferFeeAmountMinor,
+      breakdown.juroServiceMarkupMinor,
+      breakdown.clientTotalMinor,
+      breakdown.lawyerPayoutMinor,
+      JSON.stringify(breakdown),
       idempotencyKey,
       at,
       at,
@@ -96,7 +148,7 @@ export async function createDemoPaymentRun(
   const created = await db.prepare(`${selectRunSql(" AND id=?")} LIMIT 1`)
     .bind(actor.workspaceId, actor.userId, id).first<DemoPaymentRun>();
   if (!created) throw new Error("DEMO_PAYMENT_CREATE_FAILED");
-  return created;
+  return hydrateBreakdown(created);
 }
 
 function nextStatus(action: DemoPaymentAction, run: DemoPaymentRun): DemoPaymentStatus | null {
@@ -162,5 +214,5 @@ export async function transitionDemoPaymentRun(
   const updated = await db.prepare(`${selectRunSql(" AND id=?")} LIMIT 1`)
     .bind(actor.workspaceId, actor.userId, input.runId).first<DemoPaymentRun>();
   if (!updated) throw new Error("DEMO_PAYMENT_UNAVAILABLE");
-  return updated;
+  return hydrateBreakdown(updated);
 }

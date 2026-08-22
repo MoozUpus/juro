@@ -43,7 +43,26 @@ test("a delayed account theme response cannot override a newer user choice", () 
   assert.match(switcher, /document\.documentElement\.dataset\.themeInteractionRevision/);
   assert.match(switcher, /const startedRevision = readThemeInteractionRevision\(\)/);
   assert.match(switcher, /readThemeInteractionRevision\(\) !== startedRevision/);
-  assert.match(switcher, /async function select\(next: ThemeMode\)\s*\{\s*markThemeInteraction\(\)/);
+  assert.match(switcher, /async function select\(next: ThemeMode\)[\s\S]*?markThemeInteraction\(\)/);
+});
+
+test("the shared theme cookie wins over stale per-host storage and account state", () => {
+  const switcher = source("app/_theme/ThemeSwitcher.tsx");
+
+  assert.match(switcher, /function readThemeCookie\(\): ThemeMode \| null/);
+  assert.match(switcher, /const cookieTheme = readThemeCookie\(\)/);
+  assert.match(switcher, /if \(cookieTheme\) \{[\s\S]*?writePreference\(cookieTheme\);[\s\S]*?applyTheme\(cookieTheme\);/);
+  assert.match(switcher, /if \(cookieTheme\) \{[\s\S]*?method: "PATCH"[\s\S]*?JSON\.stringify\(\{ theme: cookieTheme \}\)/);
+  assert.match(switcher, /async function select\(next: ThemeMode\)\s*\{\s*accountSyncController\.current\?\.abort\(\);/);
+});
+
+test("the account theme API scopes shared cookies only to JURO application hosts", () => {
+  const route = source("app/api/platform/theme/route.ts");
+
+  assert.match(route, /sharedAuthCookieDomain\(requestUrl\.hostname\)/);
+  assert.match(route, /requestUrl\.protocol === "https:"/);
+  assert.match(route, /function GET\(request: Request\)/);
+  assert.doesNotMatch(route, /SameSite=Lax; Domain=\.juro\.uz; Secure/);
 });
 
 test("the account theme API scopes shared cookies only to JURO application hosts", () => {

@@ -4,7 +4,7 @@ import {
   parseProviderEnvironment,
   ProviderCostControlError,
 } from "../ai/provider-cost-control";
-import { recordProviderUsage } from "../ai/provider-usage";
+import { ProviderUsageError, recordProviderUsage } from "../ai/provider-usage";
 import {
   ComparisonProcessingError,
   type AnalysisPackageContext,
@@ -27,7 +27,7 @@ import {
   OcrProcessingError,
   scheduleOcrProcessing,
 } from "./ocr-processor";
-import { chunkDocumentForAnalysis } from "./chunking";
+import { planDocumentAnalysis } from "./chunking";
 import {
   extractAnalysisDocument,
   isAnalysisPackageContext,
@@ -165,6 +165,12 @@ export type DocumentAnalysisDiagnosticDetail =
   | "PROVIDER_HTTP_5XX"
   | "PROVIDER_TIMEOUT"
   | "PROVIDER_CIRCUIT_OPEN"
+  | "PROVIDER_COST_CONTROL_INVALID"
+  | "PROVIDER_COST_CONTROL_PERSISTENCE_FAILED"
+  | "PROVIDER_USAGE_INVALID"
+  | "PROVIDER_USAGE_PERSISTENCE_FAILED"
+  | "PROVIDER_EXECUTION_FAILED"
+  | "RUNTIME_SETTINGS_FAILED"
   | "INVALID_AI_OUTPUT"
   | "INVALID_AI_OUTPUT_MAX_TOKENS"
   | "INVALID_AI_OUTPUT_TOOL_RESULT_MISSING"
@@ -175,7 +181,10 @@ export type DocumentAnalysisDiagnosticDetail =
   | "INVALID_AI_OUTPUT_SCHEMA_INVALID"
   | "PROVIDER_UNAVAILABLE";
 
-export function documentAnalysisDiagnosticDetail(error: unknown): DocumentAnalysisDiagnosticDetail | undefined {
+export function documentAnalysisDiagnosticDetail(
+  error: unknown,
+  stage?: DocumentAnalysisDiagnosticStage,
+): DocumentAnalysisDiagnosticDetail | undefined {
   if (error instanceof AiUnavailableError) {
     if (error.code === "INVALID_AI_OUTPUT") {
       // providerErrorType can originate at a provider boundary. Persist only
@@ -236,14 +245,26 @@ export function documentAnalysisDiagnosticDetail(error: unknown): DocumentAnalys
         return undefined;
       })();
   }
+  if (error instanceof ProviderUsageError) return error.code;
+  if (error instanceof ProviderCostControlError) {
+    if (error.code === "PROVIDER_COST_CONTROL_INVALID") return "PROVIDER_COST_CONTROL_INVALID";
+    if (error.code === "PROVIDER_COST_CONTROL_PERSISTENCE_FAILED") {
+      return "PROVIDER_COST_CONTROL_PERSISTENCE_FAILED";
+    }
+    return "PROVIDER_CIRCUIT_OPEN";
+  }
   if (error instanceof Error) {
     // The detail remains an allow-listed operational category: never include
     // document text, source content, SQL, provider responses, or credentials.
-    if (/LIKE or GLOB pattern too complex/i.test(error.message)) {
-      return "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX";
+    if (stage === "retrieval") {
+      if (/LIKE or GLOB pattern too complex/i.test(error.message)) {
+        return "LEGAL_RETRIEVAL_SQLITE_PATTERN_TOO_COMPLEX";
+      }
+      if (/SQLITE_ERROR/i.test(error.message)) return "LEGAL_RETRIEVAL_SQLITE_ERROR";
+      return "LEGAL_RETRIEVAL_FAILED";
     }
-    if (/SQLITE_ERROR/i.test(error.message)) return "LEGAL_RETRIEVAL_SQLITE_ERROR";
-    return "LEGAL_RETRIEVAL_FAILED";
+    if (stage === "runtime") return "RUNTIME_SETTINGS_FAILED";
+    if (stage === "provider") return "PROVIDER_EXECUTION_FAILED";
   }
   return undefined;
 }
@@ -286,36 +307,12 @@ export type DocumentAnalysisProcessorDependencies = {
   }) => Promise<AiStructuredResult<DocumentAnalysisResult>>;
 };
 
-async function opaqueProbeUsageEventId(input: {
-  analysisId: string;
-  createdAt: string;
-  provider: "openai" | "anthropic";
-}): Promise<string> {
-  // The provider usage ledger is visible to privileged operational tooling.
-  // Hash all lifecycle dimensions so neither a raw analysis ID nor a timestamp
-  // is carried into the append-only event identifier.
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode([
-      "staging-document-analysis-probe-usage-v1",
-      input.analysisId,
-      input.createdAt,
-      input.provider,
-    ].join("\n")),
-  );
-  const hex = Array.from(
-    new Uint8Array(digest),
-    (byte) => byte.toString(16).padStart(2, "0"),
-  ).join("");
-  return `provider_usage_document_probe_${hex.slice(0, 48)}`;
-}
-
 /**
- * Keeps the user document-analysis ledger identity stable. A controlled
- * staging probe reseeds a fixed analysis ID on each run, so it instead hashes
- * that run's immutable creation timestamp into a content-free event ID. This
- * preserves append-only evidence across probe runs without exposing any raw
- * document, tenant, analysis, or provider request identifier.
+ * Gives every real provider call a stable, content-free ledger identity. The
+ * call start and ordinal distinguish queue retries and multi-chunk calls while
+ * keeping an accidental replay of the same bookkeeping operation idempotent.
+ * Including the analysis creation time also keeps controlled probe reseeds
+ * append-only without exposing document, tenant, or provider request IDs.
  */
 export async function documentAnalysisProviderUsageEventId(input: {
   row: {
@@ -325,18 +322,30 @@ export async function documentAnalysisProviderUsageEventId(input: {
   };
   environment: "development" | "staging" | "production";
   provider: "openai" | "anthropic";
+  callStartedAt: string;
+  callOrdinal: number;
 }): Promise<string> {
-  if (
-    input.environment === "staging"
-    && input.row.consentVersion === stagingSyntheticProbeConsentVersion
-  ) {
-    return opaqueProbeUsageEventId({
-      analysisId: input.row.analysisId,
-      createdAt: input.row.createdAt,
-      provider: input.provider,
-    });
+  if (!Number.isSafeInteger(input.callOrdinal) || input.callOrdinal < 1) {
+    throw new TypeError("Invalid document analysis provider call ordinal.");
   }
-  return `provider_usage_document_${input.row.analysisId}_${input.provider}`;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode([
+      "document-analysis-provider-usage-v2",
+      input.environment,
+      input.row.analysisId,
+      input.row.createdAt,
+      input.row.consentVersion === stagingSyntheticProbeConsentVersion ? "synthetic-probe" : "user-analysis",
+      input.provider,
+      input.callStartedAt,
+      String(input.callOrdinal),
+    ].join("\n")),
+  );
+  const hex = Array.from(
+    new Uint8Array(digest),
+    (byte) => byte.toString(16).padStart(2, "0"),
+  ).join("");
+  return `provider_usage_document_v2_${hex.slice(0, 48)}`;
 }
 
 function withSequentialAnalysisSession(
@@ -512,7 +521,12 @@ async function analyzeObject(
     // The full document never becomes a Lex query. A bounded structural
     // sample gives live retrieval the document's subject without handing it a
     // local corpus or building any document-to-law embedding index.
-    const retrieval = await deps.retrieve(env.DB, extracted.text.slice(0, 12_000), request.locale, 5);
+    const retrieval = await deps.retrieve(
+      env.DB,
+      extracted.text.slice(0, 12_000),
+      request.locale,
+      request.mode === "quick" ? 3 : 5,
+    );
     diagnosticStage = "runtime";
     const providerEnvironment = parseProviderEnvironment(env.APP_ENV);
     const runtimeSettings = await resolveAiRuntimeSettings({ db: env.DB, env });
@@ -520,11 +534,13 @@ async function analyzeObject(
       provider: "openai" | "anthropic";
       model: string;
       startedAt: string;
+      ordinal: number;
     }> = [];
     let ai: AiStructuredResult<DocumentAnalysisResult>;
     try {
       diagnosticStage = "provider";
-      const chunks = chunkDocumentForAnalysis(extracted.text);
+      const analysisPlan = planDocumentAnalysis(extracted.text, request.mode);
+      const chunks = analysisPlan.chunks;
       const chunkResults: AiStructuredResult<DocumentAnalysisResult>[] = [];
       for (const chunk of chunks) {
         chunkResults.push(await deps.analyze({
@@ -534,6 +550,7 @@ async function analyzeObject(
           detectedLanguage: extracted.detectedLanguage,
           extractionWarnings: [
             ...(extracted.warningCode ? [extracted.warningCode] : []),
+            ...(analysisPlan.representativeSample ? ["DOCUMENT_QUICK_REPRESENTATIVE_SAMPLE"] : []),
             ...(chunks.length > 1 ? [`DOCUMENT_CHUNK_${chunk.index}_OF_${chunk.total}`] : []),
           ],
           packageContext: extracted.packageContext ?? null,
@@ -561,7 +578,11 @@ async function analyzeObject(
               }
               throw error;
             }
-            providerCalls.push({ ...call, startedAt: new Date().toISOString() });
+            providerCalls.push({
+              ...call,
+              startedAt: new Date().toISOString(),
+              ordinal: providerCalls.length + 1,
+            });
           },
         }));
       }
@@ -591,6 +612,8 @@ async function analyzeObject(
               row,
               environment: providerEnvironment,
               provider: call.provider,
+              callStartedAt: call.startedAt,
+              callOrdinal: call.ordinal,
             }),
           });
         }
@@ -622,6 +645,8 @@ async function analyzeObject(
             row,
             environment: providerEnvironment,
             provider: call.provider,
+            callStartedAt: call.startedAt,
+            callOrdinal: call.ordinal,
           }),
         });
       }
@@ -646,6 +671,8 @@ async function analyzeObject(
           row,
           environment: providerEnvironment,
           provider: ai.provider,
+          callStartedAt: successfulCall.startedAt,
+          callOrdinal: successfulCall.ordinal,
         }),
       });
     }
@@ -779,7 +806,7 @@ async function analyzeObject(
       "DOCUMENT_ANALYSIS_PROVIDER_UNAVAILABLE",
       true,
       diagnosticStage,
-      documentAnalysisDiagnosticDetail(error),
+      documentAnalysisDiagnosticDetail(error, diagnosticStage),
     );
   }
 }

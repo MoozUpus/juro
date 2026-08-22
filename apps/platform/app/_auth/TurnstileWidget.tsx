@@ -1,6 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import {
+  turnstileClientFailure,
+  turnstileClientRetryMode,
+} from "../../lib/auth/turnstile-client";
 
 type TurnstileApi = {
   render(
@@ -33,6 +37,9 @@ export function TurnstileWidget({
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
+  const [failure, setFailure] = useState<ReturnType<
+    typeof turnstileClientFailure
+  > | null>(null);
 
   useEffect(() => {
     callback.current = onToken;
@@ -58,23 +65,30 @@ export function TurnstileWidget({
             theme: "light",
             size: "flexible",
             appearance: "interaction-only",
+            retry: turnstileClientRetryMode,
             callback(token: string) {
               callback.current(token);
+              setFailure(null);
               setStatus("ready");
             },
             "expired-callback"() {
               callback.current("");
+              setFailure(null);
               setStatus("loading");
             },
-            "error-callback"() {
+            "error-callback"(errorCode: string) {
               callback.current("");
+              setFailure(turnstileClientFailure(errorCode, locale));
               setStatus("error");
+              return true;
             },
           },
         );
+        setFailure(null);
         setStatus("loading");
       } catch {
         callback.current("");
+        setFailure(turnstileClientFailure(null, locale));
         setStatus("error");
       }
     };
@@ -86,6 +100,7 @@ export function TurnstileWidget({
     const handleError = () => {
       if (!cancelled) {
         callback.current("");
+        setFailure(turnstileClientFailure(null, locale));
         setStatus("error");
       }
     };
@@ -130,14 +145,20 @@ export function TurnstileWidget({
     if (!turnstile || !widgetId.current) return;
     callback.current("");
     turnstile.reset(widgetId.current);
+    setFailure(null);
     setStatus("loading");
   }, [resetSignal]);
 
   const ru = locale === "ru";
   const retry = () => {
+    if (failure && !failure.retryable) {
+      window.location.reload();
+      return;
+    }
     callback.current("");
     const script = document.getElementById("juro-turnstile-script");
     script?.remove();
+    setFailure(null);
     setStatus("loading");
     setAttempt((value) => value + 1);
   };
@@ -148,13 +169,13 @@ export function TurnstileWidget({
         {status === "ready"
           ? (ru ? "Проверка пройдена." : "Tekshiruvdan o‘tildi.")
           : status === "error"
-            ? (ru
-              ? "Проверка безопасности не запустилась. Повторите проверку."
-              : "Xavfsizlik tekshiruvi ishga tushmadi. Tekshiruvni takrorlang.")
+            ? failure?.message
             : (ru ? "Выполняется проверка…" : "Tekshiruv bajarilmoqda…")}
       </span>
       {status === "error" && <button type="button" className="auth-turnstile-retry" onClick={retry}>
-        {ru ? "Повторить проверку" : "Tekshiruvni takrorlash"}
+        {failure && !failure.retryable
+          ? (ru ? "Обновить страницу" : "Sahifani yangilash")
+          : (ru ? "Повторить проверку" : "Tekshiruvni takrorlash")}
       </button>}
     </div>
   );
