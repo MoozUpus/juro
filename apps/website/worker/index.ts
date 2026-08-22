@@ -45,11 +45,11 @@ const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
-    // Vinext 0.0.50 currently resolves /lawyers through the dynamic /:locale
-    // segment before the more specific App Router entry. Keep the public
-    // catalogue entry canonical at the edge until route priority is fixed.
-    if (url.pathname === "/lawyers") {
-      const destination = new URL("/ru/lawyers", url);
+    // Vinext 0.0.50 currently resolves the unlocalized lawyer catalogue and
+    // profiles through generic dynamic routes before their specific App Router
+    // entries. Keep every public marketplace entry canonical at the edge.
+    if (url.pathname === "/lawyers" || url.pathname.startsWith("/lawyers/")) {
+      const destination = new URL(`/ru${url.pathname}`, url);
       destination.search = url.search;
       return withSecurityHeaders(Response.redirect(destination, 308), url);
     }
