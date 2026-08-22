@@ -92,6 +92,17 @@ test("serves localized search landing pages and a crawlable knowledge hub", asyn
   }
 });
 
+test("publishes the English lawyer catalogue with complete social metadata", async () => {
+  const worker = await createWorker();
+  const response = await worker.fetch(new Request("http://localhost/en/lawyers", { headers: { accept: "text/html" } }), runtime, context);
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /<link rel="canonical" href="https:\/\/juro\.uz\/en\/lawyers"/);
+  assert.match(html, /<meta property="og:description"/);
+  assert.match(html, /<meta name="twitter:description"/);
+  assert.match(html, /application\/ld\+json/);
+});
+
 test("keeps preview legal documents accessible but out of search indexing and the sitemap", async () => {
   const worker = await createWorker();
   for (const route of ["/ru/legal", "/uz/legal/user-agreement", "/en/legal/user-agreement"]) {
