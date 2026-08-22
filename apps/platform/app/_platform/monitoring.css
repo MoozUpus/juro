@@ -28,4 +28,6 @@
    their intrinsic width from expanding the two-column workspace. */
 .monitoring-settings,.monitoring-feed,.monitoring-section-heading>div,
 .monitoring-updates,.monitoring-update{min-width:0}
+.monitoring-feed,.monitoring-updates,.monitoring-update{grid-template-columns:minmax(0,1fr);max-width:100%}
+.monitoring-update>*{min-width:0;max-width:100%}
 .monitoring-update h3,.monitoring-update p,.monitoring-source small{overflow-wrap:anywhere}
