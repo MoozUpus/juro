@@ -406,6 +406,13 @@ The containing scheduled run `dacf7a9b-7445-4476-9c12-42bc58be53fa` ran from
 `1b8d980d-7581-48d6-95fc-d7ef250a0aec` is currently running under the same
 single-worker lock; no overlapping invocation was started.
 
+That run completed at `2026-08-22T18:03:26.688Z` with the allow-listed
+`error_code = LEX_CATALOG_TIMEOUT`. The worker released the lock, left the
+ingestion failure gate at zero, and the subsequent read-only probe recorded
+1,458 live/manual queued or retrying jobs and 21/44 completed checkpoints.
+This catalog timeout is not treated as a legal-source terminal failure or as a
+successful release gate.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
