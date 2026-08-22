@@ -7,6 +7,19 @@
 3. Confirm `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` exist as production Worker secrets. Never place the long-lived Calls token in code, docs, logs or a browser response.
 4. Confirm the payment provider remains in explicitly disclosed demo mode; this release does not authorize or imply a real merchant integration.
 5. Confirm the app registration policies are still treated as a pre-incorporation preview unless owner-approved operator identity, address and final RU/UZ editions have been supplied. Never replace missing legal details with invented values.
+6. For legal publication, obtain the owner's exact operator legal name, contact
+   email and address, plus explicit approval of the final RU and UZ editions of
+   Terms, Privacy, Cookies, AI Rules and Personal Data. Replace every
+   `{OPERATOR_*}` placeholder, issue a new policy version/hash and rerun the
+   legal-policy tests before changing the draft disclosure or making a
+   commercial-production claim.
+7. Before the investor rehearsal, require a stable Chrome extension connection
+   in both selected profiles and close every live Chrome gate named in
+   `QA_MATRIX.md`. If selected-source remote screen rendering or forced
+   reconnect is still open, keep those actions out of the investor demo rather
+   than inferring them from implementation or automated tests.
+8. After any Windows-scale QA, visibly restore the host to its original scale
+   and record both the tested state and the restored state.
 
 ## D1 gate
 
