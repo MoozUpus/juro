@@ -43,13 +43,14 @@ async function postCall(request: Request, context: Context) {
   const participant = await participantForRequest(context, user.id);
   if (!participant) return response({ code: "CALL_NOT_FOUND" }, 404);
   if (participant.format !== "video") return response({ code: "CALL_FORMAT_UNAVAILABLE" }, 409);
-  if (!["confirmed", "in_progress"].includes(participant.consultationStatus)) return response({ code: "CALL_STATE_UNAVAILABLE" }, 409);
   const parsed = await parseJsonRequest(request, schema, 4_096);
   if (!parsed.ok) return response({ code: "INVALID_INPUT" }, 400);
   const db = requireD1();
   const now = new Date().toISOString();
+  const callStateAvailable = ["confirmed", "in_progress"].includes(participant.consultationStatus);
 
   if (parsed.data.action === "prepare") {
+    if (!callStateAvailable) return response({ code: "CALL_STATE_UNAVAILABLE" }, 409);
     const ice = await generateLawyerCallIceServers(runtimeEnv());
     const candidateId = crypto.randomUUID();
     await db.prepare(
@@ -82,10 +83,14 @@ async function postCall(request: Request, context: Context) {
      WHERE r.consultation_id=? LIMIT 1`,
   ).bind(user.id, participant.consultationId).first<{ id: string; status: string; preparedAt: string | null }>();
   if (!room?.preparedAt) return response({ code: "CALL_NOT_PREPARED" }, 409);
-  if (room.status === "ended" && parsed.data.action === "end") {
-    return response({ ok: true, roomId: room.id, status: "ended" });
+  if (room.status === "ended" && ["end", "heartbeat"].includes(parsed.data.action)) {
+    await db.prepare(
+      "UPDATE lawyer_call_participants SET left_at=COALESCE(left_at,?),last_seen_at=? WHERE room_id=? AND user_id=?",
+    ).bind(now, now, room.id, user.id).run();
+    return response({ ok: true, roomId: room.id, at: now, status: "ended" });
   }
-  if (room.status === "ended" && parsed.data.action !== "heartbeat") return response({ code: "CALL_ENDED" }, 409);
+  if (room.status === "ended") return response({ code: "CALL_ENDED" }, 409);
+  if (!callStateAvailable) return response({ code: "CALL_STATE_UNAVAILABLE" }, 409);
 
   if (parsed.data.action === "heartbeat") {
     await db.prepare("UPDATE lawyer_call_participants SET last_seen_at=? WHERE room_id=? AND user_id=?")

@@ -88,6 +88,20 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
     setSharing(false);
   }, [locale]);
 
+  const finishLocalCall = useCallback(async () => {
+    callEnded.current = true;
+    clearReconnectTimer();
+    await stopScreenShare(false);
+    const connection = peer.current;
+    peer.current = null;
+    connection?.close();
+    localStream.current?.getTracks().forEach((track) => track.stop());
+    localStream.current = null;
+    if (remoteVideo.current) remoteVideo.current.srcObject = null;
+    if (localVideo.current) localVideo.current.srcObject = null;
+    setPhase("ended");
+  }, [clearReconnectTimer, stopScreenShare]);
+
   const flushIce = useCallback(async () => {
     if (!peer.current?.remoteDescription) return;
     for (const candidate of pendingIce.current.splice(0)) await peer.current.addIceCandidate(candidate);
@@ -267,20 +281,21 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
   }
 
   async function endCall() {
-    callEnded.current = true;
-    clearReconnectTimer();
-    await stopScreenShare(false);
-    peer.current?.close(); localStream.current?.getTracks().forEach((track) => track.stop()); setPhase("ended");
+    await finishLocalCall();
     try { await post({ action: "end" }); } catch (value) { setError(describeLawyerCallApiError(value, locale)); }
   }
 
   useEffect(() => {
     if (!peer.current || ["preflight", "preparing", "ready", "ended"].includes(phase)) return;
     const poll = window.setInterval(() => void pollSignals(), 900);
-    const heartbeat = window.setInterval(() => void post({ action: "heartbeat" }).catch(() => undefined), 10_000);
+    const heartbeat = window.setInterval(() => {
+      void post<{ status?: string }>({ action: "heartbeat" })
+        .then((result) => { if (result.status === "ended") void finishLocalCall(); })
+        .catch(() => undefined);
+    }, 5_000);
     void pollSignals();
     return () => { window.clearInterval(poll); window.clearInterval(heartbeat); };
-  }, [phase, pollSignals, post]);
+  }, [finishLocalCall, phase, pollSignals, post]);
 
   useEffect(() => {
     if (phase !== "connected") return;

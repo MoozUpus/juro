@@ -43,7 +43,8 @@ test("call room is participant-scoped, ephemeral, audited and never records medi
     assert.match(source, /assertSafeWrite/);
   }
   assert.match(roomRoute, /workspace_audit_events/);
-  assert.match(roomRoute, /room\.status === "ended" && parsed\.data\.action === "end"/);
+  assert.match(roomRoute, /room\.status === "ended" && \["end", "heartbeat"\]\.includes\(parsed\.data\.action\)/);
+  assert.match(roomRoute, /left_at=COALESCE\(left_at,\?\)/);
   assert.match(roomRoute, /status: "ended"/);
   assert.match(signalRoute, /expires_at/);
   assert.match(signalRoute, /created_at>=\?\) < 480/);
@@ -76,6 +77,9 @@ test("call reconnect and screen sharing fail closed without leaving capture acti
   assert.match(ui, /sharing \? void stopScreenShare\(\) : void shareScreen\(\)/);
   assert.match(ui, /aria-pressed=\{sharing\}/);
   assert.match(ui, /clearReconnectTimer\(\)/);
+  assert.match(ui, /result\.status === "ended"/);
+  assert.match(ui, /remoteVideo\.current\.srcObject = null/);
+  assert.match(ui, /localVideo\.current\.srcObject = null/);
   assert.match(ui, /Автоматическое переподключение не удалось/);
   assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
   assert.match(styles, /\.lawyer-call-room \.spin\{animation:none\}/);
