@@ -130,6 +130,10 @@ test("known admin pages render a protected re-auth screen instead of a session-e
   const accessScreen = await readFile(new URL("../app/_staff/AdminConsoleAccess.tsx", import.meta.url), "utf8");
   assert.match(accessScreen, /fontFamily:\s*"Manrope,/u);
   assert.doesNotMatch(accessScreen, /fontFamily:\s*["']Inter/u);
+
+  const launchScreen = await readFile(new URL("../app/_staff/AdminConsoleLaunch.tsx", import.meta.url), "utf8");
+  assert.match(launchScreen, /fontFamily:\s*"Manrope,/u);
+  assert.doesNotMatch(launchScreen, /fontFamily:\s*["']Inter/u);
 });
 
 test("builder navigation preserves canonical locale and account context", () => {

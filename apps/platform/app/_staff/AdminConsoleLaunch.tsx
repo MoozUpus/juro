@@ -41,7 +41,7 @@ export function AdminConsoleLaunch({
     }
   }
 
-  return <main style={{ maxWidth: "44rem", margin: "4rem auto", padding: "1.5rem", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
+  return <main style={{ maxWidth: "44rem", margin: "4rem auto", padding: "1.5rem", fontFamily: "Manrope, ui-sans-serif, system-ui, sans-serif" }}>
     <p style={{ color: "#6b541f", fontWeight: 700, letterSpacing: ".08em" }}>
       {isProduction ? "JURO · ADMIN" : "JURO · STAGING ADMIN"}
     </p>
