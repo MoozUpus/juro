@@ -272,6 +272,19 @@ Dead-letter ingestion jobs and terminal or technically-unavailable failure
 rows remained zero. Ingestion remains active; queue freeze, release floors
 and all post-ingestion gates remain open.
 
+## Completed staging continuation run (2026-08-22, 16:08–16:17Z)
+
+Run `7ad4207d-2fb1-4f46-a0d3-ab758bd2fca7` completed at
+`2026-08-22T16:17:24.122Z` with `error_code = NULL`. The worker retained
+the single distributed lease for the full bounded invocation; no parallel
+crawler was started and no checkpoint was force-completed. The post-run
+read-only boundary recorded 197 canonical documents, 12,177 distinct current
+provisions and 32,431 indexed chunks, with 17/44 discovery checkpoints
+complete and 1,485 live-or-manual queued/running/retrying jobs. Dead-letter
+ingestion jobs and terminal or technically-unavailable failure rows remained
+zero. Ingestion remains active; queue freeze, release floors and all
+post-ingestion gates remain open.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
