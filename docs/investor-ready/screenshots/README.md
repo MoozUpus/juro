@@ -61,6 +61,10 @@ recorded in `../QA_MATRIX.md`.
 - `after/admin-overview-fresh-mfa-1536.jpg` — isolated production Admin overview
   after TOTP enrollment, fresh-MFA handoff and the final publication/security
   hierarchy polish.
+- `after/admin-overview-fresh-mfa-windows-150.png` — privacy-safe isolated Admin
+  overview at real Windows scale 150% (`devicePixelRatio=1.5`, 1280×609), with
+  no horizontal clipping; SHA-256
+  `173E7D5980C171504A05D7F5F09BEB986FA424FA9D2A25DF3BA225EA14A0A4CD`.
 - `after/admin-billing-fresh-mfa-1536.jpg` — fresh-MFA fee matrix with the fixed
   1% policy and explicit 2%/5% configuration controls.
 

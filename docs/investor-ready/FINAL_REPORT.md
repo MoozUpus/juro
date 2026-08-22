@@ -215,9 +215,15 @@ document width without horizontal overflow, and Settings was then visibly
 restored to 125%. A later stable connection repeated the system-scale transition
 and exercised 19 authenticated Lawyer routes at DPR 1.5 and a 1536×769 viewport.
 Every route stayed within the root width and the dashboard screenshot showed no
-clipping. The protected Admin re-auth screen and isolated-host handoff also fit
-a 1280×609 viewport at DPR 1.5; a fresh-MFA Admin data-screen pass at 150%
-remains open. Settings was again visibly restored to 125%.
+clipping. A final fresh-MFA pass rendered the isolated Admin overview, profiles,
+reviews and Legal Corpus plus the Platform fee matrix, 200-row immutable audit
+view and lawyer lifecycle/deletion controls at DPR 1.5 and 1280×609. Every root
+stayed at or below the viewport; the loaded Manrope face, the expected 1%/2%/5%
+sandbox rules and the pending `SYNTHETIC DEMO` deletion were visible. The safe
+overview capture is indexed with SHA-256
+`173E7D5980C171504A05D7F5F09BEB986FA424FA9D2A25DF3BA225EA14A0A4CD`.
+Settings was again restored to DPR 1.25, and native Chrome page zoom was never
+changed.
 
 Reduced motion was exercised through the real Windows preference rather than a
 browser override. With Animation effects temporarily disabled, the authenticated
@@ -305,12 +311,11 @@ records during the presentation.
   visibly unfilled operator identity/address fields. Commercial production still
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
-- Fresh-MFA Admin data screens at Windows scale 150%, screen-share source
-  selection and forced reconnect remain open. Native Chrome page zoom is
-  intentionally `NOT TESTED` by the latest explicit user instruction. The
-  Client dashboard, 19-route Lawyer suite and protected Admin re-auth surface
-  passed Windows-scale 150%, and the host was restored to 125%. The
-  forced-reconnect and capture-cleanup source,
+- Screen-share source selection and forced reconnect remain open. Native Chrome
+  page zoom is intentionally `NOT TESTED` by the latest explicit user
+  instruction. The Client dashboard, 19-route Lawyer suite and fresh-MFA Admin
+  data screens passed Windows-scale 150%, and the host was restored to 125%.
+  The forced-reconnect and capture-cleanup source,
   focused tests, full CI and production asset are verified, but no live network
   interruption or selected-source remote rendering is inferred from them. The
   platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
