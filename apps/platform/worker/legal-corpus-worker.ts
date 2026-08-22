@@ -74,16 +74,17 @@ const INGESTION_JOBS_PER_RUN = 5;
 // so secondary PDF/ZIP representations cannot consistently consume the start
 // window before versioning progresses. When durable historical work has grown
 // beyond a bounded debt threshold, reserve the already-authorised sequential
-// windows for versions while retaining at least five current-corpus fetch
-// slots. Current-corpus coverage is the release-gate priority; allowing nine
-// version slots here leaves the 1,500-document target hostage to a single
-// fetch slot. Ordinary priority fetching resumes automatically below that
+// windows for versions while retaining at least three current-corpus fetch
+// slots even when the short five-slot budget is in use. Current-corpus
+// coverage is the release-gate priority; allowing four version slots in a
+// five-slot batch leaves the 1,500-document target hostage to a single fetch
+// slot. Ordinary priority fetching resumes automatically below that
 // threshold. This is back-pressure, not a new crawl stream: the shared
 // 20-second host pacer and start fence still govern every source request.
 const PREFERRED_INGESTION_SLOTS_PER_RUN = 4;
 const VERSION_INGESTION_SLOT_INDEX = 3;
 const VERSION_CATCHUP_QUEUE_THRESHOLD = 500;
-const VERSION_CATCHUP_MINIMUM_FETCH_SLOTS = 1;
+const VERSION_CATCHUP_MINIMUM_FETCH_SLOTS = 3;
 // Ten is the established upper bound for a scheduled worker invocation. The
 // elapsed-time start fence remains authoritative if the robots policy or a
 // secondary official representation consumes part of that request budget.
@@ -231,9 +232,11 @@ export function legalCorpusVersionSlotIndexes(input: {
   const ingestionBudget = Math.max(0, Math.floor(input.ingestionBudget));
   const queuedVersionJobs = Math.max(0, Math.floor(input.queuedVersionJobs));
   if (ingestionBudget === 0) return [];
-  if (queuedVersionJobs < VERSION_CATCHUP_QUEUE_THRESHOLD
-    || ingestionBudget <= VERSION_CATCHUP_MINIMUM_FETCH_SLOTS) {
+  if (queuedVersionJobs < VERSION_CATCHUP_QUEUE_THRESHOLD) {
     return VERSION_INGESTION_SLOT_INDEX < ingestionBudget ? [VERSION_INGESTION_SLOT_INDEX] : [];
+  }
+  if (ingestionBudget <= VERSION_CATCHUP_MINIMUM_FETCH_SLOTS) {
+    return ingestionBudget > 1 ? [ingestionBudget - 1] : [];
   }
   const catchupSlots = Math.min(
     VERSION_CATCHUP_MAX_SLOTS,
