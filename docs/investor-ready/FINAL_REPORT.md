@@ -116,6 +116,17 @@ passed both jobs and Worker `b9481033-bd24-4dda-8f75-61b8a7ce2473` deployed the
 new asset. This is implementation/deployment evidence, not a substitute for the
 still-open live interruption and selected-source checks.
 
+A later production header audit found that non-call Platform pages still
+advertised microphone access. Commit `b9faf4bd` denies microphone access on
+every non-call route while preserving the exact protected call-route allowlist.
+Local type-check, lint, production build, rendered HTML 33/33 and artifact
+validation passed; GitHub CI run `32594218794` passed both jobs. Worker
+`2ab9e425-6a1f-4126-a244-99f27f25861c` (version 120) deployed the correction.
+Fresh app-login, Lawyer-root and status-root responses all returned HTTP 200
+with camera, display capture and microphone denied. A new live call preflight is
+not inferred from those non-call reads; the allow branch remains rendered-test
+verified.
+
 The same rehearsal created and stopped a five-second billable timer, ran a
 one-result conflict check, saved a favourite case-linked knowledge note and
 advanced an isolated simulated payment through preview, success and refund.
@@ -160,6 +171,14 @@ Shared-theme tests preserve cookie precedence over stale per-domain
 `localStorage`. The polished Admin overview passed every requested viewport from
 320 through 1920 pixels. Remaining full-matrix responsive, zoom and
 reduced-motion coverage stay explicit in `QA_MATRIX.md`.
+
+Windows scale was also exercised directly rather than inferred from viewport
+emulation. Settings changed 125% to the recommended 150%, the authenticated
+Client dashboard rendered at DPR 1.5 with a 1280×665 viewport and 1265-pixel
+document width without horizontal overflow, and Settings was then visibly
+restored to 125%. The Chrome extension disconnected after the scale change and
+failed again after one bounded reconnect, so Lawyer/Admin 150% evidence remains
+open instead of being promoted from the Client result.
 
 ## 8. Browser and device coverage
 
@@ -239,8 +258,10 @@ records during the presentation.
   visibly unfilled operator identity/address fields. Commercial production still
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
-- Chrome zoom, live reduced-motion emulation, screen-share source selection and
-  forced reconnect remain open. The forced-reconnect and capture-cleanup source,
+- Chrome zoom, live reduced-motion emulation, Lawyer/Admin Windows-scale 150%,
+  screen-share source selection and forced reconnect remain open. The Client
+  dashboard passed Windows-scale 150% and the host was restored to 125%. The
+  forced-reconnect and capture-cleanup source,
   focused tests, full CI and production asset are verified, but no live network
   interruption or selected-source remote rendering is inferred from them. The
   platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
@@ -248,9 +269,9 @@ records during the presentation.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` returned to a fully operational 8/8 aggregate after migration
   `0155` and remained operational after Worker
-  `b9481033-bd24-4dda-8f75-61b8a7ce2473`: independent app/status-host reads
-  generated at `2026-08-22T19:17:27.353Z` showed no stale or degraded component
-  and zero active or recent incident.
+  `2ab9e425-6a1f-4126-a244-99f27f25861c`: independent app/status-host reads
+  generated at `2026-08-22T19:51:50.946Z` and `2026-08-22T19:51:51.615Z`
+  showed no stale or degraded component and zero active or recent incident.
 
 Until the open Chrome and legal-publication items are closed, this document is a
 release-candidate report rather than a blanket Definition-of-Done claim.
