@@ -52,10 +52,33 @@ test("call room is participant-scoped, ephemeral, audited and never records medi
   assert.match(ui, /RTCPeerConnection/);
   assert.match(ui, /getDisplayMedia/);
   assert.match(ui, /reconnecting/);
+  assert.match(ui, /MAX_AUTO_RECONNECT_ATTEMPTS = 3/);
+  assert.match(ui, /connection\.oniceconnectionstatechange/);
+  assert.match(ui, /createOffer\(\{ iceRestart \}\)/);
+  assert.match(ui, /peer\.current !== connection/);
+  assert.match(ui, /action: "prepare", deviceReadiness: deviceReadiness\.current/);
   assert.doesNotMatch(ui, /MediaRecorder|recording/i);
   assert.match(migration, /FOREIGN KEY \(`consultation_id`\)/);
   assert.match(migration, /CHECK \(`signal_type` IN \('offer','answer','ice','restart'\)\)/);
   assert.doesNotMatch(migration, /DROP\s+TABLE/iu);
+});
+
+test("call reconnect and screen sharing fail closed without leaving capture active", async () => {
+  const [ui, styles] = await Promise.all([
+    readFile(new URL("../app/_platform/LawyerCallRoom.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/_platform/lawyer-call-room.css", import.meta.url), "utf8"),
+  ]);
+
+  assert.match(ui, /const screenStream = useRef<MediaStream \| null>\(null\)/);
+  assert.match(ui, /activeScreen\?\.getTracks\(\)\.forEach/);
+  assert.match(ui, /display\?\.getTracks\(\)\.forEach/);
+  assert.match(ui, /screenStream\.current\?\.getTracks\(\)\.forEach/);
+  assert.match(ui, /sharing \? void stopScreenShare\(\) : void shareScreen\(\)/);
+  assert.match(ui, /aria-pressed=\{sharing\}/);
+  assert.match(ui, /clearReconnectTimer\(\)/);
+  assert.match(ui, /Автоматическое переподключение не удалось/);
+  assert.match(styles, /@media\(prefers-reduced-motion:reduce\)/);
+  assert.match(styles, /\.lawyer-call-room \.spin\{animation:none\}/);
 });
 
 test("call room converts browser media failures into actionable RU and UZ guidance", () => {

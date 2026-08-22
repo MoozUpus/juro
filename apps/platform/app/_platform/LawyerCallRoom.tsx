@@ -7,9 +7,14 @@ import { describeLawyerCallApiError, describeLawyerCallMediaError } from "../../
 import type { PlatformLocale } from "../../lib/platform/routing";
 
 type IceServer = { urls: string | string[]; username?: string; credential?: string };
+type DeviceReadiness = { camera: boolean; microphone: boolean; speaker: boolean; cameraLabel?: string; microphoneLabel?: string };
 type PrepareResponse = { roomId: string; role: "client" | "lawyer"; peerName: string; iceServers: IceServer[]; relayAvailable: boolean; provider: string };
 type Signal = { id: string; type: "offer" | "answer" | "ice" | "restart"; payload: Record<string, unknown>; createdAt: string };
 type Phase = "preflight" | "preparing" | "ready" | "joining" | "waiting" | "connected" | "reconnecting" | "ended";
+
+const MAX_AUTO_RECONNECT_ATTEMPTS = 3;
+const reconnectDelay = (attempt: number, failed: boolean) => failed ? 300 : Math.min(1_000 * 2 ** (attempt - 1), 4_000);
+const initialSignalCursor = () => new Date(Date.now() - 2_000).toISOString();
 
 class LawyerCallApiError extends Error {
   constructor(readonly code: string) {
@@ -30,17 +35,24 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
   const localVideo = useRef<HTMLVideoElement>(null);
   const remoteVideo = useRef<HTMLVideoElement>(null);
   const localStream = useRef<MediaStream | null>(null);
+  const screenStream = useRef<MediaStream | null>(null);
   const peer = useRef<RTCPeerConnection | null>(null);
   const pendingIce = useRef<RTCIceCandidateInit[]>([]);
   const cursor = useRef({ after: "", afterId: "" });
   const pollActive = useRef(false);
   const connectedAt = useRef<number | null>(null);
+  const deviceReadiness = useRef<DeviceReadiness | null>(null);
+  const reconnectTimer = useRef<number | null>(null);
+  const reconnectAttempts = useRef(0);
+  const reconnectInFlight = useRef(false);
+  const callEnded = useRef(false);
   const [phase, setPhase] = useState<Phase>("preflight");
   const [prepared, setPrepared] = useState<PrepareResponse | null>(null);
   const [cameraOn, setCameraOn] = useState(true);
   const [microphoneOn, setMicrophoneOn] = useState(true);
   const [sharing, setSharing] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [reconnectAttempt, setReconnectAttempt] = useState(0);
   const [error, setError] = useState("");
   const endpoint = `/api/platform/lawyer-consultations/${encodeURIComponent(consultationId)}/call`;
 
@@ -51,6 +63,30 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
   const sendSignal = useCallback(async (type: Signal["type"], payload: Record<string, unknown>) => {
     await api(`${endpoint}/signals`, { method: "POST", headers: { "content-type": "application/json", "x-juro-csrf": "1" }, body: JSON.stringify({ type, payload }) });
   }, [endpoint]);
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimer.current === null) return;
+    window.clearTimeout(reconnectTimer.current);
+    reconnectTimer.current = null;
+  }, []);
+
+  const stopScreenShare = useCallback(async (restoreCamera = true) => {
+    const activeScreen = screenStream.current;
+    screenStream.current = null;
+    activeScreen?.getTracks().forEach((track) => {
+      track.onended = null;
+      track.stop();
+    });
+    if (restoreCamera) {
+      const sender = peer.current?.getSenders().find((item) => item.track?.kind === "video");
+      const cameraTrack = localStream.current?.getVideoTracks()[0];
+      if (sender && cameraTrack) {
+        try { await sender.replaceTrack(cameraTrack); }
+        catch (value) { setError(describeLawyerCallMediaError(value, locale, "screen_share")); }
+      }
+    }
+    setSharing(false);
+  }, [locale]);
 
   const flushIce = useCallback(async () => {
     if (!peer.current?.remoteDescription) return;
@@ -114,7 +150,9 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
       const devices = await navigator.mediaDevices.enumerateDevices();
       const camera = devices.find((item) => item.kind === "videoinput");
       const microphone = devices.find((item) => item.kind === "audioinput");
-      const result = await post<PrepareResponse>({ action: "prepare", deviceReadiness: { camera: Boolean(camera), microphone: Boolean(microphone), speaker: typeof HTMLMediaElement !== "undefined", cameraLabel: camera?.label || undefined, microphoneLabel: microphone?.label || undefined } });
+      const readiness = { camera: Boolean(camera), microphone: Boolean(microphone), speaker: typeof HTMLMediaElement !== "undefined", cameraLabel: camera?.label || undefined, microphoneLabel: microphone?.label || undefined };
+      deviceReadiness.current = readiness;
+      const result = await post<PrepareResponse>({ action: "prepare", deviceReadiness: readiness });
       setPrepared(result); setPhase("ready");
     } catch (value) {
       localStream.current?.getTracks().forEach((track) => track.stop()); localStream.current = null;
@@ -124,46 +162,116 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
   }
 
   async function join(reconnect = false) {
-    if (!prepared || !localStream.current) return;
+    if (!prepared || !localStream.current || (reconnect && reconnectInFlight.current)) return;
+    clearReconnectTimer();
+    callEnded.current = false;
+    if (!reconnect) {
+      reconnectAttempts.current = 0;
+      setReconnectAttempt(0);
+    } else {
+      reconnectInFlight.current = true;
+      await stopScreenShare(false);
+    }
     setPhase(reconnect ? "reconnecting" : "joining"); setError("");
+    let retryAfterFailure = false;
     try {
-      if (!cursor.current.after) {
-        cursor.current = { after: new Date(Date.now() - 2_000).toISOString(), afterId: "" };
+      let callConfiguration = prepared;
+      if (reconnect && deviceReadiness.current) {
+        callConfiguration = await post<PrepareResponse>({ action: "prepare", deviceReadiness: deviceReadiness.current });
+        setPrepared(callConfiguration);
       }
-      peer.current?.close();
-      const connection = new RTCPeerConnection({ iceServers: prepared.iceServers as RTCIceServer[], iceCandidatePoolSize: 4 });
+      if (!cursor.current.after) {
+        cursor.current = { after: initialSignalCursor(), afterId: "" };
+      }
+      const previousConnection = peer.current;
+      peer.current = null;
+      previousConnection?.close();
+      pendingIce.current = [];
+      const connection = new RTCPeerConnection({ iceServers: callConfiguration.iceServers as RTCIceServer[], iceCandidatePoolSize: 4 });
       peer.current = connection;
       localStream.current.getTracks().forEach((track) => connection.addTrack(track, localStream.current!));
       connection.ontrack = (event) => { if (remoteVideo.current) remoteVideo.current.srcObject = event.streams[0]; };
       connection.onicecandidate = (event) => { if (event.candidate) void sendSignal("ice", event.candidate.toJSON() as unknown as Record<string, unknown>); };
       connection.onconnectionstatechange = () => {
+        if (peer.current !== connection || callEnded.current) return;
         if (connection.connectionState === "connected") {
+          clearReconnectTimer(); reconnectAttempts.current = 0; setReconnectAttempt(0);
           connectedAt.current ??= Date.now(); setPhase("connected"); setError("");
-        } else if (["disconnected", "failed"].includes(connection.connectionState)) setPhase("reconnecting");
+        } else if (["disconnected", "failed"].includes(connection.connectionState)) {
+          scheduleReconnect(connection, connection.connectionState === "failed");
+        }
         else if (connection.connectionState === "closed") setPhase((current) => current === "ended" ? current : "waiting");
+      };
+      connection.oniceconnectionstatechange = () => {
+        if (peer.current !== connection || callEnded.current) return;
+        if (["disconnected", "failed"].includes(connection.iceConnectionState)) {
+          scheduleReconnect(connection, connection.iceConnectionState === "failed");
+        }
       };
       await post({ action: "join", reconnect });
       setPhase("waiting");
-      if (prepared.role === "lawyer") await createOffer(reconnect);
+      if (callConfiguration.role === "lawyer") await createOffer(reconnect);
       else await sendSignal("restart", { reason: reconnect ? "client_reconnect" : "client_ready" });
-    } catch (value) { setPhase("ready"); setError(describeLawyerCallApiError(value, locale)); }
+    } catch (value) {
+      retryAfterFailure = reconnect;
+      setPhase(reconnect ? "reconnecting" : "ready");
+      setError(describeLawyerCallApiError(value, locale));
+    } finally {
+      reconnectInFlight.current = false;
+      if (retryAfterFailure && peer.current) scheduleReconnect(peer.current, true);
+    }
+  }
+
+  function scheduleReconnect(connection: RTCPeerConnection, failed: boolean) {
+    if (callEnded.current || peer.current !== connection || reconnectTimer.current !== null || reconnectInFlight.current) return;
+    if (reconnectAttempts.current >= MAX_AUTO_RECONNECT_ATTEMPTS) {
+      setPhase("reconnecting");
+      setError(ru
+        ? "Автоматическое переподключение не удалось. Проверьте сеть и нажмите «Переподключить»."
+        : "Avtomatik qayta ulanish amalga oshmadi. Tarmoqni tekshiring va «Qayta ulash» tugmasini bosing.");
+      return;
+    }
+    const attempt = reconnectAttempts.current + 1;
+    reconnectAttempts.current = attempt;
+    setReconnectAttempt(attempt);
+    setPhase("reconnecting");
+    reconnectTimer.current = window.setTimeout(() => {
+      reconnectTimer.current = null;
+      if (!callEnded.current && peer.current === connection && connection.connectionState !== "connected") void join(true);
+    }, reconnectDelay(attempt, failed));
   }
 
   async function shareScreen() {
     if (!peer.current || !navigator.mediaDevices.getDisplayMedia) return;
+    let display: MediaStream | null = null;
+    setError("");
     try {
-      const display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      display = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const screenTrack = display.getVideoTracks()[0];
       const sender = peer.current.getSenders().find((item) => item.track?.kind === "video");
-      if (!screenTrack || !sender) return;
+      if (!screenTrack || !sender) {
+        display.getTracks().forEach((track) => track.stop());
+        setError(ru ? "Показ экрана недоступен для текущего соединения." : "Joriy ulanishda ekran ko‘rsatish mavjud emas.");
+        return;
+      }
+      screenStream.current?.getTracks().forEach((track) => track.stop());
+      screenStream.current = display;
       await sender.replaceTrack(screenTrack); setSharing(true);
-      screenTrack.onended = () => { const cameraTrack = localStream.current?.getVideoTracks()[0]; if (cameraTrack) void sender.replaceTrack(cameraTrack); setSharing(false); };
-    } catch (value) { setError(describeLawyerCallMediaError(value, locale, "screen_share")); }
+      screenTrack.onended = () => { void stopScreenShare(); };
+    } catch (value) {
+      display?.getTracks().forEach((track) => track.stop());
+      if (screenStream.current === display) screenStream.current = null;
+      setSharing(false);
+      setError(describeLawyerCallMediaError(value, locale, "screen_share"));
+    }
   }
 
   async function endCall() {
-    try { await post({ action: "end" }); } catch (value) { setError(describeLawyerCallApiError(value, locale)); }
+    callEnded.current = true;
+    clearReconnectTimer();
+    await stopScreenShare(false);
     peer.current?.close(); localStream.current?.getTracks().forEach((track) => track.stop()); setPhase("ended");
+    try { await post({ action: "end" }); } catch (value) { setError(describeLawyerCallApiError(value, locale)); }
   }
 
   useEffect(() => {
@@ -181,8 +289,11 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
   }, [phase]);
 
   useEffect(() => () => {
+    callEnded.current = true;
+    clearReconnectTimer();
+    screenStream.current?.getTracks().forEach((track) => track.stop());
     peer.current?.close(); localStream.current?.getTracks().forEach((track) => track.stop());
-  }, []);
+  }, [clearReconnectTimer]);
 
   const toggleTrack = (kind: "audio" | "video") => {
     const track = kind === "audio" ? localStream.current?.getAudioTracks()[0] : localStream.current?.getVideoTracks()[0];
@@ -201,13 +312,14 @@ export function LawyerCallRoom({ locale, consultationId, returnPath }: { locale:
       <div className="lawyer-call-controls">
         <button type="button" onClick={() => toggleTrack("audio")} aria-pressed={!microphoneOn}>{microphoneOn ? <Mic /> : <MicOff />}<span>{ru ? "Микрофон" : "Mikrofon"}</span></button>
         <button type="button" onClick={() => toggleTrack("video")} aria-pressed={!cameraOn}>{cameraOn ? <Camera /> : <CameraOff />}<span>{ru ? "Камера" : "Kamera"}</span></button>
-        <button type="button" onClick={() => void shareScreen()} disabled={!(["joining", "waiting", "connected", "reconnecting"] as Phase[]).includes(phase) || sharing}><Cast /><span>{sharing ? (ru ? "Экран показан" : "Ekran ko‘rsatilmoqda") : (ru ? "Показать экран" : "Ekranni ko‘rsatish")}</span></button>
+        <button type="button" onClick={() => sharing ? void stopScreenShare() : void shareScreen()} disabled={!(["joining", "waiting", "connected", "reconnecting"] as Phase[]).includes(phase)} aria-pressed={sharing}><Cast /><span>{sharing ? (ru ? "Остановить показ" : "Ko‘rsatishni to‘xtatish") : (ru ? "Показать экран" : "Ekranni ko‘rsatish")}</span></button>
         {phase === "reconnecting" && <button type="button" onClick={() => void join(true)}><RotateCcw /><span>{ru ? "Переподключить" : "Qayta ulash"}</span></button>}
         <button className="danger" type="button" onClick={() => void endCall()} disabled={phase === "ended"}><PhoneOff /><span>{ru ? "Завершить" : "Yakunlash"}</span></button>
       </div>
       {phase === "ready" && <button className="lawyer-call-join" type="button" onClick={() => void join()}>{ru ? "Войти в комнату" : "Xonaga kirish"}</button>}
       {phase === "joining" && <p className="lawyer-call-status"><LoaderCircle className="spin" />{ru ? "Подключение…" : "Ulanmoqda…"}</p>}
       {phase === "waiting" && <p className="lawyer-call-status"><UsersRound />{ru ? "Вы в комнате. Ожидаем второго участника…" : "Siz xonadasiz. Ikkinchi ishtirokchi kutilmoqda…"}</p>}
+      {phase === "reconnecting" && <p className="lawyer-call-status" role="status"><LoaderCircle className="spin" />{ru ? `Восстанавливаем защищённое соединение${reconnectAttempt ? ` · попытка ${reconnectAttempt}/${MAX_AUTO_RECONNECT_ATTEMPTS}` : ""}…` : `Himoyalangan ulanish tiklanmoqda${reconnectAttempt ? ` · urinish ${reconnectAttempt}/${MAX_AUTO_RECONNECT_ATTEMPTS}` : ""}…`}</p>}
       {phase === "ended" && <p className="lawyer-call-status"><PhoneOff />{ru ? "Звонок завершён. Юрист может добавить итог консультации в карточке заявки." : "Qo‘ng‘iroq yakunlandi. Yurist so‘rov kartasiga maslahat yakunini qo‘shishi mumkin."}</p>}
     </section>
   </main>;
