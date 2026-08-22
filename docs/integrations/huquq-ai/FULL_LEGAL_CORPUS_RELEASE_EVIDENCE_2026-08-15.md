@@ -413,6 +413,11 @@ ingestion failure gate at zero, and the subsequent read-only probe recorded
 This catalog timeout is not treated as a legal-source terminal failure or as a
 successful release gate.
 
+The next scheduled run `22cefddf-b8dc-4ecd-9fee-48b2c5509884` completed at
+`2026-08-22T18:11:15.098Z` with `error_code = NULL`. The following read-only
+probe recorded 1,454 live/manual queued or retrying jobs, 21/44 completed
+checkpoints, zero terminal failures and zero dead-letter jobs.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
