@@ -339,6 +339,22 @@ staging-only Worker was deployed as version
 `09dba303-8870-45ab-ac5b-f24abfa6a3c1`; no production binding, flag, migration
 or DNS record changed.
 
+## Completed staging continuation run (2026-08-22, 16:56–17:05Z)
+
+Run `1580fbcf-f555-4d1b-840c-00add3aa0a39` completed at
+`2026-08-22T17:05:02.716Z` with the allow-listed upstream condition
+`error_code = LEX_CATALOG_TIMEOUT`. This is a catalog timeout recorded by the
+bounded source probe, not a terminal or technically-unavailable ingestion
+failure. The worker used the single distributed lease for the invocation; no
+parallel crawler was started and no checkpoint was force-completed. The
+post-run read-only boundary recorded 201 canonical documents, 12,298 distinct
+current provisions and 32,789 indexed chunks, with 18/44 discovery checkpoints
+complete and 1,475 live-or-manual queued/running/retrying jobs (catalog jobs
+excluded). Dead-letter ingestion jobs and terminal or technically-unavailable
+failure rows remained zero. The lease was released after completion. Ingestion
+is not frozen; queue freeze, release floors and all post-ingestion gates remain
+open.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
