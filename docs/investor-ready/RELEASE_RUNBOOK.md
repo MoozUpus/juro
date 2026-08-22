@@ -12,7 +12,9 @@
    Terms, Privacy, Cookies, AI Rules and Personal Data. Replace every
    `{OPERATOR_*}` placeholder, issue a new policy version/hash and rerun the
    legal-policy tests before changing the draft disclosure or making a
-   commercial-production claim.
+   commercial-production claim. Follow
+   `docs/investor-ready/LEGAL_PUBLICATION_HANDOFF.md` without inferring public
+   values from repository or account metadata.
 7. Before the investor rehearsal, require a stable Chrome extension connection
    in both selected profiles and close every live Chrome gate named in
    `QA_MATRIX.md`. If selected-source remote screen rendering or forced

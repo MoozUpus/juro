@@ -169,8 +169,8 @@ Chrome profile.
 
 Shared-theme tests preserve cookie precedence over stale per-domain
 `localStorage`. The polished Admin overview passed every requested viewport from
-320 through 1920 pixels. Remaining full-matrix responsive, zoom and
-reduced-motion coverage stay explicit in `QA_MATRIX.md`.
+320 through 1920 pixels. Remaining full-matrix responsive and native Chrome
+zoom coverage stay explicit in `QA_MATRIX.md`.
 
 Windows scale was also exercised directly rather than inferred from viewport
 emulation. Settings changed 125% to the recommended 150%, the authenticated
@@ -179,6 +179,14 @@ document width without horizontal overflow, and Settings was then visibly
 restored to 125%. The Chrome extension disconnected after the scale change and
 failed again after one bounded reconnect, so Lawyer/Admin 150% evidence remains
 open instead of being promoted from the Client result.
+
+Reduced motion was exercised through the real Windows preference rather than a
+browser override. With Animation effects temporarily disabled, the authenticated
+Client dashboard changed `prefers-reduced-motion` from false to true, reduced
+the computed `body` color transitions from 180 ms to 0.01 ms and the Platform
+sidebar transform from 220 ms to the design system's bounded 120 ms feedback.
+After the check, Animation effects were visibly restored and Chrome returned to
+`no-preference` with the original computed durations.
 
 ## 8. Browser and device coverage
 
@@ -258,8 +266,8 @@ records during the presentation.
   visibly unfilled operator identity/address fields. Commercial production still
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
-- Chrome zoom, live reduced-motion emulation, Lawyer/Admin Windows-scale 150%,
-  screen-share source selection and forced reconnect remain open. The Client
+- Chrome zoom, Lawyer/Admin Windows-scale 150%, screen-share source selection
+  and forced reconnect remain open. The Client
   dashboard passed Windows-scale 150% and the host was restored to 125%. The
   forced-reconnect and capture-cleanup source,
   focused tests, full CI and production asset are verified, but no live network
