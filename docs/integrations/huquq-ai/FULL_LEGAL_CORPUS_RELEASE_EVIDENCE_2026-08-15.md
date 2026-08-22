@@ -279,6 +279,25 @@ or staging redeploy. Snapshot, indexed evaluation, Qdrant/D1 restore and CI
 gates remained unopened; production bindings, corpus ingestion, feature flags
 and DNS were unchanged.
 
+## Sequential v2 monitoring continuation (2026-08-22, 23:32–23:35Z)
+
+Scheduled run `62fd4aba-e486-446a-ab8d-7a64ae1dd2a2` completed at
+`2026-08-22T23:35:44.067Z` with the existing allow-listed
+`LEX_CATALOG_TIMEOUT`. The following read-only probe observed the next
+invocation running: 21/44 checkpoints completed, 1 running and 22 queued. The
+ingestion ledger contained 1,437 completed and 15,668 queued jobs. The failure
+ledger contained nine `retrying` rows only; no terminal or technically-
+unavailable source rows and no failed, terminal or dead-letter ingestion jobs
+were observed.
+
+The materialized v2 totals at that boundary were 261 canonical documents, 366
+language variants, 14,058 distinct current provisions and 41,312 indexed
+current chunks. The document and provision floors remained open and ingestion
+was not frozen. The retryable catalogue timeout did not justify a code change
+or staging redeploy. Snapshot, indexed evaluation, Qdrant/D1 restore and CI
+gates remained unopened; production bindings, corpus ingestion, feature flags
+and DNS were unchanged.
+
 ## Sequential v2 monitoring continuation (2026-08-22, 23:28–23:31Z)
 
 Scheduled run `835187d1-795b-439c-9455-677d95561483` completed at
