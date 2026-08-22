@@ -708,8 +708,10 @@ export async function fetchLexPdfRepresentation(
     throw new TypeError("Invalid Lex PDF fetch limits.");
   }
 
-  const representationId = reference.canonicalId.replace(/^-/, "");
-  if (!/^\d+$/.test(representationId)) {
+  // Localized Lex pages expose the signed ID verbatim in `/pdffile/<id>`.
+  // Keep the optional leading minus instead of deriving a different URL.
+  const representationId = reference.canonicalId;
+  if (!/^-?\d+$/.test(representationId)) {
     throw new LegalSourceFetchError("LEGAL_SOURCE_URL_REJECTED", false);
   }
   const representationUrl = new URL(

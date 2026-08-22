@@ -612,7 +612,7 @@ export async function executeLegalSourceNormalization(
       rawContentSha256: row.content_sha256,
     });
   } catch (error) {
-    const expectedPdfPath = `/pdffile/${reference.canonicalId.replace(/^-/, "")}`;
+    const expectedPdfPath = `/pdffile/${reference.canonicalId}`;
     const canUseOfficialPdfRepresentation = row.source_type === "lex"
       && rawHtml.includes(expectedPdfPath);
     if (canUseOfficialPdfRepresentation) {

@@ -307,13 +307,13 @@ test("Lex PDF representation is fetched only from the canonical official endpoin
   assert.equal(result.sourceKind, "lex");
   assert.equal(result.locale, "uz");
   assert.equal(result.canonicalId, "-42");
-  assert.equal(result.representationUrl, "https://lex.uz/pdffile/42");
+  assert.equal(result.representationUrl, "https://lex.uz/pdffile/-42");
   assert.equal(result.fetchedAt, "2026-08-06T00:00:00.000Z");
   assert.match(result.contentSha256, /^[0-9a-f]{64}$/);
   assert.deepEqual(waits, [20_000]);
   assert.deepEqual(
     synthetic.calls.map((call) => call.url),
-    ["https://lex.uz/robots.txt", "https://lex.uz/pdffile/42"],
+    ["https://lex.uz/robots.txt", "https://lex.uz/pdffile/-42"],
   );
 });
 

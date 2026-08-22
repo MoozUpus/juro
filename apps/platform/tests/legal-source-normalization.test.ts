@@ -249,22 +249,22 @@ test("normalization persists deterministic untrusted JSON and never creates trus
   }
 });
 
-test("Lex PDF-backed pages use the official embedded representation without auto-verification", async () => {
+test("Lex PDF-backed pages preserve signed IDs in the official embedded representation", async () => {
   const { sqlite, d1 } = sqliteD1Fixture();
   const bucket = new FakeR2Bucket();
   const env = envFixture(d1, bucket);
   try {
     const acquired = await acquire(
       env,
-      "https://lex.uz/ru/docs/87",
-      "normalize_lex_pdf_87",
-      '<html><body><main><h1>Official Lex page</h1><script>PDFObject.embed("/pdffile/87", "#pdfBody");</script></main></body></html>',
+      "https://lex.uz/ru/docs/-87",
+      "normalize_lex_pdf_negative_87",
+      '<html><body><main><h1>Official Lex page</h1><script>PDFObject.embed("/pdffile/-87", "#pdfBody");</script></main></body></html>',
     );
     const raw = bucket.objects.get(acquired.rawObjectKey);
     assert.ok(raw);
     assert.match(
       new TextDecoder().decode(raw.bytes),
-      /PDFObject\.embed\("\/pdffile\/87", "#pdfBody"\)/u,
+      /PDFObject\.embed\("\/pdffile\/-87", "#pdfBody"\)/u,
     );
     assert.deepEqual(
       {
@@ -277,8 +277,8 @@ test("Lex PDF-backed pages use the official embedded representation without auto
       },
       {
         source_type: "lex",
-        canonical_id: "87",
-        official_url: "https://lex.uz/ru/docs/87",
+        canonical_id: "-87",
+        official_url: "https://lex.uz/ru/docs/-87",
         language: "ru",
       },
     );
@@ -298,14 +298,14 @@ test("Lex PDF-backed pages use the official embedded representation without auto
     );
     assert.equal(snapshot.primarySelector, "lex-pdf");
     assert.equal(snapshot.parser.name, "unpdf");
-    assert.equal(snapshot.source.canonicalUrl, "https://lex.uz/ru/docs/87");
+    assert.equal(snapshot.source.canonicalUrl, "https://lex.uz/ru/docs/-87");
     assert.equal(snapshot.plainText.includes("Official legal act"), true);
 
     const representation = [...bucket.objects.entries()].find(([key]) =>
       key.startsWith("legal-sources/representations/lex-pdf/ru/"),
     );
     assert.ok(representation);
-    assert.equal(representation[1].customMetadata?.sourceUrl, "https://lex.uz/pdffile/87");
+    assert.equal(representation[1].customMetadata?.sourceUrl, "https://lex.uz/pdffile/-87");
 
     const metadata = JSON.parse(
       (sqlite.prepare(`SELECT metadata_json FROM legal_source_versions WHERE id=?`)

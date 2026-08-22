@@ -296,7 +296,10 @@ async function normalizeOfficialLexSource(input: {
   }
 
   let representation: CorpusRepresentation;
-  const representationId = reference.canonicalId.replace(/^-/, "");
+  // Lex uses signed document IDs in the localized `/pdffile/<id>` embed path
+  // (for example `/pdffile/-8420999`). Preserve the sign from the canonical
+  // source URL; stripping it makes a reachable official PDF look unavailable.
+  const representationId = reference.canonicalId;
   const embeddedPdfPath = `/pdffile/${representationId}`;
   if (input.rawHtml.includes(embeddedPdfPath)) {
     const fetched = await fetchLexPdfRepresentation(input.sourceUrl, {
