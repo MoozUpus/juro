@@ -1,6 +1,6 @@
 # JURO investor-ready ecosystem — final report
 
-Evidence date: 2026-08-22. Branch: `codex/investor-ready-ecosystem`.
+Evidence through 2026-08-23 (Tashkent). Branch: `codex/investor-ready-ecosystem`.
 Draft PR: [#64](https://github.com/MoozUpus/juro/pull/64).
 
 This report separates implemented code, deployed production state and observed
@@ -19,6 +19,14 @@ or deploy passed.
 
 Repository tests lock `lawyer.juro.uz` as the only professional host and reject
 every noncanonical variant.
+
+A fresh 2026-08-23 public-edge pass resolved all six named hosts through
+Cloudflare, confirmed the expected apex/app/lawyer/admin/status responses and
+the `www` 308 canonical redirect, and checked `robots.txt` plus the live
+sitemap. Every one of the 78 RU/UZ/EN sitemap URLs returned HTTP 200; all 78 use
+the `juro.uz` host and neither forbidden lawyer-domain variant appears in the
+tracked repository or public discovery files. This is public HTTP coverage,
+not authenticated route or browser-state evidence.
 
 ## 2. Before audit
 

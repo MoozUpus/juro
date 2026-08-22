@@ -89,7 +89,7 @@ After the administrator lawyer-profile access fix was deployed as Worker `e8fc00
 
 ## Validation
 
-- Website: build and 42/42 tests passed; type-check and lint passed.
+- Website: build and 42/42 tests passed; type-check and lint passed. A fresh public-edge pass resolved `juro.uz`, `www`, `app`, `lawyer`, `admin` and `status` through Cloudflare, confirmed the expected host responses plus the `www` 308 canonical redirect, and received HTTP 200 from all 78 canonical RU/UZ/EN sitemap URLs. `robots.txt` points to the canonical sitemap; no sitemap URL or discovery file contains a forbidden lawyer-domain variant.
 - Platform: production build/artifact and performance budgets passed; rendered HTML 33/33, core 1065/1065, Cloudflare 201/201, the earlier focused set 28/28, call-focused set 6/6, marketplace lifecycle 19/19, admin-domain 10/10 and post-`0155` audit/config set 15/15 passed; type-check and lint passed. GitHub CI run `32592751302` passed both Platform and Website jobs at branch commit `6eaad19d` after the call-lifecycle fix.
 - Isolated Admin: type-check and production dry-run passed. Worker `9cdbf8b1-ae02-4c32-9941-85d593064038` localizes the navigation and legal-corpus operations, replaces approval terminology with publication semantics, removes manual initial-approval controls and strengthens the operational overview hierarchy. Its live polished 1536-pixel Chrome capture is indexed below.
 - Draft PR: [#64](https://github.com/MoozUpus/juro/pull/64).
