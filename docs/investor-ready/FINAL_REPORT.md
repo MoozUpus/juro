@@ -17,8 +17,8 @@ or deploy passed.
 | Admin | `admin.juro.uz` | Isolated staff console with host-only session and fresh-MFA checks |
 | Status | `status.juro.uz` | Public operational status and incident history |
 
-`lawyer.jura.us` and `lawyer.juro.us` are invalid. Repository tests lock
-`lawyer.juro.uz` as the only professional host.
+Repository tests lock `lawyer.juro.uz` as the only professional host and reject
+every noncanonical variant.
 
 ## 2. Before audit
 

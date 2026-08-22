@@ -12,7 +12,7 @@ Status snapshot: release candidate on `codex/investor-ready-ecosystem`. Producti
 | Administration | `admin.juro.uz` | Fresh-MFA staff operations and moderation | `apps/platform`, isolated admin handoff |
 | Status | `status.juro.uz` | Narrow public status surface | `apps/platform`, route-restricted host |
 
-Only `lawyer.juro.uz` is canonical. The incorrect `lawyer.jura.us` and `lawyer.juro.us` variants are rejected by repository tests.
+Only `lawyer.juro.uz` is canonical. Repository tests reject every noncanonical professional host.
 
 ## Lawyer route surface
 
