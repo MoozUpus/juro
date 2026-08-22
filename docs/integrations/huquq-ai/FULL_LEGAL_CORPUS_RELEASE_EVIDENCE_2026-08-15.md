@@ -46,6 +46,17 @@ condition remains allow-listed and retryable; the next read-only boundary must
 prove whether the checkpoint reopens. Release thresholds and the checkpoint
 freeze gate remain open.
 
+## Upstream checkpoint recovery confirmed (2026-08-22, 14:08–14:09Z)
+
+At the next four-minute staging tick, the seed reconciliation reopened the
+ministries/uz-Cyrl `LEX_CATALOG_UPSTREAM_UNAVAILABLE` checkpoint as designed;
+the checkpoint entered `running` at attempt 3 under run
+`07df35c8-f87b-41dd-94c3-e236afe01dac`. The read-only boundary showed **0
+dead-letter ingestion jobs** and **0 terminal/technically-unavailable failure
+rows**. This confirms the existing retry/self-heal path rather than a new
+terminal ingestion defect; the run must still finish successfully before the
+checkpoint can count toward release coverage.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
