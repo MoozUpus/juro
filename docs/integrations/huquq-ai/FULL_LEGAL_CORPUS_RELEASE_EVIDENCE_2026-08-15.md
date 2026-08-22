@@ -403,7 +403,7 @@ Production bindings, flags, migrations and DNS were not changed.
 The containing scheduled run `dacf7a9b-7445-4476-9c12-42bc58be53fa` ran from
 `2026-08-22T17:44:22.892Z` through `2026-08-22T17:53:17.136Z` with
 `error_code = NULL`. The following scheduled run
-`1b8d980d-7581-48d6-95fc-d7ef250a0aec` is currently running under the same
+`1b8d980d-7581-48d6-95fc-d7ef250a0aec` ran under the same
 single-worker lock; no overlapping invocation was started.
 
 That run completed at `2026-08-22T18:03:26.688Z` with the allow-listed
