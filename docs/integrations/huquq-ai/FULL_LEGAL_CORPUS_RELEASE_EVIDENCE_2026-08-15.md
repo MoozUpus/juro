@@ -44,6 +44,22 @@ Run `790de8a3-24d6-4d5d-bb3d-c575c0cf98ca` had just completed with
 crawl, old-database backfill, production binding change or release freeze was
 performed.
 
+## Sequential v2 monitoring boundary (2026-08-22, 18:42Z)
+
+Read-only probes show the scheduled run
+`c0e71f3f-0c3d-413c-892f-3decaaf65623` still running after the prior clean
+run. The checkpoint ledger is 21 `completed` and 23 `queued`; the ingestion
+ledger has 980 `completed`, 1,439 `queued` and 1 `running` non-catalogue jobs.
+The failure ledger contains seven `retrying` rows only, with no terminal or
+technically-unavailable state, and the ingestion ledger has no dead-letter
+jobs.
+
+The materialized v2 boundary is 211 canonical documents, 219 language
+variants, 12,570 distinct current provisions and 33,592 indexed chunks. The
+release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain open. No new terminal failure was observed, so no code change or
+staging redeploy was justified.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
