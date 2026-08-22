@@ -167,6 +167,12 @@ returned a real page rather than 404, fit the root width without horizontal
 overflow and produced no browser warning/error log. This is Chrome responsive
 viewport evidence, not a physical-device claim.
 
+The same 20-route set later passed an 844×390 landscape loop under restored
+System. The AI-chat composer was checked separately after load and scroll: its
+bottom was 221 pixels while the fixed mobile navigation started at 322 pixels,
+so the input remained reachable without overlap. This does not simulate an
+on-screen mobile keyboard and is not promoted to that separate gate.
+
 ## 7. Theme matrix
 
 | Surface | Light | Dark | System |
