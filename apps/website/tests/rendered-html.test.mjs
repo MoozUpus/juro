@@ -25,6 +25,10 @@ test("Trust Center keeps narrow mobile grids and Uzbek headings inside the viewp
 
 test("renders the production landing with localized canonical metadata and real actions", async () => {
   const worker = await createWorker();
+  const descriptions = {
+    ru: "JURO — AI-помощь, документы и юристы в одном сервисе.",
+    uz: "JURO — AI-yordam, hujjatlar va yuristlar bitta xizmatda.",
+  };
   for (const locale of ["ru", "uz"]) {
     const response = await worker.fetch(new Request(`http://localhost/${locale}`, { headers: { accept: "text/html" } }), runtime, context);
     assert.equal(response.status, 200, locale);
@@ -36,6 +40,10 @@ test("renders the production landing with localized canonical metadata and real 
     assert.match(response.headers.get("permissions-policy") ?? "", /camera=\(\)/);
     const html = await response.text();
     assert.match(html, new RegExp(`<link rel="canonical" href="https://juro\\.uz/${locale}"`));
+    const description = descriptions[locale];
+    assert.match(html, new RegExp(`<meta name="description" content="${description}"`));
+    assert.match(html, new RegExp(`<meta property="og:description" content="${description}"`));
+    assert.match(html, new RegExp(`<meta name="twitter:description" content="${description}"`));
     assert.match(html, new RegExp(`https://app\\.juro\\.uz/register\\?lang=${locale}&amp;accountType=individual`));
     assert.doesNotMatch(html, /jurobek-avatar\.avif/);
     assert.match(html, /Контекст не теряется между инструментами|Kontekst vositalar o‘rtasida yo‘qolmaydi/);
@@ -58,6 +66,10 @@ test("renders the complete English public landing and routes product actions to 
   const html = await response.text();
   assert.match(html, /<html\b[^>]*\blang="en"/);
   assert.match(html, /<link rel="canonical" href="https:\/\/juro\.uz\/en"/);
+  for (const tag of ["description", "og:description", "twitter:description"]) {
+    const attribute = tag === "description" ? "name" : tag.startsWith("og:") ? "property" : "name";
+    assert.match(html, new RegExp(`<meta ${attribute}="${tag}" content="JURO — AI assistance, documents and legal professionals in one service\."`));
+  }
   assert.match(html, /Tell us/);
   assert.match(html, /Get a clear next step/);
   assert.match(html, /https:\/\/app\.juro\.uz\/register\?lang=ru&amp;accountType=individual/);
