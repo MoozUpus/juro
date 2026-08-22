@@ -1,6 +1,6 @@
 # JURO investor-ready ecosystem
 
-Status snapshot: release candidate on `codex/investor-ready-ecosystem`. Production evidence is recorded only after the relevant migration, deployment, HTTP and Chrome checks pass.
+Status snapshot: release candidate on `codex/investor-ready-ecosystem`. Production evidence is recorded only after the relevant migration, deployment, HTTP and Chrome checks pass. Commercial production is not claimed while the app registration policies remain a disclosed pre-incorporation draft awaiting owner-approved operator details and final RU/UZ legal editions.
 
 ## Ecosystem map
 
@@ -48,8 +48,12 @@ The dedicated host resolves clean routes to existing role-aware platform modules
 | `0149_investor_demo_dataset.sql` | Demo-account registry and immutable dataset events |
 | `0150_notification_object_targets.sql` | Typed notification deep links |
 | `0151_lawyer_professional_tools.sql` | Time, conflict and knowledge records |
+| `0152_investor_demo_builder_documents.sql` | Synthetic document-builder records for the investor dataset |
+| `0153_investor_demo_document_content.sql` | Populated synthetic investor document content |
+| `0154_monitoring_task_sources.sql` | Official-source retention for monitoring-created tasks |
+| `0155_platform_audit_hash_constraints.sql` | D1-safe immutable audit hash constraints |
 
-The production D1 migration pattern includes `0146` through `0151`. The separate legal-corpus Worker intentionally remains bounded through `0145` because these application tables are outside its runtime.
+The production platform D1 migration pattern includes `0146` through `0155`. The separate legal-corpus Worker intentionally remains bounded through `0145` because these application tables are outside its runtime.
 
 ## Verification contract
 

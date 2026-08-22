@@ -43,7 +43,10 @@ The corresponding before evidence is in `screenshots/before/`.
 - Admin is a separate Worker service with a separate host-only session. Every
   privileged request rechecks staff capability and current MFA evidence.
 - Production D1 is the system of record; private files and verified backups use
-  private R2. Queue and DLQ status is included in operational health evidence.
+  private R2. Corrective migration `0155` replaces D1-incompatible expanded
+  audit-hash `GLOB` checks without discarding immutable events. Its full pre/post
+  exports, isolated restores and private-R2 SHA-256 round trips passed. Queue and
+  DLQ status is included in operational health evidence.
 - AI uses OpenAI and Anthropic with direct official Lex.uz grounding. Advice.uz
   ingestion and the local full-corpus flags remain disabled in this release.
 - Cloudflare Realtime provides call room transport; TURN credentials are Worker
@@ -84,8 +87,10 @@ security, billing, AI chat, document builder, document review, monitoring,
 knowledge, settings, demo payments and help. These routes produced no new
 warning/error console logs and no page-level horizontal overflow.
 
-Representative production widths passed at 360, 390, 768, 1366 and 1440
-pixels. The live monitoring defect found during this pass was fixed and deployed
+Representative Lawyer production widths passed at 360, 390, 768, 1366 and 1440
+pixels. The public catalogue, Client dashboard and final Admin overview later
+passed the complete requested 320/360/375/390/430/768/820/1024/1280/1366/1440/
+1728/1920 sequence without horizontal overflow. The live monitoring defect found during this pass was fixed and deployed
 in commits `49ceed62` and `9dc062fa`.
 
 Two separate authenticated Chrome profiles completed camera/microphone preflight
@@ -136,8 +141,9 @@ Chrome profile.
 | Admin | fixed Manrope/light surface deployed | not a supported control in the isolated console | not a supported control in the isolated console |
 
 Shared-theme tests preserve cookie precedence over stale per-domain
-`localStorage`. Remaining responsive, zoom, reduced-motion and Admin audit-log
-replay stays explicit in `QA_MATRIX.md`.
+`localStorage`. The polished Admin overview passed every requested viewport from
+320 through 1920 pixels. Remaining full-matrix responsive, zoom and
+reduced-motion coverage stay explicit in `QA_MATRIX.md`.
 
 ## 8. Browser and device coverage
 
@@ -153,7 +159,8 @@ The evidence index is `screenshots/README.md`. It includes public home, catalogu
 profile and responsive evidence; Client System/Dark, notifications, populated
 synthetic document and monitoring-task source; Lawyer Light/System and Dark,
 responsive views, live monitoring, source-linked task, AI, billing and profile;
-plus the Admin before-state and fresh-MFA overview/billing after-state.
+plus the Admin before-state and final polished fresh-MFA overview/billing
+after-state.
 The index also contains a privacy-safe production Client call preflight capture;
 live camera frames were not retained in the repository.
 
@@ -168,10 +175,16 @@ That pass also found a previously hidden audit-log failure: production D1
 rejected the seven-term compound query. The fix first shipped in Worker
 `073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker
 `727eacbe-7fb6-4012-87a9-3e290edd525b`, using bounded per-source queries and a
-safe global top-N merge. Focused tests and all seven production D1 source queries
-pass. A final browser replay of this one page is still open because the
-local Chrome client began returning `ERR_BLOCKED_BY_CLIENT` for every platform
-Admin path before requests reached the Worker.
+safe global top-N merge. A later fresh-MFA Chrome replay reached the route and
+found a second D1-specific fault: migration `0086` generated a 64-term hash
+`GLOB` that D1 rejected as too complex. Production migration `0155` now uses
+bounded length and character-class checks, retains the immutable chain/index
+guards, has no pending successor migration and passed pre/post recovery gates.
+The final fresh-MFA Chrome replay and one reload both loaded the localized audit
+table without any console warning/error and displayed immutable-chain receipts.
+A read-only production D1 aggregate confirmed the two corresponding access
+events at `2026-08-22T17:45:54.908Z` and `2026-08-22T17:50:00.687Z`; sensitive
+actor, session and hash values were not copied into repository evidence.
 
 ## 10. Demo script
 
@@ -179,19 +192,43 @@ The investor sequence is maintained in `DEMO_SCRIPT.md`. Production execution
 must use only the bounded demo registry and must never create or edit real user
 records during the presentation.
 
-## 11. Limitations and release truth
+## 11. Final-pass audit in progress
+
+1. **Local-MVP pass.** A tracked live-UI scan found no dormant CTA pattern or
+   unlabelled coming-soon route in the investor path. It did find the deliberate
+   pre-incorporation app-policy screen: registration policies are still draft
+   and contain operator placeholders. This cannot be truthfully closed without
+   owner-approved legal identity, address and final RU/UZ editions.
+2. **Investor-doubt pass.** Production D1 confirms one active synthetic trial,
+   one pending synthetic profile-deletion request, 12 explicitly simulated demo
+   payment runs and two immutable post-`0155` audit-access events. The evidence
+   does not promote those aggregates to a visual browser pass.
+3. **Weakest-screen pass.** The isolated Admin overview was the weakest primary
+   surface. It was rebuilt around localized publication semantics, clear KPI
+   hierarchy, an explicit access boundary and operational quick links, deployed,
+   captured and checked across all 13 requested Chrome widths. No weaker primary
+   screen has been identified in the current screenshot set, but the remaining
+   native Chrome gates below keep the overall audit open.
+
+## 12. Limitations and release truth
 
 - Production payment approval is off. Billing is an explicit demo foundation;
   no synthetic row is represented as a settled real payment.
 - Full local legal-corpus and dense/vector flags are off. The live release uses
   direct official Lex.uz retrieval/metadata and labels monitoring accordingly.
-- Platform audit-log/latest-Admin browser replay, Admin responsive widths,
-  Chrome zoom, live reduced-motion emulation, screen-share source selection,
-  forced reconnect and the final Admin segment of the investor rehearsal remain open.
+- App registration policies remain a versioned pre-incorporation preview with
+  visibly unfilled operator identity/address fields. Commercial production still
+  requires owner-approved operator details and final RU/UZ legal editions; this
+  report does not invent them or represent the draft as legal approval.
+- Chrome zoom, live reduced-motion emulation, screen-share source selection,
+  forced reconnect and the platform trial/deletion visual segment of the
+  investor rehearsal remain open. The underlying synthetic trial/deletion rows
+  are confirmed in production D1, but local Chrome navigation to that screen is
+  currently blocked before the Worker receives a request.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` returned to a fully operational 8/8 aggregate after the latest
-  Worker deploy and scheduled probe, with no stale dependencies or active
-  incidents at `2026-08-22T16:40:54.780Z`.
+  Worker deploy and stayed operational after migration `0155`, with no stale or
+  degraded component and zero incident at `2026-08-22T17:59:06.166Z`.
 
-Until the open Chrome items are closed, this document is a release-candidate
-report rather than a blanket Definition-of-Done claim.
+Until the open Chrome and legal-publication items are closed, this document is a
+release-candidate report rather than a blanket Definition-of-Done claim.

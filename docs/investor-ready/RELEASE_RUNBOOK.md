@@ -6,15 +6,16 @@
 2. Confirm Wrangler is authenticated to the intended account and every production command includes `--env production` and remote intent.
 3. Confirm `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` exist as production Worker secrets. Never place the long-lived Calls token in code, docs, logs or a browser response.
 4. Confirm the payment provider remains in explicitly disclosed demo mode; this release does not authorize or imply a real merchant integration.
+5. Confirm the app registration policies are still treated as a pre-incorporation preview unless owner-approved operator identity, address and final RU/UZ editions have been supplied. Never replace missing legal details with invented values.
 
 ## D1 gate
 
 1. Export the production database to a protected local temporary path.
 2. Record SHA-256, restore the export locally, run SQLite quick check and foreign-key check.
 3. Upload the encrypted/private backup and manifest to the approved private R2 location, then read back and verify the SHA-256.
-4. Apply migrations `0146`–`0151` sequentially with production bindings.
+4. Apply migrations `0146`–`0155` sequentially with production bindings.
 5. Re-list migrations and query only bounded verification counts/constraints.
-6. Apply the version-1 investor seed only after the schema gate passes. Confirm exactly three active demo-account registry rows, three simulation payment rows and one consent-published demo lawyer.
+6. Apply the version-1 investor seed only after the schema gate passes. Immediately after the first bounded seed, confirm exactly three active demo-account registry rows, the three fixed seed payment rows and one consent-published demo lawyer. Later rehearsal-created runs may increase the payment count; every such row must still be constrained to `provider=demo` and `is_simulation=1` and must never be represented as a real payment.
 7. Remove verified local plaintext backup copies using the approved safe cleanup procedure.
 
 ## Deploy and smoke
