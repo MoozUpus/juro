@@ -57,6 +57,14 @@ rows**. This confirms the existing retry/self-heal path rather than a new
 terminal ingestion defect; the run must still finish successfully before the
 checkpoint can count toward release coverage.
 
+The same run then completed the ministries/en page-one checkpoint at
+14:08:48Z and restarted ministries/uz-Cyrl as a clean queued page-one state
+with 20 discovered records, `attempt_count=0` and no error. The 14:11Z
+read-only totals were 182 canonical documents, 11,454 distinct current
+provisions and 30,098 indexed chunks with 17/44 checkpoints complete; dead-
+letter ingestion jobs and terminal failure rows remained zero. The run was
+still active at that boundary, so no freeze or release claim is made.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
