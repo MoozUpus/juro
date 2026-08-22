@@ -137,6 +137,23 @@ zero. The ingestion queue is still active, so the release floors, queue
 freeze, snapshot/evaluation, Qdrant/D1 restore and CI gates remain open;
 production is untouched.
 
+## Sequential continuation after timeout retry (2026-08-22, 19:40–19:46Z)
+
+Run `0f95b924-a2de-400f-b97f-50ee437d4dcd` closed at
+`2026-08-22T19:46:20.748Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. The distributed lease remained single-owner and no
+parallel crawl was started. No terminal or dead-letter ingestion row was
+created; the temporary checkpoint retry returned to the queued ledger for a
+later bounded attempt.
+
+The post-run read-only boundary is 218 canonical documents, 239 language
+variants, 12,715 distinct current provisions and 34,351 indexed chunks. The
+ingestion ledger contains 1,214 completed and 12,911 queued jobs. Failure
+rows remain retrying-only; unresolved terminal/technically-unavailable rows
+and dead-letter jobs are both zero. Discovery remains 21/44 completed and the
+queue is not frozen, so release floors and all post-ingestion gates remain
+open; production is untouched.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
