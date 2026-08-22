@@ -6,6 +6,25 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Staging D1 binding clarification (2026-08-22)
+
+The previously reported staging totals were read from the original
+`juro-staging` database (`bb716a96-b2fb-4823-90d6-6c228fed181a`): **3,575
+canonical documents, 62,075 distinct current provisions, 151,499 indexed
+chunks and 44/44 discovery checkpoints**. A current read-only probe confirms
+that database is still intact at the Cloudflare D1 10 GB limit; it was not
+deleted or overwritten.
+
+Commit `af7f6064` intentionally moved the isolated staging corpus binding to
+the new `juro-staging-corpus-v2` database
+(`62620fb3-3da3-4c76-a8e9-aa60858c1063`) after the original database reached
+that capacity boundary. The active resumable worker therefore writes only to
+v2. Its current read-only totals are **179 canonical documents, 185 language
+variants, 11,387 distinct current provisions, 29,996 indexed chunks and
+16/44 checkpoints**. The two databases are separate; the v2 stream is
+rehydrating the bounded catalogue and is not presented as the old 3,575-row
+corpus. No production binding, migration, feature flag or DNS record changed.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
@@ -3104,6 +3123,41 @@ jobs queued/retrying. The failure ledger still contains one retrying
 zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
+
+## Oliy Majlis recovery run closure (2026-08-22, 13:28–13:35Z)
+
+The prior run `88f5c9ab-8b96-4624-bbb1-230fe65e149e` was closed fail-closed
+at `2026-08-22T13:28:22.693Z` with
+`LEGAL_CORPUS_SCHEDULE_LEASE_EXPIRED` after its 15-minute scheduler lease
+expired. No production state or feature flag was changed. Recovery run
+`7de7df22-9d26-43e1-b5a0-6466a8bea9f4` then completed from
+`2026-08-22T13:28:22.693Z` to `2026-08-22T13:35:33.702Z` without a run-level
+error. Its stale-job reconciliation redrove
+`legal-version:7b4a1df57287dfa1151abb451103` at attempt 2/5; the job completed
+without a last error. The resulting failure ledger contained four retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows and two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` rows; terminal/dead-letter remained zero.
+
+## Oliy Majlis bounded run closure (2026-08-22, 13:36–13:43Z)
+
+Run `2aea6d24-d6d9-4268-abb5-f2471cd462c2` completed from
+`2026-08-22T13:36:22.693Z` to `2026-08-22T13:43:32.538Z` with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. The 13:44:30Z read-only
+boundary confirmed no terminal/dead-letter conversion and no new failure
+class. The bounded worker advanced the Oliy Majlis ledger without forcing any
+checkpoint.
+
+The final read-only totals are 178 canonical documents, 184 language
+variants, 11,343 distinct current provisions and 29,925 indexed chunks, with
+1,499 live-or-manual queued/retrying jobs. The checkpoint ledger is now 14
+completed and 30 queued. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and four retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Oliy Majlis Russian is completed at page 3 (2,900 discovered records); Uzbek
+Cyrillic and Uzbek Latin remain queued at page 2 with the recorded
+`LEX_CATALOG_DUPLICATE_PAGE` markers (2,900 and 2,880 records respectively).
+Release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
+gates remain unproven; production is untouched.
 
 ## Oliy Majlis bounded run closure (2026-08-22, 13:00–13:07Z)
 
