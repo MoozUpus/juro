@@ -181,6 +181,16 @@ Shared-theme tests preserve cookie precedence over stale per-domain
 320 through 1920 pixels. Remaining full-matrix responsive and native Chrome
 zoom coverage stay explicit in `QA_MATRIX.md`.
 
+Client theme coverage was later expanded beyond dashboard screenshots. All 20
+top-level Client routes passed a 390×844 loop in explicit Dark and a second loop
+in explicit Light. Every route kept the selected `data-theme`, Manrope and its
+canonical URL, while the shell/text computed colors changed from dark/light
+(`rgb(9,20,30)` / `rgb(238,243,246)`) to light/dark
+(`rgb(248,246,242)` / `rgb(16,35,51)`). Neither loop produced a 404,
+horizontal overflow or browser warning/error log. System was then restored,
+survived reload and remained selected after returning to the normal 1536-pixel
+dashboard viewport.
+
 Windows scale was also exercised directly rather than inferred from viewport
 emulation. Settings changed 125% to the recommended 150%, the authenticated
 Client dashboard rendered at DPR 1.5 with a 1280×665 viewport and 1265-pixel

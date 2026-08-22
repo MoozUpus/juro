@@ -35,7 +35,7 @@ This file is updated with evidence during release. `VERIFIED` means the named en
 | `juro.uz` | VERIFIED | VERIFIED | VERIFIED |
 | `app.juro.uz` auth/dashboard | VERIFIED | VERIFIED | VERIFIED |
 | `lawyer.juro.uz` dashboard/workspace | VERIFIED | VERIFIED | VERIFIED |
-| Documents/calendar/marketplace/profile | PARTIAL | PARTIAL | VERIFIED — desktop Client suite rendered under restored System; explicit Light/Dark screenshots are dashboard-scoped |
+| Client documents/calendar/marketplace/profile and remaining top-level modules | VERIFIED — all 20 top-level routes passed at 390×844 with the light shell and dark text computed on every route, with no 404, overflow or warning/error log | VERIFIED — the same 20-route 390×844 loop retained the dark shell and light text computed on every route, with no 404, overflow or warning/error log | VERIFIED — System was restored, survived a reload with its control still pressed and returned to the normal 1536-pixel dashboard viewport |
 | Admin | VERIFIED — fixed-light fresh-MFA overview and billing surfaces | NOT SUPPORTED — the isolated console has no theme control | NOT SUPPORTED — the isolated console has no theme control |
 
 Automated tests already enforce the shared-cookie precedence rule and cross-host scope. The isolated Admin console intentionally exposes a fixed-light operational surface rather than a user theme selector.
