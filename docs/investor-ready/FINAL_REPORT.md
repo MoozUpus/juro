@@ -105,16 +105,34 @@ Two separate authenticated Chrome profiles completed camera/microphone preflight
 and joined one production room. Both showed synchronized timers; mute/unmute,
 camera-off and simultaneous end-call states passed without raw technical codes.
 Cloudflare TURN preflight returned `relayAvailable=true`, and D1 recorded
-`provider=cloudflare_realtime_turn`. Screen-share picker selection and forced
-reconnect remain narrower open checks rather than inferred passes. A subsequent
-call-lifecycle audit fixed the untested failure paths in commit `6eaad19d`:
+`provider=cloudflare_realtime_turn`. A subsequent call-lifecycle audit fixed the
+previously untested failure paths in commit `6eaad19d`:
 reconnect is now bounded to three automatic attempts, refreshes short-lived TURN
 credentials, uses a fresh peer with ICE restart and rejects callbacks from stale
 peers. Display capture now has an explicit stop action and is stopped on track
 replacement failure, reconnect, end-call and teardown. CI run `32592751302`
 passed both jobs and Worker `b9481033-bd24-4dda-8f75-61b8a7ce2473` deployed the
-new asset. This is implementation/deployment evidence, not a substitute for the
-still-open live interruption and selected-source checks.
+new asset.
+
+The live two-profile follow-up then closed both remaining gates. Client shared
+only the selected public `juro.uz/ru` tab: its control changed to `Остановить
+показ`, Lawyer rendered the 1920×962 display stream, and stopping returned both
+peers to the 1280×720 camera stream. Closing the Lawyer tab produced the real
+`attempt 1/3` reconnect state on the unchanged Client tab; reopening and joining
+the same room recovered both remote streams while Client retained its original
+timer. D1 independently recorded `reconnected` and the replacement Lawyer
+`joined` events. No camera or display frame was retained.
+
+The same pass exposed peer-side teardown missing after a one-sided End. Commit
+`25ba7dbe` makes ended-room heartbeats idempotently persist `left_at`, return the
+terminal room state and stop/null every local media source. Focused tests passed
+6/6 and the full local release suite remained green. Worker
+`2cce22c9-1c43-41cb-ad7f-8a0555ca3710` (version 123) deployed the correction.
+In a fresh production room, Lawyer alone pressed End; Client transitioned on its
+next heartbeat without a click, and both sides reported paused `readyState=0`,
+0×0 remote/local videos. D1 recorded both participant `left_at` values, one
+terminal event and zero signals. Both exact synthetic QA rooms were removed with
+their ephemeral rows while immutable workspace audit events remained.
 
 A later production header audit found that non-call Platform pages still
 advertised microphone access. Commit `b9faf4bd` denies microphone access on
@@ -262,7 +280,7 @@ included in the evidence index.
 That pass also found a previously hidden audit-log failure: production D1
 rejected the seven-term compound query. The fix first shipped in Worker
 `073aac71-2aa2-4083-948e-1c4c12f1fd68` and is retained in current Worker
-`e8fc00ed-6249-4e04-9300-8732a4a05e91`, using bounded per-source queries and a
+`cd929f01-f04d-495b-8079-54dedcd621ea`, using bounded per-source queries and a
 safe global top-N merge. A later fresh-MFA Chrome replay reached the route and
 found a second D1-specific fault: migration `0086` generated a 64-term hash
 `GLOB` that D1 rejected as too complex. Production migration `0155` now uses
@@ -280,13 +298,15 @@ The investor sequence is maintained in `DEMO_SCRIPT.md`. Production execution
 must use only the bounded demo registry and must never create or edit real user
 records during the presentation.
 
-## 11. Final-pass audit in progress
+## 11. Three final investor-ready passes
 
-1. **Local-MVP pass.** A tracked live-UI scan found no dormant CTA pattern or
-   unlabelled coming-soon route in the investor path. It did find the deliberate
-   pre-incorporation app-policy screen: registration policies are still draft
-   and contain operator placeholders. This cannot be truthfully closed without
-   owner-approved legal identity, address and final RU/UZ editions.
+1. **Local-MVP pass.** A tracked UI scan found one disabled public-URL beta panel
+   on the primary document-review route. Commit `787f009f` removes that unavailable
+   flow from the investor path while its API remains deny-by-default; file upload
+   and analysis remain the complete working route. No empty/placeholder CTA or
+   unlabelled coming-soon route remains in the scripted demo. Registration
+   policies remain an explicitly versioned pre-incorporation preview and cannot
+   be truthfully published without owner-approved legal data.
 2. **Investor-doubt pass.** Production D1 confirms one active synthetic trial,
    one pending synthetic profile-deletion request, 12 explicitly simulated demo
    payment runs and two immutable post-`0155` audit-access events. After the
@@ -294,12 +314,13 @@ records during the presentation.
    `e8fc00ed-6249-4e04-9300-8732a4a05e91`, fresh-MFA Chrome promoted the
    profile/trial/deletion aggregate to a RU/UZ visual pass without submitting a
    mutation.
-3. **Weakest-screen pass.** The isolated Admin overview was the weakest primary
-   surface. It was rebuilt around localized publication semantics, clear KPI
-   hierarchy, an explicit access boundary and operational quick links, deployed,
-   captured and checked across all 13 requested Chrome widths. No weaker primary
-   screen has been identified in the current screenshot set, but the remaining
-   native Chrome gates below keep the overall audit open.
+3. **Weakest-screen pass.** The isolated Admin overview had already been rebuilt
+   around localized publication semantics, clear KPI hierarchy, an explicit
+   access boundary and operational quick links, then checked across all 13
+   requested Chrome widths. Comparing that result with the other primary screens
+   exposed the active-trial heading as the remaining weak Dark Lawyer detail:
+   its fixed navy foreground was replaced by theme-aware primary text and a gold
+   icon in commit `787f009f`. Worker 124 carries both final-pass corrections.
 
 ## 12. Limitations and release truth
 
@@ -311,23 +332,21 @@ records during the presentation.
   visibly unfilled operator identity/address fields. Commercial production still
   requires owner-approved operator details and final RU/UZ legal editions; this
   report does not invent them or represent the draft as legal approval.
-- Screen-share source selection and forced reconnect remain open. Native Chrome
-  page zoom is intentionally `NOT TESTED` by the latest explicit user
-  instruction. The Client dashboard, 19-route Lawyer suite and fresh-MFA Admin
-  data screens passed Windows-scale 150%, and the host was restored to 125%.
-  The forced-reconnect and capture-cleanup source,
-  focused tests, full CI and production asset are verified, but no live network
-  interruption or selected-source remote rendering is inferred from them. The
-  platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
+- Native Chrome page zoom is intentionally `NOT TESTED` by the latest explicit
+  user instruction. The Client dashboard, 19-route Lawyer suite and fresh-MFA
+  Admin data screens passed Windows-scale 150%, and the host was restored to
+  125%. Selected-source sharing, capture stop, forced reconnect and one-sided
+  remote end propagation passed separately in two authenticated Chrome profiles.
+  The platform trial/deletion segment passes in fresh-MFA RU and UZ Chrome with
   direct navigation and refresh.
 - Browser/device exclusions in section 8 remain exclusions, not passes.
 - `/api/status` returned to a fully operational 8/8 aggregate after migration
   `0155` and remained operational after Worker
-  `c03c3516-4828-44ab-bac6-74b85f45c7b4` (version 122): independent
-  app/status-host reads generated at `2026-08-22T22:33:15.747Z` and
-  `2026-08-22T22:33:17.064Z` showed no stale or degraded component and no
-  incident object. The live content-hashed Admin launch asset contains Manrope
-  and no previous inline Inter declaration.
+  `cd929f01-f04d-495b-8079-54dedcd621ea` (version 124). Fresh app/status-host
+  reads generated at `2026-08-22T23:49:21.229Z` and
+  `2026-08-22T23:49:21.701Z` showed no stale or degraded component and no incident
+  object. The live content-hashed Admin launch asset contains Manrope and no
+  previous inline Inter declaration.
 
-Until the open Chrome and legal-publication items are closed, this document is a
+Until the owner-supplied legal-publication items are closed, this document is a
 release-candidate report rather than a blanket Definition-of-Done claim.

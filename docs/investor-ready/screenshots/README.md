@@ -41,8 +41,10 @@ recorded in `../QA_MATRIX.md`.
   case-plan handoff and immutable official Lex.uz source rendering.
 - `after/client-call-preflight-1536.jpg` — privacy-safe production Chrome
   call-room preflight after the route-scoped device policy and heading-contrast
-  fix. The connected two-party pass is backed by synchronized DOM timers and D1
-  provider/events evidence; live camera frames are intentionally not retained.
+  fix. The connected two-party, selected-public-tab screen-share, forced
+  reconnect and remote-end passes are backed by DOM media dimensions/states and
+  D1 provider/events/presence evidence; live camera and display frames are
+  intentionally not retained.
 - `after/lawyer-dashboard-1536.jpg` and
   `after/lawyer-dashboard-dark-1536.jpg` — authenticated lawyer dashboard in
   System/Light-derived and explicit Dark states.
