@@ -65,6 +65,19 @@ provisions and 30,098 indexed chunks with 17/44 checkpoints complete; dead-
 letter ingestion jobs and terminal failure rows remained zero. The run was
 still active at that boundary, so no freeze or release claim is made.
 
+## Completed ministry recovery run (2026-08-22, 14:08–14:15Z)
+
+Run `07df35c8-f87b-41dd-94c3-e236afe01dac` completed at
+`2026-08-22T14:15:34.157Z` with `error_code=NULL`. The recovered ministry
+checkpoint remained free of the upstream error: English completed its four
+page-one records, while Russian, Uzbek Cyrillic and Uzbek Latin retained their
+20 discovered page-one records for sequential continuation. The post-run
+read-only boundary recorded 182 canonical documents, 11,454 distinct current
+provisions, 30,098 indexed chunks and 17/44 completed checkpoints. The live
+or manual ingestion queue was 1,496 jobs; dead-letter jobs and terminal or
+technically-unavailable failure rows were both zero. The queue is still active,
+so the freeze, snapshot and post-ingestion gates remain open.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
