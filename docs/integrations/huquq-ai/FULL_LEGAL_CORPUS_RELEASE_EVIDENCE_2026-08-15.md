@@ -418,6 +418,11 @@ The next scheduled run `22cefddf-b8dc-4ecd-9fee-48b2c5509884` completed at
 probe recorded 1,454 live/manual queued or retrying jobs, 21/44 completed
 checkpoints, zero terminal failures and zero dead-letter jobs.
 
+The subsequent scheduled run `80738156-d310-4c4f-86ab-b7d9798703ed` completed
+at `2026-08-22T18:19:16.154Z` with the same allow-listed
+`LEX_CATALOG_TIMEOUT`; its read-only boundary recorded 1,450 queued jobs,
+21/44 completed checkpoints, zero terminal failures and zero dead-letter jobs.
+
 ## CI and staging gate
 
 - Branch: `feature/full-legal-corpus`.
