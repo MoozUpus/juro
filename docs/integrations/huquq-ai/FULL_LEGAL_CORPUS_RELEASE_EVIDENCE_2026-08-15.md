@@ -121,6 +121,22 @@ completed with the queue active, so release floors, ingestion freeze,
 snapshot/evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Sequential continuation after alternate-language recovery (2026-08-22, 19:32–19:38Z)
+
+Run `7aa7896d-03a7-4c0b-89ab-79678c313c56` held the single staging lease and
+closed at `2026-08-22T19:38:28.886Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. No terminal or dead-letter row was created. The
+checkpoint ledger remains 21 completed and 23 queued; no checkpoint was
+force-completed on the timeout.
+
+The post-run read-only materialized totals are 217 canonical documents, 236
+language variants, 12,697 distinct current provisions and 34,271 indexed
+chunks. The failure ledger contains 9 retrying rows only; unresolved
+terminal/technically-unavailable rows and dead-letter ingestion jobs remain
+zero. The ingestion queue is still active, so the release floors, queue
+freeze, snapshot/evaluation, Qdrant/D1 restore and CI gates remain open;
+production is untouched.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
