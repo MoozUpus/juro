@@ -6,6 +6,25 @@ This record covers the JURO-native legal-corpus foundation at commit
 `6eee1e4957ae82054badf453d555c108ec45a9b6`. It does not claim corpus
 coverage, retrieval quality, Qdrant availability or legal-answer readiness.
 
+## Sequential v2 monitoring continuation (2026-08-22, 20:52–20:58Z)
+
+Scheduled run `2ad6f6a6-c6e6-4898-b71c-9769dc9fb342` completed at
+`2026-08-22T20:58:37.391Z` with the existing allow-listed
+`LEX_CATALOG_TIMEOUT`. Read-only counters after the run show 21/44 discovery
+checkpoints completed and 23 queued; no checkpoint is currently running or
+retrying. The ingestion ledger contains 1,259 completed and 13,488 queued
+jobs. The failure ledger contains nine `retrying` rows only; no terminal or
+technically-unavailable source rows and no failed, terminal or dead-letter
+ingestion jobs were observed.
+
+The materialized v2 totals are 227 canonical documents, 266 language variants,
+12,846 distinct current provisions and 36,325 indexed current chunks. These
+totals remain below the 1,500-document and 22,000-provision release floors,
+and the queue is not frozen. No code change or staging redeploy was justified
+by this retryable catalogue timeout. Snapshot, indexed evaluation, Qdrant/D1
+restore and CI gates remain intentionally unopened; production bindings,
+corpus ingestion, feature flags and DNS are unchanged.
+
 ## Staging D1 binding clarification (2026-08-22)
 
 The previously reported staging totals were read from the original
