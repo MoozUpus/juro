@@ -3105,6 +3105,26 @@ zero. The release floors, 44-checkpoint completion, queue freeze, snapshot,
 314-scenario evaluation, Qdrant/D1 restore and CI gates remain unproven;
 production is untouched.
 
+## Oliy Majlis bounded run closure (2026-08-22, 10:20–10:26Z)
+
+Run `b0397b14-3358-434e-aa74-b48e1f0bf5c2` completed from
+`2026-08-22T10:20:41.785Z` to `2026-08-22T10:26:34.666Z` with the
+allow-listed retryable `LEX_CATALOG_TIMEOUT`. The 10:27:23Z read-only boundary
+showed no subsequent scheduled run. The bounded worker advanced the Oliy
+Majlis catalogue ledger without force-completing any checkpoint.
+
+The final read-only totals are 156 canonical documents, 162 language
+variants, 10,735 distinct current provisions and 28,056 indexed chunks, with
+1,519 live-or-manual queued/retrying jobs. The checkpoint ledger remains 13
+completed and 31 queued. The failure ledger remains two retrying
+`LEGAL_CORPUS_INGESTION_FAILED` and three retrying
+`LEGAL_CORPUS_STALE_RUNNING_TIMEOUT` rows; terminal/dead-letter remains zero.
+Oliy Majlis is queued at page 120 for Russian (2,400 discovered records),
+page 120 for Uzbek Cyrillic (2,400) and page 120 for Uzbek Latin (2,400);
+English is completed at page 1 with zero catalogue records. Release floors,
+queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI gates remain
+unproven; production is untouched.
+
 ## Oliy Majlis bounded run closure (2026-08-22, 10:12–10:18Z)
 
 Run `d00f7373-481b-4cb9-b2f8-dc1f078bf15d` completed from
