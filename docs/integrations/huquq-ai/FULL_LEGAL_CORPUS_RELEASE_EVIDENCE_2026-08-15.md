@@ -60,6 +60,29 @@ release floors, queue freeze, snapshot/evaluation, Qdrant/D1 restore and CI
 gates remain open. No new terminal failure was observed, so no code change or
 staging redeploy was justified.
 
+## Fetch-capacity correction deployed to staging (2026-08-22, 18:43–18:48Z)
+
+The run `c0e71f3f-0c3d-413c-892f-3decaaf65623` closed at
+`2026-08-22T18:43:14.500Z` with the allow-listed `LEX_CATALOG_TIMEOUT`.
+Read-only job evidence showed the five-slot batch completed one `fetch` and
+four `version` jobs, confirming that version-debt scheduling had reduced
+current-corpus capacity to one slot. The run produced no terminal or
+dead-letter failure.
+
+Commit `52406720` changes only the bounded slot allocation: when version debt
+is high and the five-slot budget is active, two slots may process versions and
+three remain available for current-corpus fetches. The total request budget,
+20-second host pacer, distributed lock and start fence are unchanged. The
+boundary test passed 21/21, type-check, lint and staging artifact dry-run
+passed. Staging-only deployment completed as Worker version
+`2f403af0-0dfe-48e2-9cf3-e450d6d3958a`; no production deployment was made.
+
+The next sequential run `8ad13db6-ce19-4d17-824e-034041e0ecc6` was running
+after deployment. Its read-only boundary showed 212 canonical documents,
+220 language variants, 12,599 distinct current provisions and 33,655 indexed
+chunks, with 1,435 queued/retrying jobs, terminal failures 0 and dead-letter
+jobs 0. The release floors, queue freeze and post-ingestion gates remain open.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
