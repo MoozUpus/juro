@@ -218,6 +218,21 @@ remain open; production is untouched. A single transient Cloudflare D1 probe
 returned API code 7403; `wrangler whoami` confirmed the authorized OAuth
 account and the identical read-only query succeeded on retry.
 
+## Sequential continuation after local-authority retry (2026-08-22, 20:20–20:26Z)
+
+Run `334110ab-19b5-4cac-b930-60099ae57784` closed at
+`2026-08-22T20:26:24.979Z` with the allow-listed retryable
+`LEX_CATALOG_TIMEOUT`. The single distributed lease and crawl pacing were
+preserved; no terminal or dead-letter ingestion row was created.
+
+The post-run read-only boundary is 223 canonical documents, 254 language
+variants, 12,791 distinct current provisions and 34,904 indexed chunks. The
+ingestion ledger contains 1,239 completed and 13,226 queued jobs. Failure
+rows remain retrying-only (9); unresolved terminal/technically-unavailable
+rows and dead-letter jobs are both zero. Discovery remains 21/44 completed
+and the queue is not frozen, so release floors and all post-ingestion gates
+remain open; production is untouched.
+
 ## Staging catalogue upstream retry observation (2026-08-22, 13:44–14:05Z)
 
 The sequential v2 worker recorded two source-condition runs while continuing
