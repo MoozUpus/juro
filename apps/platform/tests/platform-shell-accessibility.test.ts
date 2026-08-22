@@ -69,6 +69,14 @@ test("lawyer calendar actions retain a 44px touch target", async () => {
   assert.match(css, /\.lawyer-schedule-section>header>button\{min-height:44px\}/);
 });
 
+test("lawyer trial banner keeps readable theme-aware foregrounds", async () => {
+  const css = await readFile(lawyerStylesheet, "utf8");
+
+  assert.match(css, /\.lawyer-trial-banner>svg\{width:24px;color:var\(--brand-gold\)\}/);
+  assert.match(css, /\.lawyer-trial-banner strong\{color:var\(--text-primary\)\}/);
+  assert.doesNotMatch(css, /\.lawyer-trial-banner strong\{color:var\(--brand-navy\)\}/);
+});
+
 test("client dashboard and calendar actions retain 44px touch targets", async () => {
   const [dashboard, calendar] = await Promise.all([
     readFile(dashboardStylesheet, "utf8"),

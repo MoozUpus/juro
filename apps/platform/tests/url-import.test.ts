@@ -120,10 +120,10 @@ test("URL import route and RU/UZ UI expose no credential forwarding or fake succ
   assert.match(route, /parseJsonRequest\(request, publicDocumentUrlIntentSchema, 4_096\)/);
   assert.match(route, /ANALYSIS_QUEUED/);
   assert.doesNotMatch(route, /requireQuarantineR2|quarantined|MALWARE_SCAN|FILE_SCAN_/);
-  assert.match(ui, /publicUrlImportEnabled \? <form className="review-url-import"/);
-  assert.match(ui, /review-url-import-disabled/);
-  assert.match(ui, /Контролируемая beta-функция временно недоступна/);
-  assert.match(ui, /Nazorat qilinadigan beta-funksiya vaqtincha mavjud emas/);
+  assert.match(ui, /publicUrlImportEnabled && <form className="review-url-import"/);
+  assert.doesNotMatch(ui, /review-url-import-disabled/);
+  assert.doesNotMatch(ui, /Контролируемая beta-функция временно недоступна/);
+  assert.doesNotMatch(ui, /Nazorat qilinadigan beta-funksiya vaqtincha mavjud emas/);
   assert.match(ui, /Импортировать публичную ссылку/);
   assert.match(ui, /Ommaviy havolani import qilish/);
   assert.match(ui, /type="url"/);
